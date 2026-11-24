@@ -215,7 +215,10 @@ describe("a feed's life", () => {
     const viewersChangedAt = (moving + interval) / 1000;
     view({ [S]: watched(false), [T]: watched() }, viewersChangedAt)(r.feeds);
     view({ [S]: watched(), [T]: watched() }, viewersChangedAt)(r.feeds);
-    view({ [S]: watched(true, ["pane", "statusline"]), [T]: watched() }, viewersChangedAt)(r.feeds);
+    view(
+      { [S]: watched(true, ["pane", "statusline"]), [T]: watched() },
+      viewersChangedAt,
+    )(r.feeds);
     const frames: PushedFrame[] = [];
     for (let ms = moving + interval; ms < recovery * 1000; ms += interval)
       frames.push(...wakeAndDraw(ms / 1000));
@@ -226,7 +229,9 @@ describe("a feed's life", () => {
     for (const cause of thrown) expect(cause).toBe(failure);
     expect(frames.length).toBeGreaterThan(still / moving);
     expect(
-      frames.every(({ session, frame }) => session === T && frame.kind === "drawn"),
+      frames.every(
+        ({ session, frame }) => session === T && frame.kind === "drawn",
+      ),
     ).toBe(true);
 
     r.script.throwsFor = null;
@@ -234,7 +239,10 @@ describe("a feed's life", () => {
     expect(wakeAndDraw(recovery)).toContainEqual(
       expect.objectContaining({
         session: S,
-        frame: expect.objectContaining({ kind: "drawn", bar: draw("recovered") }),
+        frame: expect.objectContaining({
+          kind: "drawn",
+          bar: draw("recovered"),
+        }),
       }),
     );
     r.script.bar = "still responsive";

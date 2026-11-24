@@ -79,7 +79,11 @@ export default async function globalTeardown(): Promise<void> {
   );
   // The shared pool's own bookkeeping: drop slot files whose recorded owner
   // is provably dead.
-  await createDaemonPool(DEFAULT_POOL_DIR, DEFAULT_POOL_SIZE, probe).sweepStale();
+  await createDaemonPool(
+    DEFAULT_POOL_DIR,
+    DEFAULT_POOL_SIZE,
+    probe,
+  ).sweepStale();
 
   sweepJestTmp(os.tmpdir(), process.pid, probe);
 }

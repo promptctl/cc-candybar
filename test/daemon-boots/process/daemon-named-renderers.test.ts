@@ -69,9 +69,14 @@ let worktreeDir: string;
 let worktreeBuilt: string;
 
 beforeAll(() => {
-  worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-alternate-renderer-"));
+  worktreeDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "ccb-alternate-renderer-"),
+  );
   worktreeBuilt = path.join(worktreeDir, "index.mjs");
-  execFileSync(process.execPath, [path.resolve("test/helpers/build-named-renderer.mjs"), worktreeBuilt]);
+  execFileSync(process.execPath, [
+    path.resolve("test/helpers/build-named-renderer.mjs"),
+    worktreeBuilt,
+  ]);
 });
 
 afterAll(() => {
@@ -107,9 +112,18 @@ test("two named renderer processes draw separately and share config, transcript 
     const source = path.join(plugin, "marker.txt");
     const definition = path.join(plugin, "plugin.json5");
     const packaged = path.join(root, "package-data");
-    const shadowed = path.join(packaged, "cc-candybar", "plugins", "shared", "plugin.json5");
+    const shadowed = path.join(
+      packaged,
+      "cc-candybar",
+      "plugins",
+      "shared",
+      "plugin.json5",
+    );
     fs.mkdirSync(path.dirname(shadowed), { recursive: true });
-    fs.writeFileSync(shadowed, '{ segments: { marker: { template: "package copy" } } }');
+    fs.writeFileSync(
+      shadowed,
+      '{ segments: { marker: { template: "package copy" } } }',
+    );
     const config = path.join(root, "config.json5");
     const transcriptOf = (session: string) =>
       path.join(root, `${session}.jsonl`);
@@ -510,8 +524,12 @@ test("a conflicting save keeps the named renderer's draft undo and redo until ca
     const main = () => draw("main-editor");
     const worktree = () => draw("worktree-editor", true);
     const link = (frame: Frame, verb: string, op?: string) =>
-      findUrl(linksOf(frame).map(({ url }) => url), (effects) =>
-        effects.some((e) => e.verb === verb && (op === undefined || e.args[3] === op)),
+      findUrl(
+        linksOf(frame).map(({ url }) => url),
+        (effects) =>
+          effects.some(
+            (e) => e.verb === verb && (op === undefined || e.args[3] === op),
+          ),
       );
     const control = (frame: Frame, verb: string, op?: string): string => {
       const url = link(frame, verb, op);
@@ -522,7 +540,9 @@ test("a conflicting save keeps the named renderer's draft undo and redo until ca
     const remove = (target: string) => encodeLayoutOp({ op: "remove", target });
     const expectPreview = (frame: Frame, present: string, removed: string) => {
       expect(link(frame, VERB_APPLY_LAYOUT_OP, remove(present))).toBeDefined();
-      expect(link(frame, VERB_APPLY_LAYOUT_OP, remove(removed))).toBeUndefined();
+      expect(
+        link(frame, VERB_APPLY_LAYOUT_OP, remove(removed)),
+      ).toBeUndefined();
     };
     const hit = (url: string) => click(daemon.sockPath, url);
     const enter = async (bar: () => Promise<Frame>) => {
@@ -615,7 +635,9 @@ test("one project approval from an earlier frame covers both renderers, a config
           draw("main", afterRestart),
           draw("worktree", afterRestart),
         ]);
-        return frames.map(textOf).every((text) => labels.every((label) => text.includes(label)));
+        return frames
+          .map(textOf)
+          .every((text) => labels.every((label) => text.includes(label)));
       },
       () => `both renderers to show ${labels.join(", ")}`,
       8_000,

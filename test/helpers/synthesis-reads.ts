@@ -110,7 +110,9 @@ function segmentReads(
   helpers: DslConfig["helpers"],
 ): Set<string> {
   const scope =
-    segment.partials === undefined ? helpers : { ...helpers, ...segment.partials };
+    segment.partials === undefined
+      ? helpers
+      : { ...helpers, ...segment.partials };
   const templates = [
     ...SEGMENT_TEMPLATE_FIELDS.map((field) => segment[field]),
     ...Object.values(segment.partials ?? {}),

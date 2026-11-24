@@ -58,17 +58,27 @@ function domainOf(name: string): readonly string[] {
 
 // The wizard's own placeholder spelling, `replace:NAME`, wherever it appears.
 function placeholdersIn(text: string): string[] {
-  return [...new Set([...text.matchAll(/replace:([A-Z_]+)/g)].map((m) => m[1]!))].sort();
+  return [
+    ...new Set([...text.matchAll(/replace:([A-Z_]+)/g)].map((m) => m[1]!)),
+  ].sort();
 }
 
 // The wizard's substitution: every placeholder replaced by its chosen value.
-function fill(template: string, values: Readonly<Record<string, string>>): string {
-  return template.replace(/replace:([A-Z_]+)/g, (_, name: string) => values[name]!);
+function fill(
+  template: string,
+  values: Readonly<Record<string, string>>,
+): string {
+  return template.replace(
+    /replace:([A-Z_]+)/g,
+    (_, name: string) => values[name]!,
+  );
 }
 
 // A bash `readonly NAME=(a b c)` line's members.
 function previewArray(name: string): string[] {
-  const line = previewScript.match(new RegExp(`^readonly ${name}=\\((.*)\\)$`, "m"));
+  const line = previewScript.match(
+    new RegExp(`^readonly ${name}=\\((.*)\\)$`, "m"),
+  );
   if (line === null) {
     throw new Error(`preview.sh declares no \`readonly ${name}=(...)\` array`);
   }
@@ -140,7 +150,9 @@ describe("plugin/bin/preview.sh renders the same template it offers", () => {
     ["ENDCAPS_SHAPES", "ENDCAPS"],
     ["PRESETS", "PRESET"],
   ])("%s is exactly the daemon's %s domain", (array, domain) => {
-    expect([...previewArray(array)].sort()).toEqual([...DOMAINS[domain]!].sort());
+    expect([...previewArray(array)].sort()).toEqual(
+      [...DOMAINS[domain]!].sort(),
+    );
   });
 });
 
@@ -150,10 +162,20 @@ describe("plugin/commands/candybar.md fills the template it ships", () => {
   });
 
   test("drives the preview script only through flags it accepts", () => {
-    const usage = previewScript.match(/^\s*printf 'Usage: preview\.sh (.*)\\n' >&2$/m);
+    const usage = previewScript.match(
+      /^\s*printf 'Usage: preview\.sh (.*)\\n' >&2$/m,
+    );
     if (usage === null) throw new Error("preview.sh prints no usage line");
-    const accepted = new Set([...usage[1]!.matchAll(/--[a-z-]+/g)].map((m) => m[0]));
-    const used = [...new Set([...wizardDoc.matchAll(/preview\.sh([^\n`]*)/g).flatMap((m) => [...m[1]!.matchAll(/--[a-z-]+/g)].map((f) => f[0]))])];
+    const accepted = new Set(
+      [...usage[1]!.matchAll(/--[a-z-]+/g)].map((m) => m[0]),
+    );
+    const used = [
+      ...new Set([
+        ...wizardDoc
+          .matchAll(/preview\.sh([^\n`]*)/g)
+          .flatMap((m) => [...m[1]!.matchAll(/--[a-z-]+/g)].map((f) => f[0])),
+      ]),
+    ];
     expect(used.length).toBeGreaterThan(0);
     expect(used.filter((f) => !accepted.has(f))).toEqual([]);
   });

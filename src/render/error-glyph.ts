@@ -2,7 +2,8 @@
 //
 // [LAW:single-enforcer] One formatter per runtime. The Node entry in
 // src/index.ts calls formatPermanentGlyph, a failed feed frame takes its words
-// (src/render/frame.ts); nothing else builds this string.
+// (src/render/frame.ts); nothing else builds this string. The host-bundle glyph
+// below shares its envelope, so a change to one is a change to both.
 //
 // [LAW:one-type-per-behavior] The Rust mirror at rust-client/src/error_glyph.rs
 // must produce byte-identical output for the same logical cause — both

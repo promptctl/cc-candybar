@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hostOf, worldOf } from "./helpers/host";
-import { runRecordHostBundle } from "../src/install";
+import { __test__, runRecordHostBundle } from "../src/install";
 import {
   readHostBundle,
   recordHostBundle,
@@ -14,7 +14,6 @@ import { hostBundlePath } from "../src/daemon/paths";
 import {
   bundleNamedByStatusLine,
   recordIfInstall,
-  recordStagedBundle,
 } from "../src/install/record";
 import { firstShellWord, shellWord } from "../src/shell-word";
 import { planAfterKick } from "../src/outcome-plan";
@@ -156,27 +155,44 @@ describe("the statusline decides which bundle is recorded", () => {
     expect(readHostBundle(host)).toEqual({ kind: "ok", value: bundle });
   });
 
-  test("the install records the bundle it staged, whatever the command's words say", () => {
+  test("the install records the staged bundle when it owns the statusline, and says how to when it does not", () => {
     const { root, host } = stateRoot();
     const staged = bundleIn(root, "staged");
-    expect(recordStagedBundle(staged, host)).toEqual({
-      kind: "recorded",
-      bundle: staged,
-    });
+
+    const skipped = __test__.recordStagedBundleIfOwned(false, staged, host);
+    expect(skipped).toContain("--force");
+    expect(readHostBundle(host).kind).toBe("absent");
+
+    const owned = __test__.recordStagedBundleIfOwned(true, staged, host);
+    expect(owned).toContain(staged);
     expect(readHostBundle(host)).toEqual({ kind: "ok", value: staged });
   });
 
-  test("a checkout reached through a symlink is the bundle the statusline names", () => {
+  test("a checkout behind a symlinked directory is the bundle the statusline names", () => {
     const { root, host } = stateRoot();
     const real = bundleIn(root, "real");
     fs.symlinkSync(path.join(root, "real"), path.join(root, "link"));
     const entry = path.join(root, "link", "bin", "cc-candybar");
-    expect(bundleNamedByStatusLine({ command: entry })).toBe(
-      fs.realpathSync(real),
+    expect(bundleNamedByStatusLine({ command: entry })).toBe(real);
+    expect(recordIfInstall(real, { command: entry }, host).kind).toBe(
+      "recorded",
     );
-    expect(
-      recordIfInstall(fs.realpathSync(real), { command: entry }, host).kind,
-    ).toBe("recorded");
+  });
+
+  test("a symlinked entry names the bundle beside its target, as node runs it", () => {
+    const { root, host } = stateRoot();
+    const real = bundleIn(root, "checkout");
+    const bin = path.join(root, "checkout", "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "cc-candybar"), "");
+    const elsewhere = path.join(root, "usr-local-bin");
+    fs.mkdirSync(elsewhere);
+    const entry = path.join(elsewhere, "cc-candybar");
+    fs.symlinkSync(path.join(bin, "cc-candybar"), entry);
+    expect(bundleNamedByStatusLine({ command: entry })).toBe(real);
+    expect(recordIfInstall(real, { command: entry }, host).kind).toBe(
+      "recorded",
+    );
   });
 
   test("a worktree's bundle, which the statusline does not name, records nothing and leaves the install's record", () => {

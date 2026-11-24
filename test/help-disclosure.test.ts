@@ -24,22 +24,31 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
+import {
+  EDIT_MODE_KEY,
+  EDIT_MODE_ARRANGE,
+} from "../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
-import { DISCLOSURE_CLOSED, DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
+import {
+  DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSE,
+} from "../src/config/disclosure";
 import { EDIT_MODE_HELP, HELP_TEXT, LANE_HELP } from "../src/help-text";
 import { LANE_NAMES } from "../src/config/lanes";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import type { DslConfig } from "../src/config/dsl-types";
 import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
-import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
+import {
+  ADD_GLYPH,
+  CONFIGURE_GLYPH,
+  REMOVE_GLYPH,
+} from "../src/config/edit-glyphs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-help");
 const ALLOWED = new Set(listResolvablePaletteNames());
-
 
 // [LAW:single-enforcer] The codebase's one display-width measure, the same one
 // `src/render/picker.ts` reserves its pagination seam with. Counting code
@@ -109,7 +118,11 @@ function helpBar(src: string = TWO_SEGMENT_ROOT) {
   );
 
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
+  const clickWriting = async (
+    out: Frame,
+    key: string,
+    value: string,
+  ): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -137,8 +150,7 @@ function helpBar(src: string = TWO_SEGMENT_ROOT) {
     await click(url);
   };
 
-  const lines = (width: number): string[] =>
-    textOf(render(width)).split("\n");
+  const lines = (width: number): string[] => textOf(render(width)).split("\n");
 
   return { ...rig, render, lines, clickWriting, toggleHelp };
 }
@@ -185,7 +197,10 @@ describe("in-bar help IS src/help-text.ts, not a second copy", () => {
   });
 
   test("--help prints the same values the bar renders", () => {
-    for (const line of [...EDIT_MODE_HELP, ...Object.values(LANE_HELP).flat()]) {
+    for (const line of [
+      ...EDIT_MODE_HELP,
+      ...Object.values(LANE_HELP).flat(),
+    ]) {
       expect(HELP_TEXT).toContain(line);
     }
   });
@@ -292,34 +307,30 @@ describe.each([
   [80, 2],
   [120, 1],
 ])("at %i columns, padding %i", (width, padding) => {
-  test.each([["edit mode", enterEditMode, EDIT_MODE_HELP]] as const)("open help in %s overflows no line and costs at most one row", async (
-    _name,
-    open,
-    corpus,
-  ) => {
-    const rt = helpBar(twoSegmentRoot(padding));
-    await open(rt);
-    const before = rt.lines(width);
-    await rt.toggleHelp(rt.render(width));
-    const after = rt.lines(width);
+  test.each([["edit mode", enterEditMode, EDIT_MODE_HELP]] as const)(
+    "open help in %s overflows no line and costs at most one row",
+    async (_name, open, corpus) => {
+      const rt = helpBar(twoSegmentRoot(padding));
+      await open(rt);
+      const before = rt.lines(width);
+      await rt.toggleHelp(rt.render(width));
+      const after = rt.lines(width);
 
-    // The body is REALLY there: without this the row-count bound below is
-    // satisfied by a help toggle that renders nothing at all.
-    for (const line of corpus)
-      expect([width, padding, line, after.join("\n").includes(line)]).toEqual([
-        width,
-        padding,
-        line,
-        true,
-      ]);
-    for (const line of after) expect(cols(line)).toBeLessThanOrEqual(width);
-    // AT MOST one row, not exactly one: the trigger shrinks when it opens
-    // (`(?)` → `✕`), so on a bar sitting at the wrap seam the freed columns can
-    // pull a wrapped cell back up and the body lands in the row it vacated.
-    // Costing NO extra row is the better outcome; the promise is the ceiling.
-    expect(after.length - before.length).toBeLessThanOrEqual(1);
-    expect(after.length).toBeGreaterThanOrEqual(before.length);
-  });
+      // The body is REALLY there: without this the row-count bound below is
+      // satisfied by a help toggle that renders nothing at all.
+      for (const line of corpus)
+        expect([width, padding, line, after.join("\n").includes(line)]).toEqual(
+          [width, padding, line, true],
+        );
+      for (const line of after) expect(cols(line)).toBeLessThanOrEqual(width);
+      // AT MOST one row, not exactly one: the trigger shrinks when it opens
+      // (`(?)` → `✕`), so on a bar sitting at the wrap seam the freed columns can
+      // pull a wrapped cell back up and the body lands in the row it vacated.
+      // Costing NO extra row is the better outcome; the promise is the ceiling.
+      expect(after.length - before.length).toBeLessThanOrEqual(1);
+      expect(after.length).toBeGreaterThanOrEqual(before.length);
+    },
+  );
 
   // "Help must not widen the bar while closed." The earlier version of this
   // test opened neither surface, so no `(?)` was on the bar at all and it
@@ -328,12 +339,12 @@ describe.each([
   test.each([["edit mode", enterEditMode]] as const)(
     "closed help in %s overflows no line",
     async (_name, open) => {
-    const rt = helpBar(twoSegmentRoot(padding));
-    await open(rt);
-    const shown = rt.lines(width);
+      const rt = helpBar(twoSegmentRoot(padding));
+      await open(rt);
+      const shown = rt.lines(width);
 
-    expect(shown.some((l) => l.includes(HELP_GLYPH_CLOSED))).toBe(true);
-    for (const line of shown) expect(cols(line)).toBeLessThanOrEqual(width);
+      expect(shown.some((l) => l.includes(HELP_GLYPH_CLOSED))).toBe(true);
+      for (const line of shown) expect(cols(line)).toBeLessThanOrEqual(width);
     },
   );
 });
@@ -363,14 +374,17 @@ const triggerLines = (rt: ReturnType<typeof helpBar>): string[] =>
   rt.lines(WIDE).filter((l) => l.includes(HELP_GLYPH_CLOSED));
 
 describe("a closed (?) rides a row rather than adding one", () => {
-  test.each([["edit mode", enterEditMode]] as const)("in %s", async (_name, open) => {
-    const rt = helpBar();
-    await open(rt);
-    const hosts = triggerLines(rt);
+  test.each([["edit mode", enterEditMode]] as const)(
+    "in %s",
+    async (_name, open) => {
+      const rt = helpBar();
+      await open(rt);
+      const hosts = triggerLines(rt);
 
-    expect(hosts).toHaveLength(1);
-    expect(hosts[0]!.replaceAll(HELP_GLYPH_CLOSED, "").trim()).not.toBe("");
-  });
+      expect(hosts).toHaveLength(1);
+      expect(hosts[0]!.replaceAll(HELP_GLYPH_CLOSED, "").trim()).not.toBe("");
+    },
+  );
 });
 
 // ─── 6. The placement walk, over root SHAPES ─────────────────────────────────

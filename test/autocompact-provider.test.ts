@@ -40,14 +40,22 @@ describe("AutoCompactProvider", () => {
   test("no file is Claude Code's own window, read once", () => {
     expect(provider.window(settings, "change")).toEqual(ok("auto"));
     expect(provider.window(settings, "change")).toEqual(ok("auto"));
-    expect(provider.getStats().refreshes).toEqual({ first: 0, period: 0, change: 1 });
+    expect(provider.getStats().refreshes).toEqual({
+      first: 0,
+      period: 0,
+      change: 1,
+    });
   });
 
   test("the file is read again only when its stamp moved", () => {
     write(JSON.stringify({ autoCompactWindow: 400_000 }), 1_000);
     expect(provider.window(settings, "change")).toEqual(ok(400_000));
     expect(provider.window(settings, "change")).toEqual(ok(400_000));
-    expect(provider.getStats().refreshes).toEqual({ first: 0, period: 0, change: 1 });
+    expect(provider.getStats().refreshes).toEqual({
+      first: 0,
+      period: 0,
+      change: 1,
+    });
 
     write(JSON.stringify({ autoCompactWindow: 1_000_000 }), 2_000);
     expect(provider.window(settings, "change")).toEqual(ok(1_000_000));
@@ -69,7 +77,8 @@ describe("AutoCompactProvider", () => {
       reads++;
     });
     try {
-      for (let refresh = 0; refresh < 3; refresh++) provider.window(settings, "change");
+      for (let refresh = 0; refresh < 3; refresh++)
+        provider.window(settings, "change");
       expect(reads).toBe(1);
       write(JSON.stringify({ autoCompactWindow: 1_000_000 }), 2_000);
       provider.window(settings, "change");

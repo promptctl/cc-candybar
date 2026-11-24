@@ -52,12 +52,17 @@ function reshapeBar() {
   // reshapes. (draw-bar.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
   const render = (): Frame =>
     rig.draw({
-      opts: { endcaps: globalsFor(config, (key) => sessionState.get(SID, key)).endcaps },
+      opts: {
+        endcaps: globalsFor(config, (key) => sessionState.get(SID, key))
+          .endcaps,
+      },
     }).frame;
 
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const clickEndcaps = (style: string): Promise<void> =>
-    rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]));
+    rig.click(
+      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]),
+    );
 
   return { render, clickEndcaps };
 }

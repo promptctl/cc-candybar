@@ -12,7 +12,12 @@ import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
-import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
+import {
+  effectsUrl,
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
+  VERB_SET_STATE,
+} from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
 import { daemonClock } from "../../../src/host";
 import { systemTimekeeper } from "../../helpers/system-clock";
@@ -118,37 +123,47 @@ describe("a daemon in this worker", () => {
   test.each([
     { verb: VERB_COPY, bin: "/usr/bin/pbcopy", category: "click.pbcopy" },
     { verb: VERB_OPEN_VSCODE, bin: "/usr/bin/open", category: "click.open" },
-  ] as const)("the bar reports a rate-limited $verb launch", async ({ verb, bin, category }) => {
-    const sid = "rate-limited-desktop-click";
-    // The launcher measures both clicks in the same interval. Its fake child
-    // exits on the normal event loop, while the daemon's request clock runs.
-    const startedAt = systemTimekeeper.monotonic();
-    let fake: FakeLauncher | undefined;
-    daemon = startDaemon(env, {
-      launcher: (own) => {
-        const launcher = fakeLauncher(
-          { ...systemTimekeeper, monotonic: () => startedAt },
-          own,
-        );
-        launcher.spawner.program((program) => program === bin, exits());
-        fake = launcher;
-        return launcher.launcher;
-      },
-    });
-    await render(daemon, sid, projectDir);
-    const url = drawnLink(daemon, effectsUrl([
-      { verb, args: ["fixture"] },
-      { verb: VERB_SET_STATE, args: [sid, "padding", "4"] },
-    ]));
-    await click(daemon, url);
-    await refusedClick(daemon, url, "threw");
+  ] as const)(
+    "the bar reports a rate-limited $verb launch",
+    async ({ verb, bin, category }) => {
+      const sid = "rate-limited-desktop-click";
+      // The launcher measures both clicks in the same interval. Its fake child
+      // exits on the normal event loop, while the daemon's request clock runs.
+      const startedAt = systemTimekeeper.monotonic();
+      let fake: FakeLauncher | undefined;
+      daemon = startDaemon(env, {
+        launcher: (own) => {
+          const launcher = fakeLauncher(
+            { ...systemTimekeeper, monotonic: () => startedAt },
+            own,
+          );
+          launcher.spawner.program((program) => program === bin, exits());
+          fake = launcher;
+          return launcher.launcher;
+        },
+      });
+      await render(daemon, sid, projectDir);
+      const url = drawnLink(
+        daemon,
+        effectsUrl([
+          { verb, args: ["fixture"] },
+          { verb: VERB_SET_STATE, args: [sid, "padding", "4"] },
+        ]),
+      );
+      await click(daemon, url);
+      await refusedClick(daemon, url, "threw");
 
-    const after = await render(daemon, sid, projectDir);
-    expect(indicatorOf(after)).toBe("⚠ 1");
-    const messages = await readDiagnostics(daemon, sid, projectDir, after);
-    expect(messages.map(({ text }) => text).join(" ")).toContain(`rate-limited: ${category}`);
-    expect(fake?.started().filter((item) => item.bin === bin)).toHaveLength(1);
-  });
+      const after = await render(daemon, sid, projectDir);
+      expect(indicatorOf(after)).toBe("⚠ 1");
+      const messages = await readDiagnostics(daemon, sid, projectDir, after);
+      expect(messages.map(({ text }) => text).join(" ")).toContain(
+        `rate-limited: ${category}`,
+      );
+      expect(fake?.started().filter((item) => item.bin === bin)).toHaveLength(
+        1,
+      );
+    },
+  );
 
   // [LAW:verifiable-goals] An answer carries a failed click's error only once
   // it has flushed. Past the hold, an error an answer carried is over, and one
@@ -162,7 +177,10 @@ describe("a daemon in this worker", () => {
     await render(daemon, sid, projectDir);
     await refusedClick(
       daemon,
-      drawnLink(daemon, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }])),
+      drawnLink(
+        daemon,
+        effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }]),
+      ),
       "bad-request",
     );
     await render(daemon, sid, projectDir);
@@ -265,7 +283,10 @@ describe("a daemon in this worker", () => {
 
       expect(indicatorOf(await render(running, sid, projectDir))).toBe("⚠ 2");
       // Answered past its hold, no bar can show it: it leaves the facts.
-      await until(() => pipeEvent() === null, "the answered pipe event leaving");
+      await until(
+        () => pipeEvent() === null,
+        "the answered pipe event leaving",
+      );
       const after = await pending();
       expect(indicatorOf(after.frame)).toBeNull();
       after.settled(false);
@@ -398,13 +419,16 @@ describe("a daemon in this worker", () => {
   });
 
   test("session fixtures report only their declared environment to the daemon", async () => {
-    writeFileSync(userConfig, `{
+    writeFileSync(
+      userConfig,
+      `{
       variables: {
         worker: { kind: "env", name: "JEST_WORKER_ID", default: "unset" },
       },
       segments: { probe: { template: 'session worker={{ .worker }}' } },
       root: "probe",
-    }`);
+    }`,
+    );
     // The daemon's own process has the variable, so `unset` is the session's.
     expect(process.env.JEST_WORKER_ID).toBeDefined();
     daemon = startDaemon(env);
@@ -425,11 +449,14 @@ describe("a daemon in this worker", () => {
     const session = "desktop-worktree";
     const bundle = path.join(projectDir, "worktree.mjs");
     writeFileSync(bundle, "// in-process fixture bundle");
-    writeFileSync(userConfig, `{
+    writeFileSync(
+      userConfig,
+      `{
       actions: { readout: { copy: "drawn clipboard contents" } },
       segments: { readout: { template: '{{ action "readout" "copy" }}' } },
       root: { h: ["readout"] },
-    }`);
+    }`,
+    );
     let fake: FakeLauncher | undefined;
     daemon = startDaemon(env, {
       host: hostOf({ ...env, CANDYBAR_DESKTOP_PROOF: "daemon" }),
@@ -442,7 +469,11 @@ describe("a daemon in this worker", () => {
       },
     });
     const frame = await frameRequest(daemon, {
-      ...renderBody(session, projectDir, {}, ["cc-candybar", "--config", userConfig]),
+      ...renderBody(session, projectDir, {}, [
+        "cc-candybar",
+        "--config",
+        userConfig,
+      ]),
       env: {
         ...TEST_ENV,
         CC_CANDYBAR_NAME: "worktree",
@@ -453,29 +484,39 @@ describe("a daemon in this worker", () => {
     const copy = findUrl(linkUrls(frame), (effects) =>
       effects.some(({ verb }) => verb === VERB_COPY),
     );
-    if (copy === undefined) throw new Error("the named renderer drew no copy action");
+    if (copy === undefined)
+      throw new Error("the named renderer drew no copy action");
 
     const otherCwd = path.join(projectDir, "primary");
     mkdirSync(otherCwd);
     await frameRequest(daemon, {
-      ...renderBody("desktop-primary", otherCwd, {}, ["cc-candybar", "--config", userConfig]),
+      ...renderBody("desktop-primary", otherCwd, {}, [
+        "cc-candybar",
+        "--config",
+        userConfig,
+      ]),
       env: { ...TEST_ENV, CANDYBAR_DESKTOP_PROOF: "other-session" },
     });
     await click(daemon, copy);
 
-    const legacy = drawnLink(daemon, effectsUrl([
-      { verb: VERB_OPEN_VSCODE, args: ["legacy-target"] },
-    ]));
+    const legacy = drawnLink(
+      daemon,
+      effectsUrl([{ verb: VERB_OPEN_VSCODE, args: ["legacy-target"] }]),
+    );
     await click(daemon, legacy);
 
-    const desktop = fake?.started().filter(
-      ({ bin }) => bin === "/usr/bin/pbcopy" || bin === "/usr/bin/open",
-    );
-    expect(desktop?.map(({ bin, options }) => ({
-      bin,
-      cwd: options.cwd,
-      marker: options.env?.CANDYBAR_DESKTOP_PROOF,
-    }))).toEqual([
+    const desktop = fake
+      ?.started()
+      .filter(
+        ({ bin }) => bin === "/usr/bin/pbcopy" || bin === "/usr/bin/open",
+      );
+    expect(
+      desktop?.map(({ bin, options }) => ({
+        bin,
+        cwd: options.cwd,
+        marker: options.env?.CANDYBAR_DESKTOP_PROOF,
+      })),
+    ).toEqual([
       { bin: "/usr/bin/pbcopy", cwd: projectDir, marker: "session" },
       { bin: "/usr/bin/open", cwd: undefined, marker: "daemon" },
     ]);
@@ -514,7 +555,10 @@ describe("a daemon in this worker", () => {
     // A refusal is a frame too, and it closes the stream, so what shows a
     // subscriber is a frame it drew on a stream still open.
     await clock.settle(0);
-    await until(() => subscriber.received.length > 0, "the subscriber's first frame");
+    await until(
+      () => subscriber.received.length > 0,
+      "the subscriber's first frame",
+    );
     expect(subscriber.received[0]).toMatchObject({ ok: true });
     expect(subscriber.client.closed).toBe(false);
     const { stats } = daemon.daemon;

@@ -468,7 +468,9 @@ describe("loadDslConfig — variable source kinds", () => {
       template: "static",
       type: "string",
     });
-    expect(parseDslConfig(FILE, source).variables?.cwd_short).not.toHaveProperty("type");
+    expect(
+      parseDslConfig(FILE, source).variables?.cwd_short,
+    ).not.toHaveProperty("type");
   });
 
   test("template: a type is one an input may have", () => {

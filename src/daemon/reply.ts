@@ -67,7 +67,7 @@ interface ClickInFlight {
 }
 
 // [LAW:no-ambient-temporal-coupling] A request whose semantics include "then
-// exit" (the shutdown verb, the stale-binary version mismatch) must not exit
+// exit" (the shutdown verb) must not exit
 // until its response has flushed — but handleRequest cannot see the socket.
 // So the exit is returned as DATA (the exit code; null = stay up) and the
 // connection boundary, which owns the flush, sequences shutdown on the write

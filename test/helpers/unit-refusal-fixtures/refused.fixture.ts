@@ -65,7 +65,9 @@ test("reads outside the package", () => {
 });
 
 test("reads what git ignores", () => {
-  fs.readFileSync(path.join(__dirname, "..", "..", "..", "test-records", "unit.jsonl"));
+  fs.readFileSync(
+    path.join(__dirname, "..", "..", "..", "test-records", "unit.jsonl"),
+  );
 });
 
 test("reads inside .git", () => {

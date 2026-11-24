@@ -75,7 +75,9 @@ describe("a plugin segment's state variable", () => {
     expect(opened.refused).toBeNull();
     // The detail is a second row of the segment's own, under its cell.
     expect(textOf(opened.rendered)).toMatch(/n-1 ▾[^\n]*\n[^\n]*the long form/);
-    expect(textOf((await bar.click("▾")).rendered)).not.toContain("the long form");
+    expect(textOf((await bar.click("▾")).rendered)).not.toContain(
+      "the long form",
+    );
   });
 
   // The bare `key` the plugin writes on both sides meets under `plugins.x.`,

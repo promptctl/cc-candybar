@@ -33,10 +33,7 @@ const shaped = (
   copy: text,
   lines: [[diagnosticSpan(text, null)]],
 });
-const offer = shaped(
-  HANDOFF_SEVERITY,
-  "Drawing in a tmux pane.",
-);
+const offer = shaped(HANDOFF_SEVERITY, "Drawing in a tmux pane.");
 const question = shaped(APPROVAL_SEVERITY, "run this repository's config?");
 const list = (
   errors: readonly string[],

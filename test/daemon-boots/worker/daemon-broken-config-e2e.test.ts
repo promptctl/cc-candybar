@@ -13,10 +13,11 @@ import path from "node:path";
 
 import { RichText } from "@promptctl/rich-js";
 import { click, render, urlWriting, drawnLink } from "../../helpers/daemon-e2e";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import {
   indicatorOf,
   pageOf,
@@ -94,8 +95,7 @@ describe("a config that cannot be drawn as written", () => {
     );
     // An unknown flag is this request's own error, ahead of the file's warning.
     const flagged = [...a, "--no-such-flag"];
-    const draw = (argv: string[]) =>
-      render(daemon, sid, projectDir, {}, argv);
+    const draw = (argv: string[]) => render(daemon, sid, projectDir, {}, argv);
     const bar = await draw(a);
     expect(indicatorOf(bar)).toBe("⚠ 1");
     await click(daemon, viewerLink(bar, "open")!.url);
@@ -187,14 +187,7 @@ describe("a config that cannot be drawn as written", () => {
     // red, since one is an error. The cell of a plugin absent here adds
     // nothing to either.
     expect(indicatorOf(bar)).toBe("⚠ 2");
-    const pages = await readDiagnostics(
-      daemon,
-      sid,
-      projectDir,
-      bar,
-      hints,
-      a,
-    );
+    const pages = await readDiagnostics(daemon, sid, projectDir, bar, hints, a);
     expect(pages.map((p) => p.position)).toEqual(["1/2", "2/2"]);
     expect(pages[0]!.text).toContain("first-missing-segment");
     expect(pages[0]!.text).toContain("second-missing");

@@ -7,7 +7,12 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
+import {
+  plainOf,
+  textOf,
+  type Frame as DrawnFrame,
+  type Run,
+} from "../src/render/frame";
 import { selectionFor } from "./helpers/selection";
 import {
   DEFAULT_TERMINAL_THEME,
@@ -19,7 +24,14 @@ import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { compileDslConfig, compileInputOf, compileKey, declareDslVariables, EVERY_SCOPE, type CompiledConfig } from "../src/dsl/render";
+import {
+  compileDslConfig,
+  compileInputOf,
+  compileKey,
+  declareDslVariables,
+  EVERY_SCOPE,
+  type CompiledConfig,
+} from "../src/dsl/render";
 import { lastBinding } from "./helpers/render-binding";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -143,9 +155,18 @@ function middleColumns(line: readonly Run[]): { from: number; to: number } {
 }
 
 // The frames of a session whose middle placement appears at S.
-const FRAMES: readonly Frame[] = [0, 10, 20, S, S + 5, S + 10, S + 15, S + 19, S + 20, S + 25].map(
-  (s) => ({ shown: s >= S, when: at(s) }),
-);
+const FRAMES: readonly Frame[] = [
+  0,
+  10,
+  20,
+  S,
+  S + 5,
+  S + 10,
+  S + 15,
+  S + 19,
+  S + 20,
+  S + 25,
+].map((s) => ({ shown: s >= S, when: at(s) }));
 
 describe("a placement that appears fades in", () => {
   test.each(["none", "shimmer"] as const)(
@@ -159,7 +180,7 @@ describe("a placement that appears fades in", () => {
         for (const frame of FRAMES) {
           const faded = on.render(frame, onFx, { transitions: true, bar });
           const plain = off.render(frame, offFx, { transitions: false, bar });
-          const since = (frame.when - START) - S;
+          const since = frame.when - START - S;
           // A fade changes colours, never text.
           expect(textOf(faded)).toBe(textOf(plain));
           if (since < 0 || since >= 20) {
@@ -188,12 +209,16 @@ describe("a placement that appears fades in", () => {
 
   // Wholly veiled at its t = 0, the middle placement's ink and fill are both
   // the ground it rises from.
-  const risesFrom = (cfg: ValidatedConfig): { row: DrawnFrame; bar: string } => {
+  const risesFrom = (
+    cfg: ValidatedConfig,
+  ): { row: DrawnFrame; bar: string } => {
     const on = renderer(cfg);
     try {
       const fx = new SessionEffects<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
-      const row = on.render({ shown: true, when: at(S) }, fx, { transitions: true });
+      const row = on.render({ shown: true, when: at(S) }, fx, {
+        transitions: true,
+      });
       const bar = resolveColorRef(on.palette(), "background").hex.toLowerCase();
       return { row, bar };
     } finally {
@@ -202,7 +227,10 @@ describe("a placement that appears fades in", () => {
   };
   const expectGround = ({ rows }: DrawnFrame, ground: string): void => {
     const chars = drawnChars({ rows: rows.slice(0, 1) });
-    const [before, after] = chars.map(({ ch }) => ch).join("").split("MIDDLE");
+    const [before, after] = chars
+      .map(({ ch }) => ch)
+      .join("")
+      .split("MIDDLE");
     expect(after).toBeDefined();
     const col = [...before!].length;
     for (const { fg, bg } of chars.slice(col, col + "MIDDLE".length)) {
@@ -263,7 +291,9 @@ describe("a placement that appears fades in", () => {
       on.render({ shown: false, when: at(0) }, onFx);
       off.render({ shown: false, when: at(0) }, offFx);
       const shown = { shown: true, when: at(S + 10) };
-      expect(on.render(shown, onFx).rows).not.toEqual(off.render(shown, offFx).rows);
+      expect(on.render(shown, onFx).rows).not.toEqual(
+        off.render(shown, offFx).rows,
+      );
       expect(onFx.lastFrame().fades).toEqual([{ placement: "middle", t: 0 }]);
     } finally {
       on.dispose();
@@ -278,8 +308,14 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const off = renderer(ROW);
     try {
       const frame = { shown: true, when: at(S) };
-      expect(on.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: true }).rows).toEqual(
-        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }).rows,
+      expect(
+        on.render(frame, new SessionEffects<RenderedLine>("s"), {
+          transitions: true,
+        }).rows,
+      ).toEqual(
+        off.render(frame, new SessionEffects<RenderedLine>("s"), {
+          transitions: false,
+        }).rows,
       );
     } finally {
       on.dispose();
@@ -306,7 +342,9 @@ describe("nothing fades in where the frame is drawn from another source", () => 
         fades: [],
       });
       expect(opened.rows).toEqual(
-        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }).rows,
+        off.render(frame, new SessionEffects<RenderedLine>("s"), {
+          transitions: false,
+        }).rows,
       );
     } finally {
       on.dispose();
@@ -339,7 +377,9 @@ describe("nothing fades in where the frame is drawn from another source", () => 
   test("a reload over a shared compile still compares against nothing", () => {
     const loaded = config();
     const again = config();
-    expect(compileKey(compileInputOf(again))).toBe(compileKey(compileInputOf(loaded)));
+    expect(compileKey(compileInputOf(again))).toBe(
+      compileKey(compileInputOf(loaded)),
+    );
     const shared = compileDslConfig(compileInputOf(loaded));
     const first = renderer(loaded, new SessionState(), shared);
     const reloaded = renderer(again, new SessionState(), shared);
@@ -349,7 +389,9 @@ describe("nothing fades in where the frame is drawn from another source", () => 
       reloaded.render({ shown: true, when: at(S) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
       // Drawn from the same load again, the frame compares.
-      reloaded.render({ shown: true, when: at(S + 1) }, fx, { transitions: true });
+      reloaded.render({ shown: true, when: at(S + 1) }, fx, {
+        transitions: true,
+      });
       expect(fx.lastFrame().basis).toBe("compared");
     } finally {
       first.dispose();

@@ -59,9 +59,7 @@ describe("a click's session id", () => {
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());
-    expect(() => undo(encodeURIComponent(raw), ctx)).toThrow(
-      BadVerbArgs,
-    );
+    expect(() => undo(encodeURIComponent(raw), ctx)).toThrow(BadVerbArgs);
     expect(() => undo(encodeURIComponent(raw), ctx)).toThrow(problem);
     expect(() => stepState(encodeSegments([raw, "k", "1"]), ctx)).toThrow(
       problem,

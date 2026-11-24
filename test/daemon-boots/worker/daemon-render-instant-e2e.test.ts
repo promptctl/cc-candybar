@@ -8,10 +8,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { render } from "../../helpers/daemon-e2e";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../helpers/daemon-log";
 
 jest.setTimeout(30_000);
@@ -26,7 +27,9 @@ describe("a daemon render is drawn at the instant its request sampled, and logs 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-instant-e2e");
     ({ env, removeTmpDirs } = prepared);
-    projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-instant-e2e-"));
+    projectDir = mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-instant-e2e-"),
+    );
     config = path.join(projectDir, "epoch.json5");
     writeFileSync(
       config,

@@ -18,7 +18,10 @@ async function selectedBySearch(globalConfig, contexts) {
   const { SearchSource } = await import("jest");
   const selected = [];
   for (const context of contexts) {
-    const { tests } = await new SearchSource(context).getTestPaths(globalConfig, context.config);
+    const { tests } = await new SearchSource(context).getTestPaths(
+      globalConfig,
+      context.config,
+    );
     selected.push(...tests.map((test) => test.path));
   }
   return selected;
@@ -46,7 +49,9 @@ class TestRecordsReporter {
         lost === 0
           ? []
           : neverRan(
-              (await this.select(this.globalConfig, contexts)).map((file) => path.relative(rootDir, file)),
+              (await this.select(this.globalConfig, contexts)).map((file) =>
+                path.relative(rootDir, file),
+              ),
               this.records,
               this.run,
             );

@@ -16,10 +16,11 @@ import { textOf, type Frame } from "../../../src/render/frame";
 import { click, frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { loggedWhen } from "../../helpers/daemon-log";
 import { effectsOf } from "../../helpers/click";
 import { until } from "../../helpers/until";
@@ -115,7 +116,9 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-plugin-fit");
     ({ env, removeTmpDirs } = prepared);
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-plugin-fit-")));
+    root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-plugin-fit-")),
+    );
     projectDir = path.join(root, "project");
     claudeDir = path.join(root, "claude");
     gaugeHome = path.join(root, "gauge-home");
@@ -161,7 +164,10 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
       env: { PATH: process.env.PATH! },
     });
 
-  const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<Frame> => {
+  const renderUntil = async (
+    shows: (bar: string) => boolean,
+    what: string,
+  ): Promise<Frame> => {
     let raw = barOf();
     await until(
       async () => shows(textOf((raw = await renderRaw()))),
@@ -202,10 +208,16 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
       : [];
 
   // The link the bar drew for a move, read off its frame.
-  const moveLink = (rendered: Frame, action: string): { url: string; drawn: EvaluatedRun } => {
+  const moveLink = (
+    rendered: Frame,
+    action: string,
+  ): { url: string; drawn: EvaluatedRun } => {
     for (const url of linkUrls(rendered)) {
-      const run = effectsOf(url).find((e) => e.verb === VERB_RUN && e.args[1] === action);
-      if (run !== undefined) return { url, drawn: JSON.parse(run.args[2]!) as EvaluatedRun };
+      const run = effectsOf(url).find(
+        (e) => e.verb === VERB_RUN && e.args[1] === action,
+      );
+      if (run !== undefined)
+        return { url, drawn: JSON.parse(run.args[2]!) as EvaluatedRun };
     }
     throw new Error(`no ${action} link in ${JSON.stringify(rendered)}`);
   };
@@ -217,7 +229,12 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
     expect(bar).not.toContain("was not loaded");
     await loggedWhen(
       env,
-      (lines) => lines.some((l) => l.includes("config load ") && l.includes(" plugins loaded=1 sources=1 ")),
+      (lines) =>
+        lines.some(
+          (l) =>
+            l.includes("config load ") &&
+            l.includes(" plugins loaded=1 sources=1 "),
+        ),
       "the config-load event loading the plugin and its source",
     );
     expect(fs.existsSync(path.join(storage(), `${SESSION}.json`))).toBe(false);
@@ -225,10 +242,22 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
 
   test("it shows the value from the file, and the program's refusal when the file carries one", async () => {
     await programWrites(
-      { home: gaugeHome, command: program, refusal: "the session's layer is unreadable" },
+      {
+        home: gaugeHome,
+        command: program,
+        refusal: "the session's layer is unreadable",
+      },
       "limit refused: the session's layer is unreadable",
     );
-    await programWrites({ home: gaugeHome, command: program, limit: PROJECT_LIMIT, session: null }, `limit=${PROJECT_LIMIT}`);
+    await programWrites(
+      {
+        home: gaugeHome,
+        command: program,
+        limit: PROJECT_LIMIT,
+        session: null,
+      },
+      `limit=${PROJECT_LIMIT}`,
+    );
   });
 
   test.each([
@@ -240,14 +269,20 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
     "%s runs the program the session's status names, with the session's facts, and the bar shows what it wrote",
     async (action, args, shows) => {
       const before = calls().length;
-      const { url, drawn } = moveLink(await renderRaw(), `plugins.gauge.${action}`);
+      const { url, drawn } = moveLink(
+        await renderRaw(),
+        `plugins.gauge.${action}`,
+      );
       expect(drawn).toEqual({
         run: [program, ...args],
         env: { GAUGE_HOME: gaugeHome },
       });
 
       await click(daemon, url);
-      await renderUntil((b) => calls().length > before && b.includes(shows), `${action}'s write`);
+      await renderUntil(
+        (b) => calls().length > before && b.includes(shows),
+        `${action}'s write`,
+      );
 
       expect(calls().slice(before)).toEqual([
         {

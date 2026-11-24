@@ -10,7 +10,13 @@ import { holdClickError } from "../src/daemon/foundations/click-error";
 import { isEnvironmentOutput } from "../src/daemon/environment-output";
 import { linkUrls } from "./helpers/frame";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
-import { HOST, WORLD, fixtureLauncher, locs, processLauncher } from "./helpers/host";
+import {
+  HOST,
+  WORLD,
+  fixtureLauncher,
+  locs,
+  processLauncher,
+} from "./helpers/host";
 import { type Launcher } from "../src/proc/launcher";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
@@ -265,10 +271,11 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     // reported: a shell's search path, under the session's own facts.
     environmentOf: () => ({
       kind: "ok",
-      value: sessionEnvironment(
-        TEST_ENV,
-        { sessionId: SID, projectDir: dir, claudeConfigDir: "/u/.claude-x" },
-      ),
+      value: sessionEnvironment(TEST_ENV, {
+        sessionId: SID,
+        projectDir: dir,
+        claudeConfigDir: "/u/.claude-x",
+      }),
     }),
     launch,
   });
@@ -313,7 +320,11 @@ function draw(view: SessionView<SessionSource>): {
     effective,
   );
   const errors = segmentErrorsOf(warnings);
-  return { text: textOf(frame), links: linkUrls(publishingFrames(TEST_SIGNER)(frame)), errors };
+  return {
+    text: textOf(frame),
+    links: linkUrls(publishingFrames(TEST_SIGNER)(frame)),
+    errors,
+  };
 }
 
 function viewOf(
@@ -676,8 +687,13 @@ describe("a click on a run link", () => {
       // Another session that has rendered: what its link must prove is the
       // signature.
       recordRender(r.sessionState, S2, dir);
-      await expect(clickActing(relink(tampered), ctx, running(r))).resolves.toEqual([
-        { kind: "refused", reason: expect.stringContaining("signature does not match") },
+      await expect(
+        clickActing(relink(tampered), ctx, running(r)),
+      ).resolves.toEqual([
+        {
+          kind: "refused",
+          reason: expect.stringContaining("signature does not match"),
+        },
       ]);
       expect(r.runs.stats()).toMatchObject({ started: 0 });
       // The refusal is in the bar of the session the link names.
@@ -711,7 +727,12 @@ describe("a click on a run link", () => {
     } as typeof drawnUnder;
     const ctx = clickContext(r, view, { configFor: () => edited });
     await expect(clickActing(link.url, ctx, running(r))).resolves.toEqual([
-      { kind: "refused", reason: expect.stringContaining("its action has been edited since it was drawn") },
+      {
+        kind: "refused",
+        reason: expect.stringContaining(
+          "its action has been edited since it was drawn",
+        ),
+      },
     ]);
     expect(r.runs.stats()).toMatchObject({ started: 0 });
     // The same link under the declaration it was drawn from runs.
@@ -726,7 +747,10 @@ describe("a click on a run link", () => {
     await expect(
       clickActing(link.url, ctx, running(r), linkSigner(Buffer.alloc(32, 9))),
     ).resolves.toEqual([
-      { kind: "refused", reason: expect.stringContaining("signature does not match") },
+      {
+        kind: "refused",
+        reason: expect.stringContaining("signature does not match"),
+      },
     ]);
     expect(r.runs.stats()).toMatchObject({ started: 0 });
   });

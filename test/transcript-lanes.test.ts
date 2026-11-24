@@ -69,7 +69,12 @@ function rig({ throwing = new Set<string>() } = {}) {
     watchers: {
       acquire: (_key, targets, changed) => {
         watched.push({ targets, changed: () => changed({} as never) });
-        return { release: () => {}, observed: () => {}, deaf: [], ridesStream: false };
+        return {
+          release: () => {},
+          observed: () => {},
+          deaf: [],
+          ridesStream: false,
+        };
       },
     },
     clock,

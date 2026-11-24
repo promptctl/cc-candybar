@@ -16,7 +16,9 @@ describe("the tmux stub's wait is its gate's", () => {
   // lifeline holds it. Only its gate ends it, so a run that ends before the
   // gate opens leaves nothing behind.
   test("a stub whose gate closes before it opens exits", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-tmux-stub-gate-"));
+    const dir = mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-tmux-stub-gate-"),
+    );
     const stub = await tmuxStub(dir);
     const child = spawn(path.join(dir, "tmux"), [], {
       detached: true,
@@ -25,8 +27,8 @@ describe("the tmux stub's wait is its gate's", () => {
     try {
       // A spawn that fails rejects here, by name, and the gate closes
       // whichever way this ends.
-      await Promise.all([once(child, "spawn"), stub.asked(1)]).finally(async () =>
-        await stub.close(),
+      await Promise.all([once(child, "spawn"), stub.asked(1)]).finally(
+        async () => await stub.close(),
       );
       // Bounded, so a stub that ignores its gate fails this test by name and
       // the cleanup below still runs.

@@ -119,9 +119,9 @@ describe("{{ swatch }}", () => {
   });
 
   test("an option outside the domain is refused, naming it, before any palette is asked for it", () => {
-    expect(textOf(rig('{{ swatch "applyTheme" "no-such-theme" }}').rendered)).toMatch(
-      /swatch "applyTheme": "no-such-theme" is not one of its options/,
-    );
+    expect(
+      textOf(rig('{{ swatch "applyTheme" "no-such-theme" }}').rendered),
+    ).toMatch(/swatch "applyTheme": "no-such-theme" is not one of its options/);
   });
 });
 
@@ -140,9 +140,7 @@ describe("links()", () => {
     // A theme option in a bare picker is its name and its swatch: several
     // runs of colour, every one carrying the option's click.
     const { rendered } = rig('{{ picker "applyTheme" "page" false false }}');
-    const nord = linksOf(rendered).filter((l) =>
-      l.text.startsWith("nord "),
-    );
+    const nord = linksOf(rendered).filter((l) => l.text.startsWith("nord "));
     expect(nord.map((l) => l.text)).toEqual(["nord ▀▀▀"]);
     expect(nord[0]!.url).toContain("theme%2Fnord");
   });

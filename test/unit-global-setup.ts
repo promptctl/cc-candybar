@@ -6,5 +6,7 @@ import path from "node:path";
 import { IGNORED_ENV, gitIgnored } from "./helpers/package-files";
 
 export default function unitGlobalSetup(): void {
-  process.env[IGNORED_ENV] = JSON.stringify(gitIgnored(path.resolve(__dirname, "..")));
+  process.env[IGNORED_ENV] = JSON.stringify(
+    gitIgnored(path.resolve(__dirname, "..")),
+  );
 }

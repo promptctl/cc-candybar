@@ -149,7 +149,9 @@ test("the verified forwarder acknowledgement still precedes a rate-limited effec
   expect(h.unheard).toEqual([]);
   await answered.land();
   expect(h.events).toEqual([expect.stringContaining("outcome=threw")]);
-  expect(h.unheard).toEqual([expect.stringContaining("rate-limited: click.pbcopy")]);
+  expect(h.unheard).toEqual([
+    expect.stringContaining("rate-limited: click.pbcopy"),
+  ]);
 });
 
 // A copy names no session, so no bar holds its failure: the daemon's warning

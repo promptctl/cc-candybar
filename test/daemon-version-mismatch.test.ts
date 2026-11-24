@@ -21,21 +21,20 @@ import { planOutcome } from "../src/outcome-plan";
 // version-mismatched client sees and how the daemon responds — not the
 // implementation. The shape of the daemon's handleRequest is free to change
 // as long as it preserves: (a) a mismatched client gets VERSION_MISMATCH with
-// daemonV present, (b) daemon does NOT initiate self-shutdown for a client of
-// either version, (c) the client's typed outcome carries clientV and daemonV.
+// daemonV present, (b) the client's typed outcome carries clientV and daemonV.
+// That the host stays up for a newer client is the real daemon's contract,
+// pinned in test/daemon-boots/process/daemon-shutdown.test.ts.
 
 // --- helper: minimal daemon-like server that mirrors handleRequest's
 // version-mismatch branch ---
 
 interface MismatchServer {
   sockPath: string;
-  shutdownObserved: { triggered: boolean };
   close: () => Promise<void>;
 }
 
 function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
   return new Promise((resolve) => {
-    const shutdownObserved = { triggered: false };
     const server = net.createServer((sock) => {
       const reader = makeFrameReader(
         (frame) => {
@@ -53,8 +52,6 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
             return "done";
           }
           if (req.v !== daemonV) {
-            // Mirrors the daemon: a mismatch in either direction answers and
-            // stays up, so shutdownObserved is never set here.
             sock.write(
               encodeFrame({
                 ok: false,
@@ -84,7 +81,6 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
     server.listen(sockPath, () => {
       resolve({
         sockPath,
-        shutdownObserved,
         close: () =>
           new Promise((r) => {
             server.close(() => {
@@ -135,7 +131,7 @@ function sendRequest(
 }
 
 describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
-  test("older client receives VERSION_MISMATCH with daemonV; daemon does NOT trigger shutdown", async () => {
+  test("older client receives VERSION_MISMATCH with daemonV", async () => {
     const daemonV = PROTOCOL_VERSION;
     const server = await spinUpMismatchServer(daemonV);
     try {
@@ -149,22 +145,15 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
         expect(resp.code).toBe("VERSION_MISMATCH");
         expect(resp.daemonV).toBe(daemonV);
       }
-      // [LAW:types-are-the-program] The load-bearing assertion: shutdown is
-      // NOT triggered when the client is stale. Triggering would respawn a
-      // daemon at the same version, which the same client would mismatch
-      // again — the 452-corpse spiral.
-      expect(server.shutdownObserved.triggered).toBe(false);
     } finally {
       await server.close();
     }
   });
 
-  test("newer client receives VERSION_MISMATCH; daemon does NOT trigger shutdown", async () => {
+  test("newer client receives VERSION_MISMATCH with daemonV", async () => {
     const daemonV = PROTOCOL_VERSION;
     const server = await spinUpMismatchServer(daemonV);
     try {
-      // A newer client (a worktree's build) must not end the installed host:
-      // only the install's record and the running bundle move it.
       const resp = await sendRequest(server.sockPath, {
         v: daemonV + 1,
         kind: "render",
@@ -174,7 +163,6 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
         expect(resp.code).toBe("VERSION_MISMATCH");
         expect(resp.daemonV).toBe(daemonV);
       }
-      expect(server.shutdownObserved.triggered).toBe(false);
     } finally {
       await server.close();
     }
@@ -189,7 +177,6 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
         kind: "render",
       });
       expect(resp.ok).toBe(true);
-      expect(server.shutdownObserved.triggered).toBe(false);
     } finally {
       await server.close();
     }
@@ -473,7 +460,10 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // identically and the spiral repeats.
 
   test("ok outcome returns the daemon output, no kick, no debug message", () => {
-    const plan = planOutcome({ kind: "ok", value: "rendered statusline\n" }, undefined);
+    const plan = planOutcome(
+      { kind: "ok", value: "rendered statusline\n" },
+      undefined,
+    );
     expect(plan.kick).toBe(false);
     expect(plan.output).toBe("rendered statusline\n");
     // The happy path carries no debug message — nothing for the caller to log.
@@ -491,7 +481,9 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
         undefined,
       );
       expect(plan.kick).toBe(true);
-      expect(plan.output).toBe("\x1b[1mCandybar · waiting for daemon…\x1b[0m\n");
+      expect(plan.output).toBe(
+        "\x1b[1mCandybar · waiting for daemon…\x1b[0m\n",
+      );
       // The debug string is data, not a side effect — the caller decides
       // whether to log it.
       expect(plan.debug).toContain(`transient: ${cause}`);
@@ -502,20 +494,36 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // The daemon answered, so it is up: a kick would spawn a candidate that
   // loses the bind to it. The Rust client's Busy variant agrees.
   test.each([
-    { stateHome: undefined, command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log" },
-    { stateHome: "", command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log" },
-    { stateHome: "/state dir", command: 'tail -n 40 "$XDG_STATE_HOME/cc-candybar/daemon.log"' },
-  ])("a timeout gives an offline log command for state home $stateHome", ({ stateHome, command }) => {
-    const plan = planOutcome(
-      { kind: "busy", phase: "deadline", message: "request exceeded its budget" },
-      stateHome,
-    );
-    expect(plan).toMatchObject({
-      kick: false,
-      output: `\x1b[1mCandybar timed out\x1b[0m · ${command}\n`,
-    });
-    expect(plan.debug).toContain("busy");
-  });
+    {
+      stateHome: undefined,
+      command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log",
+    },
+    {
+      stateHome: "",
+      command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log",
+    },
+    {
+      stateHome: "/state dir",
+      command: 'tail -n 40 "$XDG_STATE_HOME/cc-candybar/daemon.log"',
+    },
+  ])(
+    "a timeout gives an offline log command for state home $stateHome",
+    ({ stateHome, command }) => {
+      const plan = planOutcome(
+        {
+          kind: "busy",
+          phase: "deadline",
+          message: "request exceeded its budget",
+        },
+        stateHome,
+      );
+      expect(plan).toMatchObject({
+        kick: false,
+        output: `\x1b[1mCandybar timed out\x1b[0m · ${command}\n`,
+      });
+      expect(plan.debug).toContain("busy");
+    },
+  );
 
   test("every permanent cause does NOT kick (the spiral-breaker)", () => {
     const permanentOutcomes: PermanentOutcome[] = [

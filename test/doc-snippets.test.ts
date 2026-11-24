@@ -197,14 +197,21 @@ beforeAll(() => {
   }
   process.env.PATH = `${bin}${path.delimiter}${SAVED_PATH ?? ""}`;
   // Built after the PATH write so the stubs reach the launcher's children.
-  world = worldOf(hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(os.tmpdir(), "cc-doc-xdg-empty") }));
+  world = worldOf(
+    hostOf({
+      ...HOST.env,
+      XDG_CONFIG_HOME: path.join(os.tmpdir(), "cc-doc-xdg-empty"),
+    }),
+  );
   for (const f of fences) {
     if (f.snippet.kind !== "file") continue;
     const target = path.join(dir, f.snippet.path);
     // [LAW:no-silent-failure] One path, one body: a second fence at the same
     // path would leave whichever was written last for every snippet to read.
     if (fs.existsSync(target)) {
-      throw new Error(`file "${f.snippet.path}" is declared twice (${f.doc} line ${f.line})`);
+      throw new Error(
+        `file "${f.snippet.path}" is declared twice (${f.doc} line ${f.line})`,
+      );
     }
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, f.body);
@@ -315,9 +322,7 @@ describe("doc snippet contract", () => {
         );
       }
       // Compare what a reader sees at the documented width.
-      expect(previewText(textOf(outcome.rendered))).toBe(
-        previewText(f.body),
-      );
+      expect(previewText(textOf(outcome.rendered))).toBe(previewText(f.body));
     },
   );
 

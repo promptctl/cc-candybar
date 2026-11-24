@@ -68,19 +68,20 @@ import {
 } from "../src/config/menu-keys";
 import { menuKeyOf } from "./helpers/menu-key";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
   const walk = (node: CompiledNode, address: Address): Address | undefined => {
-    if (node.kind === "segment") return node.name === name ? address : undefined;
+    if (node.kind === "segment")
+      return node.name === name ? address : undefined;
     for (const [index, child] of node.children.entries()) {
-      const found = walk(child, [
-        ...address,
-        childStep(node, index),
-      ]);
+      const found = walk(child, [...address, childStep(node, index)]);
       if (found !== undefined) return found;
     }
     return undefined;
@@ -141,7 +142,8 @@ function expectSwatched(
   );
 }
 // The ground a rendered line is drawn on: its own background.
-const groundOf = (line: RichText): Ground => resolvedStyle(line.style).bgcolor!.value!;
+const groundOf = (line: RichText): Ground =>
+  resolvedStyle(line.style).bgcolor!.value!;
 
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
@@ -169,7 +171,11 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
     latest = drawn.segments;
     return drawn.frame;
   };
-  const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
+  const clickToggle = async (
+    out: Frame,
+    key: string,
+    value: string,
+  ): Promise<void> => {
     const url = ownUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -285,7 +291,9 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("two menus whose names differ only in punctuation keep two open states", () => {
     // Apply actions "a-b" and "a_b": every part of a key is spelled
     // injectively, so the two never share open state.
-    const config = parseAndValidate("<test>", `{
+    const config = parseAndValidate(
+      "<test>",
+      `{
       globals: {},
       actions: {
         'a-b': { set: 'theme', from: 'themes' },
@@ -293,7 +301,9 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       },
       segments: { s: { template: 'S {{ menu "a-b" "▸" "▾" }} {{ menu "a_b" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
-    }`, ALLOWED);
+    }`,
+      ALLOWED,
+    );
     const s = { preset: "default", id: "s", segment: "s" };
     expect(menuStateKey(s, "a-b", undefined)).not.toBe(
       menuStateKey(s, "a_b", undefined),
@@ -485,7 +495,6 @@ const load =
     parseAndValidate("<test>", srcFor(segTemplate, extraVars), ALLOWED);
 
 describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
-
   test("the full old positional form fails load naming the new form (acceptance)", () => {
     try {
       load('{{ menu "applyTheme" "themePage" false true }}')();
@@ -584,7 +593,9 @@ describe("the options dict and the trigger displays cannot be confused", () => {
     // expr is provably the dict and BOTH displays may be dynamic — the parity
     // with a cycle {{ action }}'s free displays is preserved, not traded away.
     expect(
-      load('{{ menu "applyTheme" (printf "◂%s" "a") (printf "▸%s" "b") (dict) }}'),
+      load(
+        '{{ menu "applyTheme" (printf "◂%s" "a") (printf "▸%s" "b") (dict) }}',
+      ),
     ).not.toThrow();
   });
 
@@ -621,8 +632,7 @@ describe("toggle round trip + drop stacking", () => {
   });
 
   test("click opens: ▾ + body dropped BELOW the row; row 0 keeps the neighbor", async () => {
-    const { render, clickToggle, sessionState } =
-      menuBar(MENU_SRC);
+    const { render, clickToggle, sessionState } = menuBar(MENU_SRC);
     await clickToggle(render(), TKEY, "applyTheme");
     expect(sessionState.get(S1, TKEY)).toBe("applyTheme");
     const lines = textOf(render()).split("\n");
@@ -645,7 +655,12 @@ describe("toggle round trip + drop stacking", () => {
       return new Map(
         [...segments().entries()].map(([name, cells]) => [
           name,
-          cells.map((c) => `${c.plain}|${resolvedStyle(c.style).bgcolor?.value?.hex}|${resolvedStyle(c.style).color?.value?.hex}`).join("\n"),
+          cells
+            .map(
+              (c) =>
+                `${c.plain}|${resolvedStyle(c.style).bgcolor?.value?.hex}|${resolvedStyle(c.style).color?.value?.hex}`,
+            )
+            .join("\n"),
         ]),
       );
     };
@@ -680,8 +695,7 @@ describe("toggle round trip + drop stacking", () => {
   // to "closed" + page reset, one atomic write — not the standalone picker's
   // page=-1 idiom (which cannot close a disclosure-keyed menu).
   test("the dropped body's ✕ closes the disclosure (and resets the page)", async () => {
-    const { render, click, clickToggle, sessionState } =
-      menuBar(MENU_SRC);
+    const { render, click, clickToggle, sessionState } = menuBar(MENU_SRC);
     await clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     expect(textOf(open).split("\n")).toHaveLength(2);
@@ -708,8 +722,7 @@ describe("toggle round trip + drop stacking", () => {
       '{{ menu "applyTheme" "▸" "▾" }}',
       '{{ menu "applyTheme" "▸" "▾" (dict "closeOnPick" true) }}',
     );
-    const { render, click, clickToggle, sessionState } =
-      menuBar(src);
+    const { render, click, clickToggle, sessionState } = menuBar(src);
     await clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     const pickUrl = ownUrls(open).find((u) => {
@@ -796,12 +809,15 @@ const INDEPENDENT_SRC = `{
 
 describe("independent default (no shared key)", () => {
   test("two menus have distinct keys (and page cursors); both can be open at once", async () => {
-    const { config, render, clickToggle } =
-      menuBar(INDEPENDENT_SRC);
+    const { config, render, clickToggle } = menuBar(INDEPENDENT_SRC);
     // Distinct keys — neither click writes the other's key — and each key
     // brings its own synthesized page cursor.
-    expect(config.variables[menuKeyOf("themeMenu", "applyTheme")]).toBeDefined();
-    expect(config.variables[menuKeyOf("endcapsMenu", "applyEndcaps")]).toBeDefined();
+    expect(
+      config.variables[menuKeyOf("themeMenu", "applyTheme")],
+    ).toBeDefined();
+    expect(
+      config.variables[menuKeyOf("endcapsMenu", "applyEndcaps")],
+    ).toBeDefined();
     expect(
       config.variables[menuPageKey(menuKeyOf("themeMenu", "applyTheme"))],
     ).toBeDefined();
@@ -809,12 +825,20 @@ describe("independent default (no shared key)", () => {
       config.variables[menuPageKey(menuKeyOf("endcapsMenu", "applyEndcaps"))],
     ).toBeDefined();
 
-    await clickToggle(render(), menuKeyOf("themeMenu", "applyTheme"), "applyTheme");
+    await clickToggle(
+      render(),
+      menuKeyOf("themeMenu", "applyTheme"),
+      "applyTheme",
+    );
     let out = textOf(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▸"); // style still closed — independence
     // Open style too: theme stays open (NOT mutually exclusive).
-    await clickToggle(render(), menuKeyOf("endcapsMenu", "applyEndcaps"), "applyEndcaps");
+    await clickToggle(
+      render(),
+      menuKeyOf("endcapsMenu", "applyEndcaps"),
+      "applyEndcaps",
+    );
     out = textOf(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▾"); // both open
@@ -838,13 +862,20 @@ const ACCORDION_SRC = `{
 
 describe("opt-in accordion (shared key, one open at a time)", () => {
   test("both menus share the key; the gate unions members; ONE shared page cursor; opening one closes the other", async () => {
-    const { config, render, clickToggle } =
-      menuBar(ACCORDION_SRC);
-    expect(config.actions[menuActionName(sharedMenuStateKey("pickers"), "applyTheme")]).toEqual({
+    const { config, render, clickToggle } = menuBar(ACCORDION_SRC);
+    expect(
+      config.actions[
+        menuActionName(sharedMenuStateKey("pickers"), "applyTheme")
+      ],
+    ).toEqual({
       set: sharedMenuStateKey("pickers"),
       cycle: ["closed", "applyTheme"],
     });
-    expect(config.actions[menuActionName(sharedMenuStateKey("pickers"), "applyEndcaps")]).toEqual({
+    expect(
+      config.actions[
+        menuActionName(sharedMenuStateKey("pickers"), "applyEndcaps")
+      ],
+    ).toEqual({
       set: sharedMenuStateKey("pickers"),
       cycle: ["closed", "applyEndcaps"],
     });
@@ -857,7 +888,9 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
     });
     // One page cursor per disclosure key: the accordion holds at most one open
     // body, so its one cursor is exact — and every toggle resets it to 0.
-    expect(config.variables[menuPageKey(sharedMenuStateKey("pickers"))]).toEqual({
+    expect(
+      config.variables[menuPageKey(sharedMenuStateKey("pickers"))],
+    ).toEqual({
       kind: "state",
       key: menuPageKey(sharedMenuStateKey("pickers")),
       default: "0",
@@ -939,7 +972,11 @@ describe('the "theme tester" — N menus in one segment', () => {
   test("a mid-segment menu keeps content AFTER it on row 0; its body drops below", async () => {
     const { render, clickToggle } = menuBar(TESTER_SRC);
     // Open only the FIRST menu (mid-segment, followed by ' | ▸ | ▸ END').
-    await clickToggle(render(), menuKeyOf("tester", "applyTheme"), "applyTheme");
+    await clickToggle(
+      render(),
+      menuKeyOf("tester", "applyTheme"),
+      "applyTheme",
+    );
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(2); // row 0 + one drop
     // The first glyph flipped, and EVERYTHING after it is still on row 0 —
@@ -951,9 +988,21 @@ describe('the "theme tester" — N menus in one segment', () => {
 
   test("all three open independently: three bodies stack below one inline row", async () => {
     const { render, clickToggle } = menuBar(TESTER_SRC);
-    await clickToggle(render(), menuKeyOf("tester", "applyTheme"), "applyTheme");
-    await clickToggle(render(), menuKeyOf("tester", "applyEndcaps"), "applyEndcaps");
-    await clickToggle(render(), menuKeyOf("tester", "applyTheme2"), "applyTheme2");
+    await clickToggle(
+      render(),
+      menuKeyOf("tester", "applyTheme"),
+      "applyTheme",
+    );
+    await clickToggle(
+      render(),
+      menuKeyOf("tester", "applyEndcaps"),
+      "applyEndcaps",
+    );
+    await clickToggle(
+      render(),
+      menuKeyOf("tester", "applyTheme2"),
+      "applyTheme2",
+    );
     const lines = textOf(render()).split("\n");
     expect(lines[0]).toContain("TEST ▾ | ▾ | ▾ END"); // all three open, all inline
     expect(lines).toHaveLength(4); // row 0 + three dropped bodies
@@ -1114,7 +1163,11 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
     expect(closed).toContain("P ▸");
 
     await clickToggle(render(), "groups.grp", "grp");
-    await clickToggle(render(), menuKeyOf("picker", "applyTheme"), "applyTheme");
+    await clickToggle(
+      render(),
+      menuKeyOf("picker", "applyTheme"),
+      "applyTheme",
+    );
     const open = textOf(render());
     expect(open).toContain("G ▾");
     expect(open).toContain("P ▾");
@@ -1127,7 +1180,11 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
     const closed = textOf(render()).split("\n");
     expect(closed.some((l) => l.includes("P +"))).toBe(true);
 
-    await clickToggle(render(), menuKeyOf("picker", "applyTheme"), "applyTheme");
+    await clickToggle(
+      render(),
+      menuKeyOf("picker", "applyTheme"),
+      "applyTheme",
+    );
     // Still `+`, and the picker body now drops onto the line below it — the
     // open state is carried by the body, not by a glyph swap.
     const open = textOf(render()).split("\n");
@@ -1176,7 +1233,15 @@ describe("a menu's `distribution` option places its band", () => {
     await clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(
+      palette,
+      {
+        kind: "bar",
+        decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] },
+        address,
+      },
+      ColorDepth.TRUECOLOR,
+    );
     const body = segments().get("themepicker")![1]!;
     const options = [...WORDS];
     const optionSpans = body.spans.filter(
@@ -1191,11 +1256,21 @@ describe("a menu's `distribution` option places its band", () => {
       const style = resolvedStyle(span.style);
       const step = { index, count: options.length };
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS.monotonic }, ColorDepth.TRUECOLOR).hex,
+        bandItemFor(
+          palette,
+          disclosure,
+          { ...step, distribution: DISTRIBUTIONS.monotonic },
+          ColorDepth.TRUECOLOR,
+        ).hex,
       );
       if (
         style.bgcolor?.value?.hex !==
-        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] }, ColorDepth.TRUECOLOR).hex
+        bandItemFor(
+          palette,
+          disclosure,
+          { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
+          ColorDepth.TRUECOLOR,
+        ).hex
       )
         differsFromDefault++;
     }
@@ -1203,13 +1278,17 @@ describe("a menu's `distribution` option places its band", () => {
   });
 
   test("an unknown distribution name is a load error naming the five", () => {
-    expect(() => parseAndValidate("<test>", WITH('"distribution" "spiral"'), ALLOWED)).toThrow(
+    expect(() =>
+      parseAndValidate("<test>", WITH('"distribution" "spiral"'), ALLOWED),
+    ).toThrow(
       /"distribution" must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
     );
   });
 
   test("the unknown-option error lists `distribution` in the vocabulary", () => {
-    expect(() => parseAndValidate("<test>", WITH('"distributon" "uniform"'), ALLOWED)).toThrow(
+    expect(() =>
+      parseAndValidate("<test>", WITH('"distributon" "uniform"'), ALLOWED),
+    ).toThrow(
       /unknown \{\{ menu \}\} option "distributon".*"distribution" \(one of "van-der-corput"/,
     );
   });
@@ -1344,8 +1423,11 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   });
 
   test("every style option's swatch is the BASE palette under that style, not the bar's already-styled one", async () => {
-    const { render, segments, config, palette, clickToggle } =
-      menuBar(BOTH_PICKERS_SRC, S1, "dim");
+    const { render, segments, config, palette, clickToggle } = menuBar(
+      BOTH_PICKERS_SRC,
+      S1,
+      "dim",
+    );
     render();
     await clickToggle(render(), LKEY, "applyStyle");
     render();
@@ -1448,16 +1530,29 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     await clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(
+      palette,
+      {
+        kind: "bar",
+        decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] },
+        address,
+      },
+      ColorDepth.TRUECOLOR,
+    );
     const cells = optionCells(segments(), "themepicker", WORDS);
     expect(cells.length).toBe(WORDS.length);
     for (const cell of cells) {
       expect(cell.bg).toBe(
-        bandItemFor(palette, disclosure, {
+        bandItemFor(
+          palette,
+          disclosure,
+          {
             index: WORDS.indexOf(cell.name),
             count: WORDS.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-          }, ColorDepth.TRUECOLOR).hex,
+          },
+          ColorDepth.TRUECOLOR,
+        ).hex,
       );
     }
   });

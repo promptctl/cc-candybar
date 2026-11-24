@@ -25,17 +25,28 @@ describe("a stored JSON document", () => {
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   test("absent is the empty value; an update is read back by the next reader, its directory made", () => {
-    expect(stateFile([file], [], numbers).read()).toEqual({ kind: "ok", value: [] });
-    expect(writeStatePlan(stateFile([file], [], numbers).plan((ns) => [...ns, 1]))).toEqual({ kind: "ok", value: [1] });
+    expect(stateFile([file], [], numbers).read()).toEqual({
+      kind: "ok",
+      value: [],
+    });
+    expect(
+      writeStatePlan(stateFile([file], [], numbers).plan((ns) => [...ns, 1])),
+    ).toEqual({ kind: "ok", value: [1] });
     // Another process — the CLI, a later daemon — reads the same document.
-    expect(stateFile([file], [], numbers).read()).toEqual({ kind: "ok", value: [1] });
+    expect(stateFile([file], [], numbers).read()).toEqual({
+      kind: "ok",
+      value: [1],
+    });
   });
 
   test("an update that returns what it was given writes nothing", () => {
     const store = stateFile<readonly number[]>([file], [], numbers);
     writeStatePlan(store.plan(() => [1]));
     fs.utimesSync(file, 0, 0);
-    expect(writeStatePlan(store.plan((ns) => ns))).toEqual({ kind: "ok", value: [1] });
+    expect(writeStatePlan(store.plan((ns) => ns))).toEqual({
+      kind: "ok",
+      value: [1],
+    });
     expect(fs.statSync(file).mtimeMs).toBe(0);
   });
 
@@ -64,7 +75,9 @@ describe("a stored JSON document", () => {
   test("nothing is filed over a file that does not read", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(file, "junk");
-    expect(writeStatePlan(stateFile([file], [], numbers).plan((ns) => [...ns, 1]))).toMatchObject({
+    expect(
+      writeStatePlan(stateFile([file], [], numbers).plan((ns) => [...ns, 1])),
+    ).toMatchObject({
       kind: "failed",
       reason: expect.stringContaining(`${file} is not JSON`),
     });
@@ -77,9 +90,9 @@ describe("a stored JSON document", () => {
     fs.mkdirSync(path.dirname(file));
     fs.chmodSync(path.dirname(file), 0o500);
     try {
-      expect(() => writeStatePlan(stateFile([file], [], numbers).plan((ns) => [...ns, 1]))).toThrow(
-        expect.objectContaining({ code: "EACCES" }),
-      );
+      expect(() =>
+        writeStatePlan(stateFile([file], [], numbers).plan((ns) => [...ns, 1])),
+      ).toThrow(expect.objectContaining({ code: "EACCES" }));
     } finally {
       fs.chmodSync(path.dirname(file), 0o700);
     }

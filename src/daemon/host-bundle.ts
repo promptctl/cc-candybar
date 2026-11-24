@@ -1,14 +1,17 @@
-import fs from "node:fs";
 import path from "node:path";
 import type { Host } from "../host";
 import { writeAtomic } from "../utils/atomic-write";
+import { presence } from "../utils/presence";
+import { readTextIfPresent } from "../utils/regular-text";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import { hostBundlePath } from "./paths";
 
 // The host's bundle record: which `index.mjs` the install runs the host from.
-// [LAW:single-enforcer] The install's writer (`recordHostBundle`) and a client's
-// reader (`readHostBundle`) are the only code that touch the file, so a client
-// that finds no host has exactly one answer to "which code starts it".
+// [LAW:single-enforcer] In this runtime the install's writer (`recordHostBundle`)
+// and a client's reader (`readHostBundle`) are the only code that touch the
+// file, so a client that finds no host has exactly one answer to "which code
+// starts it". The Rust client mirrors the read (rust-client/src/main.rs
+// read_host_bundle), and only the file's name is diffed by check-protocol.
 
 // [LAW:parse-dont-validate] The crossing from the file's text to a bundle a
 // spawn can use. `ok` is a recorded path that exists; `absent` is no record
@@ -17,21 +20,25 @@ import { hostBundlePath } from "./paths";
 // holds the path or a refusal, never a path it must re-check.
 export function readHostBundle(host: Host): Outcome<string> {
   const record = hostBundlePath(host);
-  let text: string;
+  let text: string | null;
   try {
-    text = fs.readFileSync(record, "utf8");
+    text = readTextIfPresent(record);
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "ENOENT"
-      ? ABSENT
-      : failed(`${record}: ${(error as Error).message}`, "read");
+    return failed((error as Error).message, "read");
   }
+  if (text === null) return ABSENT;
   const bundle = text.trim();
   if (!path.isAbsolute(bundle)) {
     return failed(`${record} does not hold an absolute path`, "parse");
   }
-  return fs.existsSync(bundle)
-    ? ok(bundle)
-    : failed(`${record} names ${bundle}, which does not exist`, "read");
+  const there = presence(bundle);
+  if (there === "present") return ok(bundle);
+  return failed(
+    there === "absent"
+      ? `${record} names ${bundle}, which does not exist`
+      : `${record} names ${bundle}, which cannot be read: ${there.error}`,
+    "read",
+  );
 }
 
 // [LAW:one-source-of-truth] The files whose change or loss ends a host: the

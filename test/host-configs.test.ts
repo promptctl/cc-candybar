@@ -77,7 +77,13 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs },
+  subscriptions: {
+    sources: {},
+    lanes: {},
+    managedFolders: [],
+    configSelections: [],
+    configs,
+  },
   wake: null,
   record: [],
   frames: [],
@@ -392,16 +398,19 @@ test("an unanswered start keeps the previous declaration until the next successf
     return opened;
   });
   await host.answer(() => ({ kind: "event", event: due }));
-  const start = () => host.answer(() => ({
-    kind: "event",
-    event: { kind: "start", viewers: {}, sessions: [] },
-  }));
+  const start = () =>
+    host.answer(() => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [] },
+    }));
   const refused = {
     kind: "threw",
     failure: { message: "the renderer went down" },
   };
   expect(await start()).toMatchObject(refused);
-  expect(await host.answer(() => ({ kind: "event", event: due }))).toMatchObject(refused);
+  expect(
+    await host.answer(() => ({ kind: "event", event: due })),
+  ).toMatchObject(refused);
   expect(heard).toEqual(["due", "config", "start"]);
   expect(declarations).toEqual([opened.subscriptions]);
   fail = false;

@@ -11,7 +11,13 @@ let bar: Bar | undefined;
 afterEach(async () => bar?.stop());
 
 test("a click on the door opens the menu in the next render", async () => {
-  bar = await startBar({ width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false });
+  bar = await startBar({
+    width: 120,
+    rows: 40,
+    config: null,
+    cwd: process.cwd(),
+    ssh: false,
+  });
   expect(textOf(await bar.render())).not.toContain("🎨 look");
   const opened = textOf((await bar.click(DOOR_GLYPH)).rendered);
   expect(opened).toContain("🎨 look");

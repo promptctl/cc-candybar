@@ -133,7 +133,9 @@ describe("a layout node's when that throws costs that node, not the bar", () => 
       const bar = rt.render();
       expect(bar).toContain("⚠ ay: the gate broke");
       expect(bar).toContain("BEE");
-      expect(rt.segmentErrors).toEqual([["ay", 'segment "ay": the gate broke']]);
+      expect(rt.segmentErrors).toEqual([
+        ["ay", 'segment "ay": the gate broke'],
+      ]);
       // Not a container's: no warning beside the ⚠.
       expect(rt.warnings).toEqual([]);
     } finally {

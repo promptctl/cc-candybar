@@ -13,7 +13,8 @@ export const LIFELINE_DIR_ENV = "CC_CANDYBAR_LIFELINE_DIR";
 
 export function lifelineAcrossFiles(file: string): void {
   const dir = process.env[LIFELINE_DIR_ENV];
-  if (dir === undefined) throw new Error(`${LIFELINE_DIR_ENV} names no directory`);
+  if (dir === undefined)
+    throw new Error(`${LIFELINE_DIR_ENV} names no directory`);
   let pid: number | undefined;
 
   test("no lifeline an earlier file held still runs", () => {

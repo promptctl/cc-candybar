@@ -78,7 +78,9 @@ describe("linksOf", () => {
 
   test("a link wrapped across rows is one link per row", () => {
     expect(
-      linksOf(frameOf(row({ text: "a", link: A }), row({ text: "b", link: A }))),
+      linksOf(
+        frameOf(row({ text: "a", link: A }), row({ text: "b", link: A })),
+      ),
     ).toEqual([
       { text: "a", url: A },
       { text: "b", url: A },
@@ -86,7 +88,10 @@ describe("linksOf", () => {
   });
 
   test("a frame with no look keeps its links", () => {
-    const bare: Frame = { ...frameOf(row({ text: "a", link: A })), depth: "none" };
+    const bare: Frame = {
+      ...frameOf(row({ text: "a", link: A })),
+      depth: "none",
+    };
     expect(linksOf(bare)).toEqual([{ text: "a", url: A }]);
   });
 });
@@ -94,7 +99,10 @@ describe("linksOf", () => {
 test("textOf is a frame's text, a line per row", () => {
   expect(
     textOf(
-      frameOf(row({ text: "a", fg: "#ff0000" }, { text: "b" }), row({ text: "c" })),
+      frameOf(
+        row({ text: "a", fg: "#ff0000" }, { text: "b" }),
+        row({ text: "c" }),
+      ),
     ),
   ).toBe("ab\nc");
 });

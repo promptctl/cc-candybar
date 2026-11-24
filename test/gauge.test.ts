@@ -124,7 +124,6 @@ describe("renderGauge — painted cells", () => {
 // same live palette, and its per-cell colour is the author's OWN ramp asked at the
 // cell's position. Assert the rendered text and colours together.
 describe("{{ gauge }} in a real config", () => {
-
   test("draws the cells a value earns, and paints them from the author's ramp", async () => {
     const clean = await checkText(
       "gauge",

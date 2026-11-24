@@ -7,11 +7,15 @@ export const WORKTREE_MODEL = "Worktree renderer";
 export function composePayload(
   ...[facts, inputs, draw]: Parameters<typeof compose>
 ): ReturnType<typeof compose> {
-  return compose(facts, {
-    ...inputs,
-    hookData: {
-      ...inputs.hookData,
-      model: { ...inputs.hookData.model, display_name: WORKTREE_MODEL },
+  return compose(
+    facts,
+    {
+      ...inputs,
+      hookData: {
+        ...inputs.hookData,
+        model: { ...inputs.hookData.model, display_name: WORKTREE_MODEL },
+      },
     },
-  }, draw);
+    draw,
+  );
 }

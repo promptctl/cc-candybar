@@ -21,12 +21,21 @@
 const path = require("node:path");
 const { TestEnvironment } = require("jest-environment-node");
 const { caseName } = require("./test-records.cjs");
-const { QUARANTINE_FILE, markError, quarantined, readQuarantine } = require("./quarantine.cjs");
+const {
+  QUARANTINE_FILE,
+  markError,
+  quarantined,
+  readQuarantine,
+} = require("./quarantine.cjs");
 
 /** The describe titles of a test from the outside in: the root block is the one with no parent. */
 function caseNameOf(test) {
   const titles = [];
-  for (let block = test.parent; block.parent !== undefined; block = block.parent) {
+  for (
+    let block = test.parent;
+    block.parent !== undefined;
+    block = block.parent
+  ) {
     titles.unshift(block.name);
   }
   return caseName(titles, test.name);
@@ -53,7 +62,8 @@ class QuarantineEnvironment extends TestEnvironment {
     this.list = testEnvironmentOptions.quarantine ?? QUARANTINE_FILE;
     this.entries = readQuarantine(rootDir, this.list);
     this.fixtureReleases = [];
-    this.global.releaseTestFixture = (release) => this.fixtureReleases.push(release);
+    this.global.releaseTestFixture = (release) =>
+      this.fixtureReleases.push(release);
   }
 
   // [LAW:no-ambient-temporal-coupling] The sandbox is per file, and this runs
@@ -82,7 +92,8 @@ class QuarantineEnvironment extends TestEnvironment {
   refuseAmbiguousLines(state) {
     const counts = countNames(state.rootDescribeBlock, [], new Map());
     for (const entry of this.entries) {
-      const matches = entry.file === this.file ? (counts.get(entry.name) ?? 0) : 0;
+      const matches =
+        entry.file === this.file ? (counts.get(entry.name) ?? 0) : 0;
       if (matches > 1) {
         throw new Error(
           `${this.list}: ${entry.file} › ${entry.name} matches ${matches} cases, and a line names one; rename them`,

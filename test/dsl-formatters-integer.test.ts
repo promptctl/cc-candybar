@@ -26,10 +26,7 @@ import { textOf } from "../src/render/frame";
 import { SessionState } from "../src/renderer/session-state";
 
 import { validateConfig } from "./helpers/parse-and-validate";
-import {
-  parseDslConfig,
-  mergeWithDefault,
-} from "../src/config/dsl-loader";
+import { parseDslConfig, mergeWithDefault } from "../src/config/dsl-loader";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
@@ -41,7 +38,9 @@ import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 const VARS = `{ n: { kind: "input", path: "n", type: "number", default: 0 } }`;

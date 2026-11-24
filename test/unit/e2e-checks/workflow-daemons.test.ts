@@ -7,7 +7,10 @@ import {
   type Repo,
 } from "../../e2e-checks/workflow-daemons";
 
-function repoOf(scripts: Record<string, string>, files: Record<string, string>): Repo {
+function repoOf(
+  scripts: Record<string, string>,
+  files: Record<string, string>,
+): Repo {
   return { scripts, read: (path) => files[path] };
 }
 
@@ -28,34 +31,52 @@ jobs:
   b:
     uses: ./.github/workflows/other.yml
 `;
-    expect(stepsOf(text, "w.yml")).toEqual([{ run: "pnpm test", condition: "github.event_name == 'pull_request'" }]);
+    expect(stepsOf(text, "w.yml")).toEqual([
+      { run: "pnpm test", condition: "github.event_name == 'pull_request'" },
+    ]);
   });
 
   test("fails on a document with no jobs", () => {
-    expect(() => stepsOf("name: x", "w.yml")).toThrow("w.yml: a workflow needs a jobs mapping");
+    expect(() => stepsOf("name: x", "w.yml")).toThrow(
+      "w.yml: a workflow needs a jobs mapping",
+    );
   });
 });
 
 describe("commandsOf", () => {
   test("splits on && and newlines and drops quotes", () => {
-    expect(commandsOf('pnpm build && node "scripts/a.mjs"\nnode b.ts')).toEqual([
-      ["pnpm", "build"],
-      ["node", "scripts/a.mjs"],
-      ["node", "b.ts"],
-    ]);
+    expect(commandsOf('pnpm build && node "scripts/a.mjs"\nnode b.ts')).toEqual(
+      [
+        ["pnpm", "build"],
+        ["node", "scripts/a.mjs"],
+        ["node", "b.ts"],
+      ],
+    );
   });
 });
 
 describe("leafCommands", () => {
-  const repo = repoOf({ ci: "pnpm lint && node scripts/x.mjs", lint: "eslint src/", loop: "pnpm loop" }, {});
+  const repo = repoOf(
+    {
+      ci: "pnpm lint && node scripts/x.mjs",
+      lint: "eslint src/",
+      loop: "pnpm loop",
+    },
+    {},
+  );
 
   test("expands pnpm run, bare pnpm and npm run to the script's commands", () => {
-    expect(leafCommands("pnpm run ci", repo)).toEqual([["eslint", "src/"], ["node", "scripts/x.mjs"]]);
+    expect(leafCommands("pnpm run ci", repo)).toEqual([
+      ["eslint", "src/"],
+      ["node", "scripts/x.mjs"],
+    ]);
     expect(leafCommands("npm run lint", repo)).toEqual([["eslint", "src/"]]);
   });
 
   test("leaves a command that is no script alone, and expands a self-reference once", () => {
-    expect(leafCommands("pnpm install --frozen-lockfile", repo)).toEqual([["pnpm", "install", "--frozen-lockfile"]]);
+    expect(leafCommands("pnpm install --frozen-lockfile", repo)).toEqual([
+      ["pnpm", "install", "--frozen-lockfile"],
+    ]);
     expect(leafCommands("pnpm loop", repo)).toEqual([]);
   });
 });
@@ -76,7 +97,8 @@ describe("violationsOf", () => {
     "scripts/lib/util.ts": "export const x = 1;",
     "scripts/boot.ts": 'import { daemonArgs } from "../src/acquire.js";',
     "scripts/indirect.ts": 'import "./lib/hop.js";',
-    "scripts/lib/hop.ts": 'export { createDaemon as make } from "../../src/daemon.js";',
+    "scripts/lib/hop.ts":
+      'export { createDaemon as make } from "../../src/daemon.js";',
     "src/acquire.ts": "export function daemonArgs() {}",
     "src/daemon.ts": "export function createDaemon() {}",
   };
@@ -90,42 +112,80 @@ describe("violationsOf", () => {
 
   test("flags a step whose script imports a daemon symbol", () => {
     expect(violationsOf([workflow("pnpm run boot")], repo, [])).toEqual([
-      { workflow: "ci.yml", step: "pnpm run boot", offender: "scripts/boot.ts" },
+      {
+        workflow: "ci.yml",
+        step: "pnpm run boot",
+        offender: "scripts/boot.ts",
+      },
     ]);
   });
 
   test("follows relative imports and re-exports to a module that imports one", () => {
-    expect(violationsOf([workflow("pnpm indirect")], repo, []).map((v) => v.offender)).toEqual(["scripts/lib/hop.ts"]);
+    expect(
+      violationsOf([workflow("pnpm indirect")], repo, []).map(
+        (v) => v.offender,
+      ),
+    ).toEqual(["scripts/lib/hop.ts"]);
   });
 
   test.each([
-    ["a namespace import", 'import * as d from "../src/daemon.js"; d.createDaemon();'],
-    ["a require destructuring", 'const { createDaemon } = require("../src/daemon.js");'],
-    ["a dynamic import", 'const { daemonArgs } = await import("../src/acquire.js");'],
+    [
+      "a namespace import",
+      'import * as d from "../src/daemon.js"; d.createDaemon();',
+    ],
+    [
+      "a require destructuring",
+      'const { createDaemon } = require("../src/daemon.js");',
+    ],
+    [
+      "a dynamic import",
+      'const { daemonArgs } = await import("../src/acquire.js");',
+    ],
     ["a require property read", 'require("../src/daemon.js").createDaemon();'],
   ])("flags %s", (_name, source) => {
     const reached = repoOf({}, { ...files, "scripts/form.ts": source });
-    expect(violationsOf([workflow("node scripts/form.ts")], reached, []).map((v) => v.offender)).toEqual(["scripts/form.ts"]);
+    expect(
+      violationsOf([workflow("node scripts/form.ts")], reached, []).map(
+        (v) => v.offender,
+      ),
+    ).toEqual(["scripts/form.ts"]);
   });
 
   test("passes a type-only import of a daemon symbol", () => {
     const reached = repoOf(
       {},
-      { ...files, "scripts/types.ts": 'import type { daemonArgs } from "../src/acquire.js"; import { type createDaemon } from "../src/daemon.js";' },
+      {
+        ...files,
+        "scripts/types.ts":
+          'import type { daemonArgs } from "../src/acquire.js"; import { type createDaemon } from "../src/daemon.js";',
+      },
     );
-    expect(violationsOf([workflow("node scripts/types.ts")], reached, [])).toEqual([]);
+    expect(
+      violationsOf([workflow("node scripts/types.ts")], reached, []),
+    ).toEqual([]);
   });
 
   test("passes a script that reaches none, and a jest run", () => {
-    expect(violationsOf([workflow("pnpm safe && pnpm test:worker")], repo, [])).toEqual([]);
+    expect(
+      violationsOf([workflow("pnpm safe && pnpm test:worker")], repo, []),
+    ).toEqual([]);
   });
 
   test("reaches a script named straight on the command line", () => {
-    expect(violationsOf([workflow("node scripts/boot.ts")], repo, []).map((v) => v.offender)).toEqual(["scripts/boot.ts"]);
+    expect(
+      violationsOf([workflow("node scripts/boot.ts")], repo, []).map(
+        (v) => v.offender,
+      ),
+    ).toEqual(["scripts/boot.ts"]);
   });
 
   test("skips an excused workflow whole and still judges the others", () => {
-    const workflows = [workflow("pnpm run boot", "load-gate.yml"), workflow("pnpm run boot", "other.yml")];
-    expect(violationsOf(workflows, repo, ["load-gate.yml"]).map((v) => v.workflow)).toEqual(["other.yml"]);
+    const workflows = [
+      workflow("pnpm run boot", "load-gate.yml"),
+      workflow("pnpm run boot", "other.yml"),
+    ];
+    expect(
+      violationsOf(workflows, repo, ["load-gate.yml"]).map((v) => v.workflow),
+    ).toEqual(["other.yml"]);
   });
 });

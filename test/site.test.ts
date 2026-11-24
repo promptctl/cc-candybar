@@ -27,20 +27,38 @@ function withoutLandscape(): NodeJS.ProcessEnv {
 
 // site/build.mjs as a command, with the deploy's environment unless a test names its own.
 function buildSite(args: string[], env: NodeJS.ProcessEnv = {}): void {
-  execFileSync("node", [path.join(ROOT, "site/build.mjs"), ...args], { stdio: "pipe", env: { ...withoutLandscape(), ...env } });
+  execFileSync("node", [path.join(ROOT, "site/build.mjs"), ...args], {
+    stdio: "pipe",
+    env: { ...withoutLandscape(), ...env },
+  });
 }
 
 test("the deploy's LANDSCAPE_DIR is the live bar's link to the explorer, and a path outside the page is refused", () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
   buildSite([out], { LANDSCAPE_DIR: "landscape" });
-  const printed = execFileSync("node", ["--input-type=module", "-e", `
+  const printed = execFileSync(
+    "node",
+    [
+      "--input-type=module",
+      "-e",
+      `
     const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
     console.log(JSON.stringify(transport.landscape));
     process.exit(0);
-  `], { encoding: "utf8", timeout: 30_000 });
+  `,
+    ],
+    { encoding: "utf8", timeout: 30_000 },
+  );
   expect(JSON.parse(printed.trim().split("\n").pop()!)).toBe("landscape/");
-  for (const bad of ["/landscape", "./landscape", "../landscape", 'x" onclick="y'])
-    expect(() => buildSite([out], { LANDSCAPE_DIR: bad })).toThrow(/LANDSCAPE_DIR must be folders/);
+  for (const bad of [
+    "/landscape",
+    "./landscape",
+    "../landscape",
+    'x" onclick="y',
+  ])
+    expect(() => buildSite([out], { LANDSCAPE_DIR: bad })).toThrow(
+      /LANDSCAPE_DIR must be folders/,
+    );
   fs.rmSync(out, { recursive: true, force: true });
 });
 
@@ -80,14 +98,26 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     console.log(JSON.stringify({ frames: { cold, first, opened, working }, refused: clicked.refused, copied: copied.refused }));
     process.exit(0);
   `;
-  const printed = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
+  const printed = execFileSync("node", ["--input-type=module", "-e", probe], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   fs.rmSync(out, { recursive: true, force: true });
   const { frames, ...said } = JSON.parse(printed.trim().split("\n").pop()!) as {
-    frames: Record<"cold" | "first" | "opened" | "working", Pick<Frame, "rows">>;
+    frames: Record<
+      "cold" | "first" | "opened" | "working",
+      Pick<Frame, "rows">
+    >;
     refused: string | null;
     copied: string | null;
   };
-  const r = { ...said, cold: textOf(frames.cold), first: textOf(frames.first), opened: textOf(frames.opened), working: textOf(frames.working) };
+  const r = {
+    ...said,
+    cold: textOf(frames.cold),
+    first: textOf(frames.first),
+    opened: textOf(frames.opened),
+    working: textOf(frames.working),
+  };
   expect(r.cold).toContain("~/c/tidepool");
   expect(r.first).toContain("~/c/tidepool");
   expect(r.first).toContain("fix-cache-timer");
@@ -119,28 +149,43 @@ describe("the dev server", () => {
   };
 
   test("serves the page from disk on loopback, and only the served bundle reloads the page", async () => {
-    const server = spawn("node", [path.join(ROOT, "site/build.mjs"), "--serve", "--port", "0", tmpDir()], { env: withoutLandscape() });
+    const server = spawn(
+      "node",
+      [path.join(ROOT, "site/build.mjs"), "--serve", "--port", "0", tmpDir()],
+      { env: withoutLandscape() },
+    );
     cleanups.push(() => server.kill());
     const serving = await new Promise<string>((resolve, reject) => {
       let said = "";
       server.stdout.on("data", (chunk) => {
         said += chunk;
-        const line = said.split("\n").slice(0, -1).find((l) => l.startsWith("serving "));
+        const line = said
+          .split("\n")
+          .slice(0, -1)
+          .find((l) => l.startsWith("serving "));
         if (line !== undefined) resolve(line);
       });
       server.stderr.on("data", (chunk) => (said += chunk));
-      server.on("exit", () => reject(new Error(`the dev server exited before serving: ${said}`)));
+      server.on("exit", () =>
+        reject(new Error(`the dev server exited before serving: ${said}`)),
+      );
     });
     // It prints the addresses esbuild bound: loopback, and nothing else.
     expect(serving).toMatch(/^serving http:\/\/127\.0\.0\.1:\d+\/$/);
     const url = serving.slice("serving ".length);
-    expect(await (await fetch(url + "index.html")).text()).toBe(fs.readFileSync(PAGE, "utf8"));
+    expect(await (await fetch(url + "index.html")).text()).toBe(
+      fs.readFileSync(PAGE, "utf8"),
+    );
     expect(await (await fetch(url + "transport.js")).text()).toContain(RELOADS);
 
     const built = tmpDir();
     buildSite([built]);
-    expect(fs.readFileSync(path.join(built, "transport.js"), "utf8")).not.toContain(RELOADS);
-    expect(fs.readFileSync(path.join(built, "index.html"), "utf8")).toBe(fs.readFileSync(PAGE, "utf8"));
+    expect(
+      fs.readFileSync(path.join(built, "transport.js"), "utf8"),
+    ).not.toContain(RELOADS);
+    expect(fs.readFileSync(path.join(built, "index.html"), "utf8")).toBe(
+      fs.readFileSync(PAGE, "utf8"),
+    );
   });
 
   test("refuses a flag it does not know, a port that is not one, and a port with nothing to serve, and builds nothing", () => {
@@ -153,7 +198,8 @@ describe("the dev server", () => {
       [["--port", "9000"], /use it with --serve/],
       [["extra"], /one output directory at most/],
     ];
-    for (const [args, said] of refused) expect(() => buildSite([...args, out])).toThrow(said);
+    for (const [args, said] of refused)
+      expect(() => buildSite([...args, out])).toThrow(said);
     expect(fs.existsSync(out)).toBe(false);
   });
 });

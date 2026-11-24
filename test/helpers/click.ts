@@ -40,7 +40,12 @@ import type {
   EffectOutcome,
 } from "../../src/renderer-interface/interface";
 import { ActsOnTheirWay } from "../../src/renderer/acts";
-import { Acts, outlives, type ActPrograms, type ActDeps } from "../../src/daemon/acts";
+import {
+  Acts,
+  outlives,
+  type ActPrograms,
+  type ActDeps,
+} from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { BarPaneEdge, BarPaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
@@ -55,7 +60,12 @@ import {
   type RenderRequest,
 } from "../../src/daemon/foundations/protocol";
 import type { ConfigTarget } from "../../src/config-hint";
-import { admitClick, VERB_NAMES, type ClickAdmission, type RunEvidence } from "../../src/click/wire";
+import {
+  admitClick,
+  VERB_NAMES,
+  type ClickAdmission,
+  type RunEvidence,
+} from "../../src/click/wire";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -334,16 +344,27 @@ export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   clickVerb(verb, value, ctx);
 }
 
-export const CLICK_VERBS: ReadonlyMap<string, (value: string, ctx: VerbContext) => void> =
-  new Map(VERB_NAMES.map((verb) => [verb, (value, ctx) => clickVerb(verb, value, ctx)]));
+export const CLICK_VERBS: ReadonlyMap<
+  string,
+  (value: string, ctx: VerbContext) => void
+> = new Map(
+  VERB_NAMES.map((verb) => [verb, (value, ctx) => clickVerb(verb, value, ctx)]),
+);
 
 // Enter through the same admission and dispatch as the daemon.
-export function clickVerb(verb: string, value: string, ctx: VerbContext): ClickAdmission {
+export function clickVerb(
+  verb: string,
+  value: string,
+  ctx: VerbContext,
+): ClickAdmission {
   const admission = admitClick(verb, value, TEST_SIGNER);
   const { click } = admission;
   runClick(click, {
     ...ctx,
-    context: click.scope === "session" ? bookedContext(ctx.sessionState, click.session) : null,
+    context:
+      click.scope === "session"
+        ? bookedContext(ctx.sessionState, click.session)
+        : null,
   });
   return admission;
 }
@@ -359,9 +380,14 @@ export function testActs(
   const missing = (part: string) => async (): Promise<never> => {
     throw new Error(`${part}: no host part in this test`);
   };
-  const { launch = missing("launch"), claudeInput = {
-    read: missing("claude input read"), type: missing("claude input type"),
-  }, ...rest } = deps;
+  const {
+    launch = missing("launch"),
+    claudeInput = {
+      read: missing("claude input read"),
+      type: missing("claude input type"),
+    },
+    ...rest
+  } = deps;
   return new Acts({
     detach: systemTimekeeper.detach,
     programsFor: () => ({ launch, claudeInput }),
@@ -391,7 +417,8 @@ export function actingWorld(
 ): HostWorld {
   const acts = testActs(ctx.log, deps);
   return {
-    authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
+    authorizeRun: (request, captures) =>
+      authorizeRun(TEST_SIGNER, request, captures),
     perform: (act) => acts.perform(act),
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
@@ -421,11 +448,15 @@ export async function performActs(
   const outcomes: EffectOutcome[] = [];
   for (const act of asked) {
     if (act.kind === "approve-repo") continue;
-    const read = act.kind === "run"
-      ? authorizeRun(signer, act, captures)
-      : { kind: "ok", value: act } as const;
+    const read =
+      act.kind === "run"
+        ? authorizeRun(signer, act, captures)
+        : ({ kind: "ok", value: act } as const);
     if (read.kind === "failed") {
-      const outcome = { kind: "refused", reason: `run: ${read.reason}` } as const;
+      const outcome = {
+        kind: "refused",
+        reason: `run: ${read.reason}`,
+      } as const;
       (ctx.acts as ActsOnTheirWay).done(act.id, act.session, outcome);
       outcomes.push(outcome);
       continue;

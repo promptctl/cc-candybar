@@ -246,7 +246,6 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     await refusedClick(daemon, changed, "bad-request");
     expect((await statsOf(daemon.daemon)).runs).toMatchObject({
       started: before.runs.started,
-
     });
     expect(await render()).not.toContain("⚠");
   });
@@ -281,7 +280,6 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     await refusedClick(daemon, forged, "bad-request");
     expect((await statsOf(daemon.daemon)).runs).toMatchObject({
       started: before.runs.started,
-
     });
     // The refusal is the bar's one message: the indicator counts it, and the
     // viewer it opens shows it.

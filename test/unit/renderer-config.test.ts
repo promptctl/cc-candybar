@@ -9,7 +9,11 @@ import { applyChanges } from "../../src/config/config-changes";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { RenderOrigin } from "../../src/config-hint";
 import { effectsOf, linksOf } from "../../src/click/read";
-import { admitClick, encodeSegments, VERB_SET_CONFIG } from "../../src/click/wire";
+import {
+  admitClick,
+  encodeSegments,
+  VERB_SET_CONFIG,
+} from "../../src/click/wire";
 import { DOOR_GLYPH } from "../../src/config/disclosure";
 import { parseJson5Syntax } from "../../src/config/loader/diagnostics";
 import { parseClick } from "../../src/daemon/click-reading";
@@ -186,7 +190,8 @@ async function replayLines(inputs: readonly string[]) {
   let pending: (() => void) | null = null;
   const child = rendererLines((bytes) => {
     outputs.push(bytes);
-    if (pending === null) throw new Error("replay received an unsolicited reply");
+    if (pending === null)
+      throw new Error("replay received an unsolicited reply");
     const complete = pending;
     pending = null;
     complete();
@@ -301,7 +306,9 @@ async function drawn(text: string) {
   const t = renderer();
   const context = contextOf("s1");
   const origin: RenderOrigin = context.requested;
-  answered(await handIn(t, { kind: "start", viewers: {}, sessions: [], configs: [] }));
+  answered(
+    await handIn(t, { kind: "start", viewers: {}, sessions: [], configs: [] }),
+  );
   const named = answered(
     await handIn(t, {
       kind: "context",
@@ -346,7 +353,12 @@ test("rotating an in-process renderer disposes its previous view before serving 
   const link = inProcessRenderer((core) => {
     cores.push(core);
     return core;
-  })({ name: MAIN_RENDERER, boot: bootOf, entry: "/nowhere/renderer", node: [] }).start({
+  })({
+    name: MAIN_RENDERER,
+    boot: bootOf,
+    entry: "/nowhere/renderer",
+    node: [],
+  }).start({
     clock: heldClock(new Date(AT * 1000)),
     log: (level, line) => logged.push({ level, line }),
     start: async () => {},
@@ -355,12 +367,35 @@ test("rotating an in-process renderer disposes its previous view before serving 
   const open = async (session: string) => {
     const context = contextOf(session);
     const { requested: origin, hookData } = context;
-    answered(await handIn(link.renderer, { kind: "start", viewers: {}, sessions: [], configs: [] }));
-    answered(await handIn(link.renderer, {
-      kind: "context", context, worldState: worldStateOf(hookData.session_id),
-    }));
-    answered(await handIn(link.renderer, { kind: "config", origin, config: snapshotOf(CONFIG) }));
-    const output = answered(await handIn(link.renderer, { kind: "request", id: 1 as RequestId, context }));
+    answered(
+      await handIn(link.renderer, {
+        kind: "start",
+        viewers: {},
+        sessions: [],
+        configs: [],
+      }),
+    );
+    answered(
+      await handIn(link.renderer, {
+        kind: "context",
+        context,
+        worldState: worldStateOf(hookData.session_id),
+      }),
+    );
+    answered(
+      await handIn(link.renderer, {
+        kind: "config",
+        origin,
+        config: snapshotOf(CONFIG),
+      }),
+    );
+    const output = answered(
+      await handIn(link.renderer, {
+        kind: "request",
+        id: 1 as RequestId,
+        context,
+      }),
+    );
     expect(textOf(presentOf(output.effects).frame)).toContain(SAID);
   };
   const viewsOf = async (core: Renderer) => {
@@ -372,13 +407,15 @@ test("rotating an in-process renderer disposes its previous view before serving 
   try {
     await open("before-restart");
     const previous = cores[0];
-    if (previous === undefined) throw new Error("the initial core did not build");
+    if (previous === undefined)
+      throw new Error("the initial core did not build");
     expect(await viewsOf(previous)).toBe(1);
 
     await link.restart();
     expect(await viewsOf(previous)).toBe(0);
     expect(logged).toContainEqual({
-      level: "info", line: "render-cache closed entries=1 deferred=0",
+      level: "info",
+      line: "render-cache closed entries=1 deferred=0",
     });
     await open("after-restart");
     expect(await viewsOf(link.renderer)).toBe(1);
@@ -401,10 +438,15 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     sessions: { [session]: { remembered: profile } },
   });
   const live = await recordedRenderer(boot);
-  const recording: RecordingEntry[] = [{
-    kind: "boot", version: RECORDING_VERSION, wireVersion: RENDERER_WIRE_VERSION,
-    input: boot, result: live.construction,
-  }];
+  const recording: RecordingEntry[] = [
+    {
+      kind: "boot",
+      version: RECORDING_VERSION,
+      wireVersion: RENDERER_WIRE_VERSION,
+      input: boot,
+      result: live.construction,
+    },
+  ];
   const bootDiagnostic = {
     level: "info",
     line: `settings-history: trimmed an old step for session ${oversizedSession}`,
@@ -419,9 +461,13 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
       pal: { persist: "palette", from: "themes" },
       remember: { set: "remembered", to: "remembered by click" },
     },
-    variables: { remembered: { kind: "state", key: "remembered", default: "missing" } },
+    variables: {
+      remembered: { kind: "state", key: "remembered", default: "missing" },
+    },
     segments: {
-      said: { template: `${SAID} {{ .remembered }} {{ frames 1 "phase-a" 1 "phase-b" }} {{ action "pal" "palette" "${palette}" }} {{ action "remember" "remember" }}` },
+      said: {
+        template: `${SAID} {{ .remembered }} {{ frames 1 "phase-a" 1 "phase-b" }} {{ action "pal" "palette" "${palette}" }} {{ action "remember" "remember" }}`,
+      },
     },
     root: { h: ["said"] },
   });
@@ -438,15 +484,17 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     recording.push({ kind: "turn", input, output });
     return answer;
   };
-  const started = answered(await turn(
-    {
-      kind: "start",
-      viewers: {},
-      sessions: [{ context, worldState: worldStateOf(session) }],
-      configs: [{ origin, config: snapshotOf(config) }],
-    },
-    0,
-  ));
+  const started = answered(
+    await turn(
+      {
+        kind: "start",
+        viewers: {},
+        sessions: [{ context, worldState: worldStateOf(session) }],
+        configs: [{ origin, config: snapshotOf(config) }],
+      },
+      0,
+    ),
+  );
   expect(configLoads(started)).toEqual([
     expect.stringContaining("cause=open state=built"),
   ]);
@@ -458,10 +506,10 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     value: null,
   });
   expect(started.diagnostics).not.toContainEqual(bootDiagnostic);
-  const first = presentOf(answered(await turn(
-    { kind: "request", id: 1 as RequestId, context },
-    10,
-  )).effects);
+  const first = presentOf(
+    answered(await turn({ kind: "request", id: 1 as RequestId, context }, 10))
+      .effects,
+  );
   const published = publishingFrames(TEST_SIGNER)(first.frame, {
     renderer: MAIN_RENDERER,
     session,
@@ -489,7 +537,8 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     );
   const selection = click("palette");
   expect(effectsOf(selection.link.url)).toContainEqual({
-    verb: VERB_SET_CONFIG, args: [session, "user", "palette", palette],
+    verb: VERB_SET_CONFIG,
+    args: [session, "user", "palette", palette],
   });
   const changed = answered(await sendClick(selection)).effects.find(
     (effect) => effect.kind === "change",
@@ -504,7 +553,9 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     kind: "parsed",
     value: { globals: { palette } },
   });
-  answered(await turn({ kind: "config", origin, config: snapshotOf(applied.text) }, 0));
+  answered(
+    await turn({ kind: "config", origin, config: snapshotOf(applied.text) }, 0),
+  );
   answered(await acknowledge(changed.id));
   const remembered = answered(await sendClick(click("remember")));
   expect(remembered.stored).toContainEqual({
@@ -512,22 +563,33 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     key: session,
     value: { remembered: "remembered by click" },
   });
-  const watching = answered(await turn({
-    kind: "viewers",
-    viewers: {
-      [session]: {
-        lanes: { pane: { subscribers: 1, drawing: true } },
-        shown: true,
-        joined: 1,
+  const watching = answered(
+    await turn(
+      {
+        kind: "viewers",
+        viewers: {
+          [session]: {
+            lanes: { pane: { subscribers: 1, drawing: true } },
+            shown: true,
+            joined: 1,
+          },
+        },
       },
-    },
-  }, 0));
+      0,
+    ),
+  );
   const due = async (wake: Tick | null) => {
     if (wake === null) throw new Error("the pane requested no scheduled draw");
-    const delayMs = Math.max(0, Math.ceil(1000 * (wake - readingsAt(clock).tick)));
+    const delayMs = Math.max(
+      0,
+      Math.ceil(1000 * (wake - readingsAt(clock).tick)),
+    );
     const result = answered(await turn({ kind: "due" }, delayMs));
-    const pushed = result.frames.find((each) => each.session === session)?.frame;
-    if (pushed?.kind !== "drawn") throw new Error("scheduled pane drew no frame");
+    const pushed = result.frames.find(
+      (each) => each.session === session,
+    )?.frame;
+    if (pushed?.kind !== "drawn")
+      throw new Error("scheduled pane drew no frame");
     const ack = answered(await acknowledge(pushed.receipt));
     return { frame: parseFrame(pushed.bar), wake: ack.wake };
   };
@@ -548,45 +610,68 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     failure: { message: expect.stringContaining("missing-from-capture") },
   });
   const failedEntryIndex = recording.length - 1;
-  const reloaded = answered(await turn(
-    {
-      kind: "config",
-      origin,
-      config: snapshotOf(applied.text.replace(SAID, "after replayed reload")),
-    },
-    100,
-  ));
-  expect(configLoads(reloaded)).toEqual([expect.stringContaining("cause=config state=built")]);
-  const last = answered(await turn(
-    { kind: "request", id: 3 as RequestId, context },
-    100,
-  ));
+  const reloaded = answered(
+    await turn(
+      {
+        kind: "config",
+        origin,
+        config: snapshotOf(applied.text.replace(SAID, "after replayed reload")),
+      },
+      100,
+    ),
+  );
+  expect(configLoads(reloaded)).toEqual([
+    expect.stringContaining("cause=config state=built"),
+  ]);
+  const last = answered(
+    await turn({ kind: "request", id: 3 as RequestId, context }, 100),
+  );
   expect(textOf(presentOf(last.effects).frame)).toContain(
     "after replayed reload",
   );
 
   const recordedTurns = recording.length - 1;
   const replayed: RendererOutput[] = [];
-  const lines = [...recording, { kind: "end", turns: recordedTurns }].map((entry) => JSON.stringify(entry));
-  expect(await replayRecording(lines, (_input, output) => replayed.push(output))).toEqual({ turns: recordedTurns });
-  expect(replayed.flatMap((answer) => answer.frames).filter(({ frame }) => frame.kind === "drawn")).toHaveLength(2);
-  expect(replayed.flatMap((answer) => answer.effects).some((effect) => effect.kind === "change")).toBe(true);
+  const lines = [...recording, { kind: "end", turns: recordedTurns }].map(
+    (entry) => JSON.stringify(entry),
+  );
+  expect(
+    await replayRecording(lines, (_input, output) => replayed.push(output)),
+  ).toEqual({ turns: recordedTurns });
+  expect(
+    replayed
+      .flatMap((answer) => answer.frames)
+      .filter(({ frame }) => frame.kind === "drawn"),
+  ).toHaveLength(2);
+  expect(
+    replayed
+      .flatMap((answer) => answer.effects)
+      .some((effect) => effect.kind === "change"),
+  ).toBe(true);
   expect(replayed[failedEntryIndex - 1]).toMatchObject({
     kind: "threw",
     failure: { message: expect.stringContaining("missing-from-capture") },
   });
-  expect(textOf(presentOf(answered(replayed.at(-1)!).effects).frame)).toContain("after replayed reload");
+  expect(textOf(presentOf(answered(replayed.at(-1)!).effects).frame)).toContain(
+    "after replayed reload",
+  );
 
   const failureEntry = recording[failedEntryIndex];
   if (failureEntry?.kind !== "turn" || failureEntry.output.kind !== "threw")
     throw new Error("the recorded failure turn is missing");
-  const altered = lines.with(failedEntryIndex, JSON.stringify({
-    ...failureEntry,
-    output: {
-      ...failureEntry.output,
-      failure: { ...failureEntry.output.failure, detail: "altered failure detail" },
-    },
-  }));
+  const altered = lines.with(
+    failedEntryIndex,
+    JSON.stringify({
+      ...failureEntry,
+      output: {
+        ...failureEntry.output,
+        failure: {
+          ...failureEntry.output.failure,
+          detail: "altered failure detail",
+        },
+      },
+    }),
+  );
   await expect(replayRecording(altered)).rejects.toThrow(
     `recording turn ${failedEntryIndex} differs at output.failure.detail`,
   );
@@ -620,12 +705,18 @@ test("a click on a session with no live context waits for the config of the orig
   const session = sessionIdOf("idle-one");
   const origin = contextOf("idle-one").requested;
   const r = renderer();
-  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
+  answered(
+    await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }),
+  );
   const palette = [...listResolvablePaletteNames()][0]!;
   const parked = answered(
     await handIn(r, {
       kind: "click",
-      click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER).click,
+      click: admitClick(
+        VERB_SET_CONFIG,
+        encodeSegments([session, "user", "palette", palette]),
+        TEST_SIGNER,
+      ).click,
       arrival: { via: "link", delivery: { kind: "cli" } },
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },

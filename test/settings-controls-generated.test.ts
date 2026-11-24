@@ -195,9 +195,7 @@ describe("a global the menu has never seen gets its control from the generator",
     const writes = Object.values(actions).flatMap((a) =>
       "set" in a ? [a.set] : [],
     );
-    expect(new Set(writes)).toEqual(
-      new Set(["zoom", LIST, menuPageKey(LIST)]),
-    );
+    expect(new Set(writes)).toEqual(new Set(["zoom", LIST, menuPageKey(LIST)]));
   });
 
   test("the picker names the current member between its arrows, lists every member, and its gate admits exactly them", async () => {
@@ -235,7 +233,15 @@ describe("a global the menu has never seen gets its control from the generator",
     const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
     const render = () =>
-      drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;
+      drawPayload(
+        config,
+        compiled,
+        store,
+        registry,
+        PAYLOAD,
+        instantOf(new Date()),
+        OPTS,
+      ).frame;
     const gate = stateGate(config);
     expect(gate.validate("zoom", "high").ok).toBe(true);
     expect(gate.validate("zoom", "max").ok).toBe(false);
@@ -250,9 +256,7 @@ describe("a global the menu has never seen gets its control from the generator",
     // The label is the list's toggle: open here, so its click closes it.
     expect(
       linkUrls(out).some((u) =>
-        effectsOf(u).some(
-          (e) => e.args[1] === LIST && e.args[2] === "closed",
-        ),
+        effectsOf(u).some((e) => e.args[1] === LIST && e.args[2] === "closed"),
       ),
     ).toBe(true);
     const high = linkUrls(out).find((u) =>

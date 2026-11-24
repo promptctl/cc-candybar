@@ -34,38 +34,36 @@ test("a renderer restart restores live sessions beyond the feed's request histor
     start(own) {
       restart = own.start;
       return {
-        renderer: hostHeld(
-          {
-            answer: async ({ event }) => {
-              if (event.kind === "start") startTurn = event.sessions;
-              return {
-                kind: "answered",
-                record: [],
-                frames: [],
-                stored: [],
-                subscriptions,
-                wake: null,
-                ...(event.kind === "close-journal" || event.kind === "close-views"
-                  ? { reply: { kind: event.kind } }
-                  : {}),
-                effects:
-                  event.kind === "request"
-                    ? [
-                        {
-                          kind: "present",
-                          id: Number(event.id) as EffectId,
-                          session: event.context.hookData.session_id,
-                          surface: "statusline",
-                          request: event.id,
-                          frame: renderFailedFrame("test frame"),
-                          awaiting: { kind: "settled", seq: 1 },
-                        },
-                      ]
-                    : [],
-              };
-            },
+        renderer: hostHeld({
+          answer: async ({ event }) => {
+            if (event.kind === "start") startTurn = event.sessions;
+            return {
+              kind: "answered",
+              record: [],
+              frames: [],
+              stored: [],
+              subscriptions,
+              wake: null,
+              ...(event.kind === "close-journal" || event.kind === "close-views"
+                ? { reply: { kind: event.kind } }
+                : {}),
+              effects:
+                event.kind === "request"
+                  ? [
+                      {
+                        kind: "present",
+                        id: Number(event.id) as EffectId,
+                        session: event.context.hookData.session_id,
+                        surface: "statusline",
+                        request: event.id,
+                        frame: renderFailedFrame("test frame"),
+                        awaiting: { kind: "settled", seq: 1 },
+                      },
+                    ]
+                  : [],
+            };
           },
-        ),
+        }),
         serve: () => {},
         arm: () => {},
         restart: () => own.start(),

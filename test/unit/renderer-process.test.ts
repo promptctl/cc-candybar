@@ -179,7 +179,13 @@ const PINNED: Timed<RendererOutput> = {
   effects: [],
   stored: [],
   reply: { kind: "close-journal" },
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+  subscriptions: {
+    sources: {},
+    lanes: {},
+    managedFolders: [],
+    configSelections: [],
+    configs: [],
+  },
   wake: null,
   turnMs: 0,
 };
@@ -189,7 +195,10 @@ describe("a renderer process's start", () => {
     "takes %s boot diagnostics before the boot record, once",
     (kind) => {
       const { link, children, logs, levels } = rig();
-      const diagnostic: LogLine = { level: "warn", line: "construction warning" };
+      const diagnostic: LogLine = {
+        level: "warn",
+        line: "construction warning",
+      };
       link.arm();
       const child = children[0]!;
       const boot: RendererLine =
@@ -265,7 +274,9 @@ describe("a renderer process's start", () => {
       const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
         "renderer wire version mismatch",
       );
-      const diagnostics = [{ level: "warn", line: "diagnostics in an unaccepted protocol" }];
+      const diagnostics = [
+        { level: "warn", line: "diagnostics in an unaccepted protocol" },
+      ];
       child.opts.heard.stdout(
         `${JSON.stringify({ kind: "started", pid: 9001, diagnostics, ...fields })}\n`,
       );
@@ -577,7 +588,9 @@ test("a failed restoration ends that generation and starts its successor after b
   await settled();
   expect(children[0]!.opts.signal?.aborted).toBe(true);
   expect(logs).toContainEqual(expect.stringContaining("start failed:"));
-  expect(ends[0]?.text).toContain("failed to start: unavailable config snapshot");
+  expect(ends[0]?.text).toContain(
+    "failed to start: unavailable config snapshot",
+  );
   clock.advance(BACKOFF_FIRST_MS);
   children[1]!.say(startedLine(9002));
   await settled();
@@ -610,7 +623,12 @@ describe("ids a renderer mints", () => {
   };
   const done = (of: EffectId): EventInput => ({
     ...due,
-    event: { kind: "effect-done", session: SESSION, of, outcome: { kind: "ok" } },
+    event: {
+      kind: "effect-done",
+      session: SESSION,
+      of,
+      outcome: { kind: "ok" },
+    },
   });
   const reply = async (
     { inputs, link }: ReturnType<typeof rig>,
@@ -647,7 +665,12 @@ describe("ids a renderer mints", () => {
     expect(hostFrame.receipt).not.toBe(hostEffect);
     await reply(host, child, done(hostFrame.receipt), NOTIFIED);
     await reply(host, child, done(hostEffect), NOTIFIED);
-    expect(host.inputs(child).slice(1).map(({ input }) => input.event)).toEqual([
+    expect(
+      host
+        .inputs(child)
+        .slice(1)
+        .map(({ input }) => input.event),
+    ).toEqual([
       { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "ok" } },
       { kind: "effect-done", session: SESSION, of: 2, outcome: { kind: "ok" } },
     ]);
@@ -729,7 +752,13 @@ describe("ids a renderer mints", () => {
       stored: [],
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+      subscriptions: {
+        sources: {},
+        lanes: {},
+        managedFolders: [],
+        configSelections: [],
+        configs: [],
+      },
       wake: null,
       frames: [],
       turnMs: 0,
@@ -781,7 +810,13 @@ describe("ids a renderer mints", () => {
         effects: [
           { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
         ],
-        subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+        subscriptions: {
+          sources: {},
+          lanes: {},
+          managedFolders: [],
+          configSelections: [],
+          configs: [],
+        },
         wake: null,
         frames: [],
         turnMs: 0,

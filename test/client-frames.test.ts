@@ -5,10 +5,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  openFrameStream,
-  type StreamEnd,
-} from "../src/daemon/client-frames";
+import { openFrameStream, type StreamEnd } from "../src/daemon/client-frames";
 import {
   encodeFrame,
   PROTOCOL_VERSION,
@@ -74,7 +71,10 @@ test.each([null, [], {}])(
       frames: stream.frames.length,
       ends: stream.ends.map((e) =>
         e.kind === "failed"
-          ? { malformed: e.error instanceof ProtocolError, why: e.error.message }
+          ? {
+              malformed: e.error instanceof ProtocolError,
+              why: e.error.message,
+            }
           : e.kind,
       ),
     }).toEqual({

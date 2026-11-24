@@ -24,7 +24,10 @@ async function withFreshLog<T>(
   ) => Promise<T> | T,
 ): Promise<T> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-log-"));
-  const log = new DaemonLog(path.join(dir, "cc-candybar", "daemon.log"), systemTimekeeper);
+  const log = new DaemonLog(
+    path.join(dir, "cc-candybar", "daemon.log"),
+    systemTimekeeper,
+  );
   try {
     const logFile = path.join(dir, "cc-candybar", "daemon.log");
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -91,7 +94,9 @@ describe("DaemonLog", () => {
         dlog("info", "two");
         await drained();
         expect(fs.readFileSync(`${logFile}.1`, "utf8")).not.toContain("two");
-        expect(fs.readFileSync(logFile, "utf8")).toMatch(/^\S+ \[info\] two\n$/);
+        expect(fs.readFileSync(logFile, "utf8")).toMatch(
+          /^\S+ \[info\] two\n$/,
+        );
       },
     );
   });
@@ -119,7 +124,9 @@ describe("DaemonLog", () => {
         } finally {
           spy.mockRestore();
         }
-        expect(written.join("")).toMatch(/\[error\] uncaughtException: boom\n.*unwritable/);
+        expect(written.join("")).toMatch(
+          /\[error\] uncaughtException: boom\n.*unwritable/,
+        );
       },
     );
   });
@@ -203,8 +210,12 @@ describe("DaemonLog", () => {
         dlog("warn", "death line");
         await drained();
         const logged = fs.readFileSync(logFile, "utf8").trimEnd().split("\n");
-        const counted = logged.find((l) => / earlier line\(s\) dropped \(\d+ bytes\): /.test(l));
-        const dropped = Number(/ (\d+) earlier line\(s\) dropped/.exec(counted ?? "")?.[1]);
+        const counted = logged.find((l) =>
+          / earlier line\(s\) dropped \(\d+ bytes\): /.test(l),
+        );
+        const dropped = Number(
+          / (\d+) earlier line\(s\) dropped/.exec(counted ?? "")?.[1],
+        );
         expect(dropped).toBeGreaterThan(0);
         expect(logged.length - 1 + dropped).toBe(sent + 1);
         expect(logged.at(-1)).toMatch(/\[warn\] death line$/);
@@ -215,7 +226,10 @@ describe("DaemonLog", () => {
           .map((l) => Number(/ \[info\] (\d+) /.exec(l)![1]));
         expect(kept).toEqual([
           0,
-          ...Array.from({ length: kept.length - 1 }, (_, i) => sent - kept.length + 1 + i),
+          ...Array.from(
+            { length: kept.length - 1 },
+            (_, i) => sent - kept.length + 1 + i,
+          ),
         ]);
       },
     );
@@ -226,20 +240,20 @@ describe("DaemonLog", () => {
   test("a line an exit listener logs after the log's own is in the file", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-log-exit-late-"));
     try {
-      execFileSync(
-        process.execPath,
-        [
-          "--import",
-          "tsx",
-          "-e",
-          `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
-            `import { systemTimekeeper } from ${JSON.stringify(path.resolve("test/helpers/system-clock.ts"))};` +
-            `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))}, systemTimekeeper);` +
-            `log.log("info", "first"); await log.drained();` +
-            `process.on("exit", () => log.log("warn", "from exit")); process.exit(0);`,
-        ],
+      execFileSync(process.execPath, [
+        "--import",
+        "tsx",
+        "-e",
+        `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
+          `import { systemTimekeeper } from ${JSON.stringify(path.resolve("test/helpers/system-clock.ts"))};` +
+          `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))}, systemTimekeeper);` +
+          `log.log("info", "first"); await log.drained();` +
+          `process.on("exit", () => log.log("warn", "from exit")); process.exit(0);`,
+      ]);
+      const text = fs.readFileSync(
+        path.join(dir, "cc-candybar", "daemon.log"),
+        "utf8",
       );
-      const text = fs.readFileSync(path.join(dir, "cc-candybar", "daemon.log"), "utf8");
       expect(text).toMatch(/\[info\] first\n.*\[warn\] from exit\n$/s);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -252,28 +266,25 @@ describe("DaemonLog", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-log-exit-"));
     try {
       const lines = 2000;
-      execFileSync(
-        process.execPath,
-        [
-          "--import",
-          "tsx",
-          "-e",
-          `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
-            `import { systemTimekeeper } from ${JSON.stringify(path.resolve("test/helpers/system-clock.ts"))};` +
-            `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))}, systemTimekeeper);` +
-            `for (let i = 0; i < ${lines}; i++) log.log("info", "line " + i + " " + "x".repeat(200));` +
-            `log.log("warn", "death line"); process.exit(0);`,
-        ],
-      );
+      execFileSync(process.execPath, [
+        "--import",
+        "tsx",
+        "-e",
+        `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
+          `import { systemTimekeeper } from ${JSON.stringify(path.resolve("test/helpers/system-clock.ts"))};` +
+          `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))}, systemTimekeeper);` +
+          `for (let i = 0; i < ${lines}; i++) log.log("info", "line " + i + " " + "x".repeat(200));` +
+          `log.log("warn", "death line"); process.exit(0);`,
+      ]);
       const text = fs.readFileSync(
         path.join(dir, "cc-candybar", "daemon.log"),
         "utf8",
       );
       const logged = text.trimEnd().split("\n");
       expect(logged).toHaveLength(lines + 1);
-      expect(logged.slice(0, -1).map((l) => / line (\d+) /.exec(l)?.[1])).toEqual(
-        Array.from({ length: lines }, (_, i) => String(i)),
-      );
+      expect(
+        logged.slice(0, -1).map((l) => / line (\d+) /.exec(l)?.[1]),
+      ).toEqual(Array.from({ length: lines }, (_, i) => String(i)));
       expect(logged.at(-1)).toMatch(/\[warn\] death line$/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -303,18 +314,18 @@ describe("a disposed DaemonLog", () => {
     // opens are counted: another file opening meanwhile is not the flush's.
     const opened: Array<{ file: unknown; fd: number }> = [];
     const realOpen = fs.open;
-    const openSpy = jest
-      .spyOn(fs, "open")
-      .mockImplementation(((...args: unknown[]) => {
-        const cb = args.at(-1) as (err: Error | null, fd: number) => void;
-        (realOpen as (...a: unknown[]) => void)(
-          ...args.slice(0, -1),
-          (err: Error | null, fd: number) => {
-            if (err === null) opened.push({ file: args[0], fd });
-            cb(err, fd);
-          },
-        );
-      }) as typeof fs.open);
+    const openSpy = jest.spyOn(fs, "open").mockImplementation(((
+      ...args: unknown[]
+    ) => {
+      const cb = args.at(-1) as (err: Error | null, fd: number) => void;
+      (realOpen as (...a: unknown[]) => void)(
+        ...args.slice(0, -1),
+        (err: Error | null, fd: number) => {
+          if (err === null) opened.push({ file: args[0], fd });
+          cb(err, fd);
+        },
+      );
+    }) as typeof fs.open);
     const closeSpy = jest.spyOn(fs, "closeSync");
     try {
       await withFreshLog(

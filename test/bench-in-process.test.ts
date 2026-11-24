@@ -17,7 +17,8 @@ describe("the benchmark registry", () => {
   it("names every benchmark once, group first", () => {
     const ids = BENCHMARKS.map((b) => b.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const b of BENCHMARKS) expect(b.id.startsWith(`${b.group}.`)).toBe(true);
+    for (const b of BENCHMARKS)
+      expect(b.id.startsWith(`${b.group}.`)).toBe(true);
   });
 });
 

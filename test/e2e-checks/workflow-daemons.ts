@@ -50,10 +50,16 @@ export function stepsOf(workflowText: string, source: string): Step[] {
   return Object.entries(jobs).flatMap(([job, body]) => {
     const steps = (body as { steps?: unknown } | null)?.steps;
     if (steps === undefined) return []; // a job that calls a reusable workflow has no steps
-    if (!Array.isArray(steps)) throw new Error(`${source}: job ${job} has steps that are not a list`);
+    if (!Array.isArray(steps))
+      throw new Error(`${source}: job ${job} has steps that are not a list`);
     return steps.flatMap((step: { run?: unknown; if?: unknown }) =>
       typeof step.run === "string"
-        ? [{ run: step.run, condition: typeof step.if === "string" ? step.if : undefined }]
+        ? [
+            {
+              run: step.run,
+              condition: typeof step.if === "string" ? step.if : undefined,
+            },
+          ]
         : [],
     );
   });
@@ -64,7 +70,13 @@ export function commandsOf(script: string): string[][] {
   return script
     .replace(/\\\n/g, " ")
     .split(/&&|\|\||;|\||\n/)
-    .map((part) => part.trim().split(/\s+/).map(unquote).filter((token) => token !== ""))
+    .map((part) =>
+      part
+        .trim()
+        .split(/\s+/)
+        .map(unquote)
+        .filter((token) => token !== ""),
+    )
     .filter((tokens) => tokens.length > 0);
 }
 
@@ -77,47 +89,85 @@ function unquote(token: string): string {
  * run X`, `pnpm X` and `npm run X` become the commands of script X. A script that
  * names itself is expanded once.
  */
-export function leafCommands(run: string, repo: Repo, expanding: ReadonlySet<string> = new Set()): string[][] {
+export function leafCommands(
+  run: string,
+  repo: Repo,
+  expanding: ReadonlySet<string> = new Set(),
+): string[][] {
   return commandsOf(run).flatMap((tokens) => {
     const script = packageScriptOf(tokens, repo);
     if (script === undefined) return [tokens];
     if (expanding.has(script)) return [];
-    return leafCommands(repo.scripts[script]!, repo, new Set([...expanding, script]));
+    return leafCommands(
+      repo.scripts[script]!,
+      repo,
+      new Set([...expanding, script]),
+    );
   });
 }
 
 function packageScriptOf(tokens: string[], repo: Repo): string | undefined {
   const [runner, verb, name] = tokens;
-  if (runner !== "pnpm" && runner !== "npm" && runner !== "yarn") return undefined;
+  if (runner !== "pnpm" && runner !== "npm" && runner !== "yarn")
+    return undefined;
   const candidate = verb === "run" ? name : verb;
-  return candidate !== undefined && Object.hasOwn(repo.scripts, candidate) ? candidate : undefined;
+  return candidate !== undefined && Object.hasOwn(repo.scripts, candidate)
+    ? candidate
+    : undefined;
 }
 
 export function isJest(tokens: string[]): boolean {
   const [head, second, third] = tokens;
-  return head === "jest" || (head === "npx" && second === "jest") || (head === "pnpm" && second === "exec" && third === "jest");
+  return (
+    head === "jest" ||
+    (head === "npx" && second === "jest") ||
+    (head === "pnpm" && second === "exec" && third === "jest")
+  );
 }
 
 /** The value of jest's `--config`, in either spelling. */
 export function jestConfigOf(tokens: string[]): string | undefined {
-  const at = tokens.findIndex((token) => token === "--config" || token.startsWith("--config="));
+  const at = tokens.findIndex(
+    (token) => token === "--config" || token.startsWith("--config="),
+  );
   if (at === -1) return undefined;
-  return tokens[at]!.startsWith("--config=") ? tokens[at]!.slice("--config=".length) : tokens[at + 1];
+  return tokens[at]!.startsWith("--config=")
+    ? tokens[at]!.slice("--config=".length)
+    : tokens[at + 1];
 }
 
-const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs"];
+const SOURCE_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".mjs",
+  ".cjs",
+];
 
 /** The files a command names as arguments that the repo holds: the scripts `node` and `tsx` run. */
 function entryFilesOf(tokens: string[], repo: Repo): string[] {
   return tokens
     .map((token) => posix.normalize(token))
-    .filter((path) => SOURCE_EXTENSIONS.some((ext) => path.endsWith(ext)) && repo.read(path) !== undefined);
+    .filter(
+      (path) =>
+        SOURCE_EXTENSIONS.some((ext) => path.endsWith(ext)) &&
+        repo.read(path) !== undefined,
+    );
 }
 
-function resolveImport(from: string, specifier: string, repo: Repo): string | undefined {
+function resolveImport(
+  from: string,
+  specifier: string,
+  repo: Repo,
+): string | undefined {
   if (!specifier.startsWith(".")) return undefined; // a package, not repo source
   const base = posix.join(posix.dirname(from), specifier);
-  const swapped = base.replace(/\.(m|c)?js$/, (_m, flavour: string | undefined) => `.${flavour ?? ""}ts`);
+  const swapped = base.replace(
+    /\.(m|c)?js$/,
+    (_m, flavour: string | undefined) => `.${flavour ?? ""}ts`,
+  );
   const candidates = [
     base,
     swapped,
@@ -138,14 +188,28 @@ function sourceFileOf(path: string, text: string): ts.SourceFile {
  * A type-only import starts nothing.
  */
 export function importsDaemonSymbol(path: string, text: string): boolean {
-  const named = (name: ts.Node | undefined): boolean => name !== undefined && ts.isIdentifier(name) && DAEMON_SYMBOLS.has(name.text);
+  const named = (name: ts.Node | undefined): boolean =>
+    name !== undefined &&
+    ts.isIdentifier(name) &&
+    DAEMON_SYMBOLS.has(name.text);
   const hits = (node: ts.Node): boolean => {
     if (ts.isImportSpecifier(node)) {
       const clause = node.parent.parent;
-      if (!node.isTypeOnly && !clause.isTypeOnly && named(node.propertyName ?? node.name)) return true;
+      if (
+        !node.isTypeOnly &&
+        !clause.isTypeOnly &&
+        named(node.propertyName ?? node.name)
+      )
+        return true;
     } else if (ts.isExportSpecifier(node)) {
       const declaration = node.parent.parent;
-      if (!node.isTypeOnly && !declaration.isTypeOnly && declaration.moduleSpecifier !== undefined && named(node.propertyName ?? node.name)) return true;
+      if (
+        !node.isTypeOnly &&
+        !declaration.isTypeOnly &&
+        declaration.moduleSpecifier !== undefined &&
+        named(node.propertyName ?? node.name)
+      )
+        return true;
     } else if (ts.isBindingElement(node)) {
       if (named(node.propertyName ?? node.name)) return true;
     } else if (ts.isPropertyAccessExpression(node)) {
@@ -157,7 +221,10 @@ export function importsDaemonSymbol(path: string, text: string): boolean {
 }
 
 /** The first module reachable from `entry` through relative imports that imports a daemon symbol. */
-export function daemonImporterReachedFrom(entry: string, repo: Repo): string | undefined {
+export function daemonImporterReachedFrom(
+  entry: string,
+  repo: Repo,
+): string | undefined {
   const seen = new Set<string>();
   const queue = [entry];
   while (queue.length > 0) {
@@ -166,7 +233,8 @@ export function daemonImporterReachedFrom(entry: string, repo: Repo): string | u
     seen.add(path);
     const text = repo.read(path)!;
     if (importsDaemonSymbol(path, text)) return path;
-    for (const { fileName } of ts.preProcessFile(text, true, true).importedFiles) {
+    for (const { fileName } of ts.preProcessFile(text, true, true)
+      .importedFiles) {
       const next = resolveImport(path, fileName, repo);
       if (next !== undefined) queue.push(next);
     }
@@ -194,7 +262,13 @@ export function violationsOf(
             const offender = daemonImporterReachedFrom(entry, repo);
             return offender === undefined
               ? []
-              : [{ workflow: workflow.name, step: step.run.trim().split("\n")[0]!, offender }];
+              : [
+                  {
+                    workflow: workflow.name,
+                    step: step.run.trim().split("\n")[0]!,
+                    offender,
+                  },
+                ];
           }),
       ),
     );

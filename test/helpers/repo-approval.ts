@@ -14,7 +14,10 @@ import {
 import { stateDir } from "../../src/daemon/paths";
 import type { StateFile } from "../../src/daemon/state-file";
 import { ok, type Asked } from "../../src/utils/outcome";
-import type { RepoAnswer, RepoConfigBook } from "../../src/config/loader/repo-gate";
+import type {
+  RepoAnswer,
+  RepoConfigBook,
+} from "../../src/config/loader/repo-gate";
 
 export function answerRepo(
   dir: string,
@@ -35,10 +38,12 @@ export function recordAnswer(
   answer: RepoAnswer,
 ): Asked<Recorded> {
   let recorded: Recorded = { superseded: [], absent: [], unchecked: [] };
-  const filed = writeStatePlan(store.plan((book) => {
-    const answered = answering(book, dir, answer);
-    recorded = answered.recorded;
-    return answered.book;
-  }));
+  const filed = writeStatePlan(
+    store.plan((book) => {
+      const answered = answering(book, dir, answer);
+      recorded = answered.recorded;
+      return answered.book;
+    }),
+  );
   return filed.kind === "failed" ? filed : ok(recorded);
 }

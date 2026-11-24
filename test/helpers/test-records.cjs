@@ -4,7 +4,12 @@
 // CommonJS because the reporter and the report script load it untransformed.
 
 const path = require("node:path");
-const { EXPIRY_DAYS, ageDays, expired, markedTicket } = require("./quarantine.cjs");
+const {
+  EXPIRY_DAYS,
+  ageDays,
+  expired,
+  markedTicket,
+} = require("./quarantine.cjs");
 
 // A file's layer is the first directory under test/ that holds it, and `root`
 // for a file directly in test/, the transitional layer the layered plan empties.
@@ -51,7 +56,9 @@ function layerOf(file) {
  */
 function outcomeOf(result) {
   if (result.testExecError) {
-    return result.testExecError.message === NO_TEST_MESSAGE ? "empty" : "errored";
+    return result.testExecError.message === NO_TEST_MESSAGE
+      ? "empty"
+      : "errored";
   }
   if (result.numFailingTests > 0) return "failed";
   if (result.numPassingTests > 0) return "passed";
@@ -99,7 +106,9 @@ function recordOf(result, rootDir, run) {
   const cases = result.testResults.map(caseRecord);
   // Jest counts a failing test by its status, so a failed case it gave another
   // status (pending, from the quarantine) is added to what it counted.
-  const uncounted = result.testResults.filter((t) => t.status !== "failed" && t.failureMessages.length > 0).length;
+  const uncounted = result.testResults.filter(
+    (t) => t.status !== "failed" && t.failureMessages.length > 0,
+  ).length;
   return {
     file,
     layer: layerOf(file),
@@ -108,7 +117,10 @@ function recordOf(result, rootDir, run) {
     durationMs: result.perfStats.runtime,
     startedAt: result.perfStats.start || null,
     endedAt: result.perfStats.end || null,
-    outcome: outcomeOf({ ...result, numFailingTests: result.numFailingTests + uncounted }),
+    outcome: outcomeOf({
+      ...result,
+      numFailingTests: result.numFailingTests + uncounted,
+    }),
     cases,
   };
 }
@@ -165,12 +177,15 @@ function thisRunOf(record, name) {
  */
 function quarantineView(records, entries, now) {
   return entries.map((entry) => {
-    const record = records.find((r) => r.file === entry.file && r.outcome !== "never-ran");
+    const record = records.find(
+      (r) => r.file === entry.file && r.outcome !== "never-ran",
+    );
     return {
       ...entry,
       ageDays: ageDays(entry, now),
       expired: expired(entry, now),
-      thisRun: record === undefined ? "no record" : thisRunOf(record, entry.name),
+      thisRun:
+        record === undefined ? "no record" : thisRunOf(record, entry.name),
     };
   });
 }
@@ -200,7 +215,11 @@ function summarise(records, entries, now) {
       row.cases += record.count;
       row.durationMs += record.durationMs;
     }
-    if (record.outcome !== "never-ran" && record.startedAt !== null && record.endedAt !== null) {
+    if (
+      record.outcome !== "never-ran" &&
+      record.startedAt !== null &&
+      record.endedAt !== null
+    ) {
       const run = byRun.get(record.run) ?? {
         run: record.run,
         startedAt: record.startedAt,
@@ -216,7 +235,9 @@ function summarise(records, entries, now) {
     .map((run) => ({ run: run.run, wallMs: run.endedAt - run.startedAt }))
     .sort((a, b) => a.run.localeCompare(b.run));
   return {
-    layers: [...byLayer.values()].sort((a, b) => a.layer.localeCompare(b.layer)),
+    layers: [...byLayer.values()].sort((a, b) =>
+      a.layer.localeCompare(b.layer),
+    ),
     runs,
     // The span of each run's test files, summed over the runs: the installs and
     // the build between the runs are not tests, and neither are jest's global
@@ -251,8 +272,12 @@ function renderSummary({ layers, runs, wallMs, notPassed, quarantine }) {
     lines.push("", "Files that did not pass:");
     lines.push(
       ...notPassed.map((r) => {
-        const failed = (r.cases ?? []).filter((c) => c.outcome === "failed").length;
-        const letThrough = (r.cases ?? []).filter((c) => c.quarantined !== undefined).length;
+        const failed = (r.cases ?? []).filter(
+          (c) => c.outcome === "failed",
+        ).length;
+        const letThrough = (r.cases ?? []).filter(
+          (c) => c.quarantined !== undefined,
+        ).length;
         // A failed case the quarantine let through did not fail its run.
         return letThrough === 0
           ? `- ${r.file}: ${r.outcome}`
@@ -269,7 +294,10 @@ function renderSummary({ layers, runs, wallMs, notPassed, quarantine }) {
     lines.push(
       ...quarantine.map((entry) => {
         const days = (n) => `${n} ${n === 1 ? "day" : "days"}`;
-        const dated = entry.ageDays < 0 ? `dated ${days(-entry.ageDays)} ahead` : `listed ${days(entry.ageDays)} ago`;
+        const dated =
+          entry.ageDays < 0
+            ? `dated ${days(-entry.ageDays)} ahead`
+            : `listed ${days(entry.ageDays)} ago`;
         return `- ${entry.expired ? "🔴" : "⚪"} ${entry.file} › ${entry.name} (${entry.ticket}): ${entry.thisRun} this run, ${dated}`;
       }),
     );

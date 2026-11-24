@@ -60,7 +60,8 @@ function render() {
     undefined,
   );
   const out = drawn.frame;
-  const style = (name: string) => resolvedStyle(drawn.segments.get(name)![0]!.style);
+  const style = (name: string) =>
+    resolvedStyle(drawn.segments.get(name)![0]!.style);
   return { out, style, dispose: () => registry.dispose() };
 }
 

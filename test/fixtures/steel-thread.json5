@@ -7,8 +7,8 @@
 {
   globals: {},
   variables: {
-    current_dir: { kind: 'input', path: 'workspace.current_dir', default: '' },
-    home: { kind: 'env', name: 'HOME', default: '' },
+    current_dir: { kind: "input", path: "workspace.current_dir", default: "" },
+    home: { kind: "env", name: "HOME", default: "" },
   },
   segments: {
     directory: {
@@ -16,16 +16,16 @@
       // ne .home "" guard: hasPrefix with empty prefix is vacuously true, so the
       // guard prevents an unset HOME from collapsing every path to "~<path>".
       template: ' {{ if and (ne .home "") (hasPrefix .home .current_dir) }}~{{ trimPrefix .home .current_dir }}{{ else }}{{ if and (ne .project_dir .current_dir) (hasPrefix .project_dir .current_dir) }}{{ ternary (trimPrefix "/" (trimPrefix .project_dir .current_dir)) (basename .project_dir) (ne (trimPrefix "/" (trimPrefix .project_dir .current_dir)) "") }}{{ else }}{{ .current_dir }}{{ end }}{{ end }} ',
-      bg: 'surface',
-      fg: 'foreground',
+      bg: "surface",
+      fg: "foreground",
     },
     sessionId: {
-      template: ' ⌗{{ trunc 8 .session.id }} ',
-      bg: 'surface',
-      fg: 'foreground',
+      template: " ⌗{{ trunc 8 .session.id }} ",
+      bg: "surface",
+      fg: "foreground",
       // Different palette: exercises effectiveSegmentPalette (3rq.2) in the spine.
-      palette: 'gruvbox',
+      palette: "gruvbox",
     },
   },
-  root: { h: ['directory', 'sessionId'] },
+  root: { h: ["directory", "sessionId"] },
 }

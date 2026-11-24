@@ -69,7 +69,9 @@ test.each(["valid", "invalid"] as const)(
   30_000,
 );
 
-async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") {
+async function sharedStorageAcrossRestart(
+  configAtRestart: "valid" | "invalid",
+) {
   const isolated = prepareIsolatedDaemonEnv("ccb-managed");
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "ccb-managed-plugin-")),
@@ -98,8 +100,7 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
     lines.filter((line) =>
       line.includes(`] dir watch ${state} path=${valueOf(folder)} `),
     );
-  const sourceFile = (session: string) =>
-    path.join(folder, `${session}.json`);
+  const sourceFile = (session: string) => path.join(folder, `${session}.json`);
   const reads = (lines: readonly string[], session: string) =>
     lines.filter((line) =>
       line.includes(
@@ -289,9 +290,7 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
     expect(reads(beforeBoot, worktree)).toHaveLength(1);
     expect(reads(beforeBoot, primary)).toHaveLength(1);
     expect(
-      beforeBoot.some((line) =>
-        line.includes("renderer worktree[2] started"),
-      ),
+      beforeBoot.some((line) => line.includes("renderer worktree[2] started")),
     ).toBe(false);
     gate.release();
     await until(
@@ -350,8 +349,7 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
     configure(primary, false);
     await until(
       () =>
-        mainFeed(`removed ${primary}`) &&
-        watches(log(), "closed").length >= 1,
+        mainFeed(`removed ${primary}`) && watches(log(), "closed").length >= 1,
       "the last consumer to release its one managed watch",
       8_000,
     );
@@ -359,9 +357,7 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
     expect(watches(final, "opened")).toHaveLength(1);
     expect(watches(final, "closed")).toHaveLength(1);
     // The only mutation since the crash is the intentional removal above.
-    expect(declares(remaining.slice(before.length), worktree)).toHaveLength(
-      1,
-    );
+    expect(declares(remaining.slice(before.length), worktree)).toHaveLength(1);
     expect(
       reads(final.slice(before.length, remaining.length), worktree),
     ).toHaveLength(1);

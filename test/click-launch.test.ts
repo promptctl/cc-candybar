@@ -16,9 +16,7 @@ describe("clickLaunch", () => {
   test("a program that cannot start fails with the spawn's own error", async () => {
     await expect(
       clickLaunch(
-        clickLaunchVia(
-          fixtureLauncher({ inherited: process.env }),
-        ),
+        clickLaunchVia(fixtureLauncher({ inherited: process.env })),
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
           args: ["https://example.com"],
@@ -30,7 +28,9 @@ describe("clickLaunch", () => {
     ).resolves.toMatchObject({
       outcome: {
         kind: "failed",
-        reason: expect.stringMatching(/^opening https:\/\/example\.com failed \(.*ENOENT\)$/),
+        reason: expect.stringMatching(
+          /^opening https:\/\/example\.com failed \(.*ENOENT\)$/,
+        ),
       },
     });
   });
@@ -63,7 +63,9 @@ describe("clickLaunch", () => {
   test("keeps the launch timeout and returns its failure", async () => {
     const clock = heldClock(new Date(0));
     const closing = new AbortController();
-    const { launcher, spawner } = fakeLauncher(clock, { signal: closing.signal });
+    const { launcher, spawner } = fakeLauncher(clock, {
+      signal: closing.signal,
+    });
     spawner.program((bin) => bin === "/example/opener", hangs());
     try {
       const result = clickLaunch(

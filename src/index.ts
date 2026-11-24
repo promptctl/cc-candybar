@@ -235,8 +235,9 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // 452-corpse spiral (kz8.5) — kicking on `permanent` failures keeps
     // respawning a daemon that will refuse the next request identically.
     // [LAW:dataflow-not-control-flow] planOutcome maps each variant to a
-    // plan value (output, kick, debug); the side effects below run against
-    // the plan in fixed order. Variability lives in the data.
+    // plan value (output, kick, debug); the kick runs when the plan asks, and
+    // its outcome amends the plan before the side effects below run against
+    // it in fixed order. Variability lives in the data.
     const asked = planOutcome(outcome, host.env.XDG_STATE_HOME);
     // [LAW:no-silent-failure] A kick the install's record refuses reaches the
     // bar: the frame is delivered after the kick's outcome is known.

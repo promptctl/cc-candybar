@@ -1530,7 +1530,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       // The refs tree under it is refused, on every platform.
       expect(
         logs.some((l) =>
-          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(l),
+          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(
+            l,
+          ),
         ),
       ).toBe(true);
       expect(counters).toEqual({

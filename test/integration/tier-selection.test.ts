@@ -38,31 +38,46 @@ async function listed(tier: Tier): Promise<string[]> {
 
 async function listAll(): Promise<Record<Tier, string[]>> {
   const lists = await Promise.all(TIERS.map(listed));
-  return Object.fromEntries(TIERS.map((tier, at) => [tier, lists[at]])) as Record<Tier, string[]>;
+  return Object.fromEntries(
+    TIERS.map((tier, at) => [tier, lists[at]]),
+  ) as Record<Tier, string[]>;
 }
 
 test("every test file is selected by exactly one tier", async () => {
   const lists = await listAll();
   const tiersOf = new Map<string, string[]>();
   for (const tier of TIERS) {
-    for (const file of lists[tier]) tiersOf.set(file, [...(tiersOf.get(file) ?? []), tier]);
+    for (const file of lists[tier])
+      tiersOf.set(file, [...(tiersOf.get(file) ?? []), tier]);
   }
 
   const onDisk = testFilesUnder(join(ROOT, "test"));
   const unrun = onDisk.filter((file) => !tiersOf.has(file));
-  const twice = [...tiersOf].filter(([, tiers]) => tiers.length !== 1).map(([file, tiers]) => `${file}: ${tiers}`);
+  const twice = [...tiersOf]
+    .filter(([, tiers]) => tiers.length !== 1)
+    .map(([file, tiers]) => `${file}: ${tiers}`);
   const vanished = [...tiersOf.keys()].filter((file) => !onDisk.includes(file));
 
-  expect({ unrun, twice, vanished }).toEqual({ unrun: [], twice: [], vanished: [] });
+  expect({ unrun, twice, vanished }).toEqual({
+    unrun: [],
+    twice: [],
+    vanished: [],
+  });
 }, 120_000);
 
 // A tier that is selected and never run proves nothing: each has a script, the
 // whole-suite script runs the three that need no sign-off, and CI runs and
 // reports each.
 test("every tier is run by its script, by pnpm test and by CI", () => {
-  const scripts = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { scripts: Record<string, string> })
-    .scripts;
-  const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+  const scripts = (
+    JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    }
+  ).scripts;
+  const workflow = readFileSync(
+    join(ROOT, ".github", "workflows", "release.yml"),
+    "utf8",
+  );
   const recorded = ["unit", "worker", "process"];
 
   for (const tier of TIERS) {
@@ -80,5 +95,9 @@ test("the unit and process tiers hold their directory and the worker tier holds 
   expect(lists.unit.every(within(UNIT_DIR))).toBe(true);
   expect(lists.process.length).toBeGreaterThan(0);
   expect(lists.process.every(within(PROCESS_TIER_DIR))).toBe(true);
-  expect(lists.worker.some((file) => within(UNIT_DIR)(file) || within(PROCESS_TIER_DIR)(file))).toBe(false);
+  expect(
+    lists.worker.some(
+      (file) => within(UNIT_DIR)(file) || within(PROCESS_TIER_DIR)(file),
+    ),
+  ).toBe(false);
 }, 120_000);

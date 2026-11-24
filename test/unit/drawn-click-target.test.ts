@@ -20,10 +20,12 @@ const CLOSE = DISCLOSURE_GLYPH_CLOSE;
 const KEY = "groups.details";
 const ACTION = {
   kind: "action",
-  effects: [{
-    verb: VERB_SET_STATE,
-    args: [SESSION, KEY, DISCLOSURE_CLOSED],
-  }],
+  effects: [
+    {
+      verb: VERB_SET_STATE,
+      args: [SESSION, KEY, DISCLOSURE_CLOSED],
+    },
+  ],
 } as const;
 
 function runs(fragments: readonly RichText[]) {
@@ -45,10 +47,12 @@ test("adjacent equivalent close targets retain one action and a different key re
       text: CLOSE,
       link: {
         kind: "action",
-        effects: [{
-          verb: VERB_SET_STATE,
-          args: [SESSION, "groups.other", DISCLOSURE_CLOSED],
-        }],
+        effects: [
+          {
+            verb: VERB_SET_STATE,
+            args: [SESSION, "groups.other", DISCLOSURE_CLOSED],
+          },
+        ],
       },
     },
   ]);

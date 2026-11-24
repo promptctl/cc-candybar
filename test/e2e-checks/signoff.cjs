@@ -9,7 +9,13 @@
 const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
-const SIGNOFF_PATH = path.join(__dirname, "..", "..", ".claude", "e2e-signoff.json");
+const SIGNOFF_PATH = path.join(
+  __dirname,
+  "..",
+  "..",
+  ".claude",
+  "e2e-signoff.json",
+);
 const FIELDS = ["cap", "assertionsPerTest"];
 
 /**
@@ -26,11 +32,15 @@ function parseSignoff(text, source) {
     throw new Error(`${source} is not JSON: ${error.message}`);
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${source} must hold an object with ${FIELDS.join(" and ")}`);
+    throw new Error(
+      `${source} must hold an object with ${FIELDS.join(" and ")}`,
+    );
   }
   for (const field of FIELDS) {
     if (!Number.isInteger(value[field]) || value[field] < 1) {
-      throw new Error(`${source}: ${field} must be a positive integer, found ${JSON.stringify(value[field])}`);
+      throw new Error(
+        `${source}: ${field} must be a positive integer, found ${JSON.stringify(value[field])}`,
+      );
     }
   }
   const extra = Object.keys(value).filter((key) => !FIELDS.includes(key));

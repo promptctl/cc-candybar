@@ -71,7 +71,10 @@ describe("a click's config writes", () => {
     const w = writes();
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     expect(w.read("/a.json5")).toEqual({ kind: "text", text: "{ a: 2 }\n" });
-    expect(w.read("/b.json5")).toEqual({ kind: "text", text: DISK["/b.json5"] });
+    expect(w.read("/b.json5")).toEqual({
+      kind: "text",
+      text: DISK["/b.json5"],
+    });
     expect(w.read("/c.json5")).toEqual({ kind: "absent" });
   });
 

@@ -24,7 +24,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { effectsUrl, VERB_SET_STATE, VERB_SLASH } from "../../../src/click/wire";
+import {
+  effectsUrl,
+  VERB_SET_STATE,
+  VERB_SLASH,
+} from "../../../src/click/wire";
 import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
 import type { ServedDaemon } from "../../../src/daemon/daemon";
@@ -38,9 +42,7 @@ import {
   rendererNameOf,
   type RendererName,
 } from "../../../src/daemon/foundations/renderer-name";
-import {
-  type RendererBoot,
-} from "../../../src/renderer-interface/interface";
+import { type RendererBoot } from "../../../src/renderer-interface/interface";
 import type { LaunchResult } from "../../../src/proc/launcher";
 import { type Timekeeper } from "../../../src/time";
 import { daemonClock } from "../../../src/host";
@@ -483,7 +485,10 @@ describe("the daemon is a value", () => {
                 input.event.context.hookData.session_id === session
               )
                 await context.wait();
-              if (prepared.name === WORKTREE && input.event.kind === "close-journal")
+              if (
+                prepared.name === WORKTREE &&
+                input.event.kind === "close-journal"
+              )
                 await journal.wait();
               return link.renderer.answer(input);
             },
@@ -526,7 +531,9 @@ describe("the daemon is a value", () => {
     });
     const slashLink = (line: string) =>
       findUrl(linkUrls(pane), (effects) =>
-        effects.some(({ verb, args }) => verb === VERB_SLASH && args[1] === line),
+        effects.some(
+          ({ verb, args }) => verb === VERB_SLASH && args[1] === line,
+        ),
       );
     const compact = slashLink("/compact");
     const clear = slashLink("/clear");
@@ -597,9 +604,13 @@ describe("the daemon is a value", () => {
     writeConfig(PADDED);
     const daemon = construct();
     await answer(daemon, renderRequest("value-refused"));
-    const click = clickBody(drawnHere(effectsUrl([
-      { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
-    ])));
+    const click = clickBody(
+      drawnHere(
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
+        ]),
+      ),
+    );
     const closing = daemon.close();
     expect(daemon.close()).toBe(closing);
     const accepted = daemon.stats.accept();
@@ -609,12 +620,23 @@ describe("the daemon is a value", () => {
       accepted,
       () => false,
     );
-    expect(render).toMatchObject({ kind: "reply", resp: {
+    expect(render).toMatchObject({
+      kind: "reply",
+      resp: {
+        ok: false,
+        error: "the daemon closed: render refused",
+      },
+    });
+    const clicked = await daemon.reply(
+      click,
+      () => false,
+      daemon.stats.accept(),
+      () => false,
+    );
+    expect(clicked.resp).toMatchObject({
       ok: false,
-      error: "the daemon closed: render refused",
-    } });
-    const clicked = await daemon.reply(click, () => false, daemon.stats.accept(), () => false);
-    expect(clicked.resp).toMatchObject({ ok: false, error: "the daemon closed: click refused" });
+      error: "the daemon closed: click refused",
+    });
     const refused = jest.fn();
     const unsubscribe = daemon.subscribe(VALUE_REFUSED, {
       lane: "statusline",
@@ -624,15 +646,19 @@ describe("the daemon is a value", () => {
     });
     unsubscribe();
     expect(refused).toHaveBeenCalledTimes(1);
-    expect(refused).toHaveBeenCalledWith(expect.objectContaining({
-      error: "the daemon closed: subscribe refused",
-    }));
+    expect(refused).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "the daemon closed: subscribe refused",
+      }),
+    );
     expect(() => daemon.arm()).toThrow("the daemon closed");
     await close(daemon);
     expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
     await Promise.all(openLogs.map((log) => log.drained()));
     const lines = readFileSync(daemonPaths(hostNow()).log, "utf8").split("\n");
-    const event = lines.filter((line) => line.includes(` render req=${accepted.id} `));
+    const event = lines.filter((line) =>
+      line.includes(` render req=${accepted.id} `),
+    );
     expect(event).toHaveLength(1);
     expect(event[0]).toContain("[info]");
     expect(event[0]).toContain(" outcome=closing ");

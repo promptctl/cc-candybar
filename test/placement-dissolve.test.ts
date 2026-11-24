@@ -8,7 +8,12 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
+import {
+  plainOf,
+  textOf,
+  type Frame as DrawnFrame,
+  type Run,
+} from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { selectionFor } from "./helpers/selection";
 
@@ -99,7 +104,11 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
         { session_id: "s", shown, dark },
         when,
         { ...opts, width },
-        selectionFor(cfg, { effect: decideEffectName(bar), effects, transitions }),
+        selectionFor(cfg, {
+          effect: decideEffectName(bar),
+          effects,
+          transitions,
+        }),
       ).frame,
     dispose: () => registry.dispose(),
   };
@@ -150,9 +159,7 @@ describe.each(["segment", "container"] as const)(
           // It leaves: its text stays where it was, and so does every other.
           const left = both(leaving(0));
           expect(plainOf(firstRow(left.off))).not.toContain("MIDDLE");
-          expect(plainOf(firstRow(left.on))).toBe(
-            plainOf(firstRow(drawn)),
-          );
+          expect(plainOf(firstRow(left.on))).toBe(plainOf(firstRow(drawn)));
 
           // Mid-dissolve: its cells thin and nothing else moves; the row
           // keeps its width.
@@ -404,4 +411,3 @@ describe("another width ends every dissolve in flight; another palette does not"
     expect(textOf(on)).toContain("MIDDLE");
   });
 });
-

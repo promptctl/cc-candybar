@@ -53,7 +53,12 @@ import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { linksOf } from "../../../src/click/read";
 import { decodeAnsi, Style } from "@promptctl/rich-js";
-import { composeBar, textOf, type Frame, type Run } from "../../../src/render/frame";
+import {
+  composeBar,
+  textOf,
+  type Frame,
+  type Run,
+} from "../../../src/render/frame";
 import { pageOf, viewerLink } from "../../helpers/diagnostics-viewer";
 import { barOf } from "../../helpers/drawn-frame";
 import { untilHeard } from "../../helpers/reload-signal";
@@ -68,10 +73,7 @@ import {
   renderLines,
 } from "../../helpers/daemon-log";
 import { POLLED } from "../../../src/config/settings-menu";
-import {
-  effectsUrl,
-  VERB_SET_STATE,
-} from "../../../src/click/wire";
+import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import {
   startDaemon,
   statsOf,
@@ -208,21 +210,26 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   const bars = (frames: ReadonlyArray<Pushed>): Frame[] =>
     frames.map(({ resp }) => {
       const text = decoded(resp);
-      if (text === null) throw new Error(`expected ANSI: ${JSON.stringify(resp)}`);
-      return barOf(...text.split("\n").flatMap((row, i, rows) => {
-        if (i === rows.length - 1 && row.plain === "") return [];
-        const runs: Run[] = [];
-        let at = 0;
-        for (const span of row.spans) {
-          const link = span.style instanceof Style ? span.style.link : undefined;
-          if (link === undefined || span.start < at) continue;
-          if (span.start > at) runs.push({ text: row.plain.slice(at, span.start) });
-          runs.push({ text: row.plain.slice(span.start, span.end), link });
-          at = span.end;
-        }
-        if (at < row.plain.length) runs.push({ text: row.plain.slice(at) });
-        return [runs];
-      }));
+      if (text === null)
+        throw new Error(`expected ANSI: ${JSON.stringify(resp)}`);
+      return barOf(
+        ...text.split("\n").flatMap((row, i, rows) => {
+          if (i === rows.length - 1 && row.plain === "") return [];
+          const runs: Run[] = [];
+          let at = 0;
+          for (const span of row.spans) {
+            const link =
+              span.style instanceof Style ? span.style.link : undefined;
+            if (link === undefined || span.start < at) continue;
+            if (span.start > at)
+              runs.push({ text: row.plain.slice(at, span.start) });
+            runs.push({ text: row.plain.slice(span.start, span.end), link });
+            at = span.end;
+          }
+          if (at < row.plain.length) runs.push({ text: row.plain.slice(at) });
+          return [runs];
+        }),
+      );
     });
 
   const shows = (frames: ReadonlyArray<Pushed>, text: string): boolean =>
@@ -682,7 +689,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   // The lane toggles (candybar-animation-wbxz.81o.azo).
-  const subscribeUntilEnd = (sessionId: string, lane: "statusline" | "pane") => {
+  const subscribeUntilEnd = (
+    sessionId: string,
+    lane: "statusline" | "pane",
+  ) => {
     const frames: Response[] = [];
     let end: StreamEnd | null = null;
     const ended = new Promise<StreamEnd>((resolve) =>
@@ -737,7 +747,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   ): Promise<void> =>
     await click(
       sockPath,
-      drawnLink(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }])),
+      drawnLink(
+        sockPath,
+        effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
+      ),
     );
 
   // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
@@ -757,7 +770,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       { ...body, v: PROTOCOL_VERSION, kind: "render", deadline: 1 },
       5_000,
     );
-    if (expired.ok || expired.code !== "TIMEOUT" || expired.request === undefined)
+    if (
+      expired.ok ||
+      expired.code !== "TIMEOUT" ||
+      expired.request === undefined
+    )
       throw new Error(
         `expected a timeout for the expired draw: ${JSON.stringify(expired)}`,
       );
@@ -879,9 +896,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(await subscribe("everywhere")).toMatchObject({
       ok: false,
       code: "BAD_REQUEST",
-      error: expect.stringMatching(
-        /needs a lane, one of statusline, pane/,
-      ),
+      error: expect.stringMatching(/needs a lane, one of statusline, pane/),
     });
   });
 
@@ -949,13 +964,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
           ),
         ),
       async () => {
-        await render(sockPath, sid, projectDir, { termCols: ++cols }, args("fileLane"));
-        return renderEvents(sid).some((line) => line.includes(" lanes=statusline "));
+        await render(
+          sockPath,
+          sid,
+          projectDir,
+          { termCols: ++cols },
+          args("fileLane"),
+        );
+        return renderEvents(sid).some((line) =>
+          line.includes(" lanes=statusline "),
+        );
       },
       "the statusline feed enabled by the config reload",
     );
     const stream = subscribeUntilEnd(sid, "statusline");
-    await until(() => stream.live().length > 0, "the enabled feed's first frame");
+    await until(
+      () => stream.live().length > 0,
+      "the enabled feed's first frame",
+    );
     await setState(sid, "experimentalStatusline", "false");
     expect(await stream.ended).toMatchObject({
       kind: "refused",
@@ -967,12 +993,18 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     await render(sockPath, "feed-follow", projectDir, {}, args("off"));
     const seen: string[] = [];
     let offs = 0;
-    const follower = followFrames(WORLD, sockPath, "feed-follow", "statusline", {
-      frame: (resp) => seen.push(String(barText(resp))),
-      off: () => offs++,
-      fault: (reason) => seen.push(`fault: ${reason}`),
-      exit: (reason) => seen.push(`exit: ${reason}`),
-    });
+    const follower = followFrames(
+      WORLD,
+      sockPath,
+      "feed-follow",
+      "statusline",
+      {
+        frame: (resp) => seen.push(String(barText(resp))),
+        off: () => offs++,
+        fault: (reason) => seen.push(`fault: ${reason}`),
+        exit: (reason) => seen.push(`exit: ${reason}`),
+      },
+    );
     try {
       await until(() => offs > 0, "the lane switched off", 2000);
       expect(offs).toBe(1);

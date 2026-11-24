@@ -15,14 +15,21 @@ import path from "node:path";
 import { cellLen } from "@promptctl/rich-js";
 
 import { until } from "../../helpers/until";
-import { describeLink, linksOf, startBar, type Bar } from "../../helpers/drive-bar";
+import {
+  describeLink,
+  linksOf,
+  startBar,
+  type Bar,
+} from "../../helpers/drive-bar";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
 import { textOf } from "../../../src/render/frame";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 
 jest.setTimeout(30_000);
 
-const userConfig = (config = "{ root: { h: ['directory', 'model'] } }\n"): string => {
+const userConfig = (
+  config = "{ root: { h: ['directory', 'model'] } }\n",
+): string => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-drive-test-"));
   const file = path.join(dir, "config.json5");
   fs.writeFileSync(file, config);
@@ -42,7 +49,13 @@ describe("drive-bar", () => {
     const original = userConfig();
     const before = fs.readFileSync(original, "utf8");
     bar = await startBar(
-      { width: 120, rows: 40, config: original, cwd: process.cwd(), ssh: false },
+      {
+        width: 120,
+        rows: 40,
+        config: original,
+        cwd: process.cwd(),
+        ssh: false,
+      },
       startBarDaemon,
     );
     await bar.render();
@@ -59,7 +72,6 @@ describe("drive-bar", () => {
     expect(fs.readFileSync(original, "utf8")).toBe(before);
   });
 
-
   test("a click that rewrites the config file shows in the very next render", async () => {
     bar = await startBar(
       { width: 200, rows: 40, config: null, cwd: process.cwd(), ssh: false },
@@ -69,17 +81,24 @@ describe("drive-bar", () => {
     await bar.click(DOOR_GLYPH);
     await bar.click("✎ arrange");
     // ✖ #1 is the risen door; #2 removes host, #3 directory.
-    expect(textOf((await bar.click("✖", 3)).rendered)).not.toContain("✖ directory");
+    expect(textOf((await bar.click("✖", 3)).rendered)).not.toContain(
+      "✖ directory",
+    );
     // Undo writes the file back; the render after it must already draw it.
     const { refused, rendered } = await bar.click("↶");
     expect(refused).toBeNull();
     expect(textOf(rendered)).toContain("✖ directory");
   });
 
-
   test("a render fits the size it was asked for", async () => {
     bar = await startBar(
-      { width: 200, rows: 40, config: userConfig(WIDE_BAR), cwd: process.cwd(), ssh: false },
+      {
+        width: 200,
+        rows: 40,
+        config: userConfig(WIDE_BAR),
+        cwd: process.cwd(),
+        ssh: false,
+      },
       startBarDaemon,
     );
     const wide = textOf(await bar.render()).split("\n");
@@ -98,9 +117,22 @@ describe("drive-bar", () => {
       execFileSync("git", args, { cwd, stdio: "pipe" });
     };
     git("init", "-q", "-b", BRANCH);
-    git("-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q", "--allow-empty", "-m", "x");
+    git(
+      "-c",
+      "user.email=a@b",
+      "-c",
+      "user.name=a",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "x",
+    );
     const width = 30;
-    bar = await startBar({ width, rows: 40, config: null, cwd, ssh: false }, startBarDaemon);
+    bar = await startBar(
+      { width, rows: 40, config: null, cwd, ssh: false },
+      startBarDaemon,
+    );
     const over = (text: string): string[] =>
       text.split("\n").filter((line) => cellLen(line) > width);
 
@@ -145,7 +177,9 @@ describe("drive-bar", () => {
     );
     await bar.render();
     await expect(bar.click("no such button")).rejects.toThrow(
-      new RegExp(`drew no link "no such button" #1; it drew: .*"${DOOR_GLYPH}"`),
+      new RegExp(
+        `drew no link "no such button" #1; it drew: .*"${DOOR_GLYPH}"`,
+      ),
     );
   });
 });

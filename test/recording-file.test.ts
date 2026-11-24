@@ -18,7 +18,9 @@ test("only a complete recording is published, privately and without replacing an
     await runnerUp.discard();
     expect(await fs.readdir(dir)).toEqual(["session.jsonl"]);
     expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
-    expect(await fs.readFile(file, "utf8")).toBe('{"kind":"boot"}\n{"kind":"end","turns":0}\n');
+    expect(await fs.readFile(file, "utf8")).toBe(
+      '{"kind":"boot"}\n{"kind":"end","turns":0}\n',
+    );
     await expect(openRecordingFile(file)).rejects.toThrow("already exists");
   } finally {
     await fs.rm(dir, { recursive: true, force: true });

@@ -3,12 +3,7 @@ import path from "node:path";
 import type { Host, World } from "../host";
 import { heapCapMb } from "./limits";
 import process from "node:process";
-import {
-  spawnLockPath,
-  spawnCooldownPath,
-  spawnBackoffPath,
-  daemonDir,
-} from "./paths";
+import { spawnLockPath, spawnCooldownPath, spawnBackoffPath } from "./paths";
 import type { Timekeeper } from "../time";
 import { readHostBundle, type UnusableRecord } from "./host-bundle";
 
@@ -65,7 +60,6 @@ export function obtainDaemonKick(
 
 function kickWith(world: World, spawnFn: () => boolean): void {
   const { host, clock } = world;
-  if (ensureStateDir(host) !== null) return;
   const lock = tryAcquireSpawnLock(host, clock);
 
   // [LAW:dataflow-not-control-flow] Lock outcome is data, not control flow.
@@ -134,7 +128,7 @@ function safeSpawn(spawnFn: () => boolean): void {
   try {
     if (!spawnFn()) {
       process.stderr.write(
-        "cc-candybar: daemon spawn returned false (unable to resolve script path?)\n",
+        "cc-candybar: daemon spawn returned false (the detached launch failed)\n",
       );
     }
   } catch (e) {
@@ -348,7 +342,7 @@ function cooldownAgeMs(path: string, clock: Timekeeper): number | null {
 
 function recordSpawnAttempt(filePath: string, clock: Timekeeper): void {
   // [LAW:composability] Self-sufficient — ensure the state dir exists rather
-  // than leaning on an ambient ensureStateDir(host) precondition, so any spawn site
+  // than leaning on an ambient state-dir precondition, so any spawn site
   // routing through claimSpawnCooldown records correctly (mirrors Rust's
   // record_spawn_attempt). Content is human-diagnostic only; the mtime is the
   // authority. A write failure means no cooldown recorded — worst case one extra
@@ -450,19 +444,6 @@ function releaseSpawnLock(): void {
   try {
     fs.unlinkSync(path);
   } catch {}
-}
-
-// ─── State-dir setup ────────────────────────────────────────────────────────
-
-// Returns null on success, or a reason string on unrecoverable failure.
-// obtainDaemonKick silently gives up — there is no caller to report to.
-function ensureStateDir(host: Host): string | null {
-  try {
-    fs.mkdirSync(daemonDir(host), { recursive: true });
-    return null;
-  } catch (e) {
-    return `mkdir ${daemonDir(host)}: ${(e as Error).message}`;
-  }
 }
 
 // ─── Default spawn implementation ───────────────────────────────────────────

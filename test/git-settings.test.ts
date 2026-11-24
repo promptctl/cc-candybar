@@ -75,7 +75,12 @@ function renderPair(
       compiled,
       store,
       registry,
-      { session_id: SESSION, cwd: "/tmp", workspace: { current_dir: "/tmp" }, git: GIT },
+      {
+        session_id: SESSION,
+        cwd: "/tmp",
+        workspace: { current_dir: "/tmp" },
+        git: GIT,
+      },
       instantOf(new Date(AT_SEC * 1000)),
       {
         endcaps: "powerline",
@@ -87,7 +92,10 @@ function renderPair(
       undefined,
     );
     const textOf = (id: string): string =>
-      (segments.get(id) ?? []).map((t) => t.plain).join("").trim();
+      (segments.get(id) ?? [])
+        .map((t) => t.plain)
+        .join("")
+        .trim();
     return { full: textOf("full"), lean: textOf("lean") };
   } finally {
     registry.dispose();
@@ -115,7 +123,7 @@ describe("gitaculous settings", () => {
     ["flags", "collapsed", " SU?"],
     ["flags", "expanded", " SU?"],
     ["operation", "expanded", " [rebase]"],
-        ["upstream", "expanded", " [origin/feature +2/-1]"],
+    ["upstream", "expanded", " [origin/feature +2/-1]"],
     ["sha", "expanded", " abc1234"],
     ["stash", "expanded", " (1 stashed)"],
     ["age", "expanded", " ◷ 5m"],
@@ -146,7 +154,9 @@ describe("gitaculous settings", () => {
       JSON.stringify({
         segments: {
           gitaculous: {
-            settings: { compact: { label: "c", domain: "bool", default: false } },
+            settings: {
+              compact: { label: "c", domain: "bool", default: false },
+            },
           },
         },
       }),
@@ -171,7 +181,9 @@ describe("gitaculous settings", () => {
   test("a segment calling a piece must declare its setting", () => {
     const withSettings = (settings: object) =>
       load({
-        segments: { mySha: { template: '{{ template "gitSha" . }}', settings } },
+        segments: {
+          mySha: { template: '{{ template "gitSha" . }}', settings },
+        },
       });
     expect(() => withSettings({})).toThrow(
       /segments\.mySha\.template[^\n]*"\.settings\.sha" through helper "gitSha", but segment "mySha" has no setting "sha"/,

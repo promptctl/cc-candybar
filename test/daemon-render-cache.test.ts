@@ -60,16 +60,11 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { answerRepo } from "./helpers/repo-approval";
-import {
-  repoConfigsPath,
-} from "../src/daemon/config-discovery/repo-configs";
+import { repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
-import {
-  revisionOf,
-  type ConfigSnapshot,
-} from "../src/config/config-snapshot";
+import { revisionOf, type ConfigSnapshot } from "../src/config/config-snapshot";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
@@ -1187,9 +1182,7 @@ describe("RenderCache", () => {
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
-      await reloads.after(entry, () =>
-        writeFileSync(book, declined),
-      );
+      await reloads.after(entry, () => writeFileSync(book, declined));
       expect(entry.configLayers).toEqual([]);
       expect(entry.revision.snapshot.repo?.standing).toBe("declined");
       expect(causes).toContain("config");

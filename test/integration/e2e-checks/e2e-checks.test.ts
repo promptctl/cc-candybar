@@ -3,7 +3,10 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
-import { ASSERTION_LIMIT_SETUP, CAP_REPORTER } from "../../e2e-checks/wiring.cjs";
+import {
+  ASSERTION_LIMIT_SETUP,
+  CAP_REPORTER,
+} from "../../e2e-checks/wiring.cjs";
 import { readSignoff } from "../../e2e-checks/signoff.cjs";
 
 // The end-to-end config run over fixtures that break each check in turn. A check
@@ -27,7 +30,14 @@ function runFixtures(runName: string, pattern: string): Promise<FixtureRun> {
   return new Promise((resolveRun, reject) => {
     const child = spawn(
       process.execPath,
-      [JEST, "--config", "jest.e2e-fixtures.config.js", "--json", `--outputFile=${json}`, pattern],
+      [
+        JEST,
+        "--config",
+        "jest.e2e-fixtures.config.js",
+        "--json",
+        `--outputFile=${json}`,
+        pattern,
+      ],
       { cwd: ROOT, env: { ...process.env, E2E_CHECKS_RUN: runName } },
     );
     let output = "";
@@ -39,10 +49,16 @@ function runFixtures(runName: string, pattern: string): Promise<FixtureRun> {
         const result = JSON.parse(readFileSync(json, "utf8")) as {
           testResults: { name: string; status: string }[];
         };
-        const statusByFile = Object.fromEntries(result.testResults.map((r) => [basename(r.name), r.status]));
+        const statusByFile = Object.fromEntries(
+          result.testResults.map((r) => [basename(r.name), r.status]),
+        );
         resolveRun({ code, output, statusByFile });
       } catch (error) {
-        reject(new Error(`jest wrote no result for ${pattern}:\n${output}\n${error}`));
+        reject(
+          new Error(
+            `jest wrote no result for ${pattern}:\n${output}\n${error}`,
+          ),
+        );
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -50,11 +66,18 @@ function runFixtures(runName: string, pattern: string): Promise<FixtureRun> {
   });
 }
 
-function defaultExportOfRealConfig(): Promise<{ setupFilesAfterEnv: string[]; reporters: unknown[] }> {
+function defaultExportOfRealConfig(): Promise<{
+  setupFilesAfterEnv: string[];
+  reporters: unknown[];
+}> {
   return new Promise((resolveConfig, reject) => {
     const child = spawn(
       process.execPath,
-      ["--input-type=module", "-e", `import c from "./jest.e2e.config.js"; process.stdout.write(JSON.stringify(c))`],
+      [
+        "--input-type=module",
+        "-e",
+        `import c from "./jest.e2e.config.js"; process.stdout.write(JSON.stringify(c))`,
+      ],
       { cwd: ROOT },
     );
     let out = "";
@@ -62,7 +85,9 @@ function defaultExportOfRealConfig(): Promise<{ setupFilesAfterEnv: string[]; re
     child.stdout.on("data", (chunk) => (out += chunk));
     child.stderr.on("data", (chunk) => (err += chunk));
     child.on("close", (code) =>
-      code === 0 ? resolveConfig(JSON.parse(out)) : reject(new Error(`loading jest.e2e.config.js failed:\n${err}`)),
+      code === 0
+        ? resolveConfig(JSON.parse(out))
+        : reject(new Error(`loading jest.e2e.config.js failed:\n${err}`)),
     );
   });
 }
@@ -75,7 +100,10 @@ beforeAll(async () => {
   [overCap, atCap, assertions] = await Promise.all([
     runFixtures("e2e-checks-over-cap", "over-cap"),
     runFixtures("e2e-checks-at-cap", "at-cap"),
-    runFixtures("e2e-checks-assertions", "(exact|too-many)-assertions|no-assertions"),
+    runFixtures(
+      "e2e-checks-assertions",
+      "(exact|too-many)-assertions|no-assertions",
+    ),
   ]);
 }, 240_000);
 
@@ -83,13 +111,18 @@ describe("the cap", () => {
   test("fails a run one test over, naming the cap, though every test passes", () => {
     expect({
       failed: overCap.code !== 0,
-      reason: overCap.output.includes(`end-to-end cap: ${cap + 1} tests declared, the sign-off allows ${cap}`),
+      reason: overCap.output.includes(
+        `end-to-end cap: ${cap + 1} tests declared, the sign-off allows ${cap}`,
+      ),
       testsPassed: overCap.statusByFile["over-cap.fixture.ts"],
     }).toEqual({ failed: true, reason: true, testsPassed: "passed" });
   });
 
   test("lets a run at the cap through", () => {
-    expect({ code: atCap.code, status: atCap.statusByFile["at-cap.fixture.ts"] }).toEqual({
+    expect({
+      code: atCap.code,
+      status: atCap.statusByFile["at-cap.fixture.ts"],
+    }).toEqual({
       code: 0,
       status: "passed",
     });
@@ -106,7 +139,9 @@ describe("the assertion limit", () => {
   });
 
   test("names the limit in the failure", () => {
-    expect(assertions.output).toContain(`the sign-off requires exactly ${assertionsPerTest}`);
+    expect(assertions.output).toContain(
+      `the sign-off requires exactly ${assertionsPerTest}`,
+    );
   });
 });
 

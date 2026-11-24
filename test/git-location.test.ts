@@ -31,7 +31,18 @@ describe("checkoutLocation", () => {
     linked = path.join(tmp, "elsewhere", "my-tree");
     fs.mkdirSync(path.join(main, "src"), { recursive: true });
     git(main, "init", "-q");
-    git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x");
+    git(
+      main,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "x",
+    );
     git(main, "worktree", "add", "-q", linked);
     fs.mkdirSync(path.join(linked, "src"));
   });
@@ -87,13 +98,22 @@ function drawAll(
       registry,
       { session_id: "s", home: "/home/me", ...payload },
       instantOf(new Date(0)),
-      { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 0, width: Number.POSITIVE_INFINITY },
+      {
+        endcaps: "powerline",
+        colorCompatibility: "truecolor",
+        wrap: true,
+        padding: 0,
+        width: Number.POSITIVE_INFINITY,
+      },
       undefined,
     );
     return new Map(
       ["directory", "gitaculous"].map((name) => [
         name,
-        (segments.get(name) ?? []).map((t) => t.plain).join("").trim(),
+        (segments.get(name) ?? [])
+          .map((t) => t.plain)
+          .join("")
+          .trim(),
       ]),
     );
   } finally {
@@ -101,7 +121,10 @@ function drawAll(
   }
 }
 
-function draw(payload: Record<string, unknown>, variables: object = {}): string {
+function draw(
+  payload: Record<string, unknown>,
+  variables: object = {},
+): string {
   return drawAll(payload, variables).get("gitaculous") ?? "";
 }
 
@@ -119,14 +142,21 @@ describe("directory, the worktree-aware location", () => {
     expect(drawAll(located("", "")).get("directory")).toBe("~/p/cc-candybar");
   });
   test("linked worktree is named", () => {
-    expect(drawAll(located("jumping", "")).get("directory")).toBe("~/p/cc-candybar (⊫ jumping)");
+    expect(drawAll(located("jumping", "")).get("directory")).toBe(
+      "~/p/cc-candybar (⊫ jumping)",
+    );
   });
   test("worktree subdirectory keeps the subpath", () => {
-    expect(drawAll(located("jumping", "/src")).get("directory")).toBe("~/p/cc-candybar/src (⊫ jumping)");
+    expect(drawAll(located("jumping", "/src")).get("directory")).toBe(
+      "~/p/cc-candybar/src (⊫ jumping)",
+    );
   });
   test("no repo falls back to the session directory", () => {
     expect(
-      drawAll({ workspace: { current_dir: "/home/me/scratch/notes" }, location: { main: "", worktree: "", subpath: "", noRepo: true } }).get("directory"),
+      drawAll({
+        workspace: { current_dir: "/home/me/scratch/notes" },
+        location: { main: "", worktree: "", subpath: "", noRepo: true },
+      }).get("directory"),
     ).toBe("~/s/notes");
   });
   test("draws while git is still pending", () => {
@@ -145,13 +175,14 @@ describe("gitaculous, the git lane alone", () => {
   });
   test("no repo shows only the init offer", () => {
     expect(
-      draw({ workspace: { current_dir: "/home/me/scratch/notes" }, location: { main: "", worktree: "", subpath: "", noRepo: true } }),
+      draw({
+        workspace: { current_dir: "/home/me/scratch/notes" },
+        location: { main: "", worktree: "", subpath: "", noRepo: true },
+      }),
     ).toBe("init");
   });
   test("draws nothing while git is still pending", () => {
-    expect(
-      draw({ ...located("jumping", ""), git: undefined }),
-    ).toBe("");
+    expect(draw({ ...located("jumping", ""), git: undefined })).toBe("");
   });
 });
 
@@ -167,7 +198,10 @@ test("a directory with no repo beside a live git answer keeps the git state", ()
 
 test("gitExpanded always shows the repo name, never the path", () => {
   const out = draw(
-    { git: { branch: "main", repoName: "repo" }, location: { main: "/r", worktree: "", subpath: "", noRepo: false } },
+    {
+      git: { branch: "main", repoName: "repo" },
+      location: { main: "/r", worktree: "", subpath: "", noRepo: false },
+    },
     { "git.detail": { kind: "state", key: "git-detail", default: "expanded" } },
   );
   expect(out).toContain("(git) repo ");

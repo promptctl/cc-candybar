@@ -17,9 +17,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import {
-  effectiveInputs,
-} from "../src/renderer/render-payload";
+import { effectiveInputs } from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import {
   listResolvablePaletteNames,
@@ -130,7 +128,6 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
     expect(textOf(none).match(/▾ (⚡ session|🎨 look|📐 layout)/)).toBeNull();
     // The same state drawn in colour carries exactly the same links.
     expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
-
   } finally {
     registry.dispose();
   }

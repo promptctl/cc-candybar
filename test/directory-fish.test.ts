@@ -45,7 +45,6 @@ const dirOnlyRoot = {
   },
 };
 
-
 // [LAW:locality-or-seam] The settings menu references `edit.toggle`, so `synthesizeEditChrome` (inside
 // `parseAndValidate`, before any call site here narrows the layout) has
 // already baked a spliced copy of the full root into `presets.default.root`
@@ -104,13 +103,21 @@ function renderDirRaw(paths: DirPaths): Frame {
         noRepo: paths.noRepo ?? false,
       },
     };
-    return drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
-      endcaps: "plain",
-      colorCompatibility: "none",
-      wrap: true,
-      padding: 0,
-      width: Number.POSITIVE_INFINITY,
-    }).frame;
+    return drawPayload(
+      parsed,
+      compiled,
+      store,
+      registry,
+      payload,
+      instantOf(new Date()),
+      {
+        endcaps: "plain",
+        colorCompatibility: "none",
+        wrap: true,
+        padding: 0,
+        width: Number.POSITIVE_INFINITY,
+      },
+    ).frame;
   } finally {
     registry.dispose();
   }
@@ -157,7 +164,8 @@ describe("default directory segment renders the worktree-aware location, fish-ab
         home: "/Users/bmf",
         main: "/Users/bmf/code/cc-candybar",
         worktree: "composed-knitting-cake",
-        current_dir: "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake",
+        current_dir:
+          "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake",
       }),
     ).toBe("~/c/cc-candybar (⊫ composed-knitting-cake)");
   });
@@ -169,7 +177,8 @@ describe("default directory segment renders the worktree-aware location, fish-ab
         main: "/Users/bmf/code/cc-candybar",
         worktree: "composed-knitting-cake",
         subpath: "/src",
-        current_dir: "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake/src",
+        current_dir:
+          "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake/src",
       }),
     ).toBe("~/c/cc-candybar/src (⊫ composed-knitting-cake)");
   });
@@ -228,7 +237,10 @@ describe("configurability seam: user template override restores full path", () =
       actions: dropEditNs(parsed.actions),
       segments: dropEditNs({
         ...parsed.segments,
-        directory: { ...parsed.segments.directory, template: "{{ .current_dir }}" },
+        directory: {
+          ...parsed.segments.directory,
+          template: "{{ .current_dir }}",
+        },
       }),
     };
     const store = new VariableStore(systemTimekeeper);
@@ -238,32 +250,39 @@ describe("configurability seam: user template override restores full path", () =
         cwd: "/Users/bmf/code/cc-candybar",
       });
       const basePalette = getThemePalette("textual-dark"!);
-      const line = textOf(drawPayload(
-        overridden,
-        compiled,
-        store,
-        registry,
-        {
-          hook_event_name: "Status",
-          session_id: "dir-fish-override-0000-0000-000000000000",
-          cwd: "/Users/bmf/code/cc-candybar",
-          home: "/Users/bmf",
-          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-          workspace: {
-            current_dir: "/Users/bmf/code/cc-candybar",
-            added_dirs: [],
+      const line = textOf(
+        drawPayload(
+          overridden,
+          compiled,
+          store,
+          registry,
+          {
+            hook_event_name: "Status",
+            session_id: "dir-fish-override-0000-0000-000000000000",
+            cwd: "/Users/bmf/code/cc-candybar",
+            home: "/Users/bmf",
+            model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+            workspace: {
+              current_dir: "/Users/bmf/code/cc-candybar",
+              added_dirs: [],
+            },
+            location: {
+              main: "/Users/bmf/code/cc-candybar",
+              worktree: "",
+              subpath: "",
+              noRepo: false,
+            },
           },
-          location: { main: "/Users/bmf/code/cc-candybar", worktree: "", subpath: "", noRepo: false },
-        },
-        instantOf(new Date()),
-        {
-          endcaps: "plain",
-          colorCompatibility: "none",
-          wrap: true,
-          padding: 0,
-          width: Number.POSITIVE_INFINITY,
-        },
-      ).frame).trim();
+          instantOf(new Date()),
+          {
+            endcaps: "plain",
+            colorCompatibility: "none",
+            wrap: true,
+            padding: 0,
+            width: Number.POSITIVE_INFINITY,
+          },
+        ).frame,
+      ).trim();
       expect(line).toBe("/Users/bmf/code/cc-candybar");
     } finally {
       registry.dispose();

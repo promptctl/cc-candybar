@@ -345,9 +345,9 @@ describe("a session's facts document", () => {
         T0,
       );
       expect(first.daemon.fileEvents).toEqual([]);
-      expect(
-        assembleFacts(first, SID, readings, daemonFactsOf(), at(5)),
-      ).toBe(first);
+      expect(assembleFacts(first, SID, readings, daemonFactsOf(), at(5))).toBe(
+        first,
+      );
       const second = assembleFacts(
         first,
         SID,

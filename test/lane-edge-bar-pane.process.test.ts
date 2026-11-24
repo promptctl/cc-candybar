@@ -13,7 +13,6 @@ import { type Launcher } from "../src/proc/launcher";
 import type { TmuxHint } from "../src/tmux-hint";
 import { HAS_TMUX } from "./helpers/private-tmux";
 
-
 (HAS_TMUX ? describe : describe.skip)("a bar pane on a real tmux", () => {
   let dir: string;
   let socket: string;

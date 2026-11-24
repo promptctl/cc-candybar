@@ -62,7 +62,14 @@ const collectDiagnostics = (
   errors: readonly string[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly string[],
-) => collectSourced(SID, "request", errors.map(sourced), notices, warnings.map(sourced));
+) =>
+  collectSourced(
+    SID,
+    "request",
+    errors.map(sourced),
+    notices,
+    warnings.map(sourced),
+  );
 const at = (index: number) => ({ index, page: 0 });
 const geometry = (width: number): DiagnosticGeometry => ({
   width,
@@ -94,7 +101,9 @@ const encoded = (rows: readonly Row[], depth: ColorCompatibility): string =>
     rows.map((row) => row.runs),
     depth,
   );
-const viewer = (...args: Parameters<typeof viewerRows>): Pick<Frame, "rows"> => ({
+const viewer = (
+  ...args: Parameters<typeof viewerRows>
+): Pick<Frame, "rows"> => ({
   rows: viewerRows(...args),
 });
 
@@ -145,7 +154,9 @@ describe("the diagnostic list", () => {
 
 describe("the indicator the door reads", () => {
   test("nothing to show is an empty label", () => {
-    expect(diagnosticsProjection(collectDiagnostics([], [], [])).label).toBe("");
+    expect(diagnosticsProjection(collectDiagnostics([], [], [])).label).toBe(
+      "",
+    );
   });
 
   test("red with the count when any member is an error", () => {
@@ -247,7 +258,9 @@ describe("the viewer", () => {
     const first = rowsOf(viewer(list, at(1), SID, "request", short));
     expect(first).toHaveLength(5);
     expect(first[0]).toBe("✕   [1/2 1/8] › ⧉ copy ");
-    const last = rowsOf(viewer(list, { index: 1, page: 7 }, SID, "request", short));
+    const last = rowsOf(
+      viewer(list, { index: 1, page: 7 }, SID, "request", short),
+    );
     expect(last.at(-1)).toBe("  issue 29 ");
     const onward = (pos: { index: number; page: number }) =>
       linksOf(viewer(list, pos, SID, "request", short))
@@ -373,7 +386,9 @@ describe("the viewer", () => {
     if (copy === null) throw new Error("missing copy link");
     expect(hrefOfDrawnLink(copy).length).toBeLessThan(200);
     expect(list[0]!.lines[1]![0].link).toBeNull();
-    for (const url of linkUrls(viewer(list, at(1), SID, "request", geometry(80))))
+    for (const url of linkUrls(
+      viewer(list, at(1), SID, "request", geometry(80)),
+    ))
       expect(url).not.toContain("FIX");
   });
 
@@ -420,7 +435,9 @@ describe("the viewer and the handoff line at every colour depth", () => {
         ),
       )
       .join("\n");
-  const at40 = (colorCompatibility: ColorCompatibility): DiagnosticGeometry => ({
+  const at40 = (
+    colorCompatibility: ColorCompatibility,
+  ): DiagnosticGeometry => ({
     width: 40,
     rows: 40,
     colorCompatibility,

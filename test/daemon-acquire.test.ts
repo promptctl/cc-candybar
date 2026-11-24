@@ -310,6 +310,40 @@ describe("obtainDaemonKick starts the host only from the install's record", () =
 });
 
 describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
+  test("reclaims a stale spawn.lock older than the staleness window", async () => {
+    await withTempState(async ({ host, world }) => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnLockPath } = await import("../src/daemon/paths");
+
+      // A lock backdated past the staleness window is reclaimed, so the kick
+      // holds the lock and spawns, rather than reading it as contended and
+      // spawning unlocked once the crashed-holder override passes.
+      fs.writeFileSync(
+        spawnLockPath(host),
+        JSON.stringify({ pid: 999999, ts: Date.now() - 30_000 }),
+      );
+      const oldTime = new Date(Date.now() - 30_000);
+      fs.utimesSync(spawnLockPath(host), oldTime, oldTime);
+
+      let spawned = 0;
+      const stderr = jest.spyOn(process.stderr, "write").mockReturnValue(true);
+      try {
+        obtainDaemonKick(world, {
+          spawn: () => {
+            spawned++;
+            return true;
+          },
+        });
+        expect(spawned).toBe(1);
+        expect(stderr.mock.calls.join("")).not.toMatch(/spawning unlocked/);
+      } finally {
+        stderr.mockRestore();
+      }
+      expect(fs.existsSync(spawnLockPath(host))).toBe(false);
+    });
+  });
+
   test("invokes spawn synchronously when lock is acquired", async () => {
     await withTempState(async ({ host, world }) => {
       jest.resetModules();

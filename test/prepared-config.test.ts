@@ -6,7 +6,11 @@ import path from "node:path";
 
 import { textOf } from "../src/render/frame";
 import { WORLD } from "./helpers/host";
-import { expectClean, renderConfig, withTempConfig } from "./helpers/config-fixture";
+import {
+  expectClean,
+  renderConfig,
+  withTempConfig,
+} from "./helpers/config-fixture";
 
 // [LAW:behavior-not-structure] The file first names a run when the sampled
 // width is bound. A draw that waited too early still shows the fallback.
@@ -15,7 +19,9 @@ test("a prepared sample draws the file value keyed on its bound width", async ()
     const cwd = path.dirname(file);
     const source = path.join(cwd, "reading.txt");
     fs.writeFileSync(source, "current reading");
-    fs.writeFileSync(file, `{
+    fs.writeFileSync(
+      file,
+      `{
       variables: {
         columns: { kind: 'input', path: 'term.cols', type: 'number' },
         reading: {
@@ -25,7 +31,8 @@ test("a prepared sample draws the file value keyed on its bound width", async ()
       },
       segments: { probe: { template: 'cols={{ .columns }} {{ .reading }}' } },
       root: { h: ['probe'] },
-    }`);
+    }`,
+    );
     const outcome = expectClean(
       "keyed sample",
       await renderConfig(WORLD, file, cwd),

@@ -282,9 +282,11 @@ describe("a repository's config waits for the user's one answer", () => {
     git("-C", project, "worktree", "add", "-q", "--detach", older);
     // This worktree predates project approvals. The new worktree asks for
     // the project, and the explicit answer replaces the older entry.
-    writeStatePlan(repoConfigs(stateDir(hostOf(isolated.env))).plan(() => ({
-      [older]: "declined",
-    })));
+    writeStatePlan(
+      repoConfigs(stateDir(hostOf(isolated.env))).plan(() => ({
+        [older]: "declined",
+      })),
+    );
     try {
       start();
       const asked = await questionOf(

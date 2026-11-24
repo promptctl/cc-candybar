@@ -1,7 +1,10 @@
 // A config fixture uses the same loader, compiler, collector and DSL renderer as the statusline.
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { locations } from "../../src/daemon/paths";
-import { createGates, deriveActionGates } from "../../src/daemon/foundations/gates";
+import {
+  createGates,
+  deriveActionGates,
+} from "../../src/daemon/foundations/gates";
 import { diskFiles } from "../../src/daemon/config-discovery/discovery-files";
 import {
   installedRoots,
@@ -23,15 +26,15 @@ import {
 } from "../../src/config/effective-globals";
 import { plainEnvironment } from "../../src/daemon/foundations/session-env";
 import { SourceRuns } from "../../src/daemon/source-runs";
-import {
-  registerDslConfig,
-  type CompiledConfig,
-} from "../../src/dsl/render";
+import { registerDslConfig, type CompiledConfig } from "../../src/dsl/render";
 import type { World } from "../../src/host";
 import type { Frame } from "../../src/render/frame";
 import { renderOptionsOf } from "../../src/renderer/render-payload";
 import { SessionState } from "../../src/renderer/session-state";
-import { configFiles, userAuthoredRoots } from "../../src/renderer/render-cache";
+import {
+  configFiles,
+  userAuthoredRoots,
+} from "../../src/renderer/render-cache";
 import { timeoutSignal } from "../../src/time";
 import type { Instant } from "../../src/utils/instant";
 import { SourceRegistry } from "../../src/var-system/sources";
@@ -164,7 +167,11 @@ export async function renderEffective(
   effective: EffectiveGlobals,
   width: number,
   at: Instant,
-): Promise<{ rendered: Frame; failures: readonly string[]; pending: readonly string[] }> {
+): Promise<{
+  rendered: Frame;
+  failures: readonly string[];
+  pending: readonly string[];
+}> {
   const { config, compiled, store, registry, runs, layers } = prepared;
   const payload = samplePayload(config, effective, layers.at(-1) ?? null, at);
   const opts = renderOptionsOf(effective, width);
@@ -179,11 +186,16 @@ export async function renderEffective(
     effective,
     runs.readings,
   );
-  const pending = await runs.settled(timeoutSignal(store.clock, "test settle deadline", SETTLE_MS));
+  const pending = await runs.settled(
+    timeoutSignal(store.clock, "test settle deadline", SETTLE_MS),
+  );
   const { frame, warnings } = draw(at);
   return {
     rendered: frame,
-    failures: [...prepared.droppedPlacements, ...warnings.map((warning) => warning.message)],
+    failures: [
+      ...prepared.droppedPlacements,
+      ...warnings.map((warning) => warning.message),
+    ],
     pending,
   };
 }

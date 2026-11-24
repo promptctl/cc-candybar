@@ -12,13 +12,22 @@ const ENTRY = path.join(REPO_ROOT, "src", "index.ts");
 const run = (args: readonly string[]) =>
   // The sandbox env carries the version stamp test/setup.ts threads through
   // NODE_OPTIONS; the default would be the worker's own, which does not.
-  spawnSync(TSX, [ENTRY, ...args], { encoding: "utf8", input: "", env: process.env });
+  spawnSync(TSX, [ENTRY, ...args], {
+    encoding: "utf8",
+    input: "",
+    env: process.env,
+  });
 
-test.each(["nope", "check", "lint"])("unknown subcommand %s is refused with exit 2", (name) => {
-  const r = run([name]);
-  expect(r.status).toBe(2);
-  expect(r.stderr).toBe(`cc-candybar: unknown subcommand "${name}" — see --help\n`);
-});
+test.each(["nope", "check", "lint"])(
+  "unknown subcommand %s is refused with exit 2",
+  (name) => {
+    const r = run([name]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toBe(
+      `cc-candybar: unknown subcommand "${name}" — see --help\n`,
+    );
+  },
+);
 
 test("an unknown subcommand is refused before --help, so the help it would print never hides the mistake", () => {
   // `follow` is the native client's (rust-client/src/main.rs NATIVE_SUBCOMMANDS):

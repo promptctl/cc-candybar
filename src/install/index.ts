@@ -38,7 +38,8 @@ import {
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
 import { stageExecutable } from "./stage-executable.js";
-import { recordIfInstall, recordStagedBundle } from "./record";
+import { recordIfInstall } from "./record";
+import { recordHostBundle } from "../daemon/host-bundle";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
@@ -603,9 +604,7 @@ export async function runInstall(
     world.host,
   );
   process.stdout.write(
-    ownsStatusLine
-      ? recordedMessage(recordStagedBundle(staged.distPath, world.host))
-      : `Host bundle not recorded: the statusLine is customized, so it does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
+    recordStagedBundleIfOwned(ownsStatusLine, staged.distPath, world.host),
   );
 
   process.stdout.write(installSuccessMessage());
@@ -634,8 +633,22 @@ function userSettingsPath(host: Host): string {
   );
 }
 
-function recordedMessage(recording: { readonly bundle: string }): string {
-  return `Recorded ${recording.bundle} as the host's bundle\n`;
+function recordedMessage(bundle: string): string {
+  return `Recorded ${bundle} as the host's bundle\n`;
+}
+
+// The install's record: the staged bundle, when the statusline command runs
+// it. Returns what the install says about it.
+function recordStagedBundleIfOwned(
+  ownsStatusLine: boolean,
+  stagedBundle: string,
+  host: Host,
+): string {
+  if (!ownsStatusLine) {
+    return `Host bundle not recorded: the statusLine is customized, so it does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`;
+  }
+  recordHostBundle(host, stagedBundle);
+  return recordedMessage(stagedBundle);
 }
 
 // The checkout's install step: a build is complete without staging, so this
@@ -649,10 +662,10 @@ export function runRecordHostBundle(bundle: string, world: World): void {
   );
   process.stdout.write(
     recording.kind === "recorded"
-      ? recordedMessage(recording)
+      ? recordedMessage(recording.bundle)
       : `Host bundle not recorded: ${bundle} is not the install. ${
           recording.named === null
-            ? "The statusLine command names no bundle this can read (an absolute path to a bin/cc-candybar entry, bare or single-quoted)."
+            ? "There is no statusLine command, or it names no bundle this can read (an absolute path to a bin/cc-candybar entry, bare or single-quoted)."
             : `The statusLine command runs ${recording.named}.`
         }\n`,
   );
@@ -735,4 +748,5 @@ export const __test__ = {
   stageFile,
   stagedEntryKind,
   installSuccessMessage,
+  recordStagedBundleIfOwned,
 };

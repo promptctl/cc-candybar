@@ -34,7 +34,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const raw = parseDslConfig(
     "<test>",
@@ -47,10 +46,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store,
-    "",
-    new SessionState(),
-  );
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp",
   });

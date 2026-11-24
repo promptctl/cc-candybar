@@ -3,7 +3,6 @@
 // daemon renders through. Asserts the three render-distinguishable states the
 // forge outcome produces, and that an open PR draws one link region.
 
-
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -26,10 +25,11 @@ const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 1,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 1,
   width: Number.POSITIVE_INFINITY,
 };
-
 
 function renderGitPr(git: Record<string, unknown>): Frame {
   const base = parseAndValidate("<default>", SERIALIZED);
@@ -74,7 +74,15 @@ function renderGitPr(git: Record<string, unknown>): Frame {
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
       git,
     };
-    return drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), OPTS).frame;
+    return drawPayload(
+      parsed,
+      compiled,
+      store,
+      registry,
+      payload,
+      instantOf(new Date()),
+      OPTS,
+    ).frame;
   } finally {
     registry.dispose();
   }

@@ -25,10 +25,7 @@ import { textOf } from "../src/render/frame";
 import { SessionState } from "../src/renderer/session-state";
 
 import { validateConfig } from "./helpers/parse-and-validate";
-import {
-  parseDslConfig,
-  mergeWithDefault,
-} from "../src/config/dsl-loader";
+import { parseDslConfig, mergeWithDefault } from "../src/config/dsl-loader";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
@@ -39,7 +36,9 @@ import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 // A whole-second-aligned frozen instant: clock().getTime() === NOW_MS exactly,
@@ -182,7 +181,9 @@ describe("bdi.4 — minutesUntilReset func against a frozen clock", () => {
     [NOW_SEC - 3600, "0"],
     [NOW_SEC - 1, "0"],
   ])("minutesUntilReset(%p) === %p", (e, want) => {
-    expect(render("[{{ minutesUntilReset .e }}]", { e })).toContain(`[${want}]`);
+    expect(render("[{{ minutesUntilReset .e }}]", { e })).toContain(
+      `[${want}]`,
+    );
   });
 
   // The block/weekly composition, `formatResetCountdown`: the minute in
