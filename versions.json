@@ -4,46 +4,46 @@
     {
       "version": "pr-949",
       "ref": "refs/pull/949/merge",
-      "sha": "21695eae8fd9a701ab829cd1a67014c8a229927a",
-      "timestamp": "2026-11-24T14:24:58.242Z",
+      "sha": "749515d22eb4e4ff536dbd129cc615b6f654c7b8",
+      "timestamp": "2026-11-24T14:26:18.332Z",
       "commits": [
         {
-          "sha": "21695eae8fd9a701ab829cd1a67014c8a229927a",
+          "sha": "749515d22eb4e4ff536dbd129cc615b6f654c7b8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:23:08-07:00",
-          "message": "Merge 67f4fa1c3db44a777fc87d312db2e2c60c26c27d into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+          "timestamp": "2026-11-24T07:23:31-07:00",
+          "message": "Merge 616f4fd7ec71cda1b3af3ef4295426baeee615f9 into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
         },
         {
-          "sha": "67f4fa1c3db44a777fc87d312db2e2c60c26c27d",
+          "sha": "616f4fd7ec71cda1b3af3ef4295426baeee615f9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T07:22:51-07:00",
           "message": "fix(tools): the bar sends to the socket its daemon's readiness was proven on (candybar-later-fixes-nwu9.1d4)\n"
         },
         {
-          "sha": "86f92c593b3057ff8dce760efc74ba7f21eee735",
+          "sha": "7142b50c5cdf6ae4f95b6a66c4b95906c522d388",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T07:14:01-07:00",
           "message": "fix(tools): a path no zone names is refused, and the shared daemon start reports every failure (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 2 on PR 949:\n\n- The zone table places every root. audits/, which runs under Jest, sits\n  with the suite. A path no row names is in no zone and nothing may\n  import it, so a tool can no longer reach the suite through an unlisted\n  root.\n- The package root comes from scripts/lib/repo.cjs's own location, not\n  the working directory.\n- The shell a tool takes is a closed type. The worker env is merged\n  where an in-worker daemon starts.\n- A cleanup after a failure reports its own error beside the failure\n  (failAfter), never in its place.\n- The readiness probe returns a tagged outcome. The bar uses the wire's\n  reply budget.\n- The spawner headers name the callers they serve: the tests and the\n  bar tools.\n"
         },
         {
-          "sha": "1f41cd4026be4f8be26107bfb378be6ed7d1166f",
+          "sha": "0a58eb27712aa9c8494dd4022ce05f134ca20809",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T06:54:04-07:00",
           "message": "fix(tools): scripts/lib is a zone of its own, and the tools lint holds every root outside Jest (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 1 on PR 949:\n\n- scripts/lib imports only the app and itself. Each import refusal names\n  why by the zone it reaches, and the lint config refuses to load if a\n  zone has no reason.\n- The tools lint runs over the roots the zone table names as outside\n  Jest. It refuses jest and @jest/* imports and every Jest global. The\n  suite's effect rules also cover scripts/lib.\n- Typecheck covers every TS file under scripts/.\n- The lint-rule tests share one harness.\n- The process tier runs pnpm bar, bar:web and bench --list from a plain\n  shell.\n- The Status hook fixture is one source: the tick every case extends,\n  and the bar's full tick built on it.\n- drive-bar reads session state at the daemon's own path.\n- The pane feed cases wait for the frame that shows what they assert.\n"
         },
         {
-          "sha": "3690a405f7d0b502d1e482f9a28eef1bd9cb87d1",
+          "sha": "bee4cff405cf510abd0abcc64907f2dfc5a49562",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T06:16:12-07:00",
           "message": "fix(test): the host-bundle tests import the shared helpers from scripts/lib (candybar-later-fixes-nwu9.1d4)\n"
         },
         {
-          "sha": "21585336daed42c61c6f623aa76735518eda925a",
+          "sha": "db69fc9feac4b395b56475b3d70e19a8fb63a704",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T05:56:31-07:00",
