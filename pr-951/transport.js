@@ -80419,8 +80419,9 @@ function waitWithin(task, work, ms, clock, closing) {
     working.then(
       (value) => resolve2({ end: "answered", value }),
       (e) => {
-        if (wait.signal.aborted) clock.failed(`${task} after its wait`, e);
-        else reject2(e);
+        if (!wait.signal.aborted) reject2(e);
+        else if (e !== wait.signal.reason)
+          clock.failed(`${task} after its wait`, e);
       }
     );
   });
@@ -83639,7 +83640,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         ({ renderer: renderer2, process: process2, mailbox }) => rendererPanel(
           {
             name: renderer2.name,
-            ask: () => renderer2.command({ kind: "stats" }).then(({ stats: stats2 }) => stats2),
+            ask: (until2) => renderer2.command({ kind: "stats" }, until2).then(({ stats: stats2 }) => stats2),
             process: process2,
             mailbox
           },
@@ -88727,14 +88728,17 @@ function makeLimits(deps) {
     const read3 = judged.map((process2) => {
       const before = latest.get(process2.key)?.gap ?? 0;
       const reading = {
-        kind: "measured",
         charge: readCharge(chargeOf(process2), before),
         usage: process2.usage
       };
       return { process: process2, reading, gap: gapOf(reading, before) };
     });
+    const at = deps.clock.monotonic();
     latest = new Map(
-      read3.map(({ process: process2, reading, gap }) => [process2.key, { reading, gap }])
+      read3.map(({ process: process2, reading, gap }) => [
+        process2.key,
+        { reading, gap, at }
+      ])
     );
     deps.log("info", eventLine("memory", readingFields(read3, limit)));
     for (const { process: process2, reading } of read3) {
@@ -88798,9 +88802,14 @@ function makeLimits(deps) {
     return judged.end(why);
   }
   function memoryOf(key, pid2) {
+    const checked = latest.get(key);
     return {
       pid: pid2,
-      memory: latest.get(key)?.reading ?? { kind: "unmeasured" },
+      memory: checked === void 0 ? { kind: "unmeasured" } : {
+        kind: "measured",
+        ...checked.reading,
+        ageMs: deps.clock.monotonic() - checked.at
+      },
       limit,
       nearAt: nearAtOf(limit)
     };
@@ -91014,7 +91023,7 @@ var CHARGE = tagged({
 });
 var READING = tagged({
   unmeasured: {},
-  measured: { charge: CHARGE, usage: USAGE }
+  measured: { ageMs: number, charge: CHARGE, usage: USAGE }
 });
 var PROCESS_MEMORY = object({
   pid: number,
@@ -92335,8 +92344,18 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const deliver2 = recorded2("last");
   const unawaited = (what, settling) => clock.detach(`renderer ${name} ${what}`, settling);
-  const command = async (event) => {
-    const { turn } = await taken2(() => ({ kind: "event", event }));
+  const command = async (event, until2) => {
+    let made = true;
+    const { turn } = await taken2(() => {
+      if (until2?.aborted !== true) return { kind: "event", event };
+      made = false;
+      return {
+        kind: "abandoned",
+        message: "its asker stopped waiting",
+        detail: `${commandLabel(event)} was not made: its asker stopped waiting`
+      };
+    });
+    if (!made) throw until2?.reason;
     if (turn.kind === "threw") {
       const label2 = commandLabel(event);
       const fields2 = finalizationFields(turn) ?? [];
