@@ -3,8 +3,8 @@
 // click. Driven through the real loader and draw, so what a click does is read
 // from the link the frame drew.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -14,7 +14,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender } from "./helpers/click";
 import { effectsOf } from "../src/click/read";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { hrefOfDrawnLink } from "../src/render/drawn-link";
 import type { Run } from "../src/render/frame";
