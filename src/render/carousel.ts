@@ -13,10 +13,11 @@
 // on the action's current value, read through the action's own `stateVar` (for
 // the settings menu's controls, the `.effective` projection the bar rendered
 // with), so the label and the bar cannot disagree, and there is no cursor key
-// to gate, reset, or leave stale. An arrow carries its step, a link that means
-// the same on every draw; the click resolves it from the value the key holds
-// when it lands (realizeRing, render/action.ts), so N clicks that arrive before
-// the bar has redrawn land N steps.
+// to gate, reset, or leave stale. An arrow carries its step, never the option
+// it lands on; the click resolves it from the value the key holds when it
+// lands, or while a rule decides the key, from the name this draw wore
+// (realizeRing, render/action.ts), so N clicks that arrive before the bar has
+// redrawn land N steps.
 //
 // [LAW:one-way-deps] Lives in render/ beside the picker, injected into the
 // engine by registerDslConfig as data; the generic engine never imports it.

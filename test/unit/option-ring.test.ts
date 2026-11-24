@@ -45,6 +45,13 @@ describe("a step lands on the ring the value is centred in", () => {
     expect(landing(options, "e", stepOffset(1), 0)).toBe("a");
     expect(landing(options, "c", stepOffset(2), 0)).toBe("e");
     expect(landing(options, "c", stepOffset(-7), 0)).toBe("a");
+    // An offset at the edge of the safe range: centre plus offset would round.
+    expect(
+      landing(["a", "b", "c"], "c", stepOffset(Number.MAX_SAFE_INTEGER), 0),
+    ).toBe("a");
+    expect(
+      landing(["a", "b", "c"], "c", stepOffset(-Number.MAX_SAFE_INTEGER), 0),
+    ).toBe("b");
   });
 
   test("a value outside the domain counts as the first option", () => {
