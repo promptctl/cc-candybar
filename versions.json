@@ -4,32 +4,32 @@
     {
       "version": "pr-958",
       "ref": "refs/pull/958/merge",
-      "sha": "885dd861f6fae9292c53e98ba594c3b708e49bfd",
-      "timestamp": "2026-11-24T23:44:30.805Z",
+      "sha": "e17065e843cb86bc2398dd16a367e797e200e806",
+      "timestamp": "2026-11-24T23:48:40.458Z",
       "commits": [
         {
-          "sha": "885dd861f6fae9292c53e98ba594c3b708e49bfd",
+          "sha": "e17065e843cb86bc2398dd16a367e797e200e806",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T23:42:39Z",
-          "message": "Merge 3621a571f8d16d4928037e3c78f573f0626ec0af into 1b60f481a32ccbc977686108a7b4498de1c72ade\n"
+          "timestamp": "2026-11-24T16:47:34-07:00",
+          "message": "Merge 6859f7e3e444a08377467b3a74437f1b706714b9 into 1b60f481a32ccbc977686108a7b4498de1c72ade\n"
         },
         {
-          "sha": "3621a571f8d16d4928037e3c78f573f0626ec0af",
+          "sha": "6859f7e3e444a08377467b3a74437f1b706714b9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T16:29:44-07:00",
           "message": "test(controls): each control is declared once with its mark and arrows, the ring is refused when the picker pages, and every ring comment says the link carries its step and never its landing (candybar-host-renderer-x96a.7o3)\n\nReview pass 2 on #958.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "f7446dc60e0add69fb095405105de1d65f639655",
+          "sha": "178aca4b95b02ef183045e7de57a5fc2bf9b998a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T16:18:39-07:00",
           "message": "test(controls): each control over a per-draw rule is read on its own row, and every ◀ ▶ ? steps from the option the draw wore; a ring step near the safe range lands exactly (candybar-host-renderer-x96a.7o3)\n\nReview pass 1 on #958. The test now reads each control's row alone, takes\nthe ring from the picker, clicks ◀ and ▶ of the carousel and the swatches\nrow in every domain after a draw at the other answer, and checks ? lands\noff the worn option. ringAround reduces the offset before adding the\ncentre, so its sum never rounds. The ring headers say the link carries the\nworn name while a rule decides the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "3fe4c4331841207f0b2c9188089460731ba3ae1e",
+          "sha": "1850d02ccb2ff13751e23587c00f3e59dc286f16",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T16:03:40-07:00",
