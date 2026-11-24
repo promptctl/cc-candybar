@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-957",
+      "ref": "refs/pull/957/merge",
+      "sha": "1099df41cc81bc4af928856673b7d741e6769cfc",
+      "timestamp": "2026-11-24T23:09:42.724Z",
+      "commits": [
+        {
+          "sha": "1099df41cc81bc4af928856673b7d741e6769cfc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T23:08:39Z",
+          "message": "Merge 88c5611f4ad8e61bec377a01988c89f8fe04d9aa into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
+        },
+        {
+          "sha": "88c5611f4ad8e61bec377a01988c89f8fe04d9aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:08:26-07:00",
+          "message": "fix(links): a structural insert holds no ring, the step-config log keeps its space, and a run of state writes reports under each write's own verb (candybar-host-renderer-x96a.5f9)\n"
+        },
+        {
+          "sha": "69fa262d45347d4cc9fe1ee709b0d2a446a18817",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T15:54:35-07:00",
+          "message": "fix(links): one fold joins a click's state writes, and review pass 1's smaller findings (candybar-host-renderer-x96a.5f9)\n\nA click's adjacent set-state and ring-state effects are joined once, at admission, into one state-writes step; set-state leaves the text batching beside reset-config. The step carries no verb of its own, and its write type no longer shares a name with the disclosure's. The menu trigger shares one render binding; the picker's close names the holding-current sentinel; the menu-action inverse sits beside its producer with a round-trip test; test helpers read a stepped ring through one lookup.\n"
+        },
+        {
+          "sha": "1f4658a5ac7c46960d8a308d0ad54b1867f8e7b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T15:29:01-07:00",
+          "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n"
+        }
+      ]
+    },
+    {
       "version": "pr-958",
       "ref": "refs/pull/958/merge",
       "sha": "c3f267045b9da5fea7aeceeab48846352cf686e6",
@@ -20,35 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T16:03:40-07:00",
           "message": "test(controls): a carousel, picker, swatches row and swatch over a key a per-draw rule chooses mark and step from what the bar wears (candybar-host-renderer-x96a.7o3)\n\nA theme, style or effect rule that reads `now` is evaluated in each draw.\nEvery control that centres on the key already reads the name that draw's\nrule settled on; no test drew one under such a rule, only under a rule\nsettled once and kept. One rig is drawn at alternating instants, so a\nreader that kept the first draw's answer or fell to the floor fails it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-957",
-      "ref": "refs/pull/957/merge",
-      "sha": "3dade34e9f491d8e869430d2f399e61681bc5a6b",
-      "timestamp": "2026-11-24T22:55:48.719Z",
-      "commits": [
-        {
-          "sha": "3dade34e9f491d8e869430d2f399e61681bc5a6b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:54:48Z",
-          "message": "Merge 69fa262d45347d4cc9fe1ee709b0d2a446a18817 into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
-        },
-        {
-          "sha": "69fa262d45347d4cc9fe1ee709b0d2a446a18817",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:54:35-07:00",
-          "message": "fix(links): one fold joins a click's state writes, and review pass 1's smaller findings (candybar-host-renderer-x96a.5f9)\n\nA click's adjacent set-state and ring-state effects are joined once, at admission, into one state-writes step; set-state leaves the text batching beside reset-config. The step carries no verb of its own, and its write type no longer shares a name with the disclosure's. The menu trigger shares one render binding; the picker's close names the holding-current sentinel; the menu-action inverse sits beside its producer with a round-trip test; test helpers read a stepped ring through one lookup.\n"
-        },
-        {
-          "sha": "1f4658a5ac7c46960d8a308d0ad54b1867f8e7b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:29:01-07:00",
-          "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n"
         }
       ]
     },

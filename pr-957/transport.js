@@ -57135,11 +57135,11 @@ function synthesizePlacementMenus(config, issues) {
   const variables = {};
   const actions = {};
   const callsOf = /* @__PURE__ */ new Map();
-  const reported = /* @__PURE__ */ new Set();
+  const reported2 = /* @__PURE__ */ new Set();
   const issue3 = (segName, message) => {
     const path31 = `segments.${segName}`;
-    if (reported.has(`${path31}\0${message}`)) return;
-    reported.add(`${path31}\0${message}`);
+    if (reported2.has(`${path31}\0${message}`)) return;
+    reported2.add(`${path31}\0${message}`);
     issues.push({ path: path31, message });
   };
   for (const preset of presetNames(config.presets)) {
@@ -62092,7 +62092,7 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       yield* unreadBelow(childPaths(child, path31), whereBelow(child, where));
     }
   }
-  const reported = /* @__PURE__ */ new Set();
+  const reported2 = /* @__PURE__ */ new Set();
   const checkLayoutTree = (root, layoutKey) => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
@@ -62127,7 +62127,7 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       }
       const placed2 = presence2(node.name);
       if (reportable(placed2)) {
-        reported.add(node.name);
+        reported2.add(node.name);
         ctx.unplaced.push({
           path: path31,
           message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
@@ -62153,10 +62153,10 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
   }
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
-      if (node.kind !== "segment" || reported.has(node.name)) continue;
+      if (node.kind !== "segment" || reported2.has(node.name)) continue;
       const placed2 = presence2(node.name);
       if (!reportable(placed2)) continue;
-      reported.add(node.name);
+      reported2.add(node.name);
       ctx.inherited.push({
         name: node.name,
         path: key,
@@ -77348,7 +77348,7 @@ var stepConfig = (args, ctx) => {
   writeValues(editStore(ctx, sid), into, [[landing2.key, result.value]]);
   ctx.log(
     "info",
-    `step-config: ${landing2.key}${current}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
+    `step-config: ${landing2.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
   );
 };
 function headFor(config, name) {
@@ -77361,7 +77361,7 @@ function optionsOf2(config, head) {
   return domain === void 0 ? void 0 : resolveOptionDomain(domain, configOptionDomains(config)).members;
 }
 function ringHeld(ctx, config, head) {
-  const options = optionsOf2(config, head);
+  const options = "from" in head || "cycle" in head ? optionsOf2(config, head) : void 0;
   if (options === void 0) return void 0;
   const pick2 = (k) => ctx.sessionState.get(ctx.session, k);
   if ("set" in head)
@@ -77811,7 +77811,7 @@ var SESSION_HANDLERS = {
   [VERB_SLASH]: slash,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
-var stepVerb = (step4) => step4.kind === "state-writes" ? [...new Set(step4.writes.map((w) => w.verb))].join("+") : step4.verb;
+var reported = (step4, message) => step4.kind === "state-writes" ? message : `${step4.verb}: ${message}`;
 function foldEffects(steps2, log, perform, recordErrors) {
   const errors2 = [];
   let operational = false;
@@ -77829,7 +77829,7 @@ function foldEffects(steps2, log, perform, recordErrors) {
         throw e;
       }
       if (failure2.kind === "threw") operational = true;
-      errors2.push(`${stepVerb(step4)}: ${failure2.message}`);
+      errors2.push(reported(step4, failure2.message));
     }
   }
   if (errors2.length > 0) {
@@ -79145,8 +79145,8 @@ var NOT_HEARD = {
   kind: "failed",
   reason: "the daemon holds no request from this session, so its environment is not known: none has arrived since the daemon started, or the session was among the oldest of more sessions than the daemon keeps"
 };
-function sessionEnvironment(reported, facts) {
-  const { [CLAUDE_CONFIG_DIR_ENV]: _reportedDir, ...rest2 } = reported;
+function sessionEnvironment(reported2, facts) {
+  const { [CLAUDE_CONFIG_DIR_ENV]: _reportedDir, ...rest2 } = reported2;
   return {
     ...rest2,
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
@@ -80354,9 +80354,9 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 
 // src/daemon/task-throws.ts
 init_globals();
-function thrownText(reported, more = 0) {
-  const failure2 = failureOf(reported.thrown);
-  const threw2 = `${reported.task} threw${recurrence(more)}`;
+function thrownText(reported2, more = 0) {
+  const failure2 = failureOf(reported2.thrown);
+  const threw2 = `${reported2.task} threw${recurrence(more)}`;
   return {
     shown: `${threw2}: ${failure2.message}`,
     logged: `${threw2}: ${failure2.detail}`
@@ -80365,9 +80365,9 @@ function thrownText(reported, more = 0) {
 var TaskThrowInbox = class {
   taking = { kind: "waiting", waiting: [] };
   report = (task, thrown2, at) => {
-    const reported = { task, thrown: thrown2, at };
-    if (this.taking.kind === "waiting") this.taking.waiting.push(reported);
-    else this.taking.take(reported);
+    const reported2 = { task, thrown: thrown2, at };
+    if (this.taking.kind === "waiting") this.taking.waiting.push(reported2);
+    else this.taking.take(reported2);
   };
   // [LAW:single-enforcer] The daemon takes every throw, those waiting first,
   // oldest first; one reported while they are taken waits behind them.
@@ -80383,8 +80383,8 @@ var TaskThrowInbox = class {
   handOver(to) {
     const { taking } = this;
     if (taking.kind === "waiting")
-      for (let reported = taking.waiting.shift(); reported !== void 0; reported = taking.waiting.shift())
-        to.take(reported);
+      for (let reported2 = taking.waiting.shift(); reported2 !== void 0; reported2 = taking.waiting.shift())
+        to.take(reported2);
     this.taking = to;
   }
 };
@@ -91847,13 +91847,13 @@ var DeclaredBarPanes = class {
   // Re-elect demand only when a session changed panes or can take ownership.
   reported(session, previous2) {
     if (!Object.hasOwn(this.lanes, session)) return;
-    const reported = this.paneOf(session);
-    if (reported === void 0 && previous2 === null) return;
-    if (reported !== void 0 && previous2 !== null) {
-      const key = paneKey(reported.pane);
+    const reported2 = this.paneOf(session);
+    if (reported2 === void 0 && previous2 === null) return;
+    if (reported2 !== void 0 && previous2 !== null) {
+      const key = paneKey(reported2.pane);
       const held = this.held.get(key);
       if (paneKey(previous2) === key && held?.demand.session === session) {
-        held.demand = { ...reported, session, on: held.demand.on };
+        held.demand = { ...reported2, session, on: held.demand.on };
         this.reconcile(key, held);
         return;
       }
@@ -91863,12 +91863,12 @@ var DeclaredBarPanes = class {
   reconcileDemands() {
     const next2 = /* @__PURE__ */ new Map();
     for (const [session, switches] of Object.entries(this.lanes)) {
-      const reported = this.paneOf(session);
-      if (reported === void 0) continue;
-      const key = paneKey(reported.pane);
+      const reported2 = this.paneOf(session);
+      if (reported2 === void 0) continue;
+      const key = paneKey(reported2.pane);
       const competing = next2.get(key);
-      if (competing === void 0 || competing.order < reported.order)
-        next2.set(key, { ...reported, session, on: switches.pane });
+      if (competing === void 0 || competing.order < reported2.order)
+        next2.set(key, { ...reported2, session, on: switches.pane });
     }
     for (const [key, demand] of next2) {
       const held = this.held.get(key);
@@ -95041,9 +95041,9 @@ function createDaemon(inputs) {
   const taskThrows = new RecurringEvents(
     clock,
     "task-threw",
-    (reported) => reported.task,
-    (reported, more, at) => {
-      const { shown, logged } = thrownText(reported, more);
+    (reported2) => reported2.task,
+    (reported2, more, at) => {
+      const { shown, logged } = thrownText(reported2, more);
       log("error", logged);
       return environmentOutput(joinedEvent(null, shown, at), true);
     },
@@ -95117,17 +95117,17 @@ function createDaemon(inputs) {
     }
     if (changed) restateFaults();
   };
-  const taken2 = (reported) => {
+  const taken2 = (reported2) => {
     stats.tasksThrew++;
-    taskThrows.occur(reported);
+    taskThrows.occur(reported2);
   };
-  clock.throws.attach((reported) => {
+  clock.throws.attach((reported2) => {
     try {
-      taken2(reported);
+      taken2(reported2);
     } catch (failure2) {
       log(
         "error",
-        `taking what ${reported.task} threw failed: ${failureOf(failure2).detail}; it threw: ${failureOf(reported.thrown).detail}`
+        `taking what ${reported2.task} threw failed: ${failureOf(failure2).detail}; it threw: ${failureOf(reported2.thrown).detail}`
       );
     }
   });
@@ -95345,7 +95345,7 @@ function createDaemon(inputs) {
     frameFeeds.switched(lanes);
     declaredBarPanes.declare(lanes);
   };
-  function prepareRenderer(name, reported, entry) {
+  function prepareRenderer(name, reported2, entry) {
     const stores = new HeldStores(inputs.profile(name, log), clock);
     const boot = () => ({
       stored: stores.current(),
@@ -95360,11 +95360,11 @@ function createDaemon(inputs) {
       recording: () => recordings?.generation(name),
       node: bundle.node
     });
-    return { name, reported, entry, stores, prepared };
+    return { name, reported: reported2, entry, stores, prepared };
   }
   const connectRenderer = ({
     name,
-    reported,
+    reported: reported2,
     entry,
     stores,
     prepared
@@ -95457,7 +95457,7 @@ function createDaemon(inputs) {
         }
       }
     );
-    return { reported, entry, stores, link, renderer };
+    return { reported: reported2, entry, stores, link, renderer };
   };
   const primary = connectRenderer(primaryPrepared);
   renderers.set(inputs.rendererName, primary);
@@ -95735,7 +95735,7 @@ function createDaemon(inputs) {
         "held events close",
         () => {
           clock.throws.close(
-            (reported) => log("error", thrownText(reported).logged)
+            (reported2) => log("error", thrownText(reported2).logged)
           );
           for (const slot of [
             launchPipes,
@@ -96300,8 +96300,8 @@ function productionAdapters(paths2, daemonLog, machine) {
     }),
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
-    rendererEntryOf: (reported) => {
-      const entry = fs_default.realpathSync.native(reported);
+    rendererEntryOf: (reported2) => {
+      const entry = fs_default.realpathSync.native(reported2);
       if (!fs_default.statSync(entry).isFile()) throw new Error("not a file");
       return entry;
     },
