@@ -1,5 +1,5 @@
 import { inspectionPayloadProblem } from "../../src/daemon/foundations/inspection-reply";
-import { RENDERER_STATS_REFERENCE } from "../../src/daemon/foundations/stats-snapshot";
+import { EMPTY_RENDERER_STATS } from "../helpers/empty-stats";
 import { formatDebug } from "../../src/daemon/client-debug";
 import type { DebugSnapshot } from "../../src/daemon/foundations/debug-types";
 
@@ -50,7 +50,7 @@ test.each(formatted)(
 );
 
 test("requires the renderer's full stats contribution, including finite counts", () => {
-  const stats = RENDERER_STATS_REFERENCE;
+  const stats = EMPTY_RENDERER_STATS;
   expect(inspectionPayloadProblem({ kind: "stats", stats })).toBeNull();
   expect(
     inspectionPayloadProblem({

@@ -6,10 +6,10 @@ import {
   type RoundTripOutcome,
 } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
-import { RuntimeStats } from "./stats";
 import { isPlainObject } from "../config/loader/validate-core.js";
+import { read } from "../utils/wire-shape.js";
+import { STATS_SHAPE } from "./foundations/stats-shape.js";
 import {
-  missingFields,
   type Durations,
   type RendererPanel,
   type StatsSnapshot,
@@ -21,7 +21,6 @@ import {
   type ProcessMemory,
   usageWords,
 } from "./foundations/memory-limit";
-export { missingFields } from "./foundations/stats-snapshot";
 import { fileEventsLine } from "./cache/file-events";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
@@ -73,8 +72,10 @@ export function statsPlan(
 export function fetchStats(
   world: ClientWorld,
 ): Promise<RoundTripOutcome<StatsReply>> {
-  // An ok response without `stats` classifies as permanent/malformed_response
-  // in the transport; one with it is read once, here.
+  // [LAW:no-defensive-null-guards] exception: trust boundary. The presence
+  // check is the narrowing at the wire's edge: an ok response without `stats`
+  // classifies as permanent/malformed_response in the transport, and one with
+  // it is read once, here.
   return requestOutcome(
     world,
     () => ({ kind: "stats" }),
@@ -90,8 +91,9 @@ export function fetchStats(
 // restarts the daemon. The invariant is the SHAPE (every field this client
 // reads is there), not the build's identity: a worktree's client reading the
 // main checkout's daemon is a different digest and the same shape, and it is
-// refused by nothing. The fields are checked against this build's own
-// reference snapshot, never a second spelling of the type.
+// refused by nothing. The reply is read against this build's declaration of
+// its own type, so a field, an arm or a word this build reads and the reply
+// lacks is the skew.
 export type StatsReply =
   | { readonly kind: "ours"; readonly snapshot: StatsSnapshot }
   | {
@@ -101,19 +103,20 @@ export type StatsReply =
     };
 
 export function statsReplyOf(said: unknown): StatsReply {
-  const missing = missingFields(RuntimeStats.referenceSnapshots(), said);
-  return missing.length === 0
-    ? // [LAW:parse-dont-validate] The walk over the reference is the parse:
-      // every field this build reads is present and usable.
-      { kind: "ours", snapshot: said as StatsSnapshot }
+  const reply = read(STATS_SHAPE, said);
+  return reply.kind === "read"
+    ? { kind: "ours", snapshot: reply.value }
     : {
         kind: "another-build",
         said,
-        skew: `the daemon (${theirLabel(said)}) reports no ${missing.join(", ")}; ${anotherBuild}`,
+        skew: `the daemon (${theirLabel(said)}) reports no ${reply.at.map((at) => at || "<snapshot>").join(", ")}; ${anotherBuild}`,
       };
 }
 
 // Another build's own words for which build it is, as far as it says them.
+// [LAW:no-defensive-null-guards] exception: trust boundary. The reply is
+// another build's, so either word may be absent or of another type, and each
+// is said as missing.
 function theirLabel(said: unknown): string {
   const word = (key: string): string | null => {
     const value = isPlainObject(said) ? said[key] : undefined;

@@ -562,21 +562,21 @@ describe("a renderer process's start", () => {
     expect(children).toHaveLength(2);
   });
 
-  test("a renderer read before its close writes no heap, and its end is the close's", async () => {
-    const { link, children, clock, logs, ends } = rig();
+  test("a renderer read before its close writes no heap and is not ended by it, so it takes the close's steps", async () => {
+    const { link, children, logs } = rig();
     const read = await readRenderer(link, children);
     link.beginClose();
     await expect(read.heapSnapshot("/s/heap")).rejects.toThrow(
       "renderer main[1] is closing, so its heap was not written",
     );
     read.end("passed its memory limit");
-    await stopped(clock, children[0]!);
-    await link.close();
+    await settled();
+    expect(children[0]!.stdinEnded).toBe(false);
     expect(logs).toContainEqual(
-      "renderer main[1] passed its memory limit in the daemon's close",
+      "renderer main[1] was not ended for passed its memory limit: it is closing",
     );
-    // An end in the close starts nothing.
-    expect(ends).toEqual([]);
+    children[0]!.exit(EXITED);
+    await link.close();
     expect(children).toHaveLength(1);
   });
 

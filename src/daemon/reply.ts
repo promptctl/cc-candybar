@@ -40,7 +40,6 @@ import type {
   SourceSnapshots,
 } from "./foundations/stats-snapshot";
 import type { RendererProcessState } from "./renderer-process.js";
-import type { Asked } from "../utils/outcome.js";
 import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import type { RendererName } from "./foundations/renderer-name.js";

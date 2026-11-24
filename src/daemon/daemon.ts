@@ -1115,6 +1115,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // the journal and view pushes. Booting or down links have neither to close.
     await runTeardown(
       [
+        // [LAW:no-ambient-temporal-coupling] Before any renderer's close
+        // begins: a reading in flight across the close judges no renderer
+        // taking the close's steps.
+        ["limits disarm", () => limits.disarm()],
         ...attached.map(
           ({ renderer }): TeardownStep => [
             `${renderer.name} wakes close`,
@@ -1156,7 +1160,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ],
       ["frameFeeds close", () => frameFeeds.close()],
       ["binaryWatch close", () => binaryWatch.close()],
-      ["limits disarm", () => limits.disarm()],
       // Before the sources and the storage its states hold.
       ["collector close", () => collector.close()],
       // Before the views close: a `config` made after it finds its origin

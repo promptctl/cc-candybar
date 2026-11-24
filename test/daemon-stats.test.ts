@@ -1,9 +1,9 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import {
-  RENDERER_STATS_REFERENCE,
-  type Durations,
-  type SourceSnapshots,
+import type {
+  Durations,
+  SourceSnapshots,
 } from "../src/daemon/foundations/stats-snapshot";
+import { EMPTY_RENDERER_STATS, emptyStats } from "./helpers/empty-stats";
 import {
   MAIN_RENDERER,
   rendererNameOf,
@@ -22,7 +22,6 @@ const NO_DURATIONS: Durations = {
 };
 import {
   formatStats,
-  missingFields,
   statsReplyOf,
   statsPlan,
 } from "../src/daemon/client-stats";
@@ -170,7 +169,7 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
       stats: {
         kind: "ok",
         value: {
-          ...RENDERER_STATS_REFERENCE,
+          ...EMPTY_RENDERER_STATS,
           effectCache: { sessions: 2, effects: 5 },
           sessionState: { sessions: 2, observers: 11, revision: 7 },
         },
@@ -250,7 +249,7 @@ describe("RuntimeStats.snapshot", () => {
   // stamp (what `cc-candybar --version` prints for the same build), and the
   // wire contract number lives under its own name — two facts, two fields.
   test("version is the package stamp; protocolVersion is the wire contract", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     expect(snap.version).toBe(pkg.version);
     expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
   });
@@ -323,12 +322,12 @@ describe("RuntimeStats.snapshot", () => {
 
 describe("a stats reply", () => {
   test("a snapshot from this build is ours", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     expect(statsReplyOf(snap)).toEqual({ kind: "ours", snapshot: snap });
   });
 
   test("a snapshot of another digest with every field is ours: shape, not identity", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     for (const other of [
       { ...snap, sourceDigest: "abcdef0123456789" },
       { ...snap, version: "0.0.1" },
@@ -337,7 +336,7 @@ describe("a stats reply", () => {
   });
 
   test("a snapshot lacking fields this build reads is another build's, naming them and both builds", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     const { renderers: _r, sourceDigest: _d, ...older } = snap;
     const reply = statsReplyOf(older);
     if (reply.kind !== "another-build") throw new Error("read as ours");
@@ -356,83 +355,183 @@ describe("a stats reply", () => {
     );
   });
 
-  test("missingFields names a nested field by its path, and an atom in place of an object", () => {
-    const refs = RuntimeStats.referenceSnapshots();
-    const snap = RuntimeStats.referenceSnapshot();
-    const { retiring: _r, ...collector } = snap.collector;
-    expect(missingFields(refs, { ...snap, collector })).toEqual([
-      "collector.retiring",
-    ]);
-    expect(missingFields(refs, { ...snap, watchers: 3 })).toEqual(["watchers"]);
-    // A list the reader maps, carried as anything else, is as absent to it.
-    expect(missingFields(refs, { ...snap, clients: null })).toEqual([
-      "clients",
-    ]);
-    for (const each of refs) expect(missingFields(refs, each)).toEqual([]);
-    expect(
-      missingFields(refs, { ...snap, host: { ...snap.host, memory: 3 } }),
-    ).toEqual(["host.memory"]);
+  // Where a reply is not this build's, as the skew names it.
+  const skewOf = (said: unknown): string[] => {
+    const reply = statsReplyOf(said);
+    if (reply.kind === "ours") return [];
+    return /reports no (.*); it is another build/
+      .exec(reply.skew)![1]!
+      .split(", ");
+  };
+  const sizes = { rss: 1, heapTotal: 1 };
+  const panel = (fields: object) => ({
+    name: MAIN_RENDERER,
+    process: { kind: "in-host" },
+    mailbox: { holder: "render", heldMs: 3, queued: 1 },
+    stats: { kind: "ok", value: EMPTY_RENDERER_STATS },
+    ...fields,
   });
 
-  test("missingFields reads each arm of a union as its own, and each element of a list", () => {
-    const refs = RuntimeStats.referenceSnapshots();
-    const snap = RuntimeStats.referenceSnapshot();
+  test("the producer's snapshot is ours in every arm its parts report", () => {
+    const stats = new RuntimeStats(systemTimekeeper);
+    const memory = (reading: object) => ({
+      pid: 9,
+      memory: reading,
+      limit: 512 * MB,
+      nearAt: 384 * MB,
+    });
+    const snap = stats.snapshot({
+      ...EXTRAS,
+      sourceDigest: "abcdef",
+      sources: {
+        ...SOURCES,
+        records: [
+          {
+            name: "git",
+            scope: "repo",
+            refreshes: { first: 1, change: 2 },
+            failures: 0,
+            abandoned: 0,
+            lastMs: 4,
+          },
+        ],
+      },
+      fileEvents: {
+        ...FILE_EVENTS,
+        delivery: { kind: "unmeasured", since: 1, reason: "x", missedSince: 1 },
+      },
+      clients: [
+        {
+          ...EXTRAS.clients[0]!,
+          client: { kind: "native", bundle: "/b", source: null },
+          termCols: null,
+        },
+      ],
+      host: memory({
+        kind: "measured",
+        charge: { kind: "charged", measure: "phys_footprint", bytes: 1 },
+        usage: { kind: "read", sizes },
+      }) as never,
+      renderers: [
+        panel({}),
+        panel({
+          process: { kind: "not-running", why: "it exited 1" },
+          stats: { kind: "failed", reason: "not asked" },
+        }),
+        panel({
+          process: {
+            kind: "process",
+            memory: memory({
+              kind: "measured",
+              charge: { kind: "stand-in", rss: 1, gap: 0, unread: "x" },
+              usage: { kind: "unread", why: "no ping" },
+            }),
+          },
+        }),
+        panel({
+          process: {
+            kind: "process",
+            memory: memory({
+              kind: "measured",
+              charge: { kind: "unread", gap: 0, unread: "x" },
+              usage: { kind: "read", sizes },
+            }),
+          },
+        }),
+      ] as never,
+    });
+    expect(skewOf(snap)).toEqual([]);
+    expect(
+      skewOf({
+        ...snap,
+        fileEvents: {
+          ...snap.fileEvents,
+          delivery: { kind: "stalled", missedSince: 1 },
+        },
+      }),
+    ).toEqual([]);
+  });
+
+  test("a field missing below the top, an atom in place of an object, and a list carried as anything else are each named by path", () => {
+    const snap = emptyStats();
+    const { retiring: _r, ...collector } = snap.collector;
+    expect(skewOf({ ...snap, collector })).toEqual(["collector.retiring"]);
+    expect(skewOf({ ...snap, watchers: 3 })).toEqual(["watchers"]);
+    expect(skewOf({ ...snap, clients: null })).toEqual(["clients"]);
+    expect(skewOf({ ...snap, host: { ...snap.host, memory: 3 } })).toEqual([
+      "host.memory",
+    ]);
+  });
+
+  test("an arm or a word this build does not know is another build's, named at its tag", () => {
+    const snap = emptyStats();
+    expect(
+      skewOf({ ...snap, host: { ...snap.host, memory: { kind: "later" } } }),
+    ).toEqual(["host.memory.kind"]);
+    expect(
+      skewOf({
+        ...snap,
+        renderers: [
+          panel({ process: { kind: "later" } }),
+          panel({ stats: { kind: "later", value: {} } }),
+        ],
+      }),
+    ).toEqual(["renderers[0].process.kind", "renderers[1].stats.kind"]);
+    expect(
+      skewOf({
+        ...snap,
+        clients: [{ ...EXTRAS.clients[0]!, frame: "later" }],
+      }),
+    ).toEqual(["clients[0].frame"]);
+  });
+
+  test("a field of another type than this build's is another build's", () => {
+    const snap = emptyStats();
+    expect(skewOf({ ...snap, sourceDigest: {}, version: 7 })).toEqual([
+      "version",
+      "sourceDigest",
+    ]);
+    expect(
+      skewOf({
+        ...snap,
+        renderers: [panel({ mailbox: { holder: 3, heldMs: 0, queued: 0 } })],
+      }),
+    ).toEqual(["renderers[0].mailbox.holder"]);
+  });
+
+  test("each arm is read below its tag, and each element of a list", () => {
+    const snap = emptyStats();
     const measured = (memory: object) => ({
       ...snap,
       host: { ...snap.host, memory: { kind: "measured", ...memory } },
     });
-    const sizes = { rss: 1, heapTotal: 1 };
-    // The arm every running daemon reports, read below its tag.
+    expect(skewOf(measured({ usage: { kind: "read", sizes } }))).toEqual([
+      "host.memory.charge",
+    ]);
     expect(
-      missingFields(refs, measured({ usage: { kind: "read", sizes } })),
-    ).toEqual(["host.memory.charge"]);
-    expect(
-      missingFields(
-        refs,
+      skewOf(
         measured({
           charge: { kind: "stand-in", rss: 1, unread: "x" },
           usage: { kind: "read", sizes },
         }),
       ),
     ).toEqual(["host.memory.charge.gap"]);
-    // An arm no reference holds is no field this build reads.
+    const { refreshes: _f, ...unrefreshed } = {
+      name: "git",
+      scope: "repo",
+      refreshes: {},
+      failures: 0,
+      abandoned: 0,
+      lastMs: null,
+    };
+    const { frame: _d, ...undrawn } = EXTRAS.clients[0]!;
     expect(
-      missingFields(refs, {
+      skewOf({
         ...snap,
-        host: { ...snap.host, memory: { kind: "later" } },
-      }),
-    ).toEqual([]);
-    const [panel] = snap.renderers;
-    const { mailbox: _m, ...unboxed } = panel!;
-    const { renderCache: _c, ...uncached } = RENDERER_STATS_REFERENCE;
-    expect(
-      missingFields(refs, {
-        ...snap,
-        renderers: [
-          panel,
-          unboxed,
-          { ...panel, stats: { kind: "ok", value: uncached } },
-          { ...panel, stats: { kind: "failed" } },
-          { ...panel, process: { kind: "not-running" } },
-        ],
-      }),
-    ).toEqual([
-      "renderers[1].mailbox",
-      "renderers[2].stats.value.renderCache",
-      "renderers[3].stats.reason",
-      "renderers[4].process.why",
-    ]);
-    const [record] = snap.sources.records;
-    const { refreshes: _f, ...unrefreshed } = record!;
-    const [client] = snap.clients;
-    const { frame: _d, ...undrawn } = client!;
-    expect(
-      missingFields(refs, {
-        ...snap,
-        sources: { ...snap.sources, records: [record, unrefreshed] },
+        sources: { ...snap.sources, records: [unrefreshed] },
         clients: [undrawn],
       }),
-    ).toEqual(["sources.records[1].refreshes", "clients[0].frame"]);
+    ).toEqual(["sources.records[0].refreshes", "clients[0].frame"]);
   });
 });
 
@@ -586,7 +685,7 @@ describe("formatStats", () => {
           name: rendererNameOf("site"),
           process: { kind: "in-host" },
           mailbox: { holder: null, heldMs: 0, queued: 0 },
-          stats: { kind: "ok", value: RENDERER_STATS_REFERENCE },
+          stats: { kind: "ok", value: EMPTY_RENDERER_STATS },
         },
       ],
     });
@@ -668,7 +767,7 @@ describe("formatStats", () => {
   });
 
   test("a refused row sits in the column the rows above it use", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     const out = formatStats({
       ...snap,
       subprocesses: {
@@ -685,7 +784,7 @@ describe("formatStats", () => {
   });
 
   test("near the limit is judged on the daemon's line, not this build's", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     const at = (nearAt: number) =>
       formatStats({
         ...snap,
@@ -709,7 +808,7 @@ describe("formatStats", () => {
   });
 
   test("a renderer nothing could charge says so, and is never called near its limit", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     const why =
       "footprint printed no phys_footprint for pid 4343, and no ping has answered yet";
     const out = formatStats({
@@ -731,7 +830,7 @@ describe("formatStats", () => {
             },
           },
           mailbox: { holder: null, heldMs: 0, queued: 0 },
-          stats: { kind: "ok", value: RENDERER_STATS_REFERENCE },
+          stats: { kind: "ok", value: EMPTY_RENDERER_STATS },
         },
       ],
     });
@@ -772,9 +871,9 @@ describe("formatStats", () => {
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      sources: RuntimeStats.referenceSnapshot().sources,
-      fileEvents: RuntimeStats.referenceSnapshot().fileEvents,
-      sourceRuns: RuntimeStats.referenceSnapshot().sourceRuns,
+      sources: emptyStats().sources,
+      fileEvents: emptyStats().fileEvents,
+      sourceRuns: emptyStats().sourceRuns,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       collector: { sessions: 1, retiring: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
@@ -821,7 +920,7 @@ describe("formatStats", () => {
 // plan value (src/cli-plan.ts delivers it), so it is pinned here without a
 // process.
 describe("statsPlan — the text/exit-code contract", () => {
-  const snap = RuntimeStats.referenceSnapshot();
+  const snap = emptyStats();
 
   it("JSON mode carries the whole snapshot on stdout and exits 0", () => {
     const plan = statsPlan(

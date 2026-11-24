@@ -9,6 +9,7 @@
 // [LAW:no-ambient-temporal-coupling] Its life is a state, `idle → starting →
 // live → down → starting …`, and every input asks the state where it goes.
 
+import { backedOffMs } from "../utils/period.js";
 import { streamedToFile } from "./streamed-file.js";
 import type { RendererRecording } from "./renderer-recording.js";
 import type { Timekeeper } from "../time.js";
@@ -186,10 +187,13 @@ export function rendererNodeArgs(
 
 // The wait before the next start, from how many renderers in a row did not
 // prove themselves: none after one that did.
+// [LAW:one-source-of-truth] The one exponential backoff.
 export function backoffMs(failed: number): number {
-  return failed === 0
-    ? 0
-    : Math.min(BACKOFF_FIRST_MS * 2 ** (failed - 1), BACKOFF_MAX_MS);
+  return backedOffMs(
+    { okMs: 0, failedMs: BACKOFF_FIRST_MS },
+    failed,
+    BACKOFF_MAX_MS,
+  );
 }
 
 // One renderer process, from its spawn to its end.
@@ -507,24 +511,22 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     ping(link);
   };
 
-  // [LAW:single-enforcer] Every end the host decides, whatever its reason:
-  // the generation keeps the reason its exit reports, and the first reason
-  // owns it. It ends one starting, live or taking the close's steps. One
-  // starting or live moves to ending, and what waited for its boot fails; one
-  // the close waits on stays the close's, whose end starts nothing. Every end
-  // stops its process as the close does, so one that would not exit by
-  // itself is signalled after the grace. A reason the end refuses is said: a
-  // second one, or an end of a renderer the phase has moved past.
+  // [LAW:single-enforcer] Every end the supervisor decides, whatever its
+  // reason: the generation keeps the reason its exit reports, and the first
+  // reason owns it. It ends one starting, live or taking the close's steps
+  // (one that stopped answering cannot take them). One starting or live moves
+  // to ending, and what waited for its boot fails; one the close waits on
+  // stays the close's, whose end starts nothing. Every end stops its process
+  // as the close does, so one that would not exit by itself is signalled
+  // after the grace. A reason the end refuses is said: a second one, or an
+  // end of a renderer the phase has moved past.
   const endWith = (link: Link, why: string): void => {
     const at = phase;
     const mine =
       (at.kind === "starting" || at.kind === "live" || at.kind === "closing") &&
       at.link === link;
     if (!mine || link.endReason !== null) {
-      log(
-        "info",
-        `renderer ${name}[${link.generation}] was not ended for ${why}: ${link.endReason !== null ? `it is already ending: ${link.endReason}` : `it is ${at.kind}`}`,
-      );
+      notEnded(link, why, at.kind);
       return;
     }
     const ending: EndedLink = Object.assign(link, { endReason: why });
@@ -535,6 +537,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
     clock.detach(`renderer ${name} end`, () => stopGracefully(link, why));
   };
+
+  // [LAW:no-silent-failure] An end refused is said, with what holds it.
+  const notEnded = (link: Link, why: string, at: Phase["kind"]): void =>
+    log(
+      "info",
+      `renderer ${name}[${link.generation}] was not ended for ${why}: ${link.endReason !== null ? `it is already ending: ${link.endReason}` : `it is ${at}`}`,
+    );
 
   // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log. The
   // stack is the log's alone.
@@ -806,7 +815,15 @@ export function processRenderer(own: ProcessOwner): RendererLink {
                   `renderer ${name}[${link.generation}] is ${phase.kind}, so its heap was not written`,
                 ),
               ),
-        end: (why) => endWith(link, why),
+        // [LAW:no-ambient-temporal-coupling] A handle is of the starting or
+        // live renderer it was handed for: one the close has begun to drain
+        // finishes its close steps, whatever a reading taken before the close
+        // finds of it.
+        end: (why) =>
+          (phase.kind === "starting" || phase.kind === "live") &&
+          phase.link === link
+            ? endWith(link, why)
+            : notEnded(link, why, phase.kind),
       },
     };
   };

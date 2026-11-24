@@ -9,8 +9,6 @@ import {
   type Histogram,
 } from "./foundations/durations.js";
 import {
-  RENDERER_STATS_REFERENCE,
-  type Delivery,
   type Durations,
   type RunStats,
   type FeedStats,
@@ -21,27 +19,15 @@ import {
 } from "./foundations/stats-snapshot.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { RenderSighting } from "./foundations/sightings";
-import type { SessionId } from "./foundations/session-id";
-import type { ProcessMemory } from "./foundations/memory-limit";
 import type { LaunchCategory } from "../proc/launcher";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
-import { MAIN_RENDERER } from "./foundations/renderer-name";
 import { PACKAGE_VERSION } from "../version";
 import type { Monotonic, Timekeeper } from "../time";
 import type { RequestId } from "../renderer-interface/interface.js";
 import type { Acceptance } from "./foundations/request-event.js";
 
 // A read kind no run of which has happened yet.
-const NO_RUNS: SourceRunsStats["shell"] = {
-  entries: 0,
-  held: 0,
-  refreshes: {},
-  failures: 0,
-  abandoned: 0,
-  lastMs: null,
-};
-
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
 //
@@ -218,199 +204,6 @@ export class RuntimeStats {
       pipeErrors: this.subprocessPipeErrors,
       durations,
     };
-  }
-
-  // [LAW:one-source-of-truth] This build's snapshot shape, as data: every
-  // field `snapshot` writes, with zeroed counts. A client reads a snapshot
-  // from whichever daemon is running, and an older build's lacks fields this
-  // one reads; comparing against the producer's own output, not a second
-  // spelling of the type, means a field added here is checked for there.
-  // [LAW:parse-dont-validate] Every arm a reader descends into, across a set
-  // of references, so a field of each arm is checked: the base, and the base
-  // with each other arm of each union in its place. Each list holds an
-  // element, so its elements are checked too.
-  static referenceSnapshots(): readonly StatsSnapshot[] {
-    const base = RuntimeStats.referenceSnapshot();
-    const panel = base.renderers[0]!;
-    const sizes = { rss: 0, heapTotal: 0 };
-    // Each arm of a process's reading, read at the host and at a panel alike.
-    const measured: ReadonlyArray<ProcessMemory["memory"]> = [
-      {
-        kind: "measured",
-        charge: { kind: "charged", measure: "rss", bytes: 0 },
-        usage: { kind: "read", sizes },
-      },
-      {
-        kind: "measured",
-        charge: { kind: "stand-in", rss: 0, gap: 0, unread: "" },
-        usage: { kind: "unread", why: "" },
-      },
-      {
-        kind: "measured",
-        charge: { kind: "unread", gap: 0, unread: "" },
-        usage: { kind: "read", sizes },
-      },
-    ];
-    const withDelivery = (delivery: Delivery): StatsSnapshot["fileEvents"] => ({
-      ...base.fileEvents,
-      delivery,
-    });
-    return [
-      base,
-      ...measured.map(
-        (memory): StatsSnapshot => ({
-          ...base,
-          host: { pid: 0, memory, limit: 0, nearAt: 0 },
-          renderers: [
-            {
-              ...panel,
-              process: {
-                kind: "process",
-                memory: { pid: 0, memory, limit: 0, nearAt: 0 },
-              },
-            },
-          ],
-        }),
-      ),
-      {
-        ...base,
-        renderers: [
-          { ...panel, process: { kind: "in-host" } },
-          {
-            ...panel,
-            process: { kind: "not-running", why: "" },
-            stats: { kind: "failed", reason: "" },
-          },
-        ],
-        fileEvents: withDelivery({ kind: "stalled", missedSince: 0 }),
-        sources: {
-          ...base.sources,
-          records: base.sources.records.map((record) => ({
-            ...record,
-            lastMs: 0,
-          })),
-        },
-      },
-      {
-        ...base,
-        fileEvents: withDelivery({
-          kind: "unmeasured",
-          since: 0,
-          reason: "",
-          missedSince: 0,
-        }),
-      },
-    ];
-  }
-
-  static referenceSnapshot(): StatsSnapshot {
-    return new RuntimeStats({
-      now: () => 0,
-      monotonic: () => 0 as Monotonic,
-    }).snapshot({
-      gitCache: {
-        size: 0,
-        held: 0,
-        hits: 0,
-        misses: 0,
-        changes: 0,
-        watchers: 0,
-      },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      sources: {
-        records: [
-          {
-            name: "",
-            scope: "daemon",
-            refreshes: {},
-            failures: 0,
-            abandoned: 0,
-            lastMs: null,
-          },
-        ],
-        homes: {
-          daemon: 0,
-          configDir: 0,
-          repo: 0,
-          session: 0,
-          pane: 0,
-        },
-        held: {
-          git: 0,
-          tmux: 0,
-          host: 0,
-          today: 0,
-          pluginStorage: 0,
-          transcript: 0,
-        },
-        pluginStorage: {
-          folders: 0,
-          faults: { unusable: 0, unreadable: 0, refused: 0, error: 0 },
-          lost: 0,
-        },
-      },
-      fileEvents: {
-        delivery: { kind: "delivering", unreported: [], missedSince: null },
-        stalls: 0,
-        catchUps: 0,
-        probes: 0,
-        probeFailures: 0,
-      },
-      sourceRuns: {
-        shell: NO_RUNS,
-        file: NO_RUNS,
-        watches: 0,
-      },
-      transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      collector: { sessions: 0, retiring: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
-      frameFeeds: {
-        feeds: 0,
-        subscribers: 0,
-        pushed: 0,
-        refused: 0,
-        lookups: 0,
-        found: 0,
-      },
-      watchersActive: 0,
-      dirWatchesActive: 0,
-      polledPaths: 0,
-      clients: [
-        {
-          client: null,
-          sessionId: "" as SessionId,
-          termCols: 0,
-          rateLimits: "carried",
-          claudeConfigDir: "",
-          projectDir: "",
-          transcript: { path: "", answered: false },
-          frame: "still",
-          role: "statusline",
-          ago: 0,
-        },
-      ],
-      bundle: "/",
-      sourceDigest: null,
-      host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0, nearAt: 0 },
-      // [LAW:one-source-of-truth] One panel, which every panel is read as:
-      // the arms a reader descends into, so a field of theirs is checked.
-      renderers: [
-        {
-          name: MAIN_RENDERER,
-          process: {
-            kind: "process",
-            memory: {
-              pid: 0,
-              memory: { kind: "unmeasured" },
-              limit: 0,
-              nearAt: 0,
-            },
-          },
-          mailbox: { holder: null, heldMs: 0, queued: 0 },
-          stats: { kind: "ok", value: RENDERER_STATS_REFERENCE },
-        },
-      ],
-    });
   }
 
   snapshot(extras: {

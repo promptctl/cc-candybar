@@ -6,7 +6,7 @@
 import { rendererNameOf } from "../../src/daemon/foundations/renderer-name";
 import type { ProcessMemory } from "../../src/daemon/foundations/memory-limit";
 import type { RendererProcessState } from "../../src/daemon/renderer-process";
-import { RENDERER_STATS_REFERENCE } from "../../src/daemon/foundations/stats-snapshot";
+import { EMPTY_RENDERER_STATS } from "../helpers/empty-stats";
 import { RENDERER_STATS_WAIT_MS, rendererPanel } from "../../src/daemon/reply";
 import { heldClock } from "../helpers/held-clock";
 
@@ -88,7 +88,7 @@ describe("a renderer's stats panel", () => {
 
   test("one that answers leaves no wait armed", async () => {
     const clock = heldClock(new Date(0));
-    const stats = RENDERER_STATS_REFERENCE;
+    const stats = EMPTY_RENDERER_STATS;
     const panel = await rendererPanel(
       {
         name,
