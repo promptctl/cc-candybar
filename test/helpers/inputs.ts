@@ -1,7 +1,7 @@
 import { ColorDepth } from "@promptctl/rich-js";
 import { resolvePath, type SourceRegistry } from "../../src/var-system/sources";
 import { NOTHING_READ, type HostReadings } from "../../src/dsl/view-source";
-import { sessionOfPayload } from "./payload-session";
+import { sessionOfPayload } from "../../scripts/lib/draw-fixtures/payload-session";
 
 // A fixed payload bound as a registry's input source, as `cc-candybar check`
 // binds its constant payload: every input derives its path in it, and the

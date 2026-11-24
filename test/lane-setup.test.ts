@@ -14,7 +14,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { ClaudeInputEdge } from "../src/claude-input/typing";
 import { Acts, type HostAct } from "../src/daemon/acts";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import type { EffectId } from "../src/renderer-interface/interface";
 
 const SID = sessionIdOf("1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11");

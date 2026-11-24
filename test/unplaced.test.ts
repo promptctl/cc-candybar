@@ -16,7 +16,7 @@ import { ConfigError } from "../src/config/loader/diagnostics";
 import { placementIds } from "../src/config/dsl-types";
 import { rootNode } from "../src/config/root";
 import { presetRoot } from "../src/config/presets";
-import { EMPTY_DEFAULT, validateConfig } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { withoutUnplaced } from "../src/config/loader/unplaced";
 
 const authored = (source: string) => {

@@ -1,23 +1,21 @@
-// [LAW:single-enforcer] The ONE place that sends a single frame-encoded
-// request to a daemon socket and awaits its response, and the ONE place
-// that resolves a child process's actual exit — both were duplicated
-// verbatim (byte-for-byte, modulo a timeout constant) across
-// daemon-shutdown.test.ts (test/daemon-boots/process) and daemon-config-persistence-e2e.test.ts before
-// this extraction (candybar-config-engine-71o.5 review). A protocol or
-// socket-lifecycle change now has one call site to update, not N drifting
-// copies.
+// [LAW:single-enforcer] The one place that sends a single frame-encoded
+// request to a daemon socket and awaits its response, so a protocol or
+// socket-lifecycle change has one call site to update. It also awaits the exit
+// of a child its caller holds no other handle on; the spawner, which owns its
+// child's whole life, reads that exit itself (scripts/lib/daemon/process.ts).
 
 import type { ChildProcess } from "node:child_process";
-import { hostOf } from "./host";
+import { hostOf } from "../host";
 import net from "node:net";
-import path from "node:path";
 
-import { logPath } from "../../src/daemon/paths";
-import { sendOne } from "../../src/daemon/foundations/protocol";
-import type { Request, Response } from "../../src/daemon/foundations/protocol";
-import { systemTimekeeper } from "./system-clock";
+import { logPath } from "../../../src/daemon/paths";
+import { sendOne } from "../../../src/daemon/foundations/protocol";
+import type { Request, Response } from "../../../src/daemon/foundations/protocol";
+import { systemTimekeeper } from "../system-clock";
+import { stateHomeOf } from "./layout";
 
-const DEFAULT_REPLY_BUDGET_MS = 5000;
+// How long a request waits for its answer unless its caller says otherwise.
+export const REPLY_BUDGET_MS = 5000;
 
 // What a test reaches a daemon through: one request's round trip, the log the
 // daemon writes, and the clock its clients state a deadline on. `req` stays
@@ -42,12 +40,9 @@ export function endpointOf(target: DaemonTarget): DaemonEndpoint {
   if (typeof target !== "string") return target;
   return {
     send: (req, budgetMs) => overSocket(target, req, budgetMs),
-    // An isolated daemon keeps its socket in its state directory
-    // (prepareIsolatedDaemonEnv), whose log is the one the daemon itself
-    // writes (logPath).
-    log: logPath(
-      hostOf({ XDG_STATE_HOME: path.dirname(path.dirname(target)) }),
-    ),
+    // The log the daemon itself writes (logPath), under the state home its
+    // socket is in.
+    log: logPath(hostOf({ XDG_STATE_HOME: stateHomeOf(target) })),
     now: Date.now,
   };
 }
@@ -55,7 +50,7 @@ export function endpointOf(target: DaemonTarget): DaemonEndpoint {
 export function sendDaemonRequest(
   target: DaemonTarget,
   req: Record<string, unknown>,
-  timeoutMs: number = DEFAULT_REPLY_BUDGET_MS,
+  timeoutMs: number = REPLY_BUDGET_MS,
 ): Promise<Response> {
   return endpointOf(target).send(req, timeoutMs);
 }

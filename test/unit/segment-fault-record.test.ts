@@ -29,9 +29,9 @@ import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import { mainRendererOf } from "../../src/renderer/main";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
-import { daemonFactsOf } from "../helpers/daemon-facts";
+import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
-import { viewFacts } from "../helpers/view-facts";
+import { viewFacts } from "../../scripts/lib/draw-fixtures/view-facts";
 
 const AT = instantOf(new Date(1_700_000_000_000));
 const READ = { at: AT, tick: 0 as Tick };

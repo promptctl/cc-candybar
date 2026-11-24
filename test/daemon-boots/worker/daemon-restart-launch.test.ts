@@ -23,14 +23,14 @@ import {
 } from "../../../src/daemon/foundations/protocol";
 import type { DaemonLogger } from "../../../src/utils/logger";
 import { renderBody } from "../../helpers/daemon-e2e";
-import { loggedLines } from "../../helpers/daemon-log";
+import { loggedLines } from "../../../scripts/lib/daemon/log";
 import {
   startDaemon,
   type DaemonOverrides,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);
 

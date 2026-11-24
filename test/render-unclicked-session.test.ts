@@ -3,20 +3,20 @@
 // style its globals name, through the daemon's own resolution
 // (`resolveEffectiveGlobals`), not the preset and style floors.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { globalsFor, picked } from "./helpers/selection";
+import { globalsFor, picked } from "../scripts/lib/draw-fixtures/selection";
 import { SessionState } from "../src/renderer/session-state";
 import { STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // The first truecolor background a drawn bar paints.
 const bgOf = ({ rows }: Frame): string | undefined =>

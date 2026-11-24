@@ -10,7 +10,7 @@ import {
   refusedClick,
   renderBody,
 } from "../../helpers/daemon-e2e";
-import { logLines } from "../../helpers/daemon-log";
+import { logLines } from "../../../scripts/lib/daemon/log";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { heldClock } from "../../helpers/held-clock";
 import {

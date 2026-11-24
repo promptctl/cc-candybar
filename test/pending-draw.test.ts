@@ -7,9 +7,15 @@
 // view last settled on, and a template variable passes it on rather than
 // answering with its default. None of it is a fault: nothing is reported.
 
-import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
-import { fakeLauncher, turns } from "./helpers/fake-launcher";
-import { systemTimekeeper } from "./helpers/system-clock";
+import {
+  drawPayload,
+  segmentErrorsOf,
+} from "../scripts/lib/draw-fixtures/draw-payload";
+import {
+  fakeLauncher,
+  turns,
+} from "../scripts/lib/draw-fixtures/fake-launcher";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { heldClock } from "./helpers/held-clock";
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
@@ -28,14 +34,14 @@ import { THEME_FLOOR } from "../src/themes/policy";
 import { ok, pendingOf } from "../src/utils/outcome";
 import type { JsonValue } from "../src/var-system/types";
 import type { Instant } from "../src/utils/instant";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { lastBinding } from "./helpers/render-binding";
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { collectedRuns } from "./helpers/held-runs";
-import { TEST_ENV } from "./helpers/session-environment";
+import { collectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
+import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S = sessionIdOf("s");
 
@@ -77,7 +83,7 @@ function renderer(cfg: ValidatedConfig) {
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
   const sourceRuns = new SourceRuns({ launcher, clock });
-  const runs = collectedRuns(sourceRuns, registry, TEST_ENV);
+  const runs = collectedRuns(sourceRuns, registry, TEST_ENVIRONMENT);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,

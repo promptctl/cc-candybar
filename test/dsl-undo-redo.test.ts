@@ -27,7 +27,7 @@ import { linkUrls } from "./helpers/frame";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { chmodSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";

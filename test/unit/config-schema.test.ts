@@ -16,7 +16,7 @@ import path from "node:path";
 import JSON5 from "json5";
 import Ajv from "ajv";
 import type { ValidateFunction } from "ajv";
-import { validateConfig } from "../helpers/parse-and-validate";
+import { validateConfig } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   inheritableSegmentNames,
   parseDslConfig,

@@ -15,8 +15,8 @@
 // what lands in the payload, and whether the bundled segment renders.
 
 import { textOf } from "../src/render/frame";
-import { unscriptedRuns } from "./helpers/fake-launcher";
-import { drawPayload } from "./helpers/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
 import os from "node:os";
 
@@ -28,14 +28,14 @@ import {
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { Holds } from "../src/utils/holds";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { ABSENT } from "../src/utils/outcome";
 import {
   RAW_DEFAULT_DSL_CONFIG,
   DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -52,13 +52,14 @@ import {
   fakeUsage,
   requestPayload,
   type FixtureOwners,
-} from "./helpers/payload-owners";
-import { systemTimekeeper } from "./helpers/system-clock";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 const DEPS = {
-  ...absentOwners(),
+  ...absentOwners(TEST_ENVIRONMENT),
   gitProvider: fakeGit(async () => ABSENT),
   usageStore: fakeUsage({
     usage: async () => ABSENT,

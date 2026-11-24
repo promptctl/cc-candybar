@@ -3,7 +3,7 @@
 // a turn in which nothing moved leaves untouched, and what the stamp says when
 // one answer does.
 
-import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { restamp, type Fact } from "../src/facts/fact";
 import type { BuiltinFacts } from "../src/facts/world-state";
 import type { GitRead } from "../src/segments/git";
@@ -43,7 +43,8 @@ import {
   fakeTmux,
   fakeUsage,
   withTranscriptLanes,
-} from "./helpers/payload-owners";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const SID = sessionIdOf("facts-assembly");
 const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
@@ -85,7 +86,7 @@ const PR = {
 // Every lane over the value it is given; the git lane answers `git`.
 function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
   return {
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     gitProvider: fakeGit(() => git),
     tmuxService: fakeTmux(() => ok("work")),
     usageStore: fakeUsage({

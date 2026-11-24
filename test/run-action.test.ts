@@ -10,7 +10,8 @@ import { holdClickError } from "../src/daemon/foundations/click-error";
 import { isEnvironmentOutput } from "../src/daemon/environment-output";
 import { linkUrls } from "./helpers/frame";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
-import { HOST, WORLD, fixtureLauncher, locs, processLauncher } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
+import { WORLD, fixtureLauncher, locs, processLauncher } from "./helpers/host";
 import { type Launcher } from "../src/proc/launcher";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
@@ -29,7 +30,7 @@ import {
 import { SessionState } from "../src/renderer/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { drawDsl } from "../src/dsl/render";
-import { segmentErrorsOf } from "./helpers/draw-payload";
+import { segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { renderConfig, type ConfigDraw } from "./helpers/config-fixture";
@@ -64,13 +65,13 @@ import {
 } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { heardRequest } from "./helpers/click";
-import { throughout, until } from "./helpers/until";
+import { throughout, until } from "../scripts/lib/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
 import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/daemon/source-runs";
 import {

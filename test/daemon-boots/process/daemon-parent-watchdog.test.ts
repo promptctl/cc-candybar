@@ -5,11 +5,9 @@ import path from "node:path";
 
 import { PARENT_PID_ENV } from "../../../src/daemon/parent-watchdog";
 import { processProbe } from "../../helpers/host";
-import {
-  spawnTestDaemon,
-  type TestDaemonProcess,
-} from "../../helpers/spawn-test-daemon";
-import { until } from "../../helpers/until";
+import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
+import { type DaemonProcess } from "../../../scripts/lib/daemon/process";
+import { until } from "../../../scripts/lib/until";
 
 // [LAW:verifiable-goals] End-to-end proof of the acceptance criterion in
 // miniature: a REAL daemon process anchored to a throwaway "spawner" exits on
@@ -19,7 +17,7 @@ import { until } from "../../helpers/until";
 describe("daemon dies with its spawner (integration)", () => {
   const spawned: ChildProcess[] = [];
   const tmpDirs: string[] = [];
-  const daemons: TestDaemonProcess[] = [];
+  const daemons: DaemonProcess[] = [];
 
   const track = (c: ChildProcess): ChildProcess => {
     spawned.push(c);

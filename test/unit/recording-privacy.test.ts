@@ -39,9 +39,9 @@ import { mainRendererOf } from "../../src/renderer/main";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, failed, ok } from "../../src/utils/outcome";
 import { pending, type Current } from "../../src/utils/reading";
-import { daemonFactsOf } from "../helpers/daemon-facts";
+import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
-import { viewFacts } from "../helpers/view-facts";
+import { viewFacts } from "../../scripts/lib/draw-fixtures/view-facts";
 
 const SESSION = sessionIdOf("recording-privacy");
 const ROOT = "/nowhere/project";

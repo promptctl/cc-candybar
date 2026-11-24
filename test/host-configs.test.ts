@@ -38,11 +38,11 @@ import type {
 } from "../src/renderer-interface/interface";
 import { type Monotonic } from "../src/time";
 import { handClock } from "./helpers/hand-clock";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
-import { HOST } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
 
 const S = sessionIdOf("s");
 const CLOCK = handClock({ now: () => 0, monotonic: () => 0 as Monotonic });

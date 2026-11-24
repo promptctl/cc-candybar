@@ -9,12 +9,12 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { getThemePalette, type RichText } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -25,7 +25,7 @@ import { DECOR_HUES } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { swatch, SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const OPTS = {
   endcaps: "plain" as const,

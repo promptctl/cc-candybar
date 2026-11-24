@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { HOST } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";

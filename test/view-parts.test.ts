@@ -6,8 +6,8 @@
 
 import { reaction } from "mobx";
 import { partsOf } from "../src/dsl/parts";
-import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { linksOf } from "../src/click/read";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -25,9 +25,9 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { textOf, type Frame } from "../src/render/frame";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const OPTS = {

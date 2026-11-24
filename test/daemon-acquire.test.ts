@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import { hostOf, worldOf } from "./helpers/host";
+import { hostOf } from "../scripts/lib/host";
+import { worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { recordHostBundle } from "../src/daemon/host-bundle";
 import net from "node:net";

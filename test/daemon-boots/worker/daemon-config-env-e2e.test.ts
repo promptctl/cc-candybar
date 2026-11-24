@@ -11,15 +11,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { renderLines } from "../../helpers/daemon-log";
+import { renderLines } from "../../../scripts/lib/daemon/log";
 import { configFlag, hookData, render as renderBar, renderRequest } from "../../helpers/daemon-e2e";
-import type { DaemonTarget } from "../../helpers/daemon-wire";
+import type { DaemonTarget } from "../../../scripts/lib/daemon/wire";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 

@@ -14,8 +14,8 @@ import {
   type WarningChange,
 } from "../../src/proc/launcher";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
-import { until } from "../helpers/until";
-import { systemTimekeeper } from "../helpers/system-clock";
+import { until } from "../../scripts/lib/until";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
 // What these cases launch leaves its process group with setsid, which only
 // python reaches portably: macOS has no setsid command.

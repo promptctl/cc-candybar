@@ -22,7 +22,7 @@ import type { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";

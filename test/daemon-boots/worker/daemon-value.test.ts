@@ -9,7 +9,7 @@ import {
 } from "../../../src/daemon/task-throws";
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import { linkSignerOver } from "../../../src/click/link-signer";
-import { hostOf } from "../../helpers/host";
+import { hostOf } from "../../../scripts/lib/host";
 import type { Host } from "../../../src/host";
 import type { ClaudeInputEdge } from "../../../src/claude-input/typing";
 import { createHook } from "node:async_hooks";
@@ -44,7 +44,7 @@ import {
 import type { LaunchResult } from "../../../src/proc/launcher";
 import { type Timekeeper } from "../../../src/time";
 import { daemonClock } from "../../../src/host";
-import { systemTimekeeper } from "../../helpers/system-clock";
+import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { processProbe } from "../../helpers/host";
 import {
   daemonPaths,
@@ -59,7 +59,8 @@ import {
 } from "../../../src/daemon/foundations/protocol";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
-import { clickBody, findUrl, hookData } from "../../helpers/daemon-e2e";
+import { clickBody } from "../../../scripts/lib/daemon/requests";
+import { findUrl, hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
 import {
   buildDaemon,
@@ -68,7 +69,7 @@ import {
   statsOf,
 } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
 import { heldClock } from "../../helpers/held-clock";

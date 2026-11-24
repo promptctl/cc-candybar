@@ -10,7 +10,7 @@ import { RuntimeStats } from "../src/daemon/stats";
 import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_COPY } from "../src/click/wire";
 import { URL_FRAME_VERSION } from "../src/daemon/foundations/protocol";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { clickParts } from "./helpers/click-parts";
 import type { LaunchResult } from "../src/proc/launcher";
 import { testVerbContext, actingWorld } from "./helpers/click";

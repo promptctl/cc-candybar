@@ -12,10 +12,10 @@
 
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, linkUrls } from "./helpers/frame";
-import { picked, selectionFor } from "./helpers/selection";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { arrange, configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { effectsOf, CLICK_VERBS } from "./helpers/click";

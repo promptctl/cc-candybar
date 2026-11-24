@@ -5,7 +5,7 @@
 // used in production.
 
 import { PAYLOAD_INPUTS } from "../../src/config/payload-inputs";
-import { parseAndPlace, validateConfig } from "../helpers/parse-and-validate";
+import { parseAndPlace, validateConfig } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   mergeWithDefault,
   unauthored,

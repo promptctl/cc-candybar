@@ -17,10 +17,10 @@
 // closure are two different theorems — the bleed defect satisfied the first and
 // broke the second, so closure needs its own guard.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { ansiOf, type Frame } from "../src/render/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -30,7 +30,7 @@ import type { BuildLineOptions } from "../src/render/strip";
 import { osc8Sequences } from "@promptctl/rich-js";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

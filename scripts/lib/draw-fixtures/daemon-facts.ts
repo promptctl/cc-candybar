@@ -1,9 +1,9 @@
-import type { DaemonFacts } from "../../src/facts/world-state";
+import type { DaemonFacts } from "../../../src/facts/world-state";
 import {
   UNFOLLOWED_FEEDS,
   type Lane,
   type LaneFeeds,
-} from "../../src/config/lanes";
+} from "../../../src/config/lanes";
 
 export const FILE_EVENTS_STALLED = [
   { kind: "file-events", state: "stalled", message: "file events stopped" },

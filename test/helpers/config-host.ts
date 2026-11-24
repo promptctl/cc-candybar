@@ -24,7 +24,7 @@ import type { Locations } from "../../src/config/loader/chain-places";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { systemTimekeeper } from "./system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import {
   loadOrigin,
   RenderCache,

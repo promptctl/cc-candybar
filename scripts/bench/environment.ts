@@ -16,15 +16,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { crateDigest, sourceDigest } from "../../src/source-digest.js";
+import { REPO } from "../lib/repo.cjs";
 
-// The package root, which `pnpm bench` runs in and the test helpers take theirs
-// from (jest compiles scripts to CommonJS, where `import.meta` does not exist).
-export const REPO = process.cwd();
-// [LAW:no-silent-failure] Run elsewhere, every path below points at nothing,
-// and the first thing to say so would be an unrelated ENOENT.
-if (!fs.existsSync(path.join(REPO, "rust-client", "Cargo.toml"))) {
-  throw new Error(`${REPO} is not the cc-candybar package root: run the benchmark with pnpm bench from there`);
-}
 export const BUNDLE = path.join(REPO, "dist", "index.mjs");
 export const BUNDLED_CLIENT_SHIM = path.join(REPO, "bin", "cc-candybar");
 

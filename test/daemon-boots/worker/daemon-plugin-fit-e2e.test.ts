@@ -17,12 +17,10 @@ import { click, frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
-import { loggedWhen } from "../../helpers/daemon-log";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { loggedWhen } from "../../../scripts/lib/daemon/log";
 import { effectsOf } from "../../helpers/click";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 import { untilHeard } from "../../helpers/reload-signal";
 import { VERB_RUN, type EvaluatedRun } from "../../../src/click/wire";
 

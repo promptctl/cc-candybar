@@ -21,7 +21,7 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { buildRig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {

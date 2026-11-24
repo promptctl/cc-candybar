@@ -1,44 +1,45 @@
 // A config fixture uses the same loader, compiler, collector and DSL renderer as the statusline.
-import type { ConfigSnapshot } from "../../src/config/config-snapshot";
-import { locations } from "../../src/daemon/paths";
-import { createGates, deriveActionGates } from "../../src/daemon/foundations/gates";
-import { diskFiles } from "../../src/daemon/config-discovery/discovery-files";
+import type { ConfigSnapshot } from "../../../src/config/config-snapshot";
+import { locations } from "../../../src/daemon/paths";
+import { createGates, deriveActionGates } from "../../../src/daemon/foundations/gates";
+import { diskFiles } from "../../../src/daemon/config-discovery/discovery-files";
 import {
   installedRoots,
   layerOf,
   readLayer,
   sessionPlugins,
   snapshotOf,
-} from "../../src/daemon/config-discovery/discover";
+} from "../../../src/daemon/config-discovery/discover";
 import {
   loadSnapshot,
   type ConfigLayer,
   type DroppedPlugin,
-} from "../../src/config/dsl-loader";
-import type { ValidatedConfig } from "../../src/config/dsl-types";
-import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+} from "../../../src/config/dsl-loader";
+import type { ValidatedConfig } from "../../../src/config/dsl-types";
+import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
-} from "../../src/config/effective-globals";
-import { plainEnvironment } from "../../src/daemon/foundations/session-env";
-import { SourceRuns } from "../../src/daemon/source-runs";
+} from "../../../src/config/effective-globals";
+import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
+import { SourceRuns } from "../../../src/daemon/source-runs";
 import {
   registerDslConfig,
   type CompiledConfig,
-} from "../../src/dsl/render";
-import type { World } from "../../src/host";
-import type { Frame } from "../../src/render/frame";
-import { renderOptionsOf } from "../../src/renderer/render-payload";
-import { SessionState } from "../../src/renderer/session-state";
-import { configFiles, userAuthoredRoots } from "../../src/renderer/render-cache";
-import { timeoutSignal } from "../../src/time";
-import type { Instant } from "../../src/utils/instant";
-import { SourceRegistry } from "../../src/var-system/sources";
-import { VariableStore } from "../../src/var-system/store";
+} from "../../../src/dsl/render";
+import type { World } from "../../../src/host";
+import type { Frame } from "../../../src/render/frame";
+import { renderOptionsOf } from "../../../src/renderer/render-payload";
+import { SessionState } from "../../../src/renderer/session-state";
+import { configFiles, userAuthoredRoots } from "../../../src/renderer/render-cache";
+import { timeoutSignal } from "../../../src/time";
+import type { Instant } from "../../../src/utils/instant";
+import { SourceRegistry } from "../../../src/var-system/sources";
+import { VariableStore } from "../../../src/var-system/store";
 import { samplePayload } from "./sample-payload";
 import { bindSample } from "./draw-payload";
 import { collectedRuns, type CollectedRuns } from "./held-runs";
+import { ok } from "../../../src/utils/outcome";
 
 // How long a prepare waits for its sources' first runs.
 const SETTLE_MS = 5000;
@@ -120,7 +121,7 @@ export function prepareSnapshot(
   const runs = collectedRuns(
     sourceRuns,
     registry,
-    plainEnvironment(world.host.env),
+    ok(plainEnvironment(world.host.env)),
     { cwd },
   );
   const dispose = (): void => {

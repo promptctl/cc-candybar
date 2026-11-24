@@ -3,14 +3,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { answerRepo } from "../../helpers/repo-approval";
 import { configFlag, hookData, render, renderBody, runRealClient } from "../../helpers/daemon-e2e";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
-} from "../../helpers/spawn-isolated-daemon";
+import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 

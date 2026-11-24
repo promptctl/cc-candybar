@@ -5,7 +5,7 @@
 
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { type LaunchOpts } from "../src/proc/launcher";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { collectDiagnostics, diagnosticCopies } from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
 import { hrefOfDrawnLink } from "../src/render/drawn-link";

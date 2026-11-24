@@ -3,25 +3,9 @@
 // `void` included. The typed rules read the project, so each case is text
 // linted at a file the project holds.
 
-import { execFileSync } from "node:child_process";
-import path from "node:path";
+import { lintCases } from "./helpers/lint-cases";
 
-const ROOT = path.resolve(__dirname, "..");
 const AT = "src/utils/period.ts";
-
-const SCRIPT = `
-import { ESLint } from "eslint";
-const [root, file, casesJson] = process.argv.slice(1);
-const eslint = new ESLint({ cwd: root });
-const out = {};
-for (const [name, code] of Object.entries(JSON.parse(casesJson))) {
-  const [result] = await eslint.lintText(code, { filePath: root + "/" + file });
-  out[name] = result.messages
-    .filter((m) => m.ruleId?.startsWith("@typescript-eslint/no-") && m.ruleId.endsWith("promises"))
-    .map((m) => m.ruleId);
-}
-console.log(JSON.stringify(out));
-`;
 
 const CASES = {
   bare: "export const f = (p: Promise<void>): void => {\n  p;\n};\n",
@@ -35,15 +19,23 @@ const CASES = {
 };
 
 describe("the promise rules", () => {
-  let found: Record<string, string[]>;
+  let found: Record<string, (string | null)[]>;
 
   beforeAll(() => {
-    found = JSON.parse(
-      execFileSync(
-        process.execPath,
-        ["--input-type=module", "-e", SCRIPT, ROOT, AT, JSON.stringify(CASES)],
-        { cwd: ROOT, encoding: "utf8" },
-      ),
+    const cases = Object.fromEntries(
+      Object.entries(CASES).map(([name, code]) => [name, { file: AT, code }]),
+    );
+    found = Object.fromEntries(
+      Object.entries(lintCases(cases, {})).map(([name, messages]) => [
+        name,
+        messages
+          .filter(
+            (m) =>
+              m.ruleId?.startsWith("@typescript-eslint/no-") &&
+              m.ruleId.endsWith("promises"),
+          )
+          .map((m) => m.ruleId),
+      ]),
     );
   }, 120_000);
 

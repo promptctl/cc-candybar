@@ -1,8 +1,8 @@
 // The checkout's location: what `checkoutLocation` reads off a real
 // checkout, and what `directory` draws from it. `gitaculous` reads the same
 // payload fields only to decide whether it has a branch to show at all.
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,8 +15,8 @@ import { checkoutLocation } from "../src/utils/git-root";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, stdio: "pipe" });

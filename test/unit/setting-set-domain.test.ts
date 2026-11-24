@@ -4,7 +4,7 @@
 // nothing. Run through the production cascade (DEFAULT_DSL_CONFIG), because
 // the `styles` and `presets` domains are the merged config's.
 
-import { parseAndValidate } from "../helpers/parse-and-validate";
+import { parseAndValidate } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { SESSION_KEY_TO_SETTING } from "../../src/config/setting-projections";

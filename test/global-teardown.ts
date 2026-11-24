@@ -18,7 +18,7 @@ import {
   DEFAULT_POOL_SIZE,
 } from "./helpers/daemon-pool";
 import { JEST_TMP_PREFIX, jestTmpOwner } from "./helpers/jest-tmp";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import {
   systemProbe,
   type ProcessProbe,

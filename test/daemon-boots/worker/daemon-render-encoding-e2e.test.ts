@@ -26,8 +26,8 @@ import {
   renderBody,
   renderRequest,
 } from "../../helpers/daemon-e2e";
-import { logLines } from "../../helpers/daemon-log";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { logLines } from "../../../scripts/lib/daemon/log";
+import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import {
   startDaemon,
   type InWorkerDaemon,
@@ -35,7 +35,7 @@ import {
 import { heldClock } from "../../helpers/held-clock";
 import { field, landedEvents } from "../../helpers/request-event";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);
 

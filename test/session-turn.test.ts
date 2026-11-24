@@ -8,7 +8,7 @@
 // own composition (test/helpers/session-rig.ts) and read the way a draw reads
 // it; what moves is an owner, a pick, a request or a daemon warning.
 
-import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,9 +18,9 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import { composePayload } from "../src/renderer/render-payload";
-import { settledWorld } from "./helpers/settled";
+import { settledWorld } from "../scripts/lib/draw-fixtures/settled";
 import type { Readings } from "../src/daemon/readings";
-import { readTranscriptLanes } from "./helpers/payload-owners";
+import { readTranscriptLanes } from "../scripts/lib/draw-fixtures/payload-owners";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
@@ -28,7 +28,7 @@ import { settledLane } from "../src/utils/reading";
 import type { DaemonFacts } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   AT,
   PROJECT,
@@ -38,12 +38,12 @@ import {
   sessionRig,
   settledRequest,
 } from "./helpers/session-rig";
-import { sessionBar } from "./helpers/session-bar";
-import { until } from "./helpers/until";
-import { fakeLauncher } from "./helpers/fake-launcher";
+import { sessionBar } from "../scripts/lib/draw-fixtures/session-bar";
+import { until } from "../scripts/lib/until";
+import { fakeLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { exits, runsFor, shell } from "../src/proc/spawner-fake";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { originOf } from "./helpers/config-host";
 
 const SID = sessionIdOf(SESSION);

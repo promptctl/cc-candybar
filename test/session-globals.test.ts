@@ -11,7 +11,7 @@
 
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { buildRig, type Rig } from "./helpers/rig";
 import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -26,7 +26,7 @@ import {
   EDIT_MODE_KEY,
 } from "../src/config/loader/edit-mode";
 import type { EffectiveGlobals } from "../src/config/effective-globals";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 
 import {
   sessionIdOf,

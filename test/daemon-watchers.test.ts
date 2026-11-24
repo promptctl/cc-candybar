@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
 import { processLauncher } from "./helpers/host";
 import os from "node:os";
@@ -24,7 +24,7 @@ import { type GitRead } from "../src/segments/git";
 import { GitService } from "../src/daemon/cache/git-service";
 import { ABSENT, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 import { readPolledEntry } from "../src/daemon/foundations/polled-entry";

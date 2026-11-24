@@ -21,7 +21,7 @@ import { withoutRepositoryScopedEnv } from "../../../src/repository-cli";
 import { frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { renderLines } from "../../helpers/daemon-log";
+import { renderLines } from "../../../scripts/lib/daemon/log";
 
 jest.setTimeout(30_000);
 

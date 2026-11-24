@@ -23,7 +23,7 @@
 //   --no-minify`); the shipped bundle's are mangled.
 //
 // USAGE
-//   pnpm build && node --require ./scripts/version-stamp.cjs --import tsx \
+//   pnpm build && node --require ./scripts/lib/version-stamp.cjs --import tsx \
 //     scripts/capture-heap.ts [--sessions N] [--turns T] [--config FILE] [--out DIR]
 //
 // Prints one JSON object: the footprint at each stage, the heap and footprint

@@ -34,7 +34,7 @@ import { readsRed, TERMINAL_REDS } from "../src/render/segment-color";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { POWERLINE } from "./helpers/powerline";
 import { LADDER } from "./helpers/decor-vocabulary";
-import { sessionBar, type SessionBar } from "./helpers/session-bar";
+import { sessionBar, type SessionBar } from "../scripts/lib/draw-fixtures/session-bar";
 
 const THEMES = listThemePalettes();
 // Every shade of a role a cell can wear: the ladder and the muted form.

@@ -4,7 +4,10 @@
 // docs/design/gather-and-renderer.md, section 19).
 
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
-import { fakeLauncher, turns } from "./helpers/fake-launcher";
+import {
+  fakeLauncher,
+  turns,
+} from "../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 import {
   SourceRegistry,
@@ -12,10 +15,14 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
+import {
+  collectedRuns,
+  type CollectedRuns,
+} from "../scripts/lib/draw-fixtures/held-runs";
 import { runOf, type SourceIdentity } from "../src/facts/source-identity";
 import { shellEnvOf } from "../src/config/shell-env";
 import type { Environment } from "../src/daemon/foundations/session-env";
+import { ok } from "../src/utils/outcome";
 
 const TEXT: SourceParse = { kind: "text", default: undefined };
 // The variables a shell source here runs in: the base set a declaration
@@ -42,7 +49,7 @@ function rig() {
   const registry = (environment: Environment = {}): Held => {
     const store = new VariableStore(clock);
     const r = new SourceRegistry(store, "");
-    const held = collectedRuns(runs, r, environment);
+    const held = collectedRuns(runs, r, ok(environment));
     r.bindInputs({
       session: () => {
         throw new Error("no session is read");

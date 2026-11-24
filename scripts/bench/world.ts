@@ -39,7 +39,7 @@ import { parseFrame, type Frame } from "../../src/render/frame.js";
 import type { ClaudeHookData } from "../../src/utils/claude.js";
 import { fieldOf, valueOf } from "../../src/utils/logfmt.js";
 import { atOf, msOf } from "./log-event.js";
-import { hookData as barHookData } from "../lib/hook-data.js";
+import { barHook } from "../lib/hook-data.js";
 import { sessionEnv } from "../lib/session-env.js";
 import { transcriptPath } from "../lib/transcript.js";
 import { BUNDLE, requireCurrentBundle } from "./environment.js";
@@ -470,7 +470,7 @@ export function drawn(
 // The Status hook Claude Code sends at tick `n` of a session: what moves
 // between ticks (cost, duration) moves.
 function hookDataOf(session: Session, n: number): ClaudeHookData {
-  const base = barHookData(session.cwd, session.transcript);
+  const base = barHook(session.cwd, session.transcript);
   return {
     ...base,
     session_id: session.id,

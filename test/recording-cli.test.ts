@@ -10,9 +10,9 @@ import type {
 } from "../src/renderer-interface/interface";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { WireFrame } from "../src/render/frame";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import type { Instant, Tick } from "../src/utils/instant";
-import { hostOf } from "./helpers/host";
+import { hostOf } from "../scripts/lib/host";
 
 const session = sessionIdOf("recording-fixture");
 const frame = (text: string): WireFrame => ({

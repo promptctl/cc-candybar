@@ -1,7 +1,8 @@
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
-import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
+import { HOST } from "../scripts/lib/host";
+import { locs } from "./helpers/host";
+import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 // [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
 // the real spine (mirroring dsl-persist-actions.test.ts's model one arm
 // over), re-aimed at the config FILE as the one durable store
@@ -46,16 +47,16 @@ import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 //      authored root from the file, so the next reload falls back to the
 //      bundled tree — never a silent drift between screen and disk.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { picked, selectionFor } from "./helpers/selection";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { ownLinks } from "./helpers/ambient-chrome";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { writeFileSync } from "node:fs";
 import { getThemePalette } from "@promptctl/rich-js";
 import { layerFlags } from "../src/config/layer-role";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -109,11 +110,11 @@ import { presetRoot } from "../src/config/presets";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
-import { viewFacts } from "./helpers/view-facts";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { instantOf } from "../src/utils/instant";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";

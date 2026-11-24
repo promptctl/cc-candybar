@@ -26,7 +26,7 @@ import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
 import { processRenderer, type RendererLink } from "../../../src/daemon/renderer-process";
 import { RendererDown } from "../../../src/daemon/foundations/verb-error";
 import { systemLauncher } from "../../../src/proc/system-launcher";
-import { systemTimekeeper } from "../../helpers/system-clock";
+import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import {
   DISCLOSURE_CLOSED,
@@ -45,11 +45,9 @@ import {
   runRealClient,
   urlsOfAnsi,
 } from "../../helpers/daemon-e2e";
-import {
-  spawnIsolatedDaemon,
-  type IsolatedDaemonHandle,
-} from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
+import { type IsolatedDaemonHandle } from "../../../scripts/lib/daemon/isolated";
+import { until } from "../../../scripts/lib/until";
 import {
   oversizedRendererHistory,
   oversizedSession,

@@ -1,5 +1,5 @@
 import type { Frame } from "../src/render/frame";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
 // accepts a TEMPLATE, evaluated per render, so the bar's theme can follow data;
 // (2) precedence comes out IDENTICAL to the style's — staged over session over the
@@ -24,11 +24,11 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { textOf } from "../src/render/frame";
-import { picked, selectionFor } from "./helpers/selection";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { buildRig } from "./helpers/rig";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -49,7 +49,7 @@ import {
 } from "../src/config/loader/edit-mode";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-theme-expr");

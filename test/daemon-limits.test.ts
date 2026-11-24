@@ -1,5 +1,5 @@
-import { until } from "./helpers/until";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { until } from "../scripts/lib/until";
+import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import {
   makeLimits,
   type LimitsDeps,
@@ -20,7 +20,7 @@ import type {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 interface Recorder {
   shutdownCalls: number[];

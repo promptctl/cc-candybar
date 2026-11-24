@@ -22,9 +22,7 @@ import path from "node:path";
 
 import { click, render, urlWriting } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { encodeLayoutOp } from "../../../src/config/layout-ops";
 import { EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
@@ -124,7 +122,7 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
 describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", () => {
   test("pick compact, then default: open after each, the pick current", async () => {
     const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
-      "cc-candybar-preset-stays-open",
+      "ccb-preset-open",
     );
     const projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-preset-stays-open-project-"),

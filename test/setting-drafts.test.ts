@@ -14,7 +14,7 @@ import {
 import { presetGlobals } from "../src/config/presets";
 import { settingDrafts } from "../src/renderer/setting-drafts";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { SETTINGS } from "../src/config/setting-projections";
 import { writeValues } from "../src/renderer/config-file-store";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

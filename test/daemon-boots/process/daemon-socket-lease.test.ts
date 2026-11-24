@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { readLease, writeLease } from "../../../src/daemon/socket-lease";
-import { waitForExit } from "../../helpers/daemon-wire";
+import { waitForExit } from "../../../scripts/lib/daemon/wire";
 import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 

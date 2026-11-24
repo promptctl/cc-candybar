@@ -40,7 +40,7 @@ import type { Host } from "../../src/host";
 import type { BuildLineOptions } from "../../src/render/strip";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, type Instant } from "../../src/utils/instant";
-import { systemTimekeeper } from "./system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
 import {
@@ -50,11 +50,11 @@ import {
   testVerbContext,
 } from "./click";
 import { readingsIn } from "./session-environment";
-import { drawPayload } from "./draw-payload";
-import { sessionOfPayload, TEST_SESSION } from "./payload-session";
-import { unscriptedRuns } from "./fake-launcher";
-import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
-import { selectionFor, type RenderSelection } from "./selection";
+import { drawPayload } from "../../scripts/lib/draw-fixtures/draw-payload";
+import { sessionOfPayload, TEST_SESSION } from "../../scripts/lib/draw-fixtures/payload-session";
+import { unscriptedRuns } from "../../scripts/lib/draw-fixtures/fake-launcher";
+import { EMPTY_DEFAULT, parseAndValidate } from "../../scripts/lib/draw-fixtures/parse-and-validate";
+import { selectionFor, type RenderSelection } from "../../scripts/lib/draw-fixtures/selection";
 
 export { DEFAULT_DSL_CONFIG, EMPTY_DEFAULT };
 

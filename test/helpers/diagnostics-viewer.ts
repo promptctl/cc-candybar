@@ -10,7 +10,7 @@ import { DIAGNOSTIC_LEVELS } from "../../src/render/diagnostics";
 import type { ClientHints } from "../../src/daemon/foundations/protocol";
 import { effectsOf } from "./click";
 import { click, render } from "./daemon-e2e";
-import type { DaemonTarget } from "./daemon-wire";
+import type { DaemonTarget } from "../../scripts/lib/daemon/wire";
 
 // The indicator's text in a rendered bar (`⚠ N`, or `ℹ N` with nothing
 // wrong), or null when it shows none.

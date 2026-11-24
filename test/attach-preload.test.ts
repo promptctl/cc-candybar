@@ -4,7 +4,7 @@
 // only under Bun (measured live; see the ticket); these pin the decision.
 
 import { execFileSync } from "node:child_process";
-import { HOST } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
 import path from "node:path";
 import {
   attachCommandLine,

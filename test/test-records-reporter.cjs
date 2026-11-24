@@ -1,6 +1,6 @@
 // [LAW:nothing-unseen] Writes one record per test file of a run to
 // test-records/<run>.jsonl, which CI keeps as an artifact. The record's shape
-// and every view over it live in helpers/test-records.cjs.
+// and every view over it live in scripts/lib/test-records.cjs.
 //
 // A result exists only for a file that ran. Jest counts the files it scheduled
 // after every narrowing (-o, --shard, path filters), so the count of files that
@@ -10,7 +10,7 @@
 
 const { mkdirSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
-const { neverRan, recordOf } = require("./helpers/test-records.cjs");
+const { neverRan, recordOf } = require("../scripts/lib/test-records.cjs");
 
 // The files the config selects, by jest's own search. Imported here and not at
 // the top so a test of the reporter does not load jest.

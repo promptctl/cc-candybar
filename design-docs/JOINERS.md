@@ -57,7 +57,7 @@ Five joiners never draw a divider, because their divider is their seam: plain, c
 
 ## How often it happens today
 
-The bundled bar was rendered through the in-process rig (`test/helpers/session-bar.ts`) under all 23 bundled themes. Each theme was drawn six ways: the closed bar, and the settings menu open on each of its five tabs. That makes 138 frames for each depth and joiner, and each frame's divider glyphs were counted against its seam glyphs. Torn is left out, because its divider uses its seam's glyphs and glyph counts can't separate the two.
+The bundled bar was rendered through the in-process rig (`scripts/lib/draw-fixtures/session-bar.ts`) under all 23 bundled themes. Each theme was drawn six ways: the closed bar, and the settings menu open on each of its five tabs. That makes 138 frames for each depth and joiner, and each frame's divider glyphs were counted against its seam glyphs. Torn is left out, because its divider uses its seam's glyphs and glyph counts can't separate the two.
 
 | depth | joiner | dividers | seams | frames with a divider |
 |---|---|---|---|---|

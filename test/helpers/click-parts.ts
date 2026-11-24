@@ -15,7 +15,7 @@ import { rendererHost, type HostWorld } from "../../src/daemon/renderer-host";
 import type { ActsOnTheirWay } from "../../src/renderer/acts";
 import { mainRenderer } from "../../src/renderer/main";
 import { type Timekeeper } from "../../src/time";
-import { systemTimekeeper } from "./system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { TurnTime } from "../../src/renderer/turn-time";
 import { TurnLog } from "../../src/renderer/turn-log";
 import { MenuIdle } from "../../src/renderer/menu-idle";
@@ -28,7 +28,7 @@ import { NO_CONFIGS } from "./renderers";
 import { bookedContext, discoveryNow } from "./click";
 import type { SessionBook } from "../../src/daemon/session-book";
 import { heardContextOf } from "../../src/renderer-interface/request-context";
-import { HOST } from "./host";
+import { HOST } from "../../scripts/lib/host";
 import { stateDir } from "../../src/daemon/paths";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 

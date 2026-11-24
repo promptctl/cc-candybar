@@ -9,13 +9,13 @@
 // so "spawns once" is a count of lines, and "in the turn the fact moved" is
 // the run in flight before any draw.
 
-import { TEST_SESSION } from "./helpers/payload-session";
+import { TEST_SESSION } from "../scripts/lib/draw-fixtures/payload-session";
 import { processLauncher } from "./helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { observable, runInAction } from "mobx";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { shellGate } from "./helpers/shell-gate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -25,10 +25,10 @@ import { drawDsl, registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { collectedRuns } from "./helpers/held-runs";
-import { TEST_ENV } from "./helpers/session-environment";
+import { collectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
+import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const AT = instantOf(new Date(2026, 9, 25, 12, 0, 0));
 const RUN_WITHIN_MS = 5_000;
@@ -59,7 +59,7 @@ function viewOver(
     launcher: processLauncher,
     clock: systemTimekeeper,
   });
-  const held = collectedRuns(sourceRuns, registry, TEST_ENV);
+  const held = collectedRuns(sourceRuns, registry, TEST_ENVIRONMENT);
   const selections = resolveEffectiveGlobals(
     config,
     () => null,
@@ -312,7 +312,7 @@ test("a run whose declaration throws reads as its failure, naming the throw", as
       },
     },
     registry,
-    TEST_ENV,
+    TEST_ENVIRONMENT,
   );
   try {
     expect(await held.settled(AbortSignal.timeout(1000))).toEqual([]);

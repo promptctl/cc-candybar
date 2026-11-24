@@ -1,6 +1,7 @@
-import { drawPayload } from "./helpers/draw-payload";
-import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { HOST } from "../scripts/lib/host";
+import { locs } from "./helpers/host";
+import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -38,12 +39,12 @@ import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { viewFacts } from "./helpers/view-facts";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost } from "./helpers/config-host";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per

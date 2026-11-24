@@ -16,7 +16,7 @@ import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { instantOf } from "../src/utils/instant";
 import { POWERLINE } from "./helpers/powerline";
-import { sessionBar } from "./helpers/session-bar";
+import { sessionBar } from "../scripts/lib/draw-fixtures/session-bar";
 
 // U+E0B1, the thin divider: no join draws it, so any on a row fails.
 const DIVIDER = "\u{E0B1}";

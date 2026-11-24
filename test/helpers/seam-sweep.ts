@@ -70,7 +70,7 @@ import {
   shown,
   visible,
 } from "./seams";
-import { sessionBar, type SessionBar } from "./session-bar";
+import { sessionBar, type SessionBar } from "../../scripts/lib/draw-fixtures/session-bar";
 
 const THEMES = listThemePalettes();
 const DEPTHS = [

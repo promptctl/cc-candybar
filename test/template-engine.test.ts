@@ -9,7 +9,7 @@ import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
 import { ABSENT, pendingOf, failed, ok } from "../src/utils/outcome";
 import { readPending, toDocument } from "../src/var-system/types";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {

@@ -7,8 +7,8 @@
 // Prints the RSS, heap and external growth peak and after, sampled every
 // millisecond. The fold's step only counts entries, so what is measured is the
 // read itself.
-import { foldAppended } from "../src/utils/claude.ts";
-import { transcriptReads } from "../src/utils/transcript-fs.ts";
+import { foldAppended } from "../src/utils/claude.js";
+import { transcriptReads } from "../src/utils/transcript-fs.js";
 
 const [file, n = "1"] = process.argv.slice(2);
 if (file === undefined) {

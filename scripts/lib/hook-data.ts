@@ -6,18 +6,30 @@ import type { ClaudeHookData } from "../../src/utils/claude.js";
 
 export const BAR_SESSION_ID = "bar0a1b2-c3d4-4e5f-8a7b-8c9d0e1f2a3b";
 
-// The Status hook Claude Code sends, with every field the bundled bar reads
-// set, so each of its segments draws: context, cost, both rate-limit windows.
-export function hookData(cwd: string, transcriptPath: string): ClaudeHookData {
-  const nowSec = Math.floor(Date.now() / 1000);
+// The fields every Status tick carries, for session `sessionId` in `cwd`. A
+// test adds to it the blocks it reads, so a block it does not state is absent.
+export function statusHook(
+  sessionId: string,
+  cwd: string,
+  transcriptPath: string,
+): ClaudeHookData {
   return {
     hook_event_name: "Status",
-    session_id: BAR_SESSION_ID,
+    session_id: sessionId,
     transcript_path: transcriptPath,
     cwd,
-    version: "2.1.0",
-    model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
+    model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
     workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
+  };
+}
+
+// The Status hook Claude Code sends, with every field the bundled bar reads
+// set, so each of its segments draws: context, cost, both rate-limit windows.
+export function barHook(cwd: string, transcriptPath: string): ClaudeHookData {
+  const nowSec = Math.floor(Date.now() / 1000);
+  return {
+    ...statusHook(BAR_SESSION_ID, cwd, transcriptPath),
+    version: "2.1.0",
     cost: {
       total_cost_usd: 0.39,
       total_duration_ms: 930_000,

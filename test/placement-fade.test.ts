@@ -5,10 +5,10 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import {
   DEFAULT_TERMINAL_THEME,
   RichText,
@@ -33,8 +33,8 @@ import {
   type EffectName,
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS, undoOf } from "./helpers/history-step";

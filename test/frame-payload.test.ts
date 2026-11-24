@@ -7,7 +7,7 @@
 // with the instant (`today`, the feeds) is the draw's own projection.
 //
 // [LAW:behavior-not-structure] Each owner is a fake over a counted reader
-// (test/helpers/payload-owners.ts), so "refreshes nothing" is a count of the
+// (scripts/lib/draw-fixtures/payload-owners.ts), so "refreshes nothing" is a count of the
 // reads its source made, and "reads what the request stored" is the payload
 // a frame draws beside the one the request drew.
 
@@ -15,7 +15,7 @@ import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { sumsOf } from "./helpers/today";
 import { renderWidth, todayOf } from "../src/renderer/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, failed, pendingOf, ok } from "../src/utils/outcome";
@@ -39,7 +39,8 @@ import {
   fakeUsage,
   payloadOf,
   withTranscriptLanes,
-} from "./helpers/payload-owners";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const EFFECTIVE = globalsFor(DEFAULT_DSL_CONFIG);
 const DRAW = {
@@ -101,7 +102,7 @@ function counted(pr: unknown = ABSENT) {
       return answer;
     };
   const owners = {
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     gitProvider: fakeGit(count("git", ok({ ...GIT, pullRequest: pr }))),
     tmuxService: fakeTmux(count("tmux", ok("work"))),
     usageStore: fakeUsage({

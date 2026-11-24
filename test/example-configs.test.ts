@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { instantOf } from "../src/utils/instant";
-import { prepareSnapshot, renderEffective } from "./helpers/prepared-config";
+import { prepareSnapshot, renderEffective } from "../scripts/lib/draw-fixtures/prepared-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import { checkText, discoverFixture, expectClean, renderConfig, withTempConfig } from "./helpers/config-fixture";

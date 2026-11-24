@@ -1,4 +1,4 @@
-// The readiness contract of test/helpers/spawn-isolated-daemon.ts — the one
+// The readiness contract of scripts/lib/daemon/isolated.ts — the one
 // spawn+readiness path every daemon-e2e call site shares
 // (brandon-ci-flakes-630.c7o).
 //
@@ -12,7 +12,7 @@
 // which arm spoke is therefore a claim about the mechanism, not about a clock.
 
 import fs from "node:fs";
-import { HOST, hostOf } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -20,11 +20,12 @@ import { logPath } from "../src/daemon/paths";
 import {
   readinessFailure,
   type ReadinessFailure,
-} from "./helpers/spawn-isolated-daemon";
+} from "../scripts/lib/daemon/isolated";
 
 const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
 const STDERR_LINE = "Error: died before it had a log";
 const SOCK = "/tmp/ccb-x/cc-candybar/socket";
+const LAST_PROBE = "connect ECONNREFUSED /tmp/ccb-x/cc-candybar/socket";
 
 // An env whose logPath(HOST) names a real file, so the projection under test reads
 // the daemon's own words the way it does in production.
@@ -55,7 +56,7 @@ describe("readinessFailure — what the socket did, what our process did", () =>
   // of the boot died.
   test("never booted and booted-but-mute are different sentences", () => {
     const neverBooted = message({ phase: "booting", exit: null });
-    const mute = message({ phase: "bound", exit: null });
+    const mute = message({ phase: "bound", exit: null, lastProbe: LAST_PROBE });
 
     expect(neverBooted).toContain(
       `no socket at ${SOCK}, so it never got as far as binding`,
@@ -63,6 +64,8 @@ describe("readinessFailure — what the socket did, what our process did", () =>
     expect(mute).toContain(
       `it bound ${SOCK} but never answered a stats round trip`,
     );
+    // Why the last probe did not complete is the cause a bound socket gives.
+    expect(mute).toContain(LAST_PROBE);
     expect(neverBooted).not.toContain("never answered a stats round trip");
     expect(mute).not.toContain("never got as far as binding");
   });
@@ -79,22 +82,27 @@ describe("readinessFailure — what the socket did, what our process did", () =>
       message({ phase: "booting", exit: { code: 1, signal: null } }),
     ).toContain("the process exited (code 1)");
     expect(
-      message({ phase: "bound", exit: { code: null, signal: "SIGKILL" } }),
+      message({
+        phase: "bound",
+        exit: { code: null, signal: "SIGKILL" },
+        lastProbe: LAST_PROBE,
+      }),
     ).toContain("the process exited (signal SIGKILL)");
   });
 
   // A daemon logs nothing until it binds, so a process that died before that
   // said why only on stderr.
   test("every combination quotes the daemon's log, named by path, and its stderr", () => {
-    const phases = ["booting", "bound"] as const;
     const exits = [null, { code: 1, signal: null }] as const;
-    for (const phase of phases) {
-      for (const exit of exits) {
-        const m = message({ phase, exit });
-        expect(m).toContain(logPath(hostOf(env)));
-        expect(m).toContain(LOG_LINE);
-        expect(m).toContain(`stderr:\n${STDERR_LINE}`);
-      }
+    const failures = exits.flatMap((exit): ReadinessFailure[] => [
+      { phase: "booting", exit },
+      { phase: "bound", exit, lastProbe: LAST_PROBE },
+    ]);
+    for (const failure of failures) {
+      const m = message(failure);
+      expect(m).toContain(logPath(hostOf(env)));
+      expect(m).toContain(LOG_LINE);
+      expect(m).toContain(`stderr:\n${STDERR_LINE}`);
     }
   });
 });

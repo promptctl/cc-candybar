@@ -9,21 +9,21 @@
 import { drawPayload } from "./draw-payload";
 import { unscriptedRuns } from "./fake-launcher";
 import type { RichText } from "@promptctl/rich-js";
-import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
-import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
-import { perSetting } from "../../src/config/setting-projections";
+import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config";
+import { resolveEffectiveGlobals } from "../../../src/config/effective-globals";
+import { perSetting } from "../../../src/config/setting-projections";
 import { samplePayload } from "./sample-payload";
-import { renderOptionsOf } from "../../src/renderer/render-payload";
-import type { Frame } from "../../src/render/frame";
-import { SessionState } from "../../src/renderer/session-state";
-import { registerDslConfig, type RenderWarning } from "../../src/dsl/render";
-import { listResolvablePaletteNames } from "../../src/themes/policy";
-import type { Instant } from "../../src/utils/instant";
-import { SourceRegistry } from "../../src/var-system/sources";
-import { VariableStore } from "../../src/var-system/store";
+import { renderOptionsOf } from "../../../src/renderer/render-payload";
+import type { Frame } from "../../../src/render/frame";
+import { SessionState } from "../../../src/renderer/session-state";
+import { registerDslConfig, type RenderWarning } from "../../../src/dsl/render";
+import { listResolvablePaletteNames } from "../../../src/themes/policy";
+import type { Instant } from "../../../src/utils/instant";
+import { SourceRegistry } from "../../../src/var-system/sources";
+import { VariableStore } from "../../../src/var-system/store";
 import { parseAndValidate } from "./parse-and-validate";
-import { systemTimekeeper } from "./system-clock";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { systemTimekeeper } from "../system-clock";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("bar00a1b-2c3d-4e5f-8a7b-8c9d0e1f2a3b");
 

@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 
-import { until } from "./until";
+import { until } from "../../scripts/lib/until";
 
 // Reads the tmux session name, which the payload awaits from a `tmux` spawn
 // (src/daemon/cache/tmux.ts): the stub below.

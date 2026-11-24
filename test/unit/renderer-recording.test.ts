@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "../helpers/system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import {
   RendererRecording,

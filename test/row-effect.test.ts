@@ -1,14 +1,14 @@
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { runUnder, sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.d2i: the whole bar wears a looping
 // effect chosen by `globals.effect`. An effect changes colours and nothing else,
 // starts calm when it comes into force, and `none` draws exactly what the bar
 // always drew.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { linkUrls } from "./helpers/frame";
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import {
   ColorSpec,
   DEFAULT_TERMINAL_THEME,
@@ -34,8 +34,8 @@ import {
   type EffectName,
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {

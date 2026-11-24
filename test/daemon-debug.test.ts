@@ -11,7 +11,7 @@
 // a pure function over the DSL state bundle, so tests drive it with
 // constructed state and read the result.
 
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
 import { readingsIn } from "./helpers/session-environment";
 import { SessionState } from "../src/renderer/session-state";
@@ -32,14 +32,14 @@ import {
   introspectVars,
   type DaemonDslState,
 } from "../src/renderer/debug";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { rootOf } from "../src/config/root";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { ABSENT, pendingOf, failed, ok } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 

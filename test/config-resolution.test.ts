@@ -23,7 +23,7 @@ import {
   configLocations,
   type Locations,
 } from "../src/config/loader/chain-places";
-import { hostOf } from "./helpers/host";
+import { hostOf } from "../scripts/lib/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 

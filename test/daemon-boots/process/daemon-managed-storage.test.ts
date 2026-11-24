@@ -11,14 +11,11 @@ import {
 } from "../../../src/daemon/client-frames";
 import { fieldOf, valueOf } from "../../../src/utils/logfmt";
 import { frameRequest, renderBody } from "../../helpers/daemon-e2e";
-import { logLines } from "../../helpers/daemon-log";
+import { logLines } from "../../../scripts/lib/daemon/log";
 import { TEST_ENV } from "../../helpers/session-environment";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type RunningDaemon,
-} from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import { until } from "../../../scripts/lib/until";
 import { readProbe, readsOf } from "../../helpers/daemon-read-probe";
 
 // [LAW:no-ambient-temporal-coupling] Hold the next named child before the

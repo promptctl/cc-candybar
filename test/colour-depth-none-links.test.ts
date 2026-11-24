@@ -4,8 +4,8 @@
 // the bar draws no SGR yet keeps every link it draws in colour, and the open
 // tab still reads as open.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { ansiOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
@@ -25,7 +25,7 @@ import {
   listResolvablePaletteNames,
   type ColorCompatibility,
 } from "../src/themes/policy";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   clickUrl,
   effectsOf,
@@ -33,7 +33,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 

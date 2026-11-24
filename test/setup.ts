@@ -15,11 +15,11 @@ import { jestTmpDir } from "./helpers/jest-tmp";
 process.env[PARENT_PID_ENV] = String(process.pid);
 
 // [LAW:single-enforcer] The one place the test suite stamps the package
-// version (scripts/version-stamp.cjs): this worker's own sandbox global, and —
+// version (scripts/lib/version-stamp.cjs): this worker's own sandbox global, and —
 // through NODE_OPTIONS, inherited by every daemon a test spawns — each child's
 // too. Without it src/version.ts refuses to load.
 const stamp = createRequire(__filename)(
-  path.join(__dirname, "..", "scripts", "version-stamp.cjs"),
+  path.join(__dirname, "..", "scripts", "lib", "version-stamp.cjs"),
 ) as { withStamp(nodeOptions: string | undefined): string };
 process.env.NODE_OPTIONS = stamp.withStamp(process.env.NODE_OPTIONS);
 

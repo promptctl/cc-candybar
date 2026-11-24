@@ -7,14 +7,14 @@
 // test/claude-input.test.ts's; the lane itself is
 // test/render-payload-outcomes.test.ts's.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -39,7 +39,7 @@ import { readAutoCompactWindow } from "../src/daemon/cache/autocompact";
 import { projectAutoCompact } from "../src/renderer/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 

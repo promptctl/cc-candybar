@@ -20,7 +20,7 @@
 // name every accent alike, as Textual draws them — and fact 1 is what holds
 // a bar to its theme.
 
-import { drawPayload } from "../test/helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
 import {
@@ -40,9 +40,9 @@ import {
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
-import { samplePayload } from "../test/helpers/sample-payload";
+import { samplePayload } from "../scripts/lib/draw-fixtures/sample-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { validateConfig } from "../test/helpers/parse-and-validate";
+import { validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { unauthored } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/renderer/session-state";
@@ -56,7 +56,7 @@ import {
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../test/helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // About one just-noticeable step: how near a drawn background must sit to a
 // colour its palette names (the ticket's own bound).

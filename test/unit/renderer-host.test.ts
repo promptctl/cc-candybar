@@ -31,7 +31,7 @@ import type { Renderer } from "../../src/renderer-interface/interface";
 import { ABSENT } from "../../src/utils/outcome";
 import { digestOf } from "../../src/utils/plain";
 import { heardRequest } from "../helpers/click";
-import { daemonFactsOf } from "../helpers/daemon-facts";
+import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);

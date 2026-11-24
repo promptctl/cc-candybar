@@ -4,7 +4,7 @@ import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs as feedPayload } from "./helpers/inputs";
 import { shellGate } from "./helpers/shell-gate";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { handDelivery } from "./helpers/hand-delivery";
 import fs from "fs";
 import os from "os";
@@ -25,7 +25,10 @@ import {
   SHELL_READ_TIMEOUT_MS,
   type SourceRunsDeps,
 } from "../src/daemon/source-runs";
-import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
+import {
+  collectedRuns,
+  type CollectedRuns,
+} from "../scripts/lib/draw-fixtures/held-runs";
 import { shellEnvOf } from "../src/config/shell-env";
 import {
   plainEnvironment,
@@ -34,7 +37,10 @@ import {
 import { MIN_SHELL_TTL_MS } from "../src/daemon/foundations/judge-run";
 import { PendingValueError } from "../src/var-system/types";
 import { timeoutSignal } from "../src/time";
-import { fakeLauncher, turns } from "./helpers/fake-launcher";
+import {
+  fakeLauncher,
+  turns,
+} from "../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 import {
   type Behaviour,
@@ -49,15 +55,15 @@ import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
 import { ABSENT, ok, pendingOf, type Reading } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
-import { drawPayload } from "./helpers/draw-payload";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { NOTHING_READ } from "../src/dsl/view-source";
 import { textOf } from "../src/render/frame";
 import { restamp } from "../src/facts/fact";
 import { instantOf } from "../src/utils/instant";
 import { buildScope } from "../src/template-engine/scope";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 const A_ID = sessionIdOf("a");
@@ -68,8 +74,10 @@ const B_ID = sessionIdOf("b");
 //
 // [LAW:dataflow-not-control-flow] Real subprocess timing can't be advanced
 // by fake timers (the OS does the spawning, not the test runner), so these
-// TTL tests are unavoidably real-time. The buffer accounts for setInterval
-// drift; the run the tick starts is awaited through `ran`, not guessed here.
+// TTL tests are unavoidably real-time. A tick that must have happened is
+// waited for through the poll helper, by the change it makes: a sleep of one
+// TTL is a bet on how late a loaded machine runs the timer and the command.
+// A sleep stays only where the case asserts that a tick did not happen.
 const TTL_TICK_BUFFER_MS = 200;
 const TTL_TICK_WAIT_MS = MIN_SHELL_TTL_MS + TTL_TICK_BUFFER_MS;
 
@@ -123,7 +131,7 @@ function hold(
   runs: SourceRuns,
   environment: Environment = plainEnvironment(process.env),
 ): void {
-  const held = collectedRuns(runs, registry, environment);
+  const held = collectedRuns(runs, registry, ok(environment));
   holders.set(registry, { held, runs });
   registry.bindInputs({
     session: () => {
@@ -1181,10 +1189,10 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      await elapse(TTL_TICK_WAIT_MS); // ≥ 1 TTL tick
-      await ran(registry);
-
-      expect(store.read("val")).toBe("v2");
+      await until(
+        () => store.read("val") === "v2",
+        "a TTL tick reran the command",
+      );
     } finally {
       cleanup();
     }
@@ -1215,7 +1223,17 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
       await ran(registry);
-      await elapse(TTL_TICK_WAIT_MS);
+      // The shell source's record, which its first refresh made.
+      const shellRecord = () => {
+        const record = ledger.snapshot().find((r) => r.name === "source.shell");
+        if (record === undefined)
+          throw new Error("the ledger holds no source.shell record");
+        return record;
+      };
+      await until(
+        () => (shellRecord().refreshes.period ?? 0) >= 1,
+        "a TTL tick recorded a period refresh",
+      );
       await ran(registry);
 
       // One record per read kind, each refresh naming its digest (spec
@@ -1243,7 +1261,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
           lastMs: expect.any(Number),
         },
       ]);
-      expect(ledger.snapshot()[1]!.refreshes.period).toBeGreaterThanOrEqual(1);
+      expect(shellRecord().refreshes.period).toBeGreaterThanOrEqual(1);
     } finally {
       cleanup();
     }
@@ -1276,11 +1294,10 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
 
       fs.writeFileSync(f1, "a2");
       fs.writeFileSync(f2, "b2");
-      await elapse(TTL_TICK_WAIT_MS); // ≥ 1 TTL tick
-      await ran(registry);
-
-      expect(store.read("v1")).toBe("a2");
-      expect(store.read("v2")).toBe("b2");
+      await until(
+        () => store.read("v1") === "a2" && store.read("v2") === "b2",
+        "a TTL tick reran both commands",
+      );
     } finally {
       cleanup();
     }

@@ -9,7 +9,8 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 
-import { BUNDLED_CLIENT_SHIM, REPO, nativeClient } from "../environment.js";
+import { BUNDLED_CLIENT_SHIM, nativeClient } from "../environment.js";
+import { REPO } from "../../lib/repo.cjs";
 import { measured, skipped, type Benchmark, type Outcome } from "../types.js";
 import { inWorld } from "../world.js";
 import { repeat, WARMUP } from "../measure.js";

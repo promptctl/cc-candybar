@@ -10,15 +10,20 @@ import {
 } from "../../src/daemon/foundations/session-env";
 import { NOTHING_READ, type HostReadings } from "../../src/dsl/view-source";
 import { instantOf } from "../../src/utils/instant";
+import { reportedEnvironment } from "../../scripts/lib/session-env";
+import {
+  shellEnvironment,
+  type ShellEnvironment,
+} from "../../scripts/lib/shell";
 
 // A session's children get this environment whole. Where a machine keeps its
 // tools is the machine's fact, so its PATH is the worker's; its Claude
 // directory is the empty one test/setup.ts made. Nothing else of the worker's
 // reaches a session.
-export const TEST_ENV: Environment = Object.freeze({
-  PATH: workerVariable("PATH"),
-  CLAUDE_CONFIG_DIR: workerVariable("CLAUDE_CONFIG_DIR"),
-});
+export const TEST_ENV: Environment = reportedEnvironment(
+  workerVariable("PATH"),
+  workerVariable("CLAUDE_CONFIG_DIR"),
+);
 
 function workerVariable(name: string): string {
   const value = process.env[name];
@@ -26,6 +31,9 @@ function workerVariable(name: string): string {
     throw new Error(`the test worker has no ${name} for its sessions`);
   return value;
 }
+
+// The worker's shell, as a bar a test starts takes it.
+export const WORKER_SHELL: ShellEnvironment = shellEnvironment(process.env);
 
 export const TEST_ENVIRONMENT: SessionEnvironment = {
   kind: "ok",

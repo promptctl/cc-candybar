@@ -11,7 +11,7 @@ import { effectsOf } from "./helpers/click";
 import { linkUrls } from "./helpers/frame";
 import { menuKeyOf } from "./helpers/menu-key";
 import { buildRig } from "./helpers/rig";
-import { picked, selectionFor } from "./helpers/selection";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 
 const S1 = sessionIdOf("s1");
 const OPEN = "applyTheme";

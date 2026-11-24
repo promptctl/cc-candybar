@@ -5,7 +5,7 @@
 // what those fields answer. Read over the real usage, context and metrics
 // owners, the three whose answers the hook used to be laid into.
 
-import { daemonFactsOf } from "./helpers/daemon-facts";
+import { daemonFactsOf } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { heldClock } from "./helpers/held-clock";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,19 +23,20 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { ContextProvider } from "../src/daemon/cache/context-provider";
 import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import type { CheckedHookData } from "../src/renderer-interface/request-context";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
-import { HOST } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
 import {
   absentOwners,
   readTranscriptLanes,
   type FixtureOwners,
   withTranscriptLanes,
-} from "./helpers/payload-owners";
-import { globalsFor } from "./helpers/selection";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const SID = sessionIdOf("hook-split");
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -126,7 +127,7 @@ function inputsOf(hookData: CheckedHookData) {
   });
   stores.push(usageStore);
   const deps = withTranscriptLanes({
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     usageStore,
     contextProvider: new ContextProvider({ clock: systemTimekeeper }),
     metricsProvider: new MetricsProvider({ clock: systemTimekeeper }),

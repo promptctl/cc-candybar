@@ -45,9 +45,7 @@ const OPEN_THEME_PICKER = [sharedMenuStateKey("candybar.pickers"), "candybar.app
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 

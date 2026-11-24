@@ -21,7 +21,7 @@ import {
   verbContextWith,
   CLICK_VERBS,
 } from "./helpers/click";
-import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { NavigationHistory } from "../src/renderer/navigation-history";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";

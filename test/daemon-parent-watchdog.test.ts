@@ -5,7 +5,7 @@ import {
   armParentWatchdog,
   PARENT_PID_ENV,
 } from "../src/daemon/parent-watchdog";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // [LAW:verifiable-goals] The contract under test is the leak's negation: a
 // daemon spawned by a transient process MUST die when that process dies, even
