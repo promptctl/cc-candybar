@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "0c0d303b41c1e63858bbaf9c6e95d702a27ab63a",
-      "timestamp": "2026-11-24T19:35:24.236Z",
+      "sha": "820f215c895c2a8bb6f38f94d32868578070bf7b",
+      "timestamp": "2026-11-24T19:39:15.887Z",
       "commits": [
         {
-          "sha": "0c0d303b41c1e63858bbaf9c6e95d702a27ab63a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:34:12-07:00",
-          "message": "fix(diagnostics): a diagnostic's identity says which rule built it, and two load warnings are not one message (candybar-law-review-ibyq.aa1) (#953)\n\n* fix(diagnostics): a message's about carries the rule that names it, so two load warnings are two messages\n\nabout was a bare string built four ways, and every load warning was about the bare kind, so two shared an identity and only list position told them apart: fixing the first left a viewer open on the second closed.\n\nabout is now a kind, a kind's subject, or the message's own text, built by its constructor, and the identity hashes each by rule. A load warning is about its text; the fault note reads its kind and subject from the same value.\n\n* fix(diagnostics): a load warning carries the subject its producer knew, so fixing one leaves the viewer on another whose line moved (candybar-law-review-ibyq.aa1)\n\n* fix(diagnostics): a load warning is born about a typed subject, an insert cell is named by what it says and not its list position (candybar-law-review-ibyq.aa1)\n\nAbout moves below the loader so producers emit it; every load advisory is built by one constructor over a closed LoadSubject, so no producer spells its identity. Insert refusals carry a typed cause, the three discovery notices return their own advisory, and a non-Error thrown by a variable declaration no longer escapes its catch. The tests that read warnings as text are migrated, with producer-level identity tests.\n\n* fix(diagnostics): an advisory keeps its typed subject until the draw names it, one insert cell is one advisory per kind of cause, and the renderer wire version moves with the snapshot (candybar-law-review-ibyq.aa1)\n\nConfigSnapshot.notices changed shape, so RENDERER_WIRE_VERSION is 17 and an old recording is refused at the version check. Advisory carries a LoadSubject, derived into an About once by loadAbout, so the kind and text forms are unrepresentable for a load warning. An insert cell's misses group by kind of cause, naming each tree, matching what the identity names.\n\n* refactor(diagnostics): placeInserts' per-cell kinds map is typed, so its non-empty miss lists stay non-empty (candybar-law-review-ibyq.aa1)"
+          "sha": "820f215c895c2a8bb6f38f94d32868578070bf7b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T19:37:38Z",
+          "message": "chore(release): set `package.json` to 1.238.1\n\n## [1.238.1](https://github.com/promptctl/cc-candybar/compare/v1.238.0...v1.238.1) (2026-11-24)\n\n### Bug Fixes\n\n* **diagnostics:** a diagnostic's identity says which rule built it, and two load warnings are not one message (candybar-law-review-ibyq.aa1) ([#953](https://github.com/promptctl/cc-candybar/issues/953)) ([0c0d303](https://github.com/promptctl/cc-candybar/commit/0c0d303b41c1e63858bbaf9c6e95d702a27ab63a))\n"
         }
       ]
     }
