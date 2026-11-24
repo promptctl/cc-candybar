@@ -74,11 +74,24 @@ export const ZONE_IMPORTS = {
 // The zone of a path no row names: no zone imports it.
 export const NO_ZONE = "unlisted";
 
-// The directories of code that runs outside Jest beside the app: the tools,
-// and what they share with the tests. eslint.tools.config.mjs lints them.
-export const OUTSIDE_JEST_ROOTS = Object.entries(ZONE_ROWS)
+// The directories of the tools and of what they share with the tests.
+// eslint.tools.config.mjs holds their imports to the zone rule, as src's
+// config holds src's.
+export const TOOL_ROOTS = Object.entries(ZONE_ROWS)
   .filter(([, zone]) => zone === "tools" || zone === "lib")
   .map(([row]) => row);
+
+// The top-level directories of code that runs outside Jest, src among them:
+// every directory a row outside the test zone lies in. eslint.tools.config.mjs
+// refuses Jest's globals across them, so a new root refuses them the moment a
+// row places it outside the suite.
+export const OUTSIDE_JEST_ROOTS = [
+  ...new Set(
+    Object.entries(ZONE_ROWS)
+      .filter(([row, zone]) => zone !== "test" && row.includes("/"))
+      .map(([row]) => row.slice(0, row.indexOf("/") + 1)),
+  ),
+];
 
 export const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
 const ZONE_KEYS = Object.entries(ZONE_ROWS)
@@ -95,6 +108,10 @@ export const zoneOf = (file) => {
 };
 
 export const mayImport = (from, to) => ZONE_IMPORTS[from].includes(to);
+
+// Jest's packages are the test zone's, as test/ is: the runner, its scoped
+// parts, its `jest-*` parts, and its assertion library, published as `expect`.
+export const isJestPackage = (id) => /^(?:jest|expect)(?:\/|$)|^jest-|^@jest\//.test(id);
 import { isBuiltin } from "node:module";
 
 

@@ -5,7 +5,7 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import fs from "node:fs";
 import path from "node:path";
-import { mayImport, mayLoadRendererModule, NO_ZONE, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
+import { isJestPackage, mayImport, mayLoadRendererModule, NO_ZONE, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -280,7 +280,7 @@ const REFUSAL = {
   root: "The CLI's entry dispatches to every process, and nothing imports it.",
   lib: "scripts/lib is what the tools and the tests share, and the app imports nothing from it.",
   tools: "A tool runs by hand: the app and scripts/lib import nothing from one, and what it shares lives in scripts/lib.",
-  test: "The test suite runs under Jest: code that runs outside it imports nothing from test/, and what a tool and a test share lives in scripts/lib.",
+  test: "The test suite runs under Jest: code that runs outside it imports nothing from test/ or from Jest, and what a tool and a test share lives in scripts/lib.",
   [NO_ZONE]: "A path no row of scripts/import-zones.mjs names is in no zone: give its root a row there, saying which side of Jest it runs on.",
   "outside the repo": "A module outside the repo is in no zone.",
 };
@@ -354,6 +354,12 @@ const importDirection = {
         return;
       }
       if (!source.startsWith(".") && !path.isAbsolute(source)) {
+        if (isJestPackage(source) && !mayImport(fromZone, "test")) {
+          context.report({
+            node,
+            message: `${fromZone} ${from} imports Jest's ${source}. ${REFUSAL.test} [LAW:one-way-deps]`,
+          });
+        }
         if (rendering && !typeOnly(node) && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
           context.report({
             node,

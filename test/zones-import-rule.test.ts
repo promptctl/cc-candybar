@@ -119,6 +119,17 @@ const REFUSED = {
     file: IN_RENDERER,
     code: `export const x = require("../../test/helpers/x");\n`,
   },
+  // Jest's packages are the test zone's, in every spelling of an edge.
+  restToJestGlobals: { file: IN_REST, code: imp("@jest/globals") },
+  sharedToJestMock: {
+    file: IN_SHARED,
+    code: `export const x = require("jest-mock");\n`,
+  },
+  rendererToExpect: {
+    file: IN_RENDERER,
+    code: `export const m = import("expect");\n`,
+  },
+  entryToJest: { file: "src/index.ts", code: typeImp("jest") },
   restToLib: { file: IN_REST, code: imp("../../scripts/lib/x") },
   restToTools: { file: IN_REST, code: imp("../../scripts/drive-bar") },
   // A path no row of the table names is in no zone.
