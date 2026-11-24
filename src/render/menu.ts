@@ -2,9 +2,9 @@
 // `{{ action }}`/`{{ picker }}`. A menu is a self-contained disclosure: an inline
 // TRIGGER that toggles open/closed, and (when open) its body — a picker grid —
 // that DROPS onto the line(s) below the enclosing row. The body is the one picker
-// renderer (`renderPicker`); the trigger is a coupled set-state the menu composes
-// directly (like the picker's closeOnPick) — it toggles the open-state AND resets
-// the page cursor in one atomic batch, gated by the synthesized cycle action.
+// renderer (`renderPicker`); the trigger is a click the menu composes directly
+// (like the picker's closeOnPick) — it steps the open-state AND resets the page
+// cursor, gated by the synthesized cycle action.
 //
 // [LAW:one-source-of-truth] The trigger's TEXT is authored, never emitted here.
 // This module used to append ▸/▾ from the glyph constants, while the codebase's
@@ -41,6 +41,7 @@
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import {
+  MENU_FIRST_PAGE,
   menuMember,
   menuPageKey,
   menuStateKey,
@@ -48,7 +49,7 @@ import {
   type MenuOptions,
 } from "../config/menu-keys.js";
 import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
-import { VERB_SET_STATE } from "../click/wire.js";
+import { VERB_CYCLE_STATE, VERB_SET_STATE } from "../click/wire.js";
 import { actionTarget } from "./drawn-link.js";
 import {
   linkFragment,
@@ -117,19 +118,19 @@ function renderMenu(
   const store = renderBinding(action, "menu").store;
   const open = readVar(store, stateKey) === member;
 
-  // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click is ONE
-  // atomic set-state that keeps the two split keys coherent: it toggles the open-
-  // state (the binary cycle — successor is closed when open, the member when
-  // closed) AND resets the page cursor to page 0, in one batch. So a reopened menu
-  // is never stranded on a stale page left by ←/→ before the last close. This
-  // mirrors the picker's closeOnPick page-reset fold: the picker builds its set-
-  // state targets directly so it can couple two writes; the
-  // menu — the one part that knows BOTH the open-state key and the page key
-  // [LAW:decomposition] — does the same. The synthesized cycle action stays the
-  // GATE source (deriveActionValidators); both keys are independently gated, so the
-  // coupled batch passes the same wire gate every click does [LAW:single-enforcer].
+  // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click keeps
+  // the two split keys coherent in one click: it steps the open-state through
+  // its binary `[closed, member]` cycle AND resets the page cursor to page 0, so
+  // a reopened menu is never stranded on a stale page left by ←/→ before the
+  // last close. The step is taken when the click lands, never drawn into the
+  // link, because a link means the same thing on every draw: a terminal that
+  // kept the link from before the last click still closes the menu it opened.
+  // The menu — the one part that knows BOTH the open-state key and the page key
+  // [LAW:decomposition] — composes the two writes. The synthesized cycle action
+  // stays the GATE source (deriveActionValidators); both keys are independently
+  // gated, so the click passes the same wire gate every click does
+  // [LAW:single-enforcer].
   const sessionId = clickSession(action, "menu");
-  const successor = open ? DISCLOSURE_CLOSED : member;
   // [LAW:one-source-of-truth] The trigger's text is AUTHORED, resolved through
   // the one display rule a cycle `{{ action }}` uses — a menu's disclosure is a
   // two-member cycle, so binding `"▸" "▾"` gives the per-state form and binding
@@ -140,9 +141,10 @@ function renderMenu(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open ? 1 : 0),
     actionTarget([
       {
-        verb: VERB_SET_STATE,
-        args: [sessionId, stateKey, successor, pageKey, "0"],
+        verb: VERB_CYCLE_STATE,
+        args: [sessionId, stateKey, DISCLOSURE_CLOSED, member],
       },
+      { verb: VERB_SET_STATE, args: [sessionId, pageKey, MENU_FIRST_PAGE] },
     ]),
     false,
   );
@@ -182,7 +184,7 @@ function renderMenu(
         kind: "own",
         writes: [
           [stateKey, DISCLOSURE_CLOSED],
-          [pageKey, "0"],
+          [pageKey, MENU_FIRST_PAGE],
         ],
         onPick: options.closeOnPick,
       },

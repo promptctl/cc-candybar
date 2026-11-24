@@ -50,6 +50,7 @@ import type {
   RootFragment,
   SettingValue,
 } from "../config/dsl-types.js";
+import { settingSpelling } from "../config/dsl-types.js";
 import type { ThemeDefaultField } from "../config/globals-fields.js";
 import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
@@ -717,13 +718,36 @@ export type Declared =
   | { readonly kind: "other"; readonly source: string };
 
 export function readDeclared(text: string | null, key: string): Declared {
-  const target = requireValueTarget(key);
-  const doc = docOf(text ?? "");
-  const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
+  const node = declaredNode(text, key);
   if (node === undefined) return { kind: "none" };
   return node.kind === "number" && Number.isInteger(node.value)
     ? { kind: "integer", value: node.value }
     : { kind: "other", source: textOf(text ?? "", node) };
+}
+
+/**
+ * What the file declares at a value target, spelled as the bar spells a
+ * setting's value, or null when it declares nothing there. A null, a list or an
+ * object is spelled as written, which no setting's value is.
+ */
+export function declaredSpelling(
+  text: string | null,
+  key: string,
+): string | null {
+  const node = declaredNode(text, key);
+  if (node === undefined) return null;
+  return node.kind === "string" ||
+    node.kind === "number" ||
+    node.kind === "boolean"
+    ? settingSpelling(node.value)
+    : textOf(text ?? "", node);
+}
+
+function declaredNode(text: string | null, key: string): Node | undefined {
+  const doc = docOf(text ?? "");
+  return doc === null
+    ? undefined
+    : nodeAt(doc, persistPath(requireValueTarget(key)));
 }
 
 /**

@@ -44,7 +44,7 @@ import { deriveActionValidators } from "../src/daemon/foundations/state-validato
 import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, writesOf } from "./helpers/click";
 import type { RichText } from "@promptctl/rich-js";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
@@ -171,7 +171,9 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
   };
   const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = ownUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      writesOf(u, rig.config, (k) => rig.sessionState.get(sessionId, k)).some(
+        (w) => w.key === key && w.value === value,
+      ),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
     await rig.click(url);
@@ -659,21 +661,29 @@ describe("toggle round trip + drop stacking", () => {
     expect(open.get("themepicker")).not.toBe(closed.get("themepicker"));
   });
 
-  // [LAW:verifiable-goals] The pagination-reset contract: the disclosure click is
-  // ONE atomic set-state that toggles the open-state AND resets the SYNTHESIZED
-  // page cursor to page 0 — so a reopened menu is never stranded on a stale page
-  // left by ←/→ before the last close. The page key is derived from identity
-  // (menuPageKey), never from a page-action argument.
-  test("disclosure click resets the synthesized page cursor to 0 in the same atomic write", () => {
-    const { render } = menuBar(MENU_SRC);
+  // [LAW:verifiable-goals] The pagination-reset contract: the disclosure click
+  // steps the open-state through its [closed, member] cycle AND resets the
+  // SYNTHESIZED page cursor to page 0, in one click — so a reopened menu is
+  // never stranded on a stale page left by ←/→ before the last close. The page
+  // key is derived from identity (menuPageKey), never from a page-action
+  // argument. The link carries the step, so it is the same open and closed.
+  test("disclosure click steps the open-state and resets the synthesized page cursor to 0 in the same click", async () => {
+    const { render, click, sessionState } = menuBar(MENU_SRC);
     const url = ownUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === TKEY),
     );
     if (!url) throw new Error("no disclosure toggle rendered");
-    const eff = effectsOf(url)[0]!;
-    // [sessionId, openStateKey, successor, pageKey, "0"] — open-state + page reset
-    // in one batch. Both keys are independently gated; the batch passes one gate.
-    expect(eff.args.slice(1)).toEqual([TKEY, "applyTheme", PKEY, "0"]);
+    expect(effectsOf(url)).toEqual([
+      { verb: "cycle-state", args: [S1, TKEY, "closed", "applyTheme"] },
+      { verb: "set-state", args: [S1, PKEY, "0"] },
+    ]);
+    sessionState.set(S1, PKEY, "2");
+    await click(url);
+    expect(sessionState.get(S1, TKEY)).toBe("applyTheme");
+    expect(sessionState.get(S1, PKEY)).toBe("0");
+    expect(ownUrls(render())).toContain(url);
+    await click(url);
+    expect(sessionState.get(S1, TKEY)).toBe("closed");
   });
 
   // The body's ✕ delivers the SAME close the ▾ glyph promises: disclosure back
@@ -1037,13 +1047,15 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   }`;
 
   test("the picker renders one option per inline domain member, once opened", async () => {
-    const { render, click } = menuBar(SRC);
+    const { config, render, click, sessionState } = menuBar(SRC);
     const closed = render();
     expect(textOf(closed)).not.toContain("buzz");
     expect(textOf(closed)).not.toContain("silent");
 
     const toggleUrl = ownUrls(closed).find((u) =>
-      effectsOf(u).some((e) => e.args[2] === "applySound"),
+      writesOf(u, config, (k) => sessionState.get(S1, k)).some(
+        (w) => w.value === "applySound",
+      ),
     );
     expect(toggleUrl).toBeDefined();
     await click(toggleUrl!);
@@ -1057,7 +1069,9 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   test("clicking an option mutates the field through the real gate — the domain's own allow-list, derived with zero engine edits", async () => {
     const { config, render, click, sessionState } = menuBar(SRC);
     const toggleUrl = ownUrls(render()).find((u) =>
-      effectsOf(u).some((e) => e.args[2] === "applySound"),
+      writesOf(u, config, (k) => sessionState.get(S1, k)).some(
+        (w) => w.value === "applySound",
+      ),
     );
     expect(toggleUrl).toBeDefined();
     await click(toggleUrl!);

@@ -43,11 +43,26 @@ export function stateKeyShown(
 // declares it: the field in the globals the bar renders under its preset, or
 // the field's floor (numericGlobalsSeeds). null for a key that is no numeric globals field.
 export function configKeySeed(globals: Globals, key: string): string | null {
-  // The seeds are named by field, and the key spells where in the file the
-  // field lives (`presets.compact.globals.padding`).
-  const target = parsePersistTarget(key);
-  const seed = numericGlobalsSeeds(globals).get(
-    target !== null && "field" in target ? target.field : key,
-  );
+  const seed = numericGlobalsSeeds(globals).get(fieldOf(key));
   return seed === undefined ? null : String(seed);
+}
+
+// [LAW:one-source-of-truth] What a cycled config key holds before the file
+// declares it: the field in the globals the bar renders under its preset,
+// spelled as the bar spells a setting. null for a field those globals leave
+// unset, or a key that names none, which a cycle counts as its first member.
+export function configKeyShown(globals: Globals, key: string): string | null {
+  const value: unknown = globals[fieldOf(key) as keyof Globals];
+  return typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+    ? settingSpelling(value)
+    : null;
+}
+
+// The globals field a config key names: the key spells where in the file the
+// field lives (`presets.compact.globals.padding`).
+function fieldOf(key: string): string {
+  const target = parsePersistTarget(key);
+  return target !== null && "field" in target ? target.field : key;
 }

@@ -106,16 +106,16 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       const menuOpen = await render(daemon, SID, projectDir);
 
       // The door's first line shows the theme picker, `🎨 theme ▀▀▀`, not its row of
-      // swatches: the label is the row's toggle (a set-state write on the
-      // pickers accordion key, whose member is the apply action's name, with
+      // swatches: the label is the row's toggle (a step of the pickers
+      // accordion key's cycle, whose member is the apply action's name, with
       // the row's page cursor beside it). Click it before any per-theme
       // swatch exists to click.
       const themeMenuToggleUrl = findUrl(linkUrls(menuOpen), (effects) =>
         effects.some(
           (e) =>
-            e.verb === "set-state" &&
+            e.verb === "cycle-state" &&
             e.args[1] === sharedMenuStateKey("candybar.pickers") &&
-            e.args[2] === "candybar.apply.theme",
+            e.args.includes("candybar.apply.theme"),
         ),
       );
       expect(themeMenuToggleUrl).toBeDefined();

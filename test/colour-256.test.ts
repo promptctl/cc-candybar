@@ -36,8 +36,8 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { VERB_SET_STATE } from "../src/click/wire";
-import { effectsOf } from "./helpers/click";
+import { writesOf } from "./helpers/click";
+import { SessionState } from "../src/renderer/session-state";
 import { buildRig } from "./helpers/rig";
 import { WORLD } from "./helpers/host";
 import { instantOf } from "../src/utils/instant";
@@ -130,6 +130,7 @@ async function forEachStage(
     // names it between its arrows, and that name is what opens its list.
     preset: { effective: "default" },
   };
+  const sessionState = new SessionState();
   // Open the disclosure `key` names: the click on the bar that writes it a
   // member other than closed — loud when the bar renders none.
   const opener = (
@@ -138,12 +139,11 @@ async function forEachStage(
     member: (v: string) => boolean,
   ): string => {
     const url = linkUrls(rendered).find((u) =>
-      effectsOf(u).some(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          e.args[1] === key &&
-          e.args[2] !== DISCLOSURE_CLOSED &&
-          member(e.args[2] ?? ""),
+      writesOf(u, rig.config, (k) =>
+        sessionState.get(sessionIdOf(PAYLOAD.session_id), k),
+      ).some(
+        (w) =>
+          w.key === key && w.value !== DISCLOSURE_CLOSED && member(w.value),
       ),
     );
     if (url === undefined) throw new Error(`nothing on the bar opens ${key}`);
@@ -171,6 +171,7 @@ async function forEachStage(
     source: `{ globals: { palette: '${theme}' } }`,
     base: DEFAULT_DSL_CONFIG,
     sessionId: sessionIdOf(PAYLOAD.session_id),
+    sessionState,
   });
   try {
     // One instant for every render, as `closedBars` draws.

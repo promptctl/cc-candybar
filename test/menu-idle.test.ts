@@ -10,7 +10,7 @@ import {
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { clickUrl, effectsOf, bookedContext, CLICK_VERBS } from "./helpers/click";
+import { clickUrl, writesOf, bookedContext, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
@@ -203,7 +203,9 @@ function idleBar(src: string) {
   };
   const clickWriting = async (key: string, value: string): Promise<void> => {
     const url = linkUrls(draw(instantOf(new Date()))).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      writesOf(u, config, (k) => ctx.edits.view.get(SID, k)).some(
+        (w) => w.key === key && w.value === value,
+      ),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = linkClick(url);

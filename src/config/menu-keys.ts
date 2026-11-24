@@ -57,6 +57,9 @@ import {
 // (render/picker.ts), so a list opened with it opens where its value is.
 export const PAGE_HOLDING_CURRENT = "-1";
 
+// The page cursor's value for a list's first page, where a `{{ menu }}` opens.
+export const MENU_FIRST_PAGE = "0";
+
 export function menuMember(applyName: string): string {
   return applyName;
 }

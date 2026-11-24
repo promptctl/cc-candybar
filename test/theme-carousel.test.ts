@@ -44,7 +44,12 @@ import { drawnDepth, listResolvablePaletteNames } from "../src/themes/policy";
 import type { ColorCompatibility, Endcaps } from "../src/themes/policy";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick, CLICK_VERBS } from "./helpers/click";
-import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
+import {
+  testVerbContext,
+  effectsOf,
+  recordRender,
+  writesOf as writesNow,
+} from "./helpers/click";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { CAROUSEL_NEXT, CAROUSEL_PREV } from "../src/render/carousel";
 import { decorEntryColour, windowAt } from "../src/themes/decor";
@@ -168,11 +173,13 @@ function rig(
     await click(hit.url);
     render();
   };
-  // Click the link whose writes include [key, value] — how a test names one
+  // Click the link that writes [key, value] now — how a test names one
   // control among several that share a glyph (every closed toggle is ▸).
   const clickWriting = async (key: string, value: string): Promise<void> => {
     const hit = linksOf(last).find((l) =>
-      effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
+      writesNow(l.url, config, (k) => sessionState.get(SID, k)).some(
+        (w) => w.key === key && w.value === value,
+      ),
     );
     if (hit === undefined) throw new Error(`no link writes ${key}=${value}`);
     await click(hit.url);
@@ -471,7 +478,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
     );
     // The gear opens the theme's configuration on the same accordion.
     const gear = linksOf(rendered).find((l) => l.text === "⚙")!;
-    expect(writesOf(gear.url)).toEqual([[PICKERS, "gear"]]);
+    expect(writesOf(gear.url)).toEqual([[PICKERS, "closed", "gear"]]);
     // The style, variation and shade controls are behind it, not in the tab.
     expect(rt.segments().has("candybar.style")).toBe(false);
     await rt.clickWriting(PICKERS, "gear");

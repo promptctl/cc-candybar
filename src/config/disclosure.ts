@@ -110,6 +110,26 @@ export function cycleDisplayIssue(
   return undefined;
 }
 
+// [LAW:one-source-of-truth] THE rule for where a cycle stands: the member the
+// value is, and a value outside the members counts as the first. Members are
+// ordered default-state-first, so an unset or foreign value shows the first
+// display and steps to the second member (an accordion sibling's path "counts
+// as closed", a never-written toggle "counts as off"). The draw picks its
+// display by it and the click its write, each from the value it reads.
+export function cycleIndex(
+  members: readonly string[],
+  current: string | null,
+): number {
+  return Math.max(current === null ? -1 : members.indexOf(current), 0);
+}
+
+export function cycleSuccessor(
+  members: readonly string[],
+  current: string | null,
+): string {
+  return members[(cycleIndex(members, current) + 1) % members.length]!;
+}
+
 // [LAW:dataflow-not-control-flow] Which display shows is a pure function of
 // (bound displays, current member index): a single static display shows in
 // every state, per-member displays index by the state. Throws the one rule's

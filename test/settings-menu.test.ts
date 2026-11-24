@@ -51,7 +51,7 @@ import {
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, writesOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";
@@ -107,7 +107,9 @@ function menuBar(
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      writesOf(u, rig.config, (k) => rig.sessionState.get(S1, k)).some(
+        (w) => w.key === key && w.value === value,
+      ),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     await rig.click(url);
@@ -198,7 +200,7 @@ describe("the global settings menu is reachable from a user config", () => {
   });
 
   test("the preset picker's click is admitted by the derived gate", async () => {
-    const { render, click, clickWriting, sessionState } = menuBar(
+    const { config, render, click, clickWriting, sessionState } = menuBar(
       userConfig(TWO_SEGMENT_ROW),
     );
     await clickWriting(render(), SETTINGS_ANCHOR, "open");
@@ -206,8 +208,10 @@ describe("the global settings menu is reachable from a user config", () => {
     // Both clicks go through the real verb handlers against the derived gate —
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1]?.startsWith(sharedMenuStateKey("candybar.")) && e.args[2] !== DISCLOSURE_CLOSED,
+      writesOf(u, config, (k) => sessionState.get(S1, k)).some(
+        (w) =>
+          w.key.startsWith(sharedMenuStateKey("candybar.")) &&
+          w.value !== DISCLOSURE_CLOSED,
       ),
     );
     expect(pickerUrl).toBeDefined();
@@ -562,7 +566,7 @@ describe("the menu in a config that declares no variables", () => {
     );
 
   test("loads, renders the door, and opens every disclosure without a ⚠", async () => {
-    const { config, render, click } = menuBar(BARE, EMPTY_DEFAULT);
+    const { config, render, click, sessionState } = menuBar(BARE, EMPTY_DEFAULT);
     const keys = disclosureKeys(config);
     const first = textOf(render());
     expect(first).toContain(DOOR_GLYPH);
@@ -573,13 +577,18 @@ describe("the menu in a config that declares no variables", () => {
     for (let frontier = true; frontier; ) {
       frontier = false;
       for (const url of linkUrls(render())) {
-        const effects = effectsOf(url);
+        const writes = writesOf(url, config, (k) => sessionState.get(S1, k));
         // The walk explores the menu, so it never takes the click that closes it.
-        if (effects.some((e) => e.args[1] === SETTINGS_ANCHOR && e.args[2] === DISCLOSURE_CLOSED)) continue;
-        const opens = effects.filter(
-          (e) => keys.has(String(e.args[1])) && e.args[2] !== DISCLOSURE_CLOSED,
+        if (
+          writes.some(
+            (w) => w.key === SETTINGS_ANCHOR && w.value === DISCLOSURE_CLOSED,
+          )
+        )
+          continue;
+        const opens = writes.filter(
+          (w) => keys.has(w.key) && w.value !== DISCLOSURE_CLOSED,
         );
-        const id = opens.map((e) => `${e.args[1]}=${e.args[2]}`).join("&");
+        const id = opens.map((w) => `${w.key}=${w.value}`).join("&");
         if (opens.length === 0 || opened.has(id)) continue;
         opened.add(id);
         await click(url);

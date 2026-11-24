@@ -23,7 +23,7 @@ import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { VERB_SLASH } from "../src/click/wire";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, writesOf } from "./helpers/click";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -116,9 +116,9 @@ async function bar(
   // Open the door by the write its own link carries, so the menu's session
   // tab — and its tray — is on the bar too.
   const door = linkUrls(render())
-    .flatMap((u) => effectsOf(u))
-    .find((e) => e.args[1] === "candybar.menu")!;
-  sessionState.set(SID, door.args[1]!, door.args[2]!);
+    .flatMap((u) => writesOf(u, config, (k) => sessionState.get(SID, k)))
+    .find((w) => w.key === "candybar.menu")!;
+  sessionState.set(SID, door.key, door.value);
   const raw = render();
   registry.dispose();
   return {

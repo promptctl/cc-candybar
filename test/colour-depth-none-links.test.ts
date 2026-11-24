@@ -12,7 +12,6 @@ import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { VERB_SET_STATE } from "../src/click/wire";
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -28,9 +27,9 @@ import {
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   clickUrl,
-  effectsOf,
   recordRender,
   testVerbContext,
+  writesOf,
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
@@ -93,18 +92,16 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
           colorCompatibility: drawnAt,
         },
       ).frame;
-    // The links on `rendered` that write `key` a value `member` accepts.
+    // The links on `rendered` that, clicked now, write `key` a value `member`
+    // accepts.
     const writers = (
       rendered: Frame,
       key: string,
       member: (v: string) => boolean,
     ): string[] =>
       linkUrls(rendered).filter((url) =>
-        effectsOf(url).some(
-          (e) =>
-            e.verb === VERB_SET_STATE &&
-            e.args[1] === key &&
-            member(e.args[2] ?? ""),
+        writesOf(url, config, (k) => sessionState.get(S1, k)).some(
+          (w) => w.key === key && member(w.value),
         ),
       );
     const click = async (

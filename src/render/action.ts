@@ -41,7 +41,7 @@ import {
   type RenderPalettes,
   type ResolvedDomain,
 } from "../config/option-domain.js";
-import { pickCycleDisplay } from "../config/disclosure.js";
+import { cycleIndex, pickCycleDisplay } from "../config/disclosure.js";
 import { resolvedStyle } from "./rich-theme.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
@@ -61,6 +61,8 @@ import {
   VERB_DELETE_PRESET,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
+  VERB_CYCLE_CONFIG,
+  VERB_CYCLE_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
@@ -140,14 +142,13 @@ type CompiledActionShape =
     }
   | {
       // [LAW:types-are-the-program] An enumerated-domain stepper: the click
-      // writes the SUCCESSOR of the current value in `members` (wrapping; a
-      // current value outside the domain counts as the first member). Unlike
-      // set-bounded — which emits a RELATIVE nudge so rapid clicks accumulate —
-      // a cycle emits the ABSOLUTE successor computed at render: the rendered
-      // display names the current state, so the click's meaning is "go to the
-      // successor of what I showed you". A stale link then lands on the state
-      // the user saw promised, not an extra flip past it — for toggles the
-      // absolute write IS the correct intent.
+      // steps to the SUCCESSOR in `members` (wrapping; a value outside the
+      // domain counts as the first member) of the value the key holds when the
+      // click lands. Like set-bounded its link carries the step, never the
+      // member it lands on, because a link means the same thing on every draw:
+      // a terminal keeps the link it found when the mouse last moved, so clicks
+      // that land before the bar redraws add up instead of repeating the first.
+      // `stateVar` is what the draw reads to pick the display.
       readonly kind: "set-cycle";
       readonly key: string;
       readonly stateVar: string;
@@ -777,18 +778,6 @@ export function linkOver(
   return linked;
 }
 
-// [LAW:one-source-of-truth] THE "unknown current counts as the first member"
-// rule — the one resolution both the display selection and the successor write
-// fold over. Members are ordered default-state-first, so an unset/foreign value
-// renders the first display and clicks to the second member (an accordion
-// sibling's path "counts as closed", a never-written toggle "counts as off").
-function cycleIndex(
-  c: Extract<CompiledActionDecl, { kind: "set-cycle" | "persist-cycle" }>,
-  store: VariableStore,
-): number {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
-}
-
 // [LAW:dataflow-not-control-flow] The single total projection of a compiled action
 // onto (effect, active) — the click's wire effect plus whether this region is the
 // current selection. The template supplies `display` (the clickable text) and an
@@ -802,6 +791,8 @@ function cycleIndex(
 //                  reads current and never "active". The wrap + bounds + the
 //                  unset seed are applied at APPLY time by the daemon handler
 //                  reading live state, not snapshotted into the link here.
+//   • set-cycle:   emits a cycle-state step over its members, resolved the same
+//                  way at APPLY time; never "active".
 //   • copy/open:   one copy/open effect of the evaluated template; never active.
 // [LAW:dataflow-not-control-flow] The template scope is an input only the copy/
 // open arms consume, so it is built WHERE consumed (buildScope snapshots
@@ -849,17 +840,13 @@ export function realize(
         active: current === value,
       };
     }
-    case "set-cycle": {
-      // [LAW:one-source-of-truth] The same current-index resolution that picked
-      // the rendered display picks the write target — display and write derive
-      // from one read, so the click delivers exactly the transition the glyph
-      // promised.
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
+    case "set-cycle":
       return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId, c.key, next] }],
+        effects: [
+          { verb: VERB_CYCLE_STATE, args: [sessionId, c.key, ...c.members] },
+        ],
         active: false,
       };
-    }
     case "set-bounded": {
       // [LAW:one-source-of-truth] Emit a RELATIVE nudge — the irreducible intent
       // (key + signed delta), never an absolute target derived from a render-time
@@ -927,15 +914,19 @@ export function realize(
         active: current === value,
       };
     }
-    case "persist-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
+    case "persist-cycle":
       return {
         effects: [
-          configWriteEffect(VERB_SET_CONFIG, sessionId, c.layer, c.key, next),
+          configWriteEffect(
+            VERB_CYCLE_CONFIG,
+            sessionId,
+            c.layer,
+            c.key,
+            ...c.members,
+          ),
         ],
         active: false,
       };
-    }
     case "persist-bounded": {
       return {
         effects: [
@@ -1147,7 +1138,7 @@ function selectDisplay(
       `action "${name}"`,
       displays,
       action.members.length,
-      cycleIndex(action, store),
+      cycleIndex(action.members, readVar(store, action.stateVar)),
     );
     return { display, boundValue: undefined };
   }

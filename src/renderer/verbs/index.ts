@@ -40,14 +40,14 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeyShown, configKeySeed } from "./key-seeds";
+import { stateKeyShown, configKeySeed, configKeyShown } from "./key-seeds";
 import {
   disclosureNest,
   NO_NEST,
   openRoots,
   type DisclosureNest,
 } from "../../config/disclosure-nest";
-import { DISCLOSURE_CLOSED } from "../../config/disclosure";
+import { cycleSuccessor, DISCLOSURE_CLOSED } from "../../config/disclosure";
 import {
   CLICK_MODE_KEY,
   DEFAULT_CLICK_MODE,
@@ -68,6 +68,7 @@ import {
   deletePreset as deletePresetFromFile,
   deleteValues,
   proveLoads,
+  declaredSpelling,
   readDeclared,
   writePreset,
   writeDrafts,
@@ -123,6 +124,8 @@ import {
   VERB_DELETE_PRESET,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
+  VERB_CYCLE_CONFIG,
+  VERB_CYCLE_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
@@ -466,6 +469,34 @@ const stepState: VerbHandler = (args, ctx) => {
   );
 };
 
+// [LAW:one-source-of-truth] A step through an enumerated domain. The link
+// carries `[sessionId, key, …members]`, never the member it lands on, so it
+// means the same thing on every draw and N clicks land N steps. The successor
+// is taken HERE, of what the bar shows for the key (as a stepper steps from
+// it), by the one cycle rule the draw picks its display with, and crosses the
+// key's gate like every other write.
+const cycleState: VerbHandler = (args, ctx) => {
+  const [key = "", ...members] = args;
+  const sid = ctx.session;
+  if (!key || members.length === 0) {
+    throw new BadVerbArgs(
+      "cycle-state: <key> and its members are required (shape: <sessionId>/<key>/<member>/…)",
+    );
+  }
+  const config = sessionConfig(ctx);
+  const gate = ctx.gates.state.gateFor(config);
+  const shown = stateKeyShown(config, (k) => ctx.sessionState.get(sid, k), key);
+  const result = gate.validate(key, cycleSuccessor(members, shown));
+  if (!result.ok) throw new BadVerbArgs(`cycle-state: ${result.reason}`);
+  const writes = [{ key, value: result.value }];
+  refuseDisorderedPicks(ctx, "cycle-state", writes);
+  ctx.menu.choose(sid, writes, () => menuContext(ctx, sid, config));
+  ctx.log(
+    "info",
+    `cycle-state: ${key} ${shown ?? "unset"}→${result.value} (session=${sid})`,
+  );
+};
+
 // [LAW:no-silent-failure] An unsaved pick of a placement's setting lands only
 // if the placement's settings still stand together (placementPickProblems) —
 // a threshold stepped past its neighbour is refused here, in the bar, rather
@@ -697,30 +728,62 @@ const setConfig: VerbHandler = (args, ctx) => {
   );
 };
 
+// [LAW:single-enforcer] Where a durable step lands, and what the layer it lands
+// in holds: the file the click writes, the key it writes there (durableLanding)
+// with the globals the bar renders at it, and that layer's text. A step moves
+// from what that layer declares, never from a draw, so step-config and
+// cycle-config resolve their target here alike.
+function durableStepTarget(
+  verb: string,
+  shape: string,
+  args: readonly string[],
+  ctx: ClickContext,
+) {
+  const sid = ctx.session;
+  const {
+    role,
+    args: [key = "", ...rest],
+  } = configArgs(verb, args);
+  if (!key || rest.length === 0) {
+    throw new BadVerbArgs(
+      `${verb}: <key> and ${shape} are required (shape: <sessionId>/<layer>/<key>/${shape})`,
+    );
+  }
+  const origin = sessionOrigin(ctx);
+  const config = ctx.configFor(origin);
+  const into = heldLayer(ctx, origin, role);
+  const store = editStore(ctx, sid);
+  return {
+    key,
+    rest,
+    gate: ctx.gates.config.gateFor(config),
+    into,
+    landing: durableLanding(config, (k) => ctx.sessionState.get(sid, k), key),
+    store,
+    text: requireLayerText(into.path, store.read(into.path)),
+  };
+}
+
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
 // against the value the file declares at the layer the click lands in (or,
 // when it declares none, what the bar renders there — configKeySeed), wrapped
 // and re-validated through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = (args, ctx) => {
-  const sid = ctx.session;
   const {
-    role,
-    args: [key = "", byRaw = ""],
-  } = configArgs("step-config", args);
-  if (!key) {
-    throw new BadVerbArgs(
-      "step-config: <key> is required (shape: <sessionId>/<layer>/<key>/<by>)",
-    );
-  }
+    key,
+    rest: [byRaw = ""],
+    gate,
+    into,
+    landing,
+    store,
+    text,
+  } = durableStepTarget("step-config", "<by>", args, ctx);
   if (!STEP_INT_RE.test(byRaw)) {
     throw new BadVerbArgs(
       `step-config: delta must be an integer, got "${byRaw}"`,
     );
   }
   const by = parseInt(byRaw, 10);
-  const origin = sessionOrigin(ctx);
-  const config = ctx.configFor(origin);
-  const gate = ctx.gates.config.gateFor(config);
   const params = gate.rangeParamsFor(key);
   if (!params) {
     throw new BadVerbArgs(
@@ -728,17 +791,7 @@ const stepConfig: VerbHandler = (args, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const into = heldLayer(ctx, origin, role);
-  const landing = durableLanding(
-    config,
-    (k) => ctx.sessionState.get(sid, k),
-    key,
-  );
-  const store = editStore(ctx, sid);
-  const declared = readDeclared(
-    requireLayerText(into.path, store.read(into.path)),
-    landing.key,
-  );
+  const declared = readDeclared(text, landing.key);
   // [LAW:no-silent-failure] A layer that declares the key holds an integer, to
   // step from (clamped into the stepper's own range), or something else, which
   // is refused naming what the layer holds: a step from the value the bar draws
@@ -760,10 +813,35 @@ const stepConfig: VerbHandler = (args, ctx) => {
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
+  writeValues(store, into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${into.path} (session=${sid})`,
+    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${into.path} (session=${ctx.session})`,
+  );
+};
+
+// [LAW:one-source-of-truth] `persist`'s twin of cycleState: the successor of
+// the value the file declares at the layer the click lands in (or, when it
+// declares none, what the bar renders there — configKeyShown), by the one
+// cycle rule, through the config gate, written durably.
+const cycleConfig: VerbHandler = (args, ctx) => {
+  const {
+    key,
+    rest: members,
+    gate,
+    into,
+    landing,
+    store,
+    text,
+  } = durableStepTarget("cycle-config", "<member>/…", args, ctx);
+  const shown =
+    declaredSpelling(text, landing.key) ?? configKeyShown(landing.globals, key);
+  const result = gate.validate(key, cycleSuccessor(members, shown));
+  if (!result.ok) throw new BadVerbArgs(`cycle-config: ${result.reason}`);
+  writeValues(store, into, [[landing.key, result.value]]);
+  ctx.log(
+    "info",
+    `cycle-config: ${landing.key} ${shown ?? "unset"}→${result.value} → ${into.path} (session=${ctx.session})`,
   );
 };
 
@@ -1188,8 +1266,10 @@ const SESSION_HANDLERS: Record<
 > = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
+  [VERB_CYCLE_STATE]: cycleState,
   [VERB_SET_CONFIG]: setConfig,
   [VERB_STEP_CONFIG]: stepConfig,
+  [VERB_CYCLE_CONFIG]: cycleConfig,
   [VERB_RESET_CONFIG]: resetConfig,
   [VERB_SAVE]: save,
   [VERB_SAVE_PRESET]: savePreset,

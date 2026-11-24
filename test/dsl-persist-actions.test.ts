@@ -587,9 +587,9 @@ describe("persist action click → the config file", () => {
       }
     };
     try {
-      // The disclosure toggle is the menu's OWN SessionState write — open it.
+      // The disclosure toggle is the menu's OWN SessionState step — open it.
       const toggleUrl = ownUrls(render()).find(
-        (u) => effectsOf(u)[0]!.verb === "set-state",
+        (u) => effectsOf(u)[0]!.verb === "cycle-state",
       )!;
       await click(toggleUrl);
 
@@ -647,12 +647,26 @@ describe("persist action click → the config file", () => {
     const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[1]!)[0]!;
-    expect(effect.verb).toBe("set-config");
+    expect(effect.verb).toBe("cycle-config");
     await click(urls[1]!);
     // Unset counts as the first member ("truecolor"); the click writes the
-    // successor ("256") — same "unknown current counts as first" rule the
-    // renderer's cycleIndex uses.
+    // successor ("256") — the same rule the draw picks its display by.
     expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
+  });
+
+  // A terminal keeps the link it found when the mouse last moved, so every
+  // click here is on the link of the first draw, and each steps from what the
+  // file holds when it lands.
+  test("clicking one persist-cycle link five times without a redraw lands five steps", async () => {
+    const { render, click } = buildPersistRuntime(SRC2);
+    const url = ownUrls(render())[1]!;
+    const landed: unknown[] = [];
+    for (let i = 0; i < 5; i++) {
+      await click(url);
+      landed.push(globalsInFile().colorCompatibility);
+    }
+    expect(landed).toEqual(["256", "truecolor", "256", "truecolor", "256"]);
+    expect(ownUrls(render())[1]).toBe(url);
   });
 
   test("clicking a persist-bounded action steps and persists via stepConfig", async () => {

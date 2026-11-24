@@ -46,6 +46,7 @@ import {
   recordRender,
   testVerbContext,
   effectsOf,
+  writesOf,
   CLICK_VERBS,
 } from "./helpers/click";
 import { linkClick } from "./helpers/click";
@@ -178,7 +179,9 @@ function build(src: string, withDefault: boolean) {
     const link = lines
       .flatMap(rowLinks)
       .find((l) =>
-        effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
+        writesOf(l.url, config, (k) => sessionState.get(SID, k)).some(
+          (w) => w.key === key && w.value === value,
+        ),
       );
     if (link === undefined) throw new Error(`nothing writes ${key}=${value}`);
     await click(link.url);

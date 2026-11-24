@@ -79,18 +79,22 @@ describe("do: several declared actions, one click", () => {
     // The head is a two-member cycle, so the `do` shows its per-member display.
     expect(textOf(out)).toContain("◎ focus");
     const [url] = linkUrls(out).filter((u) => u.includes("focus"));
-    // Members' effects, head first; the daemon joins the adjacent session
-    // writes into one batch (test/click-wire.test.ts pins that).
+    // Members' effects, head first: the head's cycle carries its step, and the
+    // follower its literal write.
     expect(effectsOf(url!)).toEqual([
-      { verb: "set-state", args: ["s1", "focus", "on"] },
+      { verb: "cycle-state", args: ["s1", "focus", "off", "on"] },
       { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
     await rt.click(url!);
     expect(rt.sessionState.get(S1, "focus")).toBe("on");
     expect(rt.sessionState.get(S1, "panel")).toBe("closed");
-    // The head's current state drives the next display and the next write.
+    // The head's current state drives the next display; its link means the
+    // same thing on every draw, so the next click steps back.
     const next = rt.render();
     expect(textOf(next)).toContain("◉ unfocus");
+    expect(linkUrls(next).filter((u) => u.includes("focus"))).toEqual([url]);
+    await rt.click(url!);
+    expect(rt.sessionState.get(S1, "focus")).toBe("off");
   });
 
   test.each([

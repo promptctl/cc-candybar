@@ -24,7 +24,7 @@ import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validat
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
-import { effectsOf } from "./helpers/click";
+import { writesOf } from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
@@ -36,12 +36,14 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 function groupsBar(source: string, sessionId = S1) {
   const rig = buildRig({ source, sessionId });
   const render = (): Frame => rig.draw().frame;
-  const { click } = rig;
+  const { click, sessionState } = rig;
   // Click the toggle whose URL writes `value` to `key` (a group toggle's
   // set-state), regardless of which row it rendered on.
   const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      writesOf(u, rig.config, (k) => sessionState.get(sessionId, k)).some(
+        (w) => w.key === key && w.value === value,
+      ),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
     await click(url);

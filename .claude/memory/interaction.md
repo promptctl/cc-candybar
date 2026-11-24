@@ -8,7 +8,7 @@ A clickable region in a template and the effect of clicking it are separate decl
 
 Only `set` writes session state, so only `set` derives a gate. Each `set` carries its value source as literal data, so the writable keys and values can be listed straight from the config. That derived gate is the only authority: a template can name an action, but it can't sneak in an ungated write. Each gate belongs to the clicking session's config, so if two configs declare one key differently, each gates its own sessions.
 
-A cycle writes the absolute successor, computed at render time. The glyph shows the current state, so the click must deliver exactly the change the glyph promised. A stepper writes a relative nudge instead, because rapid clicks have to add up.
+A cycle's link and a stepper's carry their step, never the value it lands on, and the click resolves the step against what the bar shows when it lands. A terminal keeps the link it found when the mouse last moved, so a link that named its result would repeat the first click until the mouse moved; a link that means the same thing on every draw makes five clicks land five steps. A cycle's members ride in its link because sibling cycles share one key, so the key's gate knows only their union.
 
 In a multi-action click, the first action is its face: it provides the display and the current-state mark. The actions after it can't bind a template value, since only the first is bound to a display. The dispatcher joins adjacent session writes into one all-or-nothing batch, and adjacent resets into one file write, whatever produced them.
 

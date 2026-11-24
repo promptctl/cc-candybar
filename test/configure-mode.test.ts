@@ -22,15 +22,17 @@ import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
+import { clickUrl, effectsOf, CLICK_VERBS, writesOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import {
   parseEffects,
   VERB_APPLY_LAYOUT_OP,
+  VERB_CYCLE_STATE,
   VERB_DISPATCH,
   VERB_SAVE,
   VERB_SAVE_PRESET,
+  VERB_SET_STATE,
   VERB_UNDO,
 } from "../src/click/wire";
 import { type VerbContext } from "../src/renderer/verbs";
@@ -141,17 +143,24 @@ function configureBar(src: string, preset?: string) {
     current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
   });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
-  // A link whose click writes `value` to `key` — or, for a stepper
-  // (`step-state`), steps `key` by `value`. A picker over two words writes
-  // the other one behind both its arrows, so there may be more than one; they
-  // are one click. A config write names its layer before the key.
+  // A link whose click writes `value` to `key` now (a cycle's step resolves
+  // against what the session holds) — or, for a stepper (`step-state`), steps
+  // `key` by `value`. A picker over two words writes the other one behind both
+  // its arrows, so there may be more than one; they are one click. A config
+  // write names its layer before the key.
   const urlWriting = (out: Frame, key: string, value: string): string => {
     const hits = new Set(
-      linkUrls(out).filter((u) =>
-        effectsOf(u).some((e) => {
-          const at = e.verb === VERB_APPLY_LAYOUT_OP ? 2 : 1;
-          return e.args[at] === key && e.args[at + 1] === value;
-        }),
+      linkUrls(out).filter(
+        (u) =>
+          writesOf(u, current, (k) => ctx.edits.view.get(SID, k)).some(
+            (w) => w.key === key && w.value === value,
+          ) ||
+          effectsOf(u).some((e) => {
+            if (e.verb === VERB_SET_STATE || e.verb === VERB_CYCLE_STATE)
+              return false;
+            const at = e.verb === VERB_APPLY_LAYOUT_OP ? 2 : 1;
+            return e.args[at] === key && e.args[at + 1] === value;
+          }),
       ),
     );
     expect(hits.size).toBe(1);

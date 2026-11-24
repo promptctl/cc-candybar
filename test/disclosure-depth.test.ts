@@ -41,7 +41,7 @@ import { DEFAULT_DECOR } from "./helpers/decor";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
+import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   barRoot,
@@ -62,11 +62,12 @@ import type { VerbContext } from "../src/renderer/verbs";
 import {
   recordRender,
   testVerbContext,
-  effectsOf,
+  writesOf,
+  menuOpened,
   CLICK_VERBS,
 } from "./helpers/click";
 import { linkClick } from "./helpers/click";
-import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
+import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { hrefOfDrawnLink } from "../src/render/drawn-link";
 import { linkFromStyle } from "../src/render/link-style";
@@ -274,33 +275,30 @@ function build(src: string, withDefault = false) {
         return link === undefined ? [] : [hrefOfDrawnLink(link)];
       }),
     );
+  // The session writes a link lands now, under this config and the session's
+  // picks.
+  const writes = (url: string) =>
+    writesOf(url, config, (key) => sessionState.get(SID, key));
   // Click the affordance in `name` that writes `value` to `key` — a
-  // disclosure toggle's set-state — loud when it is not on the bar.
+  // disclosure toggle's step — loud when it is not on the bar.
   const clickWriting = async (
     name: string,
     key: string,
     value: string,
   ): Promise<void> => {
     const url = urlsIn(name).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      writes(u).some((w) => w.key === key && w.value === value),
     );
     if (url === undefined) {
       throw new Error(`"${name}" renders nothing writing ${key}=${value}`);
     }
     await click(url);
   };
-  // Open the `{{ menu }}` in `name`: its opener is the one set-state whose
-  // 4th arg is the page key of its 2nd (the coupled batch `renderMenu`
-  // emits) and whose member is not the closed sentinel — the same shape
-  // test/default-menu-bytes.test.ts identifies openers by.
+  // Open the `{{ menu }}` in `name`.
   const openMenuIn = async (name: string): Promise<void> => {
-    const url = urlsIn(name).find((u) =>
-      effectsOf(u).some(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          e.args[3] === menuPageKey(e.args[1] ?? "") &&
-          e.args[2] !== DISCLOSURE_CLOSED,
-      ),
+    const url = urlsIn(name).find(
+      (u) =>
+        menuOpened(u, config, (key) => sessionState.get(SID, key)) !== null,
     );
     if (url === undefined) throw new Error(`"${name}" hosts no menu opener`);
     await click(url);

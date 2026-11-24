@@ -37,7 +37,7 @@ const barLinks = (rendered: Frame): DrawnLink[] =>
 // shows only once armed, and an insert list only from arrange mode, beside the
 // segment it inserts after.
 const DRAWN_ONLY_AFTER = [
-  /\.armed to armed$/,
+  /\.armed to armed( or |$)/,
   /^set edit\.mode to arrange/,
   /^open edit\.default\.insert\./,
   /^turn .* to page /,
@@ -67,26 +67,42 @@ interface Walked {
 }
 
 // Every frame a walk of the bar draws: from the open door, each click takes a
-// link not yet clicked, those first. A frame with nothing new moves on through
-// its first link.
+// link not yet clicked as it shows, those first. A cycle's link is the same in
+// every state and its text names the state, so each state's step is a click of
+// its own; the links drawn only after a click are matched by their words, which
+// every state shares, so they lead only until their first click. A frame with
+// nothing new moves on through the link it clicked longest ago, so the walk
+// never pumps one toggle.
 async function walk(bar: Bar): Promise<Walked> {
   await bar.render();
   const opened = (await bar.click(DOOR_GLYPH)).rendered;
   const frames = [barLinks(opened)];
   const turns: Turn[] = [];
   let before = positionsIn(opened);
-  const clicked = new Set<string>();
+  const lastClicked = new Map<string, number>();
+  const urlsClicked = new Set<string>();
+  const shown = (l: DrawnLink): string => `${l.text}\0${l.url}`;
   for (let n = 0; n < CLICKS; n++) {
     const frame = frames.at(-1)!;
-    const fresh = frame.filter((l) => !clicked.has(l.url));
+    const fresh = frame.filter((l) => !lastClicked.has(shown(l)));
     const next =
       DRAWN_ONLY_AFTER.flatMap((drawn) =>
-        fresh.filter((l) => drawn.test(doesOf(l.url))),
+        fresh.filter(
+          (l) => !urlsClicked.has(l.url) && drawn.test(doesOf(l.url)),
+        ),
       )[0] ??
       fresh[0] ??
-      frame[0];
+      frame.reduce<DrawnLink | undefined>(
+        (oldest, l) =>
+          oldest === undefined ||
+          lastClicked.get(shown(l))! < lastClicked.get(shown(oldest))!
+            ? l
+            : oldest,
+        undefined,
+      );
     if (next === undefined) break;
-    clicked.add(next.url);
+    lastClicked.set(shown(next), n);
+    urlsClicked.add(next.url);
     const { rendered } = await bar.follow(next.url);
     frames.push(barLinks(rendered));
     const after = positionsIn(rendered);
@@ -204,7 +220,10 @@ describe.each([
   test("a click that acts beyond the session never reads as a session write", () => {
     const acting = links.filter((l) =>
       effectsOf(l.url).some(
-        (e) => e.verb !== "set-state" && e.verb !== "step-state",
+        (e) =>
+          e.verb !== "set-state" &&
+          e.verb !== "step-state" &&
+          e.verb !== "cycle-state",
       ),
     );
     expect(acting.length).toBeGreaterThan(0);

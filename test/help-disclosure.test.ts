@@ -30,7 +30,7 @@ import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_CLOSED, DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { EDIT_MODE_HELP, HELP_TEXT, LANE_HELP } from "../src/help-text";
 import { LANE_NAMES } from "../src/config/lanes";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, writesOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import type { DslConfig } from "../src/config/dsl-types";
 import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
@@ -111,17 +111,17 @@ function helpBar(src: string = TWO_SEGMENT_ROOT) {
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      writesOf(u, config, (k) => ctx.edits.view.get(SID, k)).some(
+        (w) => w.key === key && w.value === value,
+      ),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     await click(url);
   };
 
   // Toggle the `(?)`, whichever way it currently points. Deliberately NOT
-  // matched on the value written: a disclosure trigger writes the SUCCESSOR of
-  // its current state, so an open help offers "closed" and a closed one offers
-  // "open". A helper that only found one of those would silently stop being
-  // able to close what it opened.
+  // matched on the value it lands: a disclosure trigger steps its state, so
+  // the same link opens a closed help and closes an open one.
   const toggleHelp = async (out: Frame): Promise<void> => {
     // A (?)'s own click writes its key and nothing else; the door's click
     // also writes every help key, folding them closed.

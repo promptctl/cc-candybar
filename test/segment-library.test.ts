@@ -17,10 +17,8 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { menuOfKey, menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/reserved-names";
-import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { isReservedName } from "../src/config/reserved-names";
 import {
   GROUP_LABELS,
@@ -34,8 +32,7 @@ import {
   libraryLayout,
 } from "../src/render/library";
 import { cellWidth } from "../src/render/picker";
-import { effectsOf } from "./helpers/click";
-import { VERB_SET_STATE } from "../src/click/wire";
+import { effectsOf, menuOpened, writesOf } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -85,24 +82,18 @@ function rig(width: number, userSegments = "") {
       padding: 1,
       width,
     }).frame;
-  // The `+` opener is the one coupled write whose 4th argument is the page
-  // key of its 2nd; opening applies exactly those writes.
+  // The `+` opener is the menu trigger that opens an edit menu; opening applies
+  // exactly the writes it lands.
   let pageKey = "";
   const open = (): Frame => {
-    const opener = linksOf(render())
-      .flatMap((l) => effectsOf(l.url))
-      .find(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          menuOfKey(e.args[1] ?? "")?.page === false &&
-          e.args[3] === menuPageKey(e.args[1]!) &&
-          e.args[2] !== DISCLOSURE_CLOSED &&
-          e.args[2]!.startsWith(EDIT_NS),
-      );
+    const pick = (k: string) => sessionState.get(SID, k);
+    const opener = linksOf(render()).find((l) =>
+      menuOpened(l.url, config, pick)?.startsWith(EDIT_NS),
+    );
     if (opener === undefined) throw new Error("edit mode rendered no + opener");
-    for (let i = 1; i + 1 < opener.args.length; i += 2)
-      sessionState.set(SID, opener.args[i]!, opener.args[i + 1]!);
-    pageKey = opener.args[3]!;
+    const writes = writesOf(opener.url, config, pick);
+    for (const w of writes) sessionState.set(SID, w.key, w.value);
+    pageKey = writes[1]!.key;
     return render();
   };
   const page = (to: number): Frame => {

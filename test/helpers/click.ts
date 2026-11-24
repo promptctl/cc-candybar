@@ -13,8 +13,15 @@ import { TEST_SIGNER } from "./link-signer";
 import type { LinkSigner } from "../../src/click/link-signer";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
-import { clickOf } from "../../src/click/read";
+import { clickOf, effectsOf } from "../../src/click/read";
+import { cycleSuccessor, DISCLOSURE_CLOSED } from "../../src/config/disclosure";
+import {
+  MENU_FIRST_PAGE,
+  menuOfKey,
+  menuPageKey,
+} from "../../src/config/menu-keys";
 import { changeDone, runClick } from "../../src/renderer/verbs";
+import { stateKeyShown } from "../../src/renderer/verbs/key-seeds";
 import {
   ConfigWrites,
   type Consequence,
@@ -55,7 +62,7 @@ import {
   type RenderRequest,
 } from "../../src/daemon/foundations/protocol";
 import type { ConfigTarget } from "../../src/config-hint";
-import { admitClick, VERB_NAMES, type ClickAdmission, type RunEvidence } from "../../src/click/wire";
+import { admitClick, VERB_CYCLE_STATE, VERB_NAMES, VERB_SET_STATE, type ClickAdmission, type RunEvidence } from "../../src/click/wire";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -324,6 +331,48 @@ export function testVerbContext(
 }
 
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
+
+// The session write each of a link's effects leads with, under this config and
+// these session picks: a set-state's first pair, or a cycle-state's successor
+// of what its key shows. It is what a test means by "the link that writes
+// key=value now", since a cycle's link carries its step and never the member it
+// lands on.
+// [LAW:one-source-of-truth] What a key shows is the handler's own rule, so a
+// setting's step reads its fold and a state's its declared default, as the
+// click does; the caller names only where its rig keeps the picks.
+export function writesOf(
+  url: string,
+  config: DslConfig,
+  pick: (key: string) => string | null,
+): ReadonlyArray<{ readonly key: string; readonly value: string }> {
+  return effectsOf(url).flatMap(({ verb, args: [, key = "", ...rest] }) => {
+    if (verb === VERB_CYCLE_STATE)
+      return [
+        { key, value: cycleSuccessor(rest, stateKeyShown(config, pick, key)) },
+      ];
+    return verb === VERB_SET_STATE ? [{ key, value: rest[0]! }] : [];
+  });
+}
+
+// The member a link opens a `{{ menu }}` onto, clicked now under this config
+// and these picks, or null: a menu's trigger steps its disclosure onto a member
+// and sends that key's page cursor to the first page. A page arrow writes only
+// the cursor, and a carousel's opener opens on the page holding its value, so
+// neither reads as a menu's opener.
+export function menuOpened(
+  url: string,
+  config: DslConfig,
+  pick: (key: string) => string | null,
+): string | null {
+  const [step, page] = writesOf(url, config, pick);
+  return step !== undefined &&
+    menuOfKey(step.key)?.page === false &&
+    step.value !== DISCLOSURE_CLOSED &&
+    page?.key === menuPageKey(step.key) &&
+    page.value === MENU_FIRST_PAGE
+    ? step.value
+    : null;
+}
 
 // A rendered link as the daemon reads it; a test's links are always links.
 export const linkClick = clickOf;

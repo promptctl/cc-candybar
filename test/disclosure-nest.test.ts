@@ -7,7 +7,7 @@ import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
+import { clickUrl, writesOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { type VerbContext } from "../src/renderer/verbs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
@@ -57,7 +57,9 @@ function nestBar(src: string) {
     const matches = (k: string): boolean =>
       key.endsWith("*") ? k.startsWith(key.slice(0, -1)) : k === key;
     const url = linkUrls(render()).find((u) =>
-      effectsOf(u).some((e) => matches(e.args[1] ?? "") && e.args[2] === value),
+      writesOf(u, config, (k) => ctx.edits.view.get(SID, k)).some(
+        (w) => matches(w.key) && w.value === value,
+      ),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     await click(url);

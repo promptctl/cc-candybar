@@ -87,14 +87,13 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       expect(statusRowBefore).toBeDefined();
 
       // The menu's own toggle, before its per-theme option links exist to
-      // click.
+      // click: it steps the menu's cycle, whose member is the apply action.
       const menuToggleUrl = linkUrls(before).find((u) => {
         try {
-          const effects = effectsOf(u);
+          const [step] = effectsOf(u);
           return (
-            effects.length === 1 &&
-            effects[0]!.verb === "set-state" &&
-            effects[0]!.args[2] === "applyDirectoryPalette"
+            step!.verb === "cycle-state" &&
+            step!.args.includes("applyDirectoryPalette")
           );
         } catch {
           return false;

@@ -27,7 +27,7 @@ import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { runUrl } from "./helpers/frame";
 import { settingsOf } from "../src/config/dsl-types";
-import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
+import { clickUrl, effectsOf, CLICK_VERBS, writesOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERB_SAVE } from "../src/click/wire";
 import { type VerbContext } from "../src/renderer/verbs";
@@ -111,7 +111,11 @@ function themeBar(src: string) {
     current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
   });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
-  return { ...rig, render, bgOf, click, ctx };
+  // The session writes a link lands now, under the config the bar renders and
+  // the picks its clicks read, open drafts on top.
+  const writes = (url: string) =>
+    writesOf(url, current, (key) => ctx.edits.view.get(SID, key));
+  return { ...rig, render, bgOf, click, ctx, writes };
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -228,8 +232,8 @@ describe("configure mode picks a placement's theme", () => {
     // 8v9r); its label opens the row of swatches. The open click is the one
     // whose write names the theme control's own segment as the open member.
     const open = linkUrls(rt.render(BAR_A)).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] !== key && (e.args[2] ?? "").endsWith(".theme"),
+      rt.writes(u).some(
+        (w) => w.key !== key && w.value.endsWith(".theme"),
       ),
     );
     expect(open).toBeDefined();
@@ -317,7 +321,7 @@ describe("configure mode over a placement several presets share", () => {
     configurePlacement(rt.ctx, SID, "default", "tag");
     // The theme picker's label: the click opening its swatches.
     const controls = linkUrls(rt.render(BAR_A)).filter((u) =>
-      effectsOf(u).some((e) => (e.args[2] ?? "").endsWith(".theme")),
+      rt.writes(u).some((w) => w.value.endsWith(".theme")),
     );
     expect(controls.length).toBeGreaterThan(0);
   });

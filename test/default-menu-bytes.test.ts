@@ -29,17 +29,14 @@ import { createEngine } from "@promptctl/go-template-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { ADD_GLYPH } from "../src/config/edit-glyphs";
-import { menuOfKey, menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/reserved-names";
 import {
-  DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
 } from "../src/config/disclosure";
-import { effectsOf } from "./helpers/click";
-import { buildRig } from "./helpers/rig";
-import { VERB_SET_STATE } from "../src/click/wire";
+import { menuOpened } from "./helpers/click";
+import { buildRig, type Rig } from "./helpers/rig";
 import type { DslConfig } from "../src/config/dsl-types";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { arrange } from "./helpers/configure";
@@ -70,29 +67,20 @@ const PAYLOAD = {
 };
 
 // [LAW:dataflow-not-control-flow] A menu's opener identifies itself in its own
-// click: the disclosure toggle is the coupled batch `renderMenu` emits, so its
-// 4th arg is by construction the PAGE key of its 2nd, and its 3rd is a member
-// rather than the closed sentinel. Matching that exact shape — rather than the
-// `menus.` prefix, which a page-cursor key also carries — keeps a ←/→ page
-// click (a 3-arg write, no 4th arg) from reading as an opener on a render where
-// a picker is already open. So this test needs to know no key names — the member
-// it writes IS the menu's apply-action name, which is also how each snapshot
-// below gets its label.
+// click (menuOpened), rather than by the `menus.` prefix, which a page-cursor
+// key also carries. So this test needs to know
+// no key names — the member it lands IS the menu's apply-action name, which is
+// also how each snapshot below gets its label.
 interface Opener extends DrawnLink {
   readonly member: string;
 }
-function menuOpeners(rendered: Frame): Opener[] {
-  return linksOf(rendered).flatMap(({ url, text }) =>
-    effectsOf(url)
-      .filter(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          menuOfKey(e.args[1] ?? "")?.page === false &&
-          e.args[3] === menuPageKey(e.args[1]!) &&
-          e.args[2] !== DISCLOSURE_CLOSED,
-      )
-      .map((e) => ({ url, text, member: e.args[2]! })),
-  );
+function menuOpeners(rig: Rig, rendered: Frame): Opener[] {
+  return linksOf(rendered).flatMap(({ url, text }) => {
+    const member = menuOpened(url, rig.config, (k) =>
+      rig.ctx.sessionState.get(SID, k),
+    );
+    return member === null ? [] : [{ url, text, member }];
+  });
 }
 
 function menuBar(root: string) {
@@ -168,7 +156,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   test("the config menu with every picker closed: exact bytes", async () => {
     const rig = await openConfigMenu();
     const out = rig.render();
-    expect(menuOpeners(out)).toEqual([]);
+    expect(menuOpeners(rig, out)).toEqual([]);
     expect(ansiOf(out)).toMatchSnapshot("closed");
   });
 
@@ -220,7 +208,7 @@ describe("every {{ menu }} the bundled default renders", () => {
 
     test("one + opened: exact bytes", async () => {
       const rig = editRig();
-      const opener = menuOpeners(rig.render()).find((o) =>
+      const opener = menuOpeners(rig, rig.render()).find((o) =>
         o.member.startsWith(EDIT_NS),
       );
       if (!opener) throw new Error("edit mode rendered no + opener");
@@ -239,7 +227,7 @@ describe("every {{ menu }} the bundled default renders", () => {
     // here, which is the point.
     test("an opened + is distinguishable from its unopened siblings", async () => {
       const rig = editRig();
-      const openers = menuOpeners(rig.render()).filter((o) =>
+      const openers = menuOpeners(rig, rig.render()).filter((o) =>
         o.member.startsWith(EDIT_NS),
       );
       expect(openers.length).toBeGreaterThan(1);

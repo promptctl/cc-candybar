@@ -30,6 +30,7 @@ import {
   type FrameSource,
 } from "../../src/click/link-signer";
 import { effectsOf, type DecodedEffect } from "./click";
+import { VERB_CYCLE_STATE } from "../../src/click/wire";
 import {
   endpointOf,
   REPLY_BUDGET_MS,
@@ -291,14 +292,21 @@ export function findUrl(
 }
 
 // The affordance that writes `value` to `key`, as the user's own click would
-// find it: by what it does, from the drawn frame — never constructed.
+// find it: by what it does, from the drawn frame — never constructed. A cycle's
+// link carries its step, not the member it lands on, so a cycle over `key` with
+// `value` among its members is one: the caller knows which state the session is
+// in, as a user reading the bar does, and this daemon's state is not the test's
+// to read.
 export function urlWriting(
   rendered: Frame,
   key: string,
   value: string,
 ): string {
   const url = findUrl(linkUrls(rendered), (effects) =>
-    effects.some((e) => e.args[1] === key && e.args[2] === value),
+    effects.some(({ verb, args: [, k, ...rest] }) =>
+      k === key &&
+      (verb === VERB_CYCLE_STATE ? rest.includes(value) : rest[0] === value),
+    ),
   );
   if (url === undefined) {
     throw new Error(`no rendered affordance writes ${key}=${value}`);

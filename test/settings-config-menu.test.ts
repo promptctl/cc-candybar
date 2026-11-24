@@ -50,6 +50,7 @@ import {
   verbContextWith,
   effectsOf,
   recordRender,
+  writesOf,
 } from "./helpers/click";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -74,7 +75,14 @@ import { onLanded } from "./helpers/click";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
+import { BOOLEAN_MEMBERS } from "../src/themes/policy";
 const SID = sessionIdOf("settings-ui-aok-3");
+// The session writes a link lands now, under the config the rig renders and
+// the session's picks.
+const writesIn = (
+  r: { readonly config: ValidatedConfig; readonly sessionState: SessionState },
+  url: string,
+) => writesOf(url, r.config, (key) => r.sessionState.get(SID, key));
 
 // The config that motivated the whole epic: a `root` naming two segments and
 // nothing else. It declares no actions, no menu, no drawer — every control
@@ -278,12 +286,13 @@ async function showTab(
     render: () => Frame;
     click: (url: string) => Promise<void>;
     sessionState: SessionState;
+    readonly config: ValidatedConfig;
   },
   tab: string,
 ): Promise<void> {
   if (r.sessionState.get(SID, TAB_KEY) === tab) return;
   const url = urlsOf(r.render()).find((u) =>
-    effectsOf(u).some((e) => e.args[1] === TAB_KEY && e.args[2] === tab),
+    writesIn(r, u).some((w) => w.key === TAB_KEY && w.value === tab),
   );
   if (url === undefined) throw new Error(`no tab writes ${TAB_KEY}=${tab}`);
   await r.click(url);
@@ -295,10 +304,11 @@ async function showGear(r: {
   render: () => Frame;
   click: (url: string) => Promise<void>;
   sessionState: SessionState;
+  readonly config: ValidatedConfig;
 }): Promise<void> {
   if (r.sessionState.get(SID, PICKERS_KEY) === "gear") return;
   const url = urlsOf(r.render()).find((u) =>
-    effectsOf(u).some((e) => e.args[1] === PICKERS_KEY && e.args[2] === "gear"),
+    writesIn(r, u).some((w) => w.key === PICKERS_KEY && w.value === "gear"),
   );
   if (url === undefined)
     throw new Error("no link opens the theme picker's gear");
@@ -309,12 +319,11 @@ async function showThemePicker(r: {
   render: () => Frame;
   click: (url: string) => Promise<void>;
   sessionState: SessionState;
+  readonly config: ValidatedConfig;
 }): Promise<void> {
   if (r.sessionState.get(SID, PICKERS_KEY) === "candybar.apply.theme") return;
   const url = urlsOf(r.render()).find((u) =>
-    effectsOf(u).some(
-      (e) => e.args[1] === PICKERS_KEY && e.args[2] === "candybar.apply.theme",
-    ),
+    writesIn(r, u).some((w) => w.key === PICKERS_KEY && w.value === "candybar.apply.theme"),
   );
   if (url === undefined) throw new Error("no link opens the theme picker");
   await r.click(url);
@@ -459,7 +468,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
       r.render(),
       sharedMenuStateKey("candybar.pickers"),
     ).find((u) =>
-      effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
+      writesIn(r, u).some((w) => w.value === "candybar.apply.theme"),
     );
     await r.click(themeMenu!);
     const open = r.render();
@@ -639,7 +648,7 @@ describe("save under a preset that pins the setting", () => {
     await showTab(r, "look");
     await r.click(
       writesTo(r.render(), sharedMenuStateKey("candybar.pickers")).find((u) =>
-        effectsOf(u).some((e) => e.args[2] === "candybar.apply.endcaps"),
+        writesIn(r, u).some((w) => w.value === "candybar.apply.endcaps"),
       )!,
     );
     const capsule = textOf(r.render());
@@ -687,7 +696,7 @@ describe("save under a preset that pins the setting", () => {
       await r.click(writesTo(r.render(), "candybar.menu")[0]!);
       await r.click(
         writesTo(r.render(), sharedMenuStateKey("candybar.pickers")).find((u) =>
-          effectsOf(u).some((e) => e.args[2] === "candybar.apply.preset"),
+          writesIn(r, u).some((w) => w.value === "candybar.apply.preset"),
         )!,
       );
       await r.click(
@@ -1060,7 +1069,7 @@ describe("a pick leaves the picker open", () => {
     await r.click(writesTo(r.render(), "candybar.menu")[0]!);
     await r.click(
       writesTo(r.render(), sharedMenuStateKey("candybar.pickers")).find((u) =>
-        effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
+        writesIn(r, u).some((w) => w.value === "candybar.apply.theme"),
       )!,
     );
   });
@@ -1169,7 +1178,7 @@ describe("save as preset", () => {
     await r.click(writesTo(r.render(), "candybar.menu")[0]!);
     await r.click(
       linksOf(r.render()).find((l) =>
-        effectsOf(l.url).some((e) => e.args[2] === "candybar.apply.preset"),
+        writesIn(r, l.url).some((w) => w.value === "candybar.apply.preset"),
       )!.url,
     );
   };
@@ -1696,9 +1705,7 @@ describe("the animation lanes' toggles", () => {
     await r.click(writesTo(r.render(), "candybar.menu")[0]!);
     await showTab(r, "config");
     const url = urlsOf(r.render()).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
-      ),
+      writesIn(r, u).some((w) => w.key === PICKERS_KEY && w.value === "toggles"),
     );
     if (url === undefined) throw new Error("no link opens 🧪 toggles");
     await r.click(url);
@@ -1719,7 +1726,7 @@ describe("the animation lanes' toggles", () => {
         );
         expect(others).toEqual([]);
         expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
-          ["set-state", SID, LANES[lane].switch.setting, "true"],
+          ["cycle-state", SID, LANES[lane].switch.setting, ...BOOLEAN_MEMBERS],
         ]);
         await r.click(url!);
         expect(textOf(r.render())).toContain(`☑ ${LANES[lane].label}`);
@@ -1763,9 +1770,7 @@ describe("a lane toggle's readout", () => {
     await r.click(writesTo(r.render(), "candybar.menu")[0]!);
     await showTab(r, "config");
     const url = urlsOf(r.render()).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
-      ),
+      writesIn(r, u).some((w) => w.key === PICKERS_KEY && w.value === "toggles"),
     );
     if (url === undefined) throw new Error("no link opens 🧪 toggles");
     await r.click(url);

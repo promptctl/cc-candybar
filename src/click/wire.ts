@@ -69,6 +69,12 @@ export const VERB_SET_STATE = "set-state";
 // from live state, so the link carries no `current` snapshot and N rapid clicks
 // each re-read-and-write. Additive: old set-state links still resolve.
 export const VERB_STEP_STATE = "step-state";
+// [LAW:types-are-the-program] A step through an enumerated domain: its args are
+// `[sessionId, key, …members]`. Like step-state it carries the step, never the
+// member it lands on, so a link means the same thing on every draw: the
+// successor is taken at APPLY time of the value the bar shows then, and N
+// clicks on one link land N steps.
+export const VERB_CYCLE_STATE = "cycle-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 // Every config write's args begin `[sessionId, layer]`: the session whose
@@ -84,6 +90,8 @@ export const VERB_SET_CONFIG = "set-config";
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
 // `[sessionId, layer, key, by]`.
 export const VERB_STEP_CONFIG = "step-config";
+// The config twin of cycle-state. Args: `[sessionId, layer, key, …members]`.
+export const VERB_CYCLE_CONFIG = "cycle-config";
 // [LAW:no-ambient-temporal-coupling] Write every one of the session's unsaved
 // settings (src/renderer/setting-drafts.ts) to its config file, then release
 // them from the session — one handler, so a refused write keeps every draft.
@@ -227,6 +235,7 @@ export interface Effect {
 type ConfigWriteVerb =
   | typeof VERB_SET_CONFIG
   | typeof VERB_STEP_CONFIG
+  | typeof VERB_CYCLE_CONFIG
   | typeof VERB_RESET_CONFIG
   | typeof VERB_APPLY_LAYOUT_OP
   | typeof VERB_SAVE
@@ -250,6 +259,12 @@ export function configWriteEffect(
 
 const sayStep = (key: string, by: string): string =>
   `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
+
+// A cycle's members in the order clicks from its first member visit them.
+const visits = (members: readonly string[]): string[] => [
+  ...members.slice(1),
+  ...members.slice(0, 1),
+];
 
 // One session write in words. A disclosure's state keys read as the menu they
 // open or close, and a page cursor, which counts from 0, as the page the bar
@@ -307,6 +322,13 @@ const SAYS = {
       i % 2 === 0 ? [said(sayWrite(key, pairs[i + 1]!))] : [],
     ),
   [VERB_STEP_STATE]: ([, key, by]) => [said(sayStep(key!, by!))],
+  [VERB_CYCLE_STATE]: ([, key, ...members]) => [
+    said(
+      visits(members)
+        .map((m) => sayWrite(key!, m))
+        .join(" or "),
+    ),
+  ],
   [VERB_COPY]: ([text]) => {
     const copied = saidCopy(text!);
     return [said(`copy ${copied}`, copied)];
@@ -318,6 +340,9 @@ const SAYS = {
   ],
   [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
     said(`save ${sayStep(key!, by!)} in ${layer} config`),
+  ],
+  [VERB_CYCLE_CONFIG]: ([, layer, key, ...members]) => [
+    said(`save ${key} as ${visits(members).join(" or ")} in ${layer} config`),
   ],
   [VERB_SAVE]: ([, layer]) => [said(`save settings to ${layer} config`)],
   [VERB_SAVE_PRESET]: ([, layer]) => [
@@ -364,7 +389,9 @@ const spell = (text: string): string =>
 // first, but what it does is what it fires.
 export function saysOf(effects: readonly Effect[]): Said[] {
   const writesSession = (e: Effect): boolean =>
-    e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
+    e.verb === VERB_SET_STATE ||
+    e.verb === VERB_STEP_STATE ||
+    e.verb === VERB_CYCLE_STATE;
   return [
     ...effects.filter((e) => !writesSession(e)),
     ...effects.filter(writesSession),
@@ -534,8 +561,10 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
 export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_SET_STATE,
   VERB_STEP_STATE,
+  VERB_CYCLE_STATE,
   VERB_SET_CONFIG,
   VERB_STEP_CONFIG,
+  VERB_CYCLE_CONFIG,
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,

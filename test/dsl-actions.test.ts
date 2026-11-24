@@ -767,34 +767,52 @@ describe("2de.4 — cycle set action", () => {
     root: 'bar',
   }`;
 
-  test("renders the current member's display; the click writes the successor", async () => {
+  test("renders the current member's display; the click steps to the successor, and the link is the same on the next draw", async () => {
     const { render, click, sessionState } = actionBar(SRC);
     const out = render();
     expect(textOf(out)).toContain("▸ details");
     const urls = ownUrls(out);
     expect(urls).toHaveLength(1);
     expect(effectsOf(urls[0]!)).toEqual([
-      { verb: "set-state", args: ["s1", "details-open", "1"] },
+      { verb: "cycle-state", args: ["s1", "details-open", "0", "1"] },
     ]);
     await click(urls[0]!);
     expect(sessionState.get(S1, "details-open")).toBe("1");
-    // Next render flips display AND write target (the toggle round trip).
     const out2 = render();
     expect(textOf(out2)).toContain("▾ details");
-    expect(effectsOf(ownUrls(out2)[0]!)).toEqual([
-      { verb: "set-state", args: ["s1", "details-open", "0"] },
-    ]);
+    expect(ownUrls(out2)).toEqual(urls);
   });
 
-  test("a current value outside the domain counts as the first member", () => {
-    const { render, sessionState } = actionBar(SRC);
+  test("a current value outside the domain counts as the first member", async () => {
+    const { render, click, sessionState } = actionBar(SRC);
     // Bypass the gate to simulate a foreign/legacy stored value.
     sessionState.set(S1, "details-open", "garbage");
     const out = render();
     expect(textOf(out)).toContain("▸ details");
-    expect(effectsOf(ownUrls(out)[0]!)).toEqual([
-      { verb: "set-state", args: ["s1", "details-open", "1"] },
-    ]);
+    await click(ownUrls(out)[0]!);
+    expect(sessionState.get(S1, "details-open")).toBe("1");
+  });
+
+  // A terminal keeps the link it found when the mouse last moved, so every
+  // click here is on the link of the first draw.
+  test("clicking one cycle link five times without a redraw lands five steps", async () => {
+    const src = `{
+      globals: {},
+      variables: {
+        mode: { kind: 'state', key: 'mode', default: 'off' },
+      },
+      actions: { next: { set: 'mode', cycle: ['off', 'low', 'high'] } },
+      segments: { bar: { template: '{{ action "next" "○" "◐" "●" }}', bg: 'surface', fg: 'foreground' } },
+      root: 'bar',
+    }`;
+    const { render, click, sessionState } = actionBar(src);
+    const [url] = ownUrls(render());
+    const landed: (string | null)[] = [];
+    for (let i = 0; i < 5; i++) {
+      await click(url!);
+      landed.push(sessionState.get(S1, "mode"));
+    }
+    expect(landed).toEqual(["low", "high", "off", "low", "high"]);
   });
 
   test("a single display is static across states (the bare-glyph toggle)", async () => {
