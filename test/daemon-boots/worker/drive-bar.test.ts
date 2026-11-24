@@ -14,8 +14,8 @@ import path from "node:path";
 
 import { cellLen } from "@promptctl/rich-js";
 
-import { until } from "../../helpers/until";
-import { describeLink, linksOf, startBar, type Bar } from "../../helpers/drive-bar";
+import { until } from "../../../scripts/lib/until";
+import { describeLink, linksOf, startBar, type Bar } from "../../../scripts/lib/drive-bar";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
 import { textOf } from "../../../src/render/frame";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";

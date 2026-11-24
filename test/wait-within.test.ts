@@ -1,6 +1,6 @@
 import { waitWithin } from "../src/utils/reading";
 import { clockOver, systemTimers } from "../src/time";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const after = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));

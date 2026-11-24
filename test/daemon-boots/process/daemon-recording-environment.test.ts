@@ -7,11 +7,9 @@ import { linksOf } from "../../../src/click/read";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { textOf } from "../../../src/render/frame";
 import { click, frameRequest, hookData } from "../../helpers/daemon-e2e";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-} from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import { until } from "../../../scripts/lib/until";
 
 const exec = promisify(execFile);
 const BUNDLE = path.resolve("dist/index.mjs");

@@ -13,7 +13,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 describe("Metrics Provider", () => {
   let tempDir: string;

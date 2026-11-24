@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
 import type { LogLevel } from "../src/utils/logger";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 let dir: string;
 let bundle: string;

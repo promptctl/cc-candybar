@@ -2,13 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  prepareIsolatedDaemonEnv,
-  READINESS_BUDGET_MS,
-  spawnDaemonWithEnv,
-  type IsolatedDaemonEnv,
-  type RunningDaemon,
-} from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv, READINESS_BUDGET_MS, type IsolatedDaemonEnv, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import {
   listRegistryFiles,
   readRegistryEntry,
@@ -18,7 +13,7 @@ import {
   type ProcessIdentity,
 } from "../../../src/daemon/process-fingerprint";
 import { processProbe } from "../../helpers/host";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 // [LAW:verifiable-goals] Integration proof for the daemon-side fork-bomb
 // circuit breaker (brandon-daemon-lifecycle-gad.2): with a real, tiny ceiling

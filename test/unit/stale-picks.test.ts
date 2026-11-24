@@ -15,7 +15,7 @@ import {
   placementThemeNames,
 } from "../../src/themes/policy";
 import { parseSettingSpelling } from "../../src/config/dsl-types";
-import { parseAndValidate } from "../helpers/parse-and-validate";
+import { parseAndValidate } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

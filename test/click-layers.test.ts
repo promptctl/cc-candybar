@@ -33,7 +33,7 @@ import {
   SOURCES_NOTHING,
 } from "../src/renderer/render-cache";
 import type { RenderOrigin } from "../src/config-hint";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const S1 = sessionIdOf("s1");
 const USER = `{

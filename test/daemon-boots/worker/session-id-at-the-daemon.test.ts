@@ -8,10 +8,10 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { hookData, renderRequest } from "../../helpers/daemon-e2e";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import { REFUSED } from "../../helpers/session-id-refused";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 
 describe("a render's and a subscribe's session id, at the daemon", () => {
   let daemon: InWorkerDaemon;

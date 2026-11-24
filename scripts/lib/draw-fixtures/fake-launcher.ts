@@ -4,16 +4,16 @@ import {
   type LaunchOwner,
   type OneShotLauncher,
   type TestableLauncher,
-} from "../../src/proc/launch";
+} from "../../../src/proc/launch";
 import {
   fakeSpawner,
   readsStdin,
   type FakeSpawner,
   type Spawn,
-} from "../../src/proc/spawner-fake";
-import { type Timekeeper } from "../../src/time";
-import { systemTimekeeper } from "./system-clock";
-import { SourceRuns } from "../../src/daemon/source-runs";
+} from "../../../src/proc/spawner-fake";
+import { type Timekeeper } from "../../../src/time";
+import { systemTimekeeper } from "../system-clock";
+import { SourceRuns } from "../../../src/daemon/source-runs";
 
 export interface FakeLauncher {
   readonly launcher: TestableLauncher & OneShotLauncher;

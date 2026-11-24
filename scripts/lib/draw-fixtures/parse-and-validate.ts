@@ -14,8 +14,8 @@ import {
   validateRenderable,
   type AuthoredConfig,
   type Renderable,
-} from "../../src/config/dsl-loader";
-import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
+} from "../../../src/config/dsl-loader";
+import type { DslConfig, ValidatedConfig } from "../../../src/config/dsl-types";
 
 // A test's own slice alone.
 export const EMPTY_DEFAULT: DslConfig = {

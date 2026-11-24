@@ -3,17 +3,18 @@
 // and the loaded config's live variable store (what the daemon renders from).
 // brandon-plugins-ktag.8fv.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { HOST, hostOf } from "../scripts/lib/host";
+import { WORLD, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { renderConfig, type ConfigDraw } from "./helpers/config-fixture";
-import { prepareConfig } from "./helpers/prepared-config";
+import { prepareConfig } from "../scripts/lib/draw-fixtures/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { instantOf } from "../src/utils/instant";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
@@ -27,16 +28,16 @@ import { installedPluginDirs } from "../src/daemon/config-discovery/plugin-folde
 import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
 import { textOf } from "../src/render/frame";
-import { viewFacts } from "./helpers/view-facts";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { answerRepo } from "./helpers/repo-approval";
 import { installFromRepo } from "../src/plugin-install";
 import { bindSelf } from "../src/config/loader/refs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { collectedRuns } from "./helpers/held-runs";
+import { collectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import {
   DiscoveringCache,

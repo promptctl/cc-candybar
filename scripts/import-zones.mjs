@@ -1,7 +1,10 @@
 // [LAW:one-way-deps] ESLint and the production bundle use this ownership table.
 // Unlisted application modules belong to the host. More specific entries win.
 // The CLI dispatches to every process. The renderer process constructs its
-// core using the shared contract and has no host dependencies.
+// core using the shared contract and has no host dependencies. The test suite
+// is Jest's alone: what runs outside Jest (src, and the tools in scripts/,
+// site/ and proto-looks/) imports nothing from it, and what a tool and a test
+// share lives in scripts/lib/, which the tests import.
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -38,6 +41,10 @@ const ZONE_ROWS = {
   "src/index.ts": "root",
   // The renderer process's composition root, the counterpart of the daemon's.
   "src/renderer-process.ts": "renderer-process",
+  "test/": "test",
+  "scripts/": "tools",
+  "site/": "tools",
+  "proto-looks/": "tools",
 };
 const rendererDependencies = ["renderer", "start", "shared"];
 const ZONE_IMPORTS = {
@@ -47,6 +54,8 @@ const ZONE_IMPORTS = {
   rest: ["rest", "start", "shared"],
   "renderer-process": rendererDependencies,
   root: ["renderer", "start", "shared", "rest", "root", "renderer-process"],
+  tools: ["renderer", "start", "shared", "rest", "root", "renderer-process", "tools"],
+  test: ["renderer", "start", "shared", "rest", "root", "renderer-process", "tools", "test"],
 };
 
 export const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");

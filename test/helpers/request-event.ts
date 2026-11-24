@@ -1,4 +1,4 @@
-import { loggedLines } from "./daemon-log";
+import { loggedLines } from "../../scripts/lib/daemon/log";
 
 export type Event = {
   level: string;

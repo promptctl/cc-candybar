@@ -6,13 +6,15 @@
 //   pnpm bar:web --config my.json5         a config of your own (a copy: clicks never touch it)
 //   pnpm bar:web --port 0                  any free port
 //
-// The server is scripts/bar-web/server.ts; the bar it drives is test/helpers/drive-bar.ts.
+// The server is scripts/bar-web/server.ts; the bar it drives is scripts/lib/drive-bar.ts.
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { serveBar } from "./bar-web/server";
+import { unpooled } from "./lib/daemon/process";
+import { realBarDaemon } from "./lib/drive-bar";
 
 const invokedIn = process.env.INIT_CWD ?? process.cwd();
 
@@ -37,7 +39,7 @@ async function main(): Promise<void> {
     config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
     cwd: path.resolve(invokedIn, values.cwd),
     ssh: values.ssh,
-  });
+  }, realBarDaemon(unpooled));
   console.log(`the live bar: ${web.url}  (ctrl-c stops it and its daemon)`);
   const stop = (): void => {
     void web.close().then(() => process.exit(0));

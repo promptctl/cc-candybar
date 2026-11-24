@@ -1,5 +1,5 @@
 import net from "node:net";
-import { systemTimekeeper } from "../helpers/system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { timekeeperContract } from "../contract/timekeeper.contract";
 
 timekeeperContract("the system timekeeper", () => ({

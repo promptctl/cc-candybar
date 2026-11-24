@@ -14,24 +14,16 @@ import type { ClaudeInputEdge } from "../../../src/claude-input/typing";
 import type { Frame } from "../../../src/render/frame";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import type { TmuxHint } from "../../../src/tmux-hint";
-import {
-  answeredEvents,
-  click,
-  frameRequest,
-  hookData,
-  linkTo,
-  render,
-  saidOf,
-  sendClick,
-} from "../../helpers/daemon-e2e";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { answeredEvents, saidOf, sendClick } from "../../../scripts/lib/daemon/requests";
+import { click, frameRequest, hookData, linkTo, render } from "../../helpers/daemon-e2e";
+import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { environmentKey } from "../../../src/daemon/foundations/session-env";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import type { AsyncLaunchOpts } from "../../../src/proc/launcher";
-import { fakeLauncher } from "../../helpers/fake-launcher";
-import { systemTimekeeper } from "../../helpers/system-clock";
+import { fakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
+import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 
 jest.setTimeout(30_000);
 

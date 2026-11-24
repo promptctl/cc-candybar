@@ -3,7 +3,7 @@
 // reader clicks back to that daemon as the click it is.
 //
 // [LAW:single-enforcer] The daemon, the render request and the click are
-// test/helpers/drive-bar.ts — the same bar `pnpm bar` drives. This file only
+// scripts/lib/drive-bar.ts — the same bar `pnpm bar` drives. This file only
 // carries its renders out over HTTP and its clicks back in.
 //
 // [LAW:no-silent-failure] Every answer names what happened: the render, every
@@ -31,7 +31,7 @@ import {
   type StartBarDaemon,
   type Clicked,
   type TerminalSize,
-} from "../../test/helpers/drive-bar";
+} from "../lib/drive-bar";
 
 // What the page draws: the bytes, every link in them, and why a click did nothing.
 export interface View {
@@ -101,7 +101,7 @@ export interface ServeOptions extends BarOptions {
 
 export async function serveBar(
   opts: ServeOptions,
-  startDaemon?: StartBarDaemon,
+  startDaemon: StartBarDaemon,
 ): Promise<BarWeb> {
   let bar: Bar = await startBar(opts, startDaemon);
   // One bar, one reader: requests run one at a time, so a click always

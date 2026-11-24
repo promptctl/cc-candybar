@@ -20,7 +20,8 @@ import {
 } from "../src/config/dsl-loader";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { loadFile } from "./helpers/discovered-load";
-import { hostOf, worldOf } from "./helpers/host";
+import { hostOf } from "../scripts/lib/host";
+import { worldOf } from "./helpers/host";
 import { discoverFixture } from "./helpers/config-fixture";
 import { presenceOf } from "../src/config/loader/unplaced";
 import { SETTINGS_ANCHOR } from "../src/config/door";
@@ -29,7 +30,7 @@ import {
   JSON5_DIALECT,
   setValue,
 } from "../src/config/json5-edit";
-import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   validateVariables,
   variableDeclJson,

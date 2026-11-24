@@ -20,12 +20,12 @@
 // SENSITIVITY itself (the retention rationale, what Option A would break) is
 // pinned separately below.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { SessionState } from "../src/renderer/session-state";
 
-import { validateConfig } from "./helpers/parse-and-validate";
+import { validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   parseDslConfig,
   mergeWithDefault,
@@ -37,7 +37,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { formatInteger } from "../src/utils/formatters";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,

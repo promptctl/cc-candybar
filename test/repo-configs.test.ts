@@ -5,7 +5,8 @@
 
 import { writeStatePlan } from "./helpers/state-file";
 import { bareGates } from "./helpers/gates";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
+import { worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -32,7 +33,7 @@ import { repoQuestions } from "../src/config/repo-question";
 import { SessionState } from "../src/renderer/session-state";
 import { answerRepo, recordAnswer } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";

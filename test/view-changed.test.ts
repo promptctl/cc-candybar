@@ -5,21 +5,23 @@
 // nothing, so a still source under a fast period wakes no feed.
 
 import fs from "node:fs";
-import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
-import { heldRuns } from "./helpers/held-runs";
+import { HOST } from "../scripts/lib/host";
+import { locs } from "./helpers/host";
+import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { heldRuns } from "../scripts/lib/draw-fixtures/held-runs";
 import os from "node:os";
 import path from "node:path";
 import { RenderCache } from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
-import { viewFacts } from "./helpers/view-facts";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { writeAtomic } from "../src/utils/atomic-write";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { TEST_ENV } from "./helpers/session-environment";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,7 +74,7 @@ function setUp() {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const runs = heldRuns(unscriptedLauncher, cleanups);
+  const runs = heldRuns(unscriptedLauncher, TEST_ENV, cleanups);
   const changed: string[] = [];
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];

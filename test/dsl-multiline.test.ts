@@ -14,7 +14,7 @@
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { buildRig } from "./helpers/rig";

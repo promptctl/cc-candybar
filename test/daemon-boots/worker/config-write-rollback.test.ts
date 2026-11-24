@@ -10,7 +10,7 @@ import {
   refusedClick,
   renderBody,
 } from "../../helpers/daemon-e2e";
-import { logLines } from "../../helpers/daemon-log";
+import { logLines } from "../../../scripts/lib/daemon/log";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { heldClock } from "../../helpers/held-clock";
 import {
@@ -18,7 +18,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { answerRepo } from "../../helpers/repo-approval";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 
 jest.setTimeout(30_000);
 

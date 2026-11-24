@@ -15,9 +15,9 @@ import {
 import { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import { stateDir } from "../../src/daemon/paths";
 import type { DaemonFacts } from "../../src/facts/world-state";
-import { daemonFactsOf } from "./daemon-facts";
+import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
 import { collected } from "./collected";
-import { settledWorld } from "./settled";
+import { settledWorld } from "../../scripts/lib/draw-fixtures/settled";
 import {
   sessionSource,
   type SessionSource,
@@ -25,7 +25,7 @@ import {
 } from "../../src/renderer/session-source";
 import { SessionState } from "../../src/renderer/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../../src/renderer/settings-history";
-import { systemTimekeeper } from "./system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { instantOf } from "../../src/utils/instant";
 import { ABSENT, failed, ok, pendingOf } from "../../src/utils/outcome";
 import { settledLane } from "../../src/utils/reading";
@@ -43,12 +43,13 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
-} from "./payload-owners";
+} from "../../scripts/lib/draw-fixtures/payload-owners";
 import { sumsOf } from "./today";
-import { viewFacts } from "./view-facts";
+import { viewFacts } from "../../scripts/lib/draw-fixtures/view-facts";
 import { heardRequest } from "./click";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./config-host";
+import { TEST_ENVIRONMENT } from "./session-environment";
 
 export const SESSION = sessionIdOf("golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a");
 export const AT = instantOf(new Date(1_700_000_000_000));
@@ -78,7 +79,7 @@ export function fixedOwners(
   log: (level: string, message: string) => void = () => {},
 ) {
   return {
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     home: "/home/tester",
     log,
     gitProvider: started(

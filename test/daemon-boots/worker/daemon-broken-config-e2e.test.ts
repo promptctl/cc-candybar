@@ -16,7 +16,7 @@ import { click, render, urlWriting, drawnLink } from "../../helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+} from "../../../scripts/lib/daemon/isolated";
 import {
   indicatorOf,
   pageOf,
@@ -24,7 +24,7 @@ import {
   viewerLink,
 } from "../../helpers/diagnostics-viewer";
 import { effectsOf } from "../../helpers/click";
-import { renderLines } from "../../helpers/daemon-log";
+import { renderLines } from "../../../scripts/lib/daemon/log";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
 

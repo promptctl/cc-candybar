@@ -39,7 +39,8 @@
 // config snippet is an untested claim, which this suite rejects.
 
 import fs from "node:fs";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
+import { worldOf } from "./helpers/host";
 import type { World } from "../src/host";
 import os from "node:os";
 import path from "node:path";

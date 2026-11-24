@@ -12,8 +12,9 @@ import { textOf, type WireFrame } from "../../../src/render/frame";
 import type { RecordingEntry } from "../../../src/renderer-interface/recording";
 import { replayRecording } from "../../../src/renderer/replay";
 import { click, frameRequest, observePane, renderBody } from "../../helpers/daemon-e2e";
-import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import { until } from "../../../scripts/lib/until";
 
 const exec = promisify(execFile);
 const BUNDLE = path.resolve("dist/index.mjs");

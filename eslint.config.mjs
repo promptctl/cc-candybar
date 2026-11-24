@@ -276,6 +276,11 @@ const ZONE_MESSAGE = {
   "renderer-process": "The renderer process starts the core from the shared contract.",
   shared: "Shared code loads in both processes and imports neither side.",
   rest: "The host reaches the renderer only through its start (src/renderer/main.ts).",
+  tools: "A tool reaches the app through src and shares with the tests through scripts/lib.",
+};
+// What a zone holds that decides the edge, whichever zone imports it.
+const TARGET_MESSAGE = {
+  test: "The test suite runs under Jest: code that runs outside it imports nothing from test/, and what a tool and a test share lives in scripts/lib.",
 };
 
 // A module's key is its repo-relative path without its extension, so
@@ -345,7 +350,7 @@ const importDirection = {
       if (!mayImport(fromZone, toZone)) {
         context.report({
           node,
-          message: `${fromZone} ${from} imports ${toZone} ${to}. ${ZONE_MESSAGE[fromZone]} [LAW:one-way-deps]`,
+          message: `${fromZone} ${from} imports ${toZone} ${to}. ${TARGET_MESSAGE[toZone] ?? ZONE_MESSAGE[fromZone]} [LAW:one-way-deps]`,
         });
       }
       // [LAW:effects-at-boundaries] The renderer reads no clock and sets no
@@ -384,6 +389,10 @@ const importDirection = {
     };
   },
 };
+
+// The one import-direction rule: src's config runs it, and so does the tools'
+// (eslint.tools.config.mjs). [LAW:single-enforcer]
+export const zonesPlugin = { rules: { "import-direction": importDirection } };
 
 // [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
 // arrives in its inputs, so a renderer that opened one would read a disk its
@@ -572,7 +581,7 @@ export default [
   },
   {
     files: ["src/**/*.{ts,mts}"],
-    plugins: { zones: { rules: { "import-direction": importDirection } } },
+    plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },
   // `no-restricted-properties` is its own rule, so the per-file replacement of

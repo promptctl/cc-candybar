@@ -1,5 +1,6 @@
-import { drawPayload } from "./helpers/draw-payload";
-import { HOST, fixtureLauncher, locs, processLauncher } from "./helpers/host";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { HOST } from "../scripts/lib/host";
+import { fixtureLauncher, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import fs from "node:fs";
 import os from "node:os";
@@ -25,14 +26,14 @@ import {
   type FrameCandidate,
 } from "../src/renderer/presented-frames";
 import { ABSENT } from "../src/utils/outcome";
-import { viewFacts } from "./helpers/view-facts";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { type Launcher } from "../src/proc/launcher";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
+import { collectedRuns, type CollectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";

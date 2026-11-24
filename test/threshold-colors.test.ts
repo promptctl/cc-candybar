@@ -1,5 +1,5 @@
 import { textOf } from "../src/render/frame";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 // The bundled default's threshold colours, pinned as a CONTRACT over palette
 // names — not opaque bytes. block/weekly heat as utilization passes the
 // placement's `warnAt` and `errorAt` settings; burnrate heats as the projected
@@ -19,10 +19,10 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 // change. [LAW:behavior-not-structure] — the contract is the colour at each
 // value, whichever spelling computes it.
 
-import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
 import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
-import { picked, selectionFor } from "./helpers/selection";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import {
   contrastRatio,
   getThemePalette,
@@ -31,14 +31,14 @@ import {
 } from "@promptctl/rich-js";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { registerDslConfig, type DrawnFrame } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 const PALETTES = ["textual-dark", "textual-light"] as const;

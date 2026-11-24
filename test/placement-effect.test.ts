@@ -1,14 +1,14 @@
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { sameDraw } from "./helpers/frame";
 // [LAW:verifiable-goals] brandon-effects-2gka.bm1: a placement can carry its own
 // effect. Its `effect` setting moves that placement's cells and the seams that
 // show its colour, on a clock of its own, and every other cell of the row is
 // drawn exactly as it is without the setting.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { linkUrls } from "./helpers/frame";
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
@@ -21,8 +21,8 @@ import type { RenderedLine } from "../src/dsl/node-registry";
 import { menuStateKey } from "../src/config/menu-keys";
 import { decideEffectName, EFFECT_NAMES, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 

@@ -16,10 +16,10 @@
 // [LAW:single-enforcer] Everything runs the real spine: parse → merge →
 // validate, resolveEffectiveGlobals, registerDslConfig + drawDsl.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import type { RichText } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { mergeWithDefault } from "../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
@@ -40,7 +40,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const load = (source: string): ValidatedConfig =>

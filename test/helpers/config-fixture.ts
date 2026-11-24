@@ -18,7 +18,7 @@ import { textOf, type Frame } from "../../src/render/frame";
 import { instantOf } from "../../src/utils/instant";
 import { explicitConfigPath } from "../../src/utils/user-path";
 import { WORLD } from "./host";
-import { prepareSnapshot, renderEffective } from "./prepared-config";
+import { prepareSnapshot, renderEffective } from "../../scripts/lib/draw-fixtures/prepared-config";
 
 // [LAW:types-are-the-program] A draw supplies its frame or the diagnostic that prevented it.
 export type ConfigDraw = {

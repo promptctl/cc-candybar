@@ -17,7 +17,7 @@ import {
   startBar,
   type Bar,
   type DrawnLink,
-} from "../../helpers/drive-bar";
+} from "../../../scripts/lib/drive-bar";
 import { textOf, type Frame } from "../../../src/render/frame";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { doesOf, longNumbersSaid } from "../../helpers/click-words";

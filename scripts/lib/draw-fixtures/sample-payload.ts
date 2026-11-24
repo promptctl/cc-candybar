@@ -2,12 +2,12 @@ import { daemonFactsOf } from "./daemon-facts";
 // Sample inputs for the production payload projection. The menu counters exercise
 // reset, Save, Undo, Redo, and Back in the template suites.
 
-import { assembleFacts } from "../../src/daemon/facts-assembly";
-import type { Readings } from "../../src/daemon/readings";
-import type { ValidatedConfig } from "../../src/config/dsl-types";
-import type { EffectiveGlobals } from "../../src/config/effective-globals";
-import { LAYER_ROLES, layerFlags } from "../../src/config/layer-role";
-import { perSetting } from "../../src/config/setting-projections";
+import { assembleFacts } from "../../../src/daemon/facts-assembly";
+import type { Readings } from "../../../src/daemon/readings";
+import type { ValidatedConfig } from "../../../src/config/dsl-types";
+import type { EffectiveGlobals } from "../../../src/config/effective-globals";
+import { LAYER_ROLES, layerFlags } from "../../../src/config/layer-role";
+import { perSetting } from "../../../src/config/setting-projections";
 import {
   SAMPLE_HINTS,
   SAMPLE_HOME,
@@ -15,15 +15,15 @@ import {
   sampleHook,
   sampleLanes,
 } from "./sample-session";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import {
   composePayload,
   instantFacts,
   type RenderPayload,
   type ViewPayload,
-} from "../../src/renderer/render-payload";
-import type { Instant } from "../../src/utils/instant";
-import { ABSENT, ok } from "../../src/utils/outcome";
+} from "../../../src/renderer/render-payload";
+import type { Instant } from "../../../src/utils/instant";
+import { ABSENT, ok } from "../../../src/utils/outcome";
 
 const SAMPLE_SESSION = sessionIdOf("test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 

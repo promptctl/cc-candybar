@@ -12,8 +12,8 @@ import { retireSession } from "../../src/renderer/draw-bar";
 import type { RenderCache } from "../../src/renderer/render-cache";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { WorldStates } from "../../src/renderer/world-states";
-import { systemTimekeeper } from "./system-clock";
-import { daemonFactsOf } from "./daemon-facts";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
+import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
 import { TEST_ENVIRONMENT } from "./session-environment";
 
 // What the renderer's turns read of the cache: what a retire closes, and what

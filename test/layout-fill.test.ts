@@ -18,8 +18,8 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
-import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
 import {
   DEFAULT_TERMINAL_THEME,
@@ -36,13 +36,13 @@ import {
   listResolvablePaletteNames,
   ENDCAPS_SHAPES,
 } from "../src/themes/policy";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const SIZING: CellSizing = {
   justify: "left",

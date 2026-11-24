@@ -24,7 +24,7 @@ import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+} from "../../../scripts/lib/daemon/isolated";
 // [LAW:one-source-of-truth] The shared transient contract: a render retried
 // on TIMEOUT and on an answer that drew a source pending.
 // [LAW:no-ambient-temporal-coupling] A persist's synchronous write completing

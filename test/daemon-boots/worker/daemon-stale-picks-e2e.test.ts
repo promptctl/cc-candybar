@@ -28,8 +28,8 @@ import {
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(90_000);
 

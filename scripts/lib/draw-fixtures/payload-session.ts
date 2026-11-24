@@ -2,7 +2,7 @@ import {
   parseSessionId,
   sessionIdOf,
   type SessionId,
-} from "../../src/daemon/foundations/session-id";
+} from "../../../src/daemon/foundations/session-id";
 
 // The session a test draws for when its payload names none.
 export const TEST_SESSION = sessionIdOf("test-session");

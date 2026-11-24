@@ -1,4 +1,4 @@
-// The readiness contract of test/helpers/spawn-isolated-daemon.ts — the one
+// The readiness contract of scripts/lib/daemon/isolated.ts — the one
 // spawn+readiness path every daemon-e2e call site shares
 // (brandon-ci-flakes-630.c7o).
 //
@@ -12,7 +12,7 @@
 // which arm spoke is therefore a claim about the mechanism, not about a clock.
 
 import fs from "node:fs";
-import { HOST, hostOf } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -20,7 +20,7 @@ import { logPath } from "../src/daemon/paths";
 import {
   readinessFailure,
   type ReadinessFailure,
-} from "./helpers/spawn-isolated-daemon";
+} from "../scripts/lib/daemon/isolated";
 
 const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
 const STDERR_LINE = "Error: died before it had a log";

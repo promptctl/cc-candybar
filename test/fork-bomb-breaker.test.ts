@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import { hostOf, processProbe, worldOf, WORLD } from "./helpers/host";
+import { hostOf } from "../scripts/lib/host";
+import { processProbe, worldOf, WORLD } from "./helpers/host";
 import { readOwnStartTime } from "../src/daemon/process-fingerprint";
 import { oldReleaseStartTime } from "./helpers/old-release";
 import os from "node:os";

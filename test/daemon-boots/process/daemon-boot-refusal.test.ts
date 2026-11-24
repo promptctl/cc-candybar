@@ -2,13 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { RSS_LIMIT_ENV } from "../../../src/daemon/limits";
-import { waitForExit } from "../../helpers/daemon-wire";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import {
-  daemonPool,
-  HAND_RUN_SOURCE,
-  spawnTestDaemon,
-} from "../../helpers/spawn-test-daemon";
+import { waitForExit } from "../../../scripts/lib/daemon/wire";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { daemonPool, spawnTestDaemon } from "../../helpers/spawn-test-daemon";
+import { HAND_RUN_SOURCE } from "../../../scripts/lib/daemon/process";
 
 // [LAW:behavior-not-structure] The claim under test is an ORDERING of the real
 // binary's boot: a malformed memory budget is refused through daemon.log before

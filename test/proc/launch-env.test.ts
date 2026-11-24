@@ -13,8 +13,8 @@ import { createOneShotLauncher } from "../../src/proc/launch";
 import type { LaunchOpts } from "../../src/proc/launcher";
 import { systemSpawner, type Spawner } from "../../src/proc/spawner";
 import { REPOSITORY_SCOPED_ENV } from "../../src/repository-cli";
-import { systemTimekeeper } from "../helpers/system-clock";
-import { until } from "../helpers/until";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
+import { until } from "../../scripts/lib/until";
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-launch-env-"));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));

@@ -25,7 +25,7 @@ import {
   type Bar,
   type BarSession,
   type DrawnLink,
-} from "../../helpers/drive-bar";
+} from "../../../scripts/lib/drive-bar";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { BAR_SESSION_ID as SESSION } from "../../../scripts/lib/hook-data";
 

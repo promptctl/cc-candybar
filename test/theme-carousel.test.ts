@@ -14,8 +14,8 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -45,7 +45,7 @@ import type { ColorCompatibility, Endcaps } from "../src/themes/policy";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick, CLICK_VERBS } from "./helpers/click";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { CAROUSEL_NEXT, CAROUSEL_PREV } from "../src/render/carousel";
 import { decorEntryColour, windowAt } from "../src/themes/decor";
 import { DEFAULT_DECOR } from "./helpers/decor";
@@ -69,7 +69,7 @@ import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());

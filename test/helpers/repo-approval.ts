@@ -5,7 +5,7 @@
 
 import { writeStatePlan } from "./state-file";
 import fs from "node:fs";
-import { hostOf } from "./host";
+import { hostOf } from "../../scripts/lib/host";
 import {
   answering,
   type Recorded,

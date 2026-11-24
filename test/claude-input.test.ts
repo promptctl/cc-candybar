@@ -5,13 +5,13 @@
 // `tmux` on PATH that records its argv and serves a captured screen — so the
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { fixtureLauncher, processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -35,7 +35,7 @@ import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/foundations/click-error";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 

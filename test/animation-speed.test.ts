@@ -3,12 +3,12 @@
 // template's `frames` — runs that many times faster than at 1x, a change of
 // speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
 
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -23,8 +23,8 @@ import {
   type AnimationSpeedName,
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // A whole multiple of the ten-second cycles below, so `frames` reads its
 // first frame at at(0).

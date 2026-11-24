@@ -12,9 +12,9 @@
 // default → "—"), never a stale or divide-by-zero number.
 
 import { textOf } from "../src/render/frame";
-import { HOST } from "./helpers/host";
-import { unscriptedRuns } from "./helpers/fake-launcher";
-import { drawPayload } from "./helpers/draw-payload";
+import { HOST } from "../scripts/lib/host";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,7 +27,7 @@ import {
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { turnOpenAfter, type ParsedEntry } from "../src/utils/claude";
 import type { SpeedSample } from "../src/facts/world-state";
-import { validateConfig } from "./helpers/parse-and-validate";
+import { validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -36,7 +36,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S_2 = sessionIdOf("S");

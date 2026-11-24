@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 
 import { createDaemonPool } from "./helpers/daemon-pool";
-import { spawnTestDaemon, type TestDaemonProcess } from "./helpers/spawn-test-daemon";
-import { throughout, until } from "./helpers/until";
+import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { type DaemonProcess } from "../scripts/lib/daemon/process";
+import { throughout, until } from "../scripts/lib/until";
 
 // [LAW:verifiable-goals] Pins the shared-pool primitive's core contract in
 // isolation — no real cc-candybar daemon spawns, so this stays fast — mirroring
@@ -143,8 +144,8 @@ describe("the pool holds a spawn to its ceiling", () => {
     const pool = createDaemonPool(tmpPoolDir(), 2, processProbe);
     const markers = tmpPoolDir();
     const marker = (n: number): string => path.join(markers, `started-${n}`);
-    const spawned: TestDaemonProcess[] = [];
-    const standIn = async (n: number): Promise<TestDaemonProcess> => {
+    const spawned: DaemonProcess[] = [];
+    const standIn = async (n: number): Promise<DaemonProcess> => {
       const proc = await spawnTestDaemon(process.env, pool, () => ({
         bin: "/bin/sh",
         args: ["-c", `: > ${JSON.stringify(marker(n))}; exec sleep 60`],
@@ -154,7 +155,7 @@ describe("the pool holds a spawn to its ceiling", () => {
     };
     const started = (n: number) => (): boolean => fs.existsSync(marker(n));
 
-    let third: Promise<TestDaemonProcess> | undefined;
+    let third: Promise<DaemonProcess> | undefined;
     try {
       const first = await standIn(1);
       await standIn(2);

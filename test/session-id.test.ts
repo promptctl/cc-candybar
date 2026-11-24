@@ -12,7 +12,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { BadVerbArgs } from "../src/renderer/verbs";
 import { encodeSegments } from "../src/click/wire";
 import { recordRender, testVerbContext, CLICK_VERBS } from "./helpers/click";
-import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { REFUSED } from "./helpers/session-id-refused";
 
 describe("the session-id checkpoint", () => {

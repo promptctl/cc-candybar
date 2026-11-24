@@ -7,7 +7,7 @@ import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 
 import { TEST_ENV } from "./session-environment";
 import { bareGates } from "./gates";
-import { HOST } from "./host";
+import { HOST } from "../../scripts/lib/host";
 import type { Host } from "../../src/host";
 import { TEST_SIGNER } from "./link-signer";
 import type { LinkSigner } from "../../src/click/link-signer";
@@ -63,7 +63,7 @@ import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { instantOf } from "../../src/utils/instant";
 import { locations, stateDir } from "../../src/daemon/paths";
-import { systemTimekeeper } from "./system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { NO_CONFIGS } from "./renderers";
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept

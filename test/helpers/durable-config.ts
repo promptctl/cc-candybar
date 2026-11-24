@@ -13,7 +13,7 @@
 // it is a client hint, composed into the render origin, brandon-config-5g8.)
 
 import { requestedConfigTarget } from "../../src/config-hint";
-import { HOST, hostOf } from "./host";
+import { HOST, hostOf } from "../../scripts/lib/host";
 import type { Host } from "../../src/host";
 import {
   mkdirSync,

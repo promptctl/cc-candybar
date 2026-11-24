@@ -1,25 +1,25 @@
 // Draw a sample through the same view binding and draw as a session.
-import type { ValidatedConfig } from "../../src/config/dsl-types";
+import type { ValidatedConfig } from "../../../src/config/dsl-types";
 import {
   drawDsl,
   type CompiledConfig,
   type DrawnFrame,
   type RenderWarning,
-} from "../../src/dsl/render";
-import { bindView } from "../../src/dsl/parts";
-import type { BuildLineOptions } from "../../src/render/strip";
-import type { Instant } from "../../src/utils/instant";
-import type { SourceRegistry } from "../../src/var-system/sources";
-import type { VariableStore } from "../../src/var-system/store";
-import type { FrameRecord } from "../../src/render/frame-memory";
-import type { RenderedLine } from "../../src/dsl/node-registry";
+} from "../../../src/dsl/render";
+import { bindView } from "../../../src/dsl/parts";
+import type { BuildLineOptions } from "../../../src/render/strip";
+import type { Instant } from "../../../src/utils/instant";
+import type { SourceRegistry } from "../../../src/var-system/sources";
+import type { VariableStore } from "../../../src/var-system/store";
+import type { FrameRecord } from "../../../src/render/frame-memory";
+import type { RenderedLine } from "../../../src/dsl/node-registry";
 import { globalsFor, type RenderSelection } from "./selection";
 import { sessionOfPayload } from "./payload-session";
 import {
   fixedSource,
   NOTHING_READ,
   type HostReadings,
-} from "../../src/dsl/view-source";
+} from "../../../src/dsl/view-source";
 
 // The view drawing from `store` bound to a fixed `payload` and `selection`.
 // [LAW:one-source-of-truth] A sample's `opts` are its source: the payload is

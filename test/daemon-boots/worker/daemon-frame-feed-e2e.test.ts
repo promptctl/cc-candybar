@@ -49,7 +49,7 @@ import {
   urlWriting,
   drawnLink,
 } from "../../helpers/daemon-e2e";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { linksOf } from "../../../src/click/read";
 import { decodeAnsi, Style } from "@promptctl/rich-js";
@@ -58,7 +58,7 @@ import { pageOf, viewerLink } from "../../helpers/diagnostics-viewer";
 import { barOf } from "../../helpers/drawn-frame";
 import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
-import { until, type Condition } from "../../helpers/until";
+import { until, type Condition } from "../../../scripts/lib/until";
 import { elapsedMs } from "../../../src/time";
 import {
   keptRenders,
@@ -66,7 +66,7 @@ import {
   logLines,
   renderEventsOf,
   renderLines,
-} from "../../helpers/daemon-log";
+} from "../../../scripts/lib/daemon/log";
 import { POLLED } from "../../../src/config/settings-menu";
 import {
   effectsUrl,
@@ -77,7 +77,7 @@ import {
   statsOf,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 
 jest.setTimeout(30_000);
 

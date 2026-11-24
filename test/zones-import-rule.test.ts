@@ -138,6 +138,15 @@ const REFUSED = {
     file: IN_FOUNDATIONS,
     code: `export { x } from "../draw-bar";\n`,
   },
+  // The test suite runs under Jest, and src runs outside it; what src shares
+  // with a tool, a tool takes from src.
+  restToTest: { file: IN_REST, code: imp("../../test/helpers/x") },
+  sharedToTest: { file: IN_SHARED, code: imp("../../test/helpers/x") },
+  rendererToTestRequire: {
+    file: IN_RENDERER,
+    code: `export const x = require("../../test/helpers/x");\n`,
+  },
+  restToTools: { file: IN_REST, code: imp("../../scripts/lib/x") },
 };
 
 const ALLOWED = {

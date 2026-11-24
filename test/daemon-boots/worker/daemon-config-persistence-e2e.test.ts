@@ -47,7 +47,7 @@ import { click, findUrl, render, renderUntil, drawnLink } from "../../helpers/da
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+} from "../../../scripts/lib/daemon/isolated";
 
 jest.setTimeout(30_000);
 

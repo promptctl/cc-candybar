@@ -10,11 +10,11 @@
 //   - a global the menu has never seen — a throwaway enum — gets a working
 //     control from the same generator, with its option domain and its gate.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -46,7 +46,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 

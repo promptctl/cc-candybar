@@ -7,14 +7,14 @@
 // no validation error and no error cell (⚠) in the output — so any future drift
 // fails CI, not a user's status line.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { fakeLauncher } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { fakeLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { hangs } from "../src/proc/spawner-fake";
 import { NO_PROJECT } from "./helpers/no-project";
 import { textOf } from "../src/render/frame";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { validateConfig } from "./helpers/parse-and-validate";
+import { validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { loadFile } from "./helpers/discovered-load";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
@@ -23,7 +23,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 const ALLOWED = new Set(listResolvablePaletteNames());

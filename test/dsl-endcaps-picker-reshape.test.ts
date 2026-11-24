@@ -14,10 +14,10 @@
 
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { ENDCAPS_SHAPES } from "../src/themes";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import { buildRig } from "./helpers/rig";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 

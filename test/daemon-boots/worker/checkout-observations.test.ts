@@ -15,7 +15,7 @@ import {
   hookData,
   renderBody,
 } from "../../helpers/daemon-e2e";
-import { loggedLines, renderLines } from "../../helpers/daemon-log";
+import { loggedLines, renderLines } from "../../../scripts/lib/daemon/log";
 import { heldClock, type HeldClock } from "../../helpers/held-clock";
 import {
   startDaemon,
@@ -25,7 +25,7 @@ import { answerRepo } from "../../helpers/repo-approval";
 import {
   prepareIsolatedDaemonEnv,
   type IsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+} from "../../../scripts/lib/daemon/isolated";
 
 const git = (cwd: string, ...args: string[]): void => {
   execFileSync("git", args, { cwd, stdio: "pipe", timeout: 5_000 });

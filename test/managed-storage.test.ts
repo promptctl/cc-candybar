@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -23,7 +23,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { Holds } from "../src/utils/holds";
 import { ABSENT, ok } from "../src/utils/outcome";
 import type { Current } from "../src/utils/reading";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { fakeWatches } from "./helpers/fake-watches";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import { SourceFiles } from "../src/daemon/source-files";

@@ -2,10 +2,10 @@
 // shows (brandon-segment-settings-i4n.u36). Each case places the segment twice
 // on one bar — a bare copy on every default and a copy with one setting off —
 // so it pins both the setting's effect and that two copies never share a value.
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -13,7 +13,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SESSION = sessionIdOf("s1");

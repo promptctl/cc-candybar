@@ -15,7 +15,7 @@ import path from "node:path";
 
 import { type Monotonic, type Timekeeper } from "../../../src/time";
 import { daemonClock } from "../../../src/host";
-import { systemTimekeeper } from "../../helpers/system-clock";
+import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import {
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
@@ -34,7 +34,7 @@ import {
   type HeldEvent,
 } from "../../../src/utils/event-hold";
 import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
-import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
+import { loggedLines, renderEventsOf } from "../../../scripts/lib/daemon/log";
 import { heldClock } from "../../helpers/held-clock";
 import {
   startDaemon,
@@ -45,8 +45,8 @@ import { memoryConnection } from "../../helpers/memory-connection";
 import { openedOn, type Opened } from "../../helpers/opened-connection";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
-import { fakeLauncher } from "../../helpers/fake-launcher";
-import { until } from "../../helpers/until";
+import { fakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
+import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);
 

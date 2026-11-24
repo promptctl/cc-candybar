@@ -4,7 +4,7 @@
 // gives up at. A stub daemon reads what the client sent.
 
 import fs from "node:fs";
-import { hostOf } from "./helpers/host";
+import { hostOf } from "../scripts/lib/host";
 import type { Host } from "../src/host";
 import net from "node:net";
 import os from "node:os";
@@ -18,7 +18,7 @@ import {
   makeFrameReader,
   TOTAL_BUDGET_MS,
 } from "../src/daemon/foundations/protocol";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // A daemon that hands every request it reads to `seen`, and answers it with
 // `reply` — or, given none, never answers.

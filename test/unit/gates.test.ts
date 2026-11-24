@@ -2,7 +2,7 @@
 // two values share nothing, and held keys apply from construction.
 
 import { createGates } from "../../src/daemon/foundations/gates";
-import { EMPTY_DEFAULT } from "../helpers/parse-and-validate";
+import { EMPTY_DEFAULT } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 
 const NONE = { state: [], config: [] };
 

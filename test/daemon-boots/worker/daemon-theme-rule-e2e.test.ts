@@ -24,7 +24,7 @@ import { render } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+} from "../../../scripts/lib/daemon/isolated";
 
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 

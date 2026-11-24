@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import { hostOf } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { hostOf } from "../scripts/lib/host";
+import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 
@@ -12,7 +12,7 @@ import {
   rendererNameOf,
 } from "../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
 // over (candybar-testing-ihvy.yfv), so one aimed at a temporary directory

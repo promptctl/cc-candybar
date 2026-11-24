@@ -19,10 +19,10 @@ import { linkUrls } from "../../helpers/frame";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
-import { loggedWhen } from "../../helpers/daemon-log";
+} from "../../../scripts/lib/daemon/isolated";
+import { loggedWhen } from "../../../scripts/lib/daemon/log";
 import { effectsOf } from "../../helpers/click";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 import { untilHeard } from "../../helpers/reload-signal";
 import { VERB_RUN, type EvaluatedRun } from "../../../src/click/wire";
 

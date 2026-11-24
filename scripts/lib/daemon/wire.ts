@@ -8,14 +8,14 @@
 // copies.
 
 import type { ChildProcess } from "node:child_process";
-import { hostOf } from "./host";
+import { hostOf } from "../host";
 import net from "node:net";
 import path from "node:path";
 
-import { logPath } from "../../src/daemon/paths";
-import { sendOne } from "../../src/daemon/foundations/protocol";
-import type { Request, Response } from "../../src/daemon/foundations/protocol";
-import { systemTimekeeper } from "./system-clock";
+import { logPath } from "../../../src/daemon/paths";
+import { sendOne } from "../../../src/daemon/foundations/protocol";
+import type { Request, Response } from "../../../src/daemon/foundations/protocol";
+import { systemTimekeeper } from "../system-clock";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
 

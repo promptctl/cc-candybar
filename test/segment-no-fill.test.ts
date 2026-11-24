@@ -8,10 +8,10 @@
 //   - with no `fg:` the cell carries no text colour either: the terminal's own
 //     text on its own ground, the one pair known to read there.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -20,7 +20,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { NO_FILL } from "../src/template-engine/colors";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const THEME = "textual-dark";
 

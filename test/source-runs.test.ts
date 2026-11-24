@@ -4,7 +4,7 @@
 // docs/design/gather-and-renderer.md, section 19).
 
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
-import { fakeLauncher, turns } from "./helpers/fake-launcher";
+import { fakeLauncher, turns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 import {
   SourceRegistry,
@@ -12,7 +12,7 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
+import { collectedRuns, type CollectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
 import { runOf, type SourceIdentity } from "../src/facts/source-identity";
 import { shellEnvOf } from "../src/config/shell-env";
 import type { Environment } from "../src/daemon/foundations/session-env";

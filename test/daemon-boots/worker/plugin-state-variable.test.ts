@@ -8,9 +8,9 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf } from "../../../src/render/frame";
-import { startBar, type Bar } from "../../helpers/drive-bar";
+import { startBar, type Bar } from "../../../scripts/lib/drive-bar";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 let dir: string;
 beforeEach(() => {

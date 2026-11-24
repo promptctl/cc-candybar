@@ -2,9 +2,9 @@
 // off the cells it drew, so a template's `frames` moves the bar exactly as an
 // effect does, and a bar with neither is still.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
-import { picked, selectionFor } from "./helpers/selection";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -14,8 +14,8 @@ import type { Frame } from "../src/render/frame";
 import type { ColorCompatibility } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { Instant } from "../src/utils/instant";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const AT = 1_800_000_000 as Instant;
 

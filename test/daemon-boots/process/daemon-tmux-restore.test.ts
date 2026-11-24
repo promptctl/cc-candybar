@@ -14,11 +14,9 @@ import {
 import { textOf } from "../../../src/render/frame";
 import { configFlag, render } from "../../helpers/daemon-e2e";
 import { HAS_TMUX, privateTmux } from "../../helpers/private-tmux";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-} from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import { until } from "../../../scripts/lib/until";
 
 (HAS_TMUX ? test : test.skip)(
   "an upgraded host restores its old status layout while drawing the ordinary statusline",

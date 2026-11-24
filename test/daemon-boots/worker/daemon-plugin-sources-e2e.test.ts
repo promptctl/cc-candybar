@@ -22,15 +22,15 @@ import {
 } from "../../helpers/daemon-e2e";
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 import { untilHeard } from "../../helpers/reload-signal";
 import {
   startDaemon,
   statsOf,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { loggedWhen, renderLines } from "../../helpers/daemon-log";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { loggedWhen, renderLines } from "../../../scripts/lib/daemon/log";
 import { valueOf } from "../../../src/utils/logfmt";
 import { effectsOf } from "../../helpers/click";
 import { effectsUrl, VERB_RUN } from "../../../src/click/wire";

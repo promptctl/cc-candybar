@@ -29,8 +29,8 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { heldClock } from "../../helpers/held-clock";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { renderLines } from "../../helpers/daemon-log";
+import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { renderLines } from "../../../scripts/lib/daemon/log";
 import { fakeWatches } from "../../helpers/fake-watches";
 import { untilHeard } from "../../helpers/reload-signal";
 

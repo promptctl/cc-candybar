@@ -3,7 +3,8 @@
 // user's plugin root, from a local path, a GitHub slug, or a git URL.
 
 import { execFileSync } from "node:child_process";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
+import { worldOf } from "./helpers/host";
 import type { World } from "../src/host";
 import fs from "node:fs";
 import os from "node:os";

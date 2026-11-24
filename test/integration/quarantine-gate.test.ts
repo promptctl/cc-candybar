@@ -13,8 +13,8 @@ import { join, resolve } from "node:path";
 const ROOT = resolve(__dirname, "../..");
 const JEST = join(ROOT, "node_modules", "jest", "bin", "jest.js");
 const FIXTURES = "test/helpers/quarantine-fixtures";
-const records = createRequire(__filename)("../helpers/test-records.cjs");
-const quarantine = createRequire(__filename)("../helpers/quarantine.cjs");
+const records = createRequire(__filename)("../../scripts/lib/test-records.cjs");
+const quarantine = createRequire(__filename)("../../scripts/lib/quarantine.cjs");
 
 interface Case {
   title: string;

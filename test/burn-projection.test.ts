@@ -9,15 +9,15 @@
 // → "—"), never a fabricated number.
 
 import { textOf } from "../src/render/frame";
-import { unscriptedRuns } from "./helpers/fake-launcher";
-import { drawPayload } from "./helpers/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { projectCostPerHour } from "../src/renderer/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { validateConfig } from "./helpers/parse-and-validate";
+import { validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -38,8 +38,9 @@ import {
   requestPayload,
   settled,
   type FixtureOwners,
-} from "./helpers/payload-owners";
-import { systemTimekeeper } from "./helpers/system-clock";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const FIVE_HOURS_MIN = 5 * 60;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
@@ -86,7 +87,7 @@ describe("projectCostPerHour (pure)", () => {
 
 function depsWith(overrides: Partial<FixtureOwners> = {}): FixtureOwners {
   return {
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
       usage: async () =>

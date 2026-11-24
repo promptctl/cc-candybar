@@ -12,8 +12,8 @@ import { hookData, renderRequest } from "../../helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
-import { renderLines } from "../../helpers/daemon-log";
+} from "../../../scripts/lib/daemon/isolated";
+import { renderLines } from "../../../scripts/lib/daemon/log";
 
 jest.setTimeout(30_000);
 

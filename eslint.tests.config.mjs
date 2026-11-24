@@ -30,7 +30,7 @@ export const ENV_WRITES = [
 
 // [LAW:effects-at-boundaries] [LAW:single-enforcer] A test that is not testing
 // the launcher's adapter does not start a real program: it scripts its programs
-// on a fake (test/helpers/fake-launcher.ts) and holds a clock. The machine's
+// on a fake (scripts/lib/draw-fixtures/fake-launcher.ts) and holds a clock. The machine's
 // launcher is imported only by the adapter tiers (integration, the launcher's
 // own tests, the process tier), by the harness that builds it, and by the files
 // below. Each exception is owned by the ticket that gives its program a port or
@@ -77,7 +77,7 @@ const REAL_LAUNCHER_EXCEPTIONS = [
   "test/var-sources.test.ts",
 ];
 const REAL_LAUNCHER_MESSAGE =
-  "Script the program on a fake launcher (test/helpers/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
+  "Script the program on a fake launcher (scripts/lib/draw-fixtures/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
 
 export default [
   {

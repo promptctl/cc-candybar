@@ -10,7 +10,7 @@
 
 const { mkdirSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
-const { neverRan, recordOf } = require("./helpers/test-records.cjs");
+const { neverRan, recordOf } = require("../scripts/lib/test-records.cjs");
 
 // The files the config selects, by jest's own search. Imported here and not at
 // the top so a test of the reporter does not load jest.

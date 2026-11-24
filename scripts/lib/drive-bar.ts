@@ -1,7 +1,7 @@
 // A bar driven the way a user drives one: render it, click what it drew,
-// render again — against an isolated daemon, a real one unless a test hands in
-// another start. `pnpm bar` (scripts/drive-bar.ts) is its command line;
-// test/drive-bar.test.ts holds it to its promises.
+// render again — against an isolated daemon its caller says how to start.
+// `pnpm bar` (scripts/drive-bar.ts) is its command line;
+// test/daemon-boots/worker/drive-bar.test.ts holds it to its promises.
 //
 // [LAW:effects-at-boundaries] The daemon is the subject and a black box: an
 // isolated daemon (its own socket, XDG dirs, Claude config dir, parent
@@ -35,15 +35,13 @@ import path from "node:path";
 import { cellLen } from "@promptctl/rich-js";
 
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
-import { BAR_SESSION_ID, hookData } from "../../scripts/lib/hook-data";
-import { withStamp } from "../../scripts/version-stamp.cjs";
+import { BAR_SESSION_ID, hookData } from "./hook-data";
+import { withStamp } from "../version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
-import { frameRequest, saidOf, sendClick } from "./daemon-e2e";
-import type { DaemonTarget } from "./daemon-wire";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-} from "./spawn-isolated-daemon";
+import { renderFrame, saidOf, sendClick } from "./daemon/requests";
+import type { DaemonTarget } from "./daemon/wire";
+import { prepareIsolatedDaemonEnv, startDaemonWithEnv } from "./daemon/isolated";
+import type { Admission } from "./daemon/process";
 import {
   describeLink as describeWith,
   effectsOf,
@@ -129,20 +127,28 @@ export interface BarDaemon {
 /** How a bar gets its daemon, from the env that isolates it. */
 export type StartBarDaemon = (env: NodeJS.ProcessEnv) => Promise<BarDaemon>;
 
-/** What `pnpm bar` runs: a real daemon that dies with this process. */
-const spawnedBarDaemon: StartBarDaemon = async (env) => {
-  const daemon = await spawnDaemonWithEnv({
-    ...env,
-    [PARENT_PID_ENV]: String(process.pid),
-    NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
-  });
-  return {
-    target: env.CC_CANDYBAR_SOCKET!,
-    stop: async () => {
-      await daemon.stop();
-    },
+/**
+ * A real daemon that dies with this process, started once `admission` lets
+ * it: `pnpm bar` admits at once, a test through the suite's daemon pool.
+ */
+export const realBarDaemon =
+  (admission: Admission): StartBarDaemon =>
+  async (env) => {
+    const daemon = await startDaemonWithEnv(
+      {
+        ...env,
+        [PARENT_PID_ENV]: String(process.pid),
+        NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
+      },
+      admission,
+    );
+    return {
+      target: env.CC_CANDYBAR_SOCKET!,
+      stop: async () => {
+        await daemon.stop();
+      },
+    };
   };
-};
 
 export { hookData };
 
@@ -155,7 +161,7 @@ export function describeLink(link: DrawnLink): string {
 
 export async function startBar(
   opts: BarOptions,
-  startDaemon: StartBarDaemon = spawnedBarDaemon,
+  startDaemon: StartBarDaemon,
 ): Promise<Bar> {
   const daemonEnv = prepareIsolatedDaemonEnv("ccb-bar");
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bar-"));
@@ -171,6 +177,13 @@ export async function startBar(
     // Claude Code settings or transcripts.
     CLAUDE_CONFIG_DIR: claudeConfigDir,
   };
+  // [LAW:one-source-of-truth] The environment the bar's client reports: where
+  // its tools live, and the same empty Claude Code config dir it reports as
+  // `claudeConfigDir`, so the two name one directory.
+  const sessionEnv = Object.freeze({
+    PATH: process.env.PATH ?? "",
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
+  });
   let daemon: BarDaemon;
   try {
     fs.writeFileSync(
@@ -193,9 +206,10 @@ export async function startBar(
   const sessionOf = (sessionId: string): BarSession => {
     let last: Pick<Frame, "rows"> = { rows: [] };
     const render = async (): Promise<Frame> => {
-      const frame = await frameRequest(
+      const frame = await renderFrame(
         daemon.target,
         {
+          env: sessionEnv,
           hookData: {
             ...hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
             session_id: sessionId,

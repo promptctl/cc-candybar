@@ -5,7 +5,8 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
-import { HOST, WORLD, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
+import { WORLD, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import {
   chmodSync,
@@ -49,7 +50,7 @@ import type { DaemonLogger } from "../src/utils/logger";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { editedConfig, editProjectConfig } from "./helpers/edited-config";
 import { ReloadSignal } from "./helpers/reload-signal";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import {
   walkNodes,
   type LayoutNode,
@@ -58,7 +59,7 @@ import {
 import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
-import { viewFacts } from "./helpers/view-facts";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { answerRepo } from "./helpers/repo-approval";
 import {
   repoConfigsPath,
@@ -70,7 +71,7 @@ import {
   revisionOf,
   type ConfigSnapshot,
 } from "../src/config/config-snapshot";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
 const S1 = sessionIdOf("s1");

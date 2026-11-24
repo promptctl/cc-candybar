@@ -11,12 +11,13 @@
 // reads it the way it reads the daemon's. `requestPayload` below declares
 // the lanes over the fakes as the collector declares a session's.
 
+import type { SessionEnvironment } from "../../../src/daemon/foundations/session-env";
 import { daemonFactsOf } from "./daemon-facts";
 import { observable, runInAction } from "mobx";
-import type { Holds } from "../../src/utils/holds";
-import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
-import { HOST } from "./host";
-import type { ManagedStorage } from "../../src/daemon/cache/managed-storage";
+import type { Holds } from "../../../src/utils/holds";
+import type { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store";
+import { HOST } from "../host";
+import type { ManagedStorage } from "../../../src/daemon/cache/managed-storage";
 
 // [LAW:no-silent-failure] The storage owner of a rig whose configs declare no
 // plugin source: a subscription naming one is a test that needs a real owner.
@@ -25,20 +26,20 @@ export const NO_STORAGE: Pick<ManagedStorage, "declare"> = {
     throw new Error(`this rig reads no plugin source (${folder})`);
   },
 };
-import type { ClaudeHookData } from "../../src/utils/claude";
+import type { ClaudeHookData } from "../../../src/utils/claude";
 import type {
   CheckedHookData,
   ViewFacts,
-} from "../../src/renderer-interface/request-context";
-import type { GitInfo } from "../../src/segments/git";
-import type { TmuxHint } from "../../src/tmux-hint";
-import type { MetricsFold } from "../../src/segments/metrics";
-import type { ActivityInfo } from "../../src/segments/activity";
-import type { TranscriptUsage } from "../../src/segments/session";
-import type { DaySums } from "../../src/daemon/cache/session-usage-store";
-import type { SpeedObservation } from "../../src/facts/world-state";
-import type { AutoCompactWindow } from "../../src/segments/autocompact";
-import type { Instant } from "../../src/utils/instant";
+} from "../../../src/renderer-interface/request-context";
+import type { GitInfo } from "../../../src/segments/git";
+import type { TmuxHint } from "../../../src/tmux-hint";
+import type { MetricsFold } from "../../../src/segments/metrics";
+import type { ActivityInfo } from "../../../src/segments/activity";
+import type { TranscriptUsage } from "../../../src/segments/session";
+import type { DaySums } from "../../../src/daemon/cache/session-usage-store";
+import type { SpeedObservation } from "../../../src/facts/world-state";
+import type { AutoCompactWindow } from "../../../src/segments/autocompact";
+import type { Instant } from "../../../src/utils/instant";
 import {
   ABSENT,
   isPending,
@@ -48,44 +49,43 @@ import {
   type PayloadNode,
   type Pending,
   type Reading,
-} from "../../src/utils/outcome";
-import { settledLane, type Current, type Lane } from "../../src/utils/reading";
-import { HostService } from "../../src/daemon/cache/host-identity";
-import { assembleFacts } from "../../src/daemon/facts-assembly";
-import { instantOf } from "../../src/utils/instant";
+} from "../../../src/utils/outcome";
+import { settledLane, type Current, type Lane } from "../../../src/utils/reading";
+import { HostService } from "../../../src/daemon/cache/host-identity";
+import { assembleFacts } from "../../../src/daemon/facts-assembly";
+import { instantOf } from "../../../src/utils/instant";
 import { settledWorld } from "./settled";
-import { spelled } from "../../src/facts/awaited";
+import { spelled } from "../../../src/facts/awaited";
 import {
   composePayload,
   todayOf,
   type ConfigFileFacts,
   type DrawInputs,
   type DrawnPayload,
-} from "../../src/renderer/render-payload";
+} from "../../../src/renderer/render-payload";
 import {
   declareLanes,
   readingsOf,
   type DeclaredLanes,
   type PayloadInputs,
   type RenderPayloadDeps,
-} from "../../src/daemon/readings";
-import type { EffectiveGlobals } from "../../src/config/effective-globals";
-import type { ClientHints } from "../../src/daemon/foundations/protocol";
-import { EMPTY_HISTORY_DEPTH } from "../../src/renderer/settings-history";
-import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
-import { Holds as HoldsClass } from "../../src/utils/holds";
-import { CacheExpiryProvider } from "../../src/segments/cache";
-import { RefreshFaults } from "../../src/daemon/refresh-faults";
-import { systemTimekeeper } from "./system-clock";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+} from "../../../src/daemon/readings";
+import type { EffectiveGlobals } from "../../../src/config/effective-globals";
+import type { ClientHints } from "../../../src/daemon/foundations/protocol";
+import { EMPTY_HISTORY_DEPTH } from "../../../src/renderer/settings-history";
+import { UNFOLLOWED_FEEDS } from "../../../src/config/lanes";
+import { Holds as HoldsClass } from "../../../src/utils/holds";
+import { CacheExpiryProvider } from "../../../src/segments/cache";
+import { RefreshFaults } from "../../../src/daemon/refresh-faults";
+import { systemTimekeeper } from "../system-clock";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import { unscriptedRuns } from "./fake-launcher";
 import {
   TranscriptLanes,
   type LaneOwners,
-} from "../../src/daemon/cache/transcript-lanes";
-import { RefreshLedger } from "../../src/utils/refresh-ledger";
-import type { DaemonLogger } from "../../src/utils/logger";
-import { TEST_ENVIRONMENT } from "./session-environment";
+} from "../../../src/daemon/cache/transcript-lanes";
+import { RefreshLedger } from "../../../src/utils/refresh-ledger";
+import type { DaemonLogger } from "../../../src/utils/logger";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -335,7 +335,7 @@ export function fakeAutoCompact(
 // with the refreshes its transcript lanes' trigger calls, and no trigger yet:
 // `withTranscriptLanes` builds it over them.
 export type FixtureOwners = Omit<RenderPayloadDeps, "transcriptLanes"> &
-  LaneOwners;
+  LaneOwners & { readonly environment: SessionEnvironment };
 
 // `owners` with the trigger of their transcript lanes built over them, as the
 // daemon builds its own over its providers (createPayloadProviders): built
@@ -376,9 +376,13 @@ export function withTranscriptLanes<O extends FixtureOwners>(
 // A log nobody reads.
 const NO_LOG: DaemonLogger = () => {};
 
-// Every lane answering ABSENT: a payload whose sources have nothing.
-export function absentOwners() {
+// Every lane answering ABSENT: a payload whose sources have nothing, for a
+// session started in `environment`.
+export function absentOwners(environment: SessionEnvironment) {
   return {
+    // The environment the session's client reported, which its lanes are
+    // declared in.
+    environment,
     // No plugin source, and a log nobody reads.
     managedStorage: NO_STORAGE,
     log: NO_LOG,
@@ -474,7 +478,7 @@ function openHome(
   const { lanes, faults } = declareLanes(
     keyed,
     holds,
-    { ...facts, environment: TEST_ENVIRONMENT },
+    { ...facts, environment: owners.environment },
     {
       plugins: new Map(),
       runs: new Map(),

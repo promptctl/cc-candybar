@@ -24,7 +24,7 @@ import { click, render, urlWriting } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+} from "../../../scripts/lib/daemon/isolated";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { encodeLayoutOp } from "../../../src/config/layout-ops";
 import { EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";

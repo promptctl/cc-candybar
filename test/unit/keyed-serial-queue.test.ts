@@ -2,7 +2,7 @@ import {
   FOREGROUND_BURST,
   KeyedSerialQueue,
 } from "../../src/utils/keyed-serial-queue";
-import { systemTimekeeper } from "../helpers/system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
 function gate(): { wait: Promise<void>; open: () => void } {
   let open = (): void => {};

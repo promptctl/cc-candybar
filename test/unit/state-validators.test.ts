@@ -23,7 +23,7 @@ import {
   listResolvablePaletteNames,
   ENDCAPS_SHAPES,
 } from "../../src/themes/policy";
-import { EMPTY_DEFAULT } from "../helpers/parse-and-validate";
+import { EMPTY_DEFAULT } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 
 // The gate of a session whose config declares no action: the built-in keys,
 // and whatever is registered daemon-wide at the moment it is asked.

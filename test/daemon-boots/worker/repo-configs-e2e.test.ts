@@ -1,6 +1,6 @@
 import { writeStatePlan } from "../../helpers/state-file";
 import type { Frame } from "../../../src/render/frame";
-import { hostOf } from "../../helpers/host";
+import { hostOf } from "../../../scripts/lib/host";
 // [LAW:verifiable-goals] A cloned repository's cc-candybar config runs only
 // once the user approves it, by one click in the bar, and the answer holds:
 // across a daemon restart and across edits of the file, as Claude Code's
@@ -22,7 +22,7 @@ import {
   renderUntil,
   refusedClick,
 } from "../../helpers/daemon-e2e";
-import type { DaemonTarget } from "../../helpers/daemon-wire";
+import type { DaemonTarget } from "../../../scripts/lib/daemon/wire";
 import {
   startDaemon,
   type InWorkerDaemon,
@@ -30,7 +30,7 @@ import {
 import {
   prepareIsolatedDaemonEnv,
   type IsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+} from "../../../scripts/lib/daemon/isolated";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
 import { logPath } from "../../../src/daemon/paths";
 import {
@@ -43,7 +43,7 @@ import {
   readDiagnostics,
   type ViewerPage,
 } from "../../helpers/diagnostics-viewer";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 import { valueOf } from "../../../src/utils/logfmt";
 
 jest.setTimeout(60_000);

@@ -8,33 +8,32 @@
 // (`SOURCES_NOTHING`).
 
 import { observable, reaction, runInAction, when } from "mobx";
-import { Collector } from "../../src/daemon/collector";
+import { Collector } from "../../../src/daemon/collector";
 import {
   registrySubscriptions,
   SOURCES_NOTHING,
   type SessionView,
   type SourceOf,
-} from "../../src/renderer/render-cache";
+} from "../../../src/renderer/render-cache";
 import {
   sessionIdOf,
   type SessionId,
-} from "../../src/daemon/foundations/session-id";
-import { SourceRuns } from "../../src/daemon/source-runs";
-import type { Environment } from "../../src/daemon/foundations/session-env";
-import type { HostReadings, ViewSource } from "../../src/dsl/view-source";
-import { awaits } from "../../src/facts/awaited";
+} from "../../../src/daemon/foundations/session-id";
+import { SourceRuns } from "../../../src/daemon/source-runs";
+import type { Environment } from "../../../src/daemon/foundations/session-env";
+import type { HostReadings, ViewSource } from "../../../src/dsl/view-source";
+import { awaits } from "../../../src/facts/awaited";
 import {
   UNREAD_ENV,
   UNREAD_RUN,
   type WorldState,
-} from "../../src/facts/world-state";
-import type { Launcher } from "../../src/proc/launcher";
-import { systemTimekeeper } from "./system-clock";
-import { ownValue } from "../../src/utils/plain";
-import type { SourceRegistry } from "../../src/var-system/sources";
+} from "../../../src/facts/world-state";
+import type { Launcher } from "../../../src/proc/launcher";
+import { systemTimekeeper } from "../system-clock";
+import { ownValue } from "../../../src/utils/plain";
+import type { SourceRegistry } from "../../../src/var-system/sources";
 import { daemonFactsOf } from "./daemon-facts";
 import { absentOwners, withTranscriptLanes } from "./payload-owners";
-import { TEST_ENV } from "./session-environment";
 import { viewFacts } from "./view-facts";
 
 export interface CollectedRuns {
@@ -53,11 +52,14 @@ export interface CollectedRuns {
 export function collectedRuns(
   sourceRuns: Pick<SourceRuns, "declare">,
   registry: SourceRegistry,
-  environment: Environment = TEST_ENV,
+  environment: Environment,
   { cwd = "/tmp", session = "s1" }: { cwd?: string; session?: string } = {},
 ): CollectedRuns {
   const sid = sessionIdOf(session);
-  const owners = withTranscriptLanes({ ...absentOwners(), sourceRuns });
+  const owners = withTranscriptLanes({
+    ...absentOwners({ kind: "ok", value: environment }),
+    sourceRuns,
+  });
   // The session's latest world state, as the collector last handed it in.
   const latest = observable.box<WorldState | null>(null, { deep: false });
   const collector = new Collector({
@@ -147,8 +149,10 @@ export interface HeldRuns {
   hold(view: SessionView): void;
 }
 
+// Each session's runs held in `environment`, the one its client reported.
 export function heldRuns(
   launcher: Launcher,
+  environment: Environment,
   cleanups: Array<() => void>,
 ): HeldRuns {
   const sourceRuns = new SourceRuns({ launcher, clock: systemTimekeeper });
@@ -168,7 +172,7 @@ export function heldRuns(
         holders.get(view.sessionId)?.readings.env(name) ?? UNREAD_ENV,
     }),
     hold: (view) => {
-      const held = collectedRuns(sourceRuns, view.registry, TEST_ENV, {
+      const held = collectedRuns(sourceRuns, view.registry, environment, {
         session: view.sessionId,
       });
       const prior = holders.get(view.sessionId);
