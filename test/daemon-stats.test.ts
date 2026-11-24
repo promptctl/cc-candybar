@@ -665,7 +665,7 @@ describe("formatStats", () => {
               pid: 4343,
               memory: {
                 kind: "measured",
-                charge: { kind: "unread", unread: why },
+                charge: { kind: "unread", gap: 0, unread: why },
                 usage: { kind: "unread", why: "no ping has answered yet" },
               },
               limit: 512 * MB,
