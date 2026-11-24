@@ -4,15 +4,22 @@
     {
       "version": "pr-947",
       "ref": "refs/pull/947/merge",
-      "sha": "3c1d8feef5441ea7c74d86fa5f42dc5f2aa86fee",
-      "timestamp": "2026-11-24T11:40:38.560Z",
+      "sha": "f59dd9ec45f6cee131604d6be63887cd9106c791",
+      "timestamp": "2026-11-24T11:50:31.078Z",
       "commits": [
         {
-          "sha": "3c1d8feef5441ea7c74d86fa5f42dc5f2aa86fee",
+          "sha": "f59dd9ec45f6cee131604d6be63887cd9106c791",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T11:39:21Z",
-          "message": "Merge 12b373bd27c55c966bf17ff0bf3e097404947b24 into f5c82561857634d22bec3fa05bbf58d6b4d43580\n"
+          "timestamp": "2026-11-24T11:49:28Z",
+          "message": "Merge 14ba0b6ae69a2e1fea0bba27c09645f8f551cbf6 into f5c82561857634d22bec3fa05bbf58d6b4d43580\n"
+        },
+        {
+          "sha": "14ba0b6ae69a2e1fea0bba27c09645f8f551cbf6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T04:49:16-07:00",
+          "message": "test(click): the real-loop defer case needs no directory, and two stale 'read in time' wordings say what the daemon read\n"
         },
         {
           "sha": "12b373bd27c55c966bf17ff0bf3e097404947b24",
