@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "08b56a048eec900bbd8bd82fd0af9815071761cf",
+      "timestamp": "2026-11-24T23:32:36.610Z",
+      "commits": [
+        {
+          "sha": "08b56a048eec900bbd8bd82fd0af9815071761cf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:31:34-07:00",
+          "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9) (#957)\n\n* fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n\n* fix(links): one fold joins a click's state writes, and review pass 1's smaller findings (candybar-host-renderer-x96a.5f9)\n\nA click's adjacent set-state and ring-state effects are joined once, at admission, into one state-writes step; set-state leaves the text batching beside reset-config. The step carries no verb of its own, and its write type no longer shares a name with the disclosure's. The menu trigger shares one render binding; the picker's close names the holding-current sentinel; the menu-action inverse sits beside its producer with a round-trip test; test helpers read a stepped ring through one lookup.\n\n* fix(links): a structural insert holds no ring, the step-config log keeps its space, and a run of state writes reports under each write's own verb (candybar-host-renderer-x96a.5f9)\n\n* docs(links): the state-writes refusal comment says whose message it is (candybar-host-renderer-x96a.5f9)"
+        }
+      ]
+    },
+    {
       "version": "pr-958",
       "ref": "refs/pull/958/merge",
       "sha": "f053da863c3472772701dbb11841bd984a590379",
@@ -34,64 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T16:03:40-07:00",
           "message": "test(controls): a carousel, picker, swatches row and swatch over a key a per-draw rule chooses mark and step from what the bar wears (candybar-host-renderer-x96a.7o3)\n\nA theme, style or effect rule that reads `now` is evaluated in each draw.\nEvery control that centres on the key already reads the name that draw's\nrule settled on; no test drew one under such a rule, only under a rule\nsettled once and kept. One rig is drawn at alternating instants, so a\nreader that kept the first draw's answer or fell to the floor fails it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-957",
-      "ref": "refs/pull/957/merge",
-      "sha": "55e511936ac7be2ab8a86b56a997ebabf75c09f6",
-      "timestamp": "2026-11-24T23:22:29.905Z",
-      "commits": [
-        {
-          "sha": "55e511936ac7be2ab8a86b56a997ebabf75c09f6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T23:21:29Z",
-          "message": "Merge 9c5acf2b51141cd8536a04b1403ff5d9331a9838 into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
-        },
-        {
-          "sha": "9c5acf2b51141cd8536a04b1403ff5d9331a9838",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:16:41-07:00",
-          "message": "docs(links): the state-writes refusal comment says whose message it is (candybar-host-renderer-x96a.5f9)\n"
-        },
-        {
-          "sha": "82be73732efe009a54769bcf3c278debbff64882",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:08:26-07:00",
-          "message": "fix(links): a structural insert holds no ring, the step-config log keeps its space, and a run of state writes reports under each write's own verb (candybar-host-renderer-x96a.5f9)\n"
-        },
-        {
-          "sha": "f73857c21b7f04bc7f1632b439f8a1e83b1420d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:54:35-07:00",
-          "message": "fix(links): one fold joins a click's state writes, and review pass 1's smaller findings (candybar-host-renderer-x96a.5f9)\n\nA click's adjacent set-state and ring-state effects are joined once, at admission, into one state-writes step; set-state leaves the text batching beside reset-config. The step carries no verb of its own, and its write type no longer shares a name with the disclosure's. The menu trigger shares one render binding; the picker's close names the holding-current sentinel; the menu-action inverse sits beside its producer with a round-trip test; test helpers read a stepped ring through one lookup.\n"
-        },
-        {
-          "sha": "c6a28ebe853907cd3549a3d5a6007da5d30df1d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:29:01-07:00",
-          "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "870a2fd08214c3d683fe9b3db477f34796e27f84",
-      "timestamp": "2026-11-24T22:45:52.390Z",
-      "commits": [
-        {
-          "sha": "870a2fd08214c3d683fe9b3db477f34796e27f84",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:44:37-07:00",
-          "message": "fix(stored-state): a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz) (#956)\n\n* fix(state): a write over a state file that did not read sets it aside, and an unread answers book asks again (candybar-law-review-ibyq.6iz)\n\n* fix(stored-state): a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz)\n\nOne holder now holds every per-session file: the session book, and a renderer profile's picks and history. It reads the file once, by the rule every state file keeps. A file that does not read is renamed aside beside itself before anything is written, and the store starts empty. A file that can be neither read nor renamed is never saved to, and stands on every bar as saving nothing.\n\nA load's set-aside and what it dropped (a refused session, a retired pick or setting, an empty session) are a daemon event about the file, grouped by what and why.\n\nRecency is the last request or write. A request moves its session in the renderer's stores, and the host hears that as a `heard` write; the wire version goes to 18. A move of place alone reaches the file within one order period and at a close, so the write rate does not grow with the tick.\n\n* fix(stored-state): one set-aside of an unread file for every store, said where it went, and no false ⚠ after an edit (candybar-law-review-ibyq.6iz)\n\nLaw review pass 1 of #956.\n\n- One executor sets an unread state file aside, for the answers book's\n  transaction and a held store's load alike. It moves the file the bytes\n  sit in, a link's target, so a symlinked answers book keeps its unread\n  bytes and stays a link.\n- One report type and one daemon translator: every store's load is\n  logged (no file, N sessions and M dropped, set aside, refused), and a\n  set-aside or a drop is a ⚠ event, the answers book's included.\n- A renderer hands the host only what a load keeps, so edit mode's keys\n  and a draft's steps never reach the file and a routine restart shows\n  no ⚠.\n- The holder keeps one fact for \"the file lags the map\", cleared only\n  once a save returns. A put of what a session holds is a hearing, and\n  every read before the load throws.\n- One move-to-newest for every recency-ordered map. The settings\n  history's hearing moves its one entry in place.\n\n* fix(stored-state): one landing rule for every per-session file, replay what was taken before the load, and a landing carries its own reports (candybar-law-review-ibyq.6iz)\n\nLaw review pass 2. A per-session file writes where its link points, the\nsame rule its set-aside uses. A legacy name is retired unless it is the file\nbeing set aside. A rollback that cannot put a set-aside back names the copy.\nThe config landing returns its store reports, and the daemon restates the\nbar only when a report gave it something to show.\n\n* fix(stored-state): the log names every dropped session, a closed file arms no order write, and a hearing moves only the history's order (candybar-law-review-ibyq.6iz)\n\nLaw review pass 3's minor items. The bar's event about a load's drops\nexpires, so the log line names every session. An order write is armed only\nwhile the file is open. A hearing reorders the settings history through\nreplace, so no session's readers hear of it."
         }
       ]
     }
