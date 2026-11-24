@@ -6,13 +6,16 @@ import path from "node:path";
 import { recordHostBundle } from "../../../src/daemon/host-bundle";
 import { spawnCooldownPath } from "../../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
-import { isConnectable, sendDaemonRequest } from "../../helpers/daemon-wire";
-import { hostOf } from "../../helpers/host";
+import {
+  isConnectable,
+  sendDaemonRequest,
+} from "../../../scripts/lib/daemon/wire";
+import { hostOf } from "../../../scripts/lib/host";
 import {
   prepareIsolatedDaemonEnv,
   type IsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+} from "../../../scripts/lib/daemon/isolated";
+import { until } from "../../../scripts/lib/until";
 
 // [LAW:behavior-not-structure] A statusline client finds no host and starts
 // one, through the same spawn production takes: a real client process, a real
