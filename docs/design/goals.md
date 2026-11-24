@@ -50,6 +50,7 @@ They are related and handled one at a time.
 ### Sessions
 
 - **R-16. Moving a session to another renderer may restart Claude Code.** Avoiding the restart was never a requirement.
+- **R-19. Claude Code starts the bar.** Claude Code's statusline command starts the host when none is running, and the install leaves nothing that starts candybar on its own: no LaunchAgent, login item or system service. Users expect the bar to run because Claude Code runs it, and a process they did not start reads as one they cannot trust.
 
 ### How designs are made
 
