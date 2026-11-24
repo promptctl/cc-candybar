@@ -47,7 +47,6 @@ import {
   renderPicker,
   requireKind,
   requireOptionKind,
-  requireReadBack,
   type OptionAction,
   type PickerStep,
 } from "./picker.js";
@@ -92,8 +91,6 @@ export function optionPalette(
   chosen?: string,
 ): Palette {
   const apply = requireSwatchable(runtime, applyName, helper);
-  // An option named in the template reads no key; the one in force does.
-  if (chosen === undefined) requireReadBack(runtime, applyName, apply, helper);
   const option =
     chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
   // [LAW:parse-dont-validate] A domain's `paletteOf` answers for its members;
@@ -135,7 +132,6 @@ export function swatchesFuncs(
     swatches: {
       fn: (applyName: string, pageName: string): RichText => {
         const apply = requireSwatchable(runtime, applyName, "swatches");
-        requireReadBack(runtime, applyName, apply, "swatches");
         const page = requireKind(
           runtime,
           pageName,
