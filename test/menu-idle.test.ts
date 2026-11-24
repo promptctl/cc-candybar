@@ -28,6 +28,7 @@ import {
   EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
+import { CLICK_MODE_KEY, HOVER_KEY, NO_HOVER } from "../src/config/click-mode";
 import { EDIT_LIVE_KEY, insertGap } from "../src/config/edit-chrome";
 import {
   CLOSING_FLASH_SECONDS,
@@ -305,6 +306,25 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     );
     expect(rt.held("groups.more")).toBe(DISCLOSURE_CLOSED);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBe(0);
+  });
+
+  test("a click mode left on closes with the menus, and the region it hovered goes with it", async () => {
+    const rt = idleBar(BUNDLED);
+    await rt.clickWriting(CLICK_MODE_KEY, "hover");
+    rt.ctx.sessionState.set(SID, HOVER_KEY, "directory");
+    expect(rt.ctx.sessionState.get(SID, CLICK_MODE_KEY)).toBe("hover");
+    await closeIdleMenus(
+      SID,
+      bookedContext(rt.ctx.sessionState, SID),
+      IDLE,
+      rt.ctx,
+      rt.ctx.effects,
+    );
+    expect(rt.ctx.sessionState.get(SID, CLICK_MODE_KEY)).toBe("click");
+    expect(rt.ctx.sessionState.get(SID, HOVER_KEY)).toBe(NO_HOVER);
+    expect(rt.logged).toContain(
+      `menu-idle: closed=${CLICK_MODE_KEY} idle=30.0s timeout=30s (session=${SID})`,
+    );
   });
 
   test("with nothing open it writes nothing, and says so", async () => {

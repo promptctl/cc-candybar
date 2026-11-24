@@ -825,7 +825,14 @@ describe("the preset control's list carries the layout beneath it", () => {
     );
     expect(rows).toEqual({
       default: [
-        ["candybar.menu", "candybar.fps", "host", "directory", "gitaculous"],
+        [
+          "candybar.menu",
+          "candybar.fps",
+          "candybar.clickMode",
+          "host",
+          "directory",
+          "gitaculous",
+        ],
         [
           "model",
           "context",
@@ -837,10 +844,24 @@ describe("the preset control's list carries the layout beneath it", () => {
         ],
       ],
       compact: [
-        ["candybar.menu", "candybar.fps", "directory", "gitaculous", "context"],
+        [
+          "candybar.menu",
+          "candybar.fps",
+          "candybar.clickMode",
+          "directory",
+          "gitaculous",
+          "context",
+        ],
       ],
       verbose: [
-        ["candybar.menu", "candybar.fps", "directory", "gitaculous", "gitPr"],
+        [
+          "candybar.menu",
+          "candybar.fps",
+          "candybar.clickMode",
+          "directory",
+          "gitaculous",
+          "gitPr",
+        ],
         [
           "model",
           "context",
@@ -852,11 +873,20 @@ describe("the preset control's list carries the layout beneath it", () => {
         ],
         ["speed", "tokenSparkline"],
       ],
-      zen: [["candybar.menu", "candybar.fps", "directory", "context"]],
+      zen: [
+        [
+          "candybar.menu",
+          "candybar.fps",
+          "candybar.clickMode",
+          "directory",
+          "context",
+        ],
+      ],
       git: [
         [
           "candybar.menu",
           "candybar.fps",
+          "candybar.clickMode",
           "host",
           "directory",
           "gitaculous",
@@ -868,6 +898,7 @@ describe("the preset control's list carries the layout beneath it", () => {
         [
           "candybar.menu",
           "candybar.fps",
+          "candybar.clickMode",
           "model",
           "context",
           "autocompact",
@@ -880,6 +911,7 @@ describe("the preset control's list carries the layout beneath it", () => {
         [
           "candybar.menu",
           "candybar.fps",
+          "candybar.clickMode",
           "host",
           "directory",
           "gitaculous",
@@ -971,7 +1003,7 @@ describe("the preset control's list carries the layout beneath it", () => {
     // for them whether or not this payload renders them (it renders no host,
     // context, cache timer, or activity).
     const placed = [
-      ["menu", "fps", "host", "directory", "gitaculous"],
+      ["menu", "fps", "clickMode", "host", "directory", "gitaculous"],
       [
         "model",
         "context",

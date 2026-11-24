@@ -195,7 +195,11 @@ describe("a colour-valued domain resolves its own painter", () => {
         lightnessShift: 0,
       },
     };
-    const domains = perConfigDomainsFor({ styles: looks, presets: {} });
+    const domains = perConfigDomainsFor({
+      styles: looks,
+      presets: {},
+      actions: {},
+    });
     const { members, paletteOf } = resolveOptionDomain("styles", domains);
     expect(members).toEqual(["none", "dim"]);
     expect(paletteOf!("dim", RENDER)).toBe(transposedPalette(BASE, looks.dim));
@@ -222,6 +226,7 @@ describe("a colour-valued domain resolves its own painter", () => {
     const domains = perConfigDomainsFor({
       styles: {},
       presets: { compact: {} },
+      actions: {},
     });
     for (const name of ["endcaps", "colorCompatibilities"]) {
       expect(resolveOptionDomain(name, new Map()).paletteOf).toBeUndefined();

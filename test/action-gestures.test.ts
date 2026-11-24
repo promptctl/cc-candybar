@@ -92,13 +92,18 @@ describe("an action's other gestures", () => {
     const link = runs.find((run) => run.text.includes("x"))?.link;
     if (typeof link === "string" || link?.kind !== "action")
       throw new Error("the region draws no action link");
-    expect(link.region).toEqual({ name: "close", gestures: {} });
+    // Its hover binding is the write that makes it the hovered region.
+    expect(link.region).toEqual({
+      name: "close",
+      gestures: {},
+      hover: [{ verb: "set-state", args: ["s1", "candybar.hover", "close"] }],
+    });
   });
 
   test.each([
     [
       "a gesture that is not one",
-      "open: { set: 'panel', to: 'open', on: { hover: 'close' } }, close: { set: 'panel', to: 'closed' },",
+      "open: { set: 'panel', to: 'open', on: { hold: 'close' } }, close: { set: 'panel', to: 'closed' },",
       "ends in a button",
     ],
     [

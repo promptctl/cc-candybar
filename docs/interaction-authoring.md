@@ -940,6 +940,149 @@ derives, so nothing a `do` fires could not be clicked alone.
 - A `do` lists at least two members, none of them twice, and none of them may
   itself be a `do` — list its members directly instead.
 
+### Other gestures, hover and the click mode: `on`
+
+A region's click is its action's own effects. `on:` binds other gestures of
+the pointer to other declared actions, so one region can answer a right click
+or an alt+click without a second region beside it:
+
+```json5 check:pass
+{
+  variables: {
+    panel: { kind: 'state', key: 'panel', default: 'open' },
+    focus: { kind: 'state', key: 'focus', default: 'off' },
+  },
+  actions: {
+    open: {
+      set: 'panel',
+      to: 'open',
+      on: { right: 'close', 'alt+left': 'close', hover: 'blur' },
+    },
+    close: { set: 'panel', to: 'closed' },
+    blur: { set: 'focus', to: 'off' },
+  },
+  segments: {
+    bar: { template: '{{ action "open" "▸ panel" }}' },
+  },
+  root: "bar",
+}
+```
+
+- **A gesture is `[ctrl+][alt+][shift+]` then `left`, `middle` or `right`.**
+  Modifiers may be written in any order and mean the same gesture; binding one
+  gesture twice is an error. `left` alone is the plain click, which is the
+  action's own effects, so `on:` cannot bind it.
+- **A target is any declared action.** It runs against the state the bar drew,
+  as the region's own click does. A target that takes its value from the
+  template (`from`, `int`) is allowed only when the declaring action takes one
+  too: both are given the region's displayed value.
+- **The tmux bar pane delivers every gesture; the statusline delivers the
+  plain click.** Over SSH too: the pane needs no handler on the remote
+  machine, because each gesture's link is signed like the plain click's and
+  a forged or altered one runs nothing. A press leaves keyboard focus where
+  it was.
+- **Hover is a value, not an action.** `.hover` is the name of the action under
+  the pointer, or empty. Every region bound to that action is hovered
+  together, and a region with no named action is never hovered. The pane
+  reports it while tmux `mouse` is on and clears it when the pointer moves onto
+  a cell with no region or the pane stops drawing. tmux sends no motion to a
+  pane the pointer is not over, so hover is the last region the pane saw, not
+  where the pointer is now.
+- **`.surface` says what the drawing surface delivers**, as space-joined
+  gestures (`left` for the statusline). One config draws on both surfaces, so a
+  binding the surface cannot deliver is not an error; use `.surface` to
+  show what only a pane can do:
+
+```json5 check:pass
+{
+  variables: {
+    panel: { kind: 'state', key: 'panel', default: 'open' },
+  },
+  actions: {
+    open: { set: 'panel', to: 'open', on: { right: 'close' } },
+    close: { set: 'panel', to: 'closed' },
+  },
+  segments: {
+    bar: {
+      template: '{{ if eq .hover "open" }}{{ action "open" "▾ panel" }}{{ else }}{{ action "open" "▸ panel" }}{{ end }}',
+    },
+    hint: {
+      template: 'right-click: close',
+      when: '{{ has "right" (splitList " " .surface) }}',
+    },
+  },
+  root: { h: ["bar", "hint"] },
+}
+```
+
+**The click mode.** The statusline cannot see the pointer move or deliver an
+alt+click, so the bar carries a three-way toggle beside the settings door,
+shown only where the surface lacks those gestures. Its glyph is the mode, and a
+click steps it:
+
+| Glyph | Mode    | A click on a region                                                                                                    |
+| ----- | ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `☝`   | `click` | runs the region's action                                                                                               |
+| `⌖`   | `hover` | runs the region's `hover` binding; a region with none becomes the hovered region until another click or a mode change |
+| `⌥`   | `alt`   | runs the region's `alt+left` binding; a region with none is drawn with no link                                         |
+
+A link no action names (a menu's own rows, a picker's option, an authored href) is not a region and is the same in every mode. The mode belongs to the session. It returns to `click` after the same idle
+period that closes menus, and stepping it puts the hovered region away. A
+surface that delivers the mode's own gesture ignores the mode: a pane with
+`mouse` on draws every region by its own gestures.
+
+The toggle, the settings door and the diagnostics indicator work in every mode
+because each binds itself under `hover` and `alt+left` in its own data; nothing
+in the draw exempts them. A control of yours that must stay reachable in every
+mode does the same, by naming itself:
+
+```json5 check:pass
+{
+  variables: {
+    mute: { kind: 'state', key: 'mute', default: 'off' },
+  },
+  actions: {
+    toggleMute: {
+      set: 'mute',
+      cycle: ['off', 'on'],
+      on: { hover: 'toggleMute', 'alt+left': 'toggleMute' },
+    },
+  },
+  segments: {
+    bar: { template: '{{ action "toggleMute" "🔔" "🔕" }}' },
+  },
+  root: "bar",
+}
+```
+
+A gesture that is not one, and the plain click, are refused with their reason:
+
+```json5 check:fail
+{
+  actions: {
+    open: { set: 'panel', to: 'open', on: { hold: 'close' } },
+    close: { set: 'panel', to: 'closed' },
+  },
+}
+```
+
+```error
+ends in a button
+```
+
+```json5 check:fail
+{
+  actions: {
+    open: { set: 'panel', to: 'open', on: { left: 'close' } },
+    close: { set: 'panel', to: 'closed' },
+  },
+}
+```
+
+```error
+is the plain click, which is the action's own effects
+```
+
 ### A command button: `slash`
 
 The settings menu already carries `/compact`, `/model` and `/clear` (the
@@ -1379,7 +1522,8 @@ the bar's first row, and it wears the theme's tint like every other cell.
 is shared by every preset). Place the reserved `candybar.menu` segment name
 yourself to move it anywhere else. The cell beside it, saying how the bar is
 redrawn (`≤30 fps`, ` ≤1 fps` or ` polled`), goes wherever the door goes, and
-stays on the bar while the menu is open.
+stays on the bar while the menu is open. Beside it sits the click-mode toggle
+(see *Other gestures, hover and the click mode*), where the surface needs it.
 
 ```json5 check:pass
 { globals: { menuGlyph: "🍬" } }
@@ -1664,7 +1808,7 @@ of the value in force sits beside the label: `◀ style ▀▀▀ ▶`.
 ```
 
 ```render
- 🍫   polled  ✱ Opus 4.8 󰶼 
+ 🍫   polled  ☝  ✱ Opus 4.8 󰶼 
  ◀ theme ▀▀▀ ▶ 
 ```
 

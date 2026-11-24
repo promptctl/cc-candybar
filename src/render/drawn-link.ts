@@ -45,6 +45,11 @@ export interface DrawnAction {
 export interface Region {
   readonly name: string;
   readonly gestures: Readonly<Record<GestureName, readonly DrawnEffect[]>>;
+  // What a click means in hover mode (src/config/click-mode.ts): the region's
+  // `hover` binding, or the write that makes it the hovered region. Only the
+  // draw's click-mode step reads it, and a frame it has been through carries
+  // none, the same absence a region with no binding for a mode shows.
+  readonly hover?: readonly DrawnEffect[];
 }
 
 export function actionTarget(

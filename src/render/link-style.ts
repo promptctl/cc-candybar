@@ -33,6 +33,13 @@ class LinkProof {
               : {
                   region: Object.freeze({
                     name: target.region.name,
+                    ...(target.region.hover === undefined
+                      ? {}
+                      : {
+                          hover: Object.freeze(
+                            target.region.hover.map(capture),
+                          ),
+                        }),
                     gestures: Object.freeze(
                       Object.fromEntries(
                         Object.entries(target.region.gestures).map(

@@ -216,6 +216,7 @@ export function registerOptionDomain(
 export function perConfigDomainsFor(config: {
   readonly styles: Readonly<Record<string, ThemeKey>>;
   readonly presets: Readonly<Record<string, unknown>>;
+  readonly actions: Readonly<Record<string, unknown>>;
 }): ReadonlyMap<string, ResolvedDomain> {
   return new Map([
     [
@@ -237,6 +238,9 @@ export function perConfigDomainsFor(config: {
     // whether or not a config declares it, and presetNames is where that is
     // stated (once, for the gate and the render alike).
     ["presets", { members: presetNames(config.presets) }],
+    // The regions a click can make hovered are the actions the config
+    // declares, which the hover write's gate admits as its values.
+    ["regions", { members: Object.keys(config.actions) }],
   ]);
 }
 

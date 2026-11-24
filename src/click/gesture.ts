@@ -76,7 +76,9 @@ export const ALL_GESTURES: readonly GestureName[] = BUTTONS.flatMap((button) =>
   ),
 );
 
-function parseOneDelivered(entry: unknown): Asked<Delivered> {
+// [LAW:parse-dont-validate] The one spelling of a gesture or hover, read:
+// what an action's `on:` key and a pane's delivered list are both made of.
+export function parseOneDelivered(entry: unknown): Asked<Delivered> {
   if (typeof entry !== "string")
     return {
       kind: "failed",

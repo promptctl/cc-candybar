@@ -66,7 +66,8 @@ import {
   VERB_UNDO,
   VERB_SLASH,
 } from "../click/wire.js";
-import type { GestureName } from "../click/gesture.js";
+import { HOVER, type GestureName } from "../click/gesture.js";
+import { HOVER_REGION } from "../config/click-mode.js";
 import {
   actionTarget,
   type DrawnEffect,
@@ -1197,21 +1198,33 @@ export function renderAction(
   // [LAW:one-source-of-truth] A gesture's effects are realized by the same
   // fold as the click's, against the same state, so each link delivers what
   // the frame drew for it.
-  const gestures = Object.fromEntries(
+  const realized = Object.fromEntries(
     Object.entries(declared.on).map(([gesture, target]) => [
       gesture,
       realize(
         runtime.compiled.get(target)!,
         display.plain,
-        undefined,
+        boundValue,
         store,
         sessionId,
       ).effects,
     ]),
   );
+  // Hover is no gesture a pane presses: it is what a click means in hover
+  // mode, so the region's published gestures never carry it. A region binding
+  // none makes itself the hovered one.
+  const { [HOVER]: hoverBinding, ...gestures } = realized;
+  const hover =
+    hoverBinding ??
+    realize(runtime.compiled.get(HOVER_REGION)!, name, name, store, sessionId)
+      .effects;
+  // [LAW:one-source-of-truth] The region carries what a click means in every
+  // mode, and nothing here reads the mode or the surface: those are one
+  // draw's, and a cell is drawn once for every lane that shows it. The one
+  // step that picks a link by them is src/render/click-mode-frame.ts.
   return linkOver(
     display,
-    actionTarget(effects, undefined, { name, gestures }),
+    actionTarget(effects, undefined, { name, gestures, hover }),
     active,
   );
 }

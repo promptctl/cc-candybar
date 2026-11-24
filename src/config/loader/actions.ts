@@ -27,8 +27,7 @@ import {
 } from "../action.js";
 import nodePath from "node:path";
 import {
-  gestureName,
-  parseGesture,
+  parseOneDelivered,
   PLAIN_CLICK,
   type GestureName,
 } from "../../click/gesture.js";
@@ -174,13 +173,15 @@ function validateGestures(
   let valid = true;
   for (const [spelling, target] of Object.entries(raw)) {
     const at = `${path}.on.${spelling}`;
-    const gesture = parseGesture(spelling);
+    // `hover` is a binding too: what a click means on a surface that cannot
+    // see the pointer move, in the statusline's hover mode.
+    const gesture = parseOneDelivered(spelling);
     if (gesture.kind === "failed") {
       issue(ctx, at, gesture.reason);
       valid = false;
       continue;
     }
-    const name = gestureName(gesture.value);
+    const name = gesture.value;
     if (name === PLAIN_CLICK) {
       issue(
         ctx,

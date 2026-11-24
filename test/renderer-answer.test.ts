@@ -51,6 +51,7 @@ import { renderWidth } from "../src/renderer/render-payload";
 import { parseFrame, textOf } from "../src/render/frame";
 import { MAX_VIEWER_ROWS } from "../src/render/diagnostics";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { CLICK_MODE_KEY } from "../src/config/click-mode";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import {
   heardContextOf,
@@ -1070,6 +1071,27 @@ describe("a draw", () => {
       parts.renderCache.presentations.diagnostics(SESSION, "request"),
     ).toBe(warned);
     expect(recorded).toHaveLength(deliveries);
+  });
+
+  // [LAW:no-ambient-temporal-coupling] A click mode left on is open state as a
+  // menu is, so the draw reports it to the idle clock, which ends it.
+  test.each([
+    ["click", false],
+    ["hover", true],
+    ["alt", true],
+  ])("a session in click mode %s draws a menu shown: %s", async (mode, shown) => {
+    const { r, parts, rig } = renderer();
+    await request({ r, rig });
+    rig.sessionState.set(SESSION, CLICK_MODE_KEY, mode);
+    using setup = setUpRender(parts, checked(), READ, []);
+    const { candidate } = drawRender(
+      parts,
+      setup,
+      ANSWERING,
+      UNFOLLOWED_FEEDS,
+      null,
+    );
+    expect(candidate.frame.menu.shown).toBe(shown);
   });
 });
 

@@ -137,9 +137,11 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const second = view.draw({ x: "1" }, B);
     expect(first.evaluated).toBeGreaterThan(second.evaluated);
     // `stamp`'s body, the rate beside the settings door, which reads who the
-    // frame is drawn for (`drawing.fps`, a draw projection), and the door's
-    // own cell, whose indicator reads the draw's diagnostics; nothing else.
-    expect(second.evaluated).toBe(3);
+    // frame is drawn for (`drawing.fps`, a draw projection), the door's own
+    // cell, whose indicator reads the draw's diagnostics, and the click-mode
+    // toggle's cell and its gate, which read what the surface delivers;
+    // nothing else.
+    expect(second.evaluated).toBe(5);
     expect(textOf(second.frame)).toContain(String(Math.floor(B)));
     expect(view.errors).toEqual([]);
   });
@@ -148,9 +150,9 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const view = viewOf(CONFIG);
     view.draw({ x: "1" }, A);
     const changed = view.draw({ x: "2" }, A);
-    // `stamp`'s body, the door's two cells, and `shown`'s body: `shown`'s
+    // `stamp`'s body, the door's cells, and `shown`'s body: `shown`'s
     // colours read no `x`.
-    expect(changed.evaluated).toBe(4);
+    expect(changed.evaluated).toBe(6);
     expect(textOf(changed.frame)).toContain("x=2");
   });
 
@@ -217,7 +219,9 @@ describe("what reads the instant is a projection, however it reaches the clock",
         ),
       ).compiled.layoutReadsInstant;
     expect(gated("{{ gt (unixEpoch now) 0 }}")).toBe(true);
-    expect(gated("true")).toBe(false);
+    // Every layout holds the click-mode toggle, gated on the surface the draw
+    // is for, which a lane answers: so no layout is gated on nothing.
+    expect(gated("true")).toBe(true);
   });
 
   // [LAW:no-silent-failure] The fold reads names; a template reaching a
@@ -264,7 +268,9 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       view.errors.length = 0;
       view.draw({}, at);
       expect(view.errors).toEqual([
-        expect.stringMatching(/^segment "gated": .*only available inside a segment/),
+        expect.stringMatching(
+          /^segment "gated": .*only available inside a segment/,
+        ),
       ]);
     }
   });
@@ -310,9 +316,9 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       ),
     );
     view.draw({}, A);
-    // The settings door's two cells alone, which read who the frame is drawn
-    // for and the draw's diagnostics.
-    expect(view.draw({}, B).evaluated).toBe(2);
+    // The settings door's cells alone, which read who the frame is drawn for,
+    // the draw's diagnostics and the surface.
+    expect(view.draw({}, B).evaluated).toBe(4);
     expect(view.errors).toEqual([]);
   });
 

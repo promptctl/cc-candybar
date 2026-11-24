@@ -1459,8 +1459,9 @@ export function validateDeclarations(
       const problem =
         target === undefined
           ? `references unknown action "${member}"`
-          : bindsTemplateValue(cfg.actions, target)
-            ? `"${member}" takes its value from the template, so it cannot answer a gesture, which binds none`
+          : bindsTemplateValue(cfg.actions, target) &&
+              !bindsTemplateValue(cfg.actions, a)
+            ? `"${member}" takes its value from the template, and ${name} binds none to give it`
             : undefined;
       if (problem !== undefined) {
         ctx.issues.push({

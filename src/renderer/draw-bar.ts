@@ -64,7 +64,14 @@ import {
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
 import type { PanePointer } from "../renderer-interface/interface.js";
-import { pointerFacts } from "../render/pointer-facts.js";
+import { pointerFacts, surfaceOf } from "../render/pointer-facts.js";
+import { inClickMode } from "../render/click-mode-frame.js";
+import {
+  CLICK_MODE_KEY,
+  HOVER_KEY,
+  modeInForce,
+  modeIsOpen,
+} from "../config/click-mode.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { TurnTime } from "./turn-time.js";
 import {
@@ -596,11 +603,15 @@ export function drawRender(
         })),
     ],
   );
+  const held = {
+    mode: sessionState.get(sessionId, CLICK_MODE_KEY),
+    hover: sessionState.get(sessionId, HOVER_KEY),
+  };
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
     feeds,
-    ...pointerFacts(pointer),
+    ...pointerFacts(pointer, held),
     ...instantFacts(document.builtins, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
@@ -652,7 +663,7 @@ export function drawRender(
   // [LAW:one-source-of-truth] Template term.cols and the physical strip use
   // the same width, including a client whose request waited through a resize.
   const {
-    frame,
+    frame: drawnFrame,
     waited,
     memory,
     warnings: drawnWarnings,
@@ -669,6 +680,12 @@ export function drawRender(
   // the frame reaches its client, so a draw that throws, or an answer that
   // never arrives, leaves the shown frame's copies.
   const copies = diagnosticCopies(diagnostics);
+  // [LAW:single-enforcer] The one place a lane's click mode picks the links its
+  // frame shows: a cell is drawn once for every lane (src/render/click-mode-frame.ts).
+  const frame = inClickMode(
+    drawnFrame,
+    modeInForce(held.mode ?? undefined, surfaceOf(pointer)),
+  );
   // [LAW:one-source-of-truth] The idle period this walk drew with.
   noteFacts(facts, {
     menuIdle:
@@ -818,7 +835,11 @@ export function drawRender(
         copies,
         menu: {
           tick: readings.tick,
-          shown: frame.rows.some((row) => row.kind === "menu"),
+          // [LAW:no-ambient-temporal-coupling] A click mode the user left on
+          // is open state as a menu is: the same idle period ends it.
+          shown:
+            frame.rows.some((row) => row.kind === "menu") ||
+            modeIsOpen(held.mode ?? undefined),
           timeoutS: effective.menuTimeout,
         },
       },

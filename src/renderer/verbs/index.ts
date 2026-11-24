@@ -48,6 +48,13 @@ import {
   type DisclosureNest,
 } from "../../config/disclosure-nest";
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
+import {
+  CLICK_MODE_KEY,
+  DEFAULT_CLICK_MODE,
+  HOVER_KEY,
+  modeIsOpen,
+  NO_HOVER,
+} from "../../config/click-mode";
 import type { Drawing } from "../../config/lanes";
 import { closingView } from "../closing-view";
 import type { Gates } from "../../daemon/foundations/gates";
@@ -1494,14 +1501,27 @@ export function closeIdleMenus(
           !hasWork ||
           !nest.inside(root).some(({ key }) => key === EDIT_MODE_KEY),
       );
+    // [LAW:no-ambient-temporal-coupling] A click mode left on ends with the
+    // menus, and the region it made hovered with it.
+    const modeOpen = modeIsOpen(
+      c.sessionState.get(sid, CLICK_MODE_KEY) ?? undefined,
+    );
     c.menu.choose(
       sid,
-      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+      [
+        ...roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+        ...(modeOpen
+          ? [
+              { key: CLICK_MODE_KEY, value: DEFAULT_CLICK_MODE },
+              { key: HOVER_KEY, value: NO_HOVER },
+            ]
+          : []),
+      ],
       () => menuContext(c, sid, sessionConfig(c)),
     );
     c.log(
       "info",
-      `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
+      `menu-idle: closed=${[...roots.map(({ key }) => key), ...(modeOpen ? [CLICK_MODE_KEY] : [])].join(",") || "-"} ` +
         `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
     );
   });

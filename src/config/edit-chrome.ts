@@ -207,7 +207,7 @@ interface ChromeArtifacts {
 // and both click gates resolve against this one map, so a name the render
 // draws options from is never one the loader refuses or a gate cannot find.
 export function configOptionDomains(
-  config: Pick<DslConfig, "styles" | "presets" | "segments">,
+  config: Pick<DslConfig, "styles" | "presets" | "segments" | "actions">,
 ): ReadonlyMap<string, ResolvedDomain> {
   return new Map([
     ...perConfigDomainsFor(config),

@@ -39,10 +39,11 @@ const DIVIDER = "\u{E0B1}";
 // joiner walk's output — no width-driven wrap to perturb it.
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
-
 
 function chevronCount(rendered: Pick<Frame, "rows">): number {
   return textOf(rendered).split(CHEVRON).length - 1;
@@ -52,10 +53,24 @@ function draw(src: string, hookData: Record<string, unknown>) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, config.globals.default_empty_value, sessionState);
+  const registry = new SourceRegistry(
+    store,
+    config.globals.default_empty_value,
+    sessionState,
+  );
   try {
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-    return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS);
+    const compiled = registerDslConfig(config, registry, {
+      cwd: process.cwd(),
+    });
+    return drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      hookData,
+      instantOf(new Date()),
+      OPTS,
+    );
   } finally {
     registry.dispose();
   }
@@ -66,24 +81,29 @@ function render(src: string, hookData: Record<string, unknown>): Frame {
 }
 
 describe("input reading in a statusline cell", () => {
-  test.each(["(empty)", "7"])("an invalid number draws its failure with global empty value %s", (empty) => {
-    const src = `{
+  test.each(["(empty)", "7"])(
+    "an invalid number draws its failure with global empty value %s",
+    (empty) => {
+      const src = `{
       globals: { default_empty_value: '${empty}' },
       variables: { count: { kind: 'input', path: 'count', type: 'number' } },
       segments: { sample: { template: 'count={{ .count }}' } },
       root: { h: ['${SETTINGS_ANCHOR}', 'sample'] },
     }`;
-    const bad = draw(src, { count: "bad input" });
-    expect(textOf(bad.frame)).toContain("⚠");
-    expect(textOf(bad.frame)).not.toContain("count=");
-    expect(segmentErrorsOf(bad.warnings)).toEqual([
-      expect.stringMatching(/variable "count": Cannot cast "bad input" to number/),
-    ]);
+      const bad = draw(src, { count: "bad input" });
+      expect(textOf(bad.frame)).toContain("⚠");
+      expect(textOf(bad.frame)).not.toContain("count=");
+      expect(segmentErrorsOf(bad.warnings)).toEqual([
+        expect.stringMatching(
+          /variable "count": Cannot cast "bad input" to number/,
+        ),
+      ]);
 
-    const good = draw(src, { count: 0 });
-    expect(textOf(good.frame)).toContain("count=0");
-    expect(segmentErrorsOf(good.warnings)).toEqual([]);
-  });
+      const good = draw(src, { count: 0 });
+      expect(textOf(good.frame)).toContain("count=0");
+      expect(segmentErrorsOf(good.warnings)).toEqual([]);
+    },
+  );
 
   test("an authored default answers an invalid typed reading, and omission still defaults to string", () => {
     const src = `{
@@ -171,10 +191,10 @@ describe("segment is the rendering unit (2de.10)", () => {
     }`;
     const out = render(src, { session_id: "s1" });
 
-    // The cells are the door, its frame rate, a and b: the lead, three joins
-    // and the tail are all arrows.
+    // The cells are the door, its frame rate, the click-mode toggle, a and b:
+    // the lead, four joins and the tail are all arrows.
     expect(textOf(out).split(DIVIDER).length - 1).toBe(0);
-    expect(chevronCount(out)).toBe(5);
+    expect(chevronCount(out)).toBe(6);
     expect(textOf(out)).toMatch(new RegExp(`AAA\\s*${CHEVRON}\\s*BBB`));
   });
 });
