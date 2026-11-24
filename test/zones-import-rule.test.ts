@@ -148,23 +148,41 @@ const REFUSED = {
     file: IN_REST,
     code: `/// <reference path="../../test/helpers/x.ts" />\nexport const x = 1;\n`,
   },
+  // What a loader loads is an edge like an import's, whatever name binds it.
+  ...Object.fromEntries(
+    Object.entries({
+      createRequireOfJest: `import { createRequire } from "node:module";\nexport const x = createRequire(import.meta.url)("jest");\n`,
+      boundLoaderOfJest: `import { createRequire } from "node:module";\nconst load = createRequire(import.meta.url);\nexport const x = load("jest");\n`,
+      renamedCreateRequireOfJest: `import { createRequire as make } from "node:module";\nexport const x = make(import.meta.url)("@jest/globals");\n`,
+      memberCreateRequireOfJest: `import * as m from "node:module";\nexport const x = m.createRequire(import.meta.url)("jest");\n`,
+      builtinLoaderOfJest: `export const x = process.getBuiltinModule("node:module").createRequire(import.meta.url)("jest");\n`,
+      loaderOfTestPath: `import { createRequire } from "node:module";\nexport const x = createRequire(import.meta.url)("../../test/helpers/x.cjs");\n`,
+      // A base no lint can read places no relative source.
+      loaderOfComputedBase: `import { createRequire } from "node:module";\nexport const x = createRequire(process.cwd())("./x");\n`,
+      // A loader used other than by a call with its source.
+      requireAliased: `const load = require;\nexport const x = load("jest");\n`,
+      requireCalledThroughCall: `export const x = require.call(null, "jest");\n`,
+      loaderExported: `import { createRequire } from "node:module";\nexport const load = createRequire(import.meta.url);\n`,
+      createRequireHandedOn: `import { createRequire } from "node:module";\nexport const make = [createRequire];\n`,
+      createRequireReexported: `export { createRequire } from "node:module";\n`,
+    }).map(([name, code]) => [name, { file: IN_REST, code }]),
+  ),
+  destructuredCreateRequireOfJest: {
+    file: "src/daemon/probe.cjs",
+    code: `const { createRequire } = require("node:module");\nmodule.exports = createRequire(__filename)("jest");\n`,
+  },
+  rendererBuiltinOfDisk: {
+    file: IN_RENDERER,
+    code: `export const fs = process.getBuiltinModule("node:fs");\n`,
+  },
+  rendererDestructuredBuiltinOfDisk: {
+    file: IN_RENDERER,
+    code: `const { getBuiltinModule } = process;\nexport const fs = getBuiltinModule("node:fs");\n`,
+  },
   restToLib: { file: IN_REST, code: imp("../../scripts/lib/x") },
   restToTools: { file: IN_REST, code: imp("../../scripts/drive-bar") },
   // A path no row of the table names is in no zone.
   restToUnlisted: { file: IN_REST, code: imp("../../docs/design/probes/p6") },
-};
-
-// [LAW:single-enforcer] What a `createRequire` loader loads no lint can place,
-// so its module is its owners' alone.
-const OWNED = {
-  loaderOutsideItsOwners: {
-    file: IN_REST,
-    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
-  },
-  loaderRequiredOutsideItsOwners: {
-    file: "src/daemon/probe.cjs",
-    code: `module.exports = require("module").createRequire(".");\n`,
-  },
 };
 
 const ALLOWED = {
@@ -174,9 +192,14 @@ const ALLOWED = {
       { file: IN_REST, code: imp(pkg) },
     ]),
   ),
-  loaderAtItsOwner: {
-    file: "src/install/index.ts",
-    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
+  // `.resolve` locates a file and loads nothing, whatever its source.
+  loaderResolvingComputedSource: {
+    file: IN_REST,
+    code: `import { createRequire } from "node:module";\nexport const at = (name: string) => createRequire(process.cwd()).resolve(\`\${name}/package.json\`);\n`,
+  },
+  localLoaderOfShared: {
+    file: IN_REST,
+    code: `import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\nexport const x = require("../utils/outcome");\n`,
   },
   // A method that is no loader shares the name.
   methodNamedRequire: {
@@ -221,7 +244,7 @@ describe("the zones import rule", () => {
     const lintFrom = (cwd: string, root = REPO) =>
       Object.fromEntries(
         Object.entries(
-          lintCases({ ...REFUSED, ...OWNED, ...ALLOWED }, UNTYPED, {
+          lintCases({ ...REFUSED, ...ALLOWED }, UNTYPED, {
             cwd,
             root,
           }),
@@ -259,15 +282,6 @@ describe("the zones import rule", () => {
     (name, at) => {
       expect(found[at][name]).toEqual([
         expect.stringContaining("[LAW:one-way-deps]"),
-      ]);
-    },
-  );
-
-  test.each(each(OWNED))(
-    "a loader outside its owners (%s) fails lint from %s",
-    (name, at) => {
-      expect(found[at][name]).toEqual([
-        expect.stringContaining("[LAW:single-enforcer]"),
       ]);
     },
   );

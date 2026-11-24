@@ -77,6 +77,10 @@ const REFUSED: Record<string, LintCase> = {
       ],
     ]),
   ),
+  "a tool's loader of Jest": {
+    file: at("scripts/", "mjs"),
+    code: `import { createRequire } from "node:module";\nexport const x = createRequire(import.meta.url)("jest-mock");\n`,
+  },
   // scripts/lib imports only the app and itself, so it never loads a tool.
   "scripts/lib's import of a tool": {
     file: at("scripts/lib/"),
@@ -94,14 +98,6 @@ const GLOBALS: Record<string, LintCase> = Object.fromEntries(
   ),
 );
 
-// [LAW:single-enforcer] What a `createRequire` loader loads no lint can place.
-const LOADER: Record<string, LintCase> = {
-  "a tool's import of the loaders' module": {
-    file: at("scripts/", "mjs"),
-    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
-  },
-};
-
 const ALLOWED: Record<string, LintCase> = {
   ...Object.fromEntries(
     NOT_JEST_PACKAGES.map((pkg) => [
@@ -109,9 +105,9 @@ const ALLOWED: Record<string, LintCase> = {
       { file: at("scripts/"), code: imp(pkg) },
     ]),
   ),
-  "a loader at its owner": {
-    file: "scripts/test-report.mjs",
-    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
+  "a tool's loader of scripts/lib": {
+    file: at("scripts/", "mjs"),
+    code: `import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\nexport const x = require("./lib/x.cjs");\n`,
   },
   "Node's own globals in a tool's JavaScript": {
     file: at("scripts/lib/", "cjs"),
@@ -143,7 +139,7 @@ describe("the tools lint", () => {
 
   beforeAll(() => {
     const messages = lintCases(
-      { ...REFUSED, ...GLOBALS, ...LOADER, ...ALLOWED },
+      { ...REFUSED, ...GLOBALS, ...ALLOWED },
       {
         overrideConfigFile: "eslint.tools.config.mjs",
       },
@@ -176,12 +172,6 @@ describe("the tools lint", () => {
   test.each(Object.keys(GLOBALS))("Jest's %s fails lint", (name) => {
     const global = name.split(" ")[0];
     expect(found[name]).toEqual([`no-undef: '${global}' is not defined.`]);
-  });
-
-  test.each(Object.keys(LOADER))("%s fails lint", (name) => {
-    expect(found[name]).toEqual([
-      expect.stringContaining("[LAW:single-enforcer]"),
-    ]);
   });
 
   test.each(Object.keys(ALLOWED))("%s passes lint", (name) => {

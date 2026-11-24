@@ -349,17 +349,19 @@ const importDirection = {
     // Where an edge's source leads: a package, whose zone is the one that
     // owns it or none; a path in the repo, whose zone is its row's; or a path
     // outside the repo, which is in no zone.
-    const targetOf = (source) => {
+    const targetOf = (source, base) => {
       if (!source.startsWith(".") && !path.isAbsolute(source))
         return { kind: "package", name: source, zone: packageZoneOf(source) };
-      const key = moduleKey(path.resolve(dir, source));
+      const key = moduleKey(path.resolve(base, source));
       return {
         kind: "path",
         name: key,
         zone: outside(key) ? "outside the repo" : zoneOf(key),
       };
     };
-    const check = (node, source) => {
+    // `base` is the directory a relative source resolves from: this file's,
+    // or null for a loader built on a base no lint can read.
+    const check = (node, source, base = dir) => {
       if (source === null) {
         context.report({
           node,
@@ -367,21 +369,20 @@ const importDirection = {
         });
         return;
       }
-      const to = targetOf(source);
+      if (base === null && (source.startsWith(".") || path.isAbsolute(source))) {
+        context.report({
+          node,
+          message: `A loader whose base is computed loads ${source} from no place a lint can read. [LAW:one-way-deps]`,
+        });
+        return;
+      }
+      const to = targetOf(source, base);
       // [LAW:one-way-deps] One judgment of every edge, a package's as a
       // path's: Jest's packages are the test zone's.
       if (to.zone !== null && !mayImport(fromZone, to.zone)) {
         context.report({
           node,
           message: `${fromZone} ${from} imports ${to.zone} ${to.name}. ${REFUSAL[to.zone]} [LAW:one-way-deps]`,
-        });
-      }
-      // [LAW:single-enforcer] A loader the reader cannot follow is its
-      // owners' alone, where a review reads each module it loads.
-      if (LOADER_MODULES.includes(source) && !LOADER_OWNERS.includes(from)) {
-        context.report({
-          node,
-          message: `${from} imports ${source}, whose loaders (\`createRequire\`) load what no lint can place. Only ${LOADER_OWNERS.join(", ")} may. [LAW:single-enforcer]`,
         });
       }
       if (!rendering || typeOnly(node)) return;
@@ -409,15 +410,87 @@ const importDirection = {
         : node.type === "TemplateLiteral" && node.expressions.length === 0
           ? node.quasis[0].value.cooked
           : null;
-    // The spellings of an edge it reads: `import`, `export … from`,
-    // `import()`, the type `import("…").T`, `import x = require("…")`, a call
-    // of `require` or `module.require`, and a triple-slash reference to types
-    // or a path. What a `createRequire`
-    // loader loads it cannot read, so that loader is owned.
     const fromSource = (node) =>
       node.source && check(node, sourceOf(node.source));
-    const fromCall = (node) =>
-      check(node, node.arguments[0] ? sourceOf(node.arguments[0]) : null);
+    // [LAW:one-way-deps] What a loader Node hands code loads is an edge like
+    // an import's: `require`, `module.require`, `process.getBuiltinModule`,
+    // and the loader `createRequire` makes, under whatever name it is bound
+    // to. A loader is used by a call with its source, which is judged, or by
+    // `.resolve`, which locates and loads nothing. Any other use (an alias,
+    // `.call`, an export) carries it where no lint follows, so it is refused.
+    const refuseUse = (node, what) =>
+      context.report({
+        node,
+        message: `${what} is used other than by a call with its source, so what it loads no lint can place. [LAW:one-way-deps]`,
+      });
+    // Each read of a variable a declaration binds, by its name in the
+    // declaration.
+    const readsOf = (declaration, name) =>
+      context.sourceCode
+        .getDeclaredVariables(declaration)
+        .filter((variable) => variable.name === name)
+        .flatMap((variable) => variable.references)
+        .filter((reference) => !reference.init)
+        .map((reference) => reference.identifier);
+    const calledAs = (node) =>
+      node.parent.type === "CallExpression" && node.parent.callee === node;
+    // An expression whose value is a loader, judged where it stands.
+    const loaderUse = (node, base, what) => {
+      const { parent } = node;
+      if (calledAs(node)) {
+        check(parent, parent.arguments[0] ? sourceOf(parent.arguments[0]) : null, base);
+        return;
+      }
+      if (
+        parent.type === "MemberExpression" &&
+        parent.object === node &&
+        !parent.computed &&
+        parent.property.name === "resolve" &&
+        calledAs(parent)
+      )
+        return;
+      if (
+        parent.type === "VariableDeclarator" &&
+        parent.init === node &&
+        parent.id.type === "Identifier" &&
+        parent.parent.parent.type !== "ExportNamedDeclaration"
+      ) {
+        for (const read of readsOf(parent, parent.id.name)) loaderUse(read, base, what);
+        return;
+      }
+      refuseUse(node, what);
+    };
+    // A `createRequire` call resolves relative sources from its base: this
+    // file's directory when the base names this file, and none a lint can
+    // read otherwise.
+    const baseOf = (call) => {
+      const [at] = call.arguments;
+      const namesThisFile =
+        (at?.type === "MemberExpression" &&
+          at.object.type === "MetaProperty" &&
+          at.property.name === "url") ||
+        (at?.type === "Identifier" && at.name === "__filename");
+      return namesThisFile ? dir : null;
+    };
+    const makerUse = (node) =>
+      calledAs(node)
+        ? loaderUse(node.parent, baseOf(node.parent), "A `createRequire` loader")
+        : refuseUse(node, "`createRequire`");
+    const builtinUse = (node) => loaderUse(node, dir, "`getBuiltinModule`");
+    // A loader destructured out of its module or of `process`.
+    const fromPattern = (property, use) => {
+      const pattern = property.parent;
+      const declarator = pattern.parent;
+      if (pattern.type !== "ObjectPattern" || declarator.type !== "VariableDeclarator") return;
+      if (property.value.type !== "Identifier") {
+        refuseUse(property, `\`${property.key.name}\``);
+        return;
+      }
+      for (const read of readsOf(declarator, property.value.name)) use(read);
+    };
+    // The spellings of an edge it reads: `import`, `export … from`,
+    // `import()`, the type `import("…").T`, `import x = require("…")`, a
+    // triple-slash reference to types or a path, and a loader's call.
     return {
       Program: () => {
         for (const comment of context.sourceCode.getAllComments()) {
@@ -434,35 +507,51 @@ const importDirection = {
               : source,
           );
         }
+        // Node's `require` and `module`, wherever this file reads them.
+        for (const scope of context.sourceCode.scopeManager.scopes) {
+          for (const { identifier, resolved } of scope.references) {
+            if (resolved !== null && resolved.scope.type !== "global") continue;
+            if (identifier.name === "require") loaderUse(identifier, dir, "`require`");
+            const { parent } = identifier;
+            if (
+              identifier.name === "module" &&
+              parent.type === "MemberExpression" &&
+              parent.object === identifier &&
+              parent.property.name === "require"
+            )
+              loaderUse(parent, dir, "`module.require`");
+          }
+        }
       },
       ImportDeclaration: fromSource,
-      ExportNamedDeclaration: fromSource,
-      ExportAllDeclaration: fromSource,
+      ExportNamedDeclaration: (node) => {
+        fromSource(node);
+        if (!LOADER_MODULES.includes(node.source?.value)) return;
+        for (const specifier of node.specifiers)
+          if (specifier.local.name === "createRequire") makerUse(specifier.local);
+      },
+      ExportAllDeclaration: (node) => {
+        fromSource(node);
+        if (LOADER_MODULES.includes(node.source.value)) refuseUse(node, "`createRequire`");
+      },
       ImportExpression: fromSource,
       TSImportType: (node) => check(node, sourceOf(node.source)),
       TSExternalModuleReference: (node) =>
         check(node, sourceOf(node.expression)),
-      "CallExpression[callee.type='Identifier'][callee.name='require']": fromCall,
-      "CallExpression[callee.object.name='module'][callee.property.name='require']": fromCall,
+      "ImportSpecifier[imported.name='createRequire']": (node) => {
+        if (!LOADER_MODULES.includes(node.parent.source.value)) return;
+        for (const read of readsOf(node, node.local.name)) makerUse(read);
+      },
+      "MemberExpression[computed=false][property.name='createRequire']": makerUse,
+      "MemberExpression[computed=false][property.name='getBuiltinModule']": builtinUse,
+      "Property[key.name='createRequire']": (node) => fromPattern(node, makerUse),
+      "Property[key.name='getBuiltinModule']": (node) => fromPattern(node, builtinUse),
     };
   },
 };
 
-// [LAW:single-enforcer] The module whose loaders take a computed path, and
-// the files that may import it, each for what it does with it:
-//   scripts/import-zones       asks whether a specifier names a builtin
-//   scripts/lib/daemon/process resolves tsx's path, which it runs
-//   scripts/pr-title           resolves a preset from commit-analyzer's install
-//   scripts/test-report        requires its own scripts/lib, by `require`
-//   src/install/index          resolves an installed package's files
+// The module whose `createRequire` makes a loader.
 const LOADER_MODULES = ["module", "node:module"];
-const LOADER_OWNERS = [
-  "scripts/import-zones",
-  "scripts/lib/daemon/process",
-  "scripts/pr-title",
-  "scripts/test-report",
-  "src/install/index",
-];
 
 // The one import-direction rule: src's config runs it, and so does the tools'
 // (eslint.tools.config.mjs). [LAW:single-enforcer]

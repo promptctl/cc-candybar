@@ -26,6 +26,6 @@
 
     "types": ["node"]
   },
-  "include": ["src/**/*", "site/**/*.ts", "scripts/**/*.ts", "scripts/**/*.mts", "scripts/lib/**/*", "proto-looks/**/*.ts"],
+  "include": ["src/**/*", "site/**/*", "scripts/**/*", "proto-looks/**/*"],
   "exclude": ["node_modules", "dist"]
 }
