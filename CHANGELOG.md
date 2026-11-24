@@ -1,3 +1,9 @@
+## [1.236.15](https://github.com/promptctl/cc-candybar/compare/v1.236.14...v1.236.15) (2026-11-24)
+
+### Bug Fixes
+
+* **click:** a click the daemon has read runs however late its turn comes ([#947](https://github.com/promptctl/cc-candybar/issues/947)) ([66287d6](https://github.com/promptctl/cc-candybar/commit/66287d6a5aaf2b2a5ac8868f5c5b148abb92e538))
+
 ## [1.236.14](https://github.com/promptctl/cc-candybar/compare/v1.236.13...v1.236.14) (2026-11-24)
 
 ### Bug Fixes
