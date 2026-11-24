@@ -55,8 +55,18 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     // The page's first render compiles the config in its arrival turn, which
     // can spend its whole deadline, so what has not answered draws pending;
     // the page's next redraw waits for it, as Claude Code's next tick does.
+    // A fact the daemon reads on its own clock (the branch, a seeked
+    // transcript) reaches the page on the redraw after it lands, as it reaches
+    // Claude Code on a later tick. So a draw waits on the fact it expects, never
+    // on a count of redraws, which only a fast machine keeps.
+    const redrawUntil = async (text) => {
+      let frame = await transport.frame(size);
+      for (const end = Date.now() + 5_000; !JSON.stringify(frame).includes(text) && Date.now() < end; )
+        frame = await new Promise((r) => setTimeout(r, 50)).then(() => transport.frame(size));
+      return frame;
+    };
     const cold = await transport.frame(size);
-    const first = await transport.frame(size);
+    const first = await redrawUntil("fix-cache-timer");
     const door = (await transport.render(size)).links.find((l) => l.text === "🍫");
     const clicked = await transport.click(door.url, size);
     const opened = await transport.frame(size);
@@ -64,11 +74,8 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const copied = await transport.click(copy.url, size); // bare Node has no clipboard
     transport.scenario.seek(27 / 90);
     // A seek rewrites the transcript, and the daemon reads it when its watch
-    // hears the write, not when a request arrives: the page's redraws show it
-    // a moment later, as Claude Code's ticks do.
-    let working = await transport.frame(size);
-    for (const end = Date.now() + 5_000; !JSON.stringify(working).includes("Finding the race") && Date.now() < end; )
-      working = await new Promise((r) => setTimeout(r, 50)).then(() => transport.frame(size));
+    // hears the write, not when a request arrives.
+    const working = await redrawUntil("Finding the race");
     const painted = await transport.render(size);
     console.log(JSON.stringify({ frames: { cold, first, opened, working }, refused: clicked.refused, copied: copied.refused }));
     process.exit(0);
