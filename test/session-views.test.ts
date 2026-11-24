@@ -40,6 +40,7 @@ import {
 import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { messagesOf } from "./helpers/diagnostic-messages";
 const S_A = sessionIdOf("s-a");
 const S_COPY = sessionIdOf("s-copy");
 
@@ -508,7 +509,9 @@ test("a config load starts no view's source, and still names a session value tha
   expect(entry.lastError).toBeNull();
   // The one value that cannot declare, and no view source faulted for want of
   // a session.
-  expect(entry.lastWarnings).toEqual(['Variable "unclosed": unclosed action']);
+  expect(messagesOf(entry.lastWarnings)).toEqual([
+    'Variable "unclosed": unclosed action',
+  ]);
   expect(shells).toBe(0);
 
   // A session asks for each of them, and a render settles what it started.

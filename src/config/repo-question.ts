@@ -6,9 +6,9 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { REPO_ANSWERS } from "./loader/repo-gate.js";
 import type { RepoQuestion } from "./config-snapshot.js";
+import { aboutSubject } from "./about.js";
 import {
   APPROVAL_SEVERITY,
-  aboutSubject,
   diagnosticSpan,
   type DiagnosticMessage,
   type DiagnosticLine,

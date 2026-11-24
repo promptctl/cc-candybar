@@ -3,6 +3,7 @@
 
 import { fragmentNode, insertCells } from "../../src/config/root";
 import { placeInserts } from "../../src/config/presets";
+import { advisory } from "../../src/config/loader/diagnostics";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import {
   walkNodes,
@@ -81,7 +82,10 @@ test("an absent anchor and an id another segment holds both come back unplaced",
     "insert.0",
     "insert.1",
   ]);
-  expect(unplaced[1]!.reason).toContain('already segment "b"');
+  expect(unplaced.map((u) => u.cause)).toEqual([
+    { kind: "no-anchor" },
+    { kind: "id-held", held: "b" },
+  ]);
 });
 
 test("a cell beside an anchor inside a row hides whenever its anchor's `when` hides it", () => {
@@ -185,12 +189,18 @@ describe("placeInserts", () => {
     expect(
       placeInserts(config, missing, { ...none, root: true }).notices,
     ).toEqual([
-      {
-        subject:
-          '/repo/.cc-candybar.json5#insert.0 after "nope", but there is no placement "nope"',
-        message:
-          '/repo/.cc-candybar.json5: insert.0 places "x" after "nope", but there is no placement "nope" (in the root)',
-      },
+      advisory(
+        [
+          "insert",
+          "/repo/.cc-candybar.json5",
+          "x",
+          null,
+          "after",
+          "nope",
+          "no-anchor",
+        ],
+        '/repo/.cc-candybar.json5: insert.0 places "x" after "nope", but there is no placement "nope" (in the root)',
+      ),
     ]);
   });
 });

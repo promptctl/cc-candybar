@@ -57,9 +57,10 @@ import {
   restages,
   rootNode,
   type Unplaced,
+  type Unplacing,
 } from "./root.js";
 import { effectiveMemberName, type Folded } from "../themes/policy.js";
-import type { Advisory } from "./loader/diagnostics.js";
+import { advisory, type Advisory } from "./loader/diagnostics.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
@@ -222,13 +223,20 @@ export function placeInserts(
       ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config.root), cells),
     }));
   // Every tree each cell missed, by why, in the order the trees were placed.
-  const missed = new Map<InsertCell, Map<string, string[]>>();
+  const missed = new Map<
+    InsertCell,
+    Map<string, { cause: Unplacing; trees: string[] }>
+  >();
   const miss =
     (tree: string) =>
-    ({ cell, reason }: Unplaced): void => {
-      const reasons = missed.get(cell) ?? new Map<string, string[]>();
-      reasons.set(reason, [...(reasons.get(reason) ?? []), tree]);
-      missed.set(cell, reasons);
+    ({ cell, cause }: Unplaced): void => {
+      const causes = missed.get(cell) ?? new Map();
+      const key = JSON.stringify(cause);
+      causes.set(key, {
+        cause,
+        trees: [...(causes.get(key)?.trees ?? []), tree],
+      });
+      missed.set(cell, causes);
     };
   (authored.root ? own.unplaced : []).forEach(miss("the root"));
   for (const { name, unplaced } of restaged.filter(({ name }) =>
@@ -249,9 +257,9 @@ export function placeInserts(
         ),
       },
     },
-    notices: [...missed].flatMap(([cell, reasons]) =>
-      [...reasons].map(([reason, trees]) =>
-        insertNotice(cell, reason, `${reason} (in ${trees.join(", ")})`),
+    notices: [...missed].flatMap(([cell, causes]) =>
+      [...causes.values()].map(({ cause, trees }) =>
+        insertNotice(cell, cause, trees),
       ),
     ),
   };
@@ -263,19 +271,48 @@ export interface AuthoredTrees {
   readonly presets: ReadonlySet<string>;
 }
 
+// What befell an insert cell: a tree could not place it, or the bar refused
+// it with the issues placing it brought (`why`, words that move).
+export type InsertRefusal =
+  | Unplacing
+  | { readonly kind: "refused"; readonly why: string };
+
 // [LAW:one-source-of-truth] THE spelling of an advisory about one insert
 // cell: the file and entry that wrote it, the segment, and what befell it. It
-// is about the cell and the cause (`because`), which stay put while the words
-// of `what` move (the trees it missed).
+// is about the cell's own fields and the kind of what befell it, never its
+// position in the file's list (deleting an earlier cell must not move it) nor
+// the words of the cause (the segment holding its id, the trees it missed),
+// which move while the cell stays refused.
 export function insertNotice(
   cell: InsertCell,
-  because: string,
-  what: string,
+  refusal: InsertRefusal,
+  // The trees that missed it; none for the bar's refusal of the cell.
+  trees: readonly string[],
 ): Advisory {
-  return {
-    subject: `${cell.by.file}#${cell.by.entry} ${because}`,
-    message: `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${what}`,
-  };
+  const place = `${cell.relation} "${cell.anchor}"`;
+  const id = cell.id ?? cell.seg;
+  const words = ((): string => {
+    switch (refusal.kind) {
+      case "id-held":
+        return `as "${id}", but placement "${id}" is already segment "${refusal.held}" — give the cell its own id`;
+      case "no-anchor":
+        return `${place}, but there is no placement "${cell.anchor}"`;
+      case "refused":
+        return `${place}, but the bar refuses it there: ${refusal.why}`;
+    }
+  })();
+  return advisory(
+    [
+      "insert",
+      cell.by.file,
+      cell.seg,
+      cell.id ?? null,
+      cell.relation,
+      cell.anchor,
+      refusal.kind,
+    ],
+    `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${words}${trees.length === 0 ? "" : ` (in ${trees.join(", ")})`}`,
+  );
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total

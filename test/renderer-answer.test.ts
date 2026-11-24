@@ -71,6 +71,7 @@ import {
 import { ok } from "../src/utils/outcome";
 import { locs } from "./helpers/host";
 import type { Locations } from "../src/config/loader/chain-places";
+import { advisory } from "../src/config/loader/diagnostics";
 import { fakeTmux } from "../scripts/lib/draw-fixtures/payload-owners";
 import { rendererHost, type HostWorld } from "../src/daemon/renderer-host";
 import type {
@@ -725,7 +726,7 @@ describe("a statusline request", () => {
     t.rig.cache.configs.follow(origin);
     const config = t.rig.cache.configs.discovery.snapshotOf(origin);
     if (config === null) throw new Error("the host did not hold the config");
-    const latest = { ...config, notices: [{ subject: "retained", message: "found after the retained one" }] };
+    const latest = { ...config, notices: [advisory(["plugin-folder", "retained"], "found after the retained one")] };
     home.unreadable = true;
     threw(
       await handIn(t.r, {
@@ -2243,7 +2244,7 @@ describe("a click", () => {
     );
     const origin = context.requested;
     const config = t.rig.cache.snapshotFor(origin);
-    const moved = { ...config, notices: [{ subject: "host", message: "a notice the host found" }] };
+    const moved = { ...config, notices: [advisory(["plugin-folder", "host"], "a notice the host found")] };
 
     home.unreadable = true;
     threw(await handIn(t.r, { kind: "config", origin, config: moved }));
@@ -2279,7 +2280,7 @@ describe("a click", () => {
     t.rig.cache.refreshEditedView(SESSION);
     // The host found the file edited, and a notice beside it. The draft pins
     // the file's text and takes the rest of what the host found.
-    const NOTICE = { subject: "sibling", message: "a shadowed sibling was found" };
+    const NOTICE = advisory(["plugin-folder", "sibling"], "a shadowed sibling was found");
     const edited = {
       ...config,
       notices: [NOTICE],

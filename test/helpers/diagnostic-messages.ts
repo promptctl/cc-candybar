@@ -1,8 +1,8 @@
 // Messages as the diagnostic list's tests build them: each about its own
 // text, unless a test says otherwise.
 
+import { aboutText } from "../../src/config/about";
 import {
-  aboutText,
   diagnosticSpan,
   type DiagnosticMessage,
   type DiagnosticSeverity,
@@ -24,3 +24,9 @@ export const shaped = (
   copy: text,
   lines: [[diagnosticSpan(text, null)]],
 });
+
+// The words of advisories a load earned, for a test that asks what a load said
+// and not what it is about.
+export const messagesOf = (
+  advisories: readonly { readonly message: string }[],
+): string[] => advisories.map(({ message }) => message);

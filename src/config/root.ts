@@ -129,10 +129,18 @@ export function mergeRoot(fragment: RootFragment, base: Root): Root {
     : rootOf(fragment);
 }
 
+// [LAW:types-are-the-program] Why a tree could not place a cell: the id it
+// asks for is held by another segment (named), or the anchor is no placement
+// in it. The words are derived from the cause and the cell, in one place
+// (insertNotice), so the cause is what the cell's advisory is about.
+export type Unplacing =
+  | { readonly kind: "id-held"; readonly held: string }
+  | { readonly kind: "no-anchor" };
+
 // A cell one rendered tree could not place, and why.
 export interface Unplaced {
   readonly cell: InsertCell;
-  readonly reason: string;
+  readonly cause: Unplacing;
 }
 
 // [LAW:one-source-of-truth] THE placement of `insert` cells in one tree that
@@ -165,11 +173,7 @@ export function insertCells(
         return acc;
       const held = placed.find((node) => placementId(node) === id);
       if (held !== undefined)
-        return refuse(
-          acc,
-          cell,
-          `as "${id}", but placement "${id}" is already segment "${held.name}" — give the cell its own id`,
-        );
+        return refuse(acc, cell, { kind: "id-held", held: held.name });
       const node: SegmentNode = {
         kind: "segment",
         name: cell.seg,
@@ -194,11 +198,7 @@ export function insertCells(
               ),
             },
           }
-        : refuse(
-            acc,
-            cell,
-            `${cell.relation} "${cell.anchor}", but there is no placement "${cell.anchor}"`,
-          );
+        : refuse(acc, cell, { kind: "no-anchor" });
     },
     { root, unplaced: [] },
   );
@@ -207,9 +207,9 @@ export function insertCells(
 function refuse(
   acc: { root: Root; unplaced: readonly Unplaced[] },
   cell: InsertCell,
-  reason: string,
+  cause: Unplacing,
 ): { root: Root; unplaced: readonly Unplaced[] } {
-  return { ...acc, unplaced: [...acc.unplaced, { cell, reason }] };
+  return { ...acc, unplaced: [...acc.unplaced, { cell, cause }] };
 }
 
 // A row that IS the anchor becomes a horizontal row of the two cells; any

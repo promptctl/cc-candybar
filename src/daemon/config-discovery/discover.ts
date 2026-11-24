@@ -46,7 +46,7 @@ import {
   pluginList,
 } from "../../config/loader/plugins.js";
 import type { PluginScope } from "../../config/loader/plugin-scope.js";
-import type { Advisory } from "../../config/loader/diagnostics.js";
+import { advisory, type Advisory } from "../../config/loader/diagnostics.js";
 import {
   repoUnreadNotice,
   type RepoConfigBook,
@@ -170,10 +170,12 @@ export function sessionPlugins(
     // [LAW:types-are-the-program] A root that cannot be listed is a fact the
     // bar says, never absence.
     if ("error" in listed) {
-      notices.push({
-        subject: listed.path,
-        message: `Plugin folder could not be listed: ${listed.path} — ${listed.error}`,
-      });
+      notices.push(
+        advisory(
+          ["plugin-folder", listed.path],
+          `Plugin folder could not be listed: ${listed.path} — ${listed.error}`,
+        ),
+      );
       continue;
     }
     for (const name of listed.folders) {
@@ -187,10 +189,9 @@ export function sessionPlugins(
   // [LAW:no-silent-failure] Only confirmed absence can use cwd. A failed
   // ancestor check gives checkout-relative plugin data no root.
   if (checkout.kind === "failed")
-    notices.push({
-      subject: "checkout",
-      message: `Checkout could not be read: ${checkout.reason}`,
-    });
+    notices.push(
+      advisory(["checkout"], `Checkout could not be read: ${checkout.reason}`),
+    );
   return {
     plugins: [...byNs.values()].map((file) =>
       readDefinition(file.path, file.scope, files),
@@ -317,22 +318,16 @@ export function discover(
   // [LAW:dataflow-not-control-flow] Every notice is computed every time; an
   // absent one is a null in the list.
   const { unreadIdentity } = project;
-  // Each is about one thing that stays put while its words move (a file
-  // joins a collision, a path leaves the unchecked).
-  const advisoryFor = (
-    subject: string,
-    message: string | null,
-  ): Advisory | null => (message === null ? null : { subject, message });
   const notices = [
-    advisoryFor("config collision", configCollisionNotice(locations)),
-    advisoryFor("config resolution", configResolutionNotice(resolution)),
-    advisoryFor("repository answers", repoUnreadNotice(project)),
+    configCollisionNotice(locations),
+    configResolutionNotice(resolution),
+    repoUnreadNotice(project),
     unreadIdentity === null
       ? null
-      : {
-          subject: `repository identity ${unreadIdentity.dir}`,
-          message: `Repository identity could not be read: ${unreadIdentity.dir} — ${unreadIdentity.reason}`,
-        },
+      : advisory(
+          ["repository-identity", unreadIdentity.dir],
+          `Repository identity could not be read: ${unreadIdentity.dir} — ${unreadIdentity.reason}`,
+        ),
     ...session.notices,
   ].filter((n): n is Advisory => n !== null);
   return {

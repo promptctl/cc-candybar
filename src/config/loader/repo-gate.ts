@@ -13,6 +13,7 @@
 import type { WorktreeLink } from "../../utils/git-root.js";
 import type { RepoQuestion } from "../config-snapshot.js";
 import type { Asked } from "../../utils/outcome.js";
+import { advisory, type Advisory } from "./diagnostics.js";
 
 export type RepoAnswer = "approved" | "declined";
 export const REPO_ANSWERS: readonly RepoAnswer[] = ["approved", "declined"];
@@ -145,10 +146,13 @@ export function withAnswer(
 
 // [LAW:no-silent-failure] A book that cannot be read is said wherever the
 // gate is presented on the bar.
-export function repoUnreadNotice(gate: ProjectAccess): string | null {
+export function repoUnreadNotice(gate: ProjectAccess): Advisory | null {
   return gate.unread === null
     ? null
-    : `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`;
+    : advisory(
+        ["repository-answers"],
+        `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`,
+      );
 }
 
 // [LAW:one-source-of-truth] One wording per standing, for what a verdict

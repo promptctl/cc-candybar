@@ -5,6 +5,7 @@
 // mapping changes; the schema validators never touch this file.
 
 import JSON5 from "json5";
+import { aboutSubject, type About } from "../about.js";
 import {
   entryOf,
   Json5EditError,
@@ -48,15 +49,45 @@ export function parseJson5Syntax(source: string): Json5Syntax {
   }
 }
 
-// [LAW:types-are-the-program] An advisory a load earned: its words, and the
-// subject it is about, which its producer knows and its words do not keep (a
-// line moves when another is fixed, a list of trees shrinks). The bar's viewer
-// names an advisory by its subject, so one stays the same message while its
-// words change, and two with other subjects are two messages.
+// [LAW:types-are-the-program] What a load's advisory is about, one row per
+// producer: the producer's tag leads, so two producers can never name one
+// subject, and what follows is what that producer knows and its words do not
+// keep (a line moves when another is fixed, a list of trees shrinks).
+export type LoadSubject =
+  | readonly ["editability", file: string]
+  | readonly ["payload-declaration", file: string, variable: string]
+  | readonly ["variable-declaration", variable: string]
+  | readonly ["dropped-plugin", path: string]
+  | readonly ["plugin-folder", path: string]
+  | readonly ["checkout"]
+  | readonly ["config-collision"]
+  | readonly ["config-resolution"]
+  | readonly ["repository-answers"]
+  | readonly ["repository-identity", dir: string]
+  | readonly [
+      "insert",
+      file: string,
+      seg: string,
+      id: string | null,
+      relation: "before" | "after",
+      anchor: string,
+      cause: string,
+    ];
+
+// An advisory a load earned: its words, and what it is about. The bar's viewer
+// names it by that, so one stays the same message while its words change, and
+// two about other things are two messages.
 export interface Advisory {
-  readonly subject: string;
+  readonly about: About<"load">;
   readonly message: string;
 }
+
+// [LAW:single-enforcer] The one constructor of an advisory: the subject is a
+// LoadSubject, so a producer cannot spell its own identity.
+export const advisory = (subject: LoadSubject, message: string): Advisory => ({
+  about: aboutSubject("load", JSON.stringify(subject)),
+  message,
+});
 
 export class ConfigError extends Error {
   readonly file: string;
@@ -240,10 +271,10 @@ export function editabilityNotice(
     return null;
   } catch (e) {
     if (!(e instanceof Json5EditError)) throw e;
-    return {
-      subject: filePath,
-      message: `${filePath}:${lineFromOffset(source, e.offset)}: ${e.reason} — the settings menu cannot edit this file until it is fixed`,
-    };
+    return advisory(
+      ["editability", filePath],
+      `${filePath}:${lineFromOffset(source, e.offset)}: ${e.reason} — the settings menu cannot edit this file until it is fixed`,
+    );
   }
 }
 

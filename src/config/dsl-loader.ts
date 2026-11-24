@@ -778,11 +778,7 @@ export function validateRenderable(
             ...acc,
             refused: [
               ...acc.refused,
-              insertNotice(
-                cell,
-                "refused",
-                `${cell.relation} "${cell.anchor}", but the bar refuses it there: ${why}`,
-              ),
+              insertNotice(cell, { kind: "refused", why }, []),
             ],
           };
         }

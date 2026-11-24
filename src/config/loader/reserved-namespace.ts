@@ -10,7 +10,12 @@
 
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type { RawDslConfig } from "../dsl-types.js";
-import { findKeyLine, keyLocator, type Advisory } from "./diagnostics.js";
+import {
+  advisory,
+  findKeyLine,
+  keyLocator,
+  type Advisory,
+} from "./diagnostics.js";
 import { scopeOf } from "./plugin-scope.js";
 import { PAYLOAD_INPUTS } from "../payload-inputs.js";
 
@@ -118,10 +123,10 @@ export function payloadDeclarationNotices(
   return declared.filter(isPayloadInput).map((name) => {
     const line = lineOf(["variables", name]);
     const at = line === undefined ? filePath : `${filePath}:${line}`;
-    return {
-      subject: `${filePath}#variables.${name}`,
-      message: `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`,
-    };
+    return advisory(
+      ["payload-declaration", filePath, name],
+      `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`,
+    );
   });
 }
 

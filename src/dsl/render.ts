@@ -38,7 +38,7 @@ import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/reserved-names.js";
-import type { Advisory } from "../config/loader/diagnostics.js";
+import { advisory, type Advisory } from "../config/loader/diagnostics.js";
 import { shellEnvOf } from "../config/shell-env.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
 import {
@@ -640,10 +640,12 @@ export function declareDslVariables(
         projections.has(name) ? "projection" : "computed",
       );
     } catch (err) {
-      loadWarnings.push({
-        subject: `variables.${name}`,
-        message: `Variable "${name}": ${(err as Error).message ?? String(err)}`,
-      });
+      loadWarnings.push(
+        advisory(
+          ["variable-declaration", name],
+          `Variable "${name}": ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
     }
   }
   return loadWarnings;

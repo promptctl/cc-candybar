@@ -85,6 +85,8 @@ import {
   aboutSubject,
   aboutText,
   type About,
+} from "../config/about.js";
+import {
   collectDiagnostics,
   diagnosticCopies,
   type SourcedText,
@@ -550,7 +552,7 @@ export function drawRender(
   const daemonWarnings = daemonEvents.filter(isWarned).map(
     ({ shown, hold }): Standing<DaemonEventWarning> => ({
       warning: { kind: shown.kind, message: shown.event.text, hold },
-      subject: shown.about,
+      about: aboutSubject(shown.kind, shown.about),
     }),
   );
   const standing: readonly Standing[] = [
@@ -560,13 +562,13 @@ export function drawRender(
     ...(configWatch === null
       ? []
       : [alone({ kind: "config-watch", message: configWatch })]),
-    // [LAW:one-source-of-truth] A load's warnings arrive with the subject
-    // their producer knew, so fixing one leaves another's identity put
-    // whatever its words (a line number) become.
+    // [LAW:one-source-of-truth] A load's warnings arrive about what their
+    // producer knew, so fixing one leaves another's identity put whatever
+    // its words (a line number) become.
     ...entry.lastWarnings.map(
-      ({ subject, message }): Standing => ({
+      ({ about, message }): Standing => ({
         warning: { kind: "load", message },
-        subject,
+        about,
       }),
     ),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
@@ -593,10 +595,10 @@ export function drawRender(
     errors,
     questions,
     [
-      ...standing.map((one) => ({
-        about: standingAbout(one),
-        text: one.warning.message,
-        copy: one.warning.message,
+      ...standing.map(({ about, warning }) => ({
+        about,
+        text: warning.message,
+        copy: warning.message,
       })),
       // A render warning is about its whole description.
       ...presentations
@@ -757,8 +759,8 @@ export function drawRender(
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
     ...errors.map(({ about, text }) => faultAbout("error", about, text)),
-    ...standing.map(({ warning, subject }) =>
-      faultOf("warning", warning.kind, warning.message, subject),
+    ...standing.map(({ about, warning }) =>
+      faultAbout("warning", about, warning.message),
     ),
     ...warnings.map(({ warning, subject }) =>
       faultOf("warning", warning.kind, warning.message, subject),
@@ -967,25 +969,18 @@ type StandingWarning =
   | LoadWarning
   | FactsWarning;
 
-// A standing warning and the subject it is about, for a kind that recurs (a
-// pipe event's count, a load's file): its words change while it stays one
-// message.
+// A standing warning and what it is about: a kind that recurs (a pipe event's
+// count, a load's file) is about its subject, so its words change while it
+// stays one message.
 interface Standing<Warning extends StandingWarning = StandingWarning> {
   readonly warning: Warning;
-  readonly subject: string | undefined;
+  readonly about: About<StandingWarning["kind"]>;
 }
 
 const alone = (warning: StandingWarning): Standing => ({
   warning,
-  subject: undefined,
+  about: aboutKind(warning.kind),
 });
-
-// [LAW:single-enforcer] The one derivation of a standing warning's identity
-// from its kind and subject.
-const standingAbout = ({ warning, subject }: Standing): About<string> =>
-  subject === undefined
-    ? aboutKind(warning.kind)
-    : aboutSubject(warning.kind, subject);
 
 // What one render drew: the body — the bar, or the viewer in its place — and
 // what the statusline's handoff line is drawn from: whether the body is the

@@ -13,9 +13,9 @@ import { fileEventsWarnings } from "../src/daemon/foundations/file-events-warnin
 import { type Delivery } from "../src/daemon/foundations/stats-snapshot";
 import { DEBOUNCE_MS, WatcherRegistry } from "../src/daemon/cache/watchers";
 import { statIdentity, type IdentityRead } from "../src/utils/folder-identity";
+import { aboutKind } from "../src/config/about";
 import {
   WARNING_SEVERITY,
-  aboutKind,
   collectDiagnostics,
 } from "../src/render/diagnostics";
 import { fakeWatches } from "./helpers/fake-watches";

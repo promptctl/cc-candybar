@@ -6,8 +6,8 @@
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { type LaunchOpts } from "../src/proc/launcher";
 import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { aboutSubject } from "../src/config/about";
 import {
-  aboutSubject,
   collectDiagnostics,
   diagnosticCopies,
 } from "../src/render/diagnostics";

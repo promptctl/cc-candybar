@@ -21,6 +21,8 @@ import {
   aboutSubject,
   aboutText,
   type About,
+} from "../src/config/about";
+import {
   APPROVAL_SEVERITY,
   collectDiagnostics as collectSourced,
   diagnosticCopies,

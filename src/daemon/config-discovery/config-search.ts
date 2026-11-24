@@ -27,6 +27,7 @@ import {
 } from "../../config/loader/chain-places.js";
 import { discoveryFiles, type DiscoveryFiles } from "./discovery-files.js";
 import type { StateObservation } from "../state-file.js";
+import { advisory, type Advisory } from "../../config/loader/diagnostics.js";
 
 type ObservedLocation = ConfigLocation & {
   readonly unchecked: readonly Unchecked[];
@@ -211,7 +212,7 @@ function repoProject(
 // observation supplied to the chain, including when more suffixes are added.
 export function configCollisionNotice(
   locations: readonly ObservedLocation[],
-): string | null {
+): Advisory | null {
   const collisions = locations.flatMap((location) =>
     location.kind === "found" && location.shadowed.length > 0
       ? [
@@ -221,5 +222,8 @@ export function configCollisionNotice(
   );
   return collisions.length === 0
     ? null
-    : `config-extension collision: ${collisions.join("; ")} — remove the duplicate`;
+    : advisory(
+        ["config-collision"],
+        `config-extension collision: ${collisions.join("; ")} — remove the duplicate`,
+      );
 }

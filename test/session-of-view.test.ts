@@ -15,6 +15,7 @@ import {
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
+import { messagesOf } from "./helpers/diagnostic-messages";
 
 const OWN = sessionIdOf("s-own");
 const OTHER = sessionIdOf("s-other");
@@ -94,7 +95,7 @@ describe("a view's session", () => {
       noProject("/home"),
       new Set(["textual-dark"]),
     );
-    expect(loaded.warnings).toEqual([
+    expect(messagesOf(loaded.warnings)).toEqual([
       expect.stringMatching(
         /^t\.json5:\d+: "session\.id" is supplied by the daemon's payload/,
       ),
@@ -118,7 +119,7 @@ describe("a view's session", () => {
       caught = e;
     }
     expect(caught).toBeInstanceOf(ConfigError);
-    expect((caught as ConfigError).warnings).toEqual([
+    expect(messagesOf((caught as ConfigError).warnings)).toEqual([
       expect.stringContaining(
         `"session.id" is supplied by the daemon's payload`,
       ),
@@ -144,7 +145,7 @@ describe("a view's session", () => {
         noProject("/home"),
       );
       expect(loaded.config.variables[name]).toEqual(PAYLOAD_INPUTS[name]);
-      expect(loaded.warnings).toEqual([
+      expect(messagesOf(loaded.warnings)).toEqual([
         expect.stringContaining(
           `"${name}" is supplied by the daemon's payload`,
         ),
