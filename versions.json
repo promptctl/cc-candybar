@@ -4,15 +4,22 @@
     {
       "version": "pr-948",
       "ref": "refs/pull/948/merge",
-      "sha": "903f925dcd7b4a65fc56c16c5ff6471a6eedb4ae",
-      "timestamp": "2026-11-24T12:24:45.090Z",
+      "sha": "e3c89061d7e7a35f741e472d50cf9060e14d250f",
+      "timestamp": "2026-11-24T12:40:49.457Z",
       "commits": [
         {
-          "sha": "903f925dcd7b4a65fc56c16c5ff6471a6eedb4ae",
+          "sha": "e3c89061d7e7a35f741e472d50cf9060e14d250f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T05:23:33-07:00",
-          "message": "Merge 1dd186435e17cf2da66d262fe9a9e206d0ed6538 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+          "timestamp": "2026-11-24T12:39:25Z",
+          "message": "Merge 99882a2e5dae60edc263712ac5fb96b86d4e0796 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+        },
+        {
+          "sha": "99882a2e5dae60edc263712ac5fb96b86d4e0796",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T05:39:02-07:00",
+          "message": "fix(host): the install records the bundle it staged, and the dead obtainDaemon path is gone\n\nThe install records the bundle it staged when it owns the statusline\ncommand instead of reading the command back; a checkout's deploy compares\nreal paths. A refused kick no longer claims to kick. obtainDaemon had no\nproduction caller and carried a second copy of the record read.\n"
         },
         {
           "sha": "1dd186435e17cf2da66d262fe9a9e206d0ed6538",
