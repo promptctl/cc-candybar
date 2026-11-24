@@ -14,6 +14,7 @@ import { hostBundlePath } from "../src/daemon/paths";
 import {
   bundleNamedByStatusLine,
   recordIfInstall,
+  recordStagedBundle,
 } from "../src/install/record";
 import { firstShellWord, shellWord } from "../src/shell-word";
 import { planAfterKick } from "../src/outcome-plan";
@@ -29,7 +30,11 @@ afterAll(() => {
 });
 
 function stateRoot() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "host-bundle-"));
+  // The real path, as Node reports a running bundle: the OS temp dir is itself
+  // a symlink on macOS.
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "host-bundle-")),
+  );
   roots.push(root);
   return { root, host: hostOf({ ...process.env, XDG_STATE_HOME: root }) };
 }
@@ -149,6 +154,29 @@ describe("the statusline decides which bundle is recorded", () => {
       bundle,
     });
     expect(readHostBundle(host)).toEqual({ kind: "ok", value: bundle });
+  });
+
+  test("the install records the bundle it staged, whatever the command's words say", () => {
+    const { root, host } = stateRoot();
+    const staged = bundleIn(root, "staged");
+    expect(recordStagedBundle(staged, host)).toEqual({
+      kind: "recorded",
+      bundle: staged,
+    });
+    expect(readHostBundle(host)).toEqual({ kind: "ok", value: staged });
+  });
+
+  test("a checkout reached through a symlink is the bundle the statusline names", () => {
+    const { root, host } = stateRoot();
+    const real = bundleIn(root, "real");
+    fs.symlinkSync(path.join(root, "real"), path.join(root, "link"));
+    const entry = path.join(root, "link", "bin", "cc-candybar");
+    expect(bundleNamedByStatusLine({ command: entry })).toBe(
+      fs.realpathSync(real),
+    );
+    expect(
+      recordIfInstall(fs.realpathSync(real), { command: entry }, host).kind,
+    ).toBe("recorded");
   });
 
   test("a worktree's bundle, which the statusline does not name, records nothing and leaves the install's record", () => {
@@ -280,6 +308,8 @@ describe("what a refused kick shows on the bar", () => {
       expect(plan.output).toContain(words);
       expect(plan.output).not.toContain("waiting");
       expect(plan.debug).toContain(whyUnusable(record));
+      // A refused kick starts nothing, so the plan no longer says it kicks.
+      expect(plan.kick).toBe(false);
     },
   );
 });

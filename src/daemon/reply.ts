@@ -274,8 +274,8 @@ export async function handleRequest(
     // bundle moves (the binary watch), never because a client claims a newer
     // protocol: a worktree's client ahead of the installed bundle would end the
     // installed host on every respawn, and every bar would flap.
-    // Shutting down on an older client was the load-bearing half of the
-    // 452-corpse spiral (kz8.5).
+    // A host that ended on a client's claim would be respawned from the same
+    // recorded bundle into the same mismatch, once per request.
     parts.log(
       "info",
       `version mismatch: client=${req.v} ${req.v > PROTOCOL_VERSION ? ">" : "<"} daemon=${PROTOCOL_VERSION}; staying up`,

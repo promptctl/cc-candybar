@@ -41,7 +41,7 @@ export interface OutcomePlan {
 
 // [LAW:no-silent-failure] A kick the install's record refused leaves nothing
 // starting, so the waiting indicator would promise a daemon that never comes:
-// the plan's output becomes the refusal, and its reason joins the debug line.
+// the plan's output becomes the refusal, and its reason is the debug line.
 // `null` is a plan that asked for no kick. A kick that ran leaves the plan as
 // it was.
 export function planAfterKick(
@@ -51,8 +51,8 @@ export function planAfterKick(
   return kick?.kind === "refused"
     ? {
         output: formatHostBundleGlyph(kick.record.kind),
-        kick: plan.kick,
-        debug: `${plan.debug ?? ""} — not spawned: ${whyUnusable(kick.record)}`,
+        kick: false,
+        debug: `daemon unavailable, and nothing was spawned: ${whyUnusable(kick.record)}`,
       }
     : plan;
 }

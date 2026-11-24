@@ -38,7 +38,7 @@ import {
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
 import { stageExecutable } from "./stage-executable.js";
-import { recordIfInstall } from "./record";
+import { recordIfInstall, recordStagedBundle } from "./record";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
@@ -593,8 +593,20 @@ export async function runInstall(
     );
   }
 
-  updateClaudeSettings(staged.binPath, argsToInstall, force, world.host);
-  recordHostBundleFollowingStatusLine(staged.distPath, world.host);
+  // [LAW:one-source-of-truth] The install knows which bundle it staged and
+  // whether the statusline now runs it, so it records the staged bundle on that
+  // fact and never reads the command's words back for an answer it holds.
+  const ownsStatusLine = updateClaudeSettings(
+    staged.binPath,
+    argsToInstall,
+    force,
+    world.host,
+  );
+  process.stdout.write(
+    ownsStatusLine
+      ? recordedMessage(recordStagedBundle(staged.distPath, world.host))
+      : `Host bundle not recorded: the statusLine is customized, so it does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
+  );
 
   process.stdout.write(installSuccessMessage());
 
@@ -622,26 +634,28 @@ function userSettingsPath(host: Host): string {
   );
 }
 
-// [LAW:single-enforcer] Every path that can make a bundle the install ends
-// here: the statusline setting is read as it stands, and the host's bundle
-// record follows it (src/install/record.ts).
-function recordHostBundleFollowingStatusLine(bundle: string, host: Host): void {
-  const recording = recordIfInstall(
-    bundle,
-    readClaudeSettings(userSettingsPath(host)).statusLine,
-    host,
-  );
-  process.stdout.write(
-    recording.kind === "recorded"
-      ? `Recorded ${recording.bundle} as the host's bundle\n`
-      : `Host bundle not recorded: the statusLine command names ${recording.named ?? "no cc-candybar bundle"}, not ${bundle}\n`,
-  );
+function recordedMessage(recording: { readonly bundle: string }): string {
+  return `Recorded ${recording.bundle} as the host's bundle\n`;
 }
 
 // The checkout's install step: a build is complete without staging, so this
-// is what makes a checkout whose statusline command names it the host's code.
+// is what makes a checkout whose statusline command names it the host's code
+// (src/install/record.ts).
 export function runRecordHostBundle(bundle: string, world: World): void {
-  recordHostBundleFollowingStatusLine(bundle, world.host);
+  const recording = recordIfInstall(
+    bundle,
+    readClaudeSettings(userSettingsPath(world.host)).statusLine,
+    world.host,
+  );
+  process.stdout.write(
+    recording.kind === "recorded"
+      ? recordedMessage(recording)
+      : `Host bundle not recorded: ${bundle} is not the install. ${
+          recording.named === null
+            ? "The statusLine command names no bundle this can read (an absolute path to a bin/cc-candybar entry, bare or single-quoted)."
+            : `The statusLine command runs ${recording.named}.`
+        }\n`,
+  );
 }
 
 // One value spliced at one key path of settings.json.
@@ -653,7 +667,7 @@ function updateClaudeSettings(
   force: boolean,
   host: Host,
   overridePath?: string,
-): void {
+): boolean {
   const target = overridePath ?? userSettingsPath(host);
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
@@ -682,7 +696,7 @@ function updateClaudeSettings(
         `  Current: ${existing}\n` +
         `  To overwrite, re-run with --force.\n`,
     );
-    return;
+    return false;
   }
 
   // [LAW:one-source-of-truth] Splices, not a rewrite, so every byte install
@@ -707,6 +721,7 @@ function updateClaudeSettings(
     ),
   );
   process.stdout.write(`Updated ${target}\n`);
+  return true;
 }
 
 // Exports for testing

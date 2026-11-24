@@ -1,237 +1,23 @@
 import fs from "node:fs";
-import net from "node:net";
 import path from "node:path";
 import type { Host, World } from "../host";
 import { heapCapMb } from "./limits";
 import process from "node:process";
 import {
-  socketPath,
   spawnLockPath,
   spawnCooldownPath,
   spawnBackoffPath,
   daemonDir,
 } from "./paths";
-import { sleep, type Timekeeper } from "../time";
-import {
-  readHostBundle,
-  whyUnusable,
-  type UnusableRecord,
-} from "./host-bundle";
+import type { Timekeeper } from "../time";
+import { readHostBundle, type UnusableRecord } from "./host-bundle";
 
-// [LAW:single-enforcer] One primitive per runtime that owns the entire
-// "obtain a daemon" verb. Every spawn site in the Node runtime now flows
-// through this one path; the Rust client mirrors it in its own
-// obtain-daemon primitive. Both runtimes agree on socketPath(host) and
-// spawnLockPath(host) *and* on the lock mechanism: open(path, O_CREAT | O_EXCL)
-// — existence == held; release by unlinking. A Rust kick and a Node kick
-// are mutually recognizable.
-//
-// [LAW:dataflow-not-control-flow] Callers do not get to choose whether to
-// spawn. They request a daemon; this function returns one of three typed
-// outcomes. The decision lives in the data (connect result, lock acquisition,
-// re-check after lock).
-
-export type ObtainResult =
-  | { kind: "attached" }
-  | { kind: "started" }
-  | { kind: "failed"; reason: string };
-
-interface ObtainOpts {
-  // Total deadline for the entire obtain operation. After this elapses we
-  // return { kind: "failed" } even if a daemon could come up shortly. Default
-  // 2000ms — generous for cold start, tight enough to bound user-visible
-  // latency on a busted state directory.
-  totalTimeoutMs?: number;
-  // Per-connect probe timeout. AF_UNIX connect to a live listener is sub-ms;
-  // anything slower implies "no listener" in practice.
-  connectTimeoutMs?: number;
-  // How long to wait after spawning before giving up on the daemon coming up.
-  spawnReadyTimeoutMs?: number;
-  // After this much continuous contention on spawn.lock without a daemon
-  // appearing, give up on the lock and spawn anyway. The bind() inside the
-  // daemon arbitrates duplicates, so a stuck lock degrades to bind-arbitrated
-  // contention instead of a multi-second availability gap. Default
-  // totalTimeoutMs / 2.
-  lockFallbackMs?: number;
-  // Test hook: replace the actual spawn call, given the recorded bundle it
-  // would have run. Returning false simulates "spawn failed"; default spawns
-  // the real daemon.
-  spawn?: (bundle: string) => boolean;
-}
-
-const DEFAULT_OPTS: Required<Omit<ObtainOpts, "spawn" | "lockFallbackMs">> = {
-  totalTimeoutMs: 2000,
-  connectTimeoutMs: 50,
-  spawnReadyTimeoutMs: 1500,
-};
-
-export async function obtainDaemon(
-  world: World,
-  opts: ObtainOpts = {},
-): Promise<ObtainResult> {
-  const { host, clock } = world;
-  const settings = { ...DEFAULT_OPTS, ...opts };
-  const deadline = clock.monotonic() + settings.totalTimeoutMs;
-  const lockFallbackMs =
-    opts.lockFallbackMs ?? Math.floor(settings.totalTimeoutMs / 2);
-
-  // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>
-  // — synchronous filesystem failures (read-only FS, permission denial) must
-  // become typed failure outcomes, not throws that surprise the caller.
-  const setupErr = ensureStateDir(host);
-  if (setupErr) return { kind: "failed", reason: setupErr };
-
-  // Fast path: is a daemon already listening?
-  if (await canConnect(socketPath(host), settings.connectTimeoutMs, clock)) {
-    return { kind: "attached" };
-  }
-
-  // No daemon yet: the install's recorded bundle is the only code that may
-  // start one, never this client's own.
-  const bundle = readHostBundle(host);
-  if (bundle.kind !== "ok") {
-    return { kind: "failed", reason: whyUnusable(bundle) };
-  }
-  const spawnAt = opts.spawn ?? ((at) => spawnDaemonDetachedReal(world, at));
-  const spawnFn = () => spawnAt(bundle.value);
-
-  // Try to win the spawn-lock so we are the one to bring it up.
-  const contentionStart = clock.monotonic();
-  while (clock.monotonic() < deadline) {
-    const lock = tryAcquireSpawnLock(host, clock);
-    if (lock.kind === "error") {
-      // [LAW:no-silent-failure] Unrecoverable errors (EACCES, ENOTDIR,
-      // broken state dir) must not silently degrade into a contention loop
-      // + timeout. The caller gets an actionable reason.
-      return { kind: "failed", reason: `spawn-lock: ${lock.reason}` };
-    }
-    if (lock.kind === "held") {
-      try {
-        // Re-check: another caller may have spawned a daemon between our
-        // initial connect and our lock acquisition.
-        if (
-          await canConnect(socketPath(host), settings.connectTimeoutMs, clock)
-        ) {
-          return { kind: "attached" };
-        }
-        return await spawnAndWaitForReady(
-          host,
-          clock,
-          spawnFn,
-          settings.spawnReadyTimeoutMs,
-          settings.connectTimeoutMs,
-          deadline,
-          "",
-        );
-      } finally {
-        releaseSpawnLock();
-      }
-    }
-    // Lock contended. Another caller is in the spawn window — brief wait,
-    // then re-check for the socket they're bringing up.
-    await sleep(clock, "daemon spawn wait", 20);
-    if (await canConnect(socketPath(host), settings.connectTimeoutMs, clock)) {
-      return { kind: "attached" };
-    }
-    // [LAW:dataflow-not-control-flow] spawn.lock is an optimization; bind()
-    // is the load-bearing exclusion. If we've been contended past the
-    // fallback threshold (e.g. crashed lock holder, slow staleness reclaim),
-    // bypass the lock and let bind() inside the daemon arbitrate duplicates.
-    // Same shape as a fresh spawn — caller pays one extra Node startup cost
-    // in the worst case, which is the right trade for availability.
-    if (clock.monotonic() - contentionStart > lockFallbackMs) {
-      return await spawnAndWaitForReady(
-        host,
-        clock,
-        spawnFn,
-        settings.spawnReadyTimeoutMs,
-        settings.connectTimeoutMs,
-        deadline,
-        " (lock-fallback)",
-      );
-    }
-  }
-
-  return { kind: "failed", reason: "timeout obtaining daemon" };
-}
-
-// Spawn the daemon, then poll for it to bind. Returns the typed outcome.
-// Shared by the lock-held path and the lock-fallback path so they don't drift.
-async function spawnAndWaitForReady(
-  host: Host,
-  clock: Timekeeper,
-  spawnFn: () => boolean,
-  spawnReadyTimeoutMs: number,
-  connectTimeoutMs: number,
-  outerDeadline: number,
-  reasonSuffix: string,
-): Promise<ObtainResult> {
-  const readyDeadline = Math.min(
-    clock.monotonic() + spawnReadyTimeoutMs,
-    outerDeadline,
-  );
-
-  // [LAW:dataflow-not-control-flow] The spawn-rate bound is consulted as data,
-  // not a mode. If a spawn was attempted within SPAWN_COOLDOWN_MS, one is
-  // already in flight — do NOT add another Node process; wait for the in-flight
-  // boot. This keeps obtainDaemon under the same global rate cap as the kick
-  // path, so the rate bound holds for EVERY spawn site [LAW:one-source-of-truth].
-  if (!claimSpawnCooldown(host, clock)) {
-    // [LAW:no-silent-failure] This failure's cause is the cooldown gate, not the
-    // lock path we arrived through — so it does NOT inherit reasonSuffix (which
-    // tags lock-held vs lock-fallback *spawn* provenance). We never spawned here.
-    return (await pollUntilReady(host, clock, connectTimeoutMs, readyDeadline))
-      ? { kind: "attached" }
-      : {
-          kind: "failed",
-          reason: "spawn on cooldown; no daemon became ready during the wait",
-        };
-  }
-
-  // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>.
-  // A synchronous throw from child_process.spawn (ENOENT, invalid options)
-  // must become a typed failure, not a rejected promise.
-  let didSpawn = false;
-  try {
-    didSpawn = spawnFn();
-  } catch (e) {
-    return {
-      kind: "failed",
-      reason: `spawn threw${reasonSuffix}: ${(e as Error).message}`,
-    };
-  }
-  if (!didSpawn) {
-    return {
-      kind: "failed",
-      reason: `spawn returned false${reasonSuffix}`,
-    };
-  }
-  return (await pollUntilReady(host, clock, connectTimeoutMs, readyDeadline))
-    ? { kind: "started" }
-    : {
-        kind: "failed",
-        reason: `daemon did not bind in time${reasonSuffix}`,
-      };
-}
-
-// Poll the socket until a daemon answers or the deadline elapses. Shared by the
-// spawn path (→ "started") and the cooldown-blocked wait path (→ "attached"):
-// both need "did a daemon come up in time", they differ only in how they label
-// the outcome.
-async function pollUntilReady(
-  host: Host,
-  clock: Timekeeper,
-  connectTimeoutMs: number,
-  readyDeadline: number,
-): Promise<boolean> {
-  while (clock.monotonic() < readyDeadline) {
-    if (await canConnect(socketPath(host), connectTimeoutMs, clock)) {
-      return true;
-    }
-    await sleep(clock, "daemon socket wait", 20);
-  }
-  return false;
-}
+// [LAW:single-enforcer] One primitive per runtime owns the "obtain a daemon"
+// verb: the kick below. Every spawn site in the Node runtime flows through
+// it; the Rust client mirrors it in obtain_daemon_kick. Both runtimes agree on
+// socketPath(host) and spawnLockPath(host) *and* on the lock mechanism:
+// open(path, O_CREAT | O_EXCL) — existence == held; release by unlinking. A
+// Rust kick and a Node kick are mutually recognizable.
 
 // Synchronous fire-and-forget kick — used for "daemon-miss" recovery where
 // the current render is already lost and we just want to warm the daemon for
@@ -251,19 +37,17 @@ async function pollUntilReady(
 // turn for the daemon to actually start.
 // If the spawn.lock has existed longer than this, the kick path assumes the
 // holder crashed mid-spawn and overrides to preserve availability.
-// Calibrated to be much larger than any legitimate hold:
-//   - A healthy kick holds for <10ms (fork + release).
-//   - obtainDaemon's lock-held path can hold up to spawnReadyTimeoutMs
-//     (1500ms default) while polling for the new daemon to bind.
-// 2s leaves a comfortable margin above the slowest legitimate holder while
+// Calibrated to be much larger than any legitimate hold: a healthy kick holds
+// for <10ms (fork + release). 2s leaves a comfortable margin above that while
 // still recovering from a crashed-mid-spawn holder well before STALE_LOCK_MS.
 const KICK_CONTENDED_OVERRIDE_MS = 2_000;
 
 // [LAW:types-are-the-program] What a kick came to: it ran its lock-and-spawn
 // path (whatever that spawned, or found already in flight, is the daemon's boot
 // to show), or it was refused because the install recorded no bundle a host
-// could start from. The refusal carries the record's own failure so the bar
-// can say so; a spawn is never the client's own bundle instead.
+// could start from. The refusal carries the record's own failure, which the
+// client's debug line reports and the bar's fixed words summarise; a spawn is
+// never the client's own bundle instead.
 export type KickOutcome =
   | { readonly kind: "kicked" }
   | { readonly kind: "refused"; readonly record: UnusableRecord };
@@ -670,9 +454,8 @@ function releaseSpawnLock(): void {
 
 // ─── State-dir setup ────────────────────────────────────────────────────────
 
-// Returns null on success, or a reason string on unrecoverable failure. Used
-// by both obtainDaemon (which converts to a `failed` result) and
-// obtainDaemonKick (which silently gives up — there is no caller to report to).
+// Returns null on success, or a reason string on unrecoverable failure.
+// obtainDaemonKick silently gives up — there is no caller to report to.
 function ensureStateDir(host: Host): string | null {
   try {
     fs.mkdirSync(daemonDir(host), { recursive: true });
@@ -680,38 +463,6 @@ function ensureStateDir(host: Host): string | null {
   } catch (e) {
     return `mkdir ${daemonDir(host)}: ${(e as Error).message}`;
   }
-}
-
-// ─── Connect probe ──────────────────────────────────────────────────────────
-
-function canConnect(
-  sockPath: string,
-  timeoutMs: number,
-  clock: Timekeeper,
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    const sock = net.connect(sockPath);
-    let settled = false;
-    let clearTimer: (() => void) | null = null;
-    const done = (result: boolean): void => {
-      if (settled) return;
-      settled = true;
-      clearTimer?.();
-      sock.removeAllListeners();
-      sock.destroy();
-      resolve(result);
-    };
-    sock.once("connect", () => done(true));
-    sock.once("error", () => done(false));
-    clearTimer = clock.after(
-      "daemon connect timeout",
-      timeoutMs,
-      () => done(false),
-      {
-        unref: true,
-      },
-    );
-  });
 }
 
 // ─── Default spawn implementation ───────────────────────────────────────────

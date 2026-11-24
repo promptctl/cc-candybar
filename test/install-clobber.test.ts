@@ -163,11 +163,19 @@ describe("install — clobber protection", () => {
       stderr.push(String(chunk));
       return true;
     };
-    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, HOST, p);
+    const owned = updateClaudeSettings(
+      bareBin,
+      DEFAULT_INSTALL_ARGS,
+      false,
+      HOST,
+      p,
+    );
     process.stderr.write = origWrite;
 
     expect(readCommand(p)).toBe(`${bareBin}-backup --mine`);
     expect(stderr.join("")).toContain("customized");
+    // The install records its bundle only for a statusline it owns.
+    expect(owned).toBe(false);
   });
 
   test("our bare command followed by args is still recognized as ours", () => {
@@ -181,7 +189,9 @@ describe("install — clobber protection", () => {
       }),
     );
 
-    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, HOST, p);
+    expect(
+      updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, HOST, p),
+    ).toBe(true);
     expect(readCommand(p)).toBe(buildStatusLineCommand(bareBin, []));
   });
 
@@ -250,7 +260,10 @@ describe("install — clobber protection", () => {
       updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
       expect(JSON.parse(fs.readFileSync(p, "utf-8"))).toEqual({
         model: "opus",
-        statusLine: { type: "command", command: buildStatusLineCommand(BIN, []) },
+        statusLine: {
+          type: "command",
+          command: buildStatusLineCommand(BIN, []),
+        },
       });
     },
   );
@@ -271,7 +284,9 @@ describe("installSuccessMessage", () => {
   // that renders it rather than spelled again here.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
     const msg = installSuccessMessage();
-    expect(msg).toMatch(/theme\/style\/variation\/shade\/endcaps\/wrap\/padding controls/i);
+    expect(msg).toMatch(
+      /theme\/style\/variation\/shade\/endcaps\/wrap\/padding controls/i,
+    );
     expect(msg).toContain(DOOR_GLYPH);
   });
 });
