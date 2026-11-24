@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-947",
-      "ref": "refs/pull/947/merge",
-      "sha": "f59dd9ec45f6cee131604d6be63887cd9106c791",
-      "timestamp": "2026-11-24T11:50:31.078Z",
-      "commits": [
-        {
-          "sha": "f59dd9ec45f6cee131604d6be63887cd9106c791",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T11:49:28Z",
-          "message": "Merge 14ba0b6ae69a2e1fea0bba27c09645f8f551cbf6 into f5c82561857634d22bec3fa05bbf58d6b4d43580\n"
-        },
-        {
-          "sha": "14ba0b6ae69a2e1fea0bba27c09645f8f551cbf6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T04:49:16-07:00",
-          "message": "test(click): the real-loop defer case needs no directory, and two stale 'read in time' wordings say what the daemon read\n"
-        },
-        {
-          "sha": "12b373bd27c55c966bf17ff0bf3e097404947b24",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T04:39:08-07:00",
-          "message": "fix(click): the held clock keeps its turn order, the url frame's late click has its end-to-end case, and the guard's reach is stated as the wait for a complete frame\n"
-        },
-        {
-          "sha": "1fdad19f21cb0aea4543de01cfd5684f892de1d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T04:27:55-07:00",
-          "message": "fix(click): the deferred backstop turn's order is part of the clock's contract, held and real, and the late-click TIMEOUT has its end-to-end case back\n"
-        },
-        {
-          "sha": "011f19b122c6e8d75f3e282d85ebd34479208182",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T04:12:25-07:00",
-          "message": "fix(click): a click the daemon has read runs however late its turn comes, and a click already waiting on its socket is read before the backstop answers\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f5c82561857634d22bec3fa05bbf58d6b4d43580",
-      "timestamp": "2026-11-24T10:56:56.867Z",
+      "sha": "66287d6a5aaf2b2a5ac8868f5c5b148abb92e538",
+      "timestamp": "2026-11-24T11:55:04.297Z",
       "commits": [
         {
-          "sha": "f5c82561857634d22bec3fa05bbf58d6b4d43580",
+          "sha": "66287d6a5aaf2b2a5ac8868f5c5b148abb92e538",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T03:55:43-07:00",
-          "message": "docs(design): remove the launchd plan from the host-and-renderer spec (#946)\n\nRemoves every line of docs/design/host-and-renderer.md that planned or described launchd owning the host's lifetime, and every line this change had rewritten."
+          "timestamp": "2026-11-24T04:54:02-07:00",
+          "message": "fix(click): a click the daemon has read runs however late its turn comes (#947)\n\n* fix(click): a click the daemon has read runs however late its turn comes, and a click already waiting on its socket is read before the backstop answers\n\n* fix(click): the deferred backstop turn's order is part of the clock's contract, held and real, and the late-click TIMEOUT has its end-to-end case back\n\n* fix(click): the held clock keeps its turn order, the url frame's late click has its end-to-end case, and the guard's reach is stated as the wait for a complete frame\n\n* test(click): the real-loop defer case needs no directory, and two stale 'read in time' wordings say what the daemon read"
         }
       ]
     }
