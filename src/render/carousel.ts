@@ -37,7 +37,12 @@ import {
 } from "./action.js";
 import { labelPaint } from "./option-paint.js";
 import { centreOf, stepOffset } from "./option-ring.js";
-import { assemble, requireOptionKind, type OptionAction } from "./picker.js";
+import {
+  assemble,
+  requireOptionKind,
+  requireReadBack,
+  type OptionAction,
+} from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
 export const CAROUSEL_NEXT = "▶";
@@ -59,13 +64,9 @@ export function renderCarousel(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on — a carousel needs a { set, from } or { persist, from } action`,
     );
   }
+  requireReadBack(runtime, applyName, apply, "carousel");
   const binding = renderBinding(runtime, "carousel");
   const { store } = binding;
-  if (!store.has(apply.stateVar)) {
-    throw new Error(
-      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on — declare { kind: "state", key: "${apply.stateVar}" } among the variables`,
-    );
-  }
   const declared = runtime.compiled.get(applyName)!;
   const sessionId = clickSession(runtime, "carousel");
   const { options } = apply;

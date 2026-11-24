@@ -45,9 +45,9 @@ import { pickCycleDisplay } from "../config/disclosure.js";
 import { resolvedStyle } from "./rich-theme.js";
 import {
   CONFIG_KEY_TO_EFFECTIVE_VAR,
-  RULE_CHOOSABLE_SETTING_OF_KEY,
+  EXPRESSION_SLOT_OF_KEY,
 } from "../config/setting-projections.js";
-import type { Selections } from "../dsl/view-source.js";
+import type { ExpressionSlot } from "../themes/policy.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
 import {
@@ -363,9 +363,8 @@ export interface RenderBinding {
   // `renderLook` / `renderLayout`.
   readonly look: RenderLook | undefined;
   readonly layout: (() => PreviewRows) | undefined;
-  // The selections in force: for each of theme, style and effect, the name
-  // decided or the rule that chooses it.
-  readonly selections: () => Selections;
+  // Whether a rule, not a name, chooses this slot's value in this render.
+  readonly ruled: (slot: ExpressionSlot) => boolean;
 }
 
 /**
@@ -1141,9 +1140,8 @@ export function ruledName(
   binding: RenderBinding,
   head: { readonly key: string; readonly stateVar: string },
 ): string {
-  const setting = RULE_CHOOSABLE_SETTING_OF_KEY.get(head.key);
-  return setting !== undefined &&
-    binding.selections()[setting].kind !== "decided"
+  const slot = EXPRESSION_SLOT_OF_KEY.get(head.key);
+  return slot !== undefined && binding.ruled(slot)
     ? readVar(binding.store, head.stateVar)
     : "";
 }

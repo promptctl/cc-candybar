@@ -4,11 +4,13 @@
 // draw's own "the page holding the option in force" reads the same map.
 export type PageMap = readonly number[];
 
+const UNPLACED = -1;
+
 export function pageMapOf(
   pages: ReadonlyArray<ReadonlyArray<{ readonly indices: readonly number[] }>>,
   optionCount: number,
 ): PageMap {
-  const map = new Array<number>(optionCount).fill(0);
+  const map = new Array<number>(optionCount).fill(UNPLACED);
   pages.forEach((sections, page) =>
     sections.forEach((section) =>
       section.indices.forEach((index) => {
@@ -16,6 +18,14 @@ export function pageMapOf(
       }),
     ),
   );
+  // [LAW:no-silent-failure] A layout that leaves an option on no page would
+  // turn a row to a page that does not hold it.
+  const unplaced = map.indexOf(UNPLACED);
+  if (unplaced >= 0) {
+    throw new Error(
+      `the page layout places no page for option ${unplaced} of ${optionCount}`,
+    );
+  }
   return map;
 }
 

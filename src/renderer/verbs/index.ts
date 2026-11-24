@@ -43,6 +43,7 @@ import type { Instant } from "../../utils/instant";
 import { stateKeyShown, configKeyShown, configKeySeed } from "./key-seeds";
 import {
   landing as landOnOption,
+  parseOffset,
   parseStep,
   type OptionStep,
 } from "../../render/option-ring";
@@ -83,7 +84,6 @@ import {
   deleteValues,
   proveLoads,
   readDeclared,
-  readDeclaredText,
   writePreset,
   writeDrafts,
   writeThemeDefault,
@@ -766,7 +766,7 @@ const stepConfig: VerbHandler = (args, ctx) => {
   // step from (clamped into the stepper's own range), or something else, which
   // is refused naming what the layer holds: a step from the value the bar draws
   // would overwrite what its author wrote.
-  if (declared.kind === "other") {
+  if (declared.kind === "other" || declared.kind === "text") {
     throw new BadVerbArgs(
       `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer to step`,
     );
@@ -793,8 +793,9 @@ const stepConfig: VerbHandler = (args, ctx) => {
 // [LAW:one-source-of-truth] The option ring an action's link names, read the
 // way the draw reads it: the options are the head's own domain, resolved over
 // this session's config as the compile resolved them, and the value the ring
-// starts from is the one the bar wears (the fold behind its `.effective`), not
-// what a layer's file happens to declare. A `do` is its head's ring.
+// starts from is the one the bar wears (the fold behind its `.effective`),
+// except for a persist twin, which steps its own layer's value (ringConfig). A
+// `do` is its head's ring.
 interface OptionRing {
   readonly twin: "set" | "persist";
   readonly key: string;
@@ -939,9 +940,15 @@ function landRing(
   ctx: ClickContext,
   name: string,
   twin: OptionRing["twin"],
-  [stepRaw = "", centre = "", ...turnRaw]: readonly string[],
+  [stepRaw, centre, ...turnRaw]: readonly string[],
   held: (ring: OptionRing) => string | null,
 ): RingLanding {
+  // [LAW:no-silent-failure] `centre` is empty when no rule chooses the key; a
+  // link that lacks the slot is malformed, never a ring from the first option.
+  if (stepRaw === undefined || centre === undefined)
+    throw new BadVerbArgs(
+      `${verb}: a ring step is <step>/<centre>[/<pageKey>/<pageLayout>]`,
+    );
   const ring = ringOf(verb, ctx, name, twin);
   const turn = turnOf(verb, turnRaw, ring.options);
   const from = held(ring) ?? centre;
@@ -969,11 +976,19 @@ const ringState: VerbHandler = (args, ctx) => {
   setState([ring.key, next, ...turn], ctx);
 };
 
+// The name a layer's text declares at a value key, or nothing when it declares
+// none or something that is no name.
+function declaredName(text: string | null, key: string): string | undefined {
+  const declared = readDeclared(text, key);
+  return declared.kind === "text" ? declared.value : undefined;
+}
+
 // `persist`'s twin of ringState: the option lands in the layer's file through
-// setConfig, and the page turn, which is session state, with it. [LAW:no-ambient-temporal-coupling]
-// A persist write is owed until the reload lands it, so the ring starts from
-// what the layer's file declares (which carries the click's own earlier
-// writes, as step-config reads it), else from what the bar wears.
+// setConfig, and the page turn, which is session state, with it.
+// [LAW:one-source-of-truth] The ring steps the value of the layer it writes,
+// as step-config does: the name that layer's file declares, which carries an
+// earlier click's write the bar has not reloaded, else what the bar wears (the
+// layer declares no name, or a rule).
 const ringConfig: VerbHandler = (args, ctx) => {
   const {
     role,
@@ -989,25 +1004,26 @@ const ringConfig: VerbHandler = (args, ctx) => {
     "persist",
     rest,
     (r) => {
-      const declared = readDeclaredText(
+      const key = durableLanding(
+        config,
+        (k) => ctx.sessionState.get(ctx.session, k),
+        r.key,
+      ).key;
+      const declared = declaredName(
         requireLayerText(
           into.path,
           editStore(ctx, ctx.session).read(into.path),
         ),
-        durableLanding(
-          config,
-          (k) => ctx.sessionState.get(ctx.session, k),
-          r.key,
-        ).key,
+        key,
       );
-      // A rule is text too, and no option: only an option the file names is
-      // where the ring starts.
       return declared !== undefined && r.options.includes(declared)
         ? declared
         : r.shown;
     },
   );
   setConfig([role, ring.key, next], ctx);
+  // [LAW:dataflow-not-control-flow] exception: the page turn is optional on
+  // the wire, and the session gate refuses an empty batch.
   if (turn.length > 0) setState(turn, ctx);
 };
 
@@ -1018,17 +1034,22 @@ const ringConfig: VerbHandler = (args, ctx) => {
 // option in force, which this reads from the session, else from where the draw
 // centred (`centre`), not from the link's layout.
 const turnPage: VerbHandler = (args, ctx) => {
-  const [name = "", pageKey = "", byRaw = "", layout = "", centre = ""] = args;
-  if (!pageKey) throw new BadVerbArgs("turn-page: <pageKey> is required");
-  const by = stepOf("turn-page", byRaw);
-  if (by.kind !== "offset")
+  const [name = "", pageKey, byRaw, layout, centre] = args;
+  if (
+    !pageKey ||
+    byRaw === undefined ||
+    layout === undefined ||
+    centre === undefined
+  )
     throw new BadVerbArgs(
-      `turn-page: by must be a whole number of pages, got "${byRaw}"`,
+      "turn-page: <action>/<pageKey>/<by>/<pageLayout>/<centre> is required",
     );
+  const by = parseOffset(byRaw);
+  if (!by.ok) throw new BadVerbArgs(`turn-page: by is ${by.problem}`);
   const config = sessionConfig(ctx);
   const head = headFor(config, name);
   const options = head === undefined ? undefined : optionsOf(config, head);
-  if (head === undefined || options === undefined)
+  if (head === undefined || options === undefined || options.length === 0)
     throw new BadVerbArgs(
       `turn-page: "${name}" lists no options to page through`,
     );

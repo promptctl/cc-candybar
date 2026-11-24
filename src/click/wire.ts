@@ -71,16 +71,18 @@ export const VERB_SET_STATE = "set-state";
 // each re-read-and-write. Additive: old set-state links still resolve.
 export const VERB_STEP_STATE = "step-state";
 // [LAW:types-are-the-program] A step through an option action's ring, resolved
-// when the click lands. Args: `[sessionId, action, step, ...turn]`: the action
-// whose domain is the ring, a step (a signed whole number of options, or
-// "random"), and optionally the page cursor to turn to the page holding the
-// option landed on, as `pageKey, pageLayout`. The ring, the value it starts
-// from and the landing are all read at click time, so the link is the same on
-// every draw and N clicks without a redraw land N steps.
+// when the click lands. Args: `[sessionId, action, step, centre, ...turn]`:
+// the action whose domain is the ring, a step (a signed whole number of
+// options, or "random"), the name the draw wore while a rule chooses the
+// key's value (else empty), and optionally the page cursor to turn to the page
+// holding the option landed on, as `pageKey, pageLayout`. The ring, the value
+// it starts from and the landing are read at click time, so the link is the
+// same on every draw and N clicks without a redraw land N steps.
 export const VERB_RING_STATE = "ring-state";
-// One page arrow: `[sessionId, action, pageKey, by, pageLayout]`. The click
-// reads the cursor and the option in force, then turns the page by `by`,
-// stopping at the first and last page the layout holds.
+// One page arrow: `[sessionId, action, pageKey, by, pageLayout, centre]`. The
+// click reads the cursor and the option in force (`centre` as for ring-state),
+// then turns the page by `by`, stopping at the first and last page the layout
+// holds.
 export const VERB_TURN_PAGE = "turn-page";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
@@ -98,7 +100,8 @@ export const VERB_SET_CONFIG = "set-config";
 // `[sessionId, layer, key, by]`.
 export const VERB_STEP_CONFIG = "step-config";
 // The config twin of ring-state. Args: `[sessionId, layer, action, step,
-// ...turn]`; the page turn, which is session state, lands with the write.
+// centre, ...turn]`; the page turn, which is session state, lands with the
+// write.
 export const VERB_RING_CONFIG = "ring-config";
 // [LAW:no-ambient-temporal-coupling] Write every one of the session's unsaved
 // settings (src/renderer/setting-drafts.ts) to its config file, then release

@@ -47,6 +47,7 @@ import {
   renderPicker,
   requireKind,
   requireOptionKind,
+  requireReadBack,
   type OptionAction,
   type PickerStep,
 } from "./picker.js";
@@ -73,14 +74,6 @@ export function requireSwatchable(
       `${helper} references action "${applyName}", which inserts a segment and holds no current value — a ${helper} needs a { set, from } or { persist, from } action`,
     );
   }
-  // [LAW:no-silent-failure] A key no variable reads back holds nothing the
-  // render can see, so a row over it would sit on its first option forever,
-  // as a carousel over it would: the same loud refusal, once, for every reader.
-  if (!renderBinding(runtime, helper).store.has(apply.stateVar)) {
-    throw new Error(
-      `${helper} references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to draw — declare { kind: "state", key: "${apply.stateVar}" } among the variables`,
-    );
-  }
   if (apply.paletteOf === undefined) {
     throw new Error(
       `${helper} references action "${applyName}", whose options are not colour-valued — a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`,
@@ -99,6 +92,8 @@ export function optionPalette(
   chosen?: string,
 ): Palette {
   const apply = requireSwatchable(runtime, applyName, helper);
+  // An option named in the template reads no key; the one in force does.
+  if (chosen === undefined) requireReadBack(runtime, applyName, apply, helper);
   const option =
     chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
   // [LAW:parse-dont-validate] A domain's `paletteOf` answers for its members;
@@ -140,6 +135,7 @@ export function swatchesFuncs(
     swatches: {
       fn: (applyName: string, pageName: string): RichText => {
         const apply = requireSwatchable(runtime, applyName, "swatches");
+        requireReadBack(runtime, applyName, apply, "swatches");
         const page = requireKind(
           runtime,
           pageName,

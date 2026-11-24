@@ -43,6 +43,12 @@ describe("a page layout as a link carries it", () => {
     });
   });
 
+  test("a layout that leaves an option on no page is a loud error, not page 0", () => {
+    expect(() => pageMapOf([[{ indices: [0, 2] }]], 3)).toThrow(
+      /places no page for option 1 of 3/,
+    );
+  });
+
   test("an empty layout has no pages", () => {
     expect(pageCount(pageMapOf([], 0))).toBe(0);
     expect(parsePageMap("", 0)).toEqual({ ok: true, map: [] });

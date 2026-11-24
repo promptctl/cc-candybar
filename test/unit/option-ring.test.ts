@@ -16,13 +16,19 @@ import {
 
 describe("a step as a link spells it", () => {
   test("an offset and `random` read back as they were spelled", () => {
-    for (const step of [stepOffset(1), stepOffset(-1), stepOffset(7), STEP_RANDOM]) {
+    for (const step of [
+      stepOffset(1),
+      stepOffset(-1),
+      stepOffset(7),
+      STEP_RANDOM,
+    ]) {
       expect(parseStep(spellStep(step))).toEqual({ ok: true, step });
     }
   });
 
   test("anything else is refused, naming what a step is", () => {
-    for (const raw of ["", "1.5", "next", "--1", " 1"]) {
+    // Past the safe range a number rounds, and the ring's wrap would be NaN.
+    for (const raw of ["", "1.5", "next", "--1", " 1", "1" + "0".repeat(30)]) {
       expect(parseStep(raw)).toMatchObject({
         ok: false,
         problem: expect.stringContaining("a whole number of options"),

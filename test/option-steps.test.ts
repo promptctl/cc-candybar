@@ -149,6 +149,24 @@ describe("a swatches row's ◀ ▶ ? land one step per click", () => {
     rt.dispose();
   });
 
+  test("a ring link missing its centre slot is refused, not stepped from the first option", () => {
+    const rt = rigOf(SWATCHES);
+    rt.draw();
+    expect(() =>
+      CLICK_VERBS.get("ring-state")!(
+        encodeSegments([SID, "applyTheme", "1"]),
+        rt.ctx,
+      ),
+    ).toThrow(/a ring step is <step>\/<centre>/);
+    expect(() =>
+      CLICK_VERBS.get("turn-page")!(
+        encodeSegments([SID, "applyTheme", "themes-page", "1", "0.1"]),
+        rt.ctx,
+      ),
+    ).toThrow(/<action>\/<pageKey>\/<by>\/<pageLayout>\/<centre> is required/);
+    rt.dispose();
+  });
+
   test("a ring step over an action that is no ring of options is refused, naming it", () => {
     const rt = rigOf(SWATCHES);
     rt.draw();

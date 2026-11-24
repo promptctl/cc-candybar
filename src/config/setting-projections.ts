@@ -27,6 +27,7 @@ import {
 } from "./globals-fields.js";
 
 export type { SettingName } from "./globals-fields.js";
+import { EXPRESSION_SLOTS, type ExpressionSlot } from "../themes/policy.js";
 
 // A globals field the render publishes an `.effective` projection of.
 export interface ConfigProjection {
@@ -103,24 +104,21 @@ export const CONFIG_KEY_TO_SETTING: ReadonlyMap<string, SettingName> = new Map(
   SETTING_PROJECTIONS.map((p) => [p.configKey, p.sessionKey]),
 );
 
-// The settings a rule may choose instead of a name (theme, style, effect), by
-// every key a `set` or `persist` writes them at: a session key, or a config
-// field.
-export const RULE_CHOOSABLE_SETTING_OF_KEY: ReadonlyMap<
-  string,
-  "theme" | "style" | "effect"
-> = new Map(
-  SETTING_PROJECTIONS.flatMap((p) =>
-    p.sessionKey === "theme" ||
-    p.sessionKey === "style" ||
-    p.sessionKey === "effect"
-      ? ([
-          [p.sessionKey, p.sessionKey],
-          [p.configKey, p.sessionKey],
-        ] as const)
-      : [],
-  ),
-);
+// The expression slot (theme, style, effect: the settings a rule may choose
+// instead of a name) a key writes, by every key a `set` or `persist` writes it
+// at: a session key, or a config field.
+export const EXPRESSION_SLOT_OF_KEY: ReadonlyMap<string, ExpressionSlot> =
+  new Map(
+    SETTING_PROJECTIONS.flatMap((p) => {
+      const slot = EXPRESSION_SLOTS.find((s) => s === p.configKey);
+      return slot === undefined
+        ? []
+        : ([
+            [p.sessionKey, slot],
+            [p.configKey, slot],
+          ] as const);
+    }),
+  );
 
 // [LAW:one-source-of-truth] The current value of a setting is the one the bar
 // is rendering with — whichever rung (staged, session, config, floor) produced

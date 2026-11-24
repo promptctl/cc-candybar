@@ -291,6 +291,24 @@ export function requireOptionKind(
   return action;
 }
 
+// [LAW:single-enforcer] The precondition of every control that centres on the
+// value its key holds (a carousel, a swatches row, the swatch of the option in
+// force): some variable reads the key back. Without one the control would sit
+// on its first option forever, every ▶ writing the same neighbour, so it is
+// refused naming the variable to declare, once, for every such reader.
+export function requireReadBack(
+  runtime: ActionRuntime,
+  applyName: string,
+  apply: { readonly stateVar: string },
+  helper: OptionHelper,
+): void {
+  if (!renderBinding(runtime, helper).store.has(apply.stateVar)) {
+    throw new Error(
+      `${helper} references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on — declare { kind: "state", key: "${apply.stateVar}" } among the variables`,
+    );
+  }
+}
+
 // [LAW:dataflow-not-control-flow] The page value (and the live width) select
 // which option cells render and which boundary arrows exist — a boundary arrow is
 // an ABSENT fragment, never a skipped branch. ←/→ navigate the page key

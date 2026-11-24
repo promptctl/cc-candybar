@@ -24,12 +24,28 @@ export function spellStep(step: OptionStep): string {
   return step.kind === "random" ? RANDOM : String(step.by);
 }
 
-// [LAW:parse-dont-validate] The step a link carried, or why it is none.
+// [LAW:parse-dont-validate] A signed whole number a link carried, as a number
+// arithmetic cannot lose (past the safe range `Number` rounds, and the ring's
+// modular wrap would answer NaN), or why it is none.
+export function parseOffset(
+  raw: string,
+): { ok: true; by: number } | { ok: false; problem: string } {
+  const by = Number(raw);
+  return OFFSET_RE.test(raw) && Number.isSafeInteger(by)
+    ? { ok: true, by }
+    : {
+        ok: false,
+        problem: `a whole number was expected, got ${JSON.stringify(raw)}`,
+      };
+}
+
+// The step a link carried, or why it is none.
 export function parseStep(
   raw: string,
 ): { ok: true; step: OptionStep } | { ok: false; problem: string } {
   if (raw === RANDOM) return { ok: true, step: STEP_RANDOM };
-  if (OFFSET_RE.test(raw)) return { ok: true, step: stepOffset(Number(raw)) };
+  const offset = parseOffset(raw);
+  if (offset.ok) return { ok: true, step: stepOffset(offset.by) };
   return {
     ok: false,
     problem: `a step is a whole number of options or "${RANDOM}", got ${JSON.stringify(raw)}`,
@@ -85,6 +101,10 @@ export function landing(
     case "offset":
       return options[at(step.by)]!;
     case "random":
-      return options[randomOther(instant, options.length, at(0))]!;
+      // The instant is fractional seconds and the hash takes an integer, so
+      // the seed is whole milliseconds: two clicks a moment apart differ.
+      return options[
+        randomOther(Math.round(instant * 1000), options.length, at(0))
+      ]!;
   }
 }
