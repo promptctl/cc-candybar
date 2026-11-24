@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-959",
+      "ref": "refs/pull/959/merge",
+      "sha": "140012dca72ab848958cb892e2e1950090cb3cb6",
+      "timestamp": "2026-11-24T23:57:15.995Z",
+      "commits": [
+        {
+          "sha": "140012dca72ab848958cb892e2e1950090cb3cb6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:56:11-07:00",
+          "message": "Merge 1d2ef37733331d83b945098e3e341a2224068173 into 857fbb5ae27e566d5d9fe4da94a8f8bdfa1c9bbd\n"
+        },
+        {
+          "sha": "1d2ef37733331d83b945098e3e341a2224068173",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:55:40-07:00",
+          "message": "fix(render-cache): a compile is charged for what it holds on the heaviest platform that runs it, so the cache's budget counts it in full (candybar-later-fixes-nwu9.asa)\n\nA compile of the bundled default measures 8.8 MB on macOS and 10.7 MB on\nCI's Linux runner, past its 10 MiB charge, so the cache undercounted and\nthe charge test failed main's Release run whenever a reading landed just\nover. About 1 MB is go-template-js holding string literals as ropes, filed\nupstream.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "857fbb5ae27e566d5d9fe4da94a8f8bdfa1c9bbd",
