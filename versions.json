@@ -4,15 +4,22 @@
     {
       "version": "pr-947",
       "ref": "refs/pull/947/merge",
-      "sha": "7e601900484b4fc0fa1481b44a6fb44000aeb1dc",
-      "timestamp": "2026-11-24T11:13:43.415Z",
+      "sha": "fec3408caafdd82116b6349e7468d54ae5d087a1",
+      "timestamp": "2026-11-24T11:29:17.126Z",
       "commits": [
         {
-          "sha": "7e601900484b4fc0fa1481b44a6fb44000aeb1dc",
+          "sha": "fec3408caafdd82116b6349e7468d54ae5d087a1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T04:12:45-07:00",
-          "message": "Merge 011f19b122c6e8d75f3e282d85ebd34479208182 into f5c82561857634d22bec3fa05bbf58d6b4d43580\n"
+          "timestamp": "2026-11-24T11:28:08Z",
+          "message": "Merge 1fdad19f21cb0aea4543de01cfd5684f892de1d2 into f5c82561857634d22bec3fa05bbf58d6b4d43580\n"
+        },
+        {
+          "sha": "1fdad19f21cb0aea4543de01cfd5684f892de1d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T04:27:55-07:00",
+          "message": "fix(click): the deferred backstop turn's order is part of the clock's contract, held and real, and the late-click TIMEOUT has its end-to-end case back\n"
         },
         {
           "sha": "011f19b122c6e8d75f3e282d85ebd34479208182",
