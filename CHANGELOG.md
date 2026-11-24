@@ -1,3 +1,9 @@
+## [1.237.1](https://github.com/promptctl/cc-candybar/compare/v1.237.0...v1.237.1) (2026-11-24)
+
+### Bug Fixes
+
+* **tools:** the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4) ([#949](https://github.com/promptctl/cc-candybar/issues/949)) ([fecf785](https://github.com/promptctl/cc-candybar/commit/fecf78573e7a1a45407726874bb48cd3cdf83443))
+
 ## [1.237.0](https://github.com/promptctl/cc-candybar/compare/v1.236.15...v1.237.0) (2026-11-24)
 
 ### Features
