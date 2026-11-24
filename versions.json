@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-956",
+      "ref": "refs/pull/956/merge",
+      "sha": "726cf0d40bbedc44a399fa618031bf9f1007faab",
+      "timestamp": "2026-11-24T21:08:06.247Z",
+      "commits": [
+        {
+          "sha": "726cf0d40bbedc44a399fa618031bf9f1007faab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:06:47Z",
+          "message": "Merge b674410ad35f90a92a8300b9734cb1e9621ce398 into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+        },
+        {
+          "sha": "b674410ad35f90a92a8300b9734cb1e9621ce398",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T14:06:14-07:00",
+          "message": "fix(stored-state): a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz)\n\nOne holder now holds every per-session file: the session book, and a renderer profile's picks and history. It reads the file once, by the rule every state file keeps. A file that does not read is renamed aside beside itself before anything is written, and the store starts empty. A file that can be neither read nor renamed is never saved to, and stands on every bar as saving nothing.\n\nA load's set-aside and what it dropped (a refused session, a retired pick or setting, an empty session) are a daemon event about the file, grouped by what and why.\n\nRecency is the last request or write. A request moves its session in the renderer's stores, and the host hears that as a `heard` write; the wire version goes to 18. A move of place alone reaches the file within one order period and at a close, so the write rate does not grow with the tick.\n"
+        },
+        {
+          "sha": "4a477878190cd5c091883676ad04a02aeab13163",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T13:41:31-07:00",
+          "message": "fix(state): a write over a state file that did not read sets it aside, and an unread answers book asks again (candybar-law-review-ibyq.6iz)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-955",
       "ref": "refs/pull/955/merge",
       "sha": "f8dc737244a1ff210720cde6b21cd1eee3d1b087",
