@@ -50,7 +50,7 @@ They are related and handled one at a time.
 ### Sessions
 
 - **R-16. Moving a session to another renderer may restart Claude Code.** Avoiding the restart was never a requirement.
-- **R-19. Nothing but Claude Code starts candybar.** The install leaves no LaunchAgent, login item or system service. A statusline is a command Claude Code runs, so users expect the bar to run because Claude Code runs it, and a process they did not start reads as one they cannot trust.
+- **R-19. Claude Code launches the statusline, and launchd does not own the host's lifetime.** Users expect the bar to come up because Claude Code runs it, and a bar that ignores that behaviour confuses them and costs their trust. Users don't want a LaunchAgent installed.
 
 ### How designs are made
 
