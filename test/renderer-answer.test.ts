@@ -152,8 +152,17 @@ function renderer(
       verbs,
     }),
     feeds: new Feeds({
-      draw: (session, fps, readings, following, lanes, prepare) =>
-        renderFrame(parts, session, fps, readings, following, lanes, prepare),
+      draw: (session, fps, readings, following, lanes, pointer, prepare) =>
+        renderFrame(
+          parts,
+          session,
+          fps,
+          readings,
+          following,
+          lanes,
+          pointer,
+          prepare,
+        ),
       pin: (session) => rig.cache.pin(session),
       log: (level, message) => logged.push(`${level} ${message}`),
       periods: FEED_PERIODS,
@@ -1044,6 +1053,7 @@ describe("a draw", () => {
         setup,
         ANSWERING,
         UNFOLLOWED_FEEDS,
+        null,
       );
       return { drawn, candidate };
     };
@@ -1157,6 +1167,7 @@ describe("a feed's frame", () => {
       READ,
       new Set(["pane"]),
       UNFOLLOWED_FEEDS,
+      null,
       () => {
         throw new Error("a failed draw requested a receipt");
       },
@@ -1341,6 +1352,7 @@ describe("a feed's frame", () => {
         { at, tick: 0 as Tick },
         new Set(),
         UNFOLLOWED_FEEDS,
+        null,
         (candidate) => {
           candidates.push(candidate);
           return parts.mint();
@@ -2062,7 +2074,13 @@ test("diagnostics use the requesting client's rows or its own default ceiling", 
     [{}, MAX_VIEWER_ROWS],
   ] as const) {
     using setup = setUpRender(t.parts, current, READ, [], terminal);
-    const { drawn } = drawRender(t.parts, setup, ANSWERING, UNFOLLOWED_FEEDS);
+    const { drawn } = drawRender(
+      t.parts,
+      setup,
+      ANSWERING,
+      UNFOLLOWED_FEEDS,
+      null,
+    );
     expect(drawn.geometry.rows).toBe(rows);
   }
 });

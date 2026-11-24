@@ -11,11 +11,13 @@
 // the terminal draws their links as it does the statusline's, so a click works
 // the same.
 
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { parseArgs as parseCliArgs } from "node:util";
 import {
   renderOutcomeOf,
   tryClickViaDaemon,
+  tryPointerViaDaemon,
   trySessionInPane,
 } from "../daemon/client";
 import { describeFailure } from "../daemon/client-transport";
@@ -34,7 +36,10 @@ import {
 } from "../daemon/pane-visibility";
 import { DRAWING, RESTORED, paint } from "./paint";
 import { readMouse } from "./mouse";
-import { linkPressed } from "./hit-test";
+import { actionAt, linkPressed } from "./hit-test";
+import { deliveredBy } from "./pointer";
+import type { Delivered } from "../click/gesture";
+import type { OwnerFacts } from "../daemon/foundations/protocol";
 import type { HitMap } from "../render/hit-map";
 
 // How stale the pane's placement and its session may be: a window switched to
@@ -84,9 +89,15 @@ async function askPlacement(
   tmux: TmuxHint,
   pane: string,
 ): Promise<
-  { readonly kind: "ok"; readonly placement: Placement } | TmuxMissed
+  | {
+      readonly kind: "ok";
+      readonly placement: Placement;
+      // What this pane's pointer delivers, by tmux's `mouse` option now.
+      readonly delivered: readonly Delivered[];
+    }
+  | TmuxMissed
 > {
-  const [panes, clients] = await Promise.all([
+  const [panes, clients, mouse] = await Promise.all([
     runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
       "list-panes",
       "-a",
@@ -100,12 +111,22 @@ async function askPlacement(
       "-F",
       LIST_CLIENTS_FORMAT,
     ]),
+    // -A reads the value in effect, the session's own or the one it inherits.
+    runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
+      "show-options",
+      "-Av",
+      "-t",
+      tmux.pane,
+      "mouse",
+    ]),
   ]);
   if (panes.kind !== "ok") return panes;
   if (clients.kind !== "ok") return clients;
+  if (mouse.kind !== "ok") return mouse;
   return {
     kind: "ok",
     placement: placementFrom(panes.stdout, clients.stdout, pane, tmux.pane),
+    delivered: deliveredBy(mouse.stdout),
   };
 }
 
@@ -206,6 +227,33 @@ async function drawBarPane(
     readonly said: { latest: string | null; hits: HitMap | null };
     readonly follower: FrameFollower;
   } | null = null;
+  // [LAW:one-source-of-truth] What this pane says of its pointer: who it is,
+  // what its terminal delivers, and the action the pointer last stood on. The
+  // host holds the latest of it, and a stream that opens restates it.
+  const owner = randomUUID();
+  let delivered = first.delivered;
+  let hover: string | null = null;
+  const facts = (): OwnerFacts => ({
+    id: owner,
+    gestures: [...delivered],
+    hover,
+  });
+  // [LAW:no-ambient-temporal-coupling] One report at a time, in the order the
+  // facts changed, so the host never ends on an older one.
+  let reporting: Promise<void> = Promise.resolve();
+  const report = (): void => {
+    if (following === null) return;
+    const { sessionId } = following;
+    reporting = reporting.then(async () => {
+      const sent = await tryPointerViaDaemon(world, sessionId, facts());
+      if (sent.kind !== "ok")
+        process.stderr.write(
+          `cc-candybar bar-pane: pointer report failed: ${describeFailure(sent)}\n`,
+        );
+    });
+    void reporting.catch(die);
+  };
+
   // What the loop last learned of the pane's session, shown until its follower
   // says something.
   let status = `waiting for pane ${pane}'s bar`;
@@ -297,21 +345,26 @@ async function drawBarPane(
     const read = readMouse(unread + chunk);
     unread = read.rest;
     for (const event of read.events) {
-      if (event.kind !== "press") continue;
-      press(
-        linkPressed(
-          following?.said.hits ?? [],
-          process.stdout.rows,
-          event.at,
-          event.gesture,
-        ),
-      );
+      if (event.kind === "release" || event.kind === "wheel") continue;
+      const hits = following?.said.hits ?? [];
+      // [LAW:single-enforcer] Hover is where the pointer last was, whatever
+      // moved it there: only a change of action is reported, so moving within
+      // one costs nothing.
+      const under = actionAt(hits, process.stdout.rows, event.at);
+      if (under !== hover) {
+        hover = under;
+        report();
+      }
+      if (event.kind === "press")
+        press(linkPressed(hits, process.stdout.rows, event.at, event.gesture));
     }
   });
 
   const follow = (sessionId: string | null): void => {
     if (following?.sessionId === sessionId) return;
     following?.follower.close();
+    // The pointer has not been seen over the session about to be drawn.
+    hover = null;
     if (sessionId === null) {
       following = null;
       return;
@@ -344,6 +397,7 @@ async function drawBarPane(
         off: (resp) => say(resp.error),
         fault: (reason) => say(reason),
         exit: (reason) => die(new Error(reason)),
+        owner: facts,
       }),
     };
   };
@@ -370,7 +424,16 @@ async function drawBarPane(
     await sleep(world.clock, "bar pane tick", TICK_MS);
     const asked = await askPlacement(world, tmux, pane);
     placementAnswered(asked);
-    if (asked.kind === "ok") placement = asked.placement;
+    if (asked.kind === "ok") {
+      placement = asked.placement;
+      // tmux's `mouse` option was switched: what the pane delivers changed,
+      // and a pointer it no longer sees is over nothing.
+      if (asked.delivered.join(" ") !== delivered.join(" ")) {
+        delivered = asked.delivered;
+        hover = null;
+        report();
+      }
+    }
   }
   follow(null);
   process.stderr.write(`cc-candybar bar-pane: pane ${pane} closed\n`);

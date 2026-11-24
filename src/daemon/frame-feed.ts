@@ -21,6 +21,7 @@ import {
 import type { FrameSource } from "../click/link-signer.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
+import type { Frame } from "../render/frame.js";
 import { hitMapOf, type HitMap } from "../render/hit-map.js";
 import {
   answerOf,
@@ -36,6 +37,7 @@ import { sameDaemonEvent, type DaemonEvent } from "../utils/event-hold.js";
 import type {
   FeedFrame,
   LaneViewers,
+  PanePointer,
   PushedFrame,
   SessionViewers,
   Viewers,
@@ -44,8 +46,18 @@ import type {
 // A subscriber holds the ANSI answer for its own display.
 type Delivered = (delivered: boolean) => void;
 
+// [LAW:one-source-of-truth] The pane that draws the pane lane and sees the
+// pointer over it: its id, and what it last said of the pointer. Held by the
+// feed for as long as the owner's subscription stands.
+export interface PaneOwner {
+  readonly id: string;
+  readonly pointer: PanePointer;
+}
+
 export interface Subscriber {
   readonly lane: Lane;
+  // Declared by a pane-lane subscriber that owns the session's pointer.
+  readonly owner?: PaneOwner;
   // The writer reports completion or replacement for each offered chunk.
   readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
@@ -99,6 +111,14 @@ interface Follower {
 
 interface Watched {
   readonly followers: Map<Subscriber, Follower>;
+  // [LAW:single-enforcer] The one owner of the session's pointer: the newest
+  // subscriber to declare one, so a stream that reconnects over its old one
+  // takes over, and the old one's end changes nothing.
+  owner: {
+    readonly sub: Subscriber;
+    readonly id: string;
+    pointer: PanePointer;
+  } | null;
   // The last frame drawn: what a subscriber is handed as it joins.
   last: EncodedFeed | null;
   // [LAW:single-enforcer] Only the host knows when a new subscriber needs a
@@ -249,7 +269,13 @@ export class FrameFeeds<Req> {
     }
     let watched = this.watched.get(sessionId);
     if (watched === undefined) {
-      watched = { followers: new Map(), last: null, frameDemand: 0, pushed: 0 };
+      watched = {
+        followers: new Map(),
+        owner: null,
+        last: null,
+        frameDemand: 0,
+        pushed: 0,
+      };
       this.watched.set(sessionId, watched);
       this.stopWatching ??= this.deps.watching();
     }
@@ -257,6 +283,7 @@ export class FrameFeeds<Req> {
       return () => this.unsubscribe(sessionId, sub);
     const follower: Follower = { confirmed: null, writes: new Set() };
     watched.followers.set(sub, follower);
+    if (sub.owner !== undefined) watched.owner = { sub, ...sub.owner };
     this.handover(sessionId, watched, sub, follower);
     this.deps.log(
       "info",
@@ -292,6 +319,31 @@ export class FrameFeeds<Req> {
     });
   }
 
+  // [LAW:single-enforcer] The one admission of a pane's report of its
+  // pointer: only the session's live owner may change what is held, and the
+  // renderer is handed the change like any change of who watches.
+  pointerOf(
+    sessionId: SessionId,
+    owner: PaneOwner,
+  ):
+    | { readonly kind: "ok" }
+    | { readonly kind: "refused"; readonly reason: string } {
+    const held = this.watched.get(sessionId)?.owner ?? null;
+    if (held === null)
+      return {
+        kind: "refused",
+        reason: `no pane owns the pointer of session ${JSON.stringify(sessionId)}`,
+      };
+    if (held.id !== owner.id)
+      return {
+        kind: "refused",
+        reason: `pane ${JSON.stringify(owner.id)} does not own the pointer of session ${JSON.stringify(sessionId)}: a newer pane does`,
+      };
+    held.pointer = owner.pointer;
+    this.announce();
+    return { kind: "ok" };
+  }
+
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
   // its world state read.
   isWatched(sessionId: SessionId): boolean {
@@ -325,6 +377,13 @@ export class FrameFeeds<Req> {
         drawing: (seen?.drawing ?? false) || sub.drawing(),
       };
     }
+    // [LAW:one-source-of-truth] The owner's facts ride on its own lane: the
+    // renderer reads the pointer where it reads who watches.
+    if (watched.owner !== null && lanes[watched.owner.sub.lane] !== undefined)
+      lanes[watched.owner.sub.lane] = {
+        ...lanes[watched.owner.sub.lane]!,
+        pointer: watched.owner.pointer,
+      };
     // Follower insertion order can change on a replacement within a lane.
     // Emit the lane facts in the same order so that it remains the same view.
     return {
@@ -511,6 +570,7 @@ export class FrameFeeds<Req> {
     const follower = watched?.followers.get(sub);
     if (watched === undefined || follower === undefined) return;
     watched.followers.delete(sub);
+    if (watched.owner?.sub === sub) watched.owner = null;
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId);
       this.deps.log(

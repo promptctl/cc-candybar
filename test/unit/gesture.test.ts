@@ -1,8 +1,51 @@
 // A gesture's one spelling (src/click/gesture.ts) and how the bar pane's
 // terminal reports one (src/bar-pane/mouse.ts).
 
-import { gestureName, parseGesture } from "../../src/click/gesture";
+import {
+  ALL_GESTURES,
+  gestureName,
+  parseDelivered,
+  parseGesture,
+} from "../../src/click/gesture";
 import { MOUSE_OFF, MOUSE_ON, readMouse } from "../../src/bar-pane/mouse";
+import { deliveredBy } from "../../src/bar-pane/pointer";
+
+describe("what a surface delivers", () => {
+  it("is every button with each subset of the modifiers, once, in canonical spelling", () => {
+    expect(ALL_GESTURES).toHaveLength(24);
+    expect(new Set(ALL_GESTURES).size).toBe(24);
+    expect(ALL_GESTURES).toEqual(
+      expect.arrayContaining(["left", "ctrl+alt+shift+right", "alt+middle"]),
+    );
+    for (const name of ALL_GESTURES) {
+      const gesture = parseGesture(name);
+      expect(gesture.kind === "ok" && gestureName(gesture.value)).toBe(name);
+    }
+  });
+
+  it("reads gestures and hover, spelled any way round, once each", () => {
+    expect(
+      parseDelivered(["hover", "shift+ctrl+left", "ctrl+shift+left", "left"]),
+    ).toEqual({ kind: "ok", value: ["hover", "ctrl+shift+left", "left"] });
+  });
+
+  it("refuses an entry that is neither, naming it", () => {
+    expect(parseDelivered(["left", "hold"])).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining('"hold" is not a gesture'),
+    });
+    expect(parseDelivered([3])).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining("a string"),
+    });
+  });
+
+  it("follows tmux's mouse option: every gesture and hover while it is on, the plain click while off", () => {
+    expect(deliveredBy("on\n")).toEqual([...ALL_GESTURES, "hover"]);
+    expect(deliveredBy("off\n")).toEqual(["left"]);
+    expect(deliveredBy("")).toEqual(["left"]);
+  });
+});
 
 describe("gesture spelling", () => {
   it("reads any order of modifiers and names them in the one order", () => {

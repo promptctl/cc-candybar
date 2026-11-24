@@ -466,6 +466,29 @@ export interface SubscribeRequest {
   kind: "subscribe";
   sessionId: string;
   lane: Lane;
+  // The pane lane's owner, which draws the bar and sees the pointer over it
+  // (`PointerRequest`): the newest to subscribe owns the session's pointer.
+  owner?: OwnerFacts;
+}
+
+// [LAW:one-source-of-truth] What a bar pane says of its pointer, whole: who it
+// is (an id it made), the gestures its terminal delivers (`hover` among them),
+// and the action the pointer last stood on. Sent with the subscribe and
+// again, whole, whenever one changes, so the host holds exactly the pane's
+// latest and a stream that reconnects restates it.
+export interface OwnerFacts {
+  id: string;
+  gestures: string[];
+  hover: string | null;
+}
+
+// A change of the owner's facts. The host accepts it only from the session's
+// live owner: a stream that was replaced, or has ended, owns nothing.
+export interface PointerRequest {
+  v: number;
+  kind: "pointer";
+  sessionId: string;
+  owner: OwnerFacts;
 }
 
 // Which session last rendered from a tmux pane: the session of the daemon's
@@ -484,6 +507,7 @@ export type Request =
   | SessionRenderRequest
   | SubscribeRequest
   | PaneSessionRequest
+  | PointerRequest
   | ShutdownRequest
   | StatsRequest
   | ClickRequest

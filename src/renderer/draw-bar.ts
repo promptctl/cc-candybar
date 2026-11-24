@@ -63,6 +63,8 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
+import type { PanePointer } from "../renderer-interface/interface.js";
+import { pointerFacts } from "../render/pointer-facts.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { TurnTime } from "./turn-time.js";
 import {
@@ -137,6 +139,8 @@ export function renderFrame(
   // of late, as the feed knows them.
   following: ReadonlySet<Lane>,
   feeds: LaneFeeds,
+  // What the pane that owns the session's pointer says of it, if one does.
+  pointer: PanePointer | null,
   prepare: PrepareDelivery,
 ): FeedDraw | null {
   const facts: RequestFacts = [];
@@ -144,7 +148,7 @@ export function renderFrame(
     using setup = setUpFrame(parts, sessionId, readings, facts);
     if (setup === null) return null;
     const { drawn, evaluated, cellBreaks, lanes, candidate, eventsShown } =
-      drawRender(parts, setup, { by: "feed", fps }, feeds);
+      drawRender(parts, setup, { by: "feed", fps }, feeds, pointer);
     const bar = drawn.body;
     const { frame: statusline } = statuslineOf(
       setup,
@@ -403,6 +407,9 @@ export function drawRender(
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
+  // The pointer of the pane that owns the session's, which only a fed bar has:
+  // the request path draws for no pointer of its own.
+  pointer: PanePointer | null,
 ): {
   drawn: DrawnBar;
   evaluated: number;
@@ -593,6 +600,7 @@ export function drawRender(
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
     feeds,
+    ...pointerFacts(pointer),
     ...instantFacts(document.builtins, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
@@ -980,6 +988,7 @@ export function answerRequest(
     setup,
     ANSWERING,
     feeds.feedsOf(sessionId, time.tick),
+    null,
   );
   const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands

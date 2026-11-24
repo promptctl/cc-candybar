@@ -38,6 +38,7 @@ import type {
 } from "../daemon/foundations/debug-types";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
+import type { Delivered } from "../click/gesture";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
@@ -302,9 +303,20 @@ export interface SessionViewers {
   readonly joined: number;
 }
 
+// [LAW:one-source-of-truth] What the pane that owns a session's pane lane says
+// of its pointer: the gestures its terminal delivers, and the action the
+// pointer last stood on (null: none). It lives as long as the owner's
+// subscription and is never session state.
+export interface PanePointer {
+  readonly gestures: readonly Delivered[];
+  readonly hover: string | null;
+}
+
 export interface LaneViewers {
   readonly subscribers: number;
   readonly drawing: boolean;
+  // Only the pane lane has an owner, and only while one is subscribed.
+  readonly pointer?: PanePointer;
 }
 
 // Every session someone watches, whole: a session absent has no viewer.

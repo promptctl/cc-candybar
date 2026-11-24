@@ -107,6 +107,9 @@ const CONFIGS = {
   // Still, and its palette rule names no theme for two seconds of every four:
   // a render warning that comes and goes while nothing else moves.
   clock: `{ globals: { experimentalStatusline: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
+  // Reads the draw's pointer: what the surface delivers and the action the
+  // pointer is on.
+  pointed: `{ globals: { experimentalPane: true }, segments: { mark: { template: '{{ if eq .hover "" }}no hover{{ else }}over {{ .hover }}{{ end }} on {{ .surface }}' } }, root: { h: ['mark'] } }`,
   toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
@@ -679,6 +682,118 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       },
     });
     expect(frames).toEqual([]);
+  });
+
+  // [LAW:verifiable-goals] The pane that owns a session's pointer says what its
+  // terminal delivers and where the pointer is, and the bar is drawn from it:
+  // a request path (no owner) draws for a link's surface.
+  test("a pane's pointer reaches the draw as `surface` and `hover`, and ends with its stream", async () => {
+    const sid = "feed-pointer";
+    const answered = await render(sockPath, sid, projectDir, {}, args("pointed"));
+    // A request is answered for a link: the plain click, nothing hovered.
+    expect(textOf(answered)).toContain("no hover on left");
+    const owner = (hover: string | null) => ({
+      id: "pane-a",
+      gestures: ["left", "ctrl+right", "hover"],
+      hover,
+    });
+    const frames: Response[] = [];
+    const stream = openFrameStream(
+      sockPath,
+      sid,
+      "pane",
+      (resp) => frames.push(resp),
+      () => {},
+      owner(null),
+    );
+    try {
+      const shown = (text: string) => () =>
+        frames.some(
+          (resp) => decoded(resp)?.plain.includes(text) === true,
+        );
+      await until(shown("no hover on left ctrl+right hover"), "the owner's surface");
+      const refused = await sendDaemonRequest(
+        sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "pointer",
+          sessionId: sid,
+          owner: { ...owner("copy"), id: "another-pane" },
+        },
+        5_000,
+      );
+      expect(refused).toMatchObject({
+        ok: false,
+        code: "BAD_REQUEST",
+        error: expect.stringMatching(/does not own the pointer/),
+      });
+      const reported = await sendDaemonRequest(
+        sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "pointer",
+          sessionId: sid,
+          owner: owner("copy"),
+        },
+        5_000,
+      );
+      expect(reported).toMatchObject({ ok: true });
+      await until(shown("over copy on left ctrl+right hover"), "the hover");
+    } finally {
+      stream.close();
+    }
+    // The owner's subscription ended: its report is refused, and the bar is
+    // drawn for a link again.
+    await until(async () => {
+      const late = await sendDaemonRequest(
+        sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "pointer",
+          sessionId: sid,
+          owner: owner("late"),
+        },
+        5_000,
+      );
+      return !late.ok;
+    }, "the owner's end");
+    expect(textOf(await render(sockPath, sid, projectDir, {}, args("pointed")))).toContain(
+      "no hover on left",
+    );
+  });
+
+  test("a subscribe that declares an owner is refused unless it is for the pane lane and names a pointer", async () => {
+    await render(sockPath, "feed-badowner", projectDir, {}, args("pointed"));
+    const subscribe = (lane: string, owner: unknown) =>
+      sendDaemonRequest(
+        sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "subscribe",
+          sessionId: "feed-badowner",
+          lane,
+          owner,
+        },
+        5000,
+      );
+    const whole = { id: "p", gestures: ["left"], hover: null };
+    expect(await subscribe("statusline", whole)).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: expect.stringMatching(/only the pane lane has an owner/),
+    });
+    for (const [owner, why] of [
+      [{ ...whole, id: "" }, /owner\.id/],
+      [{ ...whole, gestures: ["ctrl+ctrl+left"] }, /owner\.gestures: .*twice/],
+      [{ ...whole, gestures: ["hold"] }, /owner\.gestures: .*not a gesture/],
+      [{ ...whole, hover: 3 }, /owner\.hover/],
+      ["pane", /owner is an object/],
+    ] as const)
+      expect(await subscribe("pane", owner)).toMatchObject({
+        ok: false,
+        code: "BAD_REQUEST",
+        error: expect.stringMatching(why),
+      });
   });
 
   // The lane toggles (candybar-animation-wbxz.81o.azo).

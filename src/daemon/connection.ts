@@ -19,6 +19,7 @@ import {
 } from "./foundations/protocol";
 import { replyOf, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
+import type { PaneOwner } from "./frame-feed.js";
 import { newestWins } from "../utils/newest-wins.js";
 import {
   REQUEST_TIMEOUT_MS,
@@ -82,6 +83,7 @@ type Event =
       readonly kind: "subscribe";
       readonly sessionId: SessionId;
       readonly lane: Lane;
+      readonly owner: PaneOwner | null;
     }
   | { readonly kind: "attached"; readonly unsubscribe: () => void }
   | { readonly kind: "close" };
@@ -100,6 +102,7 @@ type Act =
       readonly kind: "attach";
       readonly sessionId: SessionId;
       readonly lane: Lane;
+      readonly owner: PaneOwner | null;
     }
   | { readonly kind: "unsubscribe"; readonly unsubscribe: () => void };
 
@@ -275,7 +278,15 @@ const STEP: {
   // subscription.
   subscribe: (p, e) =>
     p.kind === "answering"
-      ? [p, { kind: "attach", sessionId: e.sessionId, lane: e.lane }]
+      ? [
+          p,
+          {
+            kind: "attach",
+            sessionId: e.sessionId,
+            lane: e.lane,
+            owner: e.owner,
+          },
+        ]
       : [
           p,
           dropped(
@@ -385,7 +396,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         );
         return act.owed.settled(false);
       case "attach":
-        return attach(act.sessionId, act.lane);
+        return attach(act.sessionId, act.lane, act.owner);
       case "unsubscribe":
         return act.unsubscribe();
       default: {
@@ -460,6 +471,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
               kind: "subscribe",
               sessionId: r.sessionId,
               lane: r.lane,
+              owner: r.owner,
             });
           default: {
             const unhandled: never = r;
@@ -513,10 +525,15 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // timeout, and frames until the subscriber closes it.
   // [LAW:no-ambient-temporal-coupling] A subscriber slower than the frames
   // gets the newest one when its socket drains, never a backlog of stale ones.
-  function attach(sessionId: SessionId, lane: Lane): void {
+  function attach(
+    sessionId: SessionId,
+    lane: Lane,
+    owner: PaneOwner | null,
+  ): void {
     const push = newestWins(sock);
     const unsubscribe = daemon.subscribe(sessionId, {
       lane,
+      ...(owner !== null && { owner }),
       // [LAW:no-silent-failure] A frame that cannot be pushed (past the cap)
       // is pushed as the render failure naming why. Ending the stream
       // would cause subscribers to reconnect into the same failure.

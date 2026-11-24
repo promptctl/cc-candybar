@@ -362,6 +362,79 @@ describe("the viewers the renderer is handed", () => {
   });
 });
 
+// The pane that owns a session's pointer: its subscriber carries the facts
+// it declared, which the renderer is handed beside who watches.
+const owned = (id: string, hover: string | null = null) => ({
+  id,
+  pointer: { gestures: ["left", "hover"], hover },
+});
+const paneOwnedBy = (owner: ReturnType<typeof owned>) => {
+  const view = subscriber("pane");
+  return { ...view, sub: { ...view.sub, owner } };
+};
+
+describe("the owner of a session's pointer", () => {
+  test("is handed to the renderer on its lane, as the pane declared it", () => {
+    const r = rig();
+    r.feeds.subscribe(S, paneOwnedBy(owned("a", "copy")).sub);
+    r.feeds.subscribe(S, subscriber("statusline").sub);
+    const { lanes } = r.feeds.viewers()[S]!;
+    expect(lanes.pane?.pointer).toEqual({
+      gestures: ["left", "hover"],
+      hover: "copy",
+    });
+    expect(lanes.statusline).not.toHaveProperty("pointer");
+  });
+
+  test("is the newest pane to subscribe, and the one it replaced loses its say", () => {
+    const r = rig();
+    const first = paneOwnedBy(owned("first"));
+    r.feeds.subscribe(S, first.sub);
+    r.feeds.subscribe(S, paneOwnedBy(owned("second", "x")).sub);
+    expect(r.feeds.pointerOf(S, owned("first", "stale"))).toMatchObject({
+      kind: "refused",
+    });
+    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("x");
+    expect(r.feeds.pointerOf(S, owned("second", "y"))).toEqual({ kind: "ok" });
+    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("y");
+  });
+
+  test("keeps what it holds when the stream it replaced ends after it", () => {
+    const r = rig();
+    const leaveOld = r.feeds.subscribe(
+      S,
+      paneOwnedBy(owned("pane", "old")).sub,
+    );
+    r.feeds.subscribe(S, paneOwnedBy(owned("pane", "new")).sub);
+    leaveOld();
+    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("new");
+  });
+
+  test("ends with its subscription, and a report after that is refused saying why", () => {
+    const r = rig();
+    const leave = r.feeds.subscribe(S, paneOwnedBy(owned("a", "copy")).sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
+    leave();
+    expect(r.feeds.viewers()[S]!.lanes.pane).not.toHaveProperty("pointer");
+    expect(r.feeds.pointerOf(S, owned("a", "late"))).toMatchObject({
+      kind: "refused",
+      reason: expect.stringContaining("no pane owns the pointer"),
+    });
+  });
+
+  test("moves the viewers the renderer is handed when a report changes them, and not when it restates them", async () => {
+    const r = rig();
+    r.feeds.subscribe(S, paneOwnedBy(owned("a")).sub);
+    await r.slot();
+    expect(r.feeds.pointerOf(S, owned("a"))).toEqual({ kind: "ok" });
+    expect(r.owed).toHaveLength(0);
+    r.feeds.pointerOf(S, owned("a", "copy"));
+    expect(r.owed).toHaveLength(1);
+    await r.slot();
+    expect(r.handed.at(-1)![S]!.lanes.pane?.pointer?.hover).toBe("copy");
+  });
+});
+
 describe("a subscriber", () => {
   test("is sent each frame whose answer for its lane changed, and nothing for one that changed only another lane's", () => {
     const r = rig();

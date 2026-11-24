@@ -58,3 +58,48 @@ export function parseGesture(text: string): Asked<Gesture> {
   }
   return { kind: "ok", value: { button, modifiers } };
 }
+
+// What a surface delivers to the draw: gestures, and hover, which no link
+// carries and only a pane that sees the pointer move can report.
+export const HOVER = "hover";
+export type Delivered = GestureName | typeof HOVER;
+
+// [LAW:one-source-of-truth] Every gesture a pane can decode: each button with
+// each subset of the modifiers, in canonical spelling. What a pane with a
+// working mouse says it delivers, beside hover.
+export const ALL_GESTURES: readonly GestureName[] = BUTTONS.flatMap((button) =>
+  Array.from({ length: 1 << MODIFIERS.length }, (_, bits) =>
+    gestureName({
+      button,
+      modifiers: new Set(MODIFIERS.filter((_m, i) => (bits & (1 << i)) !== 0)),
+    }),
+  ),
+);
+
+function parseOneDelivered(entry: unknown): Asked<Delivered> {
+  if (typeof entry !== "string")
+    return {
+      kind: "failed",
+      reason: `a delivered gesture is a string: got ${JSON.stringify(entry)}`,
+    };
+  if (entry === HOVER) return { kind: "ok", value: HOVER };
+  const gesture = parseGesture(entry);
+  return gesture.kind === "ok"
+    ? { kind: "ok", value: gestureName(gesture.value) }
+    : gesture;
+}
+
+// [LAW:parse-dont-validate] A pane's list of what it delivers, read once: each
+// entry canonical, none twice, and a spelling that is neither a gesture nor
+// hover refused by name.
+export function parseDelivered(
+  entries: readonly unknown[],
+): Asked<readonly Delivered[]> {
+  const delivered: Delivered[] = [];
+  for (const entry of entries) {
+    const name = parseOneDelivered(entry);
+    if (name.kind !== "ok") return name;
+    if (!delivered.includes(name.value)) delivered.push(name.value);
+  }
+  return { kind: "ok", value: delivered };
+}

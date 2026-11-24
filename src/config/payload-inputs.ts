@@ -19,6 +19,7 @@ import {
 } from "./lanes.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "./setting-projections.js";
 import { EXPRESSION_SLOTS, type ExpressionSlot } from "../themes/policy.js";
+import { PLAIN_CLICK } from "../click/gesture.js";
 import {
   GLOBAL_FIELDS,
   wireKindOf,
@@ -141,6 +142,11 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "number",
     default: 0,
   },
+  // What the drawing surface delivers, and the action the pointer is on
+  // (src/render/pointer-facts.ts): the gestures it delivers, space-joined (a
+  // link's surface delivers only `left`), and the action's name, "" for none.
+  surface: { kind: "input", path: "surface", default: PLAIN_CLICK },
+  hover: { kind: "input", path: "hover", default: "" },
   // The settings door's indicator (src/render/diagnostics.ts,
   // DiagnosticsProjection): its label, "" while there is nothing to show, the
   // colours of the worst level the draw's diagnostics hold, and the key of
@@ -238,6 +244,9 @@ export const DRAW_PROJECTIONS = {
   today: "the day the draw is at",
   feeds: "the frames a lane was sent up to the draw's instant",
   drawing: "who the draw is for",
+  surface: "the gestures the drawing surface delivers",
+  hover: "the action the pointer is on",
+
   diagnostics: "the errors and warnings the draw owes its reader",
 } as const;
 export type DrawProjection = keyof typeof DRAW_PROJECTIONS;

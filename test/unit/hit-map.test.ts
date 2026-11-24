@@ -3,7 +3,7 @@
 // by the host's one signer, so the pane can only find one, never make one.
 
 import { parseGesture } from "../../src/click/gesture";
-import { linkPressed } from "../../src/bar-pane/hit-test";
+import { actionAt, linkPressed } from "../../src/bar-pane/hit-test";
 import { lineAtRow } from "../../src/bar-pane/paint";
 import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
 import { effectsUrl, VERB_COPY } from "../../src/click/wire";
@@ -129,6 +129,13 @@ describe("what a press finds", () => {
     expect(linkPressed(hits, 2, { column: 1, row: 9 }, gesture("left"))).toBe(
       undefined,
     );
+  });
+
+  it("is hovering the action a region names, and nothing over a cell with no region or a region with no action", () => {
+    expect(actionAt(hits, 2, { column: 4, row: 1 })).toBe("copyIt");
+    expect(actionAt(hits, 2, { column: 1, row: 1 })).toBeNull();
+    expect(actionAt(hits, 2, { column: 1, row: 2 })).toBeNull();
+    expect(actionAt(hits, 2, { column: 1, row: 9 })).toBeNull();
   });
 
   // paint writes line i at row i + 1, and the rows past a short pane's bottom
