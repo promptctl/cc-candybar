@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-949",
+      "ref": "refs/pull/949/merge",
+      "sha": "21695eae8fd9a701ab829cd1a67014c8a229927a",
+      "timestamp": "2026-11-24T14:24:58.242Z",
+      "commits": [
+        {
+          "sha": "21695eae8fd9a701ab829cd1a67014c8a229927a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:23:08-07:00",
+          "message": "Merge 67f4fa1c3db44a777fc87d312db2e2c60c26c27d into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+        },
+        {
+          "sha": "67f4fa1c3db44a777fc87d312db2e2c60c26c27d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:22:51-07:00",
+          "message": "fix(tools): the bar sends to the socket its daemon's readiness was proven on (candybar-later-fixes-nwu9.1d4)\n"
+        },
+        {
+          "sha": "86f92c593b3057ff8dce760efc74ba7f21eee735",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:14:01-07:00",
+          "message": "fix(tools): a path no zone names is refused, and the shared daemon start reports every failure (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 2 on PR 949:\n\n- The zone table places every root. audits/, which runs under Jest, sits\n  with the suite. A path no row names is in no zone and nothing may\n  import it, so a tool can no longer reach the suite through an unlisted\n  root.\n- The package root comes from scripts/lib/repo.cjs's own location, not\n  the working directory.\n- The shell a tool takes is a closed type. The worker env is merged\n  where an in-worker daemon starts.\n- A cleanup after a failure reports its own error beside the failure\n  (failAfter), never in its place.\n- The readiness probe returns a tagged outcome. The bar uses the wire's\n  reply budget.\n- The spawner headers name the callers they serve: the tests and the\n  bar tools.\n"
+        },
+        {
+          "sha": "1f41cd4026be4f8be26107bfb378be6ed7d1166f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:54:04-07:00",
+          "message": "fix(tools): scripts/lib is a zone of its own, and the tools lint holds every root outside Jest (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 1 on PR 949:\n\n- scripts/lib imports only the app and itself. Each import refusal names\n  why by the zone it reaches, and the lint config refuses to load if a\n  zone has no reason.\n- The tools lint runs over the roots the zone table names as outside\n  Jest. It refuses jest and @jest/* imports and every Jest global. The\n  suite's effect rules also cover scripts/lib.\n- Typecheck covers every TS file under scripts/.\n- The lint-rule tests share one harness.\n- The process tier runs pnpm bar, bar:web and bench --list from a plain\n  shell.\n- The Status hook fixture is one source: the tick every case extends,\n  and the bar's full tick built on it.\n- drive-bar reads session state at the daemon's own path.\n- The pane feed cases wait for the frame that shows what they assert.\n"
+        },
+        {
+          "sha": "3690a405f7d0b502d1e482f9a28eef1bd9cb87d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:16:12-07:00",
+          "message": "fix(test): the host-bundle tests import the shared helpers from scripts/lib (candybar-later-fixes-nwu9.1d4)\n"
+        },
+        {
+          "sha": "21585336daed42c61c6f623aa76735518eda925a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T05:56:31-07:00",
+          "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-950",
       "ref": "refs/pull/950/merge",
       "sha": "ac9214d7b7895b4055714931f629c8e98617f154",
@@ -34,49 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T06:46:14-07:00",
           "message": "feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-949",
-      "ref": "refs/pull/949/merge",
-      "sha": "2d4330711db1c50c0c31b7e260c040c3c493eedb",
-      "timestamp": "2026-11-24T14:15:25.939Z",
-      "commits": [
-        {
-          "sha": "2d4330711db1c50c0c31b7e260c040c3c493eedb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T14:14:18Z",
-          "message": "Merge 86f92c593b3057ff8dce760efc74ba7f21eee735 into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
-        },
-        {
-          "sha": "86f92c593b3057ff8dce760efc74ba7f21eee735",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:14:01-07:00",
-          "message": "fix(tools): a path no zone names is refused, and the shared daemon start reports every failure (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 2 on PR 949:\n\n- The zone table places every root. audits/, which runs under Jest, sits\n  with the suite. A path no row names is in no zone and nothing may\n  import it, so a tool can no longer reach the suite through an unlisted\n  root.\n- The package root comes from scripts/lib/repo.cjs's own location, not\n  the working directory.\n- The shell a tool takes is a closed type. The worker env is merged\n  where an in-worker daemon starts.\n- A cleanup after a failure reports its own error beside the failure\n  (failAfter), never in its place.\n- The readiness probe returns a tagged outcome. The bar uses the wire's\n  reply budget.\n- The spawner headers name the callers they serve: the tests and the\n  bar tools.\n"
-        },
-        {
-          "sha": "1f41cd4026be4f8be26107bfb378be6ed7d1166f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:54:04-07:00",
-          "message": "fix(tools): scripts/lib is a zone of its own, and the tools lint holds every root outside Jest (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 1 on PR 949:\n\n- scripts/lib imports only the app and itself. Each import refusal names\n  why by the zone it reaches, and the lint config refuses to load if a\n  zone has no reason.\n- The tools lint runs over the roots the zone table names as outside\n  Jest. It refuses jest and @jest/* imports and every Jest global. The\n  suite's effect rules also cover scripts/lib.\n- Typecheck covers every TS file under scripts/.\n- The lint-rule tests share one harness.\n- The process tier runs pnpm bar, bar:web and bench --list from a plain\n  shell.\n- The Status hook fixture is one source: the tick every case extends,\n  and the bar's full tick built on it.\n- drive-bar reads session state at the daemon's own path.\n- The pane feed cases wait for the frame that shows what they assert.\n"
-        },
-        {
-          "sha": "3690a405f7d0b502d1e482f9a28eef1bd9cb87d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:16:12-07:00",
-          "message": "fix(test): the host-bundle tests import the shared helpers from scripts/lib (candybar-later-fixes-nwu9.1d4)\n"
-        },
-        {
-          "sha": "21585336daed42c61c6f623aa76735518eda925a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T05:56:31-07:00",
-          "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n"
         }
       ]
     },
