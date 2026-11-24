@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-943",
+      "ref": "refs/pull/943/merge",
+      "sha": "b66509f20d793b5495e245a795a6fe23f2e77009",
+      "timestamp": "2026-11-24T01:26:37.006Z",
+      "commits": [
+        {
+          "sha": "b66509f20d793b5495e245a795a6fe23f2e77009",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T18:25:28-07:00",
+          "message": "Merge e4f624a45aab83474555b45d1c0e6a79f19e1278 into 7f014cebcabb7b7b5888bc1990095ca6dec045d1\n"
+        },
+        {
+          "sha": "e4f624a45aab83474555b45d1c0e6a79f19e1278",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T18:25:00-07:00",
+          "message": "fix(release): the Publish job publishes by npm trusted publishing, with no stored token (brandon-unfiled-3248.frhb)\n\nNPM_TOKEN was a granular token with npm's 90-day cap; it expired and every\npublish since v1.236.6 failed, which npm reports as E404. Each @promptctl\npackage now names this repo's release.yml as its trusted publisher, so the\njob's OIDC identity is the credential. Trusted publishing needs npm 11.5.1+,\nwhich Node 22 does not ship.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7f014cebcabb7b7b5888bc1990095ca6dec045d1",
