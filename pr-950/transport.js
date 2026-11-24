@@ -56961,6 +56961,100 @@ init_globals();
 init_globals();
 var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
 
+// src/config/action.ts
+init_globals();
+
+// src/config/layer-role.ts
+init_globals();
+var LAYER_ROLES = ["user", "project", "local"];
+var DEFAULT_WRITE_LAYER = "user";
+function layerFlags(roles) {
+  const [user, project, local] = LAYER_ROLES;
+  return {
+    [user]: roles.includes(user),
+    [project]: roles.includes(project),
+    [local]: roles.includes(local)
+  };
+}
+function layerRoleOf(raw) {
+  return LAYER_ROLES.find((role) => role === raw) ?? null;
+}
+
+// src/config/action.ts
+var ACTION_KEYS = [
+  "set",
+  "persist",
+  "copy",
+  "open",
+  "reset",
+  "undo",
+  "redo",
+  "back",
+  "rewind",
+  "save",
+  "preset",
+  "themeDefault",
+  "slash",
+  "run",
+  "do"
+];
+var LAYER_CHOICES = {
+  persist: LAYER_ROLES,
+  reset: LAYER_ROLES,
+  preset: LAYER_ROLES,
+  themeDefault: LAYER_ROLES,
+  save: [...LAYER_ROLES, "ask"]
+};
+var defaultLayer = (choice) => choice ?? DEFAULT_WRITE_LAYER;
+function resolveActionLayer(action2) {
+  if ("save" in action2) return { ...action2, layer: defaultLayer(action2.layer) };
+  if ("persist" in action2 || "reset" in action2 || "preset" in action2 || "themeDefault" in action2)
+    return { ...action2, layer: defaultLayer(action2.layer) };
+  return action2;
+}
+function runDeclaration(a) {
+  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
+}
+var actionMembers = (a) => [
+  ..."do" in a ? a.do : [],
+  ...Object.values(a.on ?? {})
+];
+function* actionTemplates(a) {
+  const found2 = [];
+  mapActionTemplates(a, (source, field) => {
+    found2.push([field, source]);
+    return source;
+  });
+  yield* found2;
+}
+function mapActionTemplates(a, f) {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
+  if ("run" in a) {
+    const run2 = a.run.map((item, i2) => f(item, `run.${i2}`));
+    return {
+      ...a,
+      run: run2,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`)
+        ])
+      )
+    };
+  }
+  return a;
+}
+function actionBindsTemplateValue(a) {
+  return "from" in a || "int" in a || "insertSegmentFrom" in a || "save" in a && a.layer === "ask";
+}
+function bindsTemplateValue(actions, a) {
+  const head = "do" in a ? actions[a.do[0]] : a;
+  return head !== void 0 && actionBindsTemplateValue(head);
+}
+
 // src/config/loader/edit-mode.ts
 var EDIT_CONFIGURE_KEY = "edit.configure";
 var EDIT_TOGGLE_ACTION = "edit.toggle";
@@ -56984,7 +57078,7 @@ function referencesEditToggle(template) {
 }
 function fileWantsEditMode(out) {
   if (Object.values(out.actions ?? {}).some(
-    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
+    (a) => actionMembers(a).includes(EDIT_TOGGLE_ACTION)
   )) {
     return true;
   }
@@ -57462,22 +57556,6 @@ function autocompactControl(prefix, formatCount) {
 // src/config/format-token-count.ts
 init_globals();
 var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
-
-// src/config/layer-role.ts
-init_globals();
-var LAYER_ROLES = ["user", "project", "local"];
-var DEFAULT_WRITE_LAYER = "user";
-function layerFlags(roles) {
-  const [user, project, local] = LAYER_ROLES;
-  return {
-    [user]: roles.includes(user),
-    [project]: roles.includes(project),
-    [local]: roles.includes(local)
-  };
-}
-function layerRoleOf(raw) {
-  return LAYER_ROLES.find((role) => role === raw) ?? null;
-}
 
 // src/config/menu-places.ts
 init_globals();
@@ -58853,78 +58931,6 @@ function synthesizeEditChrome(config) {
   };
 }
 
-// src/config/action.ts
-init_globals();
-var ACTION_KEYS = [
-  "set",
-  "persist",
-  "copy",
-  "open",
-  "reset",
-  "undo",
-  "redo",
-  "back",
-  "rewind",
-  "save",
-  "preset",
-  "themeDefault",
-  "slash",
-  "run",
-  "do"
-];
-var LAYER_CHOICES = {
-  persist: LAYER_ROLES,
-  reset: LAYER_ROLES,
-  preset: LAYER_ROLES,
-  themeDefault: LAYER_ROLES,
-  save: [...LAYER_ROLES, "ask"]
-};
-var defaultLayer = (choice) => choice ?? DEFAULT_WRITE_LAYER;
-function resolveActionLayer(action2) {
-  if ("save" in action2) return { ...action2, layer: defaultLayer(action2.layer) };
-  if ("persist" in action2 || "reset" in action2 || "preset" in action2 || "themeDefault" in action2)
-    return { ...action2, layer: defaultLayer(action2.layer) };
-  return action2;
-}
-function runDeclaration(a) {
-  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
-}
-var actionMembers = (a) => [
-  ..."do" in a ? a.do : [],
-  ...Object.values(a.on ?? {})
-];
-function* actionTemplates(a) {
-  const found2 = [];
-  mapActionTemplates(a, (source, field) => {
-    found2.push([field, source]);
-    return source;
-  });
-  yield* found2;
-}
-function mapActionTemplates(a, f) {
-  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
-  if ("open" in a) return { ...a, open: f(a.open, "open") };
-  if ("preset" in a && a.preset === "delete")
-    return { ...a, name: f(a.name, "name") };
-  if ("run" in a) {
-    const run2 = a.run.map((item, i2) => f(item, `run.${i2}`));
-    return {
-      ...a,
-      run: run2,
-      env: Object.fromEntries(
-        Object.entries(a.env).map(([name, value]) => [
-          name,
-          f(value, `env.${name}`)
-        ])
-      )
-    };
-  }
-  return a;
-}
-function actionBindsTemplateValue(a) {
-  return "from" in a || "int" in a || "insertSegmentFrom" in a || "save" in a && a.layer === "ask";
-}
-
 // src/config/loader/actions.ts
 init_globals();
 var import_node_path4 = __toESM(require_path_browserify(), 1);
@@ -58981,9 +58987,9 @@ function validateActionDecl(ctx, path31, raw, home) {
   const key = present[0];
   const { layer, on: rawOn, ...rest2 } = raw;
   const on2 = rawOn === void 0 ? {} : validateGestures(ctx, path31, rawOn);
-  if (on2 === null) return null;
   const parsed2 = armParsed(ctx, path31, key, layer, rest2, home);
-  return parsed2 === null || Object.keys(on2).length === 0 ? parsed2 : { ...parsed2, on: on2 };
+  if (on2 === null || parsed2 === null) return null;
+  return Object.keys(on2).length === 0 ? parsed2 : { ...parsed2, on: on2 };
 }
 function validateGestures(ctx, path31, raw) {
   if (!isPlainObject(raw)) {
@@ -62367,10 +62373,6 @@ function valuesWritten(a, optionDomains) {
     ];
   }
   return "int" in a ? ANY_INTEGER : null;
-}
-function bindsTemplateValue(actions, a) {
-  const head = "do" in a ? actions[a.do[0]] : a;
-  return head !== void 0 && actionBindsTemplateValue(head);
 }
 function subjects(record2, subject) {
   return Object.entries(record2).filter(([name]) => subject(name));
@@ -67148,7 +67150,7 @@ function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
     out.set(name, {
       ...compiled,
       on: action2.on ?? {},
-      bindsTemplateValue: compiled.kind === "do" ? compiled.head.bindsTemplateValue : actionBindsTemplateValue(action2)
+      bindsTemplateValue: bindsTemplateValue(actions, action2)
     });
   }
   return out;
@@ -77348,20 +77350,17 @@ function closeIdleMenus(sid, context, idle, ctx, effects) {
     const modeOpen = modeIsOpen(
       clickModeOf(c.sessionState.get(sid, CLICK_MODE_KEY))
     );
-    c.menu.choose(
-      sid,
-      [
-        ...roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
-        ...modeOpen ? [
-          { key: CLICK_MODE_KEY, value: DEFAULT_CLICK_MODE },
-          { key: HOVER_KEY, value: NO_HOVER }
-        ] : []
-      ],
-      () => menuContext(c, sid, sessionConfig(c))
-    );
+    const closed = [
+      ...roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+      ...modeOpen ? [
+        { key: CLICK_MODE_KEY, value: DEFAULT_CLICK_MODE },
+        { key: HOVER_KEY, value: NO_HOVER }
+      ] : []
+    ];
+    c.menu.choose(sid, closed, () => menuContext(c, sid, sessionConfig(c)));
     c.log(
       "info",
-      `menu-idle: closed=${[...roots.map(({ key }) => key), ...modeOpen ? [CLICK_MODE_KEY] : []].join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
+      `menu-idle: closed=${closed.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
     );
   });
 }
@@ -78861,10 +78860,10 @@ function track(state, work) {
   return entry;
 }
 function admit(state, category, signal) {
-  const refusal = refusalOf(state, category, signal);
-  if (refusal !== null) {
+  const refusal2 = refusalOf(state, category, signal);
+  if (refusal2 !== null) {
     state.scope.stats?.onRefused(category);
-    return refusal;
+    return refusal2;
   }
   state.lastStartAt.set(category, state.scope.clock.monotonic());
   return null;
@@ -81230,11 +81229,11 @@ var FileEventDelivery = class {
     };
     this.instrument = probing;
     this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.deaf;
-    if (refusal !== void 0) {
+    const [refusal2] = probing.handle.deaf;
+    if (refusal2 !== void 0) {
       this.end(
         stopPeriod,
-        `the OS refused the probe folder's watch: ${refusal.reason}`
+        `the OS refused the probe folder's watch: ${refusal2.reason}`
       );
       return;
     }
@@ -83464,7 +83463,8 @@ var REPLY_EVENTS = {
   debug: "request"
 };
 var eventOf = (kind) => typeof kind === "string" && Object.hasOwn(REPLY_EVENTS, kind) ? REPLY_EVENTS[kind] : "request";
-var refuse2 = (code2, error) => replied(stay({ ok: false, error, code: code2, daemonV: PROTOCOL_VERSION }));
+var refusal = (code2, error) => stay({ ok: false, error, code: code2, daemonV: PROTOCOL_VERSION });
+var refuse2 = (code2, error) => replied(refusal(code2, error));
 function parseOwner(raw) {
   const bad = (reason) => ({
     kind: "failed",
@@ -83595,18 +83595,14 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     });
   }
   if (req.kind === "pointer") {
-    const refused2 = (error) => stay({
-      ok: false,
-      error,
-      code: "BAD_REQUEST",
-      daemonV: PROTOCOL_VERSION
-    });
     const session = parseSessionId(req.sessionId);
-    if (!session.ok) return refused2(`pointer's sessionId ${session.problem}`);
+    if (!session.ok)
+      return refusal("BAD_REQUEST", `pointer's sessionId ${session.problem}`);
     const owner = parseOwner(req.owner);
-    if (owner.kind !== "ok") return refused2(`pointer's ${owner.reason}`);
+    if (owner.kind !== "ok")
+      return refusal("BAD_REQUEST", `pointer's ${owner.reason}`);
     const admitted = frameFeeds.pointerOf(session.id, owner.value);
-    return admitted.kind === "ok" ? stay({ ok: true, output: "" }) : refused2(admitted.reason);
+    return admitted.kind === "ok" ? stay({ ok: true, output: "" }) : refusal("BAD_REQUEST", admitted.reason);
   }
   if (req.kind === "stats") {
     const mailbox = parts.renderer.stats();
@@ -88247,7 +88243,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.237.0";
+var PACKAGE_VERSION = "1.237.1";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -89595,12 +89591,13 @@ function hitMapOf(frame2) {
 var MAX_REQUESTS = 256;
 function ownerOf(watched) {
   let found2 = null;
-  for (const [sub2, { owner }] of watched.followers)
-    if (owner !== null) found2 = { lane: sub2.lane, owner };
+  for (const { owner } of watched.followers.values())
+    if (owner !== null && (found2 === null || owner.said > found2.said))
+      found2 = owner;
   return found2;
 }
-var failedFeed = (refusal) => {
-  const encoded = { json: JSON.stringify(refusal) };
+var failedFeed = (refusal2) => {
+  const encoded = { json: JSON.stringify(refusal2) };
   return { resp: encoded, statusline: encoded };
 };
 function covers(prior, offered) {
@@ -89649,6 +89646,7 @@ var FrameFeeds = class {
   // what it holds is unknown (a delivery failed).
   handed = JSON.stringify({});
   frameDemands = 0;
+  panesSaid = 0;
   pushed = 0;
   refused = 0;
   lookups = 0;
@@ -89709,7 +89707,7 @@ var FrameFeeds = class {
     const follower = {
       confirmed: null,
       writes: /* @__PURE__ */ new Set(),
-      owner: sub2.owner === void 0 ? null : { ...sub2.owner }
+      owner: sub2.owner === null ? null : this.held(sub2.owner)
     };
     watched.followers.set(sub2, follower);
     this.handover(sessionId2, watched, sub2, follower);
@@ -89735,23 +89733,25 @@ var FrameFeeds = class {
       }
     });
   }
-  // [LAW:single-enforcer] The one admission of a pane's report of its
-  // pointer: only the session's live owner may change what is held, and the
-  // renderer is handed the change like any change of who watches.
-  pointerOf(sessionId2, owner) {
-    const watched = this.watched.get(sessionId2);
-    const held = watched === void 0 ? null : ownerOf(watched)?.owner ?? null;
-    if (held === null)
+  // [LAW:single-enforcer] A pane's facts of its pointer, as a subscribe and
+  // each report admit them: its latest, and the latest word of any pane.
+  held(pane) {
+    return { ...pane, said: ++this.panesSaid };
+  }
+  // A pane's report of its pointer: held for the pane, which then owns the
+  // session's pointer, and the renderer is handed the change like any change
+  // of who watches. A pane that does not follow the session is refused.
+  pointerOf(sessionId2, pane) {
+    const reporting = [
+      ...this.watched.get(sessionId2)?.followers.values() ?? []
+    ].filter((follower) => follower.owner?.id === pane.id);
+    if (reporting.length === 0)
       return {
         kind: "refused",
-        reason: `no pane owns the pointer of session ${JSON.stringify(sessionId2)}`
+        reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId2)}`
       };
-    if (held.id !== owner.id)
-      return {
-        kind: "refused",
-        reason: `pane ${JSON.stringify(owner.id)} does not own the pointer of session ${JSON.stringify(sessionId2)}: a newer pane does`
-      };
-    held.pointer = owner.pointer;
+    const admitted = this.held(pane);
+    for (const follower of reporting) follower.owner = admitted;
     this.announce();
     return { kind: "ok" };
   }
@@ -89778,7 +89778,7 @@ var FrameFeeds = class {
   }
   seen(sessionId2, watched) {
     const lanes = {};
-    const owner = ownerOf(watched)?.owner ?? null;
+    const owner = ownerOf(watched);
     for (const [sub2, follower] of watched.followers) {
       const seen = lanes[sub2.lane];
       lanes[sub2.lane] = {

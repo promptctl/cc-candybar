@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c",
-      "timestamp": "2026-11-24T14:55:10.500Z",
-      "commits": [
-        {
-          "sha": "cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T14:53:52Z",
-          "message": "chore(release): set `package.json` to 1.237.1\n\n## [1.237.1](https://github.com/promptctl/cc-candybar/compare/v1.237.0...v1.237.1) (2026-11-24)\n\n### Bug Fixes\n\n* **tools:** the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4) ([#949](https://github.com/promptctl/cc-candybar/issues/949)) ([fecf785](https://github.com/promptctl/cc-candybar/commit/fecf78573e7a1a45407726874bb48cd3cdf83443))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-950",
       "ref": "refs/pull/950/merge",
-      "sha": "1b94ed96a294df96d3652788d272df5e8aae83b7",
-      "timestamp": "2026-11-24T14:55:07.230Z",
+      "sha": "9c605816054388a3283deb101bf9ccdf8890e76d",
+      "timestamp": "2026-11-24T15:11:58.625Z",
       "commits": [
         {
-          "sha": "1b94ed96a294df96d3652788d272df5e8aae83b7",
+          "sha": "9c605816054388a3283deb101bf9ccdf8890e76d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T14:53:35Z",
-          "message": "Merge 0e8ca32da8d2acd4ab3e864fc20cc2d7752d81f2 into fecf78573e7a1a45407726874bb48cd3cdf83443\n"
+          "timestamp": "2026-11-24T15:10:45Z",
+          "message": "Merge 2bdded7ba7929903d30d7b9f07c4326c8084393d into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+        },
+        {
+          "sha": "2bdded7ba7929903d30d7b9f07c4326c8084393d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T08:10:31-07:00",
+          "message": "fix(bar-pane): review pass 2 — a report made with no session followed no longer shuts the gate, the pointer is the pane that spoke last, and a side button runs nothing\n"
         },
         {
           "sha": "0e8ca32da8d2acd4ab3e864fc20cc2d7752d81f2",
@@ -70,6 +62,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T06:46:14-07:00",
           "message": "feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c",
+      "timestamp": "2026-11-24T14:55:10.500Z",
+      "commits": [
+        {
+          "sha": "cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T14:53:52Z",
+          "message": "chore(release): set `package.json` to 1.237.1\n\n## [1.237.1](https://github.com/promptctl/cc-candybar/compare/v1.237.0...v1.237.1) (2026-11-24)\n\n### Bug Fixes\n\n* **tools:** the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4) ([#949](https://github.com/promptctl/cc-candybar/issues/949)) ([fecf785](https://github.com/promptctl/cc-candybar/commit/fecf78573e7a1a45407726874bb48cd3cdf83443))\n"
         }
       ]
     }
