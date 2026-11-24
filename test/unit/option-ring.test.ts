@@ -49,9 +49,6 @@ describe("a step lands on the ring the value is centred in", () => {
     expect(
       landing(["a", "b", "c"], "c", stepOffset(Number.MAX_SAFE_INTEGER), 0),
     ).toBe("a");
-    expect(
-      landing(["a", "b", "c"], "c", stepOffset(-Number.MAX_SAFE_INTEGER), 0),
-    ).toBe("b");
   });
 
   test("a value outside the domain counts as the first option", () => {

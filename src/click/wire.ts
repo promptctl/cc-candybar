@@ -78,7 +78,7 @@ export const VERB_STEP_STATE = "step-state";
 // holding the option landed on, as `pageKey, pageLayout`. The ring, the value
 // it starts from and the landing are read at click time (the centre is that
 // value only while the key holds no name), so N clicks without a redraw land N
-// steps, and the link changes between draws only when a rule's answer does.
+// steps.
 export const VERB_RING_STATE = "ring-state";
 // One page arrow: `[sessionId, action, pageKey, by, pageLayout, centre]`. The
 // click reads the cursor and the option in force (`centre` as for ring-state),

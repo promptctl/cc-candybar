@@ -8,7 +8,7 @@
 // floor under the rule, shows here.
 
 import { linksOf, effectsOf } from "../src/click/read";
-import { VERB_SET_STATE } from "../src/click/wire";
+import { VERB_SET_STATE, VERB_TURN_PAGE } from "../src/click/wire";
 import { textOf, type Frame, type Row } from "../src/render/frame";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { EFFECT_NAMES } from "../src/themes/policy";
@@ -29,98 +29,8 @@ const AT_03 = instantOf(new Date(2026, 5, 4, 12, 0, 3));
 const rule = (at02: string, other: string): string =>
   `{{ if eq (date "05" now) "02" }}${at02}{{ else }}${other}{{ end }}`;
 
-interface Domain {
-  readonly field: string;
-  readonly key: string;
-  readonly from: string | readonly string[];
-  readonly at02: string;
-  readonly at03: string;
-  // A colour-valued domain draws a swatches row and the swatch of the option
-  // in force; every domain draws a carousel and a picker.
-  readonly colour: boolean;
-}
-
-const DOMAINS: readonly Domain[] = [
-  {
-    field: "palette",
-    key: "theme",
-    from: "themes",
-    at02: "nord",
-    at03: "dracula",
-    colour: true,
-  },
-  {
-    field: "style",
-    key: "style",
-    from: "styles",
-    at02: "vivid",
-    at03: "muted",
-    colour: true,
-  },
-  {
-    field: "effect",
-    key: "effect",
-    from: EFFECT_NAMES,
-    at02: "pulse",
-    at03: "sparkle",
-    colour: false,
-  },
-];
-
-// Each control on a row of its own, led by its tag, so a reading of one
-// control reads that row alone: the bundled default draws glyphs of its own.
-const controlsOf = ({ colour }: Domain): Readonly<Record<string, string>> => ({
-  car: '{{ carousel "apply" "open" "Pick" }}',
-  pk: '{{ picker "apply" "page" false true }}',
-  ...(colour && {
-    sw: '{{ swatches "apply" "page" }}',
-    held: '{{ swatch "apply" }}',
-  }),
-});
-
-const sourceOf = (d: Domain): string => {
-  const controls = controlsOf(d);
-  return `{
-  globals: { ${d.field}: '${rule(d.at02, d.at03)}' },
-  variables: { page: { kind: 'state', key: 'page', default: '0' } },
-  actions: {
-    apply: { set: '${d.key}', from: ${JSON.stringify(d.from)} },
-    page: { set: 'page', int: true },
-    open: { set: 'opened', to: 'yes' },
-  },
-  segments: ${JSON.stringify(
-    Object.fromEntries(
-      Object.entries(controls).map(([tag, t]) => [
-        tag,
-        { template: `${tag} ${t}` },
-      ]),
-    ),
-  )},
-  root: { rows: { ${Object.keys(controls)
-    .map((tag) => `${tag}: { h: ['${tag}'] }`)
-    .join(", ")}, status: { h: [] } } },
-}`;
-};
-
-// [LAW:no-ambient-temporal-coupling] Every rig a case builds is closed after
-// it, whether the case passed or threw.
-const rigs: Rig[] = [];
-afterEach(() => rigs.splice(0).forEach((rig) => rig.dispose()));
-
-const rigOf = (d: Domain) => {
-  const rig = buildRig({
-    source: sourceOf(d),
-    base: DEFAULT_DSL_CONFIG,
-    sessionId: SID,
-  });
-  rigs.push(rig);
-  const draw = (at: Instant): Frame =>
-    rig.draw({ opts: { width: 400, wrap: true }, at }).frame;
-  return { ...rig, draw };
-};
-
-// The row the control `tag` leads. A row opens on its endcap, so
-// the tag is found as a run of its own.
+// The row the control `tag` leads. A row opens on its endcap, so the tag is
+// found as a run of its own.
 const rowOf = (frame: Frame, tag: string): Row => {
   const row = frame.rows.find(({ runs }) =>
     runs.some((r) => r.text.trim() === tag),
@@ -145,19 +55,6 @@ const urlOn = (frame: Frame, tag: string, glyph: string): string => {
   return hit.url;
 };
 
-// The option ring as the picker draws it: every option, in the domain's order.
-const ringOf = (frame: Frame, key: string): string[] =>
-  linksOn(frame, "pk").flatMap((l) => writes(l.url, key) ?? []);
-
-// [LAW:parse-dont-validate] The option `by` steps round `ring` from `from`, an
-// option the ring holds.
-const stepped = (ring: readonly string[], from: string, by: number): string => {
-  const at = ring.indexOf(from);
-  if (at === -1)
-    throw new Error(`"${from}" is not on the ring ${ring.join(" ")}`);
-  return ring[(((at + by) % ring.length) + ring.length) % ring.length]!;
-};
-
 // The colours of the swatch drawn after `label` on the row `tag` leads.
 const swatchAfter = (frame: Frame, tag: string, label: string): string => {
   const { runs } = rowOf(frame, tag);
@@ -172,49 +69,195 @@ const swatchAfter = (frame: Frame, tag: string, label: string): string => {
     .join(" ");
 };
 
-// What each control shows as current, beside the frame's text so a failure
-// shows the bar: the picker's bold options and the swatches row's bracketed
-// swatch by the option they write, the carousel label's and the held swatch's
-// colours as they are.
-const shown = (frame: Frame, d: Domain) => {
-  const bold = new Set(boldUrls({ rows: [rowOf(frame, "pk")] }));
-  return {
-    drawn: textOf(frame),
-    picker: linksOn(frame, "pk").flatMap(
-      (l) => (bold.has(l.url) && writes(l.url, d.key)) || [],
-    ),
-    ...(d.colour && {
-      swatches: linksOn(frame, "sw").flatMap(
-        (l) => (l.text === "[▀▀▀]" && writes(l.url, d.key)) || [],
-      ),
-      carousel: swatchAfter(frame, "car", "Pick"),
-      held: swatchAfter(frame, "held", "held"),
-    }),
+// A control over the key, drawn on a row of its own led by its tag, so a
+// reading of one control reads that row alone: the bundled default draws
+// glyphs of its own. Its mark is what it shows as current, read from the
+// frame, and what it shows while the bar wears `worn`. A carousel over a
+// domain without colours draws a plain label, so it marks nothing.
+interface Control {
+  readonly tag: string;
+  readonly template: string;
+  readonly arrows: boolean;
+  readonly mark?: {
+    readonly shown: (frame: Frame, key: string) => unknown;
+    readonly wearing: (frame: Frame, worn: string) => unknown;
   };
+}
+
+const CAROUSEL: Control = {
+  tag: "car",
+  template: '{{ carousel "apply" "open" "Pick" }}',
+  arrows: true,
+};
+const SWATCH_CAROUSEL: Control = {
+  ...CAROUSEL,
+  mark: {
+    shown: (frame) => swatchAfter(frame, "car", "Pick"),
+    wearing: (frame, worn) => swatchAfter(frame, "pk", worn),
+  },
+};
+const PICKER: Control = {
+  tag: "pk",
+  template: '{{ picker "apply" "page" false true }}',
+  arrows: false,
+  mark: {
+    shown: (frame, key) => {
+      const bold = new Set(boldUrls({ rows: [rowOf(frame, "pk")] }));
+      return linksOn(frame, "pk").flatMap(
+        (l) => (bold.has(l.url) && writes(l.url, key)) || [],
+      );
+    },
+    wearing: (_, worn) => [worn],
+  },
+};
+const SWATCHES: Control = {
+  tag: "sw",
+  template: '{{ swatches "apply" "page" }}',
+  arrows: true,
+  mark: {
+    shown: (frame, key) =>
+      linksOn(frame, "sw").flatMap(
+        (l) => (l.text === "[▀▀▀]" && writes(l.url, key)) || [],
+      ),
+    wearing: (_, worn) => [worn],
+  },
+};
+const HELD: Control = {
+  tag: "held",
+  template: '{{ swatch "apply" }}',
+  arrows: false,
+  mark: {
+    shown: (frame) => swatchAfter(frame, "held", "held"),
+    wearing: (frame, worn) => swatchAfter(frame, "pk", worn),
+  },
 };
 
-// What each control shows while the bar wears `worn`: the option itself, or
-// the colours the picker draws beside it.
-const showing = (frame: Frame, d: Domain, worn: string) => ({
+interface Domain {
+  readonly field: string;
+  readonly key: string;
+  readonly from: string | readonly string[];
+  readonly at02: string;
+  readonly at03: string;
+  readonly controls: readonly Control[];
+}
+
+const COLOUR_CONTROLS = [SWATCH_CAROUSEL, PICKER, SWATCHES, HELD];
+const DOMAINS: readonly Domain[] = [
+  {
+    field: "palette",
+    key: "theme",
+    from: "themes",
+    at02: "nord",
+    at03: "dracula",
+    controls: COLOUR_CONTROLS,
+  },
+  {
+    field: "style",
+    key: "style",
+    from: "styles",
+    at02: "vivid",
+    at03: "muted",
+    controls: COLOUR_CONTROLS,
+  },
+  {
+    field: "effect",
+    key: "effect",
+    from: EFFECT_NAMES,
+    at02: "pulse",
+    at03: "sparkle",
+    controls: [CAROUSEL, PICKER],
+  },
+];
+
+const sourceOf = (d: Domain): string => `{
+  globals: { ${d.field}: '${rule(d.at02, d.at03)}' },
+  variables: { page: { kind: 'state', key: 'page', default: '0' } },
+  actions: {
+    apply: { set: '${d.key}', from: ${JSON.stringify(d.from)} },
+    page: { set: 'page', int: true },
+    open: { set: 'opened', to: 'yes' },
+  },
+  segments: ${JSON.stringify(
+    Object.fromEntries(
+      d.controls.map((c) => [c.tag, { template: `${c.tag} ${c.template}` }]),
+    ),
+  )},
+  root: { rows: { ${d.controls
+    .map(({ tag }) => `${tag}: { h: ['${tag}'] }`)
+    .join(", ")}, status: { h: [] } } },
+}`;
+
+// [LAW:no-ambient-temporal-coupling] Every rig a case builds is closed after
+// it, whether the case passed or threw.
+const rigs: Rig[] = [];
+afterEach(() => rigs.splice(0).forEach((rig) => rig.dispose()));
+
+const rigOf = (d: Domain) => {
+  const rig = buildRig({
+    source: sourceOf(d),
+    base: DEFAULT_DSL_CONFIG,
+    sessionId: SID,
+  });
+  rigs.push(rig);
+  const draw = (at: Instant): Frame =>
+    rig.draw({ opts: { width: 400, wrap: true }, at }).frame;
+  return { ...rig, draw };
+};
+
+// The option ring as the picker draws it: every option, in the domain's
+// order, which holds while the picker draws its whole domain on one page.
+const ringOf = (frame: Frame, key: string): string[] => {
+  const links = linksOn(frame, "pk");
+  if (
+    links.some((l) => effectsOf(l.url).some((e) => e.verb === VERB_TURN_PAGE))
+  )
+    throw new Error(
+      `the picker pages, so it draws part of the ring: ${textOf(frame)}`,
+    );
+  return links.flatMap((l) => writes(l.url, key) ?? []);
+};
+
+// [LAW:verifiable-goals] The option `by` steps round `ring` from `from`,
+// worked out here apart from the ring the click lands through, so an arrow
+// case checks that ring rather than repeating it.
+const stepped = (ring: readonly string[], from: string, by: number): string => {
+  const at = ring.indexOf(from);
+  if (at === -1)
+    throw new Error(`"${from}" is not on the ring ${ring.join(" ")}`);
+  return ring[(((at + by) % ring.length) + ring.length) % ring.length]!;
+};
+
+// What each control marks as current, and what it marks while the bar wears
+// `worn`, beside the frame's text so a failure shows the bar.
+const marked = (frame: Frame, d: Domain) => ({
   drawn: textOf(frame),
-  picker: [worn],
-  ...(d.colour && {
-    swatches: [worn],
-    carousel: swatchAfter(frame, "pk", worn),
-    held: swatchAfter(frame, "pk", worn),
-  }),
+  ...Object.fromEntries(
+    d.controls.flatMap(({ tag, mark }) =>
+      mark ? [[tag, mark.shown(frame, d.key)]] : [],
+    ),
+  ),
+});
+const marking = (frame: Frame, d: Domain, worn: string) => ({
+  drawn: textOf(frame),
+  ...Object.fromEntries(
+    d.controls.flatMap(({ tag, mark }) =>
+      mark ? [[tag, mark.wearing(frame, worn)]] : [],
+    ),
+  ),
 });
 
 describe.each(DOMAINS)("a $field chosen per draw by a rule", (d) => {
-  test("every control shows the option the bar wears at each instant, in turn", () => {
+  test("every control marks the option the bar wears at each instant, in turn", () => {
     const rt = rigOf(d);
     const first = rt.draw(AT_02);
-    // The two answers draw apart, so a control showing one can be told from
-    // one showing the other.
-    if (d.colour)
-      expect(swatchAfter(first, "pk", d.at02)).not.toBe(
-        swatchAfter(first, "pk", d.at03),
-      );
+    // Every mark draws the two answers apart, so a control marking one can be
+    // told from one marking the other.
+    for (const { tag, mark } of d.controls)
+      if (mark)
+        expect([tag, mark.wearing(first, d.at02)]).not.toEqual([
+          tag,
+          mark.wearing(first, d.at03),
+        ]);
     for (const [at, worn] of [
       [AT_02, d.at02],
       [AT_03, d.at03],
@@ -222,21 +265,23 @@ describe.each(DOMAINS)("a $field chosen per draw by a rule", (d) => {
       [AT_03, d.at03],
     ] as const) {
       const frame = rt.draw(at);
-      expect(shown(frame, d)).toEqual(showing(frame, d, worn));
+      expect(marked(frame, d)).toEqual(marking(frame, d, worn));
     }
   });
 
-  const arrows = (d.colour ? ["car", "sw"] : ["car"]).flatMap((tag) => [
-    { tag, glyph: CAROUSEL_NEXT, by: 1 },
-    { tag, glyph: CAROUSEL_PREV, by: -1 },
-  ]);
+  const arrows = d.controls
+    .filter((c) => c.arrows)
+    .flatMap(({ tag }) => [
+      { tag, glyph: CAROUSEL_NEXT, by: 1 },
+      { tag, glyph: CAROUSEL_PREV, by: -1 },
+    ]);
 
   test.each(arrows)(
-    "$glyph on $tag, clicked 3 times with no redraw, lands 3 steps from the option the draw wore, and the pick then outranks the rule",
+    "$glyph on $tag, clicked 3 times with no redraw, lands 3 steps from the option its draw wore, and the pick then outranks the rule",
     async ({ tag, glyph, by }) => {
       const rt = rigOf(d);
-      // A draw at the other answer comes first and last: the link keeps
-      // nothing of either.
+      // The link carries the answer of the draw it was taken from: the draws
+      // at the other answer before and after it do not move where it starts.
       rt.draw(AT_03);
       const frame = rt.draw(AT_02);
       const ring = ringOf(frame, d.key);
@@ -252,18 +297,18 @@ describe.each(DOMAINS)("a $field chosen per draw by a rule", (d) => {
       );
       for (const at of [AT_02, AT_03]) {
         const after = rt.draw(at);
-        expect(shown(after, d)).toEqual(
-          showing(after, d, stepped(ring, d.at02, 3 * by)),
+        expect(marked(after, d)).toEqual(
+          marking(after, d, stepped(ring, d.at02, 3 * by)),
         );
       }
     },
   );
 });
 
-describe.each(DOMAINS.filter((d) => d.colour))(
+describe.each(DOMAINS.filter((d) => d.controls.includes(SWATCHES)))(
   "a $field chosen per draw by a rule, its swatches row's ?",
   (d) => {
-    test("lands an option other than the one the draw wore, where a random step from it lands at the click's instant", async () => {
+    test("lands an option other than the one its draw wore, where a random step from it lands at the click's instant", async () => {
       // A random step adds one offset to whichever centre it starts from, so at
       // one instant a step from the worn option and one from any other land
       // apart: the ring's own landing is what tells them apart.

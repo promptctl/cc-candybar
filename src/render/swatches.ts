@@ -151,8 +151,8 @@ export function swatchesFuncs(
         // [LAW:dataflow-not-control-flow] An empty domain has nothing to step
         // to, so it leads with nothing, as its grid has no cells. Otherwise ◀ ▶
         // step through the ring a carousel over the same key turns, and ? to
-        // another option at random. Each carries its step, so the row is the
-        // same on every draw and the click picks the instant it lands at.
+        // another option at random. Each carries its step, never the option
+        // it lands on, and the click picks the instant it lands at.
         const binding = renderBinding(runtime, "swatches");
         const sessionId = clickSession(runtime, "swatches");
         const declared = runtime.compiled.get(applyName)!;
