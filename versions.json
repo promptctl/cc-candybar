@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-946",
-      "ref": "refs/pull/946/merge",
-      "sha": "ab950c1110c525a65580c557e4901f6bd763472d",
-      "timestamp": "2026-11-24T10:54:03.763Z",
-      "commits": [
-        {
-          "sha": "ab950c1110c525a65580c557e4901f6bd763472d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T03:53:03-07:00",
-          "message": "Merge 1e1a0b30fafebcbfffe55712ebde99f8be21b7cf into 0a4c9e344d200164eb36b2069e8585ab5bfb1beb\n"
-        },
-        {
-          "sha": "1e1a0b30fafebcbfffe55712ebde99f8be21b7cf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T03:52:52-07:00",
-          "message": "docs(design): remove every line this change had modified\n"
-        },
-        {
-          "sha": "5ca321375fcc113c8def5ee339bd45457f04638d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T03:48:38-07:00",
-          "message": "docs(design): R-19 says what was decided: Claude Code launches the statusline and launchd does not own the host\n"
-        },
-        {
-          "sha": "5c8903055527f80a62235a6fa05c5ec19a4f2f38",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T03:26:35-07:00",
-          "message": "docs(design): R-19 rules only what is a choice; Claude Code running the statusline is how a statusline works\n"
-        },
-        {
-          "sha": "2dfef894e46c88af33d6e160efd945b0ce081277",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T03:25:31-07:00",
-          "message": "docs(design): Claude Code starts the bar, and the host's lifetime plan names no launchd\n\ngoals.md R-19 records the requirement: Claude Code's statusline command starts\nthe host, and the install leaves nothing that starts candybar on its own. The\nspec's ADR-3 takes the alternative it already named, the client starting the\nhost from the bundle the install recorded, and A-4, its probe readings, the\nlaunchd precedent and the launchd roadmap step are removed.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "0a4c9e344d200164eb36b2069e8585ab5bfb1beb",
-      "timestamp": "2026-11-24T01:58:51.045Z",
+      "sha": "f5c82561857634d22bec3fa05bbf58d6b4d43580",
+      "timestamp": "2026-11-24T10:56:56.867Z",
       "commits": [
         {
-          "sha": "0a4c9e344d200164eb36b2069e8585ab5bfb1beb",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T01:57:15Z",
-          "message": "chore(release): set `package.json` to 1.236.14\n\n## [1.236.14](https://github.com/promptctl/cc-candybar/compare/v1.236.13...v1.236.14) (2026-11-24)\n\n### Bug Fixes\n\n* **release:** the Publish job's cap sits above the registry wait ([#945](https://github.com/promptctl/cc-candybar/issues/945)) ([75172bc](https://github.com/promptctl/cc-candybar/commit/75172bc2fc5c0d9718f43b5f28f3f7bc194d4306))\n"
+          "sha": "f5c82561857634d22bec3fa05bbf58d6b4d43580",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T03:55:43-07:00",
+          "message": "docs(design): remove the launchd plan from the host-and-renderer spec (#946)\n\nRemoves every line of docs/design/host-and-renderer.md that planned or described launchd owning the host's lifetime, and every line this change had rewritten."
         }
       ]
     }
