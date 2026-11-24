@@ -300,7 +300,11 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # publish.mjs waits up to 10 minutes for the registry to serve the platform
+    # packages before it publishes the main one, and the registry's pace is not
+    # ours to set: v1.236.13's took over four. This only has to sit above that
+    # wait, so a cap under it cancels a release the registry is still accepting.
+    timeout-minutes: 15
     needs: [test, build-rust, build-url-handler]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
