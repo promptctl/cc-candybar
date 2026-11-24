@@ -88,12 +88,23 @@ describe("a client that finds no host starts the one the install recorded", () =
       "the host the worktree's client started",
       15_000,
     );
-    const answered = (await sendDaemonRequest(prepared.sockPath, {
-      v: PROTOCOL_VERSION,
-      kind: "stats",
-    })) as { ok: true; stats: { bundle: string } };
-    expect(answered.stats.bundle).toBe(installed);
-    expect(answered.stats.bundle).not.toBe(worktree);
+    // A bound socket is not yet a host that answers: ask until stats come back.
+    let seen: unknown;
+    let bundle: string | undefined;
+    await until(
+      async () => {
+        seen = await sendDaemonRequest(prepared.sockPath, {
+          v: PROTOCOL_VERSION,
+          kind: "stats",
+        });
+        bundle = (seen as { stats?: { bundle?: string } }).stats?.bundle;
+        return bundle !== undefined;
+      },
+      () => `the host's stats; the last answer was ${JSON.stringify(seen)}`,
+      15_000,
+    );
+    expect(bundle).toBe(installed);
+    expect(bundle).not.toBe(worktree);
   });
 
   test("with no record the bar says to run the install and nothing is spawned", () => {

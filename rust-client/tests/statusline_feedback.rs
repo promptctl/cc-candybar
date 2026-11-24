@@ -157,13 +157,18 @@ fn a_cold_host_starts_from_the_recorded_bundle() {
     let log = client.node_that_records_its_arguments();
     assert_eq!(client.tick(None, None), WAIT);
 
-    // node runs detached, after the client has exited: wait for what it wrote.
+    // node runs detached, after the client has exited: wait for the line it
+    // wrote. The file exists before its line does, so a read of the file alone
+    // can see it empty.
     let started = (0..200)
         .find_map(|_| {
-            fs::read_to_string(&log).ok().or_else(|| {
-                std::thread::sleep(Duration::from_millis(25));
-                None
-            })
+            fs::read_to_string(&log)
+                .ok()
+                .filter(|written| written.ends_with('\n'))
+                .or_else(|| {
+                    std::thread::sleep(Duration::from_millis(25));
+                    None
+                })
         })
         .expect("the client never started node");
     assert_eq!(
