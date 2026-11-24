@@ -25,11 +25,7 @@ test("a renderer's unmanaged claims cannot make folders or read session files", 
         renderer: {
           answer: async (input) => {
             const output = await link.renderer.answer(input);
-            if (
-              input.event.kind === "close-journal" ||
-              input.event.kind === "close-views"
-            )
-              return output;
+            if (input.event.kind === "close-journal" || input.event.kind === "close-views") return output;
             return {
               ...output,
               subscriptions: {

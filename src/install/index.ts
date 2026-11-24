@@ -38,7 +38,7 @@ import {
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
 import { stageExecutable } from "./stage-executable.js";
-import { recordIfInstall } from "./record";
+import { recordIfInstall, statusLineRunsBundle } from "./record";
 import { recordHostBundle } from "../daemon/host-bundle";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
@@ -594,17 +594,19 @@ export async function runInstall(
     );
   }
 
-  // [LAW:one-source-of-truth] The install knows which bundle it staged and
-  // whether the statusline now runs it, so it records the staged bundle on that
-  // fact and never reads the command's words back for an answer it holds.
-  const ownsStatusLine = updateClaudeSettings(
-    staged.binPath,
-    argsToInstall,
-    force,
-    world.host,
-  );
+  // [LAW:one-source-of-truth] The install knows which bundle it staged, and
+  // whether it wrote the statusline command that runs it, so a command it wrote
+  // needs no reading back. A customized command it kept is read once, for
+  // whether it runs the staged entry: that setup is the install too, and
+  // `--force` would destroy the command that makes it so.
+  const statusLineRunsStaged =
+    updateClaudeSettings(staged.binPath, argsToInstall, force, world.host) ||
+    statusLineRunsBundle(
+      readClaudeSettings(userSettingsPath(world.host)).statusLine,
+      staged.distPath,
+    );
   process.stdout.write(
-    recordStagedBundleIfOwned(ownsStatusLine, staged.distPath, world.host),
+    recordStagedBundleIfRun(statusLineRunsStaged, staged.distPath, world.host),
   );
 
   process.stdout.write(installSuccessMessage());
@@ -639,13 +641,13 @@ function recordedMessage(bundle: string): string {
 
 // The install's record: the staged bundle, when the statusline command runs
 // it. Returns what the install says about it.
-function recordStagedBundleIfOwned(
-  ownsStatusLine: boolean,
+function recordStagedBundleIfRun(
+  statusLineRunsIt: boolean,
   stagedBundle: string,
   host: Host,
 ): string {
-  if (!ownsStatusLine) {
-    return `Host bundle not recorded: the statusLine is customized, so it does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`;
+  if (!statusLineRunsIt) {
+    return `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`;
   }
   recordHostBundle(host, stagedBundle);
   return recordedMessage(stagedBundle);
@@ -748,5 +750,5 @@ export const __test__ = {
   stageFile,
   stagedEntryKind,
   installSuccessMessage,
-  recordStagedBundleIfOwned,
+  recordStagedBundleIfRun,
 };

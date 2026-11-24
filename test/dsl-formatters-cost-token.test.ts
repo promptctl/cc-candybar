@@ -19,7 +19,10 @@ import { textOf } from "../src/render/frame";
 import { SessionState } from "../src/renderer/session-state";
 
 import { validateConfig } from "./helpers/parse-and-validate";
-import { parseDslConfig, mergeWithDefault } from "../src/config/dsl-loader";
+import {
+  parseDslConfig,
+  mergeWithDefault,
+} from "../src/config/dsl-loader";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
@@ -30,9 +33,7 @@ import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 // Input vars the test segment reads; all numeric, default 0 so an absent payload
@@ -185,8 +186,6 @@ describe("bdi.3 — null is owned upstream by the var default, not the helper", 
     expect(render('{{ template "formatCost" .v }}', {})).toContain("<$0.01");
   });
   test("absent tokens → default 0 → formatTokens renders '0 tokens'", () => {
-    expect(render('{{ template "formatTokens" .v }}', {})).toContain(
-      "0 tokens",
-    );
+    expect(render('{{ template "formatTokens" .v }}', {})).toContain("0 tokens");
   });
 });

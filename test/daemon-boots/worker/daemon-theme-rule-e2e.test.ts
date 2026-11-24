@@ -22,7 +22,9 @@ import path from "node:path";
 
 import { render } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import {
+  prepareIsolatedDaemonEnv,
+} from "../../helpers/spawn-isolated-daemon";
 
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 
@@ -70,6 +72,7 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the daemon", ()
 
     const daemon = startDaemon(env);
     try {
+
       // ── the good branch ────────────────────────────────────────────────────
       const good = await render(daemon, "theme-rule-good", projectDir);
       const goodText = textOf(good);
@@ -93,12 +96,7 @@ describe("brandon-themes-dzl: globals.palette as a rule, through the daemon", ()
       // rendered instead.
       const again = await render(daemon, BAD_SESSION, projectDir);
       expect(indicatorOf(again)).toBe("⚠ 1");
-      const [page] = await readDiagnostics(
-        daemon,
-        BAD_SESSION,
-        projectDir,
-        again,
-      );
+      const [page] = await readDiagnostics(daemon, BAD_SESSION, projectDir, again);
       expect(page!.text).toContain("globals.palette");
       expect(page!.text).toContain("no-such-theme");
       expect(page!.text).toContain("textual-dark");

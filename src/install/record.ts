@@ -45,6 +45,37 @@ function realPathIfThere(file: string): string {
   return fs.existsSync(file) ? fs.realpathSync(file) : file;
 }
 
+// A command wrapped in anything a shell runs (`env X=1 <entry>`, `node
+// <entry>`, a pipeline) names its entry somewhere past the first word. The
+// entry is any file in the bundle's `bin/`, so the command runs the bundle when
+// it spells that directory as a path of its own, not as the tail of a longer
+// one: `<root>/bin/` is not inside `<root>-other/bin/` or a worktree nested in
+// `<root>`.
+function commandRunsEntryBeside(
+  statusLine: JsonValue | undefined,
+  bundle: string,
+): boolean {
+  const command = isJsonObject(statusLine) ? statusLine.command : undefined;
+  if (typeof command !== "string") return false;
+  const bin = `${path.dirname(path.dirname(bundle))}${path.sep}bin${path.sep}`;
+  const spelled = new RegExp(
+    `(?<![\\w./-])${bin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+  );
+  return spelled.test(command);
+}
+
+// Whether the user's statusline setting runs `bundle`: its entry is the
+// command's first word, or the command spells the bundle's `bin/` directory.
+export function statusLineRunsBundle(
+  statusLine: JsonValue | undefined,
+  bundle: string,
+): boolean {
+  return (
+    bundleNamedByStatusLine(statusLine) === bundle ||
+    commandRunsEntryBeside(statusLine, bundle)
+  );
+}
+
 export interface Recording {
   readonly kind: "recorded";
   readonly bundle: string;
@@ -60,8 +91,12 @@ export function recordIfInstall(
   statusLine: JsonValue | undefined,
   host: Host,
 ): Recording | NotTheInstall {
-  const named = bundleNamedByStatusLine(statusLine);
-  if (named !== bundle) return { kind: "not-the-install", named };
+  if (!statusLineRunsBundle(statusLine, bundle)) {
+    return {
+      kind: "not-the-install",
+      named: bundleNamedByStatusLine(statusLine),
+    };
+  }
   recordHostBundle(host, bundle);
   return { kind: "recorded", bundle };
 }

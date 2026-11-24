@@ -44,17 +44,19 @@ const CONFIG = `{
 }`;
 
 const rendererOf = (): Renderer => {
-  const result = mainRendererOf({
-    stored: EMPTY_STORED_STATE,
-    locations: {
-      home: "/nowhere/home",
-      configHome: "/nowhere/config",
-      dataHome: "/nowhere/data",
-      dataDirs: [],
+  const result = mainRendererOf(
+    {
+      stored: EMPTY_STORED_STATE,
+      locations: {
+        home: "/nowhere/home",
+        configHome: "/nowhere/config",
+        dataHome: "/nowhere/data",
+        dataDirs: [],
+      },
+      region: { locale: "en-US", timeZone: "UTC" },
+      memoryLimitBytes: 1024 * 1024 * 1024,
     },
-    region: { locale: "en-US", timeZone: "UTC" },
-    memoryLimitBytes: 1024 * 1024 * 1024,
-  });
+  );
   if (result.kind === "refused") throw new Error(result.failure.detail);
   return result.renderer;
 };
@@ -153,9 +155,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   const r = rendererOf();
   const context = contextOf("s1");
   const session = context.hookData.session_id;
-  answered(
-    await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }),
-  );
+  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   answered(
     await handIn(r, {
       kind: "context",

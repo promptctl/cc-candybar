@@ -125,12 +125,8 @@ describe("two placements of a menu-hosting segment open independently", () => {
 
   test("each placement's menu is keyed by its id, and opening one leaves the other closed", async () => {
     const rt = placementBar(SRC);
-    expect(
-      rt.config.variables[menuKeyOf("picker", "applyTheme")],
-    ).toBeDefined();
-    expect(
-      rt.config.variables[menuKeyOf("picker", "applyTheme", "second")],
-    ).toBeDefined();
+    expect(rt.config.variables[menuKeyOf("picker", "applyTheme")]).toBeDefined();
+    expect(rt.config.variables[menuKeyOf("picker", "applyTheme", "second")]).toBeDefined();
     const open = async (key: string): Promise<void> => {
       const url = linkUrls(rt.render()).find((u) =>
         effectsOf(u).some(
@@ -141,9 +137,9 @@ describe("two placements of a menu-hosting segment open independently", () => {
       await rt.click(url);
     };
     await open(menuKeyOf("picker", "applyTheme", "second"));
-    expect(
-      rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme", "second")),
-    ).toBe("applyTheme");
+    expect(rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme", "second"))).toBe(
+      "applyTheme",
+    );
     rt.render();
     // The open copy drops its picker body; the other still draws its glyph only.
     expect(rt.segments().get("second")!.length).toBeGreaterThan(
@@ -153,9 +149,9 @@ describe("two placements of a menu-hosting segment open independently", () => {
     expect(rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme"))).toBe(
       "applyTheme",
     );
-    expect(
-      rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme", "second")),
-    ).toBe("applyTheme");
+    expect(rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme", "second"))).toBe(
+      "applyTheme",
+    );
   });
 });
 

@@ -52,7 +52,7 @@ export function planAfterKick(
     ? {
         output: formatHostBundleGlyph(kick.record.kind),
         kick: false,
-        debug: `${plan.debug ?? ""} — nothing was spawned: ${whyUnusable(kick.record)}`,
+        debug: `${plan.debug ?? ""} — but nothing was spawned:${whyUnusable(kick.record)}`,
       }
     : plan;
 }

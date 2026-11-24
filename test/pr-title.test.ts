@@ -21,14 +21,11 @@ describe("PR title check", () => {
     expect(run.stdout).toBe(`pr-title: ok release=${release}\n`);
   });
 
-  test.each(["test(views): x", "chore: x", "docs: x"])(
-    "%p is a type the config does not release",
-    (title) => {
-      const run = check(title);
-      expect(run.status).toBe(0);
-      expect(run.stdout).toContain("pr-title: ok release=none");
-    },
-  );
+  test.each(["test(views): x", "chore: x", "docs: x"])("%p is a type the config does not release", (title) => {
+    const run = check(title);
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("pr-title: ok release=none");
+  });
 
   test.each([
     "feature(menu): x",

@@ -89,9 +89,7 @@ describe("a render is drawn at the instant its caller hands it", () => {
       const atB = render(instantOf(B));
       const movedOn = (run: Run): Run => ({
         ...run,
-        text: run.text
-          .replaceAll(epochOf(A), epochOf(B))
-          .replaceAll("12:34:56", "12:34:57"),
+        text: run.text.replaceAll(epochOf(A), epochOf(B)).replaceAll("12:34:56", "12:34:57"),
       });
       expect(atB.rows).not.toEqual(atA.rows);
       expect(atB.rows).toEqual(
@@ -130,7 +128,10 @@ describe("a stored instant is read against the frame's instant", () => {
 
   test("one payload, two frames: each draws its own age and ETA", () => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store,
+      "",
+      new SessionState(),
+    );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { cwd: "/tmp" });
       const draw = (sec: number): string =>
@@ -156,7 +157,10 @@ describe("a stored instant is read against the frame's instant", () => {
 
   test("no commit date reads as no age, and an unused window as no ETA", () => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store,
+      "",
+      new SessionState(),
+    );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { cwd: "/tmp" });
       expect(

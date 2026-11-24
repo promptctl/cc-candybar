@@ -22,7 +22,8 @@ test("a reconnect says why: a daemon without subscribe support and a missing dae
     }),
   ).toEqual({
     kind: "reconnect",
-    reason: "the daemon does not take subscribe (BAD_REQUEST said)",
+    reason:
+      "the daemon does not take subscribe (BAD_REQUEST said)",
   });
   expect(
     afterStreamEnd({ kind: "failed", error: new Error("ENOENT") }),
@@ -60,15 +61,7 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
 test("--session is not a flag of frames: a named session's frames are the native client's follow", async () => {
   await expect(
     runFrames(
-      [
-        "node",
-        "cc-candybar",
-        "frames",
-        "--lane",
-        "statusline",
-        "--session",
-        "s",
-      ],
+      ["node", "cc-candybar", "frames", "--lane", "statusline", "--session", "s"],
       "/opt/cc/dist/index.mjs",
       WORLD,
     ),

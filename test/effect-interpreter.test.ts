@@ -168,26 +168,17 @@ describe("performChanges", () => {
   test("a file removed through a link removes its target and keeps the link", () => {
     const link = path.join(dir, "linked.json5");
     fs.symlinkSync("dotfiles.json5", link);
-    expect(perform([change(link, null, USER)], null)).toEqual({
-      kind: "ok",
-      files: [path.join(fs.realpathSync(dir), "dotfiles.json5")],
-    });
-    expect(perform([change(link, USER, null)], null)).toMatchObject({
-      kind: "ok",
-    });
+    expect(perform([change(link, null, USER)], null)).toEqual({ kind: "ok", files: [path.join(fs.realpathSync(dir), "dotfiles.json5")] });
+    expect(perform([change(link, USER, null)], null)).toMatchObject({ kind: "ok" });
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(dir, "dotfiles.json5"))).toBe(false);
   });
 
   test("creates a file a change creates, and removes one it removes", () => {
     const fresh = path.join(dir, "fresh.json5");
-    expect(perform([change(fresh, null, USER)], null)).toMatchObject({
-      kind: "ok",
-    });
+    expect(perform([change(fresh, null, USER)], null)).toMatchObject({ kind: "ok" });
     expect(read(fresh)).toBe(USER);
-    expect(perform([change(fresh, USER, null)], null)).toMatchObject({
-      kind: "ok",
-    });
+    expect(perform([change(fresh, USER, null)], null)).toMatchObject({ kind: "ok" });
     expect(fs.existsSync(fresh)).toBe(false);
   });
 
@@ -276,62 +267,39 @@ describe("performChanges with the trust book", () => {
     });
     if (outcome.kind !== "ok") throw new Error(JSON.stringify(outcome));
     const archive = outcome.files[2]!;
-    expect(outcome.files).toEqual([
-      current,
-      old,
-      expect.stringContaining(`${old}.migrated-`),
-    ]);
+    expect(outcome.files).toEqual([current, old, expect.stringContaining(`${old}.migrated-`)]);
     expect(JSON.parse(read(archive))).toEqual({ [user]: "declined" });
-    expect(JSON.parse(read(current))).toEqual({
-      [user]: "declined",
-      [dir]: "approved",
-    });
+    expect(JSON.parse(read(current))).toEqual({ [user]: "declined", [dir]: "approved" });
     expect(fs.existsSync(old)).toBe(false);
-    expect(said).toContain(
-      `repo-config: retired ${old} to ${archive} after updating ${current}`,
-    );
+    expect(said).toContain(`repo-config: retired ${old} to ${archive} after updating ${current}`);
   });
 
-  test.each(["missing", "existing"] as const)(
-    "a loose book that cannot retire restores the config and the %s current book",
-    (current) => {
-      const state = path.join(dir, "state");
-      const book = repoConfigsPath(state);
-      const old = path.join(state, "repo-configs.json");
-      const previous = JSON.stringify({ [dir]: "declined" });
-      fs.mkdirSync(path.dirname(book), { recursive: true });
-      fs.writeFileSync(old, previous);
-      const currentBytes = JSON.stringify(
-        { [dir]: "declined", [user]: "approved" },
-        null,
-        3,
+  test.each(["missing", "existing"] as const)("a loose book that cannot retire restores the config and the %s current book", (current) => {
+    const state = path.join(dir, "state");
+    const book = repoConfigsPath(state);
+    const old = path.join(state, "repo-configs.json");
+    const previous = JSON.stringify({ [dir]: "declined" });
+    fs.mkdirSync(path.dirname(book), { recursive: true });
+    fs.writeFileSync(old, previous);
+    const currentBytes = JSON.stringify({ [dir]: "declined", [user]: "approved" }, null, 3);
+    if (current === "existing") fs.writeFileSync(book, currentBytes);
+    fs.chmodSync(state, 0o500);
+    try {
+      const said: string[] = [];
+      const outcome = perform(
+        [change(user, USER, USER.replace("dusk", "dawn"))],
+        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
       );
-      if (current === "existing") fs.writeFileSync(book, currentBytes);
-      fs.chmodSync(state, 0o500);
-      try {
-        const said: string[] = [];
-        const outcome = perform(
-          [change(user, USER, USER.replace("dusk", "dawn"))],
-          {
-            stateDir: state,
-            answers: [answer(dir)],
-            said: (l) => said.push(l),
-          },
-        );
-        expect(outcome).toMatchObject({
-          kind: "failed",
-          reason: expect.stringContaining(old),
-        });
-        expect(read(user)).toBe(USER);
-        if (current === "existing") expect(read(book)).toBe(currentBytes);
-        else expect(fs.existsSync(book)).toBe(false);
-        expect(read(old)).toBe(previous);
-        expect(said).toEqual([]);
-      } finally {
-        fs.chmodSync(state, 0o700);
-      }
-    },
-  );
+      expect(outcome).toMatchObject({ kind: "failed", reason: expect.stringContaining(old) });
+      expect(read(user)).toBe(USER);
+      if (current === "existing") expect(read(book)).toBe(currentBytes);
+      else expect(fs.existsSync(book)).toBe(false);
+      expect(read(old)).toBe(previous);
+      expect(said).toEqual([]);
+    } finally {
+      fs.chmodSync(state, 0o700);
+    }
+  });
 
   test("a trust book that cannot be written leaves every config file as it was", () => {
     const state = path.join(dir, "state");

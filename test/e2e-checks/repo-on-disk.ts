@@ -13,12 +13,8 @@ const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
 
 export function repoOnDisk(): Repo {
   return {
-    scripts: JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"))
-      .scripts,
-    read: (path) =>
-      isFile(join(ROOT, path))
-        ? readFileSync(join(ROOT, path), "utf8")
-        : undefined,
+    scripts: JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts,
+    read: (path) => (isFile(join(ROOT, path)) ? readFileSync(join(ROOT, path), "utf8") : undefined),
   };
 }
 

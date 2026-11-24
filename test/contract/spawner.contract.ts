@@ -40,8 +40,7 @@ export function spawnerContract(name: string, make: () => Subject): void {
     afterEach(() => {
       // A hung child is ended by its group, as a launch ends it.
       for (const child of started.splice(0)) {
-        if (child.pid !== undefined)
-          subject?.spawner.signalGroup(child.pid, "SIGKILL");
+        if (child.pid !== undefined) subject?.spawner.signalGroup(child.pid, "SIGKILL");
       }
     });
     let subject: Subject | undefined;
@@ -93,12 +92,7 @@ export function spawnerContract(name: string, make: () => Subject): void {
     const hung = (): Behaviour => ({ runsFor: Infinity, exitCode: 0 });
 
     test("a program that exits reports its code, and its output arrives before its close", async () => {
-      const w = begin({
-        runsFor: 0,
-        exitCode: 3,
-        stdout: "out",
-        stderr: "err",
-      });
+      const w = begin({ runsFor: 0, exitCode: 3, stdout: "out", stderr: "err" });
       await until("close", () => w.events.includes("close"));
       expect(w.exit).toEqual({ code: 3, signal: null });
       expect(w.child.exitCode).toBe(3);
@@ -151,9 +145,7 @@ export function spawnerContract(name: string, make: () => Subject): void {
 
     test("a signal to a group that never was is no failure, and a job signal says no", () => {
       subject = make();
-      expect(() =>
-        subject!.spawner.signalGroup(2_000_000_000, "SIGTERM"),
-      ).not.toThrow();
+      expect(() => subject!.spawner.signalGroup(2_000_000_000, "SIGTERM")).not.toThrow();
       expect(subject.spawner.groupGone(2_000_000_000)).toBe(true);
       expect(subject.spawner.signalJob(2_000_000_000, "SIGTERM")).toBe(false);
     });
@@ -191,12 +183,7 @@ export function spawnerContract(name: string, make: () => Subject): void {
 
     test("a blocking start returns the program's code and output", () => {
       subject = make();
-      const p = subject.realise({
-        runsFor: 0,
-        exitCode: 2,
-        stdout: "o",
-        stderr: "e",
-      });
+      const p = subject.realise({ runsFor: 0, exitCode: 2, stdout: "o", stderr: "e" });
       const r = subject.spawner.spawnSync(p.bin, p.args, { encoding: "utf8" });
       expect(r.status).toBe(2);
       expect(r.stdout).toBe("o");
@@ -217,13 +204,9 @@ export function spawnerContract(name: string, make: () => Subject): void {
 
     test("a blocking start of a program that does not exist says it is missing", () => {
       subject = make();
-      const r = subject.spawner.spawnSync(
-        subject.missing.bin,
-        subject.missing.args,
-        {
-          encoding: "utf8",
-        },
-      );
+      const r = subject.spawner.spawnSync(subject.missing.bin, subject.missing.args, {
+        encoding: "utf8",
+      });
       expect((r.error as NodeJS.ErrnoException).code).toBe("ENOENT");
       expect(r.status).toBeNull();
     });

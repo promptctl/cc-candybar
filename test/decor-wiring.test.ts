@@ -18,11 +18,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import {
-  ColorDepth,
-  getThemePalette,
-  transposePalette,
-} from "@promptctl/rich-js";
+import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -69,10 +65,12 @@ const OPTS = {
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
   const walk = (node: CompiledNode, address: Address): Address | undefined => {
-    if (node.kind === "segment")
-      return node.name === name ? address : undefined;
+    if (node.kind === "segment") return node.name === name ? address : undefined;
     for (const [index, child] of node.children.entries()) {
-      const found = walk(child, [...address, childStep(node, index)]);
+      const found = walk(child, [
+        ...address,
+        childStep(node, index),
+      ]);
       if (found !== undefined) return found;
     }
     return undefined;
@@ -83,18 +81,11 @@ function addressOf(root: CompiledNode, name: string): Address {
 }
 
 /** Every segment of a compiled tree, with its address. */
-function segmentAddresses(
-  root: CompiledNode,
-): { name: string; address: Address }[] {
-  const walk = (
-    node: CompiledNode,
-    address: Address,
-  ): { name: string; address: Address }[] =>
+function segmentAddresses(root: CompiledNode): { name: string; address: Address }[] {
+  const walk = (node: CompiledNode, address: Address): { name: string; address: Address }[] =>
     node.kind === "segment"
       ? [{ name: node.name, address }]
-      : node.children.flatMap((child, index) =>
-          walk(child, [...address, childStep(node, index)]),
-        );
+      : node.children.flatMap((child, index) => walk(child, [...address, childStep(node, index)]));
   return walk(root, []);
 }
 
@@ -106,11 +97,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   // The cells of the latest draw, which bgOf and fgOf read after it.
   let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
-  const render = (
-    payload: object = {},
-    variation?: VariationName,
-    shade?: ShadeName,
-  ): Frame => {
+  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame => {
     const drawn = drawPayload(
       config,
       compiled,
@@ -120,9 +107,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       instantOf(new Date()),
       OPTS,
       selectionFor(config, {
-        ...(look === undefined
-          ? {}
-          : { style: { kind: "decided" as const, name: "test", value: look } }),
+        ...(look === undefined ? {} : { style: { kind: "decided" as const, name: "test", value: look } }),
         ...(variation === undefined ? {} : { variation }),
         ...(shade === undefined ? {} : { shade }),
       }),
@@ -141,26 +126,14 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   // [LAW:behavior-not-structure] rich-js `transposePalette` directly, never the
   // render's memoized `transposedPalette`: the function under test cannot be
   // the oracle that checks it.
-  const expectedTint = (
-    name: string,
-    variation?: VariationName,
-    shade?: ShadeName,
-  ): string =>
+  const expectedTint = (name: string, variation?: VariationName, shade?: ShadeName): string =>
     decorFor(
       transposePalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
       decorOf(variation, shade),
       addressOf(root, name),
       DRAWN_AT,
     ).hex;
-  return {
-    render,
-    root,
-    bgOf,
-    fgOf,
-    expectedTint,
-    sessionState,
-    dispose: () => registry.dispose(),
-  };
+  return { render, root, bgOf, fgOf, expectedTint, sessionState, dispose: () => registry.dispose() };
 }
 
 const IDENTITY_KEY: ThemeKey = {
@@ -253,14 +226,8 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     // group, leaves every other cell's tone where it was, under every dial
     // position.
     const rows = [
-      [
-        "[ 'a', { h: [ 'b', 'c', 'd' ], when: '{{ .sg }}' }, 'e' ]",
-        ["b", "c", "d"],
-      ],
-      [
-        "[ 'a', { h: [ 'b', { h: [ 'c', 'd' ], when: '{{ .sg }}' } ] }, 'e' ]",
-        ["c", "d"],
-      ],
+      ["[ 'a', { h: [ 'b', 'c', 'd' ], when: '{{ .sg }}' }, 'e' ]", ["b", "c", "d"]],
+      ["[ 'a', { h: [ 'b', { h: [ 'c', 'd' ], when: '{{ .sg }}' } ] }, 'e' ]", ["c", "d"]],
     ] as const;
     for (const [cells, group] of rows) {
       const grouped = build(groupedRow(cells));
@@ -268,25 +235,11 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
         grouped.render({}, undefined, shade);
         const before = new Map(FIVE.map((n) => [n, grouped.bgOf(n)]));
         for (const gate of [...FIVE, "g"]) {
-          const drawn = grouped.render(
-            { [`s${gate}`]: false },
-            undefined,
-            shade,
-          );
+          const drawn = grouped.render({ [`s${gate}`]: false }, undefined, shade);
           const gone: readonly string[] = gate === "g" ? group : [gate];
-          expect([
-            cells,
-            gate,
-            FIVE.filter((n) => textOf(drawn).includes(`«${n}»`)),
-          ]).toEqual([cells, gate, FIVE.filter((n) => !gone.includes(n))]);
+          expect([cells, gate, FIVE.filter((n) => textOf(drawn).includes(`«${n}»`))]).toEqual([cells, gate, FIVE.filter((n) => !gone.includes(n))]);
           for (const name of FIVE.filter((n) => !gone.includes(n))) {
-            expect([cells, shade, gate, name, grouped.bgOf(name)]).toEqual([
-              cells,
-              shade,
-              gate,
-              name,
-              before.get(name),
-            ]);
+            expect([cells, shade, gate, name, grouped.bgOf(name)]).toEqual([cells, shade, gate, name, before.get(name)]);
           }
         }
       }
@@ -327,11 +280,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     for (const variation of Object.keys(VARIATIONS) as VariationName[]) {
       rt.render({}, variation);
       for (const name of names) {
-        expect([variation, name, rt.bgOf(name)]).toEqual([
-          variation,
-          name,
-          rt.expectedTint(name, variation),
-        ]);
+        expect([variation, name, rt.bgOf(name)]).toEqual([variation, name, rt.expectedTint(name, variation)]);
       }
       seen.add(names.map((n) => rt.bgOf(n)).join());
     }
@@ -339,16 +288,13 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     // says they do — the lineage a variation's menus open in paints no closed
     // cell, and a keystone on the door or on `meaning` is off these cells.
     const forms = new Set(
-      (Object.keys(VARIATIONS) as VariationName[]).map((variation) =>
-        names.map((n) => rt.expectedTint(n, variation)).join(),
-      ),
+      (Object.keys(VARIATIONS) as VariationName[]).map((variation) => names.map((n) => rt.expectedTint(n, variation)).join()),
     );
     expect(seen.size).toBe(forms.size);
     expect(forms.size).toBeGreaterThanOrEqual(6);
     // A session with no picks renders the default: secondary on row 1, accent on row 2.
     rt.render();
-    for (const name of names)
-      expect(rt.bgOf(name)).toBe(rt.expectedTint(name, "accent"));
+    for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, "accent"));
     rt.dispose();
   });
 
@@ -361,11 +307,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     for (const shade of Object.keys(SHADES) as ShadeName[]) {
       rt.render({}, undefined, shade);
       for (const name of names) {
-        expect([shade, name, rt.bgOf(name)]).toEqual([
-          shade,
-          name,
-          rt.expectedTint(name, undefined, shade),
-        ]);
+        expect([shade, name, rt.bgOf(name)]).toEqual([shade, name, rt.expectedTint(name, undefined, shade)]);
       }
       seen.add(names.map((n) => rt.bgOf(n)).join());
     }
@@ -373,41 +315,24 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     expect(seen.size).toBe(Object.keys(SHADES).length);
     // A session with no picks renders the default: the window around each role.
     rt.render();
-    for (const name of names)
-      expect(rt.bgOf(name)).toBe(rt.expectedTint(name, undefined, "middle"));
+    for (const name of names) expect(rt.bgOf(name)).toBe(rt.expectedTint(name, undefined, "middle"));
     rt.dispose();
   });
 
   test("globals.variation is the config's default for a session with no picks", () => {
-    const rt = build(
-      SRC.replace(
-        `globals: { palette: '${THEME}' }`,
-        `globals: { palette: '${THEME}', variation: 'mono' }`,
-      ),
-    );
+    const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', variation: 'mono' }`));
     rt.render();
     for (const name of ["a", "b", "c", "echo"]) {
-      expect([name, rt.bgOf(name)]).toEqual([
-        name,
-        rt.expectedTint(name, "mono"),
-      ]);
+      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name, "mono")]);
     }
     rt.dispose();
   });
 
   test("globals.shade is the config's default for a session with no picks", () => {
-    const rt = build(
-      SRC.replace(
-        `globals: { palette: '${THEME}' }`,
-        `globals: { palette: '${THEME}', shade: 'muted' }`,
-      ),
-    );
+    const rt = build(SRC.replace(`globals: { palette: '${THEME}' }`, `globals: { palette: '${THEME}', shade: 'muted' }`));
     rt.render();
     for (const name of ["a", "b", "c", "echo"]) {
-      expect([name, rt.bgOf(name)]).toEqual([
-        name,
-        rt.expectedTint(name, undefined, "muted"),
-      ]);
+      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name, undefined, "muted")]);
     }
     rt.dispose();
   });
@@ -446,11 +371,7 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
         const expected = name.startsWith(`${EDIT_NS}${PRESET_FLOOR}.insertSeg.`)
           ? "(no bg)"
           : live.get(content);
-        expect([content, name, rt.bgOf(name)]).toEqual([
-          content,
-          name,
-          expected,
-        ]);
+        expect([content, name, rt.bgOf(name)]).toEqual([content, name, expected]);
       }
     }
     rt.dispose();
@@ -531,10 +452,7 @@ describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to 
     // meaning-bearing specs with it: some segment still states something.
     expect(authored.length).toBeGreaterThan(0);
     for (const [name, bg] of authored) {
-      expect([name, bg.includes("{{") || bg in ALERT_ROLE]).toEqual([
-        name,
-        true,
-      ]);
+      expect([name, bg.includes("{{") || bg in ALERT_ROLE]).toEqual([name, true]);
     }
   });
 
@@ -589,9 +507,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   };
 
   test("omitting the field renders byte-identical to `distribution: 'van-der-corput'`", () => {
-    expect(tints(tree(""))).toEqual(
-      tints(tree(", distribution: 'van-der-corput'")),
-    );
+    expect(tints(tree(""))).toEqual(tints(tree(", distribution: 'van-der-corput'")));
   });
 
   test("a row's authored distribution places that row's cells — and only that row's", () => {
@@ -605,14 +521,9 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       // shares the cell's place, placed by the row too.
       const address = addressOf(plain.root, name);
       const rePlaced: Address = address.map((step) =>
-        step.axis === "cell"
-          ? { ...step, distribution: DISTRIBUTIONS.monotonic }
-          : step,
+        step.axis === "cell" ? { ...step, distribution: DISTRIBUTIONS.monotonic } : step,
       );
-      expect([name, rt.bgOf(name)]).toEqual([
-        name,
-        decorFor(palette, DEFAULT_DECOR, rePlaced, DRAWN_AT).hex,
-      ]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, rePlaced, DRAWN_AT).hex]);
     }
     // The field reached the tint: the row no longer matches its unauthored self…
     plain.render();
@@ -638,8 +549,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       const unauthored = addressOf(plain.root, name);
       // Same lineage — synthesis wraps the authored root, and that wrapper
       // and every row keep their own placement…
-      const shape = (a: Address) =>
-        a.map(({ index, count }) => ({ index, count }));
+      const shape = (a: Address) => a.map(({ index, count }) => ({ index, count }));
       expect(shape(authored)).toEqual(shape(unauthored));
       // …while exactly one step's placer changed: the authored root's, whose
       // two rows hold `a b c` (row 0) and `d` (row 1).
@@ -648,21 +558,9 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       );
       expect([name, moved]).toEqual([
         name,
-        [
-          {
-            index: name === "d" ? 1 : 0,
-            count: 2,
-            distribution: DISTRIBUTIONS.uniform,
-            axis: "row",
-            lineStart: 0,
-            lineEnd: 1,
-          },
-        ],
+        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.uniform, axis: "row", lineStart: 0, lineEnd: 1 }],
       ]);
-      expect([name, rt.bgOf(name)]).toEqual([
-        name,
-        decorFor(palette, DEFAULT_DECOR, authored, DRAWN_AT).hex,
-      ]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, DEFAULT_DECOR, authored, DRAWN_AT).hex]);
     }
     expect(CELLS.map((n) => rt.bgOf(n))).not.toEqual(
       CELLS.map((n) => plain.bgOf(n)),
@@ -689,10 +587,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     // on a `{ v }` in the row: each placed nothing, and each says so alike.
     const refusals = [
       [`['a', { h: ['b', 'c']${M} }]`, "root.children[0].children[1]"],
-      [
-        `['a', { h: ['b', { h: ['c']${M} }] }]`,
-        "root.children[0].children[1].children[1]",
-      ],
+      [`['a', { h: ['b', { h: ['c']${M} }] }]`, "root.children[0].children[1].children[1]"],
       [`['a', { v: ['b', 'c']${M} }]`, "root.children[0].children[1]"],
     ].map(([row, path]) => {
       let message = "";
@@ -701,12 +596,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
       } catch (error) {
         message = (error as Error).message;
       }
-      expect([row, message]).toEqual([
-        row,
-        expect.stringContaining(
-          `${path} sets "distribution" on a container inside a row`,
-        ),
-      ]);
+      expect([row, message]).toEqual([row, expect.stringContaining(`${path} sets "distribution" on a container inside a row`)]);
       return message.slice(message.indexOf(`${path} sets`) + path!.length);
     });
     expect(new Set(refusals).size).toBe(1);
@@ -725,9 +615,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     const gated = build(bar(", when: '{{ .x }}'"));
     open.render();
     gated.render();
-    expect(["a", "b", "c"].map((n) => gated.bgOf(n))).toEqual(
-      ["a", "b", "c"].map((n) => open.bgOf(n)),
-    );
+    expect(["a", "b", "c"].map((n) => gated.bgOf(n))).toEqual(["a", "b", "c"].map((n) => open.bgOf(n)));
     open.dispose();
     gated.dispose();
   });
@@ -743,9 +631,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     build(bar(`{ v: [ { h: ['a'] }, { v: ['b'] } ]${M} }`)).dispose();
     build(bar(`{ v: [ 'a', { v: ['b'] } ]${M} }`)).dispose();
     // Every row a vertical container: each row's hue is its own container's step.
-    expect(() =>
-      build(bar(`{ v: [ { v: ['a'] }, { v: ['b'] } ]${M} }`)),
-    ).toThrow(
+    expect(() => build(bar(`{ v: [ { v: ['a'] }, { v: ['b'] } ]${M} }`))).toThrow(
       /sets "distribution" on a vertical container none of whose children is a segment or a horizontal container/,
     );
   });
@@ -764,23 +650,15 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     build(body(`{ v: [ { h: ['a', 'b']${M} } ] }`)).dispose();
     build(body(`{ h: [ { v: ['a'] }, { v: ['b'] } ]${M} }`)).dispose();
     // A body's rows pick nothing, whatever they hold; the message names the node.
-    for (const tree of [
-      `{ v: [ 'c', { h: ['a', 'b'] } ]${M} }`,
-      `{ v: [ { h: ['a', 'b'] } ]${M} }`,
-    ]) {
+    for (const tree of [`{ v: [ 'c', { h: ['a', 'b'] } ]${M} }`, `{ v: [ { h: ['a', 'b'] } ]${M} }`]) {
       expect(() => build(body(tree))).toThrow(
         /root\.children\[0\]\.opens\.body\.children\[0\] sets "distribution" on a vertical container in a disclosure body/,
       );
     }
     // Inside a body's row it places nothing, as on the bar: the row places
     // every item along its line, through a group nested in it.
-    for (const tree of [
-      `{ h: [ 'c', { h: ['a', 'b']${M} } ] }`,
-      `{ h: [ 'c', { h: ['a', { h: ['b']${M} }] } ] }`,
-    ]) {
-      expect(() => build(body(tree))).toThrow(
-        /sets "distribution" on a container inside a row/,
-      );
+    for (const tree of [`{ h: [ 'c', { h: ['a', 'b']${M} } ] }`, `{ h: [ 'c', { h: ['a', { h: ['b']${M} }] } ] }`]) {
+      expect(() => build(body(tree))).toThrow(/sets "distribution" on a container inside a row/);
     }
   });
 
@@ -814,33 +692,20 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
 // its own place on the row's line, and a row reads as the flat row of its
 // leaves does, however it nests them.
 describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, however the row nests them", () => {
-  const tints = (
-    rt: ReturnType<typeof build>,
-    names: readonly string[],
-  ): string[] => names.map((n) => rt.bgOf(n));
+  const tints = (rt: ReturnType<typeof build>, names: readonly string[]): string[] => names.map((n) => rt.bgOf(n));
 
   test("a row authored as a, { h: [b, c, d] }, e draws five places: each cell wears what a flat row of five wears there, and no two neighbours share a tone", () => {
     const grouped = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] }, 'e' ]"));
     const flat = build(groupedRow("[ 'a', 'b', 'c', 'd', 'e' ]"));
     // No dial position deals one tone, which would put every pair of
     // neighbours on it.
-    expect(
-      SHADE_NAMES.filter((shade) => SHADES[shade].tones.length < 2),
-    ).toEqual([]);
+    expect(SHADE_NAMES.filter((shade) => SHADES[shade].tones.length < 2)).toEqual([]);
     for (const shade of SHADE_NAMES) {
       grouped.render({}, undefined, shade);
       flat.render({}, undefined, shade);
       expect([shade, tints(grouped, FIVE)]).toEqual([shade, tints(flat, FIVE)]);
       // The tone each cell's place selects, as the walk drew it.
-      const tones = FIVE.map(
-        (n) =>
-          decorEntryFor(
-            getThemePalette(THEME),
-            decorOf(undefined, shade),
-            addressOf(grouped.root, n),
-            DRAWN_AT,
-          ).shade,
-      );
+      const tones = FIVE.map((n) => decorEntryFor(getThemePalette(THEME), decorOf(undefined, shade), addressOf(grouped.root, n), DRAWN_AT).shade);
       const alike = FIVE.slice(1).filter((n, i) => tones[i + 1] === tones[i]);
       expect([shade, alike]).toEqual([shade, []]);
     }
@@ -853,31 +718,15 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     const grouped = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] } ]"));
     const flat = build(groupedRow("[ 'a', 'b', 'c', 'd' ]"));
     const hues = (variation: VariationName) =>
-      FOUR.map(
-        (n) =>
-          decorEntryFor(
-            getThemePalette(THEME),
-            decorOf(variation),
-            addressOf(grouped.root, n),
-            DRAWN_AT,
-          ).hue,
-      );
-    expect(hues("end-primary")).toEqual([
-      "secondary",
-      "secondary",
-      "secondary",
-      "accent",
-    ]);
+      FOUR.map((n) => decorEntryFor(getThemePalette(THEME), decorOf(variation), addressOf(grouped.root, n), DRAWN_AT).hue);
+    expect(hues("end-primary")).toEqual(["secondary", "secondary", "secondary", "accent"]);
     // The row under test is the bar's second, so alt starts it on its second
     // step and turns after three cells: at d, the group's last leaf.
     expect(hues("alt")).toEqual(["accent", "accent", "accent", "secondary"]);
     for (const variation of ["end-primary", "alt"] as const) {
       grouped.render({}, variation);
       flat.render({}, variation);
-      expect([variation, tints(grouped, FOUR)]).toEqual([
-        variation,
-        tints(flat, FOUR),
-      ]);
+      expect([variation, tints(grouped, FOUR)]).toEqual([variation, tints(flat, FOUR)]);
     }
     grouped.dispose();
     flat.dispose();
@@ -888,73 +737,33 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     // a line of its own below the row and reaches place 3, past the row line's
     // last place: a count of the row line's two places would put d and e
     // outside the row, where a count-reading distribution places nothing.
-    const rt = build(
-      groupedRow(
-        "[ 'a', { v: [ 'b', { h: [ 'c', 'd', 'e' ] } ] } ]",
-        ", distribution: 'monotonic'",
-      ),
-    );
+    const rt = build(groupedRow("[ 'a', { v: [ 'b', { h: [ 'c', 'd', 'e' ] } ] } ]", ", distribution: 'monotonic'"));
     const drawn = rt.render();
     const lines = textOf(drawn)
       .split("\n")
       .map((line) => [...line.matchAll(/«(\w)»/g)].map(([, name]) => name))
       .filter((names) => names.length > 0);
-    expect(lines).toEqual([
-      ["a", "b"],
-      ["c", "d", "e"],
-    ]);
+    expect(lines).toEqual([["a", "b"], ["c", "d", "e"]]);
     const places = Object.fromEntries(
       FIVE.map((n) => {
         const { index, count } = addressOf(rt.root, n).at(-1)!;
         return [n, [index, count]];
       }),
     );
-    expect(places).toEqual({
-      a: [0, 4],
-      b: [1, 4],
-      c: [1, 4],
-      d: [2, 4],
-      e: [3, 4],
-    });
+    expect(places).toEqual({ a: [0, 4], b: [1, 4], c: [1, 4], d: [2, 4], e: [3, 4] });
     for (const shade of SHADE_NAMES) {
       rt.render({}, undefined, shade);
-      expect([shade, tints(rt, FIVE)]).toEqual([
-        shade,
-        FIVE.map((n) => rt.expectedTint(n, undefined, shade)),
-      ]);
+      expect([shade, tints(rt, FIVE)]).toEqual([shade, FIVE.map((n) => rt.expectedTint(n, undefined, shade))]);
     }
     // Every drawn line has its own ends: b ends the row's line though d and e
     // reach further on the line below, and c starts that line.
     const hues = (variation: VariationName) =>
-      FIVE.map(
-        (n) =>
-          decorEntryFor(
-            getThemePalette(THEME),
-            decorOf(variation),
-            addressOf(rt.root, n),
-            DRAWN_AT,
-          ).hue,
-      );
-    expect(hues("end-primary")).toEqual([
-      "secondary",
-      "accent",
-      "secondary",
-      "secondary",
-      "accent",
-    ]);
-    expect(hues("start-primary")).toEqual([
-      "accent",
-      "secondary",
-      "accent",
-      "secondary",
-      "secondary",
-    ]);
+      FIVE.map((n) => decorEntryFor(getThemePalette(THEME), decorOf(variation), addressOf(rt.root, n), DRAWN_AT).hue);
+    expect(hues("end-primary")).toEqual(["secondary", "accent", "secondary", "secondary", "accent"]);
+    expect(hues("start-primary")).toEqual(["accent", "secondary", "accent", "secondary", "secondary"]);
     for (const variation of ["end-primary", "start-primary"] as const) {
       rt.render({}, variation);
-      expect([variation, tints(rt, FIVE)]).toEqual([
-        variation,
-        FIVE.map((n) => rt.expectedTint(n, variation)),
-      ]);
+      expect([variation, tints(rt, FIVE)]).toEqual([variation, FIVE.map((n) => rt.expectedTint(n, variation))]);
     }
     rt.dispose();
   });
@@ -968,9 +777,7 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     expect(lines).toEqual([["a", "b", "c"]]);
     const THREE = FIVE.slice(0, 3);
     const places = THREE.map((n) => {
-      const { index, count, lineStart, lineEnd } = addressOf(rt.root, n).at(
-        -1,
-      )!;
+      const { index, count, lineStart, lineEnd } = addressOf(rt.root, n).at(-1)!;
       return [n, index, count, lineStart, lineEnd];
     });
     expect(places).toEqual([

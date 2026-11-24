@@ -32,13 +32,7 @@ beforeAll(async () => {
   const output = await new Promise<string>((resolveRun, reject) => {
     const child = spawn(
       process.execPath,
-      [
-        JEST,
-        "--config",
-        "jest.unit-fixtures.config.js",
-        "--json",
-        `--outputFile=${json}`,
-      ],
+      [JEST, "--config", "jest.unit-fixtures.config.js", "--json", `--outputFile=${json}`],
       { cwd: ROOT },
     );
     let text = "";
@@ -51,22 +45,15 @@ beforeAll(async () => {
     const result = JSON.parse(readFileSync(json, "utf8")) as {
       testResults: { assertionResults: Case[] }[];
     };
-    cases = Object.fromEntries(
-      result.testResults
-        .flatMap((file) => file.assertionResults)
-        .map((c) => [c.title, c]),
-    );
+    cases = Object.fromEntries(result.testResults.flatMap((file) => file.assertionResults).map((c) => [c.title, c]));
   } catch (error) {
-    throw new Error(
-      `jest wrote no result over the fixtures:\n${output}\n${error}`,
-    );
+    throw new Error(`jest wrote no result over the fixtures:\n${output}\n${error}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }, 120_000);
 
-const message = (title: string) =>
-  (cases[title]?.failureMessages ?? []).join("\n");
+const message = (title: string) => (cases[title]?.failureMessages ?? []).join("\n");
 
 // Every route in the table has a case, cut from the same table, and each fails
 // at its call. A descriptor operation passes by design: its open was judged.
@@ -81,34 +68,17 @@ const routes = MODULES.flatMap(([surface, name, guarding]) =>
 test("the table refuses every module that reaches the machine", () => {
   expect(MODULES.map(([, name]) => name).sort()).toEqual(
     [
-      "child_process",
-      "cluster",
-      "dgram",
-      "dns",
-      "dns/promises",
-      "fs",
-      "fs/promises",
-      "http",
-      "http2",
-      "https",
-      "net",
-      "os",
-      "timers",
-      "timers/promises",
-      "tls",
-      "worker_threads",
+      "child_process", "cluster", "dgram", "dns", "dns/promises", "fs", "fs/promises", "http", "http2",
+      "https", "net", "os", "timers", "timers/promises", "tls", "worker_threads",
     ].sort(),
   );
 });
 
-test.each(routes)(
-  "a unit test that reaches the %s with %s fails at the call",
-  (surface, call) => {
-    expect(cases[call]?.status).toBe("failed");
-    expect(message(call)).toContain(`reached the ${surface}: ${call}(`);
-    expect(message(call)).toContain(`in test "${call}"`);
-  },
-);
+test.each(routes)("a unit test that reaches the %s with %s fails at the call", (surface, call) => {
+  expect(cases[call]?.status).toBe("failed");
+  expect(message(call)).toContain(`reached the ${surface}: ${call}(`);
+  expect(message(call)).toContain(`in test "${call}"`);
+});
 
 // The globals, and the reads of what the checkout does not own.
 test.each([
@@ -122,11 +92,7 @@ test.each([
   ["reads the wall clock with Date called as a function", "clock", "Date("],
   ["reads the wall clock with performance.now", "clock", "performance.now("],
   ["reads the process clock with hrtime", "clock", "process.hrtime("],
-  [
-    "reads the process clock with hrtime.bigint",
-    "clock",
-    "process.hrtime.bigint(",
-  ],
+  ["reads the process clock with hrtime.bigint", "clock", "process.hrtime.bigint("],
   ["reads process uptime", "clock", "process.uptime("],
   ["starts an abort timeout", "clock", "AbortSignal.timeout("],
   ["reads outside the package", "filesystem", "fs.readFileSync("],

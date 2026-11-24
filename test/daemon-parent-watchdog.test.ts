@@ -41,8 +41,7 @@ describe("armParentWatchdog", () => {
 
   test("outlives-nobody never trips and arms no timer", () => {
     const onOrphaned = jest.fn();
-    const handle = armParentWatchdog({
-      clock: systemTimekeeper,
+    const handle = armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "outlives-nobody" },
       probe: { alive: () => false },
       onOrphaned,
@@ -54,8 +53,7 @@ describe("armParentWatchdog", () => {
 
   test("anchored + spawner alive never trips", () => {
     const onOrphaned = jest.fn();
-    armParentWatchdog({
-      clock: systemTimekeeper,
+    armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 999 },
       probe: { alive: () => true },
       onOrphaned,
@@ -67,8 +65,7 @@ describe("armParentWatchdog", () => {
 
   test("anchored + spawner gone trips with the spawner pid in the reason", () => {
     const onOrphaned = jest.fn();
-    armParentWatchdog({
-      clock: systemTimekeeper,
+    armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 4242 },
       probe: { alive: () => false },
       onOrphaned,
@@ -80,8 +77,7 @@ describe("armParentWatchdog", () => {
 
   test("disarm stops further polling", () => {
     const onOrphaned = jest.fn();
-    const handle = armParentWatchdog({
-      clock: systemTimekeeper,
+    const handle = armParentWatchdog({ clock: systemTimekeeper,
       anchor: { kind: "anchored", pid: 4242 },
       probe: { alive: () => false },
       onOrphaned,

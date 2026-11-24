@@ -22,10 +22,7 @@ import {
   makeFrameReader,
 } from "../src/daemon/foundations/protocol";
 import type { Request, Response } from "../src/daemon/foundations/protocol";
-import {
-  DEBUG_WHATS,
-  isDebugWhat,
-} from "../src/daemon/foundations/debug-types";
+import { DEBUG_WHATS, isDebugWhat } from "../src/daemon/foundations/debug-types";
 import type { DebugSnapshot } from "../src/daemon/foundations/debug-types";
 import {
   buildDebugSnapshot,
@@ -90,7 +87,10 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store,
+    "",
+    new SessionState(),
+  );
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
   });

@@ -10,7 +10,12 @@ describe("HELP_TEXT", () => {
   // landed. The glyph is read from the synthesis that renders it, not spelled
   // again here — a renamed anchor must break this loudly.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
-    for (const tab of ["⚡ session", "🎨 look", "📐 layout", "⚙ config"]) {
+    for (const tab of [
+      "⚡ session",
+      "🎨 look",
+      "📐 layout",
+      "⚙ config",
+    ]) {
       expect(HELP_TEXT).toContain(tab);
     }
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
@@ -35,9 +40,7 @@ describe("HELP_TEXT", () => {
 
   test("documents both config scopes and the editor schema", () => {
     expect(HELP_TEXT).toMatch(/--config PATH\s+Use PATH as the user layer/);
-    expect(HELP_TEXT).toMatch(
-      /--config-only PATH\s+Load only PATH over the bundled base/,
-    );
+    expect(HELP_TEXT).toMatch(/--config-only PATH\s+Load only PATH over the bundled base/);
     expect(HELP_TEXT).toMatch(/^\s+schema\s+Print the JSON Schema/m);
   });
 });

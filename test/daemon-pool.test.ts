@@ -5,10 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { createDaemonPool } from "./helpers/daemon-pool";
-import {
-  spawnTestDaemon,
-  type TestDaemonProcess,
-} from "./helpers/spawn-test-daemon";
+import { spawnTestDaemon, type TestDaemonProcess } from "./helpers/spawn-test-daemon";
 import { throughout, until } from "./helpers/until";
 
 // [LAW:verifiable-goals] Pins the shared-pool primitive's core contract in
@@ -81,8 +78,7 @@ describe("daemon pool", () => {
     });
     const deadPid = dead.pid!;
     const startTimeRead = await processProbe.startTime(deadPid);
-    const deadStartTime =
-      startTimeRead.kind === "start" ? startTimeRead.token : null;
+    const deadStartTime = startTimeRead.kind === "start" ? startTimeRead.token : null;
     dead.kill("SIGKILL");
     await new Promise<void>((resolve) => dead.once("exit", () => resolve()));
 
@@ -233,10 +229,7 @@ describe("the pool holds a spawn to its ceiling", () => {
       createDaemonPool(tmpPoolDir(), 1, processProbe),
       () => ({
         bin: "/bin/sh",
-        args: [
-          "-c",
-          `trap '' TERM; : > ${JSON.stringify(ready)}; exec sleep 60`,
-        ],
+        args: ["-c", `trap '' TERM; : > ${JSON.stringify(ready)}; exec sleep 60`],
       }),
     );
     await until(() => fs.existsSync(ready), "the stand-in ignoring SIGTERM");

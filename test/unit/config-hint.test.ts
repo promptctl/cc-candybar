@@ -6,7 +6,10 @@
 // same table.
 import path from "node:path";
 import { hostOf } from "../helpers/host";
-import { CONFIG_ENV, detectConfigEnv } from "../../src/config-hint";
+import {
+  CONFIG_ENV,
+  detectConfigEnv,
+} from "../../src/config-hint";
 
 const CWD = "/work/proj";
 // A home no machine has, so `~` expands to the host a test states.

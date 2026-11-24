@@ -22,10 +22,7 @@ describe("the system timekeeper", () => {
     await new Promise<void>((listening) =>
       server.listen(0, "127.0.0.1", listening),
     );
-    const client = net.connect(
-      (server.address() as net.AddressInfo).port,
-      "127.0.0.1",
-    );
+    const client = net.connect((server.address() as net.AddressInfo).port, "127.0.0.1");
     // Both ends are up before the write, so its bytes are in the kernel when
     // the loop is held.
     const [conn] = await Promise.all([
@@ -60,7 +57,9 @@ describe("the system timekeeper", () => {
       unref: true,
     });
     const held = systemTimekeeper.after("test task", 60_000, () => undefined);
-    const [unref, ref] = set.mock.results.map((r) => r.value as NodeJS.Timeout);
+    const [unref, ref] = set.mock.results.map(
+      (r) => r.value as NodeJS.Timeout,
+    );
     set.mockRestore();
     clear();
     held();

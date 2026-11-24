@@ -6,20 +6,17 @@
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { type LaunchOpts } from "../src/proc/launcher";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
-import {
-  collectDiagnostics,
-  diagnosticCopies,
-} from "../src/render/diagnostics";
+import { collectDiagnostics, diagnosticCopies } from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
 import { hrefOfDrawnLink } from "../src/render/drawn-link";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
+import { clickActing, clickUrl, testVerbContext,
+  verbContextWith } from "./helpers/click";
 import {
-  clickActing,
-  clickUrl,
-  testVerbContext,
-  verbContextWith,
-} from "./helpers/click";
-import { effectsUrl, VERB_COPY, VERB_COPY_DIAGNOSTIC } from "../src/click/wire";
+  effectsUrl,
+  VERB_COPY,
+  VERB_COPY_DIAGNOSTIC,
+} from "../src/click/wire";
 import { CrossedFailure } from "../src/daemon/foundations/verb-error";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -101,17 +98,16 @@ test("a copy in a click that names a session fails on that session's bar", async
     ]),
     verbContextWith(ctx, { diagnosticCopy: () => PROMPT }),
     {
-      launch: async (opts) =>
-        opts.stdinInput === PROMPT
-          ? { ok: true, exitCode: 0, stdout: "", stderr: "" }
-          : {
-              ok: false,
-              reason: "non-zero",
-              stdout: "",
-              stderr: "no pasteboard",
-              exitCode: 1,
-              signal: null,
-            },
+      launch: async (opts) => opts.stdinInput === PROMPT
+        ? { ok: true, exitCode: 0, stdout: "", stderr: "" }
+        : ({
+        ok: false,
+        reason: "non-zero",
+        stdout: "",
+        stderr: "no pasteboard",
+        exitCode: 1,
+        signal: null,
+      }),
     },
   );
   expect(outcomes).toEqual([
@@ -134,7 +130,9 @@ test("a step the daemon's close cut off keeps its class, and holds nothing on th
     detail: "",
   });
   const clicked = clickUrl(
-    effectsUrl([{ verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] }]),
+    effectsUrl([
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] },
+    ]),
     verbContextWith(testVerbContext(state), {
       diagnosticCopy: () => {
         throw closing;

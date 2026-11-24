@@ -94,9 +94,9 @@ describe("presets block — loader validation", () => {
   // an embedded newline would break template synthesis for the WHOLE
   // config. Rejected the same way groupLabelSpec rejects \n/\r in a label.
   test("a newline-bearing preset name is rejected at load", () => {
-    expect(
-      parseIssues(`{ presets: { ${JSON.stringify("a\nb")}: {} } }`),
-    ).toContain("must be non-empty, slash-free, and newline-free");
+    expect(parseIssues(`{ presets: { ${JSON.stringify("a\nb")}: {} } }`)).toContain(
+      "must be non-empty, slash-free, and newline-free",
+    );
   });
 
   // Edit chrome spells each preset name injectively, so two names that differ
@@ -280,20 +280,11 @@ describe("preset selection — the arrangement the bar renders", () => {
   function presetBar(src: string = SRC) {
     // Rendered by default: a click is gated by the config its session renders,
     // so the click below resolves this config and passes through its real gate.
-    const rig = buildRig({
-      source: src,
-      label: "<presets>",
-      palettes: ALLOWED,
-      sessionId: SID,
-    });
+    const rig = buildRig({ source: src, label: "<presets>", palettes: ALLOWED, sessionId: SID });
     const { config, sessionState } = rig;
     // The daemon's exact order: resolve the preset, take ITS globals, render.
     const resolve = () =>
-      resolveEffectiveGlobals(
-        config,
-        (key) => sessionState.get(SID, key),
-        () => false,
-      );
+      resolveEffectiveGlobals(config, (key) => sessionState.get(SID, key), () => false);
     const render = (): Frame => {
       const effective = resolve();
       return rig.draw({
@@ -305,13 +296,8 @@ describe("preset selection — the arrangement the bar renders", () => {
     return { ...rig, resolve, render };
   }
 
-  const clickPreset = (
-    rt: ReturnType<typeof presetBar>,
-    preset: string,
-  ): Promise<void> =>
-    rt.click(
-      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]),
-    );
+  const clickPreset = (rt: ReturnType<typeof presetBar>, preset: string): Promise<void> =>
+    rt.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]));
 
   test("with no pick, the floor renders the config's own root", () => {
     const rt = presetBar();
@@ -328,7 +314,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   test("a session pick restages the layout — the click drives the real wire", async () => {
     const rt = presetBar();
     try {
-      await clickPreset(rt, "both");
+      await clickPreset(rt,"both");
       expect(rt.resolve().preset).toBe("both");
       const out = rt.render();
       expect(textOf(out)).toContain("ALPHA");
@@ -339,9 +325,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   });
 
   test("a config literal (globals.preset) selects without any session pick", () => {
-    const rt = presetBar(
-      SRC.replace("padding: 1", "padding: 1, preset: 'both'"),
-    );
+    const rt = presetBar(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
     try {
       expect(rt.resolve().preset).toBe("both");
       expect(textOf(rt.render())).toContain("BETA");
@@ -351,11 +335,9 @@ describe("preset selection — the arrangement the bar renders", () => {
   });
 
   test("a session pick beats the config literal — the chain's last layer wins", async () => {
-    const rt = presetBar(
-      SRC.replace("padding: 1", "padding: 1, preset: 'both'"),
-    );
+    const rt = presetBar(SRC.replace("padding: 1", "padding: 1, preset: 'both'"));
     try {
-      await clickPreset(rt, PRESET_FLOOR);
+      await clickPreset(rt,PRESET_FLOOR);
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
       expect(textOf(rt.render())).not.toContain("BETA");
     } finally {
@@ -369,7 +351,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const rt = presetBar();
     try {
       expect(rt.resolve().padding).toBe(1);
-      await clickPreset(rt, "roomy");
+      await clickPreset(rt,"roomy");
       expect(rt.resolve().padding).toBe(4);
       // `roomy` declares no root, so the config's own layout still renders —
       // the fragment is a DELTA, not a replacement.
@@ -434,7 +416,7 @@ describe("preset selection — the arrangement the bar renders", () => {
 // ─── Loading preset layouts ────────────────────────────────────────────────────────
 
 describe("loading a preset", () => {
-  const withConfigFile = async <T>(
+  const withConfigFile = async <T,>(
     body: string,
     fn: (p: string) => Promise<T>,
   ): Promise<T> => {
@@ -476,17 +458,11 @@ describe("presetRoot — the path a preset's layout is authored at", () => {
   // Asked of the MERGED tree, before validateConfig materializes an explicit
   // root for every preset (the same seam RenderCache's authoredRoots reads).
   const merged = (src: string) =>
-    mergeWithDefault(
-      parseDslConfig("<presets>", src, ALLOWED),
-      DEFAULT_DSL_CONFIG,
-    );
+    mergeWithDefault(parseDslConfig("<presets>", src, ALLOWED), DEFAULT_DSL_CONFIG);
 
   test("an empty rows map restages nothing: the preset renders the config's root, authored at `root`", () => {
     const cfg = merged(`{ presets: { P: { root: { rows: {} } } } }`);
-    expect(presetRoot(cfg, "P")).toEqual({
-      node: rootNode(cfg.root),
-      path: "root",
-    });
+    expect(presetRoot(cfg, "P")).toEqual({ node: rootNode(cfg.root), path: "root" });
   });
 
   test("a rows fragment restages: the inherited rows keep their place and the new row appends, authored at the preset", () => {
@@ -528,9 +504,7 @@ describe("presetRoot — the path a preset's layout is authored at", () => {
 
   test("a rows fragment's unknown distribution is the load error a container's is", () => {
     expect(() =>
-      merged(
-        `{ presets: { P: { root: { rows: {}, distribution: 'spiral' } } } }`,
-      ),
+      merged(`{ presets: { P: { root: { rows: {}, distribution: 'spiral' } } } }`),
     ).toThrow(
       /distribution must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
     );

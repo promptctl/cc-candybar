@@ -6,10 +6,7 @@ import { promisify } from "node:util";
 // build a date from a value, and run on fake time.
 
 test("reads a file the package holds", () => {
-  const read = fs.readFileSync(
-    path.join(__dirname, "..", "..", "..", "package.json"),
-    "utf8",
-  );
+  const read = fs.readFileSync(path.join(__dirname, "..", "..", "..", "package.json"), "utf8");
   expect(JSON.parse(read).name).toBeDefined();
 });
 
@@ -39,9 +36,5 @@ test("fakes the clock with a spy of its own", () => {
 });
 
 test("promisifies an exists of a file the package holds", async () => {
-  await expect(
-    promisify(fs.exists)(
-      path.join(__dirname, "..", "..", "..", "package.json"),
-    ),
-  ).resolves.toBe(true);
+  await expect(promisify(fs.exists)(path.join(__dirname, "..", "..", "..", "package.json"))).resolves.toBe(true);
 });

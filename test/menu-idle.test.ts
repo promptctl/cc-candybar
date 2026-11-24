@@ -10,12 +10,7 @@ import {
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import {
-  clickUrl,
-  effectsOf,
-  bookedContext,
-  CLICK_VERBS,
-} from "./helpers/click";
+import { clickUrl, effectsOf, bookedContext, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
@@ -211,10 +206,7 @@ function idleBar(src: string) {
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = linkClick(url);
-    expect(admitClick(verb, v, TEST_SIGNER).click).toMatchObject({
-      scope: "session",
-      session: SID,
-    });
+    expect(admitClick(verb, v, TEST_SIGNER).click).toMatchObject({ scope: "session", session: SID });
     await clickUrl(url, ctx);
   };
   const held = (key: string): string =>

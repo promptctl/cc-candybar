@@ -13,17 +13,22 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import {
-  EDIT_MODE_ARRANGE,
-  EDIT_MODE_KEY,
-} from "../../../src/config/loader/edit-mode";
+  effectsUrl,
+  VERB_SET_STATE,
+} from "../../../src/click/wire";
+import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../../src/config/door";
 import { linksOf } from "../../../src/click/read";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import { click, render, drawnLink, urlWriting } from "../../helpers/daemon-e2e";
+import {
+  click,
+  render,
+  drawnLink,
+  urlWriting,
+} from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import {
   startDaemon,
@@ -135,16 +140,11 @@ esac
     ]);
     const opened = (): string[] =>
       logLines(env).filter((line) =>
-        line.includes(
-          `bar-pane sid=${JSON.stringify(sid)} pane="%7" desired=on — opened bar pane %9`,
-        ),
+        line.includes(`bar-pane sid=${JSON.stringify(sid)} pane="%7" desired=on — opened bar pane %9`),
       );
     await until(
       () => opened().length > 0,
-      () =>
-        `the configured bar pane (${logLines(env)
-          .filter((line) => line.includes("bar-pane"))
-          .join("; ")})`,
+      () => `the configured bar pane (${logLines(env).filter((line) => line.includes("bar-pane")).join("; ")})`,
     );
     await render(daemon, sid, projectDir, inTmux(sid), [
       "cc-candybar",
@@ -154,12 +154,11 @@ esac
     expect(opened()).toHaveLength(1);
     await render(daemon, "lane-pane-next", projectDir, inTmux(sid), args());
     await until(
-      () =>
-        logLines(env).some((line) =>
-          line.includes(
-            'bar-pane sid="lane-pane-next" pane="%7" desired=off — closed bar pane %9',
-          ),
+      () => logLines(env).some((line) =>
+        line.includes(
+          'bar-pane sid="lane-pane-next" pane="%7" desired=off — closed bar pane %9',
         ),
+      ),
       "the next session's disabled bar pane setting",
     );
   });
@@ -167,22 +166,13 @@ esac
   test("a draft pane preference reaches the host only after Save", async () => {
     const sid = "lane-draft";
     const file = path.join(projectDir, "pane-draft.json5");
-    const bar = () =>
-      render(daemon, sid, projectDir, inTmux(sid), [
-        "cc-candybar",
-        "--config",
-        file,
-      ]);
+    const bar = () => render(daemon, sid, projectDir, inTmux(sid), [
+      "cc-candybar", "--config", file,
+    ]);
     const held = path.join(projectDir, `lane-e2e-${sid}.split`);
     writeFileSync(file, CONFIG);
-    await click(
-      daemon,
-      urlWriting(await bar(), SETTINGS_ANCHOR, SETTINGS_OPEN),
-    );
-    await click(
-      daemon,
-      urlWriting(await bar(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
-    );
+    await click(daemon, urlWriting(await bar(), SETTINGS_ANCHOR, SETTINGS_OPEN));
+    await click(daemon, urlWriting(await bar(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await switchLanes(sid, true, "pane");
     const draft = await bar();
     expect(readFileSync(file, "utf8")).toBe(CONFIG);
@@ -210,8 +200,7 @@ esac
     await renderIn(sid);
     await switchLanes(sid, true, "pane");
     await until(
-      () =>
-        logLines(env).some((line) => line.includes("temporary split failure")),
+      () => logLines(env).some((line) => line.includes("temporary split failure")),
       "the first split to fail",
     );
     await until(async () => {
@@ -269,7 +258,7 @@ esac
       const written = (): bigint => statSync(cfg, { bigint: true }).mtimeNs;
       const unwritten = written();
       await switchLanes(`${sid}-0`, true, "pane");
-      const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
+        const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
       // The click's one file write, landed: a save after the click wrote a
       // snapshot taken after its pick.
       await until(() => {

@@ -51,13 +51,7 @@ const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: {
-    sources: {},
-    lanes: {},
-    managedFolders: [],
-    configSelections: [],
-    configs: [],
-  },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
   wake: null,
   record: [],
   frames: [],
@@ -115,8 +109,7 @@ function hostOver(
   const unheard: string[] = [];
   const heard: EventInput[] = [];
   const world: HostWorld = {
-    authorizeRun: (request, captures) =>
-      authorizeRun(TEST_SIGNER, request, captures),
+    authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
     perform: async (act: HostAct): Promise<EffectOutcome> => {
       did.push(
         `perform ${act.kind} ${act.id} (file says ${fs.readFileSync(file, "utf8").includes("dawn") ? "dawn" : "dusk"})`,

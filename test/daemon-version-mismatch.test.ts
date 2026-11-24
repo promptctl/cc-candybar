@@ -460,10 +460,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // identically and the spiral repeats.
 
   test("ok outcome returns the daemon output, no kick, no debug message", () => {
-    const plan = planOutcome(
-      { kind: "ok", value: "rendered statusline\n" },
-      undefined,
-    );
+    const plan = planOutcome({ kind: "ok", value: "rendered statusline\n" }, undefined);
     expect(plan.kick).toBe(false);
     expect(plan.output).toBe("rendered statusline\n");
     // The happy path carries no debug message — nothing for the caller to log.
@@ -481,9 +478,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
         undefined,
       );
       expect(plan.kick).toBe(true);
-      expect(plan.output).toBe(
-        "\x1b[1mCandybar · waiting for daemon…\x1b[0m\n",
-      );
+      expect(plan.output).toBe("\x1b[1mCandybar · waiting for daemon…\x1b[0m\n");
       // The debug string is data, not a side effect — the caller decides
       // whether to log it.
       expect(plan.debug).toContain(`transient: ${cause}`);
@@ -494,36 +489,20 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // The daemon answered, so it is up: a kick would spawn a candidate that
   // loses the bind to it. The Rust client's Busy variant agrees.
   test.each([
-    {
-      stateHome: undefined,
-      command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log",
-    },
-    {
-      stateHome: "",
-      command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log",
-    },
-    {
-      stateHome: "/state dir",
-      command: 'tail -n 40 "$XDG_STATE_HOME/cc-candybar/daemon.log"',
-    },
-  ])(
-    "a timeout gives an offline log command for state home $stateHome",
-    ({ stateHome, command }) => {
-      const plan = planOutcome(
-        {
-          kind: "busy",
-          phase: "deadline",
-          message: "request exceeded its budget",
-        },
-        stateHome,
-      );
-      expect(plan).toMatchObject({
-        kick: false,
-        output: `\x1b[1mCandybar timed out\x1b[0m · ${command}\n`,
-      });
-      expect(plan.debug).toContain("busy");
-    },
-  );
+    { stateHome: undefined, command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log" },
+    { stateHome: "", command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log" },
+    { stateHome: "/state dir", command: 'tail -n 40 "$XDG_STATE_HOME/cc-candybar/daemon.log"' },
+  ])("a timeout gives an offline log command for state home $stateHome", ({ stateHome, command }) => {
+    const plan = planOutcome(
+      { kind: "busy", phase: "deadline", message: "request exceeded its budget" },
+      stateHome,
+    );
+    expect(plan).toMatchObject({
+      kick: false,
+      output: `\x1b[1mCandybar timed out\x1b[0m · ${command}\n`,
+    });
+    expect(plan.debug).toContain("busy");
+  });
 
   test("every permanent cause does NOT kick (the spiral-breaker)", () => {
     const permanentOutcomes: PermanentOutcome[] = [

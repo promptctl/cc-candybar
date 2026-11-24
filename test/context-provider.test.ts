@@ -6,13 +6,7 @@
 // percentages.
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import {
-  appendFileSync,
-  mkdtempSync,
-  writeFileSync,
-  rmSync,
-  utimesSync,
-} from "node:fs";
+import { appendFileSync, mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -35,6 +29,7 @@ function baseHook(overrides: Partial<ClaudeHookData> = {}): ClaudeHookData {
 }
 
 describe("the context window's sourcing", () => {
+
   it("uses context_window_size from the hook data (1M model), not a 200k guess", async () => {
     const hook = baseHook({
       context_window: {
@@ -180,13 +175,8 @@ describe("ContextProvider transcript fallback", () => {
 
   it("reads the newest main-chain usage entry, skipping sidechains", async () => {
     const t = join(dir, "t.jsonl");
-    writeFileSync(
-      t,
-      entry(1000) + entry(2000) + entry(9999, { isSidechain: true }),
-    );
-    const tokens = await new ContextProvider({
-      clock: systemTimekeeper,
-    }).refresh(sessionIdOf("fb"), t, "change");
+    writeFileSync(t, entry(1000) + entry(2000) + entry(9999, { isSidechain: true }));
+    const tokens = await new ContextProvider({ clock: systemTimekeeper }).refresh(sessionIdOf("fb"), t, "change");
     expect(tokens).toEqual(ok(2015));
     // With no window from the hook, the ratio is against the 200k floor.
     expect(contextOver(tokens, baseHook())).toEqual({
@@ -202,14 +192,8 @@ describe("ContextProvider transcript fallback", () => {
 
   it("is absent for a transcript with no usage-bearing entry", async () => {
     const t = join(dir, "t.jsonl");
-    writeFileSync(
-      t,
-      JSON.stringify({ timestamp: "2026-05-31T00:00:00.000Z", type: "user" }) +
-        "\n",
-    );
-    const outcome = await new ContextProvider({
-      clock: systemTimekeeper,
-    }).refresh(sessionIdOf("fb"), t, "change");
+    writeFileSync(t, JSON.stringify({ timestamp: "2026-05-31T00:00:00.000Z", type: "user" }) + "\n");
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh(sessionIdOf("fb"), t, "change");
     expect(outcome.kind).toBe("absent");
   });
 
@@ -217,23 +201,17 @@ describe("ContextProvider transcript fallback", () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, entry(1000));
     const provider = new ContextProvider({ clock: systemTimekeeper });
-    expect(await provider.refresh(sessionIdOf("fb"), t, "change")).toEqual(
-      ok(1015),
-    );
+    expect(await provider.refresh(sessionIdOf("fb"), t, "change")).toEqual(ok(1015));
 
     appendFileSync(t, entry(50_000));
     utimesSync(t, Date.now() / 1000 + 5, Date.now() / 1000 + 5);
-    expect(await provider.refresh(sessionIdOf("fb"), t, "change")).toEqual(
-      ok(50_015),
-    );
+    expect(await provider.refresh(sessionIdOf("fb"), t, "change")).toEqual(ok(50_015));
     // A draw reads what the last refresh left.
     expect(provider.tokensOf(sessionIdOf("fb"))).toEqual(ok(50_015));
   });
 
   it("is failed when the transcript cannot be read", async () => {
-    const outcome = await new ContextProvider({
-      clock: systemTimekeeper,
-    }).refresh(sessionIdOf("fb"), dir, "change");
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh(sessionIdOf("fb"), dir, "change");
     expect(outcome.kind).toBe("failed");
   });
 });

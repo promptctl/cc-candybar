@@ -22,22 +22,12 @@ import {
 } from "@promptctl/rich-js";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
-import {
-  POLLED,
-  SETTINGS_ANCHOR,
-  SETTINGS_OPEN,
-} from "../src/config/settings-menu";
+import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import type { Frame } from "../src/render/frame";
 import { runUnder } from "./helpers/frame";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { SWATCH_GLYPH } from "../src/render/swatch";
-import {
-  DECOR_HUES,
-  SHADES,
-  shadeRole,
-  type RoleShade,
-  type ShadeName,
-} from "../src/themes/decor";
+import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { doorClose } from "./helpers/door-close";
 import { readsRed, TERMINAL_REDS } from "../src/render/segment-color";
@@ -70,21 +60,9 @@ const opened = (tab: string, picker: string | null) => (bar: SessionBar) => {
   else bar.pick(sharedMenuStateKey("candybar.gearPickers"), picker);
 };
 const VIEWS: readonly View[] = [
-  {
-    name: "closed",
-    open: false,
-    show: (bar) => bar.pick(SETTINGS_ANCHOR, "closed"),
-  },
-  ...TABS.map((tab) => ({
-    name: `${tab} tab`,
-    open: true,
-    show: opened(tab, null),
-  })),
-  {
-    name: "style picker in the ⚙",
-    open: true,
-    show: opened("session", "candybar.apply.style"),
-  },
+  { name: "closed", open: false, show: (bar) => bar.pick(SETTINGS_ANCHOR, "closed") },
+  ...TABS.map((tab) => ({ name: `${tab} tab`, open: true, show: opened(tab, null) })),
+  { name: "style picker in the ⚙", open: true, show: opened("session", "candybar.apply.style") },
 ];
 
 /**
@@ -95,13 +73,7 @@ const VIEWS: readonly View[] = [
  * every one the bundled bar draws is a palette role (`warning`, `error`), and
  * an authored colour that is not belongs on this list.
  */
-function grounds({
-  rows,
-}: Frame): {
-  readonly ch: string;
-  readonly at: string;
-  readonly bg: ColorSpec;
-}[] {
+function grounds({ rows }: Frame): { readonly ch: string; readonly at: string; readonly bg: ColorSpec }[] {
   return rows.flatMap(({ runs }, row) => {
     // Columns counted along the row, so two depths that split one row into
     // different runs place it alike.
@@ -111,62 +83,45 @@ function grounds({
       return [...text].flatMap((ch) => {
         const at = `row ${row} col ${column}`;
         column += ch.length;
-        return ground === undefined || ch === SWATCH_GLYPH
-          ? []
-          : [{ ch, at, bg: ground }];
+        return ground === undefined || ch === SWATCH_GLYPH ? [] : [{ ch, at, bg: ground }];
       });
     });
   });
 }
 
 describe("every background the bar draws is a colour its palette names", () => {
-  test.each(SHADE_NAMES)(
-    "at the %s dial position, under every bundled theme, closed and with the settings menu open",
-    (shade) => {
-      const bar = sessionBar(
-        `{ globals: { colorCompatibility: 'truecolor' } }`,
-        COLS,
-      );
-      const wrong: string[] = [];
-      let measured = 0;
-      try {
-        bar.pick("shade", shade);
-        for (const theme of THEMES) {
-          // A palette's colours as truecolor draws them: composited over black.
-          const named = new Set(
-            [...getThemePalette(theme)!.vars.values()].map(
-              (c) => drawnColour(c, ColorDepth.TRUECOLOR).hex,
-            ),
-          );
-          bar.pick("theme", theme);
-          VIEWS[0]!.show(bar);
-          const barRows = bar.render(AT).frame.rows.length;
-          for (const view of VIEWS) {
-            view.show(bar);
-            const { frame } = bar.render(AT);
-            // Non-vacuous: an open view draws its menu above the bar.
-            expect([theme, view.name, frame.rows.length > barRows]).toEqual([
-              theme,
-              view.name,
-              view.open,
-            ]);
-            for (const { ch, at, bg } of grounds(frame)) {
-              measured++;
-              const hex = bg.value?.hex;
-              if (hex === undefined || !named.has(hex))
-                wrong.push(
-                  `${theme} ${view.name} ${at} '${ch}': ${hex ?? bg.name}`,
-                );
-            }
+  test.each(SHADE_NAMES)("at the %s dial position, under every bundled theme, closed and with the settings menu open", (shade) => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
+    const wrong: string[] = [];
+    let measured = 0;
+    try {
+      bar.pick("shade", shade);
+      for (const theme of THEMES) {
+        // A palette's colours as truecolor draws them: composited over black.
+        const named = new Set(
+          [...getThemePalette(theme)!.vars.values()].map((c) => drawnColour(c, ColorDepth.TRUECOLOR).hex),
+        );
+        bar.pick("theme", theme);
+        VIEWS[0]!.show(bar);
+        const barRows = bar.render(AT).frame.rows.length;
+        for (const view of VIEWS) {
+          view.show(bar);
+          const { frame } = bar.render(AT);
+          // Non-vacuous: an open view draws its menu above the bar.
+          expect([theme, view.name, frame.rows.length > barRows]).toEqual([theme, view.name, view.open]);
+          for (const { ch, at, bg } of grounds(frame)) {
+            measured++;
+            const hex = bg.value?.hex;
+            if (hex === undefined || !named.has(hex)) wrong.push(`${theme} ${view.name} ${at} '${ch}': ${hex ?? bg.name}`);
           }
         }
-      } finally {
-        bar.dispose();
       }
-      expect(wrong).toEqual([]);
-      expect(measured).toBeGreaterThan(THEMES.length * VIEWS.length * 100);
-    },
-  );
+    } finally {
+      bar.dispose();
+    }
+    expect(wrong).toEqual([]);
+    expect(measured).toBeGreaterThan(THEMES.length * VIEWS.length * 100);
+  });
 });
 
 const DARKER = ["error-darken-1", "error-darken-2", "error-darken-3"];
@@ -177,70 +132,47 @@ describe("the open door's ✖ is red as each depth draws it, the theme's own whe
     ["truecolor", "truecolor", ColorDepth.TRUECOLOR],
     ["256 colours", "256", ColorDepth.EIGHT_BIT],
     ["ansi", "ansi", ColorDepth.STANDARD],
-  ] as const)(
-    "under every bundled theme and every dial position, at %s",
-    (_name, compatibility, depth) => {
-      const bar = sessionBar(
-        `{ globals: { colorCompatibility: '${compatibility}' } }`,
-        COLS,
-      );
-      const wrong: string[] = [];
-      let measured = 0;
-      try {
-        for (const theme of THEMES) {
-          const palette = getThemePalette(theme)!;
-          bar.pick("theme", theme);
-          for (const shade of SHADE_NAMES) {
-            bar.pick("shade", shade);
-            bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-            const { ink, ground } = doorClose(bar.render(AT).frame);
-            measured++;
-            // The order and the floor rule are restated here, apart from the
-            // code that picks: the error text colour, the role, its rungs out
-            // toward the ground's far pole nearest first, then back, and last
-            // the terminal's reds; of those drawn red, the first to clear the
-            // text floor, or else whichever stands farthest off. What reads as
-            // red, and which reds the terminal holds, are shared with the code
-            // and pinned in test/unit/segment-colors.test.ts.
-            const out =
-              contrastFor(ground).hex === "#000000" ? DARKER : LIGHTER;
-            const order = [
-              "text-error",
-              "error",
-              ...out,
-              ...(out === DARKER ? LIGHTER : DARKER),
-            ];
-            const reds = [
-              ...order.map((name) => palette.get(name)!),
-              ...TERMINAL_REDS,
-            ]
-              .map((c) => drawnColour(c, depth))
-              .filter(readsRed);
-            const ratio = contrastRatio(ink, ground);
-            const where = `${theme} at ${shade}: ✖ ${ink.hex} on ${ground.hex}`;
-            const clearing = reds.find(
-              (c) => contrastRatio(c, ground) >= TEXT_MIN_CONTRAST,
-            );
-            const farthest = Math.max(
-              ...reds.map((c) => contrastRatio(c, ground)),
-            );
-            if (clearing !== undefined && ink.hex !== clearing.hex)
-              wrong.push(
-                `${where} where ${clearing.hex} is the first red to clear the text floor`,
-              );
-            else if (clearing === undefined && ratio !== farthest)
-              wrong.push(
-                `${where} at ${ratio.toFixed(2)} where a red stands ${farthest.toFixed(2)}`,
-              );
-          }
+  ] as const)("under every bundled theme and every dial position, at %s", (_name, compatibility, depth) => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
+    const wrong: string[] = [];
+    let measured = 0;
+    try {
+      for (const theme of THEMES) {
+        const palette = getThemePalette(theme)!;
+        bar.pick("theme", theme);
+        for (const shade of SHADE_NAMES) {
+          bar.pick("shade", shade);
+          bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
+          const { ink, ground } = doorClose(bar.render(AT).frame);
+          measured++;
+          // The order and the floor rule are restated here, apart from the
+          // code that picks: the error text colour, the role, its rungs out
+          // toward the ground's far pole nearest first, then back, and last
+          // the terminal's reds; of those drawn red, the first to clear the
+          // text floor, or else whichever stands farthest off. What reads as
+          // red, and which reds the terminal holds, are shared with the code
+          // and pinned in test/unit/segment-colors.test.ts.
+          const out = contrastFor(ground).hex === "#000000" ? DARKER : LIGHTER;
+          const order = ["text-error", "error", ...out, ...(out === DARKER ? LIGHTER : DARKER)];
+          const reds = [...order.map((name) => palette.get(name)!), ...TERMINAL_REDS]
+            .map((c) => drawnColour(c, depth))
+            .filter(readsRed);
+          const ratio = contrastRatio(ink, ground);
+          const where = `${theme} at ${shade}: ✖ ${ink.hex} on ${ground.hex}`;
+          const clearing = reds.find((c) => contrastRatio(c, ground) >= TEXT_MIN_CONTRAST);
+          const farthest = Math.max(...reds.map((c) => contrastRatio(c, ground)));
+          if (clearing !== undefined && ink.hex !== clearing.hex)
+            wrong.push(`${where} where ${clearing.hex} is the first red to clear the text floor`);
+          else if (clearing === undefined && ratio !== farthest)
+            wrong.push(`${where} at ${ratio.toFixed(2)} where a red stands ${farthest.toFixed(2)}`);
         }
-      } finally {
-        bar.dispose();
       }
-      expect(wrong).toEqual([]);
-      expect(measured).toBe(THEMES.length * SHADE_NAMES.length);
-    },
-  );
+    } finally {
+      bar.dispose();
+    }
+    expect(wrong).toEqual([]);
+    expect(measured).toBe(THEMES.length * SHADE_NAMES.length);
+  });
 });
 
 // candybar-joiners-e5r4.686: a depth may deal a cell another shade of its role
@@ -250,101 +182,63 @@ describe("the open door's ✖ is red as each depth draws it, the theme's own whe
 describe("a lower depth draws each of those colours rounded once", () => {
   // The look the open first tab once met the ✕ beside it in at ansi, and the
   // default one.
-  const LOOKS: readonly Readonly<Record<string, string>>[] = [
-    {},
-    { shade: "deepest", variation: "duo" },
-  ];
+  const LOOKS: readonly Readonly<Record<string, string>>[] = [{}, { shade: "deepest", variation: "duo" }];
   // The joiner's own cells: it draws a seam from its two neighbours as the
   // depth draws them, which is rich-js's to say, so only the cells either side
   // of it are held here.
-  const JOINER = new Set<string>([
-    POWERLINE.glyph,
-    POWERLINE.lead,
-    POWERLINE.tail,
-  ]);
+  const JOINER = new Set<string>([POWERLINE.glyph, POWERLINE.lead, POWERLINE.tail]);
 
   test.each([
     ["256 colours", "256", ColorDepth.EIGHT_BIT],
     ["ansi", "ansi", ColorDepth.STANDARD],
-  ] as const)(
-    "at %s, every background is the one truecolor draws there as the writer rounds it, or another shade of the same role as the writer rounds it, under every bundled theme and view",
-    (_name, compatibility, depth) => {
-      const truecolor = sessionBar(
-        `{ globals: { colorCompatibility: 'truecolor' } }`,
-        COLS,
-      );
-      const lower = sessionBar(
-        `{ globals: { colorCompatibility: '${compatibility}' } }`,
-        COLS,
-      );
-      const wrong: string[] = [];
-      let measured = 0;
-      try {
-        for (const look of LOOKS) {
-          for (const bar of [truecolor, lower])
-            for (const [key, value] of Object.entries(look))
-              bar.pick(key, value);
-          for (const theme of THEMES) {
-            for (const view of VIEWS) {
-              const drawn = [truecolor, lower].map((bar) => {
-                bar.pick("theme", theme);
-                view.show(bar);
-                return grounds(bar.render(AT).frame);
-              });
-              const [full, rounded] = drawn as [
-                ReturnType<typeof grounds>,
-                ReturnType<typeof grounds>,
-              ];
-              const where = `${JSON.stringify(look)} ${theme} ${view.name}`;
-              // One frame at two depths: the same characters on the same cells.
-              expect([where, rounded.map((g) => `${g.at}${g.ch}`)]).toEqual([
-                where,
-                full.map((g) => `${g.at}${g.ch}`),
-              ]);
-              const palette = getThemePalette(theme)!;
-              const roundedOnce = (c: ColorRgba): string =>
-                ColorSpec.fromRgba(c)
-                  .downgrade(depth)
-                  .getAnsiCodes(false)
-                  .join(";");
-              // Every shade of each role the palette names `hex` as, rounded once.
-              const shadesOf = (hex: string): Set<string> =>
-                new Set(
-                  DECOR_HUES.filter((hue) =>
-                    ROLE_SHADES.some(
-                      (shade) => palette.get(shadeRole(hue, shade)).hex === hex,
-                    ),
-                  ).flatMap((hue) =>
-                    ROLE_SHADES.map((shade) =>
-                      roundedOnce(palette.get(shadeRole(hue, shade))),
-                    ),
-                  ),
-                );
-              full.forEach(({ ch, at, bg }, i) => {
-                if (JOINER.has(ch)) return;
-                measured++;
-                // [LAW:no-defensive-null-guards] A truecolor frame draws every
-                // background as an RGB value.
-                const expected = roundedOnce(bg.value!);
-                const got = rounded[i]!.bg.getAnsiCodes(false).join(";");
-                if (got !== expected && !shadesOf(bg.value!.hex).has(got))
-                  wrong.push(
-                    `${where} ${at} '${ch}': ${bg.value!.hex} drawn ${got}, rounds to ${expected}, and is no shade of its role`,
-                  );
-              });
-            }
+  ] as const)("at %s, every background is the one truecolor draws there as the writer rounds it, or another shade of the same role as the writer rounds it, under every bundled theme and view", (_name, compatibility, depth) => {
+    const truecolor = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
+    const lower = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
+    const wrong: string[] = [];
+    let measured = 0;
+    try {
+      for (const look of LOOKS) {
+        for (const bar of [truecolor, lower]) for (const [key, value] of Object.entries(look)) bar.pick(key, value);
+        for (const theme of THEMES) {
+          for (const view of VIEWS) {
+            const drawn = [truecolor, lower].map((bar) => {
+              bar.pick("theme", theme);
+              view.show(bar);
+              return grounds(bar.render(AT).frame);
+            });
+            const [full, rounded] = drawn as [ReturnType<typeof grounds>, ReturnType<typeof grounds>];
+            const where = `${JSON.stringify(look)} ${theme} ${view.name}`;
+            // One frame at two depths: the same characters on the same cells.
+            expect([where, rounded.map((g) => `${g.at}${g.ch}`)]).toEqual([where, full.map((g) => `${g.at}${g.ch}`)]);
+            const palette = getThemePalette(theme)!;
+            const roundedOnce = (c: ColorRgba): string => ColorSpec.fromRgba(c).downgrade(depth).getAnsiCodes(false).join(";");
+            // Every shade of each role the palette names `hex` as, rounded once.
+            const shadesOf = (hex: string): Set<string> =>
+              new Set(
+                DECOR_HUES.filter((hue) => ROLE_SHADES.some((shade) => palette.get(shadeRole(hue, shade)).hex === hex)).flatMap(
+                  (hue) => ROLE_SHADES.map((shade) => roundedOnce(palette.get(shadeRole(hue, shade)))),
+                ),
+              );
+            full.forEach(({ ch, at, bg }, i) => {
+              if (JOINER.has(ch)) return;
+              measured++;
+              // [LAW:no-defensive-null-guards] A truecolor frame draws every
+              // background as an RGB value.
+              const expected = roundedOnce(bg.value!);
+              const got = rounded[i]!.bg.getAnsiCodes(false).join(";");
+              if (got !== expected && !shadesOf(bg.value!.hex).has(got))
+                wrong.push(`${where} ${at} '${ch}': ${bg.value!.hex} drawn ${got}, rounds to ${expected}, and is no shade of its role`);
+            });
           }
         }
-      } finally {
-        truecolor.dispose();
-        lower.dispose();
       }
-      expect(wrong).toEqual([]);
-      expect(measured).toBeGreaterThan(
-        LOOKS.length * THEMES.length * VIEWS.length * 100,
-      );
-    },
-  );
+    } finally {
+      truecolor.dispose();
+      lower.dispose();
+    }
+    expect(wrong).toEqual([]);
+    expect(measured).toBeGreaterThan(LOOKS.length * THEMES.length * VIEWS.length * 100);
+  });
 });
 
 // candybar-joiners-e5r4.3m7: the door and the frame-rate cell beside it are
@@ -360,33 +254,20 @@ describe("the settings door and its frame-rate cell take two places of the first
     runUnder({ rows: rows.slice(0, 1) }, text)?.bg;
 
   test("under every dial position, they wear two", () => {
-    const bar = sessionBar(
-      `{ globals: { colorCompatibility: 'truecolor' } }`,
-      COLS,
-    );
+    const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
     try {
       bar.pick("theme", THEME);
       VIEWS[0]!.show(bar);
       for (const shade of SHADE_NAMES) {
         for (const hue of DECOR_HUES) {
-          const named = SHADES[shade].tones.map(
-            (tone) => palette.get(shadeRole(hue, tone)).hex,
-          );
-          expect([shade, hue, new Set(named).size]).toEqual([
-            shade,
-            hue,
-            named.length,
-          ]);
+          const named = SHADES[shade].tones.map((tone) => palette.get(shadeRole(hue, tone)).hex);
+          expect([shade, hue, new Set(named).size]).toEqual([shade, hue, named.length]);
         }
         bar.pick("shade", shade);
         const { frame } = bar.render(AT);
         const door = groundUnder(frame, DOOR_GLYPH);
         const rate = groundUnder(frame, POLLED);
-        expect([shade, door === undefined, rate === undefined]).toEqual([
-          shade,
-          false,
-          false,
-        ]);
+        expect([shade, door === undefined, rate === undefined]).toEqual([shade, false, false]);
         expect([shade, door]).not.toEqual([shade, rate]);
       }
     } finally {

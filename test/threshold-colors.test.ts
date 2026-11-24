@@ -237,7 +237,10 @@ function renderOne(
 }
 
 // The fg/bg pair of the run that paints the cell's glyph.
-function cellColors(frame: Frame, glyph: string): { fg: string; bg: string } {
+function cellColors(
+  frame: Frame,
+  glyph: string,
+): { fg: string; bg: string } {
   const run = runUnder(frame, glyph);
   expect(run?.fg).toBeDefined();
   expect(run?.bg).toBeDefined();
@@ -246,15 +249,9 @@ function cellColors(frame: Frame, glyph: string): { fg: string; bg: string } {
 
 // A calm row wears the cell's own decoration: what the same cell renders with
 // no `bg:` at all. Every other row names the palette role it heats to.
-function expectedBg(
-  palette: Palette,
-  row: Row,
-  c: Case,
-  paletteName: string,
-): string {
+function expectedBg(palette: Palette, row: Row, c: Case, paletteName: string): string {
   if (row.bg === "tint") {
-    return cellColors(renderOne(c, row.value, paletteName, true).frame, c.glyph)
-      .bg;
+    return cellColors(renderOne(c, row.value, paletteName, true).frame, c.glyph).bg;
   }
   const bg = palette.get(row.bg);
   expect(bg).toBeDefined();
@@ -270,10 +267,7 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
     test.each(c.rows)(
       `${c.segment} ${varLabel} at $value wears bg=$bg, text legible on it`,
       (row) => {
-        const { fg, bg } = cellColors(
-          renderOne(c, row.value, paletteName).frame,
-          c.glyph,
-        );
+        const { fg, bg } = cellColors(renderOne(c, row.value, paletteName).frame, c.glyph);
         expect(bg).toBe(expectedBg(palette, row, c, paletteName));
         expect(
           contrastRatio(parseRgbHex(fg.slice(1)), parseRgbHex(bg.slice(1))),
@@ -328,9 +322,7 @@ describe("a threshold below its neighbour is a loud render error", () => {
       expect(textOf(rendered)).toContain("⚠");
       expect(errors).toHaveLength(1);
       expect(errors[0]).toMatch(
-        new RegExp(
-          `^segment "${segment}": .*ascending position order; ${pair}`,
-        ),
+        new RegExp(`^segment "${segment}": .*ascending position order; ${pair}`),
       );
     },
   );

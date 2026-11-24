@@ -16,13 +16,7 @@ import { instantOf } from "../src/utils/instant";
 import { prepareSnapshot, renderEffective } from "./helpers/prepared-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
-import {
-  checkText,
-  discoverFixture,
-  expectClean,
-  renderConfig,
-  withTempConfig,
-} from "./helpers/config-fixture";
+import { checkText, discoverFixture, expectClean, renderConfig, withTempConfig } from "./helpers/config-fixture";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -33,10 +27,8 @@ const exampleFiles = fs
 
 // Draw a fresh session for assertions about a shipped example's contents.
 async function renderExample(file: string): Promise<Frame> {
-  return expectClean(
-    file,
-    await renderConfig(WORLD, path.join(examplesDir, file)),
-  ).rendered;
+  return expectClean(file, await renderConfig(WORLD, path.join(examplesDir, file)))
+    .rendered;
 }
 
 describe("shipped example configs (examples/*.json5)", () => {
@@ -54,29 +46,14 @@ describe("shipped example configs (examples/*.json5)", () => {
 
   test.each(exampleFiles)("%s renders every preset it ships", async (file) => {
     const cwd = process.cwd();
-    const { snapshot, warnings } = discoverFixture(
-      WORLD,
-      path.join(examplesDir, file),
-      cwd,
-    );
+    const { snapshot, warnings } = discoverFixture(WORLD, path.join(examplesDir, file), cwd);
     using prepared = prepareSnapshot(WORLD, snapshot, cwd, warnings);
     expect(prepared.droppedPlugins).toEqual([]);
     const at = instantOf(new Date(WORLD.clock.now()));
     for (const preset of presetNames(prepared.config.presets)) {
-      const effective = prepared.effective((key) =>
-        key === "preset" ? preset : null,
-      );
-      const { rendered, failures, pending } = await renderEffective(
-        prepared,
-        effective,
-        200,
-        at,
-      );
-      expect({ preset, failures, pending }).toEqual({
-        preset,
-        failures: [],
-        pending: [],
-      });
+      const effective = prepared.effective((key) => key === "preset" ? preset : null);
+      const { rendered, failures, pending } = await renderEffective(prepared, effective, 200, at);
+      expect({ preset, failures, pending }).toEqual({ preset, failures: [], pending: [] });
       expect(textOf(rendered).length).toBeGreaterThan(0);
     }
   });
@@ -87,8 +64,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   });
 
   test("an action error in an alternate preset belongs to the draw that selected it", async () => {
-    await withTempConfig(
-      `{
+    await withTempConfig(`{
       globals: { preset: 'a' },
       presets: { a: {}, b: { root: { h: ['sample', 'broken'] } } },
       actions: { mode: { set: 'work-mode', cycle: ['focus', 'review', 'debug'] } },
@@ -97,24 +73,19 @@ describe("shipped example configs (examples/*.json5)", () => {
         broken: { template: '{{ action "mode" "focus" "review" }}' },
       },
       root: { h: ['sample'] },
-    }`,
-      async (file) => {
-        const cwd = path.dirname(file);
-        const { snapshot, warnings } = discoverFixture(WORLD, file, cwd);
-        using prepared = prepareSnapshot(WORLD, snapshot, cwd, warnings);
-        const draw = (preset: string | null) =>
-          renderEffective(
-            prepared,
-            prepared.effective((key) => (key === "preset" ? preset : null)),
-            200,
-            instantOf(new Date(WORLD.clock.now())),
-          );
-        expect((await draw(null)).failures).toEqual([]);
-        expect((await draw("b")).failures).toEqual([
-          expect.stringContaining("mode"),
-        ]);
-      },
-    );
+    }`, async (file) => {
+      const cwd = path.dirname(file);
+      const { snapshot, warnings } = discoverFixture(WORLD, file, cwd);
+      using prepared = prepareSnapshot(WORLD, snapshot, cwd, warnings);
+      const draw = (preset: string | null) => renderEffective(
+        prepared,
+        prepared.effective((key) => key === "preset" ? preset : null),
+        200,
+        instantOf(new Date(WORLD.clock.now())),
+      );
+      expect((await draw(null)).failures).toEqual([]);
+      expect((await draw("b")).failures).toEqual([expect.stringContaining("mode")]);
+    });
   });
 
   // [LAW:verifiable-goals] The shipped demonstration of `parse: { json: true }`
@@ -129,7 +100,7 @@ describe("shipped example configs (examples/*.json5)", () => {
 
 // [LAW:verifiable-goals] Each bundled preset is selected as a user would choose it.
 describe("the bundled preset library", () => {
-  const withPresetConfig = <T>(
+  const withPresetConfig = <T,>(
     preset: string,
     fn: (configPath: string) => Promise<T> | T,
   ): Promise<T> => withTempConfig(JSON.stringify({ globals: { preset } }), fn);

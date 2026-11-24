@@ -41,11 +41,7 @@ describe("a probe that outlives its round", () => {
 
   it("is asked again once it answers false", async () => {
     let probes = 0;
-    await untilHeard(
-      () => {},
-      async () => ++probes === 2,
-      "heard",
-    );
+    await untilHeard(() => {}, async () => ++probes === 2, "heard");
     expect(probes).toBe(2);
   });
 

@@ -5,13 +5,7 @@ import path from "node:path";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { answerRepo } from "../../helpers/repo-approval";
-import {
-  configFlag,
-  hookData,
-  render,
-  renderBody,
-  runRealClient,
-} from "../../helpers/daemon-e2e";
+import { configFlag, hookData, render, renderBody, runRealClient } from "../../helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -64,30 +58,27 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
   test.each([
     ["an absolute", () => override],
     ["a relative", () => path.basename(override)],
-  ])(
-    "the real client carries %s CC_CANDYBAR_CONFIG to the daemon",
-    async (_, value) => {
-      const sid = `cfg-env-real-client-${path.isAbsolute(value()) ? "abs" : "rel"}`;
-      // Warm the entry so the client's one bounded request cannot hit a cold
-      // first-load timeout; runRealClient reruns a blank answer as the next
-      // tick would, but a warm entry keeps that the exception. The cache key is
-      // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
-      // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
-      // one this warmed. Each literal below is one run of the bar it printed.
-      await render(sockPath, sid, projectDir, { configEnv: override });
-      const client = runRealClient([], {
-        cwd: projectDir,
-        env: { ...env, CC_CANDYBAR_CONFIG: value() },
-        input: JSON.stringify(hookData(sid, projectDir)),
-      });
-      expect(client.status).toBe(0);
-      const bar = client.stdout;
-      expect(bar).toContain("OVERRIDE-WINS");
-      expect(bar).not.toContain("Invalid config");
-      expect(bar).not.toContain("Config file not found");
-      expect(bar).not.toContain("Unexpected arguments");
-    },
-  );
+  ])("the real client carries %s CC_CANDYBAR_CONFIG to the daemon", async (_, value) => {
+    const sid = `cfg-env-real-client-${path.isAbsolute(value()) ? "abs" : "rel"}`;
+    // Warm the entry so the client's one bounded request cannot hit a cold
+    // first-load timeout; runRealClient reruns a blank answer as the next
+    // tick would, but a warm entry keeps that the exception. The cache key is
+    // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
+    // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
+    // one this warmed. Each literal below is one run of the bar it printed.
+    await render(sockPath, sid, projectDir, { configEnv: override });
+    const client = runRealClient([], {
+      cwd: projectDir,
+      env: { ...env, CC_CANDYBAR_CONFIG: value() },
+      input: JSON.stringify(hookData(sid, projectDir)),
+    });
+    expect(client.status).toBe(0);
+    const bar = client.stdout;
+    expect(bar).toContain("OVERRIDE-WINS");
+    expect(bar).not.toContain("Invalid config");
+    expect(bar).not.toContain("Config file not found");
+    expect(bar).not.toContain("Unexpected arguments");
+  });
 
   // brandon-unfiled-3248.8bz: the real client's argv is `[node, script,
   // ...flags]`; it sends the daemon the script and its flags, the shape the
@@ -150,24 +141,16 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
       args: ["--config", "--config-only", "override.json5"],
       problem: "--config names no file before --config-only",
     },
-  ])(
-    "invalid isolation request $args is refused instead of using the base hint",
-    async ({ args, problem }) => {
-      const body = renderBody(
-        "cfg-invalid-only",
-        projectDir,
-        { configEnv: override },
-        ["cc-candybar", ...args],
-      );
-      const response = await sendDaemonRequest(sockPath, {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        ...body,
-      });
-      expect(response).toMatchObject({
-        ok: false,
-        error: expect.stringContaining(problem),
-      });
-    },
-  );
+  ])("invalid isolation request $args is refused instead of using the base hint", async ({ args, problem }) => {
+    const body = renderBody("cfg-invalid-only", projectDir, { configEnv: override }, [
+      "cc-candybar",
+      ...args,
+    ]);
+    const response = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      ...body,
+    });
+    expect(response).toMatchObject({ ok: false, error: expect.stringContaining(problem) });
+  });
 });

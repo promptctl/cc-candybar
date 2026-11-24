@@ -35,11 +35,12 @@ describe("a gates value is the whole of what its loads accept", () => {
     const key = "daemon.example";
     const gates = createGates({ state: [{ key, allowed: [] }], config: [] });
     const dispose = gates.state.register(key, ["abc"]);
-    expect(gates.state.gateFor(EMPTY_DEFAULT).validate(key, "abc")).toEqual({
-      ok: true,
-      value: "abc",
-    });
+    expect(
+      gates.state.gateFor(EMPTY_DEFAULT).validate(key, "abc"),
+    ).toEqual({ ok: true, value: "abc" });
     dispose();
-    expect(gates.state.gateFor(EMPTY_DEFAULT).listKeys()).toContain(key);
+    expect(gates.state.gateFor(EMPTY_DEFAULT).listKeys()).toContain(
+      key,
+    );
   });
 });

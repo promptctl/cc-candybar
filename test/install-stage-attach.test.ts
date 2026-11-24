@@ -6,11 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runStageRuntime } from "../src/install/index";
-import {
-  attachLauncherOf,
-  attachPreloadOf,
-  ATTACH_DIR,
-} from "../src/attach-launcher";
+import { attachLauncherOf, attachPreloadOf, ATTACH_DIR } from "../src/attach-launcher";
 
 describe("staging the runtime", () => {
   // Every stage names its own directory: the default is the user's real
@@ -33,10 +29,7 @@ describe("staging the runtime", () => {
 
   // A package as it lays on disk: the bundle, the launcher and its preload
   // beside it, the node shim.
-  const pkg = (
-    launcher: string | null,
-    preload: string | null = "// preload\n",
-  ): string => {
+  const pkg = (launcher: string | null, preload: string | null = "// preload\n"): string => {
     const root = path.join(home, "pkg");
     fs.mkdirSync(path.join(root, "dist"), { recursive: true });
     fs.mkdirSync(path.join(root, "bin"), { recursive: true });
@@ -48,32 +41,19 @@ describe("staging the runtime", () => {
       fs.writeFileSync(attachLauncherOf(bundle), launcher);
     }
     if (preload !== null) {
-      fs.writeFileSync(
-        attachPreloadOf(path.join(root, "dist", "index.mjs")),
-        preload,
-      );
+      fs.writeFileSync(attachPreloadOf(path.join(root, "dist", "index.mjs")), preload);
     }
     return path.join(root, "dist", "index.mjs");
   };
 
   test("the launcher is staged beside the staged bundle, and a stale one is replaced whole", () => {
     const staged = runStageRuntime(pkg("// launcher v1\n"), stage);
-    const stale = path.join(
-      path.dirname(staged.distPath),
-      ATTACH_DIR,
-      "src",
-      "gone.js",
-    );
+    const stale = path.join(path.dirname(staged.distPath), ATTACH_DIR, "src", "gone.js");
     fs.writeFileSync(stale, "// from an older release\n");
-    fs.writeFileSync(
-      attachLauncherOf(path.join(home, "pkg", "dist", "index.mjs")),
-      "// launcher v2\n",
-    );
+    fs.writeFileSync(attachLauncherOf(path.join(home, "pkg", "dist", "index.mjs")), "// launcher v2\n");
     runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage);
     expect(staged.distPath.startsWith(stage)).toBe(true);
-    expect(fs.readFileSync(attachLauncherOf(staged.distPath), "utf8")).toBe(
-      "// launcher v2\n",
-    );
+    expect(fs.readFileSync(attachLauncherOf(staged.distPath), "utf8")).toBe("// launcher v2\n");
     expect(fs.existsSync(stale)).toBe(false);
   });
 
@@ -107,24 +87,14 @@ describe("staging the runtime", () => {
   test("staging from the staged runtime itself leaves the launcher in place", () => {
     const staged = runStageRuntime(pkg("// launcher\n"), stage);
     runStageRuntime(staged.distPath, stage);
-    expect(fs.readFileSync(attachLauncherOf(staged.distPath), "utf8")).toBe(
-      "// launcher\n",
-    );
+    expect(fs.readFileSync(attachLauncherOf(staged.distPath), "utf8")).toBe("// launcher\n");
   });
 
   test("the preload that starts Claude Code under the launcher is staged beside the staged bundle", () => {
-    const staged = runStageRuntime(
-      pkg("// launcher\n", "// preload v1\n"),
-      stage,
-    );
-    fs.writeFileSync(
-      attachPreloadOf(path.join(home, "pkg", "dist", "index.mjs")),
-      "// preload v2\n",
-    );
+    const staged = runStageRuntime(pkg("// launcher\n", "// preload v1\n"), stage);
+    fs.writeFileSync(attachPreloadOf(path.join(home, "pkg", "dist", "index.mjs")), "// preload v2\n");
     runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage);
-    expect(fs.readFileSync(attachPreloadOf(staged.distPath), "utf8")).toBe(
-      "// preload v2\n",
-    );
+    expect(fs.readFileSync(attachPreloadOf(staged.distPath), "utf8")).toBe("// preload v2\n");
   });
 
   test("a package with no preload is refused, naming where it looked", () => {

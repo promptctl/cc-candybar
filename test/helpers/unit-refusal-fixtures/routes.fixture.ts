@@ -13,19 +13,14 @@ import { MODULES, routesIn } from "../unit-refusal-routes";
 const arg = path.join(os.tmpdir(), "unit-refusal-route");
 
 const at = (root: unknown, route: readonly string[]): unknown =>
-  route.reduce<unknown>(
-    (node, key) => (node as Record<string, unknown>)[key],
-    root,
-  );
+  route.reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], root);
 
 for (const [, name, guarding] of MODULES) {
   const real = jest.requireActual<Record<string, unknown>>(name);
   for (const route of routesIn(name, real, guarding)) {
     if (FS_DESCRIPTOR_OPS.has(route.path.at(-1) ?? "")) continue;
     test(route.call, () => {
-      const target = at(require(name), route.path) as (
-        ...args: unknown[]
-      ) => unknown;
+      const target = at(require(name), route.path) as (...args: unknown[]) => unknown;
       if (route.kind === "class") Reflect.construct(target, [arg]);
       else target(arg);
     });

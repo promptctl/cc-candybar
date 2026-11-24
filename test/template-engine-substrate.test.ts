@@ -79,9 +79,7 @@ describe("domain funcs win the registration-order collisions", () => {
   // not a number where sprig's quietly returns 0. It truncates as sprig's does:
   // an int parameter refuses a fractional, so the cast is how one is dropped.
   test("int is the var-system cast (loud on a non-number), truncating toward zero", () => {
-    expect(() => evalText('{{ int "abc" }}')).toThrow(
-      /Cannot cast "abc" to number/,
-    );
+    expect(() => evalText('{{ int "abc" }}')).toThrow(/Cannot cast "abc" to number/);
     expect(evalText("{{ int 3.9 }}")).toBe("3");
     expect(evalText("{{ int true }}")).toBe("1");
   });

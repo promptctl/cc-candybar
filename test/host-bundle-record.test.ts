@@ -14,6 +14,7 @@ import { hostBundlePath } from "../src/daemon/paths";
 import {
   bundleNamedByStatusLine,
   recordIfInstall,
+  statusLineRunsBundle,
 } from "../src/install/record";
 import { firstShellWord, shellWord } from "../src/shell-word";
 import { planAfterKick } from "../src/outcome-plan";
@@ -155,15 +156,41 @@ describe("the statusline decides which bundle is recorded", () => {
     expect(readHostBundle(host)).toEqual({ kind: "ok", value: bundle });
   });
 
+  test.each([
+    [
+      "a wrapper with its own environment",
+      "env FOO=1 ROOT/bin/cc-candybar --x",
+    ],
+    ["node running the entry", "node ROOT/bin/cc-candybar"],
+    ["a quoted entry in a pipeline", "cat x | 'ROOT/bin/cc-candybar' --y"],
+  ])("a customized command still runs the bundle: %s", (_name, template) => {
+    const { root } = stateRoot();
+    const bundle = bundleIn(root, "install");
+    const command = template.replace("ROOT", path.join(root, "install"));
+    expect(statusLineRunsBundle({ command }, bundle)).toBe(true);
+  });
+
+  test.each([
+    ["a sibling whose name starts the same", "ROOT-other/bin/cc-candybar"],
+    ["a worktree nested inside it", "ROOT/.claude/worktrees/w/bin/cc-candybar"],
+    ["a path that merely ends the same", "/elsewhere/ROOT/bin/cc-candybar"],
+    ["no entry at all", "echo hello"],
+  ])("a command that does not run the bundle: %s", (_name, template) => {
+    const { root } = stateRoot();
+    const bundle = bundleIn(root, "install");
+    const command = template.replaceAll("ROOT", path.join(root, "install"));
+    expect(statusLineRunsBundle({ command }, bundle)).toBe(false);
+  });
+
   test("the install records the staged bundle when it owns the statusline, and says how to when it does not", () => {
     const { root, host } = stateRoot();
     const staged = bundleIn(root, "staged");
 
-    const skipped = __test__.recordStagedBundleIfOwned(false, staged, host);
+    const skipped = __test__.recordStagedBundleIfRun(false, staged, host);
     expect(skipped).toContain("--force");
     expect(readHostBundle(host).kind).toBe("absent");
 
-    const owned = __test__.recordStagedBundleIfOwned(true, staged, host);
+    const owned = __test__.recordStagedBundleIfRun(true, staged, host);
     expect(owned).toContain(staged);
     expect(readHostBundle(host)).toEqual({ kind: "ok", value: staged });
   });

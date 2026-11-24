@@ -64,9 +64,7 @@ async function drawnUnder(preset: string | null) {
   const unnamed = (text: string): string => text.split(dir).join("<dir>");
   return {
     bar: unnamed(ansiOf(frame)),
-    payload: JSON.parse(
-      unnamed(JSON.stringify(view.source.payload())),
-    ) as unknown,
+    payload: JSON.parse(unnamed(JSON.stringify(view.source.payload()))) as unknown,
   };
 }
 
@@ -99,12 +97,7 @@ describe("a sample session payload", () => {
       (key) => (key === "preset" ? preset : null),
       () => false,
     );
-    const { today, speed, ...payload } = samplePayload(
-      config,
-      effective,
-      null,
-      AT,
-    );
+    const { today, speed, ...payload } = samplePayload(config, effective, null, AT);
     expect({ payload, today, speed }).toMatchSnapshot();
   });
 });

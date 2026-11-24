@@ -255,9 +255,7 @@ describe("validateConfig", () => {
   });
 
   test("lowering a missing variable type replaces only the declarations that need it", () => {
-    const { config, placed } = parseAndPlace(
-      "<test>",
-      `{
+    const { config, placed } = parseAndPlace("<test>", `{
       variables: {
         count: { kind: 'input', path: 'count', type: 'number' },
         label: { kind: 'input', path: 'label' },
@@ -276,8 +274,7 @@ describe("validateConfig", () => {
         },
       },
       root: { h: ['fixed', 'lowered'] },
-    }`,
-    );
+    }`);
     expect(config.variables.count).toBe(placed.variables.count);
     expect(placed.variables.label).toEqual({ kind: "input", path: "label" });
     expect(config.variables.label).toEqual({

@@ -6,32 +6,16 @@
 import path from "node:path";
 
 import { IGNORED_ENV } from "./helpers/package-files";
-import {
-  MODULES,
-  routesIn,
-  type Guarding,
-  type Route,
-} from "./helpers/unit-refusal-routes";
-import {
-  allows,
-  refusal,
-  type Call,
-  type PackageFiles,
-  type Surface,
-} from "./helpers/unit-refusal";
+import { MODULES, routesIn, type Guarding, type Route } from "./helpers/unit-refusal-routes";
+import { allows, refusal, type Call, type PackageFiles, type Surface } from "./helpers/unit-refusal";
 
 // [LAW:no-silent-failure] Without the answer, every ignored path would read as
 // the package's own, so a run that lost it stops here.
 const ignoredPaths = process.env[IGNORED_ENV];
 if (ignoredPaths === undefined) {
-  throw new Error(
-    `${IGNORED_ENV} is unset: the unit project runs through jest.unit.config.js, whose global setup sets it`,
-  );
+  throw new Error(`${IGNORED_ENV} is unset: the unit project runs through jest.unit.config.js, whose global setup sets it`);
 }
-const FILES: PackageFiles = {
-  root: path.resolve(__dirname, ".."),
-  ignored: JSON.parse(ignoredPaths) as string[],
-};
+const FILES: PackageFiles = { root: path.resolve(__dirname, ".."), ignored: JSON.parse(ignoredPaths) as string[] };
 
 // [LAW:no-silent-failure] Every refusal is kept until the test ends, because
 // code under test that catches the thrown error would otherwise pass a test
@@ -47,29 +31,21 @@ function refuse(call: Call): never {
 function failOnRefusals(): void {
   const seen = refused.splice(0);
   if (seen.length > 0) {
-    throw new Error(
-      `${seen.length} call(s) refused in this test, whether or not the code caught them. First: ${seen[0]}`,
-    );
+    throw new Error(`${seen.length} call(s) refused in this test, whether or not the code caught them. First: ${seen[0]}`);
   }
 }
 
 afterEach(failOnRefusals);
 afterAll(failOnRefusals);
 
-const refusing = (surface: Surface, call: string) => () =>
-  refuse({ surface, call, args: [] });
+const refusing = (surface: Surface, call: string) => () => refuse({ surface, call, args: [] });
 
 type AnyFn = (...args: never[]) => unknown;
 
 // `made` maps each real function met on the way to its guard, because a carried
 // property can point back at the function that holds it (the promisified form of
 // fs.exists carries itself as its own promisify.custom).
-function guard(
-  surface: Surface,
-  name: string,
-  real: AnyFn,
-  made = new Map<AnyFn, AnyFn>(),
-): AnyFn {
+function guard(surface: Surface, name: string, real: AnyFn, made = new Map<AnyFn, AnyFn>()): AnyFn {
   const wrapped = function (this: unknown, ...args: unknown[]) {
     const call: Call = { surface, call: name, args };
     if (!allows(call, FILES)) refuse(call);
@@ -82,14 +58,10 @@ function guard(
   // guarded in turn, so the promisified and `.native` forms refuse like the plain one.
   for (const key of Reflect.ownKeys(real)) {
     if (Object.hasOwn(wrapped, key)) continue;
-    const descriptor = Object.getOwnPropertyDescriptor(
-      real,
-      key,
-    ) as PropertyDescriptor;
+    const descriptor = Object.getOwnPropertyDescriptor(real, key) as PropertyDescriptor;
     if (typeof descriptor.value === "function") {
       const carried = descriptor.value as AnyFn;
-      descriptor.value =
-        made.get(carried) ?? guard(surface, name, carried, made);
+      descriptor.value = made.get(carried) ?? guard(surface, name, carried, made);
     }
     Object.defineProperty(wrapped, key, descriptor);
   }
@@ -97,49 +69,30 @@ function guard(
 }
 
 function at(root: Record<string, unknown>, path: readonly string[]): unknown {
-  return path.reduce<unknown>(
-    (node, key) => (node as Record<string, unknown>)[key],
-    root,
-  );
+  return path.reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], root);
 }
 
 // A module becomes a copy whose routes are guarded and whose everything else
 // (constants, pure helpers) is the real one. Objects on the way to a route are
 // copied, never written to, because the real ones are shared with jest.
-function guardModule(
-  surface: Surface,
-  moduleName: string,
-  real: Record<string, unknown>,
-  guarding: Guarding,
-) {
+function guardModule(surface: Surface, moduleName: string, real: Record<string, unknown>, guarding: Guarding) {
   const copy: Record<string, unknown> = {};
   for (const key of Object.getOwnPropertyNames(real)) copy[key] = real[key];
-  for (const route of routesIn(moduleName, real, guarding))
-    install(copy, real, route, surface);
+  for (const route of routesIn(moduleName, real, guarding)) install(copy, real, route, surface);
   return copy;
 }
 
-function install(
-  copy: Record<string, unknown>,
-  real: Record<string, unknown>,
-  route: Route,
-  surface: Surface,
-): void {
+function install(copy: Record<string, unknown>, real: Record<string, unknown>, route: Route, surface: Surface): void {
   const parents = route.path.slice(0, -1);
   const last = route.path[route.path.length - 1] as string;
   const holder = parents.reduce<Record<string, unknown>>((node, key) => {
-    node[key] = Object.assign(
-      Object.create(Object.getPrototypeOf(node[key])),
-      node[key],
-    );
+    node[key] = Object.assign(Object.create(Object.getPrototypeOf(node[key])), node[key]);
     return node[key] as Record<string, unknown>;
   }, copy);
   const value = at(real, route.path);
   holder[last] =
     route.kind === "class"
-      ? new Proxy(value as object, {
-          construct: () => refuse({ surface, call: route.call, args: [] }),
-        })
+      ? new Proxy(value as object, { construct: () => refuse({ surface, call: route.call, args: [] }) })
       : isScheduler(route)
         ? refusing(surface, route.call)
         : guard(surface, route.call, value as AnyFn);
@@ -148,12 +101,7 @@ function install(
 const isScheduler = (route: Route) => route.path[0] === "scheduler";
 
 for (const [surface, name, guarding] of MODULES) {
-  const mocked = guardModule(
-    surface,
-    name,
-    jest.requireActual<Record<string, unknown>>(name),
-    guarding,
-  );
+  const mocked = guardModule(surface, name, jest.requireActual<Record<string, unknown>>(name), guarding);
   jest.doMock(name, () => mocked);
   jest.doMock(`node:${name}`, () => mocked);
 }
@@ -182,11 +130,7 @@ function guardGlobal(key: string, guard: unknown): void {
 }
 
 g.fetch = refusing("network", "fetch");
-if (g.WebSocket !== undefined)
-  g.WebSocket = new Proxy(g.WebSocket as object, {
-    construct: () =>
-      refuse({ surface: "network", call: "new WebSocket", args: [] }),
-  });
+if (g.WebSocket !== undefined) g.WebSocket = new Proxy(g.WebSocket as object, { construct: () => refuse({ surface: "network", call: "new WebSocket", args: [] }) });
 
 for (const timer of ["setTimeout", "setInterval", "setImmediate"]) {
   guardGlobal(timer, refusing("clock", timer));
@@ -197,12 +141,7 @@ for (const timer of ["setTimeout", "setInterval", "setImmediate"]) {
 // A value the test sets (jest.spyOn(Date, "now"), fake timers) is its own and
 // shows as itself; setting the guard back, as a restore does, puts the native
 // member back under the guard.
-function guardMember<T extends object>(
-  target: T,
-  key: string,
-  guard: unknown,
-  handler: ProxyHandler<T> = {},
-): T {
+function guardMember<T extends object>(target: T, key: string, guard: unknown, handler: ProxyHandler<T> = {}): T {
   const native = Reflect.get(target, key, target);
   return new Proxy(target, {
     ...handler,
@@ -218,24 +157,15 @@ guardGlobal(
   "Date",
   guardMember(Date, "now", refusing("clock", "Date.now"), {
     construct(target, args, newTarget) {
-      if (args.length === 0)
-        refuse({ surface: "clock", call: "new Date", args });
+      if (args.length === 0) refuse({ surface: "clock", call: "new Date", args });
       return Reflect.construct(target, args, newTarget);
     },
     apply: refusing("clock", "Date"),
   }),
 );
 
-g.performance = guardMember(
-  performance,
-  "now",
-  refusing("clock", "performance.now"),
-);
-g.AbortSignal = guardMember(
-  AbortSignal,
-  "timeout",
-  refusing("clock", "AbortSignal.timeout"),
-);
+g.performance = guardMember(performance, "now", refusing("clock", "performance.now"));
+g.AbortSignal = guardMember(AbortSignal, "timeout", refusing("clock", "AbortSignal.timeout"));
 
 process.uptime = refusing("clock", "process.uptime") as typeof process.uptime;
 process.hrtime = Object.assign(refusing("clock", "process.hrtime"), {

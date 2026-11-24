@@ -264,9 +264,7 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       view.errors.length = 0;
       view.draw({}, at);
       expect(view.errors).toEqual([
-        expect.stringMatching(
-          /^segment "gated": .*only available inside a segment/,
-        ),
+        expect.stringMatching(/^segment "gated": .*only available inside a segment/),
       ]);
     }
   });

@@ -1034,14 +1034,23 @@ fn read_host_bundle(record: &Path) -> Result<PathBuf, HostBundleRefusal> {
             record.display()
         )));
     }
-    if !bundle.exists() {
-        return Err(HostBundleRefusal::Unusable(format!(
-            "{} names {}, which does not exist",
+    // Only a missing file is "does not exist": `Path::exists` answers false to
+    // every stat failure, so an unsearchable directory would read as a wrong path.
+    match std::fs::metadata(&bundle) {
+        Ok(_) => Ok(bundle),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(HostBundleRefusal::Unusable(format!(
+                "{} names {}, which does not exist",
+                record.display(),
+                bundle.display()
+            )))
+        }
+        Err(e) => Err(HostBundleRefusal::Unusable(format!(
+            "{} names {}, which cannot be read: {e}",
             record.display(),
             bundle.display()
-        )));
+        ))),
     }
-    Ok(bundle)
 }
 
 fn obtain_daemon_kick() -> KickOutcome {

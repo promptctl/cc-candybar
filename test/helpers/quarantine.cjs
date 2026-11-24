@@ -33,9 +33,7 @@ const TICKET = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+)*$/;
 /** @param {string} date `YYYY-MM-DD` @returns {number | null} epoch ms, or null for a day that does not exist */
 function midnightUtc(date) {
   const at = Date.parse(`${date}T00:00:00Z`);
-  return Number.isNaN(at) || new Date(at).toISOString().slice(0, 10) !== date
-    ? null
-    : at;
+  return Number.isNaN(at) || new Date(at).toISOString().slice(0, 10) !== date ? null : at;
 }
 
 /**
@@ -54,15 +52,12 @@ function parseQuarantine(text) {
     const where = `quarantine line ${index + 1}`;
     const match = LINE.exec(line);
     if (!match) {
-      throw new Error(
-        `${where}: expected "<YYYY-MM-DD> <ticket> <file> › <case name>", got: ${line}`,
-      );
+      throw new Error(`${where}: expected "<YYYY-MM-DD> <ticket> <file> › <case name>", got: ${line}`);
     }
     const [, date, ticket, file, name] = match;
     const addedAt = midnightUtc(date);
     if (addedAt === null) throw new Error(`${where}: ${date} is not a date`);
-    if (!TICKET.test(ticket))
-      throw new Error(`${where}: ${ticket} is not a lit ticket id`);
+    if (!TICKET.test(ticket)) throw new Error(`${where}: ${ticket} is not a lit ticket id`);
     if (entries.some((entry) => entry.file === file && entry.name === name)) {
       throw new Error(`${where}: ${file} › ${name} is listed twice`);
     }
@@ -103,12 +98,8 @@ function markError(ticket) {
 
 /** @param {string[]} failureMessages @returns {string | undefined} the ticket the mark names */
 function markedTicket(failureMessages) {
-  const mark = failureMessages.find((message) =>
-    message.startsWith(MARK_PREFIX),
-  );
-  return mark === undefined
-    ? undefined
-    : mark.slice(MARK_PREFIX.length).split("\n")[0];
+  const mark = failureMessages.find((message) => message.startsWith(MARK_PREFIX));
+  return mark === undefined ? undefined : mark.slice(MARK_PREFIX.length).split("\n")[0];
 }
 
 /**

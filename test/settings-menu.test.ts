@@ -55,10 +55,7 @@ import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";
-import {
-  SETTINGS,
-  SETTING_PROJECTIONS,
-} from "../src/config/setting-projections";
+import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
 import { walkNodes } from "../src/config/dsl-types";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -108,11 +105,7 @@ function menuBar(
     return rig.draw({ payload }).frame;
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = async (
-    out: Frame,
-    key: string,
-    value: string,
-  ): Promise<void> => {
+  const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -154,7 +147,9 @@ describe("the global settings menu is reachable from a user config", () => {
   });
 
   test("the toggle opens a body carrying preset switching and the tabs", async () => {
-    const { render, clickWriting } = menuBar(userConfig(TWO_SEGMENT_ROW));
+    const { render, clickWriting } = menuBar(
+      userConfig(TWO_SEGMENT_ROW),
+    );
     const closed = textOf(render());
     expect(closed).not.toContain("⚡ session");
 
@@ -173,6 +168,9 @@ describe("the global settings menu is reachable from a user config", () => {
 
   // brandon-menu-ia-q30.4oj: the menu opens ABOVE the bar and leaves the
   // bar's own rows as they were.
+
+
+
 
   test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", async () => {
     const { render, clickWriting, sessionState, ctx, click } = menuBar(
@@ -209,9 +207,7 @@ describe("the global settings menu is reachable from a user config", () => {
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) =>
-          e.args[1]?.startsWith(sharedMenuStateKey("candybar.")) &&
-          e.args[2] !== DISCLOSURE_CLOSED,
+        (e) => e.args[1]?.startsWith(sharedMenuStateKey("candybar.")) && e.args[2] !== DISCLOSURE_CLOSED,
       ),
     );
     expect(pickerUrl).toBeDefined();
@@ -238,6 +234,7 @@ describe("placement is a position, not a mode", () => {
     expect(defaultedLines[0]).toContain(DOOR_GLYPH);
     expect(placedLines[0]).not.toContain(DOOR_GLYPH);
     expect(placedLines[1]).toContain(DOOR_GLYPH);
+
   });
 
   test("a bare-segment root grows the menu beside it", () => {
@@ -367,9 +364,7 @@ describe("the menu's second line is five tabs, one open at a time", () => {
   const tabSeg = (tab: string) => `${TAB_KEY}.${tab}`;
   const bgOf = (cells: readonly RichText[] | undefined): string | undefined => {
     const style = cells?.[0]?.style;
-    return style === undefined
-      ? undefined
-      : resolvedStyle(style).bgcolor?.value?.hex;
+    return style === undefined ? undefined : resolvedStyle(style).bgcolor?.value?.hex;
   };
   // The segments a node renders, a disclosure's body included.
   const deepNames = (node: LayoutNode): string[] =>
@@ -379,41 +374,26 @@ describe("the menu's second line is five tabs, one open at a time", () => {
   // through the config's `formatTokenCount` helper, so an override reaches it
   // exactly as it reaches the ceiling beside it; a window of 0 still reads.
 
+
   test("every setting's control is in exactly one place: the door's first line or one tab", () => {
-    const config = parseAndValidate(
-      "<user>",
-      userConfig(TWO_SEGMENT_ROW),
-      ALLOWED,
-      DEFAULT_DSL_CONFIG,
-    );
+    const config = parseAndValidate("<user>", userConfig(TWO_SEGMENT_ROW), ALLOWED, DEFAULT_DSL_CONFIG);
     const door = [...walkNodes(resolvedRoot(config))].find(
       (n) => n.kind === "segment" && n.name === SETTINGS_ANCHOR,
     );
-    if (door?.kind !== "segment" || door.opens === undefined)
-      throw new Error("no door");
+    if (door?.kind !== "segment" || door.opens === undefined) throw new Error("no door");
     const [line1, line2] = door.opens.body.children;
-    if (line1 === undefined || line2?.kind !== "container")
-      throw new Error("no door lines");
+    if (line1 === undefined || line2?.kind !== "container") throw new Error("no door lines");
     // Where each name renders: the first line, or the tab whose body holds it.
     const places = new Map<string, string[]>();
-    const note = (name: string, place: string) =>
-      places.set(name, [...(places.get(name) ?? []), place]);
+    const note = (name: string, place: string) => places.set(name, [...(places.get(name) ?? []), place]);
     for (const name of deepNames(line1)) note(name, "door");
-    expect(
-      line2.children.map((n: LayoutNode) =>
-        n.kind === "segment" ? n.name : "?",
-      ),
-    ).toEqual(TABS.map(tabSeg));
+    expect(line2.children.map((n: LayoutNode) => (n.kind === "segment" ? n.name : "?"))).toEqual(TABS.map(tabSeg));
     for (const tab of line2.children) {
-      if (tab.kind !== "segment" || tab.opens === undefined)
-        throw new Error("a tab opens a body");
+      if (tab.kind !== "segment" || tab.opens === undefined) throw new Error("a tab opens a body");
       for (const name of deepNames(tab.opens.body)) note(name, tab.name);
     }
     for (const name of Object.keys(SETTINGS)) {
-      expect([name, places.get(`${SETTINGS_NS}${name}`)?.length]).toEqual([
-        name,
-        1,
-      ]);
+      expect([name, places.get(`${SETTINGS_NS}${name}`)?.length]).toEqual([name, 1]);
     }
   });
 });
@@ -517,6 +497,7 @@ describe("the default placement never inherits an author's gate", () => {
     expect(bar).toContain("Opus");
   });
 
+
   test("a bar gated away entirely still renders its door", () => {
     const { render } = menuBar(
       `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
@@ -531,10 +512,7 @@ describe("the default placement never inherits an author's gate", () => {
       "inside a gated row",
       `{ v: [{ h: ['directory','${SETTINGS_ANCHOR}'], when: '${GATE}' }] }`,
     ],
-    [
-      "with its own gate",
-      `{ h: ['directory', { seg: '${SETTINGS_ANCHOR}', when: '${GATE}' }] }`,
-    ],
+    ["with its own gate", `{ h: ['directory', { seg: '${SETTINGS_ANCHOR}', when: '${GATE}' }] }`],
     [
       "inside a group body",
       `{ h: ['directory', { kind: 'group', name: 'g', label: 'g', children: ['${SETTINGS_ANCHOR}'] }] }`,
@@ -579,9 +557,7 @@ describe("the menu in a config that declares no variables", () => {
   const disclosureKeys = (config: DslConfig): Set<string> =>
     new Set(
       Object.values(config.actions).flatMap((a) =>
-        "set" in a && "cycle" in a && a.cycle[0] === DISCLOSURE_CLOSED
-          ? [a.set]
-          : [],
+        "set" in a && "cycle" in a && a.cycle[0] === DISCLOSURE_CLOSED ? [a.set] : [],
       ),
     );
 
@@ -599,13 +575,7 @@ describe("the menu in a config that declares no variables", () => {
       for (const url of linkUrls(render())) {
         const effects = effectsOf(url);
         // The walk explores the menu, so it never takes the click that closes it.
-        if (
-          effects.some(
-            (e) =>
-              e.args[1] === SETTINGS_ANCHOR && e.args[2] === DISCLOSURE_CLOSED,
-          )
-        )
-          continue;
+        if (effects.some((e) => e.args[1] === SETTINGS_ANCHOR && e.args[2] === DISCLOSURE_CLOSED)) continue;
         const opens = effects.filter(
           (e) => keys.has(String(e.args[1])) && e.args[2] !== DISCLOSURE_CLOSED,
         );
@@ -639,9 +609,7 @@ describe("the menu in a config that declares no variables", () => {
       expect(Object.keys(config.segments)).toContain(name);
     }
     // The author's position holds: the door follows `hello`.
-    expect(placed.indexOf(SETTINGS_ANCHOR)).toBeGreaterThan(
-      placed.indexOf("hello"),
-    );
+    expect(placed.indexOf(SETTINGS_ANCHOR)).toBeGreaterThan(placed.indexOf("hello"));
   });
 
   test("a config declaring nothing is given the payload inputs the chrome reads", () => {
@@ -676,6 +644,7 @@ describe("the menu in a config that declares no variables", () => {
       ).variables.project_dir,
     ).toEqual(expect.objectContaining(PAYLOAD_INPUTS.project_dir));
   });
+
 });
 
 // ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
@@ -696,11 +665,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
 
   // The keys whose accordion is the bar's own: the settings menu's, and any
   // in edit mode's namespace.
-  for (const key of [
-    "candybar.pickers",
-    "candybar.togglesPickers",
-    "edit.things",
-  ]) {
+  for (const key of ["candybar.pickers", "candybar.togglesPickers", "edit.things"]) {
     test(`the key "${key}" is a load error naming its namespace`, () => {
       try {
         parseAndValidate("<user>", withKey(key), ALLOWED);
@@ -708,9 +673,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
       } catch (err) {
         expect(err).toBeInstanceOf(ConfigError);
         const message = (err as ConfigError).message;
-        expect(message).toContain(
-          `"${key.slice(0, key.indexOf(".") + 1)}" namespace`,
-        );
+        expect(message).toContain(`"${key.slice(0, key.indexOf(".") + 1)}" namespace`);
         expect(message).toContain("hello");
       }
     });
@@ -878,8 +841,7 @@ describe("every settings control has a setting projection", () => {
   // which writes navigation, not a setting.
   const LIST_MACHINERY = /\.(toggle|page|page\.first|open|write)$/;
   const controls = Object.entries(config.actions).filter(
-    ([name]) =>
-      name.startsWith("candybar.apply.") && !LIST_MACHINERY.test(name),
+    ([name]) => name.startsWith("candybar.apply.") && !LIST_MACHINERY.test(name),
   );
   // A `do` presents as its head (a lane toggle's write, its setup riding
   // behind it), so a control's key is its head's.
@@ -896,14 +858,11 @@ describe("every settings control has a setting projection", () => {
     );
   });
 
-  test.each(controls)(
-    "%s picks the session key of one projection",
-    (_name, a) => {
-      expect(SETTING_PROJECTIONS).toContainEqual(
-        expect.objectContaining({ sessionKey: sessionKey(a) }),
-      );
-    },
-  );
+  test.each(controls)("%s picks the session key of one projection", (_name, a) => {
+    expect(SETTING_PROJECTIONS).toContainEqual(
+      expect.objectContaining({ sessionKey: sessionKey(a) }),
+    );
+  });
 
   test.each(SETTING_PROJECTIONS.map((p) => [p.effectiveVar]))(
     "%s is declared in the bundled default",

@@ -117,9 +117,7 @@ describe("publishByLink", () => {
 
   test("a link that fails other than taken throws, and removes what it staged", () => {
     const file = path.join(dir, "key");
-    const spy = jest
-      .spyOn(fs, "linkSync")
-      .mockImplementationOnce(refused("EIO"));
+    const spy = jest.spyOn(fs, "linkSync").mockImplementationOnce(refused("EIO"));
     try {
       expect(() => publishByLink(file, "bytes")).toThrow(
         expect.objectContaining({ code: "EIO" }),
@@ -134,9 +132,7 @@ describe("publishByLink", () => {
   // not go beside it.
   test("a staged file that will not go after the link is said beside the outcome", () => {
     const file = path.join(dir, "key");
-    const spy = jest
-      .spyOn(fs, "rmSync")
-      .mockImplementationOnce(refused("EBUSY"));
+    const spy = jest.spyOn(fs, "rmSync").mockImplementationOnce(refused("EBUSY"));
     let linked: ReturnType<typeof publishByLink>;
     try {
       linked = publishByLink(file, "bytes");

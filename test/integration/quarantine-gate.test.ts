@@ -41,34 +41,24 @@ const runJest = async (fixture: string, list?: string): Promise<Run> => {
       "jest.quarantine-fixtures.config.js",
       "--json",
       `--outputFile=${json}`,
-      ...(list
-        ? ["--testEnvironmentOptions", JSON.stringify({ quarantine: list })]
-        : []),
+      ...(list ? ["--testEnvironmentOptions", JSON.stringify({ quarantine: list })] : []),
       `${FIXTURES}/${fixture}`,
     ];
-    const { exitCode, output } = await new Promise<{
-      exitCode: number | null;
-      output: string;
-    }>((resolveRun, reject) => {
-      const child = spawn(process.execPath, args, { cwd: ROOT });
-      let text = "";
-      child.stdout.on("data", (chunk) => (text += chunk));
-      child.stderr.on("data", (chunk) => (text += chunk));
-      child.on("error", reject);
-      child.on("close", (code) => resolveRun({ exitCode: code, output: text }));
-    });
+    const { exitCode, output } = await new Promise<{ exitCode: number | null; output: string }>(
+      (resolveRun, reject) => {
+        const child = spawn(process.execPath, args, { cwd: ROOT });
+        let text = "";
+        child.stdout.on("data", (chunk) => (text += chunk));
+        child.stderr.on("data", (chunk) => (text += chunk));
+        child.on("error", reject);
+        child.on("close", (code) => resolveRun({ exitCode: code, output: text }));
+      },
+    );
     try {
       const result = JSON.parse(readFileSync(json, "utf8"));
-      return {
-        exitCode,
-        file: result.testResults[0],
-        numFailedTests: result.numFailedTests,
-        output,
-      };
+      return { exitCode, file: result.testResults[0], numFailedTests: result.numFailedTests, output };
     } catch (error) {
-      throw new Error(
-        `jest wrote no result over ${fixture}:\n${output}\n${error}`,
-      );
+      throw new Error(`jest wrote no result over ${fixture}:\n${output}\n${error}`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -84,8 +74,7 @@ const namesItsEnvironment = (source: string) =>
 
 // The record the reporter would write for this file, built from jest's own result.
 const recordOfRun = (run: Run) => {
-  const count = (status: string) =>
-    run.file.assertionResults.filter((c) => c.status === status).length;
+  const count = (status: string) => run.file.assertionResults.filter((c) => c.status === status).length;
   return records.recordOf(
     {
       testFilePath: run.file.name,
@@ -104,17 +93,10 @@ describe("the quarantine moves the gate", () => {
     const run = await runJest("listed.fixture.ts");
     expect(run.exitCode).toBe(0);
     expect(run.numFailedTests).toBe(0);
-    const failed = run.file.assertionResults.find(
-      (c) => c.title === "a case that fails",
-    );
+    const failed = run.file.assertionResults.find((c) => c.title === "a case that fails");
     expect(failed?.status).toBe("pending");
-    expect(failed?.failureMessages.join("\n")).toContain(
-      "the listed case failed",
-    );
-    expect(
-      run.file.assertionResults.find((c) => c.title === "a case that passes")
-        ?.status,
-    ).toBe("passed");
+    expect(failed?.failureMessages.join("\n")).toContain("the listed case failed");
+    expect(run.file.assertionResults.find((c) => c.title === "a case that passes")?.status).toBe("passed");
   });
 
   // The mark is an error the reporters read too. Through the real list of them, it
@@ -123,9 +105,7 @@ describe("the quarantine moves the gate", () => {
   it("shows the failure and the ticket it was let through on, and no reporter misreads the mark", async () => {
     const { output } = await runJest("listed.fixture.ts");
     expect(output).toContain("the listed case failed");
-    expect(output).toContain(
-      "QuarantineMark: quarantined: candybar-testing-ihvy.hcl",
-    );
+    expect(output).toContain("QuarantineMark: quarantined: candybar-testing-ihvy.hcl");
     expect(output).not.toContain("empty stack");
   });
 
@@ -141,18 +121,10 @@ describe("the quarantine moves the gate", () => {
       }),
       expect.not.objectContaining({ quarantined: expect.anything() }),
     ]);
-    expect(record.cases.map((c: Row) => c.outcome)).toEqual([
-      "failed",
-      "passed",
-    ]);
+    expect(record.cases.map((c: Row) => c.outcome)).toEqual(["failed", "passed"]);
     // The line the environment matched on is the line the record's names join to.
-    const entries = quarantine.readQuarantine(
-      ROOT,
-      `${FIXTURES}/quarantine.txt`,
-    );
-    expect(
-      quarantine.quarantined(entries, record.file, record.cases[0].name),
-    ).toBeDefined();
+    const entries = quarantine.readQuarantine(ROOT, `${FIXTURES}/quarantine.txt`);
+    expect(quarantine.quarantined(entries, record.file, record.cases[0].name)).toBeDefined();
   });
 
   it("fails the run of the same case once it is off the list", async () => {
@@ -181,34 +153,20 @@ describe("the quarantine moves the gate", () => {
   it("fails the run of a skipped case beside a throwing beforeAll, and records it failed without a mark", async () => {
     const run = await runJest("skipped-before-all.fixture.ts");
     expect(run.exitCode).toBe(1);
-    expect(
-      run.file.assertionResults.map((c) => [
-        c.status,
-        c.failureMessages.length,
-      ]),
-    ).toEqual([
+    expect(run.file.assertionResults.map((c) => [c.status, c.failureMessages.length])).toEqual([
       ["failed", 1],
       ["pending", 1],
     ]);
     const record = recordOfRun(run);
-    expect(record.cases.map((c: Row) => c.outcome)).toEqual([
-      "failed",
-      "failed",
-    ]);
-    expect(
-      record.cases.some(
-        (c: { quarantined?: string }) => c.quarantined !== undefined,
-      ),
-    ).toBe(false);
+    expect(record.cases.map((c: Row) => c.outcome)).toEqual(["failed", "failed"]);
+    expect(record.cases.some((c: { quarantined?: string }) => c.quarantined !== undefined)).toBe(false);
   });
 
   // jest allows two cases of one title, and a line names one case.
   it("errors the file of a listed name that two cases carry, and lets neither failure through", async () => {
     const run = await runJest("duplicate-title.fixture.ts");
     expect(run.exitCode).toBe(1);
-    expect(run.file.message).toContain(
-      "a title used twice matches 2 cases, and a line names one",
-    );
+    expect(run.file.message).toContain("a title used twice matches 2 cases, and a line names one");
     expect(run.file.assertionResults).toEqual([]);
   });
 
@@ -228,8 +186,7 @@ describe("the environment the gate runs through", () => {
   // jest does not expose its own jest-environment-node, so the repo declares one
   // (package.json) and an upgrade of jest alone would leave them apart.
   it("is the version of the jest that loads it", () => {
-    const version = (name: string) =>
-      createRequire(join(ROOT, "package.json"))(`${name}/package.json`).version;
+    const version = (name: string) => createRequire(join(ROOT, "package.json"))(`${name}/package.json`).version;
     expect(version("jest-environment-node")).toBe(version("jest"));
   });
 
@@ -238,9 +195,7 @@ describe("the environment the gate runs through", () => {
     const own = ["test", "audits"].flatMap((dir) =>
       readdirSync(join(ROOT, dir), { recursive: true, encoding: "utf8" })
         .filter((file) => /\.[cm]?[jt]sx?$/.test(file))
-        .filter((file) =>
-          namesItsEnvironment(readFileSync(join(ROOT, dir, file), "utf8")),
-        )
+        .filter((file) => namesItsEnvironment(readFileSync(join(ROOT, dir, file), "utf8")))
         .map((file) => join(dir, file)),
     );
     expect(own).toEqual([]);
@@ -250,9 +205,7 @@ describe("the environment the gate runs through", () => {
   // (jest-docblock's extract), and from nowhere else.
   it("reads the pragma where jest reads it", () => {
     expect(namesItsEnvironment("/* @jest-environment node */\nx")).toBe(true);
-    expect(
-      namesItsEnvironment("\n/**\n * @jest-environment node\n */\nx"),
-    ).toBe(true);
+    expect(namesItsEnvironment("\n/**\n * @jest-environment node\n */\nx")).toBe(true);
     expect(namesItsEnvironment("// @jest-environment node\nx")).toBe(false);
     expect(namesItsEnvironment("x\n/** @jest-environment node */")).toBe(false);
   });

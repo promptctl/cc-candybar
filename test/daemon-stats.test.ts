@@ -357,9 +357,9 @@ describe("shapeSkew", () => {
     ]);
     expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
     // A list the reader maps, carried as anything else, is as absent to it.
-    expect(missingFields(snap, { ...snap, clients: null })).toEqual([
-      "clients",
-    ]);
+    expect(
+      missingFields(snap, { ...snap, clients: null }),
+    ).toEqual(["clients"]);
     expect(missingFields(snap, snap)).toEqual([]);
     // A union's arms differ: the reference's `unmeasured` arm is no spec of
     // a `measured` one, so a tagged union is judged present, not below its

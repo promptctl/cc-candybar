@@ -20,16 +20,10 @@ import {
   type HostLine,
   type RendererLine,
 } from "../../../src/renderer-interface/wire";
-import type {
-  Event,
-  RequestId,
-} from "../../../src/renderer-interface/interface";
+import type { Event, RequestId } from "../../../src/renderer-interface/interface";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
 import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
-import {
-  processRenderer,
-  type RendererLink,
-} from "../../../src/daemon/renderer-process";
+import { processRenderer, type RendererLink } from "../../../src/daemon/renderer-process";
 import { RendererDown } from "../../../src/daemon/foundations/verb-error";
 import { systemLauncher } from "../../../src/proc/system-launcher";
 import { systemTimekeeper } from "../../helpers/system-clock";
@@ -290,9 +284,7 @@ test("a built renderer answers command and draw events on the same numbered stre
 });
 
 test("the same failed turn returns identical data from different worker paths", () => {
-  const relocated = fs.mkdtempSync(
-    path.join(os.tmpdir(), "ccb-replay-worker-"),
-  );
+  const relocated = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-replay-worker-"));
   try {
     const built = path.resolve("dist/index.mjs");
     const second = path.join(relocated, "index.mjs");
@@ -593,17 +585,14 @@ describe("the daemon's renderer process", () => {
     if (requestLink === undefined)
       throw new Error("request has no disclosure close");
     expect(textOf(request)).toContain("DISCLOSURE-BODY");
-    expect(requestLink).toBe(
-      drawnLink(handle.sockPath, requestLink, {
-        renderer: MAIN_RENDERER,
-        session: sessionIdOf(session),
-      }),
-    );
+    expect(requestLink).toBe(drawnLink(handle.sockPath, requestLink, {
+      renderer: MAIN_RENDERER,
+      session: sessionIdOf(session),
+    }));
     const authoredLink = linksOf(request).find(
       ({ text }) => text === "authored",
     )?.url;
-    if (authoredLink === undefined)
-      throw new Error("request has no authored link");
+    if (authoredLink === undefined) throw new Error("request has no authored link");
     expect(authoredLink).toBe(drawnLink(handle.sockPath, authored));
     expect(effectsOf(authoredLink)).toEqual([
       { verb: VERB_OPEN_VSCODE, args: ["fixture"] },

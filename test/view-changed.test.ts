@@ -131,10 +131,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   await sleep(1000);
   expect(changed).toHaveLength(settled);
   writeAtomic(status, "red");
-  await until(
-    () => held.view.store.stored("status") === "red",
-    "the new value",
-  );
+  await until(() => held.view.store.stored("status") === "red", "the new value");
   expect(changed).toHaveLength(settled + 1);
   await sleep(300);
   expect(changed).toHaveLength(settled + 1);

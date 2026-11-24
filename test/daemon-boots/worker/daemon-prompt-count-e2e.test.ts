@@ -9,11 +9,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { hookData, renderRequest } from "../../helpers/daemon-e2e";
+import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  startDaemon,
-  type InWorkerDaemon,
-} from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+  prepareIsolatedDaemonEnv,
+} from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../helpers/daemon-log";
 
 jest.setTimeout(30_000);
@@ -129,10 +128,7 @@ describe("a daemon render's event counts the session's prompts", () => {
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
     });
-    expect((await counts(sessionId)).at(-1)).toEqual({
-      prompts: "1",
-      nonPrompts: "2",
-    });
+    expect((await counts(sessionId)).at(-1)).toEqual({ prompts: "1", nonPrompts: "2" });
   });
 
   test("a render with no cost block reads `-` for both", async () => {
@@ -142,9 +138,6 @@ describe("a daemon render's event counts the session's prompts", () => {
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
     });
-    expect((await counts(sessionId)).at(-1)).toEqual({
-      prompts: "-",
-      nonPrompts: "-",
-    });
+    expect((await counts(sessionId)).at(-1)).toEqual({ prompts: "-", nonPrompts: "-" });
   });
 });

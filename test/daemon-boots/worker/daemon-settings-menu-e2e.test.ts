@@ -16,23 +16,22 @@ import type { Frame } from "../../../src/render/frame";
 import { textOf } from "../../../src/render/frame";
 import { linksOf } from "../../../src/click/read";
 import { linkUrls, boldUrls } from "../../helpers/frame";
-import {
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { click, render, urlWriting } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import {
+  prepareIsolatedDaemonEnv,
+} from "../../helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { encodeLayoutOp } from "../../../src/config/layout-ops";
 import { EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
-import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
+import {
+  DOOR_CLOSE_GLYPH,
+  DOOR_GLYPH,
+} from "../../../src/config/disclosure";
 import { effectsOf } from "../../helpers/click";
 import { sharedMenuStateKey } from "../../../src/config/menu-keys";
 
@@ -82,21 +81,16 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
       expect(textOf(editing)).toContain(DOOR_CLOSE_GLYPH);
       expect(textOf(editing)).toContain("📐 layout");
       expect(
-        linkUrls(editing).filter((u) => u.includes("apply-layout-op")).length,
+        linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
+          .length,
       ).toBeGreaterThan(0);
       const removesModel = (frame: Frame) =>
-        linkUrls(frame).find((url) =>
-          effectsOf(url).some(
-            (effect) =>
-              effect.verb === "apply-layout-op" &&
-              effect.args[3] ===
-                encodeLayoutOp({ op: "remove", target: "model" }),
-          ),
-        );
+        linkUrls(frame).find((url) => effectsOf(url).some((effect) =>
+          effect.verb === "apply-layout-op" &&
+          effect.args[3] === encodeLayoutOp({ op: "remove", target: "model" }),
+        ));
       const affordance = (frame: Frame, verb: string) =>
-        linkUrls(frame).find((url) =>
-          effectsOf(url).some((effect) => effect.verb === verb),
-        );
+        linkUrls(frame).find((url) => effectsOf(url).some((effect) => effect.verb === verb));
       const bar = () => render(daemon, SID, projectDir);
       await click(daemon, removesModel(editing)!);
       const draft = await bar();
@@ -110,9 +104,7 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
       expect(removesModel(redone)).toBeUndefined();
       expect(readFileSync(file, "utf8")).toBe(original);
       await click(daemon, affordance(redone, "save")!);
-      expect(JSON.parse(readFileSync(file, "utf8")).root).toEqual({
-        h: ["directory"],
-      });
+      expect(JSON.parse(readFileSync(file, "utf8")).root).toEqual({ h: ["directory"] });
       expect(textOf(await bar())).not.toContain("✓ save");
     } finally {
       await daemon.stop();

@@ -8,11 +8,7 @@
 import http from "node:http";
 import path from "node:path";
 
-import {
-  serveBar,
-  type BarWeb,
-  type View,
-} from "../../../scripts/bar-web/server";
+import { serveBar, type BarWeb, type View } from "../../../scripts/bar-web/server";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 
@@ -26,31 +22,17 @@ describe("bar-web", () => {
 
   const serve = (): Promise<BarWeb> =>
     serveBar(
-      {
-        port: 0,
-        assets: ASSETS,
-        width: 120,
-        rows: 40,
-        config: null,
-        cwd: process.cwd(),
-        ssh: false,
-      },
+      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
       startBarDaemon,
     );
 
-  const post = async (
-    route: string,
-    body: object,
-  ): Promise<{ status: number; json: View & { error?: string } }> => {
+  const post = async (route: string, body: object): Promise<{ status: number; json: View & { error?: string } }> => {
     const res = await fetch(new URL(route, web!.url), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    return {
-      status: res.status,
-      json: (await res.json()) as View & { error?: string },
-    };
+    return { status: res.status, json: (await res.json()) as View & { error?: string } };
   };
 
   test("serves the page and the Powerline font", async () => {
@@ -87,10 +69,7 @@ describe("bar-web", () => {
   test("only the page drives it: a request must be JSON, sent to this server's own host", async () => {
     web = await serve();
     // What another site's page can send without a preflight.
-    const plain = await fetch(new URL("/render", web.url), {
-      method: "POST",
-      body: JSON.stringify({ width: 80, rows: 40 }),
-    });
+    const plain = await fetch(new URL("/render", web.url), { method: "POST", body: JSON.stringify({ width: 80, rows: 40 }) });
     expect(plain.status).toBe(415);
     const garbled = await fetch(new URL("/render", web.url), {
       method: "POST",
@@ -101,18 +80,10 @@ describe("bar-web", () => {
     // A rebound DNS name reaches the server with a host that is not its own.
     const { port } = new URL(web.url);
     const rebound = await new Promise<number>((resolve, reject) => {
-      const req = http.request(
-        {
-          host: "127.0.0.1",
-          port,
-          path: "/",
-          headers: { host: `evil.example:${port}` },
-        },
-        (res) => {
-          res.resume();
-          resolve(res.statusCode ?? 0);
-        },
-      );
+      const req = http.request({ host: "127.0.0.1", port, path: "/", headers: { host: `evil.example:${port}` } }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
       req.on("error", reject);
       req.end();
     });

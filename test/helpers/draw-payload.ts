@@ -52,19 +52,10 @@ export function bindSample(
   );
   bindView(compiled, store, registry, source);
   return (at) => {
-    const frame = drawDsl(
-      config,
-      compiled,
-      store,
-      registry,
-      projected,
-      at,
-      opts,
-      {
-        ...selection,
-        record: selection.record ?? records.get(store),
-      },
-    );
+    const frame = drawDsl(config, compiled, store, registry, projected, at, opts, {
+      ...selection,
+      record: selection.record ?? records.get(store),
+    });
     records.set(store, frame.memory.record);
     selection.effects?.keep(frame.memory.motion);
     return frame;
@@ -102,5 +93,9 @@ export function drawPayload(
 const records = new WeakMap<VariableStore, FrameRecord<RenderedLine>>();
 
 // Each placement that drew its ⚠ cell, by the message that names it.
-export const segmentErrorsOf = (warnings: readonly RenderWarning[]): string[] =>
-  warnings.flatMap((w) => (w.kind === "segment" ? [w.message] : []));
+export const segmentErrorsOf = (
+  warnings: readonly RenderWarning[],
+): string[] =>
+  warnings.flatMap((w) =>
+    w.kind === "segment" ? [w.message] : [],
+  );

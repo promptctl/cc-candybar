@@ -109,13 +109,9 @@ function rig(
   const lines: RendererLine[] = [];
   const logged: LogLine[] = [];
   const receive = serveRenderer({
-    renderer: timed(
-      renderer,
-      fault.rendererClock ?? clock.monotonic,
-      (line) => {
-        logged.push({ level: "warn", line });
-      },
-    ),
+    renderer: timed(renderer, fault.rendererClock ?? clock.monotonic, (line) => {
+      logged.push({ level: "warn", line });
+    }),
     send: (line) => {
       const crossed = JSON.parse(JSON.stringify(line)) as RendererLine;
       lines.push(crossed);
@@ -145,9 +141,7 @@ function rig(
     NO_ACTS,
   );
   const due = (work: () => void = () => {}) => {
-    parts.time.during(readingsAt(clock), () =>
-      parts.time.after("test task", 0, work),
-    );
+    parts.time.during(readingsAt(clock), () => parts.time.after("test task", 0, work));
     return host.deliver(() => ({ kind: "event", event: { kind: "due" } }), []);
   };
   const setTheme = (theme: string) => state.set(SESSION, "theme", theme);
@@ -398,11 +392,9 @@ test("a failed command lands writes and carries both failures without runtime fr
     },
   });
   fixture.setTheme("nord");
-  const failure = await fixture.host
-    .command({ kind: "close-journal" })
-    .then(() => {
-      throw new Error("expected this command to fail");
-    }, failureOf);
+  const failure = await fixture.host.command({ kind: "close-journal" }).then(() => {
+    throw new Error("expected this command to fail");
+  }, failureOf);
   expect(failure).toMatchObject({
     kind: "bad-request",
     message: expect.stringContaining("invalid command"),

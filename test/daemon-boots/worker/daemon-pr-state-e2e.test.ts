@@ -19,10 +19,7 @@ import path from "node:path";
 import { textOf } from "../../../src/render/frame";
 import { withoutRepositoryScopedEnv } from "../../../src/repository-cli";
 import { frameRequest, hookData } from "../../helpers/daemon-e2e";
-import {
-  startDaemon,
-  type InWorkerDaemon,
-} from "../../helpers/in-worker-daemon";
+import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../helpers/daemon-log";
 
@@ -62,17 +59,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
     const git = (...args: string[]) =>
       execFileSync("git", args, { cwd: repo, env, stdio: "pipe" });
     git("init", "-q", "-b", branch);
-    git(
-      "-c",
-      "user.name=t",
-      "-c",
-      "user.email=t@t",
-      "commit",
-      "-q",
-      "--allow-empty",
-      "-m",
-      "c",
-    );
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c");
     git("remote", "add", "origin", "git@github.com:x/y.git");
     return repo;
   }

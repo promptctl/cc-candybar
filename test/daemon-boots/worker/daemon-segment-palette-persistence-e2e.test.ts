@@ -11,13 +11,7 @@
 // per-segment), so the menu here is the user's own: one `{ persist, from }`
 // action over the segment key, the same seam any config can author.
 
-import {
-  readFileSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-  mkdirSync,
-} from "node:fs";
+import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -28,7 +22,9 @@ import { plainOf, type Frame, type Run } from "../../../src/render/frame";
 import { sameDraw } from "../../helpers/frame";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import {
+  prepareIsolatedDaemonEnv,
+} from "../../helpers/spawn-isolated-daemon";
 // [LAW:one-source-of-truth] The shared transient contract: a render retried
 // on TIMEOUT and on an answer that drew a source pending.
 // [LAW:no-ambient-temporal-coupling] A persist's synchronous write completing

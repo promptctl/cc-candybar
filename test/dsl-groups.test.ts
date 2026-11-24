@@ -39,11 +39,7 @@ function groupsBar(source: string, sessionId = S1) {
   const { click } = rig;
   // Click the toggle whose URL writes `value` to `key` (a group toggle's
   // set-state), regardless of which row it rendered on.
-  const clickToggle = async (
-    out: Frame,
-    key: string,
-    value: string,
-  ): Promise<void> => {
+  const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -79,7 +75,8 @@ describe("2de.4 — group sugar: toggle round trip", () => {
   });
 
   test("click opens: ▾ + body rendered; second click closes", async () => {
-    const { render, clickToggle, sessionState } = groupsBar(DETAILS_SRC);
+    const { render, clickToggle, sessionState } =
+      groupsBar(DETAILS_SRC);
     await clickToggle(render(), "groups.details", "details");
     expect(sessionState.get(S1, "groups.details")).toBe("details");
     const open = textOf(render());

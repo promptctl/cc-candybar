@@ -22,9 +22,7 @@ import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 
@@ -44,15 +42,7 @@ function render(s: string): Frame {
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });
-    return drawPayload(
-      CONFIG,
-      compiled,
-      store,
-      registry,
-      { s },
-      instantOf(new Date()),
-      OPTS,
-    ).frame;
+    return drawPayload(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS).frame;
   } finally {
     registry.dispose();
   }
@@ -66,8 +56,7 @@ const RLM = String.fromCodePoint(0x200f);
 describe("a segment's text reaches the terminal without the controls it could issue", () => {
   test("a bidi override, an isolate and a C1 CSI in data are not drawn", () => {
     const out = render(`a${RLO}b${LRI}c${CSI}2Jd`);
-    for (const control of [RLO, LRI, CSI])
-      expect(textOf(out)).not.toContain(control);
+    for (const control of [RLO, LRI, CSI]) expect(textOf(out)).not.toContain(control);
     expect(textOf(out)).toContain("[abc2Jd]");
   });
 

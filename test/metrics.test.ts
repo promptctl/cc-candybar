@@ -183,11 +183,7 @@ describe("Metrics Provider", () => {
 
     writeFileSync(transcriptPath, v1);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
-    const warm = await metricsProvider.refresh(
-      sessionIdOf("cache-session"),
-      transcriptPath,
-      "change",
-    );
+    const warm = await metricsProvider.refresh(sessionIdOf("cache-session"), transcriptPath, "change");
     expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
     // Mutate content but hold mtime identical: foldMetrics's mtime gate is
@@ -217,11 +213,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, userLine() + userLine());
     let mtime = 1_700_000_000;
     utimesSync(transcriptPath, mtime, mtime);
-    const first = await metricsProvider.refresh(
-      sessionIdOf("inc-session"),
-      transcriptPath,
-      "change",
-    );
+    const first = await metricsProvider.refresh(sessionIdOf("inc-session"), transcriptPath, "change");
     expect(first.kind === "ok" && first.value.messageCount).toBe(2);
     // No assistant turn yet → no user→assistant pair → no response time.
     expect(first.kind === "ok" && first.value.lastResponseTime).toBeNull();
@@ -231,11 +223,7 @@ describe("Metrics Provider", () => {
     // that happens to also be 3 — verified next by appending a non-user line.
     appendFileSync(transcriptPath, userLine());
     utimesSync(transcriptPath, ++mtime, mtime);
-    const second = await metricsProvider.refresh(
-      sessionIdOf("inc-session"),
-      transcriptPath,
-      "change",
-    );
+    const second = await metricsProvider.refresh(sessionIdOf("inc-session"), transcriptPath, "change");
     expect(second.kind === "ok" && second.value.messageCount).toBe(3);
     expect(second.kind === "ok" && second.value.lastResponseTime).toBeNull();
 
@@ -252,11 +240,7 @@ describe("Metrics Provider", () => {
       }) + "\n",
     );
     utimesSync(transcriptPath, ++mtime, mtime);
-    const third = await metricsProvider.refresh(
-      sessionIdOf("inc-session"),
-      transcriptPath,
-      "change",
-    );
+    const third = await metricsProvider.refresh(sessionIdOf("inc-session"), transcriptPath, "change");
     expect(third.kind === "ok" && third.value.messageCount).toBe(3);
     expect(third.kind === "ok" && third.value.lastResponseTime).toBeCloseTo(
       1.0,

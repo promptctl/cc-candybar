@@ -84,27 +84,20 @@ function captured(
       ? fs.readFileSync(calls, "utf8").trim().split("\n")
       : [],
     payloads: fs.existsSync(`${calls}.payloads`)
-      ? fs
-          .readFileSync(`${calls}.payloads`, "utf8")
-          .trim()
-          .split("\n")
-          .map((line) => JSON.parse(line))
+      ? fs.readFileSync(`${calls}.payloads`, "utf8").trim().split("\n").map((line) => JSON.parse(line))
       : [],
     written: path.join(root, FILE),
   };
 }
 
-test.each([FILE, `~/${FILE}`])(
-  "the written file %s is sent once in isolated mode",
-  (file) => {
-    withPreview((run) => {
-      const result = run([`--config-only=${file}`]);
-      expect(result.status).toBe(0);
-      expect(result.calls).toEqual([`--config-only=${result.written}`]);
-      expect(result.stdout.trim()).toBe(CONTENT);
-    });
-  },
-);
+test.each([FILE, `~/${FILE}`])("the written file %s is sent once in isolated mode", (file) => {
+  withPreview((run) => {
+    const result = run([`--config-only=${file}`]);
+    expect(result.status).toBe(0);
+    expect(result.calls).toEqual([`--config-only=${result.written}`]);
+    expect(result.stdout.trim()).toBe(CONTENT);
+  });
+});
 
 test("a cold retry shares its payload and each compared config gets its own session", () => {
   withPreview((run) => {
@@ -113,10 +106,7 @@ test("a cold retry shares its payload and each compared config gets its own sess
     const [cold, first, ...rest] = result.payloads;
     expect(cold).toEqual(first);
     expect(result.calls[0]).toBe(result.calls[1]);
-    expect(first).toMatchObject({
-      hook_event_name: "Status",
-      session_id: expect.any(String),
-    });
+    expect(first).toMatchObject({ hook_event_name: "Status", session_id: expect.any(String) });
     expect(rest.length).toBeGreaterThan(0);
     const distinctConfigs = new Set(result.calls);
     const sessions = [first, ...rest].map((payload) => payload.session_id);

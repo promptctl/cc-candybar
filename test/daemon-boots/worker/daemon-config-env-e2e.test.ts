@@ -12,20 +12,14 @@ import os from "node:os";
 import path from "node:path";
 
 import { renderLines } from "../../helpers/daemon-log";
-import {
-  configFlag,
-  hookData,
-  render as renderBar,
-  renderRequest,
-} from "../../helpers/daemon-e2e";
+import { configFlag, hookData, render as renderBar, renderRequest } from "../../helpers/daemon-e2e";
 import type { DaemonTarget } from "../../helpers/daemon-wire";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
-import {
-  startDaemon,
-  type InWorkerDaemon,
-} from "../../helpers/in-worker-daemon";
+import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import {
+  prepareIsolatedDaemonEnv,
+} from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 
@@ -169,13 +163,10 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       "--config names no file — the bar renders with no --config",
     );
 
-    const lastBare = await render(
-      daemon,
-      "cfg-flag-last-bare",
-      projectDir,
-      {},
-      [...configFlag(override), "--config"],
-    );
+    const lastBare = await render(daemon, "cfg-flag-last-bare", projectDir, {}, [
+      ...configFlag(override),
+      "--config",
+    ]);
     expect(lastBare).toContain(
       "--config names no file — the bar renders with no --config",
     );
@@ -211,15 +202,11 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     // renders it again, and every render names the same.
     const badArgsOf = async (sid: string) => [
       ...new Set(
-        (await renderLines(env, sid)).map(
-          (l) => l.match(/ badArgs=(\S+) /)?.[1],
-        ),
+        (await renderLines(env, sid)).map((l) => l.match(/ badArgs=(\S+) /)?.[1]),
       ),
     ];
     expect(await badArgsOf("cfg-flag-bare")).toEqual(["--config:no-value"]);
-    expect(await badArgsOf("cfg-flag-last-bare")).toEqual([
-      "--config:no-value",
-    ]);
+    expect(await badArgsOf("cfg-flag-last-bare")).toEqual(["--config:no-value"]);
     expect(await badArgsOf("cfg-flag-unknown")).toEqual(["--bogus:unknown"]);
     expect(await badArgsOf("cfg-flag-positional")).toEqual([
       "stray.json5:positional",
@@ -274,8 +261,6 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
         args: configFlag("override.json5"),
         cwd: "proj",
       }),
-    ).rejects.toThrow(
-      /request 'cwd' is not an absolute path: "proj".*BAD_REQUEST/,
-    );
+    ).rejects.toThrow(/request 'cwd' is not an absolute path: "proj".*BAD_REQUEST/);
   });
 });

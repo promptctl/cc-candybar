@@ -90,15 +90,7 @@ function renderer(
   };
   return {
     render: (bar, when, effects) =>
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        PAYLOAD,
-        when,
-        opts,
-        selectionFor(config, { effect: decideEffectName(bar), effects }),
+      drawPayload(config, compiled, store, registry, PAYLOAD, when, opts, selectionFor(config, { effect: decideEffectName(bar), effects }),
       ).frame,
     dispose: () => registry.dispose(),
   };
@@ -186,8 +178,7 @@ describe("a placement's effect setting", () => {
       const effects = new SessionEffects<RenderedLine>("s");
       plain.render("none", at(0), effects);
       expect(pulsing.render("none", at(300), effects).rows).toEqual(
-        plain.render("none", at(300), new SessionEffects<RenderedLine>("s"))
-          .rows,
+        plain.render("none", at(300), new SessionEffects<RenderedLine>("s")).rows,
       );
       expect(effects.lastFrame().own).toEqual([
         { placement: "middle", effect: "pulse", t: 0 },
@@ -206,23 +197,15 @@ describe("a placement's effect setting", () => {
   });
 
   test("none stands a placement still on a moving bar", () => {
-    const still = renderer(
-      row(`{ seg: "middle", settings: { effect: "none" } }`),
-    );
+    const still = renderer(row(`{ seg: "middle", settings: { effect: "none" } }`));
     try {
       const effects = new SessionEffects<RenderedLine>("s");
-      const frames = INSTANTS.map((s) =>
-        still.render("shimmer", at(s), effects),
-      );
+      const frames = INSTANTS.map((s) => still.render("shimmer", at(s), effects));
       const middle = frames.map((frame) => {
-        const { runs } = frame.rows.find((r) =>
-          plainOf(r.runs).includes("MIDDLE"),
-        )!;
+        const { runs } = frame.rows.find((r) => plainOf(r.runs).includes("MIDDLE"))!;
         const { from, to } = middleColumns(runs);
         // Its own cell, short of the seams, which show its neighbours too.
-        return screenCells(runs)
-          .slice(from + 1, to - 1)
-          .join();
+        return screenCells(runs).slice(from + 1, to - 1).join();
       });
       for (const cells of middle) expect(cells).toBe(middle[0]);
       // [LAW:verifiable-goals] The bar around it did move.
@@ -244,10 +227,7 @@ describe("a placement's effect setting", () => {
       const namedFx = new SessionEffects<RenderedLine>("s");
       const differs = INSTANTS.some(
         (s) =>
-          !sameDraw(
-            named.render("shimmer", at(s), namedFx),
-            plain.render("shimmer", at(s), plainFx),
-          ),
+          !sameDraw(named.render("shimmer", at(s), namedFx), plain.render("shimmer", at(s), plainFx)),
       );
       expect(differs).toBe(true);
       expect(namedFx.lastFrame().own).toEqual([
@@ -284,19 +264,13 @@ describe("a placement's effect setting", () => {
     });
     try {
       const effects = new SessionEffects<RenderedLine>("s");
-      const frames = INSTANTS.map((s) =>
-        open.render("shimmer", at(s), effects),
-      );
-      const band = frames.map(
-        ({ rows }) => rows.find((r) => plainOf(r.runs).includes("✕"))!,
-      );
+      const frames = INSTANTS.map((s) => open.render("shimmer", at(s), effects));
+      const band = frames.map(({ rows }) => rows.find((r) => plainOf(r.runs).includes("✕"))!);
       expect(band[0]).toBeDefined();
       for (const row of band) expect(row).toEqual(band[0]);
       // [LAW:verifiable-goals] The bar above it did move.
       const top = ({ rows }: Frame) => ({ rows: rows.slice(0, 1) });
-      expect(
-        frames.some((frame) => !sameDraw(top(frame), top(frames[0]!))),
-      ).toBe(true);
+      expect(frames.some((frame) => !sameDraw(top(frame), top(frames[0]!)))).toBe(true);
     } finally {
       open.dispose();
     }
@@ -311,8 +285,8 @@ describe("a placement's effect setting", () => {
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(/setting "effect" is one every placement already has/);
-    expect(() =>
-      row(`{ seg: "middle", settings: { effect: "glow" } }`),
-    ).toThrow(/effect/);
+    expect(() => row(`{ seg: "middle", settings: { effect: "glow" } }`)).toThrow(
+      /effect/,
+    );
   });
 });

@@ -184,7 +184,9 @@ describe("a pick its setting cannot hold", () => {
         // A retired theme names its successor.
         const [retired] = staleAbout(await messagesOf(rig, RETIRED), "theme");
         expect(retired).toContain('holds "dark"');
-        expect(retired).toContain('"dark" was retired; write "textual-dark"');
+        expect(retired).toContain(
+          '"dark" was retired; write "textual-dark"',
+        );
 
         // Edit mode stages endcaps over the session's pick: it decided
         // nothing, so it warns of nothing.

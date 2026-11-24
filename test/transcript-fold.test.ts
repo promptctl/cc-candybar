@@ -213,8 +213,6 @@ test("a multi-window transcript folds every entry, and a long line is logged", a
 
   expect(await valueOf(fold, "s", path)).toBe(3001);
   expect(logged).toEqual([
-    expect.stringMatching(
-      /^transcript long line path=".*big\.jsonl" offset=\d+ bytes=\d+$/,
-    ),
+    expect.stringMatching(/^transcript long line path=".*big\.jsonl" offset=\d+ bytes=\d+$/),
   ]);
 });

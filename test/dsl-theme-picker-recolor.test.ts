@@ -64,12 +64,7 @@ interface Painted {
 }
 
 function recolorBar() {
-  const rig = buildRig({
-    source: SRC,
-    label: "<recolor>",
-    palettes: ALLOWED,
-    sessionId: SID,
-  });
+  const rig = buildRig({ source: SRC, label: "<recolor>", palettes: ALLOWED, sessionId: SID });
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently
@@ -103,20 +98,13 @@ function recolorBar() {
 // Every truecolor background a frame draws. The set of these is the bar's
 // palette footprint; a recolor changes it.
 function bgColors(frame: Frame): Set<string> {
-  return new Set(
-    backgroundsOf(frame).flatMap((bg) => (bg?.startsWith("#") ? [bg] : [])),
-  );
+  return new Set(backgroundsOf(frame).flatMap((bg) => (bg?.startsWith("#") ? [bg] : [])));
 }
 
-async function clickTheme(
-  rig: ReturnType<typeof recolorBar>,
-  theme: string,
-): Promise<void> {
+async function clickTheme(rig: ReturnType<typeof recolorBar>, theme: string): Promise<void> {
   // Drive the real wire end-to-end: emit the click URL the picker would, then
   // dispatch it exactly as the daemon does (parse → dispatch → set-state).
-  await rig.click(
-    effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "theme", theme] }]),
-  );
+  await rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "theme", theme] }]));
 }
 
 describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {

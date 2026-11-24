@@ -51,10 +51,7 @@ const approving = (...dirs: string[]): RepoAnswers => ({
 // repositories are approved and ship no plugins.
 const collisionsOf = (locs: Locations, projectDir?: string) =>
   configCollisionNotice(
-    searchConfig(locs, () => observedAnswers(approving()), {
-      kind: "chain",
-      projectDir,
-    }).locations,
+    searchConfig(locs, () => observedAnswers(approving()), { kind: "chain", projectDir }).locations,
   );
 
 const NO_PROJECT_ACCESS = {
@@ -102,9 +99,7 @@ describe("dslConfigCandidatePaths", () => {
       mkdirSync(project);
       // The local file, the project's, the user's: highest precedence first,
       // each a (.json5, .json) pair.
-      expect(
-        dslConfigCandidatePaths(L, { kind: "chain", projectDir: project }),
-      ).toEqual([
+      expect(dslConfigCandidatePaths(L, { kind: "chain", projectDir: project })).toEqual([
         join(project, ".cc-candybar.local.json5"),
         join(project, ".cc-candybar.local.json"),
         join(project, ".cc-candybar.json5"),
@@ -153,17 +148,15 @@ describe("dslConfigCandidatePaths", () => {
     const { dir, cleanup } = mkdir();
     const L = isolated(dir);
     try {
-      expect(
-        dslConfigCandidatePaths(L, { kind: "chain", projectDir: "/proj" }),
-      ).toEqual(
+      expect(dslConfigCandidatePaths(L, { kind: "chain", projectDir: "/proj" })).toEqual(
         dslConfigCandidatePaths(L, {
           kind: "chain",
           projectDir: "/proj",
         }),
       );
-      expect(
-        dslConfigCandidatePaths(L, { kind: "chain", projectDir: "/proj" }),
-      ).not.toContain("/explicit/path/to/config.json");
+      expect(dslConfigCandidatePaths(L, { kind: "chain", projectDir: "/proj" })).not.toContain(
+        "/explicit/path/to/config.json",
+      );
     } finally {
       cleanup();
     }
@@ -249,21 +242,14 @@ describe("the config search", () => {
         project: {
           ...NO_PROJECT_ACCESS,
           approved: repo,
-          question: {
-            dir: realpathSync(proj),
-            standing: "approved",
-            unproven: null,
-          },
+          question: { dir: realpathSync(proj), standing: "approved", unproven: null },
         },
       });
       const query = { kind: "chain", projectDir: proj } as const;
       // The user's file, the project's own over it, and the local file a
       // first write there creates, over both.
       expect(
-        chainPlaces(
-          resolutionOf(L, approving(proj), query),
-          configLocations(L, query),
-        ),
+        chainPlaces(resolutionOf(L, approving(proj), query), configLocations(L, query)),
       ).toEqual([
         { path: xdgJson5, role: "user" },
         { path: projJson, role: "project" },
@@ -271,12 +257,9 @@ describe("the config search", () => {
       ]);
       // Unapproved, the project's layers are not the session's to write.
       const unanswered = { kind: "ok", value: {} } as const;
-      expect(
-        chainPlaces(
-          resolutionOf(L, unanswered, query),
-          configLocations(L, query),
-        ),
-      ).toEqual([{ path: xdgJson5, role: "user" }]);
+      expect(chainPlaces(resolutionOf(L, unanswered, query), configLocations(L, query))).toEqual([
+        { path: xdgJson5, role: "user" },
+      ]);
     } finally {
       cleanup();
     }
@@ -298,9 +281,7 @@ describe("the config search", () => {
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(
-        chainPlaces(resolved, configLocations(L, { kind: "chain" })),
-      ).toEqual([{ path: home, role: "user" }]);
+      expect(chainPlaces(resolved, configLocations(L, { kind: "chain" }))).toEqual([{ path: home, role: "user" }]);
     } finally {
       cleanup();
     }
@@ -323,14 +304,8 @@ describe("the config search", () => {
         { path: project, role: "project" },
         { path: local, role: "local" },
       ];
-      expect(resolved).toMatchObject({
-        kind: "chain",
-        layers: expected,
-        home: named,
-      });
-      expect(chainPlaces(resolved, configLocations(L, layered))).toEqual(
-        expected,
-      );
+      expect(resolved).toMatchObject({ kind: "chain", layers: expected, home: named });
+      expect(chainPlaces(resolved, configLocations(L, layered))).toEqual(expected);
       const samePath = { ...layered, path: project };
       const selected = resolutionOf(L, approving(dir), samePath);
       expect(selected.layers).toEqual([
@@ -338,18 +313,13 @@ describe("the config search", () => {
         { path: local, role: "local" },
       ]);
       const sibling = join(dir, ".cc-candybar.json");
-      expect(
-        chainPlaces(selected, configLocations(L, samePath)),
-      ).toContainEqual({
+      expect(chainPlaces(selected, configLocations(L, samePath))).toContainEqual({
         path: sibling,
         role: "project",
       });
       expect(dslConfigCandidatePaths(L, samePath)).toContain(sibling);
       writeFileSync(sibling, VALID_CFG);
-      const selectedJson = resolutionOf(L, approving(dir), {
-        ...layered,
-        path: sibling,
-      });
+      const selectedJson = resolutionOf(L, approving(dir), { ...layered, path: sibling });
       expect(selectedJson.layers).toEqual([
         { path: sibling, role: "user" },
         { path: project, role: "project" },
@@ -371,18 +341,12 @@ describe("the config search", () => {
       const query = { kind: "chain", projectDir: dir, path: alias } as const;
       const answers = () => observedAnswers(approving(dir));
       const snapshot = searchConfig(locs, answers, query);
-      expect(snapshot.resolution.layers).toEqual([
-        { path: alias, role: "user" },
-      ]);
-      expect(
-        chainPlaces(snapshot.resolution, snapshot.locations),
-      ).not.toContainEqual({
+      expect(snapshot.resolution.layers).toEqual([{ path: alias, role: "user" }]);
+      expect(chainPlaces(snapshot.resolution, snapshot.locations)).not.toContainEqual({
         path: overlay,
         role: "project",
       });
-      expect(snapshot.watchedFiles).toEqual(
-        expect.arrayContaining([alias, overlay]),
-      );
+      expect(snapshot.watchedFiles).toEqual(expect.arrayContaining([alias, overlay]));
 
       rmSync(alias);
       writeFileSync(alias, VALID_CFG);
@@ -416,18 +380,13 @@ describe("the config search", () => {
         home: named,
       });
       expect(configResolutionNotice(resolved)).toBe(
-        "Config file not found: " +
-          named +
-          " — using the bundled base until it appears",
+        "Config file not found: " + named + " — using the bundled base until it appears",
       );
       // A durable write creates the file the bar is waiting for.
       const query = { kind: "file", path: named } as const;
       // The named file is the chain's one layer: there is no other to write.
       expect(
-        chainPlaces(
-          resolutionOf(L, approving(dir), query),
-          configLocations(L, query),
-        ),
+        chainPlaces(resolutionOf(L, approving(dir), query), configLocations(L, query)),
       ).toEqual([{ path: named, role: "user" }]);
     } finally {
       cleanup();
@@ -535,41 +494,37 @@ describe("the config search", () => {
 test.each([
   ["absent", "missing"],
   ["unchecked", "unreadable"],
-] as const)(
-  "an explicit file that is %s reads only its own scope",
-  (observed, outcome) => {
-    const locs = isolated("/config-home");
-    const file = "/asked.json5";
-    const checked: string[] = [];
-    const readAnswers = jest.fn(() => observedAnswers(approving()));
-    const { resolution } = searchConfig(
-      locs,
-      readAnswers,
-      { kind: "file", path: file },
-      {
-        ...diskFiles,
-        presence(path) {
-          checked.push(path);
-          return observed === "absent" ? observed : { path, error: "ELOOP" };
-        },
+] as const)("an explicit file that is %s reads only its own scope", (observed, outcome) => {
+  const locs = isolated("/config-home");
+  const file = "/asked.json5";
+  const checked: string[] = [];
+  const readAnswers = jest.fn(() => observedAnswers(approving()));
+  const { resolution } = searchConfig(
+    locs,
+    readAnswers,
+    { kind: "file", path: file },
+    {
+      ...diskFiles,
+      presence(path) {
+        checked.push(path);
+        return observed === "absent" ? observed : { path, error: "ELOOP" };
       },
-    );
-    expect(checked).toEqual([file]);
-    expect(readAnswers).not.toHaveBeenCalled();
-    expect(resolution.project.question).toBeNull();
-    expect(resolution).toMatchObject({ kind: outcome, path: file, home: file });
-    if (resolution.kind === "unreadable")
-      expect(resolution.error).toBe("ELOOP");
-  },
-);
+    },
+  );
+  expect(checked).toEqual([file]);
+  expect(readAnswers).not.toHaveBeenCalled();
+  expect(resolution.project.question).toBeNull();
+  expect(resolution).toMatchObject({ kind: outcome, path: file, home: file });
+  if (resolution.kind === "unreadable") expect(resolution.error).toBe("ELOOP");
+});
 
 describe("config collisions", () => {
   test("another extension is a sibling of the same location", () => {
-    const candidates = configLocations(
-      isolated("/config-home"),
-      { kind: "chain" },
-      ["json5", "json", "jsonc"],
-    );
+    const candidates = configLocations(isolated("/config-home"), { kind: "chain" }, [
+      "json5",
+      "json",
+      "jsonc",
+    ]);
     const stated = observeConfigLocations(candidates, {
       presence: () => "present",
       realpath: (file) => file,

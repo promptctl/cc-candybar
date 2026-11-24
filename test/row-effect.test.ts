@@ -95,15 +95,7 @@ function renderer(
   };
   return {
     render: (effect, when, effects, payload = {}) =>
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        payload,
-        when,
-        opts,
-        selectionFor(config, {
+      drawPayload(config, compiled, store, registry, payload, when, opts, selectionFor(config, {
           ...(effect === undefined ? {} : { effect: decideEffectName(effect) }),
           ...(effects === undefined ? {} : { effects }),
         }),
@@ -134,9 +126,9 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("none draws the bytes a render with no effect named draws", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(
-        render("none", at(30), new SessionEffects<RenderedLine>("s")).rows,
-      ).toEqual(render(undefined, at(30)).rows);
+      expect(render("none", at(30), new SessionEffects<RenderedLine>("s")).rows).toEqual(
+        render(undefined, at(30)).rows,
+      );
     } finally {
       dispose();
     }
@@ -157,9 +149,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
           expect(linkUrls(frame)).toEqual(linkUrls(still[i]!));
         });
         // [LAW:verifiable-goals] Otherwise the equalities above prove nothing.
-        expect(drawn.some((frame, i) => !sameDraw(frame, still[i]!))).toBe(
-          true,
-        );
+        expect(drawn.some((frame, i) => !sameDraw(frame, still[i]!))).toBe(true);
       } finally {
         dispose();
       }
@@ -169,9 +159,9 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("pulse starts at rest: its first frame is none's bytes", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(
-        render("pulse", at(5), new SessionEffects<RenderedLine>("s")).rows,
-      ).toEqual(render("none", at(5)).rows);
+      expect(render("pulse", at(5), new SessionEffects<RenderedLine>("s")).rows).toEqual(
+        render("none", at(5)).rows,
+      );
     } finally {
       dispose();
     }
@@ -183,9 +173,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
       const late = new SessionEffects<RenderedLine>("s");
       render("none", at(0), late);
       // Pulse came into force at 300: its first frame is at rest.
-      expect(render("pulse", at(300), late).rows).toEqual(
-        render("none", at(300)).rows,
-      );
+      expect(render("pulse", at(300), late).rows).toEqual(render("none", at(300)).rows);
       // On a session where pulse has been on since 0, the same stretch moves.
       const early = new SessionEffects<RenderedLine>("s");
       render("pulse", at(0), early);
@@ -198,22 +186,17 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     }
   });
 
-  test.each(LOOPS)(
-    "under colorCompatibility none, %s draws what none draws",
-    (loop) => {
-      const { render, dispose } = renderer(BAR, "none");
-      try {
-        const effects = new SessionEffects<RenderedLine>("s");
-        for (const s of [0, 30, 200]) {
-          expect(render(loop, at(s), effects).rows).toEqual(
-            render("none", at(s)).rows,
-          );
-        }
-      } finally {
-        dispose();
+  test.each(LOOPS)("under colorCompatibility none, %s draws what none draws", (loop) => {
+    const { render, dispose } = renderer(BAR, "none");
+    try {
+      const effects = new SessionEffects<RenderedLine>("s");
+      for (const s of [0, 30, 200]) {
+        expect(render(loop, at(s), effects).rows).toEqual(render("none", at(s)).rows);
       }
-    },
-  );
+    } finally {
+      dispose();
+    }
+  });
 
   test("a rule flips the effect as the payload changes", () => {
     const { render, dispose } = renderer(RULED);
@@ -269,11 +252,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
 
   test("a row says when it next changes: now while its loop moves, never while every part holds still", () => {
     const effects = new SessionEffects<RenderedLine>("s");
-    const motion = effects.motion(
-      "shimmer",
-      effects.clockAt(at(7), 1),
-      STILL_FRAME,
-    );
+    const motion = effects.motion("shimmer", effects.clockAt(at(7), 1), STILL_FRAME);
     const moving = motion.row("flow.own#0", "bar", []);
     if (moving.kind !== "moving") throw new Error("shimmer is still");
     const row = moving.wrap(new RichText("abc"));
@@ -349,8 +328,7 @@ describe("the wheel paces each segment by where it sits", () => {
 
   const fillOf = (rendered: Frame, word: string): string => {
     const ground = runUnder(rendered, word)?.bg;
-    if (ground === undefined)
-      throw new Error(`${word} is drawn without its own ground`);
+    if (ground === undefined) throw new Error(`${word} is drawn without its own ground`);
     return ground;
   };
 
@@ -362,9 +340,7 @@ describe("the wheel paces each segment by where it sits", () => {
       expect(first.rows).toEqual(render("none", at(5)).rows);
       expect(new Set(SEGMENTS.map((word) => fillOf(first, word))).size).toBe(1);
       const later = render("wheel", at(65), effects);
-      expect(new Set(SEGMENTS.map((word) => fillOf(later, word))).size).toBe(
-        SEGMENTS.length,
-      );
+      expect(new Set(SEGMENTS.map((word) => fillOf(later, word))).size).toBe(SEGMENTS.length);
     } finally {
       dispose();
     }

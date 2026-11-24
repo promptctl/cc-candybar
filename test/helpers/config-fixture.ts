@@ -83,10 +83,7 @@ export async function renderConfig(
       instantOf(new Date(world.clock.now())),
     );
     warnings.push(...pending.map((name) => `source still pending: ${name}`));
-    const errors = [
-      ...failures,
-      ...prepared.droppedPlugins.map(droppedPluginNotice),
-    ];
+    const errors = [...failures, ...prepared.droppedPlugins.map(droppedPluginNotice)];
     if (errors.length > 0)
       return { kind: "fatal", message: errors.join("\n"), warnings, layers };
     return { kind: "clean", rendered, layers, warnings };

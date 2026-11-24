@@ -72,29 +72,26 @@ describe("a globals rule whose template throws renders its slot's floor and says
     { slot: "palette", label: `T=${THEME_FLOOR}`, floor: THEME_FLOOR },
     { slot: "style", label: `S=${STYLE_FLOOR}`, floor: STYLE_FLOOR },
     { slot: "effect", label: `E=${EFFECT_FLOOR}`, floor: EFFECT_FLOOR },
-  ] as const)(
-    "$slot: a `fail` draws the bar in $floor",
-    ({ slot, label, floor }) => {
-      const rt = runtime(src(slot, '{{ fail "the rule broke" }}'));
-      try {
-        // The bar is drawn, wearing the slot's floor, labelled as such.
-        expect(rt.render(0)).toContain(label);
-        expect(rt.warnings).toEqual([
-          {
-            kind: "rule",
-            slot,
-            message: expect.stringMatching(
-              new RegExp(
-                `^globals\\.${slot} rendered "${floor}": the rule failed — .*the rule broke`,
-              ),
+  ] as const)("$slot: a `fail` draws the bar in $floor", ({ slot, label, floor }) => {
+    const rt = runtime(src(slot, '{{ fail "the rule broke" }}'));
+    try {
+      // The bar is drawn, wearing the slot's floor, labelled as such.
+      expect(rt.render(0)).toContain(label);
+      expect(rt.warnings).toEqual([
+        {
+          kind: "rule",
+          slot,
+          message: expect.stringMatching(
+            new RegExp(
+              `^globals\\.${slot} rendered "${floor}": the rule failed — .*the rule broke`,
             ),
-          },
-        ]);
-      } finally {
-        rt.dispose();
-      }
-    },
-  );
+          ),
+        },
+      ]);
+    } finally {
+      rt.dispose();
+    }
+  });
 
   test("a rule reading a field nothing provides is the same failure, not a throw", () => {
     const rt = runtime(src("style", "{{ .no.such.field }}"));
@@ -110,10 +107,7 @@ describe("a globals rule whose template throws renders its slot's floor and says
 
   test("the failure is per render: the next render the rule succeeds in wears its result, silently", () => {
     const rt = runtime(
-      src(
-        "palette",
-        '{{ if ge (int .ctx.pct) 50 }}{{ fail "hot" }}{{ else }}nord{{ end }}',
-      ),
+      src("palette", '{{ if ge (int .ctx.pct) 50 }}{{ fail "hot" }}{{ else }}nord{{ end }}'),
     );
     try {
       expect(rt.render(10)).toContain("T=nord");

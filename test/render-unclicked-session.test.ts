@@ -48,27 +48,14 @@ test("a session that has never clicked draws the declared preset and style, not 
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(config, registry, {
-      cwd: process.cwd(),
-    });
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const at = instantOf(new Date());
     const render = (selection: Parameters<typeof drawPayload>[7]): Frame =>
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: "s" },
-        at,
-        OPTS,
-        selection,
-      ).frame;
+      drawPayload(config, compiled, store, registry, { session_id: "s" }, at, OPTS, selection).frame;
 
     const unclicked = render(globalsFor(config));
     // The floor preset and style, picked by the session.
-    const floor = render(
-      globalsFor(config, picked({ preset: PRESET_FLOOR, style: STYLE_FLOOR })),
-    );
+    const floor = render(globalsFor(config, picked({ preset: PRESET_FLOOR, style: STYLE_FLOOR })));
 
     expect(textOf(unclicked)).toContain("P=alt S=hot");
     expect(textOf(floor)).toContain(`P=floor S=${STYLE_FLOOR}`);

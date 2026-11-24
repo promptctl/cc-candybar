@@ -150,10 +150,13 @@ describe("daemon transcript-fs concurrency", () => {
   // constant regardless of render rate. gn4.2 landed the single-owner gate
   // (src/utils/transcript-fs.ts) that routes every transcript readdir/stat/
   // read through one limiter, so peak in-flight is now bounded by its cap.
-  test("peak in-flight transcript fs ops stays under the ceiling", async () => {
-    const peak = await measurePeakInFlight(RENDER_CONCURRENCY);
-    expect(peak).toBeLessThanOrEqual(IN_FLIGHT_CEILING);
-  });
+  test(
+    "peak in-flight transcript fs ops stays under the ceiling",
+    async () => {
+      const peak = await measurePeakInFlight(RENDER_CONCURRENCY);
+      expect(peak).toBeLessThanOrEqual(IN_FLIGHT_CEILING);
+    },
+  );
 
   // Non-failing safety net: proves the observer is live and the fan-out is real,
   // so the `.failing` gate above can never pass vacuously (e.g. via an import
@@ -215,36 +218,20 @@ describe("heap-analysis scripts", () => {
   test("heap-analyze diff reports FSReqPromise growth between snapshots", () => {
     const out = execFileSync(
       process.execPath,
-      [
-        join(scriptsDir, "heap-analyze.mjs"),
-        before,
-        after,
-        "--match",
-        "FSReqPromise",
-        "--json",
-      ],
+      [join(scriptsDir, "heap-analyze.mjs"), before, after, "--match", "FSReqPromise", "--json"],
       { encoding: "utf8" },
     );
     const { diff } = JSON.parse(out) as {
       diff: Array<{ label: string; deltaCount: number }>;
     };
-    const grew = diff.find(
-      (r) => /FSReqPromise/.test(r.label) && r.deltaCount > 0,
-    );
+    const grew = diff.find((r) => /FSReqPromise/.test(r.label) && r.deltaCount > 0);
     expect(grew).toBeDefined();
   });
 
   test("heap-retainers traces FSReqPromise to a GC root", () => {
     const out = execFileSync(
       process.execPath,
-      [
-        join(scriptsDir, "heap-retainers.mjs"),
-        after,
-        "FSReqPromise",
-        "--limit",
-        "3",
-        "--json",
-      ],
+      [join(scriptsDir, "heap-retainers.mjs"), after, "FSReqPromise", "--limit", "3", "--json"],
       { encoding: "utf8" },
     );
     const { paths, totalTargets } = JSON.parse(out) as {
@@ -285,13 +272,7 @@ describe("heap-analysis scripts", () => {
     const pathsOf = (...flags: string[]): string => {
       const out = execFileSync(
         process.execPath,
-        [
-          join(scriptsDir, "heap-retainers.mjs"),
-          snapshot,
-          "^object / Watched$",
-          "--json",
-          ...flags,
-        ],
+        [join(scriptsDir, "heap-retainers.mjs"), snapshot, "^object / Watched$", "--json", ...flags],
         { encoding: "utf8" },
       );
       return JSON.stringify((JSON.parse(out) as { paths: string[][] }).paths);
@@ -306,28 +287,12 @@ describe("heap-analysis scripts", () => {
     // A live heap cannot hold such an object, since a snapshot collects first,
     // so the snapshot is written by hand: the root weakly holds one `Foo`,
     // which comes first, and strongly holds another.
-    const nodeFields = [
-      "type",
-      "name",
-      "id",
-      "self_size",
-      "edge_count",
-      "trace_node_id",
-      "detachedness",
-    ];
+    const nodeFields = ["type", "name", "id", "self_size", "edge_count", "trace_node_id", "detachedness"];
     const snapshot = {
       snapshot: {
         meta: {
           node_fields: nodeFields,
-          node_types: [
-            ["synthetic", "object"],
-            "string",
-            "number",
-            "number",
-            "number",
-            "number",
-            "number",
-          ],
+          node_types: [["synthetic", "object"], "string", "number", "number", "number", "number", "number"],
           edge_fields: ["type", "name_or_index", "to_node"],
           edge_types: [["property", "weak"], "string_or_number", "node"],
         },
@@ -343,15 +308,7 @@ describe("heap-analysis scripts", () => {
     writeFileSync(path, JSON.stringify(snapshot));
     const out = execFileSync(
       process.execPath,
-      [
-        join(scriptsDir, "heap-retainers.mjs"),
-        path,
-        "^object / Foo$",
-        "--strong",
-        "--limit",
-        "1",
-        "--json",
-      ],
+      [join(scriptsDir, "heap-retainers.mjs"), path, "^object / Foo$", "--strong", "--limit", "1", "--json"],
       { encoding: "utf8" },
     );
     const { paths } = JSON.parse(out) as { paths: string[][] };

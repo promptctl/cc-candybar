@@ -40,9 +40,7 @@ const SHUTDOWN_BUDGET_MS = 1500;
 function leasedPid(sockPath: string): number {
   const lease = readLease(leasePathFor(sockPath));
   if (lease.kind !== "owned") {
-    throw new Error(
-      `no owner in the lease of ${sockPath}: ${JSON.stringify(lease)}`,
-    );
+    throw new Error(`no owner in the lease of ${sockPath}: ${JSON.stringify(lease)}`);
   }
   return lease.pid;
 }
@@ -179,35 +177,28 @@ describe("daemon shutdown contract", () => {
   // end a daemon through one funnel, and a click's session write waits out the
   // file's debounce. So the close in that funnel is what keeps a click a recycled
   // daemon had not written yet, and only a real process has that funnel.
-  test.each(stops)(
-    "a session write still inside its debounce lands before %s ends the daemon",
-    async (_, stop) => {
-      const { env, sockPath, stateDir, removeTmpDirs } =
-        prepareIsolatedDaemonEnv("cc-candybar-shutdown");
-      const sessionId = "shutdown-write";
-      let daemon: RunningDaemon | undefined;
-      try {
-        daemon = await spawnDaemonWithEnv(env);
-        await render(sockPath, sessionId, stateDir);
-        await click(
-          sockPath,
-          drawnLink(
-            sockPath,
-            effectsUrl([
-              { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
-            ]),
-          ),
-        );
-        expect(await stop(daemon, sockPath)).toEqual({ code: 0, signal: null });
+  test.each(stops)("a session write still inside its debounce lands before %s ends the daemon", async (_, stop) => {
+    const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
+      "cc-candybar-shutdown",
+    );
+    const sessionId = "shutdown-write";
+    let daemon: RunningDaemon | undefined;
+    try {
+      daemon = await spawnDaemonWithEnv(env);
+      await render(sockPath, sessionId, stateDir);
+      await click(
+        sockPath,
+        drawnLink(sockPath, effectsUrl([
+          { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
+        ])),
+      );
+      expect(await stop(daemon, sockPath)).toEqual({ code: 0, signal: null });
 
-        const saved = JSON.parse(
-          readFileSync(sessionStatePath(hostOf(env)), "utf8"),
-        );
-        expect(saved[sessionId]).toMatchObject({ padding: "4" });
-      } finally {
-        await daemon?.stop();
-        removeTmpDirs();
-      }
-    },
-  );
+      const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
+      expect(saved[sessionId]).toMatchObject({ padding: "4" });
+    } finally {
+      await daemon?.stop();
+      removeTmpDirs();
+    }
+  });
 });

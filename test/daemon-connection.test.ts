@@ -25,7 +25,11 @@ import {
   type Request,
   type Response,
 } from "../src/daemon/foundations/protocol";
-import { replyOf, type HandledRequest, type Reply } from "../src/daemon/reply";
+import {
+  replyOf,
+  type HandledRequest,
+  type Reply,
+} from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { barOf } from "./helpers/drawn-frame";
@@ -308,9 +312,7 @@ describe("a connection over a stream", () => {
     const ids = requests.map((r) => r.accepted().id);
     expect(new Set(ids).size).toBe(2);
     expect(clients.map((c) => c.received)).toEqual(
-      ids.map((request) => [
-        expect.objectContaining({ code: "TIMEOUT", request }),
-      ]),
+      ids.map((request) => [expect.objectContaining({ code: "TIMEOUT", request })]),
     );
   });
 
@@ -575,11 +577,7 @@ describe("a connection over a stream", () => {
     const { client, received, ended } = open(standIn({ handle }));
     client.write(Buffer.concat([encodeFrame(STATS), encodeFrame(STATS)]));
     await settled();
-    expect({
-      handled: handle.mock.calls.length,
-      received,
-      ended: ended(),
-    }).toEqual({
+    expect({ handled: handle.mock.calls.length, received, ended: ended() }).toEqual({
       handled: 1,
       received: [ANSWER],
       ended: true,
@@ -686,11 +684,7 @@ describe("a connection over a stream", () => {
     const { send, received, ended } = open(daemon);
     send(STATS);
     await settled();
-    expect({
-      received,
-      ended: ended(),
-      inFlight: daemon.stats.inFlight,
-    }).toEqual({
+    expect({ received, ended: ended(), inFlight: daemon.stats.inFlight }).toEqual({
       received: [
         expect.objectContaining({
           ok: false,
@@ -1015,20 +1009,13 @@ describe("a connection over a stream", () => {
       const confirmed = new Map<string, boolean>();
       const frame = (name: string): void => {
         const resp: Response = { ok: true, output: name.repeat(128 * 1024) };
-        subscriptions[0]!.frame(JSON.stringify(resp), (ok) =>
-          confirmed.set(name, ok),
-        );
+        subscriptions[0]!.frame(JSON.stringify(resp), (ok) => confirmed.set(name, ok));
       };
       ["a", "b", "c", "d"].forEach(frame);
       await settled();
       client.resume();
       await until(() => received.length >= 2, "the newest frame");
-      expect(Object.fromEntries(confirmed)).toEqual({
-        a: true,
-        b: false,
-        c: false,
-        d: true,
-      });
+      expect(Object.fromEntries(confirmed)).toEqual({ a: true, b: false, c: false, d: true });
 
       expect(received.map((r) => "output" in r && r.output[0])).toEqual([
         "a",

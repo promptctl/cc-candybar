@@ -56,11 +56,9 @@ function projectWithPin() {
     }`,
   );
   const pinned = (): unknown =>
-    (
-      JSON5.parse(fs.readFileSync(file, "utf8")) as {
-        globals?: { palette?: unknown };
-      }
-    ).globals?.palette;
+    (JSON5.parse(fs.readFileSync(file, "utf8")) as {
+      globals?: { palette?: unknown };
+    }).globals?.palette;
   return {
     project,
     args: ["cc-candybar", "--config", file],
@@ -172,10 +170,7 @@ test("a click the daemon has read is answered with its own outcome though its tu
     expect(held.daemon.daemon.stats.requestsTimedOut).toBe(0);
 
     held.release();
-    await until(
-      () => held.opened.received.length > 0,
-      "the click's own answer",
-    );
+    await until(() => held.opened.received.length > 0, "the click's own answer");
     expect(held.opened.received).toEqual([{ ok: true, output: "" }]);
     expect(held.bar.pinned()).toBe(PALETTE);
   } finally {

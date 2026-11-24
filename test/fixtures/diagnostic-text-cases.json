@@ -1,56 +1,12 @@
 {
   "//": "The diagnostic text pass, asserted by both runtimes: test/diagnostic-text-cases.test.ts (src/render/diagnostic-text.ts sanitizeText and sanitizeAndTruncate, src/render/error-glyph.ts formatPermanentGlyph) and rust-client/src/error_glyph.rs (sanitize, truncate and format_permanent_glyph). A glyph case is one permanent outcome and the text of its glyph, inside the style envelope check-protocol holds equal; every message in one is over the budget both runtimes clip at, so the rows pin that budget too. A clip case is one input, a budget in code points, and its exact text: the input is sanitized first, and over budget the last code point kept becomes the ellipsis, so the output stays at the budget. A sanitize case is one input and its exact sanitized text before any clip: neutralized code points become a space, whitespace runs collapse to one space, both ends trim. Every Unicode White_Space code point, NEL, ZWNBSP (U+FEFF), the ends and an interior point of each neutralized range, the printable neighbours of those ranges (U+007E, U+2065, U+2070; the other neighbours are whitespace and collapse either way, so only check-protocol's table pin guards those edges), and the bidi marks that pass through are among them.",
   "glyph": [
-    {
-      "outcome": {
-        "kind": "permanent",
-        "cause": "version_mismatch",
-        "clientV": 7,
-        "daemonV": 8
-      },
-      "output": "⚠ cc-candybar: protocol mismatch (client v7 ≠ daemon v8)"
-    },
-    {
-      "outcome": {
-        "kind": "permanent",
-        "cause": "version_mismatch",
-        "clientV": 7,
-        "daemonV": 0
-      },
-      "output": "⚠ cc-candybar: protocol mismatch (client v7 ≠ daemon unknown)"
-    },
-    {
-      "outcome": {
-        "kind": "permanent",
-        "cause": "bad_request",
-        "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
-      },
-      "output": "⚠ cc-candybar: daemon rejected request: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…"
-    },
-    {
-      "outcome": {
-        "kind": "permanent",
-        "cause": "render_failed",
-        "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
-      },
-      "output": "⚠ cc-candybar: render failed: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…"
-    },
-    {
-      "outcome": {
-        "kind": "permanent",
-        "cause": "switched_off",
-        "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
-      },
-      "output": "⚠ cc-candybar: switched off: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…"
-    },
-    {
-      "outcome": {
-        "kind": "permanent",
-        "cause": "malformed_response",
-        "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
-      },
-      "output": "⚠ cc-candybar: malformed daemon response: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…"
-    }
+    { "outcome": { "kind": "permanent", "cause": "version_mismatch", "clientV": 7, "daemonV": 8 }, "output": "⚠ cc-candybar: protocol mismatch (client v7 ≠ daemon v8)" },
+    { "outcome": { "kind": "permanent", "cause": "version_mismatch", "clientV": 7, "daemonV": 0 }, "output": "⚠ cc-candybar: protocol mismatch (client v7 ≠ daemon unknown)" },
+    { "outcome": { "kind": "permanent", "cause": "bad_request", "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀" }, "output": "⚠ cc-candybar: daemon rejected request: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…" },
+    { "outcome": { "kind": "permanent", "cause": "render_failed", "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀" }, "output": "⚠ cc-candybar: render failed: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…" },
+    { "outcome": { "kind": "permanent", "cause": "switched_off", "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀" }, "output": "⚠ cc-candybar: switched off: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…" },
+    { "outcome": { "kind": "permanent", "cause": "malformed_response", "message": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀" }, "output": "⚠ cc-candybar: malformed daemon response: 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…" }
   ],
   "clip": [
     { "input": "", "budget": 5, "output": "" },
@@ -140,15 +96,9 @@
     { "input": "a\u061cb", "output": "a\u061cb" },
     { "input": "a\u200eb", "output": "a\u200eb" },
     { "input": "a\u200fb", "output": "a\u200fb" },
-    {
-      "input": "before\u001b[31m middle\u009b[0m after",
-      "output": "before [31m middle [0m after"
-    },
+    { "input": "before\u001b[31m middle\u009b[0m after", "output": "before [31m middle [0m after" },
     { "input": "x\u0000\u0007\u007fy", "output": "x y" },
     { "input": "🚀 🚀", "output": "🚀 🚀" },
-    {
-      "input": "Invalid config in /Users/bmf/.config/cc-candybar/config.json (2 issues):\n  [line 2 \u2022 display] Unknown top-level key \"display\"\n  [line 124 \u2022 budget] Unknown top-level key \"budget\"",
-      "output": "Invalid config in /Users/bmf/.config/cc-candybar/config.json (2 issues): [line 2 \u2022 display] Unknown top-level key \"display\" [line 124 \u2022 budget] Unknown top-level key \"budget\""
-    }
+    { "input": "Invalid config in /Users/bmf/.config/cc-candybar/config.json (2 issues):\n  [line 2 \u2022 display] Unknown top-level key \"display\"\n  [line 124 \u2022 budget] Unknown top-level key \"budget\"", "output": "Invalid config in /Users/bmf/.config/cc-candybar/config.json (2 issues): [line 2 \u2022 display] Unknown top-level key \"display\" [line 124 \u2022 budget] Unknown top-level key \"budget\"" }
   ]
 }

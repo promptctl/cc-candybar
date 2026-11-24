@@ -14,7 +14,10 @@ export interface Subject {
 // passes on the fake passes on the machine: the fake has earned the trust a
 // unit test puts in it. Real time forbids exact figures, so a case asserts an
 // order or a lower bound, never a duration.
-export function timekeeperContract(name: string, make: () => Subject): void {
+export function timekeeperContract(
+  name: string,
+  make: () => Subject,
+): void {
   describe(`${name} is a Timekeeper`, () => {
     test("timers run in the order of their delays", async () => {
       const { clock, settle } = make();
@@ -147,9 +150,7 @@ export function timekeeperContract(name: string, make: () => Subject): void {
       const { clock } = make();
       const stop = new AbortController();
       stop.abort();
-      await expect(
-        sleep(clock, "test sleep", 20, stop.signal),
-      ).rejects.toMatchObject({
+      await expect(sleep(clock, "test sleep", 20, stop.signal)).rejects.toMatchObject({
         name: "AbortError",
       });
     });

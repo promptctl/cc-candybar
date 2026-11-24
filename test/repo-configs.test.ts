@@ -15,14 +15,8 @@ import path from "node:path";
 import { renderConfig } from "./helpers/config-fixture";
 import { configResolutionNotice } from "../src/config/dsl-loader";
 import { resolutionOf } from "./helpers/config-search";
-import {
-  repoUnreadNotice,
-  type RepoAnswers,
-} from "../src/config/loader/repo-gate";
-import {
-  chainPlaces,
-  configLocations,
-} from "../src/config/loader/chain-places";
+import { repoUnreadNotice, type RepoAnswers } from "../src/config/loader/repo-gate";
+import { chainPlaces, configLocations } from "../src/config/loader/chain-places";
 import {
   configLoadedLine,
   type LoadCause,
@@ -43,7 +37,10 @@ import { SourceRuns } from "../src/daemon/source-runs";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { loadDiscovered, originOf } from "./helpers/config-host";
-import { revisionOf, type ConfigSnapshot } from "../src/config/config-snapshot";
+import {
+  revisionOf,
+  type ConfigSnapshot,
+} from "../src/config/config-snapshot";
 
 const SID_1 = sessionIdOf("sid-1");
 
@@ -90,11 +87,7 @@ describe("the gate over a project's config file", () => {
       projectDir: project,
     });
     expect(layersOf(book({}))).toEqual([]);
-    expect(resolved.project.question).toEqual({
-      dir: project,
-      standing: "awaiting",
-      unproven: null,
-    });
+    expect(resolved.project.question).toEqual({ dir: project, standing: "awaiting", unproven: null });
     expect(layersOf(book({ [project]: "approved" }))).toEqual([file]);
   });
 
@@ -106,10 +99,7 @@ describe("the gate over a project's config file", () => {
       { projectDir: project },
     );
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
-    expect(resolved.project.question).toMatchObject({
-      dir: project,
-      standing: "declined",
-    });
+    expect(resolved.project.question).toMatchObject({ dir: project, standing: "declined" });
   });
 
   test("an explicit base is trusted, and other project layers still need approval", () => {
@@ -127,20 +117,14 @@ describe("the gate over a project's config file", () => {
     expect(explicit.kind === "chain" && explicit.layers).toEqual([
       { path: named, role: "user" },
     ]);
-    expect(explicit.project.question).toMatchObject({
-      dir: project,
-      standing: "awaiting",
-    });
+    expect(explicit.project.question).toMatchObject({ dir: project, standing: "awaiting" });
   });
 
   test("the chain a click writes leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
     const query = { kind: "chain", projectDir: project } as const;
     expect(
-      chainPlaces(
-        resolutionOf(locations(host), book({}), query),
-        configLocations(locations(host), query),
-      ),
+      chainPlaces(resolutionOf(locations(host), book({}), query), configLocations(locations(host), query)),
     ).toEqual([{ path: expect.any(String), role: "user" }]);
   });
 
@@ -154,9 +138,7 @@ describe("the gate over a project's config file", () => {
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
     // A question it asked could not be recorded: the notice is the answer.
     expect(resolved.project.question?.standing).toBe("unread");
-    expect(repoUnreadNotice(resolved.project)).toContain(
-      "repo-configs.json is not JSON",
-    );
+    expect(repoUnreadNotice(resolved.project)).toContain("repo-configs.json is not JSON");
     // The bar's search notice stays about the search.
     expect(configResolutionNotice(resolved)).toBeNull();
   });
@@ -206,8 +188,7 @@ describe("the gate over a project's plugins", () => {
       recursive: true,
     });
     expect(
-      resolutionOf(locations(host), book({}), { projectDir: project }).project
-        .question,
+      resolutionOf(locations(host), book({}), { projectDir: project }).project.question,
     ).toBeNull();
   });
 });
@@ -316,9 +297,7 @@ test("the question captures its session, directory and decision on each answer",
   expect(channel!.message).toBe(
     `a cc-candybar config for ${project} — run it?`,
   );
-  expect(
-    channel!.lines[0].flatMap(({ link }) => (link === null ? [] : [link])),
-  ).toEqual([
+  expect(channel!.lines[0].flatMap(({ link }) => link === null ? [] : [link])).toEqual([
     { kind: "repo-answer", session: SID_1, dir: project, answer: "approved" },
     { kind: "repo-answer", session: SID_1, dir: project, answer: "declined" },
   ]);
@@ -343,62 +322,37 @@ describe("the book in the state directory", () => {
     });
   });
 
-  test.each([true, false])(
-    "an exact project key keeps the existing decision in either order (%s)",
-    (exactFirst) => {
-      const exact = [project, "declined"];
-      const alias = [project + path.sep, "approved"];
-      write(
-        loose(),
-        Object.fromEntries(exactFirst ? [exact, alias] : [alias, exact]),
-      );
-      expect(repoConfigs(state()).read()).toEqual(
-        book({ [project]: "declined" }),
-      );
-    },
-  );
+  test.each([true, false])("an exact project key keeps the existing decision in either order (%s)", (exactFirst) => {
+    const exact = [project, "declined"];
+    const alias = [project + path.sep, "approved"];
+    write(loose(), Object.fromEntries(exactFirst ? [exact, alias] : [alias, exact]));
+    expect(repoConfigs(state()).read()).toEqual(book({ [project]: "declined" }));
+  });
 
   test("equivalent entries with the same decision give one project key", () => {
     const filesystemRoot = path.parse(project).root;
-    write(loose(), {
-      [project + "/."]: "approved",
-      [project + "//"]: "approved",
-      [filesystemRoot]: "declined",
-    });
-    expect(repoConfigs(state()).read()).toEqual(
-      book({ [project]: "approved", [filesystemRoot]: "declined" }),
-    );
+    write(loose(), { [project + "/."]: "approved", [project + "//"]: "approved", [filesystemRoot]: "declined" });
+    expect(repoConfigs(state()).read()).toEqual(book({ [project]: "approved", [filesystemRoot]: "declined" }));
   });
 
   test.each([
     ["relative directory", { "relative/project": "approved" }],
     ["parent component", { [project + "/child/../"]: "approved" }],
-    [
-      "conflicting aliases",
-      { [project + "/"]: "approved", [project + "//"]: "declined" },
-    ],
-  ])(
-    "an update preserves the stored bytes when the answer file has %s",
-    (_name, entries) => {
-      write(loose(), entries);
-      const before = fs.readFileSync(loose(), "utf8");
-      const store = repoConfigs(state());
-      const seen = store.read();
-      expect(seen).toMatchObject({
-        kind: "failed",
-        reason: expect.stringContaining(loose()),
-      });
-      expect(writeStatePlan(store.plan(() => ({})))).toEqual(seen);
-      expect(fs.readFileSync(loose(), "utf8")).toBe(before);
-      expect(fs.existsSync(repoConfigsPath(state()))).toBe(false);
-    },
-  );
+    ["conflicting aliases", { [project + "/"]: "approved", [project + "//"]: "declined" }],
+  ])("an update preserves the stored bytes when the answer file has %s", (_name, entries) => {
+    write(loose(), entries);
+    const before = fs.readFileSync(loose(), "utf8");
+    const store = repoConfigs(state());
+    const seen = store.read();
+    expect(seen).toMatchObject({ kind: "failed", reason: expect.stringContaining(loose()) });
+    expect(writeStatePlan(store.plan(() => ({})))).toEqual(seen);
+    expect(fs.readFileSync(loose(), "utf8")).toBe(before);
+    expect(fs.existsSync(repoConfigsPath(state()))).toBe(false);
+  });
 
   test("the first answer recorded writes it into the folder, with the answer", () => {
     write(loose(), { [project]: "approved" });
-    writeStatePlan(
-      repoConfigs(state()).plan((book) => ({ ...book, [other()]: "declined" })),
-    );
+    writeStatePlan(repoConfigs(state()).plan((book) => ({ ...book, [other()]: "declined" })));
     const filed = {
       kind: "ok",
       value: { [project]: "approved", [other()]: "declined" },
@@ -417,9 +371,7 @@ describe("the book in the state directory", () => {
     const store = repoConfigs(state());
     writeStatePlan(store.plan((book) => ({ ...book, [other()]: "declined" })));
     expect(fs.lstatSync(loose(), { throwIfNoEntry: false })).toBeUndefined();
-    expect(JSON.parse(fs.readFileSync(external, "utf8"))).toEqual({
-      [project]: "approved",
-    });
+    expect(JSON.parse(fs.readFileSync(external, "utf8"))).toEqual({ [project]: "approved" });
     fs.unlinkSync(repoConfigsPath(state()));
     expect(store.read()).toEqual({ kind: "ok", value: {} });
   });
@@ -428,19 +380,12 @@ describe("the book in the state directory", () => {
     write(loose(), { [project]: "approved" });
     write(repoConfigsPath(state()), { [project]: "declined" });
     const store = repoConfigs(state());
-    expect(store.read()).toEqual({
-      kind: "ok",
-      value: { [project]: "declined" },
-    });
+    expect(store.read()).toEqual({ kind: "ok", value: { [project]: "declined" } });
     expect(fs.existsSync(loose())).toBe(true);
     writeStatePlan(store.plan((book) => ({ ...book, [other()]: "approved" })));
-    const backups = fs
-      .readdirSync(state())
-      .filter((name) => name.startsWith("repo-configs.json.migrated-"));
+    const backups = fs.readdirSync(state()).filter((name) => name.startsWith("repo-configs.json.migrated-"));
     expect(backups).toHaveLength(1);
-    expect(
-      JSON.parse(fs.readFileSync(path.join(state(), backups[0]!), "utf8")),
-    ).toEqual({ [project]: "approved" });
+    expect(JSON.parse(fs.readFileSync(path.join(state(), backups[0]!), "utf8"))).toEqual({ [project]: "approved" });
     fs.unlinkSync(repoConfigsPath(state()));
     expect(store.read()).toEqual({ kind: "ok", value: {} });
   });
@@ -463,10 +408,7 @@ describe("the book in the state directory", () => {
     fs.symlinkSync(loose(), repoConfigsPath(state()));
     const store = repoConfigs(state());
     writeStatePlan(store.plan((book) => ({ ...book, [other()]: "declined" })));
-    expect(store.read()).toEqual({
-      kind: "ok",
-      value: { [project]: "approved", [other()]: "declined" },
-    });
+    expect(store.read()).toEqual({ kind: "ok", value: { [project]: "approved", [other()]: "declined" } });
     expect(fs.lstatSync(repoConfigsPath(state())).isSymbolicLink()).toBe(true);
   });
 
@@ -483,15 +425,10 @@ describe("the book in the state directory", () => {
     write(loose(), { [project]: "approved" });
     fs.writeFileSync(path.dirname(repoConfigsPath(state())), "ordinary file");
     const store = repoConfigs(state());
-    const failed = {
-      kind: "failed",
-      reason: expect.stringContaining("ENOTDIR"),
-    };
+    const failed = { kind: "failed", reason: expect.stringContaining("ENOTDIR") };
     expect(store.read()).toMatchObject(failed);
     expect(writeStatePlan(store.plan(() => ({})))).toMatchObject(failed);
-    expect(JSON.parse(fs.readFileSync(loose(), "utf8"))).toEqual({
-      [project]: "approved",
-    });
+    expect(JSON.parse(fs.readFileSync(loose(), "utf8"))).toEqual({ [project]: "approved" });
   });
 });
 
@@ -538,45 +475,28 @@ describe("a repository's worktrees answer as the repository", () => {
     const resolved = resolveAt(book({ [project]: "approved" }), wt);
     expect(resolved).toMatchObject({
       layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
-      project: {
-        approved: wt,
-        question: { dir: project, standing: "approved" },
-      },
+      project: { approved: wt, question: { dir: project, standing: "approved" } },
     });
   });
 
-  test.each(["approved", "declined"] as const)(
-    "a stored %s decision covers the same project with or without its trailing separator",
-    (decision) => {
-      write(".cc-candybar.json5", "{}");
-      const state = path.join(root, "answers");
-      const file = repoConfigsPath(state);
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      const raw = JSON.stringify({ [project + path.sep]: decision });
-      fs.writeFileSync(file, raw);
-      const stored = repoConfigs(state).read();
-      for (const dir of [project, wt]) {
-        expect(resolveAt(stored, dir).project.question).toMatchObject({
-          dir: project,
-          standing: decision,
-        });
-        expect(layersAt(stored, dir)).toEqual(
-          decision === "approved" ? [path.join(dir, ".cc-candybar.json5")] : [],
-        );
-      }
-      expect(fs.readFileSync(file, "utf8")).toBe(raw);
-      const answer = decision === "approved" ? "declined" : "approved";
-      const change = answeredBook(
-        state,
-        [{ session: SID_1, dir: project, answer }],
-        readTextIfPresent,
-      );
-      expect(writeStatePlan(change)).toEqual(book({ [project]: answer }));
-      expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({
-        [project]: answer,
-      });
-    },
-  );
+  test.each(["approved", "declined"] as const)("a stored %s decision covers the same project with or without its trailing separator", (decision) => {
+    write(".cc-candybar.json5", "{}");
+    const state = path.join(root, "answers");
+    const file = repoConfigsPath(state);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const raw = JSON.stringify({ [project + path.sep]: decision });
+    fs.writeFileSync(file, raw);
+    const stored = repoConfigs(state).read();
+    for (const dir of [project, wt]) {
+      expect(resolveAt(stored, dir).project.question).toMatchObject({ dir: project, standing: decision });
+      expect(layersAt(stored, dir)).toEqual(decision === "approved" ? [path.join(dir, ".cc-candybar.json5")] : []);
+    }
+    expect(fs.readFileSync(file, "utf8")).toBe(raw);
+    const answer = decision === "approved" ? "declined" : "approved";
+    const change = answeredBook(state, [{ session: SID_1, dir: project, answer }], readTextIfPresent);
+    expect(writeStatePlan(change)).toEqual(book({ [project]: answer }));
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ [project]: answer });
+  });
 
   test("a worktree's own answer stands while its repository has none", () => {
     expect(resolveAt(book({ [wt]: "approved" }), wt)).toMatchObject({
@@ -593,18 +513,12 @@ describe("a repository's worktrees answer as the repository", () => {
     const resolved = resolveAt(book({ [project]: "declined" }), wt);
     expect(resolved).toMatchObject({
       layers: [],
-      project: {
-        approved: null,
-        question: { dir: project, standing: "declined" },
-      },
+      project: { approved: null, question: { dir: project, standing: "declined" } },
     });
   });
 
   test("an unanswered repository's worktree asks for the repository, and its answer covers both", () => {
-    expect(resolveAt(book({}), wt).project.question).toMatchObject({
-      dir: project,
-      standing: "awaiting",
-    });
+    expect(resolveAt(book({}), wt).project.question).toMatchObject({ dir: project, standing: "awaiting" });
     const state = repoConfigs(path.join(root, "state"));
     expect(recordAnswer(state, project, "approved").kind).toBe("ok");
     const answers = state.read() as RepoAnswers;
@@ -612,28 +526,18 @@ describe("a repository's worktrees answer as the repository", () => {
       path.join(wt, ".cc-candybar.json5"),
     ]);
     fs.writeFileSync(path.join(project, ".cc-candybar.json5"), "{}");
-    expect(resolveAt(answers, project).project.question?.standing).toBe(
-      "approved",
-    );
+    expect(resolveAt(answers, project).project.question?.standing).toBe("approved");
   });
 
   test("the project decision covers its worktrees even when an older worktree entry disagrees", () => {
     const legacy = { [project]: "approved", [wt]: "declined" } as const;
     expect(resolveAt(book(legacy), wt)).toMatchObject({
       layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
-      project: {
-        approved: wt,
-        question: { dir: project, standing: "approved" },
-      },
+      project: { approved: wt, question: { dir: project, standing: "approved" } },
     });
-    expect(
-      resolveAt(book({ [project]: "declined", [wt]: "approved" }), wt),
-    ).toMatchObject({
+    expect(resolveAt(book({ [project]: "declined", [wt]: "approved" }), wt)).toMatchObject({
       layers: [],
-      project: {
-        approved: null,
-        question: { dir: project, standing: "declined" },
-      },
+      project: { approved: null, question: { dir: project, standing: "declined" } },
     });
 
     const state = repoConfigs(path.join(root, "state"));
@@ -672,11 +576,7 @@ describe("a repository's worktrees answer as the repository", () => {
       layers: [],
       project: {
         approved: null,
-        question: {
-          dir: evil,
-          standing: "awaiting",
-          unproven: `${path.join(evil, ".git")} is not a file`,
-        },
+        question: { dir: evil, standing: "awaiting", unproven: `${path.join(evil, ".git")} is not a file` },
       },
     });
 
@@ -685,16 +585,10 @@ describe("a repository's worktrees answer as the repository", () => {
     fs.renameSync(wt, moved);
     const state = repoConfigs(path.join(root, "state"));
     writeStatePlan(state.plan(() => ({ [moved]: "approved" })));
-    expect(resolveAt(state.read() as RepoAnswers, moved).project).toMatchObject(
-      {
-        approved: moved,
-        question: {
-          dir: moved,
-          standing: "approved",
-          unproven: expect.any(String),
-        },
-      },
-    );
+    expect(resolveAt(state.read() as RepoAnswers, moved).project).toMatchObject({
+      approved: moved,
+      question: { dir: moved, standing: "approved", unproven: expect.any(String) },
+    });
     expect(recordAnswer(state, project, "approved")).toEqual({
       kind: "ok",
       value: { superseded: [], absent: [], unchecked: [] },

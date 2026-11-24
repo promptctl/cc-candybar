@@ -159,6 +159,7 @@ test("a retired status-line range cannot bypass signed click admission", () => {
   }
 });
 
+
 describe("a draw's frames", () => {
   const run = (text: string, link?: DrawnLink) => ({
     text,
@@ -244,15 +245,8 @@ describe("a draw's frames", () => {
 
   test("publishes and admits a typed repository decision with identical legacy bytes", () => {
     const sign = publishingFrames(TEST_SIGNER);
-    const target = {
-      kind: "repo-answer",
-      session,
-      dir,
-      answer: decision,
-    } as const;
-    const sent = sign(frame([target, legacy])).rows[0]?.runs.map(
-      ({ link }) => link,
-    );
+    const target = { kind: "repo-answer", session, dir, answer: decision } as const;
+    const sent = sign(frame([target, legacy])).rows[0]?.runs.map(({ link }) => link);
     const signed = TEST_SIGNER.signLink(legacy);
     expect(sent).toEqual([signed, signed]);
     expect(parseClick(signed, FORWARDED, TEST_SIGNER)).toMatchObject({
@@ -260,14 +254,7 @@ describe("a draw's frames", () => {
       click: {
         scope: "session",
         session,
-        steps: [
-          {
-            kind: "repo-answer",
-            verb: VERB_REPO_CONFIG,
-            dir,
-            answer: decision,
-          },
-        ],
+        steps: [{ kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: decision }],
       },
     });
   });
@@ -280,32 +267,23 @@ describe("a draw's frames", () => {
     ["another answer", [session, dir, "declined", proof]],
     ["unknown answer", [session, dir, "pending", proof]],
   ])("leaves an authored repository href with %s inert", (_, args) => {
-    const [run] = publishingFrames(TEST_SIGNER)(frame([unsigned(args)]))
-      .rows[0]!.runs;
+    const [run] = publishingFrames(TEST_SIGNER)(frame([unsigned(args)])).rows[0]!.runs;
     expect(parseClick(run!.link!, CLI, TEST_SIGNER)).toMatchObject({
       kind: "link",
       click: {
-        steps: [
-          {
-            kind: "invalid",
-            reason: expect.stringContaining("signature does not match"),
-          },
-        ],
+        steps: [{ kind: "invalid", reason: expect.stringContaining("signature does not match") }],
       },
     });
   });
 
   test("keeps the valid effects on either side of an invalid repository step", () => {
-    const write = (key: string) =>
-      ({ verb: VERB_SET_STATE, args: [session, key, "closed"] }) as const;
+    const write = (key: string) => ({ verb: VERB_SET_STATE, args: [session, key, "closed"] }) as const;
     const url = effectsUrl([
       write("one"),
       { verb: VERB_REPO_CONFIG, args: [session, dir, decision] },
       write("two"),
     ]);
-    expect(
-      parseClick(TEST_SIGNER.signLink(url), CLI, TEST_SIGNER),
-    ).toMatchObject({
+    expect(parseClick(TEST_SIGNER.signLink(url), CLI, TEST_SIGNER)).toMatchObject({
       kind: "link",
       click: {
         steps: [
@@ -330,12 +308,10 @@ describe("a draw's frames", () => {
       });
       return { session, action, evaluated, mac };
     });
-    const raw = effectsUrl(
-      captures.map((run) => ({
-        verb: VERB_RUN,
-        args: [run.session, run.action, run.evaluated, run.mac],
-      })),
-    );
+    const raw = effectsUrl(captures.map((run) => ({
+      verb: VERB_RUN,
+      args: [run.session, run.action, run.evaluated, run.mac],
+    })));
     const admitted = parseClick(TEST_SIGNER.signLink(raw), CLI, TEST_SIGNER);
     if (admitted.kind !== "link") throw new Error(admitted.problem);
     expect(admitted.click.steps).toEqual([

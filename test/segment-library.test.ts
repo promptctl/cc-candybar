@@ -78,21 +78,13 @@ function rig(width: number, userSegments = "") {
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   sessionState.set(SID, EDIT_MODE_KEY, "arrange");
   const render = (): Frame =>
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      PAYLOAD,
-      instantOf(new Date()),
-      {
-        endcaps: "powerline",
-        colorCompatibility: "truecolor",
-        wrap: true,
-        padding: 1,
-        width,
-      },
-    ).frame;
+    drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
+      endcaps: "powerline",
+      colorCompatibility: "truecolor",
+      wrap: true,
+      padding: 1,
+      width,
+    }).frame;
   // The `+` opener is the one coupled write whose 4th argument is the page
   // key of its 2nd; opening applies exactly those writes.
   let pageKey = "";
@@ -184,19 +176,14 @@ describe("the add menu is a segment library", () => {
       (_, i) => `mine${i}`,
     );
     const r = rig(80, names.map((n) => `${n}: { template: 'M' }`).join(", "));
-    expect(
-      walk(r)
-        .get(GROUP_LABELS[OTHER_GROUP])!
-        .map(([n]) => n),
-    ).toEqual(names);
+    expect(walk(r).get(GROUP_LABELS[OTHER_GROUP])!.map(([n]) => n)).toEqual(
+      names,
+    );
     r.dispose();
   });
 
   test("a multi-line description folds onto its one row", () => {
-    const r = rig(
-      400,
-      `mine: { template: 'M', description: 'Shows X.\\n  Hidden when Y.' }`,
-    );
+    const r = rig(400, `mine: { template: 'M', description: 'Shows X.\\n  Hidden when Y.' }`);
     expect(walk(r).get(GROUP_LABELS[OTHER_GROUP])).toEqual([
       ["mine", "Shows X. Hidden when Y."],
     ]);

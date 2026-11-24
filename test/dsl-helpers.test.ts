@@ -14,7 +14,10 @@ import type { Frame } from "../src/render/frame";
 import { SessionState } from "../src/renderer/session-state";
 
 import { validateConfig } from "./helpers/parse-and-validate";
-import { parseDslConfig, mergeWithDefault } from "../src/config/dsl-loader";
+import {
+  parseDslConfig,
+  mergeWithDefault,
+} from "../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -26,11 +29,10 @@ import { systemTimekeeper } from "./helpers/system-clock";
 // each render a single line so substring assertions are stable.
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
-  wrap: true,
-  padding: 0,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
+
 
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const raw = parseDslConfig("<test>", source);
@@ -58,7 +60,7 @@ function render(source: string, payload: unknown, dflt?: DslConfig): Frame {
 }
 
 describe("bdi.2 — config-level shared helper templates", () => {
-  test('a helper renders: {{ template "money" .x }} → $1.50 for x=1.5', () => {
+  test("a helper renders: {{ template \"money\" .x }} → $1.50 for x=1.5", () => {
     const source = `{
       variables: { x: { kind: "input", path: "x", type: "number" } },
       helpers: { money: '\${{ printf "%.2f" . }}' },
@@ -184,9 +186,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       segments: { plain: { template: 'x={{ .x }}' } },
       root: "plain",
     }`;
-    expect(render(withHelper, { x: 9 }).rows).toEqual(
-      render(without, { x: 9 }).rows,
-    );
+    expect(render(withHelper, { x: 9 }).rows).toEqual(render(without, { x: 9 }).rows);
   });
 });
 

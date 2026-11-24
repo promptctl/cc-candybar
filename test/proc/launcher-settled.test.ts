@@ -14,14 +14,10 @@ const scope = () => {
   const closing = new AbortController();
   return {
     closing,
-    launcher: systemLauncher(
-      {
-        inherited: process.env,
-        signal: closing.signal,
-        observeWarnings: () => {},
-      },
-      systemTimekeeper,
-    ),
+    launcher: systemLauncher({ inherited: process.env, 
+      signal: closing.signal,
+      observeWarnings: () => {},
+    }, systemTimekeeper),
   };
 };
 
