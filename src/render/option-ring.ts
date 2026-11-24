@@ -1,11 +1,13 @@
 // [LAW:one-source-of-truth] What a stepper means over an option domain, shared
 // by the draw that shows it and the click that lands it. A ◀ ▶ ? or page arrow
 // link carries its intent (an offset, "random", a page step) and never the
-// value the draw computed from the state it read: a terminal keeps the link it
-// found when the mouse last moved, so every click after the first would repeat
-// that write. The click resolves the intent against the state it finds, with
-// the functions below, and the draw shows the same ring, so the two cannot
-// disagree about where a step lands.
+// option it lands on: a terminal keeps the link it found when the mouse last
+// moved, so every click after the first would repeat that write. The click
+// resolves the intent against the value the key holds when it lands, with the
+// functions below, and the draw shows the same ring, so the two cannot
+// disagree about where a step lands. While a rule decides the key it holds
+// nothing a click can read, so the link also carries the name the draw wore
+// (ruledName, render/action.ts), and the first click starts from it.
 
 // A step over an option ring: a signed number of members, or any other member
 // than the one the key holds.
@@ -61,14 +63,16 @@ export const centreOf = (options: readonly string[], current: string): number =>
 
 // A ring over a domain, centred on the value a key holds: the index `offset`
 // steps from the centre, wrapping. The carousel and a `{{ swatches }}` row's
-// ◀ ▶ step through this one ring. Over a domain that is not empty.
+// ◀ ▶ step through this one ring. Over a domain that is not empty. The offset
+// is reduced to the ring before the centre is added, so a sum past the safe
+// range never rounds.
 export function ringAround(
   options: readonly string[],
   current: string,
 ): (offset: number) => number {
   const count = options.length;
   const centre = centreOf(options, current);
-  return (offset) => (((centre + offset) % count) + count) % count;
+  return (offset) => (((centre + (offset % count)) % count) + count) % count;
 }
 
 // [LAW:dataflow-not-control-flow] A random option other than the one at

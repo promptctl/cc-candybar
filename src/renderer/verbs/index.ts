@@ -935,10 +935,10 @@ interface RingLanding {
 }
 
 // [LAW:one-source-of-truth] A step through an option ring, resolved against the
-// value the key holds NOW, which `held` reads, so the same link fires every
-// draw and N clicks without a redraw land N steps. A key that holds no name
-// starts where the draw centred (`centre`, the value its read-back variable
-// had): the one thing only a render can evaluate.
+// value the key holds NOW, which `held` reads, so N clicks without a redraw
+// land N steps. A key that holds no name starts where the draw centred
+// (`centre`, the value its read-back variable had): the one thing only a
+// render can evaluate.
 function landRing(
   verb: string,
   ctx: ClickContext,
