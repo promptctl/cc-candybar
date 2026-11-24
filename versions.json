@@ -4,15 +4,22 @@
     {
       "version": "pr-948",
       "ref": "refs/pull/948/merge",
-      "sha": "e3c89061d7e7a35f741e472d50cf9060e14d250f",
-      "timestamp": "2026-11-24T12:40:49.457Z",
+      "sha": "c3b38729bacfc2b05407088bb073b15a5bafa4f4",
+      "timestamp": "2026-11-24T12:51:45.234Z",
       "commits": [
         {
-          "sha": "e3c89061d7e7a35f741e472d50cf9060e14d250f",
+          "sha": "c3b38729bacfc2b05407088bb073b15a5bafa4f4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:39:25Z",
-          "message": "Merge 99882a2e5dae60edc263712ac5fb96b86d4e0796 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+          "timestamp": "2026-11-24T12:50:41Z",
+          "message": "Merge 24a759ac44ac67b289d8d854be6459dfc9d3e7dd into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+        },
+        {
+          "sha": "24a759ac44ac67b289d8d854be6459dfc9d3e7dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T05:50:17-07:00",
+          "message": "fix(host): a symlinked entry names the bundle it runs, and the record reads through the shared helpers\n\nThe checkout's recorder resolves the entry's real path before taking the\nbundle beside it. The record reader uses the regular-file reader and the\npresence stat, so an unreadable bundle is not reported as missing. The\ndead state-dir guard, the vacuous mismatch-fixture flag and stale comments\ngo; the stale-lock reclaim test returns against the kick.\n"
         },
         {
           "sha": "99882a2e5dae60edc263712ac5fb96b86d4e0796",
