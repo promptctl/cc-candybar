@@ -33,7 +33,7 @@ function heapUsed(): number {
 function registerStdlib() {
   const warnings: string[] = [];
   const { config, dropped } = loadChain([], DEFAULT_DSL_CONFIG, {
-    warned: (lines) => warnings.push(...lines),
+    warned: (lines) => warnings.push(...lines.map(({ message }) => message)),
   });
   expect({ warnings, dropped }).toEqual({ warnings: [], dropped: [] });
   const store = new VariableStore(systemTimekeeper);

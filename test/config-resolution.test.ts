@@ -52,7 +52,7 @@ const approving = (...dirs: string[]): RepoAnswers => ({
 const collisionsOf = (locs: Locations, projectDir?: string) =>
   configCollisionNotice(
     searchConfig(locs, () => observedAnswers(approving()), { kind: "chain", projectDir }).locations,
-  );
+  )?.message ?? null;
 
 const NO_PROJECT_ACCESS = {
   approved: null,
@@ -379,7 +379,7 @@ describe("the config search", () => {
         path: named,
         home: named,
       });
-      expect(configResolutionNotice(resolved)).toBe(
+      expect(configResolutionNotice(resolved)?.message).toBe(
         "Config file not found: " + named + " — using the bundled base until it appears",
       );
       // A durable write creates the file the bar is waiting for.
@@ -479,7 +479,7 @@ describe("the config search", () => {
         expect(resolved.project.unreadIdentity?.reason).toContain(
           join(physical, ".git"),
         );
-        const notice = configResolutionNotice(resolved);
+        const notice = configResolutionNotice(resolved)?.message;
         expect(notice).toContain("Config location could not be checked");
         for (const path of skipped) expect(notice).toContain(path);
         expect(notice?.split("\n")).toHaveLength(skipped.length);
@@ -536,7 +536,7 @@ describe("config collisions", () => {
       winner: { extension: "json5" },
       shadowed: [{ extension: "json" }, { extension: "jsonc" }],
     });
-    expect(configCollisionNotice(stated)).toMatch(
+    expect(configCollisionNotice(stated)?.message).toMatch(
       /config\.json5 shadows .*config\.json, .*config\.jsonc/,
     );
   });

@@ -81,7 +81,13 @@ import {
 } from "../daemon/foundations/click-error.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
-  aboutOf,
+  aboutKind,
+  aboutSubject,
+  aboutText,
+  type About,
+} from "../config/about.js";
+import { loadAbout } from "../config/loader/diagnostics.js";
+import {
   collectDiagnostics,
   diagnosticCopies,
   type SourcedText,
@@ -483,57 +489,54 @@ export function drawRender(
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
   const questions = repoQuestions(entry.revision.snapshot.repo, sessionId);
-  // What a load or a request could not honour: each its own message, named by
-  // what it is about. A load's error is about the session's config, and a
-  // drop about the file that wrote it, so their text may change under an open
-  // viewer (an issue fixed) without becoming another message; a request's
-  // refusal, its hints' and a click's are about exactly what their text says.
-  // Each copies its own text, but a drop copies the prompt that fixes it.
-  const sourced = (
-    kind: DrawError["kind"],
-    about: string,
+  // What a load or a request could not honour: each its own message. A
+  // request's refusal, its hints' and a click's are about exactly what their
+  // text says, and an absent report is no message.
+  const said = (
+    kind: DrawErrorKind,
     text: string | null | undefined,
-  ): MaybeError => ({ kind, about, text, copy: text });
-  const said = (kind: DrawError["kind"], text: string | null | undefined) =>
-    sourced(kind, text ?? "", text);
+  ): readonly DrawError[] =>
+    text == null ? [] : [{ about: aboutText(kind, text), text, copy: text }];
   const { daemon } = document;
   // [LAW:no-ambient-temporal-coupling] The daemon's events at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
   const daemonEvents = daemonEventsAt(daemon.held, at, drawing.by);
   const threw = daemonEvents.filter(isThrew);
   const errors: readonly DrawError[] = [
-    said("refused-args", refusedArgsError(req.refusedArgs)),
-    said("hints", hintsError),
-    sourced(
-      "load",
-      "load",
-      configAccess.kind === "unavailable" ? configAccess.error : null,
-    ),
+    ...said("refused-args", refusedArgsError(req.refusedArgs)),
+    ...said("hints", hintsError),
+    // A load's error is about the session's config, and a drop about the file
+    // that wrote it, so their text may change under an open viewer (an issue
+    // fixed) without becoming another message. A drop copies the prompt that
+    // fixes it.
+    ...(configAccess.kind === "unavailable"
+      ? [
+          {
+            about: aboutKind("load"),
+            text: configAccess.error,
+            copy: configAccess.error,
+          },
+        ]
+      : []),
     ...state.dropped.map(
-      (e): MaybeError => ({
-        kind: "dropped",
-        subject: e.file,
-        about: aboutOf("dropped", e.file),
+      (e): DrawError => ({
+        about: aboutSubject("dropped", e.file),
         text: e.message,
         copy: e.prompt,
       }),
     ),
-    said("click", clickShown?.text),
+    ...said("click", clickShown?.text),
     // [LAW:no-silent-failure] A daemon task that threw is a fault in the
     // daemon, an error on every bar. Each task is one message about itself,
     // however often it threw.
     ...threw.map(
-      ({ shown }): MaybeError => ({
-        kind: "task-threw",
-        subject: shown.about,
-        about: aboutOf("task-threw", shown.about),
+      ({ shown }): DrawError => ({
+        about: aboutSubject("task-threw", shown.about),
         text: shown.event.text,
         copy: shown.event.text,
       }),
     ),
-  ].flatMap(({ about, text, copy, ...named }) =>
-    text != null && copy != null ? [{ ...named, about, text, copy }] : [],
-  );
+  ];
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, what this config's
   // watch cannot hear, and the warning this config's load carried.
@@ -550,7 +553,7 @@ export function drawRender(
   const daemonWarnings = daemonEvents.filter(isWarned).map(
     ({ shown, hold }): Standing<DaemonEventWarning> => ({
       warning: { kind: shown.kind, message: shown.event.text, hold },
-      subject: shown.about,
+      about: aboutSubject(shown.kind, shown.about),
     }),
   );
   const standing: readonly Standing[] = [
@@ -560,7 +563,15 @@ export function drawRender(
     ...(configWatch === null
       ? []
       : [alone({ kind: "config-watch", message: configWatch })]),
-    ...entry.lastWarnings.map((message) => alone({ kind: "load", message })),
+    // [LAW:one-source-of-truth] A load's warnings arrive about what their
+    // producer knew, so fixing one leaves another's identity put whatever
+    // its words (a line number) become.
+    ...entry.lastWarnings.map(
+      ({ subject, message }): Standing => ({
+        warning: { kind: "load", message },
+        about: loadAbout(subject),
+      }),
+    ),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...(failure === null
@@ -585,19 +596,16 @@ export function drawRender(
     errors,
     questions,
     [
-      // A standing warning is one per kind, or per subject of a kind that
-      // recurs, whose words change as it does (a pipe event's count), so
-      // that is what it is about: a viewer open on it stays open. A render
-      // warning is about its words.
-      ...standing.map(({ warning, subject }) => ({
-        about: aboutOf(warning.kind, subject),
+      ...standing.map(({ about, warning }) => ({
+        about,
         text: warning.message,
         copy: warning.message,
       })),
+      // A render warning is about its whole description.
       ...presentations
         .warnings(sessionId, drawing.by, config)
         .map(({ key, warning }) => ({
-          about: key,
+          about: aboutText(warning.kind, key),
           text: warning.message,
           copy: warning.message,
         })),
@@ -751,9 +759,9 @@ export function drawRender(
   // learns what the frame could not honour without its viewer, and `kept`
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
-    ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
-    ...standing.map(({ warning, subject }) =>
-      faultOf("warning", warning.kind, warning.message, subject),
+    ...errors.map(({ about, text }) => faultAbout("error", about, text)),
+    ...standing.map(({ about, warning }) =>
+      faultAbout("warning", about, warning.message),
     ),
     ...warnings.map(({ warning, subject }) =>
       faultOf("warning", warning.kind, warning.message, subject),
@@ -852,28 +860,22 @@ export function drawRender(
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
 // the kind its fault is noted by, and what it is about: the file a dropped
 // write names, or the task that threw.
+type DrawErrorKind =
+  | "refused-args"
+  | "hints"
+  | "load"
+  | "dropped"
+  | "click"
+  | "task-threw";
 interface DrawError extends SourcedText {
-  readonly kind:
-    | "refused-args"
-    | "hints"
-    | "load"
-    | "dropped"
-    | "click"
-    | "task-threw";
-  readonly subject?: string;
+  readonly about: About<DrawErrorKind>;
 }
-
-// An error as its producer hands it, before an absent report is removed.
-type MaybeError = Omit<DrawError, "text" | "copy"> & {
-  readonly text: string | null | undefined;
-  readonly copy: string | null | undefined;
-};
 
 // [LAW:one-source-of-truth] Every kind a fault is noted by, derived from the
 // producers' own unions, so a new kind of warning or error is a fault's kind
 // with no list here to extend.
 type FaultKind =
-  | DrawError["kind"]
+  | DrawErrorKind
   | StandingWarning["kind"]
   | RenderWarning["kind"];
 
@@ -883,6 +885,20 @@ const faultOf = (
   message: string,
   subject?: string,
 ): Fault<FaultKind> => ({ level, kind, subject, message });
+
+// [LAW:one-source-of-truth] An error's fault is noted by the about its viewer
+// message carries, so the two cannot name different ones.
+const faultAbout = (
+  level: Fault["level"],
+  about: About<FaultKind>,
+  message: string,
+): Fault<FaultKind> =>
+  faultOf(
+    level,
+    about.kind,
+    message,
+    about.rule === "subject" ? about.subject : undefined,
+  );
 
 // The warning a load carried, beside what a draw could not honour.
 interface LoadWarning {
@@ -954,16 +970,17 @@ type StandingWarning =
   | LoadWarning
   | FactsWarning;
 
-// A standing warning and what it is about beyond its kind, for a kind that
-// recurs.
+// A standing warning and what it is about: a kind that recurs (a pipe event's
+// count, a load's file) is about its subject, so its words change while it
+// stays one message.
 interface Standing<Warning extends StandingWarning = StandingWarning> {
   readonly warning: Warning;
-  readonly subject: string | undefined;
+  readonly about: About<StandingWarning["kind"]>;
 }
 
 const alone = (warning: StandingWarning): Standing => ({
   warning,
-  subject: undefined,
+  about: aboutKind(warning.kind),
 });
 
 // What one render drew: the body — the bar, or the viewer in its place — and

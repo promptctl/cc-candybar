@@ -3,6 +3,7 @@
 
 import { fragmentNode, insertCells } from "../../src/config/root";
 import { placeInserts } from "../../src/config/presets";
+import { advisory } from "../../src/config/loader/diagnostics";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import {
   walkNodes,
@@ -81,7 +82,10 @@ test("an absent anchor and an id another segment holds both come back unplaced",
     "insert.0",
     "insert.1",
   ]);
-  expect(unplaced[1]!.reason).toContain('already segment "b"');
+  expect(unplaced.map((u) => u.cause)).toEqual([
+    { kind: "no-anchor" },
+    { kind: "id-held", held: "b" },
+  ]);
 });
 
 test("a cell beside an anchor inside a row hides whenever its anchor's `when` hides it", () => {
@@ -179,13 +183,40 @@ describe("placeInserts", () => {
     expect(names("treePreset")).toEqual(["b"]);
   });
 
+  test("one cell whose id two trees hold under different segments is one advisory naming both", () => {
+    const held: DslConfig = {
+      ...config,
+      root: { rows: { status: h(seg("a"), seg("b", "x")) } },
+      presets: { treePreset: { root: h(seg("c", "x")) } },
+    };
+    const { notices } = placeInserts(
+      held,
+      cells({ seg: "y", id: "x", anchor: "a", relation: "after" }),
+      { root: true, presets: new Set(["treePreset"]) },
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.message).toContain('is already segment "b" — give the cell its own id (in the root)');
+    expect(notices[0]!.message).toContain('is already segment "c" — give the cell its own id (in preset "treePreset")');
+  });
+
   test("a missed anchor warns for the root only when a config file writes it", () => {
     const missing = cells({ seg: "x", anchor: "nope", relation: "after" });
     expect(placeInserts(config, missing, none).notices).toEqual([]);
     expect(
       placeInserts(config, missing, { ...none, root: true }).notices,
     ).toEqual([
-      '/repo/.cc-candybar.json5: insert.0 places "x" after "nope", but there is no placement "nope" (in the root)',
+      advisory(
+        [
+          "insert",
+          "/repo/.cc-candybar.json5",
+          "x",
+          null,
+          "after",
+          "nope",
+          "no-anchor",
+        ],
+        '/repo/.cc-candybar.json5: insert.0 places "x" after "nope", but there is no placement "nope" (in the root)',
+      ),
     ]);
   });
 });

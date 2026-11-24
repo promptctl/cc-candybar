@@ -182,7 +182,7 @@ test("a projection is derived at each draw; a derived template is cached", () =>
       process.cwd(),
       EVERY_SCOPE,
     );
-    expect(failed.filter((w) => /"(clock|label|shown)"/.test(w))).toEqual([]);
+    expect(failed.filter((w) => /"(clock|label|shown)"/.test(w.message))).toEqual([]);
     expect(store.getNode("clock").kind).toBe("projection");
     expect(store.getNode("shown").kind).toBe("computed");
     const at = (s: number) => new Date(s * 1000);

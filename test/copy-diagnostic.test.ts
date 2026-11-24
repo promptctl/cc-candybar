@@ -6,7 +6,11 @@
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { type LaunchOpts } from "../src/proc/launcher";
 import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
-import { collectDiagnostics, diagnosticCopies } from "../src/render/diagnostics";
+import { aboutSubject } from "../src/config/about";
+import {
+  collectDiagnostics,
+  diagnosticCopies,
+} from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
 import { hrefOfDrawnLink } from "../src/render/drawn-link";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
@@ -37,7 +41,7 @@ const drawn = () => {
   const list = collectDiagnostics(
     SID,
     "request",
-    [{ about: "dropped\0/x.json5", text: "first line\nsecond", copy: PROMPT }],
+    [{ about: aboutSubject("dropped", "/x.json5"), text: "first line\nsecond", copy: PROMPT }],
     [],
     [],
   );

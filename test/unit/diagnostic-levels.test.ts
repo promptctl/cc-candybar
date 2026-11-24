@@ -13,8 +13,8 @@ import {
   HANDOFF_SEVERITY,
   viewedIndex,
   type DiagnosticMessage,
-  type DiagnosticSeverity,
 } from "../../src/render/diagnostics";
+import { shaped, sourced } from "../helpers/diagnostic-messages";
 import {
   DIAGNOSTIC_ERROR_COLORS,
   DIAGNOSTIC_INFO_COLORS,
@@ -22,17 +22,6 @@ import {
 } from "../../src/render/diagnostic-style";
 
 const SID = "sid-1";
-const sourced = (text: string) => ({ about: text, text, copy: text });
-const shaped = (
-  severity: DiagnosticSeverity,
-  text: string,
-): DiagnosticMessage => ({
-  severity,
-  about: text,
-  message: text,
-  copy: text,
-  lines: [[diagnosticSpan(text, null)]],
-});
 const offer = shaped(
   HANDOFF_SEVERITY,
   "Drawing in a tmux pane.",

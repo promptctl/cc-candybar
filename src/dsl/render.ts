@@ -38,6 +38,7 @@ import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/reserved-names.js";
+import { advisory, type Advisory } from "../config/loader/diagnostics.js";
 import { shellEnvOf } from "../config/shell-env.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
 import {
@@ -506,7 +507,7 @@ export interface Registration {
   // [LAW:one-source-of-truth] The identity of `compiled`: what it was compiled
   // from, so registrations carrying one key may carry one compile.
   readonly compileKey: string;
-  readonly loadWarnings: readonly string[];
+  readonly loadWarnings: readonly Advisory[];
 }
 
 // [LAW:single-enforcer] The one composition of a config into a registry, which
@@ -538,7 +539,7 @@ export interface RegisteredConfig extends CompiledConfig {
   // render as error cells. Non-empty means "partial load" — the config is
   // usable but degraded. The store's, not the compile's: one compile serves
   // every store its config is declared into.
-  readonly loadWarnings: readonly string[];
+  readonly loadWarnings: readonly Advisory[];
 }
 
 // [LAW:decomposition] What a compile reads — the config less its variables,
@@ -619,7 +620,7 @@ export function declareDslVariables(
   registry: SourceRegistry,
   cwd: string,
   scopes: ReadonlySet<VarScope>,
-): readonly string[] {
+): readonly Advisory[] {
   const scopeOf = variableScopes(config);
   const projections = projectionsOf(config);
   // [LAW:dataflow-not-control-flow] One variable failing to declare does not
@@ -627,7 +628,7 @@ export function declareDslVariables(
   // simply lacks the broken variable. Segments that reference it get a
   // MissingFieldError at render time and show an error cell. Segments that
   // don't render normally.
-  const loadWarnings: string[] = [];
+  const loadWarnings: Advisory[] = [];
   for (const [name, decl] of declaredVariables(config)) {
     if (!scopes.has(scopeOf.get(name)!)) continue;
     try {
@@ -640,7 +641,10 @@ export function declareDslVariables(
       );
     } catch (err) {
       loadWarnings.push(
-        `Variable "${name}": ${(err as Error).message ?? String(err)}`,
+        advisory(
+          ["variable-declaration", name],
+          `Variable "${name}": ${err instanceof Error ? err.message : String(err)}`,
+        ),
       );
     }
   }

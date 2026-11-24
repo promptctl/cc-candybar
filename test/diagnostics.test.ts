@@ -17,6 +17,12 @@ import {
   segmentsToString,
 } from "@promptctl/rich-js";
 import {
+  aboutKind,
+  aboutSubject,
+  aboutText,
+  type About,
+} from "../src/config/about";
+import {
   APPROVAL_SEVERITY,
   collectDiagnostics as collectSourced,
   diagnosticCopies,
@@ -54,10 +60,9 @@ import {
 } from "../src/themes/policy";
 import { DIAGNOSTICS_VIEWING } from "../src/config/door";
 import { effectsOf } from "./helpers/click";
+import { shaped, sourced } from "./helpers/diagnostic-messages";
 
 const SID = "sid-1";
-// Messages each about their own text, unless a test says otherwise.
-const sourced = (text: string) => ({ about: text, text, copy: text });
 const collectDiagnostics = (
   errors: readonly string[],
   notices: readonly DiagnosticMessage[],
@@ -81,13 +86,8 @@ const ERROR = [
   `file ${LONG_PATH} is unreadable`,
 ].join("\n");
 
-const notice = (text: string): DiagnosticMessage => ({
-  severity: HANDOFF_SEVERITY,
-  about: text,
-  message: text,
-  copy: text,
-  lines: [[diagnosticSpan(text, null)]],
-});
+const notice = (text: string): DiagnosticMessage =>
+  shaped(HANDOFF_SEVERITY, text);
 
 const encoded = (rows: readonly Row[], depth: ColorCompatibility): string =>
   encodeAnsi(
@@ -106,7 +106,7 @@ describe("the diagnostic list", () => {
   test("worst first: errors, then warnings, then notices and questions — each its own message, in its producer's order", () => {
     const question: DiagnosticMessage = {
       severity: APPROVAL_SEVERITY,
-      about: "run it?",
+      about: aboutText("test", "run it?"),
       message: "run it?",
       copy: "run it?",
       lines: [[diagnosticSpan("run it?", null)]],
@@ -191,8 +191,8 @@ describe("the viewer", () => {
 
   test("a message's key is its severity and what it is about: its text may change under it, a warning and an error of one source differ", () => {
     const keyOf = (
-      errors: { about: string; text: string }[],
-      warnings: { about: string; text: string }[],
+      errors: { about: About; text: string }[],
+      warnings: { about: About; text: string }[],
     ) =>
       viewerKey(
         collectSourced(
@@ -205,16 +205,64 @@ describe("the viewer", () => {
         0,
         0,
       );
-    const load = (text: string) => ({ about: "load", text });
+    const load = (text: string) => ({ about: aboutKind("load"), text });
     expect(keyOf([load("Invalid config in a (3 issues):")], [])).toBe(
       keyOf([load("Invalid config in a (2 issues):")], []),
     );
     expect(keyOf([load("same")], [])).not.toBe(
-      keyOf([{ about: "dropped", text: "same" }], []),
+      keyOf([{ about: aboutKind("dropped"), text: "same" }], []),
     );
     expect(keyOf([load("same")], [])).not.toBe(keyOf([], [load("same")]));
     expect(keyOf([load("same")], [])).toMatch(/^[1-9]\d*$/u);
     expect(Number(keyOf([load("same")], []))).toBeLessThan(2 ** 53);
+  });
+
+  test("each rule names a message its own way: a text is never a kind, and a subject of another kind is another message", () => {
+    const keyOf = (about: About) =>
+      viewerKey(
+        collectSourced(
+          SID,
+          "request",
+          [{ about, text: "same", copy: "same" }],
+          [],
+          [],
+        ),
+        0,
+        0,
+      );
+    expect(keyOf(aboutText("load", "load"))).not.toBe(keyOf(aboutKind("load")));
+    expect(keyOf(aboutSubject("load", "x"))).not.toBe(
+      keyOf(aboutText("load", "x")),
+    );
+    expect(keyOf(aboutSubject("dropped", "/a"))).not.toBe(
+      keyOf(aboutSubject("dropped", "/b")),
+    );
+    expect(keyOf(aboutSubject("dropped", "/a"))).toBe(
+      keyOf(aboutSubject("dropped", "/a")),
+    );
+  });
+
+  test("two load warnings are two messages: fixing the first leaves a viewer open on the second, whose words moved with it", () => {
+    const warned = (...found: readonly (readonly [string, string])[]) =>
+      collectSourced(
+        SID,
+        "request",
+        [],
+        [],
+        found.map(([subject, text]) => ({
+          about: aboutSubject("load", subject),
+          text,
+          copy: text,
+        })),
+      );
+    const both = warned(
+      ["f#variables.a", "f:3: a is ignored"],
+      ["f#variables.b", "f:6: b is ignored"],
+    );
+    const onSecond = viewerKey(both, 1, 0);
+    expect(viewerKey(both, 0, 0)).not.toBe(onSecond);
+    const fixed = warned(["f#variables.b", "f:3: b is ignored"]);
+    expect(viewedIndex(onSecond, fixed)).toEqual(at(1));
   });
 
   test("two alike messages are two stops: › from the first reaches the second, and past it", () => {
@@ -360,7 +408,7 @@ describe("the viewer", () => {
       "request",
       [
         {
-          about: "dropped",
+          about: aboutSubject("dropped", "/x.json5"),
           text: 'root entry "x" is broken\nmore',
           copy: prompt,
         },

@@ -57,8 +57,10 @@ import {
   restages,
   rootNode,
   type Unplaced,
+  type Unplacing,
 } from "./root.js";
 import { effectiveMemberName, type Folded } from "../themes/policy.js";
+import { advisory, type Advisory } from "./loader/diagnostics.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
@@ -210,7 +212,7 @@ export function placeInserts(
   cells: readonly InsertCell[],
   // The trees some config file writes.
   authored: AuthoredTrees,
-): { readonly config: DslConfig; readonly notices: readonly string[] } {
+): { readonly config: DslConfig; readonly notices: readonly Advisory[] } {
   if (cells.length === 0) return { config, notices: [] };
   const own = insertCells(config.root, cells);
   const restaged = Object.entries(config.presets)
@@ -220,14 +222,24 @@ export function placeInserts(
       preset,
       ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config.root), cells),
     }));
-  // Every tree each cell missed, by why, in the order the trees were placed.
-  const missed = new Map<InsertCell, Map<string, string[]>>();
+  // Every tree each cell missed, by the kind of why, in the order the trees
+  // were placed: a cell and a kind of why are one advisory.
+  const missed = new Map<
+    InsertCell,
+    Map<InsertRefusal["kind"], readonly [Miss, ...Miss[]]>
+  >();
   const miss =
     (tree: string) =>
-    ({ cell, reason }: Unplaced): void => {
-      const reasons = missed.get(cell) ?? new Map<string, string[]>();
-      reasons.set(reason, [...(reasons.get(reason) ?? []), tree]);
-      missed.set(cell, reasons);
+    ({ cell, cause }: Unplaced): void => {
+      const kinds =
+        missed.get(cell) ??
+        new Map<InsertRefusal["kind"], readonly [Miss, ...Miss[]]>();
+      const soFar = kinds.get(cause.kind);
+      kinds.set(
+        cause.kind,
+        soFar === undefined ? [{ cause, tree }] : [...soFar, { cause, tree }],
+      );
+      missed.set(cell, kinds);
     };
   (authored.root ? own.unplaced : []).forEach(miss("the root"));
   for (const { name, unplaced } of restaged.filter(({ name }) =>
@@ -248,10 +260,8 @@ export function placeInserts(
         ),
       },
     },
-    notices: [...missed].flatMap(([cell, reasons]) =>
-      [...reasons].map(([reason, trees]) =>
-        insertNotice(cell, `${reason} (in ${trees.join(", ")})`),
-      ),
+    notices: [...missed].flatMap(([cell, kinds]) =>
+      [...kinds.values()].map((misses) => insertNotice(cell, misses)),
     ),
   };
 }
@@ -262,10 +272,67 @@ export interface AuthoredTrees {
   readonly presets: ReadonlySet<string>;
 }
 
+// What befell an insert cell: a tree could not place it, or the bar refused
+// it with the issues placing it brought (`why`, words that move).
+export type InsertRefusal =
+  | Unplacing
+  | { readonly kind: "refused"; readonly why: string };
+
+// One place that could not take an insert cell: the tree that missed it (none
+// where the bar refused the cell as a whole), and why.
+export interface Miss {
+  readonly cause: InsertRefusal;
+  readonly tree: string | null;
+}
+
 // [LAW:one-source-of-truth] THE spelling of an advisory about one insert
-// cell: the file and entry that wrote it, the segment, and what befell it.
-export function insertNotice(cell: InsertCell, what: string): string {
-  return `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${what}`;
+// cell, over everything that befell it by one kind of why: the file and entry
+// that wrote it, the segment, and a sentence for each distinct cause, naming
+// the trees it came from. It is about the cell's own fields and that kind,
+// never its position in the file's list (deleting an earlier cell must not
+// move it) nor the words of a cause (the segment holding its id, the trees it
+// missed), which move while the cell stays refused. All of `misses` share one
+// kind; the first names it.
+export function insertNotice(
+  cell: InsertCell,
+  misses: readonly [Miss, ...Miss[]],
+): Advisory {
+  const place = `${cell.relation} "${cell.anchor}"`;
+  const id = cell.id ?? cell.seg;
+  const wordsOf = (cause: InsertRefusal): string => {
+    switch (cause.kind) {
+      case "id-held":
+        return `as "${id}", but placement "${id}" is already segment "${cause.held}" — give the cell its own id`;
+      case "no-anchor":
+        return `${place}, but there is no placement "${cell.anchor}"`;
+      case "refused":
+        return `${place}, but the bar refuses it there: ${cause.why}`;
+    }
+  };
+  const trees = new Map<string, string[]>();
+  for (const { cause, tree } of misses) {
+    const words = wordsOf(cause);
+    trees.set(words, [
+      ...(trees.get(words) ?? []),
+      ...(tree === null ? [] : [tree]),
+    ]);
+  }
+  const sentences = [...trees].map(
+    ([words, from]) =>
+      `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${words}${from.length === 0 ? "" : ` (in ${from.join(", ")})`}`,
+  );
+  return advisory(
+    [
+      "insert",
+      cell.by.file,
+      cell.seg,
+      cell.id ?? null,
+      cell.relation,
+      cell.anchor,
+      misses[0].cause.kind,
+    ],
+    sentences.join("\n"),
+  );
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total

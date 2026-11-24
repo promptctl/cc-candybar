@@ -5,6 +5,7 @@
 // mapping changes; the schema validators never touch this file.
 
 import JSON5 from "json5";
+import { aboutSubject, type About } from "../about.js";
 import {
   entryOf,
   Json5EditError,
@@ -48,16 +49,61 @@ export function parseJson5Syntax(source: string): Json5Syntax {
   }
 }
 
+// [LAW:types-are-the-program] What a load's advisory is about, one row per
+// producer: the producer's tag leads, so two producers can never name one
+// subject, and what follows is what that producer knows and its words do not
+// keep (a line moves when another is fixed, a list of trees shrinks).
+export type LoadSubject =
+  | readonly ["editability", file: string]
+  | readonly ["payload-declaration", file: string, variable: string]
+  | readonly ["variable-declaration", variable: string]
+  | readonly ["dropped-plugin", path: string]
+  | readonly ["plugin-folder", path: string]
+  | readonly ["checkout"]
+  | readonly ["config-collision"]
+  | readonly ["config-resolution"]
+  | readonly ["repository-answers"]
+  | readonly ["repository-identity", dir: string]
+  | readonly [
+      "insert",
+      file: string,
+      seg: string,
+      id: string | null,
+      relation: "before" | "after",
+      anchor: string,
+      cause: string,
+    ];
+
+// An advisory a load earned: its words, and what it is about. The subject
+// stays typed until the bar lists the advisory, which names it by `loadAbout`,
+// so one stays the same message while its words change, and two about other
+// things are two messages.
+export interface Advisory {
+  readonly subject: LoadSubject;
+  readonly message: string;
+}
+
+export const advisory = (subject: LoadSubject, message: string): Advisory => ({
+  subject,
+  message,
+});
+
+// [LAW:single-enforcer] The one derivation of what a load's advisory is about:
+// its subject, whatever its words. The tuple's JSON is a key no two subjects
+// share, since each leads with its producer's tag.
+export const loadAbout = (subject: LoadSubject): About<"load"> =>
+  aboutSubject("load", JSON.stringify(subject));
+
 export class ConfigError extends Error {
   readonly file: string;
   readonly issues: readonly ConfigIssue[];
   /** Advisories the file earned before it failed — reported beside the error. */
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Advisory[];
 
   constructor(
     file: string,
     issues: readonly ConfigIssue[],
-    warnings: readonly string[] = [],
+    warnings: readonly Advisory[] = [],
   ) {
     super(formatIssues(file, issues));
     this.name = "ConfigError";
@@ -224,13 +270,16 @@ function lineFromOffset(source: string, offset: number): number {
 export function editabilityNotice(
   filePath: string,
   source: string,
-): string | null {
+): Advisory | null {
   try {
     parseDocument(source);
     return null;
   } catch (e) {
     if (!(e instanceof Json5EditError)) throw e;
-    return `${filePath}:${lineFromOffset(source, e.offset)}: ${e.reason} — the settings menu cannot edit this file until it is fixed`;
+    return advisory(
+      ["editability", filePath],
+      `${filePath}:${lineFromOffset(source, e.offset)}: ${e.reason} — the settings menu cannot edit this file until it is fixed`,
+    );
   }
 }
 

@@ -21,6 +21,7 @@ import { type Timekeeper } from "../src/time";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { heldClock } from "./helpers/held-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { messagesOf } from "./helpers/diagnostic-messages";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -163,10 +164,10 @@ test("a kept state still carries the warning its build earned", () => {
   const r = rig();
   const text = `{ variables: { v: { kind: "template", template: "{{ if }}" } } }`;
   r.write(text);
-  expect(r.entry().lastWarnings.join("\n")).toContain(`Variable "v"`);
+  expect(messagesOf(r.entry().lastWarnings).join("\n")).toContain(`Variable "v"`);
   r.write(`// a comment\n${text}`);
   expect(r.reload()).toBe("kept");
-  expect(r.entry().lastWarnings.join("\n")).toContain(`Variable "v"`);
+  expect(messagesOf(r.entry().lastWarnings).join("\n")).toContain(`Variable "v"`);
 });
 
 test("a build that throws at its gates shows its own warning beside the error, and the old state stays", () => {
@@ -180,7 +181,7 @@ test("a build that throws at its gates shows its own warning beside the error, a
   expect(r.reload()).toBe("failed");
   const entry = r.entry();
   expect(entry.lastError).toContain(`key "k"`);
-  expect(entry.lastWarnings.join("\n")).toContain(`Variable "v"`);
+  expect(messagesOf(entry.lastWarnings).join("\n")).toContain(`Variable "v"`);
   expect(entry.state).toBe(state);
 });
 
@@ -196,7 +197,7 @@ test("a change only to a warning keeps the state and updates the warning", () =>
   );
   expect(r.reload()).toBe("kept");
   expect(r.entry().state).toBe(state);
-  expect(r.entry().lastWarnings.join("\n")).toContain("template");
+  expect(messagesOf(r.entry().lastWarnings).join("\n")).toContain("template");
 });
 
 test("an installed plugin nothing places, added with the config unchanged, builds: its drop is logged and its definition watched", () => {

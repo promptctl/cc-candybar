@@ -14,6 +14,7 @@ import type { ConfigTarget } from "../../config-hint.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { ProjectAccess } from "./repo-gate.js";
 import type { PluginScope } from "./plugin-scope.js";
+import { advisory, type Advisory } from "./diagnostics.js";
 import { LAYER_ROLES, type LayerRole } from "../layer-role.js";
 
 // [LAW:one-source-of-truth] The set of accepted extensions lives here once.
@@ -226,15 +227,14 @@ export function chainPlaces(
  */
 export function configResolutionNotice(
   resolution: ConfigResolution,
-): string | null {
-  return (
-    [
-      ...noticeLines(resolution),
-      ...resolution.unchecked.map(
-        (u) => `Config location could not be checked: ${u.path} — ${u.error}`,
-      ),
-    ].join("\n") || null
-  );
+): Advisory | null {
+  const words = [
+    ...noticeLines(resolution),
+    ...resolution.unchecked.map(
+      (u) => `Config location could not be checked: ${u.path} — ${u.error}`,
+    ),
+  ].join("\n");
+  return words === "" ? null : advisory(["config-resolution"], words);
 }
 
 function noticeLines(resolution: ConfigResolution): readonly string[] {

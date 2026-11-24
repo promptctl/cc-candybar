@@ -139,7 +139,7 @@ describe("the gate over a project's config file", () => {
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
     // A question it asked could not be recorded: the notice is the answer.
     expect(resolved.project.question?.standing).toBe("unread");
-    expect(repoUnreadNotice(resolved.project)).toContain("repo-configs.json is not JSON");
+    expect(repoUnreadNotice(resolved.project)?.message).toContain("repo-configs.json is not JSON");
     // The bar's search notice stays about the search.
     expect(configResolutionNotice(resolved)).toBeNull();
   });

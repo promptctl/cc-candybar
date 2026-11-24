@@ -13,6 +13,7 @@ import { fileEventsWarnings } from "../src/daemon/foundations/file-events-warnin
 import { type Delivery } from "../src/daemon/foundations/stats-snapshot";
 import { DEBOUNCE_MS, WatcherRegistry } from "../src/daemon/cache/watchers";
 import { statIdentity, type IdentityRead } from "../src/utils/folder-identity";
+import { aboutKind } from "../src/config/about";
 import {
   WARNING_SEVERITY,
   collectDiagnostics,
@@ -533,7 +534,11 @@ describe("the bar's row and daemon-stats' line", () => {
       "request",
       [],
       [],
-      warned.map((w) => ({ about: w.kind, text: w.message, copy: w.message })),
+      warned.map((w) => ({
+        about: aboutKind(w.kind),
+        text: w.message,
+        copy: w.message,
+      })),
     );
     expect(diagnostics).toEqual([
       expect.objectContaining({

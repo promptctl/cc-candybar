@@ -46,6 +46,7 @@ import {
   pluginList,
 } from "../../config/loader/plugins.js";
 import type { PluginScope } from "../../config/loader/plugin-scope.js";
+import { advisory, type Advisory } from "../../config/loader/diagnostics.js";
 import {
   repoUnreadNotice,
   type RepoConfigBook,
@@ -150,7 +151,7 @@ export function readDefinition(
 export interface SessionPlugins {
   readonly plugins: readonly PluginFile[];
   readonly strays: readonly Stray[];
-  readonly notices: readonly string[];
+  readonly notices: readonly Advisory[];
   readonly checkout: Checkout | null;
 }
 
@@ -164,13 +165,16 @@ export function sessionPlugins(
 ): SessionPlugins {
   const byNs = new Map<string, Pick<PluginFile, "path" | "scope">>();
   const strays: Stray[] = [];
-  const notices: string[] = [];
+  const notices: Advisory[] = [];
   for (const { root, scope, listed } of roots) {
     // [LAW:types-are-the-program] A root that cannot be listed is a fact the
     // bar says, never absence.
     if ("error" in listed) {
       notices.push(
-        `Plugin folder could not be listed: ${listed.path} — ${listed.error}`,
+        advisory(
+          ["plugin-folder", listed.path],
+          `Plugin folder could not be listed: ${listed.path} — ${listed.error}`,
+        ),
       );
       continue;
     }
@@ -185,7 +189,9 @@ export function sessionPlugins(
   // [LAW:no-silent-failure] Only confirmed absence can use cwd. A failed
   // ancestor check gives checkout-relative plugin data no root.
   if (checkout.kind === "failed")
-    notices.push(`Checkout could not be read: ${checkout.reason}`);
+    notices.push(
+      advisory(["checkout"], `Checkout could not be read: ${checkout.reason}`),
+    );
   return {
     plugins: [...byNs.values()].map((file) =>
       readDefinition(file.path, file.scope, files),
@@ -318,9 +324,12 @@ export function discover(
     repoUnreadNotice(project),
     unreadIdentity === null
       ? null
-      : `Repository identity could not be read: ${unreadIdentity.dir} — ${unreadIdentity.reason}`,
+      : advisory(
+          ["repository-identity", unreadIdentity.dir],
+          `Repository identity could not be read: ${unreadIdentity.dir} — ${unreadIdentity.reason}`,
+        ),
     ...session.notices,
-  ].filter((n): n is string => n !== null);
+  ].filter((n): n is Advisory => n !== null);
   return {
     snapshot: {
       ...snapshotOf(session, chain),

@@ -94,12 +94,12 @@ export function prepareSnapshot(
   cwd: string,
   warnings: string[],
 ): PreparedConfig {
-  warnings.push(...snapshot.notices);
+  warnings.push(...snapshot.notices.map(({ message }) => message));
   const layers = snapshot.chain
     .filter((l) => l.content.kind === "text")
     .map((l) => l.path);
   const loaded = loadSnapshot(snapshot, world.host.home, DEFAULT_DSL_CONFIG, {
-    warned: (w) => warnings.push(...w),
+    warned: (w) => warnings.push(...w.map(({ message }) => message)),
   });
   const { config } = loaded;
   const authored = userAuthoredRoots(
@@ -133,7 +133,7 @@ export function prepareSnapshot(
     const compiled = registerDslConfig(config, registry, {
       cwd,
     });
-    warnings.push(...compiled.loadWarnings);
+    warnings.push(...compiled.loadWarnings.map(({ message }) => message));
     return {
       layers,
       droppedPlacements: loaded.dropped.map((issue) => issue.message),

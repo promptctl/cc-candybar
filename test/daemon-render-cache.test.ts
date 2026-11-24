@@ -74,6 +74,8 @@ import {
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
+import { messagesOf } from "./helpers/diagnostic-messages";
+import { advisory } from "../src/config/loader/diagnostics";
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 
@@ -219,7 +221,7 @@ describe("RenderCache", () => {
         expect(entry.lastError).toContain(cfg);
         expect(entry.lastError).toContain("could not be read");
         expect(entry.lastError).toContain("EACCES");
-        expect(entry.lastWarnings.join("\n")).not.toContain(
+        expect(messagesOf(entry.lastWarnings).join("\n")).not.toContain(
           "Config file not found",
         );
       } finally {
@@ -243,7 +245,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(originAt(dir, dir, cfg));
       expect(entry.lastError).toBeNull();
       expect(entry.configLayers).toEqual([]);
-      expect(entry.lastWarnings.join("\n")).toContain(
+      expect(messagesOf(entry.lastWarnings).join("\n")).toContain(
         `Config file not found: ${cfg}`,
       );
       // The state beneath the warning is the bundled default's.
@@ -880,8 +882,8 @@ describe("RenderCache", () => {
       expect(entry.lastError).toBeNull();
       expect(entry.configLayers).toEqual([cfgJson5]);
       expect(entry.lastWarnings).not.toEqual([]);
-      expect(entry.lastWarnings.join("\n")).toContain(cfgJson5);
-      expect(entry.lastWarnings.join("\n")).toContain(cfgJson);
+      expect(messagesOf(entry.lastWarnings).join("\n")).toContain(cfgJson5);
+      expect(messagesOf(entry.lastWarnings).join("\n")).toContain(cfgJson);
 
       // Removing the duplicate clears the warning on next reload. The
       // watcher fires on file deletion in the same dir.
@@ -926,7 +928,10 @@ describe("RenderCache", () => {
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.padding).toBe(2);
       expect(entry.lastWarnings).toEqual([
-        `${cfg}:8: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+        advisory(
+          ["editability", cfg],
+          `${cfg}:8: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+        ),
       ]);
 
       // Removing the duplicate clears the advisory on the next reload.
@@ -977,7 +982,7 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.lastError).toContain("nope");
-      expect(entry.lastWarnings.join("\n")).toContain(
+      expect(messagesOf(entry.lastWarnings).join("\n")).toContain(
         `${cfg}:8: duplicate key "padding"`,
       );
     } finally {
@@ -999,7 +1004,7 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.lastError).toContain('Unknown top-level key "bogus"');
-      expect(entry.lastWarnings.join("\n")).toContain(
+      expect(messagesOf(entry.lastWarnings).join("\n")).toContain(
         `${cfg}:8: duplicate key "padding"`,
       );
     } finally {
@@ -1039,7 +1044,7 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.lastError).toContain('key "k" is an integer spec');
-      expect(entry.lastWarnings.join("\n")).toContain('Variable "s.v"');
+      expect(messagesOf(entry.lastWarnings).join("\n")).toContain('Variable "s.v"');
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
