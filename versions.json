@@ -4,15 +4,22 @@
     {
       "version": "pr-953",
       "ref": "refs/pull/953/merge",
-      "sha": "4c2e1ce6b9ce8249423d1883d4242712a8b37961",
-      "timestamp": "2026-11-24T19:28:31.439Z",
+      "sha": "3d05dba827bb476c9b135a0d96d4f5f5bc96cbd9",
+      "timestamp": "2026-11-24T19:32:35.964Z",
       "commits": [
         {
-          "sha": "4c2e1ce6b9ce8249423d1883d4242712a8b37961",
+          "sha": "3d05dba827bb476c9b135a0d96d4f5f5bc96cbd9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T19:26:47Z",
-          "message": "Merge 3c6176975c002137dd33b5a20a79a9e061c57f27 into 51471537b0aa6387c1e7d52963f056669843eeb8\n"
+          "timestamp": "2026-11-24T19:31:27Z",
+          "message": "Merge 7f30ea91b91e0d6a26f748405862180e1a994a32 into 51471537b0aa6387c1e7d52963f056669843eeb8\n"
+        },
+        {
+          "sha": "7f30ea91b91e0d6a26f748405862180e1a994a32",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T12:31:00-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.aa1\n"
         },
         {
           "sha": "3c6176975c002137dd33b5a20a79a9e061c57f27",
