@@ -169,11 +169,13 @@ export class SettingsHistory {
 
   // A request from the session: it moves to the newest end, so the bounds
   // drop the session idle longest. [LAW:carrying-cost] It runs on every
-  // request, so it moves the one entry in place: only that session's readers
-  // hear of it, and they find what they read before.
+  // request, so the order alone changes: a replace keeps each entry's
+  // observable, so no session's readers hear of it, only the order's.
   heard(sessionId: SessionId): void {
-    if (runInAction(() => toNewest(this.held, sessionId)))
-      this.moved.heard(sessionId);
+    const order = new Map(this.held);
+    if (!toNewest(order, sessionId)) return;
+    runInAction(() => this.held.replace(order));
+    this.moved.heard(sessionId);
   }
 
   // What the host has not yet been told: each session whose history moved, as

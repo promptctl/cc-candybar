@@ -126,6 +126,22 @@ describe("a load", () => {
     );
   });
 
+  // [LAW:nothing-unseen] The bar's event leaves; the log keeps every name.
+  test("the log names every session the load dropped", () => {
+    const { held } = holder({
+      kind: "ok",
+      sessions: sessions(S1),
+      dropped: ["a", "b", "c", "d"].map((session) => ({
+        session,
+        part: null,
+        why: "its value holds no picks",
+      })),
+    });
+    expect(reportLine(held.load().report)).toBe(
+      `The store: read ${FILE}, sessions=1 dropped=4: a session (its value holds no picks) in "a", "b", "c", "d"`,
+    );
+  });
+
   // [LAW:no-ambient-temporal-coupling] What is taken before the load is held,
   // but nothing reads it before the file's sessions are under it.
   test("a read before the load throws", () => {
@@ -224,6 +240,18 @@ describe("the order a restart reads", () => {
     held.take([{ kind: "heard", key: S1 }]);
     await held.close();
     expect(saves.map((saved) => [...saved.keys()])).toEqual([[S2, S1]]);
+  });
+
+  test("a hearing after the close arms no write", async () => {
+    const { held, saves, clock } = holder({
+      kind: "ok",
+      sessions: sessions(S1, S2),
+    });
+    held.load();
+    await held.close();
+    held.take([{ kind: "heard", key: S1 }]);
+    expect(clock.pending()).toBe(0);
+    expect(saves).toHaveLength(0);
   });
 
   test("a put of what the session holds is a hearing: it moves only the place", () => {

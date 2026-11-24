@@ -110,19 +110,20 @@ export function reportText({ store, file, found }: StoreReport): string | null {
     case "read":
       return found.dropped.length === 0
         ? null
-        : `${store} (${file}): the load dropped what this build does not read: ${droppedText(found.dropped)}`;
+        : `${store} (${file}): the load dropped what this build does not read: ${droppedText(found.dropped, SHOWN_SESSIONS)}`;
   }
 }
 
 // [LAW:nothing-unseen] The log's line for every report, so a store that
-// found nothing is told apart from one that never looked.
+// found nothing is told apart from one that never looked. The bar's event
+// leaves, so the log is what keeps every dropped session's name.
 export function reportLine(report: StoreReport): string {
   const { store, file, found } = report;
   switch (found.kind) {
     case "absent":
       return `${store}: no file at ${file}, holding nothing`;
     case "read":
-      return `${store}: read ${file}, sessions=${found.sessions} dropped=${found.dropped.length}`;
+      return `${store}: read ${file}, sessions=${found.sessions} dropped=${found.dropped.length}${found.dropped.length === 0 ? "" : `: ${droppedText(found.dropped, Infinity)}`}`;
     case "set-aside":
     case "refused":
       return unreadReport(store, found);
@@ -142,7 +143,8 @@ function unreadReport(
 
 const SHOWN_SESSIONS = 3;
 
-function droppedText(dropped: readonly Dropped[]): string {
+// The sessions named per group: the bar's line names a few, the log all.
+function droppedText(dropped: readonly Dropped[], shown: number): string {
   const groups = new Map<string, string[]>();
   for (const { session, part, why } of dropped) {
     const what = part === null ? `a session (${why})` : `${part} (${why})`;
@@ -152,11 +154,9 @@ function droppedText(dropped: readonly Dropped[]): string {
   }
   return [...groups]
     .map(([what, sessions]) => {
-      const shown = sessions
-        .slice(0, SHOWN_SESSIONS)
-        .map((s) => JSON.stringify(s));
-      const more = sessions.length - shown.length;
-      return `${what} in ${shown.join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
+      const named = sessions.slice(0, shown).map((s) => JSON.stringify(s));
+      const more = sessions.length - named.length;
+      return `${what} in ${named.join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
     })
     .join("; ");
 }

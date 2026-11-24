@@ -36,3 +36,29 @@ test("one session's step moves its own depth and no other session's", () => {
     for (const stop of stops) stop();
   }
 });
+
+// [LAW:carrying-cost] A hearing runs on every request and moves only the
+// order, so no session's depth is read again for it.
+test("a request from a session moves its place and no session's depth", () => {
+  const sessionState = new SessionState();
+  const history = new SettingsHistory(sessionState, () => {});
+  for (const sessionId of [A, B]) {
+    const journal = history.begin(NO_LAYERS);
+    journal.sessionState.set(sessionId, "theme", "nord");
+    journal.commit();
+  }
+  history.drain();
+  const seen: Record<string, number[]> = { a: [], b: [] };
+  const stops = [A, B].map((sid) =>
+    autorun(() => seen[sid]!.push(history.depth(sid).undo)),
+  );
+  try {
+    history.heard(A);
+    expect(seen).toEqual({ a: [1], b: [1] });
+    expect(history.drain()).toEqual([
+      { kind: "heard", store: "settings-history", key: A },
+    ]);
+  } finally {
+    for (const stop of stops) stop();
+  }
+});

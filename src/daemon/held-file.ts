@@ -171,8 +171,10 @@ export class HeldFile<V> {
     this.behind = false;
   }
 
+  // [LAW:no-ambient-temporal-coupling] Only an open file is owed an order
+  // write: a closed or refused one saves nothing, so it arms no timer.
   private orderDue(): void {
-    if (this.clearOrderTimer !== null) return;
+    if (this.phase !== "open" || this.clearOrderTimer !== null) return;
     this.clearOrderTimer = this.clock.after(
       `${this.store} order write`,
       ORDER_PERIOD_MS,
