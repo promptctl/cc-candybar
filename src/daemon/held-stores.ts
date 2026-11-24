@@ -58,10 +58,11 @@ export class HeldStores {
   }
 
   // A turn's stored writes, in the order it made them, each store's saved
-  // once. [LAW:no-silent-failure] What a file refused throws once every store
-  // has taken its share, so the host's taking says it on every bar. The
-  // renderer holds the refused write too, and the store's next write saves
-  // the copy held here whole.
+  // once. [LAW:no-silent-failure] A save that throws (the history's, written
+  // at once) throws once every store has taken its share, so the host's
+  // taking says it on every bar; a write behind says its failure where it
+  // lands. The renderer holds the refused write too, and the store's next
+  // write saves the copy held here whole.
   take(writes: readonly StoreWrite[]): void {
     const sessions: Array<HeldChange<SessionPicks>> = [];
     const history: Array<HeldChange<SessionHistory>> = [];
@@ -73,6 +74,8 @@ export class HeldStores {
         case "settings-history":
           history.push(write);
           break;
+        default:
+          write satisfies never;
       }
     // [LAW:single-enforcer] Each store its own error boundary (`runEach`).
     runEach([

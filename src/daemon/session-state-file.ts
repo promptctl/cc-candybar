@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import { asError, publishByRenameAsync } from "../utils/atomic-write";
+import {
+  asError,
+  publishByRenameAsync,
+  resolvedTarget,
+} from "../utils/atomic-write";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { ok, type Asked } from "../utils/outcome";
@@ -47,9 +51,9 @@ export interface SessionFileStorage<V> {
   readonly file: string;
   // The file's read, by the rule every state file keeps (state-file.ts).
   observe(): StateObservation<Loaded<V>>;
-  // Sets a file that did not read aside (`setAside` in file-rewrites.ts),
-  // and says where it went.
-  setAside(): FileRetirement;
+  // Sets aside the file a read named as unread (`setAside` in
+  // file-rewrites.ts), and says where it went.
+  setAside(file: string): FileRetirement;
   // The sessions as they stand, oldest first. The storage keeps its own copy
   // until the write behind lands, so the owner may go on changing its map;
   // the file keeps their order.
@@ -123,7 +127,7 @@ export function sessionFileOnDisk<V>(
   return {
     file: filePath,
     observe: file.observe,
-    setAside: () => setAside(filePath),
+    setAside,
   };
 }
 
@@ -171,8 +175,8 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     return this.disk.observe();
   }
 
-  setAside(): FileRetirement {
-    return this.disk.setAside();
+  setAside(file: string): FileRetirement {
+    return this.disk.setAside(file);
   }
 
   save(snapshot: ReadonlyMap<SessionId, V>): void {
@@ -229,12 +233,13 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     );
   }
 
-  // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
-  // off the daemon's one thread: the bytes are written through the thread
-  // pool, and so is the rename that publishes them. A rename is a journaled
+  // [LAW:effects-at-boundaries] The debounced write takes its disk writes off
+  // the daemon's one thread: the bytes are written through the thread pool,
+  // and so is the rename that publishes them. A rename is a journaled
   // metadata op, and on a busy disk it waits on the journal like any write:
   // run synchronously here it held every bar and click for 180 ms on a CI
-  // runner, past every client's reply budget.
+  // runner, past every client's reply budget. Only the walk of the path's
+  // links, a read of metadata the journal does not hold up, runs here.
   // [LAW:no-silent-failure] A write that fails says so and is a value; the
   // next write still runs.
   private async land(): Promise<Landed> {
@@ -248,10 +253,14 @@ export class SessionFile<V> implements SessionFileStorage<V> {
       body = this.body(snapshot);
       // The thread is held until the first await.
       heldMs = elapsedMs(this.clock, started);
-      await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
+      // [LAW:single-enforcer] Published where a write to the path lands, as
+      // every state file is (`resolvedTarget`), so a symlinked file stays a
+      // link, and a set-aside and the next write agree on the file.
+      const file = resolvedTarget(this.filePath);
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
       // [LAW:single-enforcer] Daemon runtime files are owner-only, like
       // pid/spawn.lock: a session file carries conversation identifiers.
-      await publishByRenameAsync(this.filePath, body, 0o600);
+      await publishByRenameAsync(file, body, 0o600);
     } catch (e) {
       // A snapshot whose write failed waits for the next save or shutdown's
       // flush, so a disk that keeps refusing is not retried on a timer.

@@ -45,12 +45,11 @@ const said = (read: Read | "object"): string =>
 export type ApproveRepo = Extract<Act, { kind: "approve-repo" }>;
 
 // The trust book a turn's answers land in, and where what each did is said
-// once they have: the log's lines, and a book set aside as every store's is.
+// once they have.
 export interface TrustBook {
   readonly stateDir: string;
   readonly answers: readonly ApproveRepo[];
   readonly said: (line: string) => void;
-  readonly reported: (report: StoreReport) => void;
 }
 
 // [LAW:single-enforcer] Where a change naming an origin's layer lands, and
@@ -62,7 +61,13 @@ export type ConfigWriteFiles = Pick<
 >;
 
 export type ConfigLanding =
-  | { readonly kind: "ok"; readonly files: readonly string[] }
+  | {
+      readonly kind: "ok";
+      readonly files: readonly string[];
+      // What the landing found of a stored file, said as every store's is: an
+      // answers book that did not read, set aside.
+      readonly reports: readonly StoreReport[];
+    }
   | {
       readonly kind: "incomplete";
       readonly files: readonly string[];
@@ -201,7 +206,7 @@ export function performChanges(
     };
   }
   const landed = writeRevisions(
-    { setAside: setAside?.file ?? null, rewrites: rewrites.values(), retire },
+    { setAside, rewrites: rewrites.values(), retire },
     write,
   );
   if (landed.kind === "failed") {
@@ -225,17 +230,18 @@ export function performChanges(
   for (const line of answered) book?.said(line);
   // [LAW:no-silent-failure] Once the answer has landed the book reads again,
   // so its unread notice is gone: the report says where the old one went.
-  if (setAside !== null && landed.setAside !== null)
-    book?.reported({
-      store: "Repository config answers",
-      file: setAside.file,
-      found: {
-        kind: "set-aside",
-        reason: setAside.reason,
-        to: landed.setAside.to,
-      },
-    });
-  return { kind: "ok", files: landed.files };
+  const reports = [landed.setAside].flatMap((aside): StoreReport[] =>
+    aside === null
+      ? []
+      : [
+          {
+            store: "Repository config answers",
+            file: aside.file,
+            found: { kind: "set-aside", reason: aside.reason, to: aside.to },
+          },
+        ],
+  );
+  return { kind: "ok", files: landed.files, reports };
 }
 
 // The rewrite of the exclude file of `file`'s repository that names it, or

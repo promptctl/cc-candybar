@@ -14,7 +14,10 @@ import type { WorktreeLink } from "../../utils/git-root.js";
 import type { RepoQuestion } from "../config-snapshot.js";
 import type { Asked } from "../../utils/outcome.js";
 import { advisory, type Advisory } from "./diagnostics.js";
-import { unreadText } from "../../daemon/foundations/stored-file.js";
+import {
+  readOrEmpty,
+  unreadText,
+} from "../../daemon/foundations/stored-file.js";
 
 export type RepoAnswer = "approved" | "declined";
 export const REPO_ANSWERS: readonly RepoAnswer[] = ["approved", "declined"];
@@ -74,7 +77,7 @@ interface Ruling {
 function ruling(answers: RepoAnswers, d: RepoDir): Ruling {
   const key = answerDir(d);
   if (key === null) return { standing: "unread", under: d.dir };
-  const book = answers.kind === "ok" ? answers.value : {};
+  const book = readOrEmpty(answers, {});
   const repo = answerOf(book, key);
   if (repo !== null) return { standing: repo, under: key };
   const legacy = answerOf(book, d.dir);

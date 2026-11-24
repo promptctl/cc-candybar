@@ -8,6 +8,35 @@ import type { Asked } from "../../utils/outcome.js";
 export const unreadText = (reason: string, where: string): string =>
   `could not be read: ${reason} — ${where}`;
 
+// [LAW:types-are-the-program] A read that failed names the location that did
+// not read, so a write planned from it knows what to set aside. Its reason
+// starts with that location, as the reader's and the parse's reasons do.
+export interface Unread {
+  readonly kind: "failed";
+  readonly reason: string;
+  readonly file: string;
+}
+
+// [LAW:single-enforcer] What a stored file that did not read holds for every
+// reader and every write planned from it: its store's empty value. Nothing
+// it held is trusted, and its bytes are set aside before any write.
+export const readOrEmpty = <T>(
+  result:
+    | { readonly kind: "ok"; readonly value: T }
+    | { readonly kind: "failed" },
+  empty: T,
+): T => (result.kind === "ok" ? result.value : empty);
+
+// An unread file as it was set aside: the name it was read under and why it
+// did not read, and the file its bytes sat in (a link's target) and where
+// they are now.
+export interface SetAside {
+  readonly file: string;
+  readonly reason: string;
+  readonly from: string;
+  readonly to: string;
+}
+
 // [LAW:types-are-the-program] What a load gave up of one session, and why
 // this build refuses it: the session whole, or a part of its value.
 export interface DroppedPart {
@@ -76,9 +105,8 @@ export function reportText({ store, file, found }: StoreReport): string | null {
     case "absent":
       return null;
     case "set-aside":
-      return `${store} ${unreadText(found.reason, `it is kept as ${found.to}, and the store started again from empty`)}`;
     case "refused":
-      return `${store} ${unreadText(found.reason, `it stays where it is, since setting it aside failed (${found.error}), and nothing is saved to it until the daemon starts again`)}`;
+      return unreadReport(store, found);
     case "read":
       return found.dropped.length === 0
         ? null
@@ -97,8 +125,19 @@ export function reportLine(report: StoreReport): string {
       return `${store}: read ${file}, sessions=${found.sessions} dropped=${found.dropped.length}`;
     case "set-aside":
     case "refused":
-      return reportText(report)!;
+      return unreadReport(store, found);
   }
+}
+
+function unreadReport(
+  store: string,
+  found: Extract<Found, { kind: "set-aside" | "refused" }>,
+): string {
+  const where =
+    found.kind === "set-aside"
+      ? `it is kept as ${found.to}, and the store started again from empty`
+      : `it stays where it is, since setting it aside failed (${found.error}), and nothing is saved to it until the daemon starts again`;
+  return `${store} ${unreadText(found.reason, where)}`;
 }
 
 const SHOWN_SESSIONS = 3;

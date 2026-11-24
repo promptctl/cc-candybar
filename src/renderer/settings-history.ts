@@ -55,7 +55,7 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { digestOf } from "../utils/plain.js";
-import { toNewest } from "../utils/recency.js";
+import { putNewest, toNewest } from "../utils/recency.js";
 import { StoredMoves } from "./stored-moves.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
@@ -377,8 +377,7 @@ export class SettingsHistory {
   // session that changed least recently.
   private put(sessionId: SessionId, history: SessionHistory): void {
     const next = new Map(this.state);
-    next.delete(sessionId);
-    if (!holdsNothing(history)) next.set(sessionId, history);
+    putNewest(next, sessionId, holdsNothing(history) ? null : history);
     // A history that moved to the end is told even when it holds what it
     // held, so the host's order is this one's.
     this.moved.put(sessionId);

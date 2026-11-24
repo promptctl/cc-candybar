@@ -469,6 +469,23 @@ describe("the book in the state directory", () => {
     expect(store.read()).toEqual({ kind: "ok", value: {} });
   });
 
+  // A folder book that does not read is set aside, and the loose copy is
+  // still the leftover it was: retired, so a reset cannot revive it.
+  test("a write over a folder book that does not read sets it aside and retires the loose copy", () => {
+    write(loose(), { [project]: "approved" });
+    fs.mkdirSync(path.dirname(repoConfigsPath(state())), { recursive: true });
+    fs.writeFileSync(repoConfigsPath(state()), "{ not json");
+    const store = repoConfigs(state());
+    writeStatePlan(store.plan((book) => ({ ...book, [other()]: "declined" })));
+    expect(store.read()).toEqual({
+      kind: "ok",
+      value: { [other()]: "declined" },
+    });
+    expect(fs.existsSync(loose())).toBe(false);
+    fs.unlinkSync(repoConfigsPath(state()));
+    expect(store.read()).toEqual({ kind: "ok", value: {} });
+  });
+
   test("a dangling legacy link cannot revive an answer after the current book is reset", () => {
     fs.mkdirSync(state());
     const target = path.join(root, "offline-answers.json");

@@ -32,7 +32,7 @@ const HISTORY_FILE: Pick<SessionFileKind<SessionHistory>, "parse"> = {
 // other per-session files are. Each step is the undo of a config edit that
 // has already landed, so it is on disk before the click answers, and a
 // write that fails throws into the click's taking, which says it on the bar:
-// the change landed and undoes until the daemon restarts, not after. A write
+// what the daemon holds undoes until it restarts, not after. A write
 // behind would lose the step to a kill inside its window and say a failure
 // only in the log; one beside this write could land older bytes over a
 // newer step.
@@ -49,7 +49,7 @@ export function fileHistoryStorage(
         // the order the owner holds them, written before this returns.
         writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 0o600);
       } catch (e) {
-        const message = `settings-history write failed — the change landed and undoes until the daemon restarts, not after: ${(e as Error).message}`;
+        const message = `settings-history write failed — what this daemon holds undoes until it restarts, and the file keeps what it last saved: ${(e as Error).message}`;
         logger("error", message);
         throw new Error(message);
       }

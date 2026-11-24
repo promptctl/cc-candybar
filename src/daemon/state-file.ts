@@ -16,15 +16,8 @@ import { asError, linkChain } from "../utils/atomic-write.js";
 import type { FileRetirement, FileRewrite } from "./file-rewrites.js";
 import { ok, type Asked, type Ok } from "../utils/outcome.js";
 import { readTextIfPresent } from "../utils/regular-text.js";
-
-// [LAW:types-are-the-program] A failure names the location that did not read,
-// so a write planned from it knows what to set aside. Its reason starts with
-// that location, as the reader's and the parse's reasons do.
-export interface Unread {
-  readonly kind: "failed";
-  readonly reason: string;
-  readonly file: string;
-}
+import { readOrEmpty, type Unread } from "./foundations/stored-file.js";
+export type { Unread } from "./foundations/stored-file.js";
 
 export interface StateObservation<T> {
   readonly result: Ok<T> | Unread;
@@ -58,9 +51,10 @@ export function writeBase<T>(
   empty: T,
 ): { readonly current: T; readonly setAside: Unread | null } {
   const { result } = observed;
-  return result.kind === "ok"
-    ? { current: result.value, setAside: null }
-    : { current: empty, setAside: result };
+  return {
+    current: readOrEmpty(result, empty),
+    setAside: result.kind === "ok" ? null : result,
+  };
 }
 
 // [LAW:one-source-of-truth] How every state file spells what it holds.
@@ -122,10 +116,10 @@ export function stateFile<T>(
         ? { file, was: source === file ? text : null, will: textOf(value) }
         : null;
     try {
-      const old =
-        setAside === null ? previousName(file, previous, source) : null;
+      // A former file that is the one set aside is already out of the way.
+      const old = previousName(file, previous, source);
       const retire =
-        old === null
+        old === null || old === setAside?.file
           ? null
           : { from: old, to: `${old}.migrated-${randomUUID()}` };
       return ok({ setAside, rewrite, retire, value });

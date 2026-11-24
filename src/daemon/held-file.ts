@@ -12,7 +12,7 @@ import {
   type SessionFileStorage,
 } from "./session-state-file.js";
 import { asError } from "../utils/atomic-write.js";
-import { toNewest } from "../utils/recency.js";
+import { putNewest, toNewest } from "../utils/recency.js";
 import type { Found, StoreReport } from "./foundations/stored-file.js";
 
 // [LAW:carrying-cost] How long a change of order alone waits for its write.
@@ -38,9 +38,14 @@ type Phase = "unread" | "open" | "refused" | "closed";
 export class HeldFile<V> {
   private held = new Map<SessionId, V>();
   private phase: Phase = "unread";
-  // [LAW:one-source-of-truth] Whether the file lags the held map: set by
-  // every change, cleared only once a save returns, so a save that throws
-  // is still owed to the next change and to the close.
+  // [LAW:no-ambient-temporal-coupling] What is taken before the load, replayed
+  // over the file's sessions as it loads: a put, a drop, a hearing and the
+  // bound each run one way, whenever they come.
+  private early: Array<HeldChange<V>> = [];
+  // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
+  // as it stands: set by every change, cleared only once a save returns, so
+  // one that throws (history's) is still owed to the next change and to the
+  // close. Whether a write handed over lands is the storage's.
   private behind = false;
   private clearOrderTimer: (() => void) | null = null;
 
@@ -61,14 +66,16 @@ export class HeldFile<V> {
 
   // [LAW:single-enforcer] Read once. A file that did not read is set aside by
   // the rule every state file keeps, before anything is written. What was
-  // taken before the load is newer than anything the file holds of it, so
-  // it wins, and the file's sessions come first; it is saved, so a save made
-  // before the load never lands without the file's sessions. Returns what
-  // the store found, and the sessions the bound dropped.
+  // taken before the load is newer than anything the file holds, so it is
+  // taken over the file's sessions, and saved, so a save made before the load
+  // never lands without them. Returns what the store found, and the
+  // sessions the bound dropped.
   load(): {
     readonly report: StoreReport;
     readonly evicted: readonly SessionId[];
   } {
+    if (this.phase !== "unread")
+      throw new Error(`${this.store} is loaded twice`);
     const observed = this.storage.observe();
     const { current, setAside } = writeBase(observed, nothingLoaded<V>());
     let found: Found;
@@ -77,7 +84,7 @@ export class HeldFile<V> {
         found = {
           kind: "set-aside",
           reason: setAside.reason,
-          to: this.storage.setAside().to,
+          to: this.storage.setAside(setAside.file).to,
         };
       } catch (e) {
         found = {
@@ -95,17 +102,13 @@ export class HeldFile<V> {
               sessions: current.sessions.size,
               dropped: current.dropped,
             };
-    const taken = this.held;
-    this.held = new Map(
-      [...current.sessions].filter(([session]) => !taken.has(session)),
-    );
-    for (const [session, value] of taken) this.held.set(session, value);
-    const evicted = this.evict();
+    this.held = new Map(current.sessions);
     this.phase = found.kind === "refused" ? "refused" : "open";
-    if (this.behind || evicted.length > 0) this.save();
+    const early = this.early;
+    this.early = [];
     return {
       report: { store: this.store, file: this.storage.file, found },
-      evicted,
+      evicted: this.take(early),
     };
   }
 
@@ -113,13 +116,15 @@ export class HeldFile<V> {
   // per store per turn, or, when only the order moved, one within the
   // period. Returns the sessions the bound dropped.
   take(changes: ReadonlyArray<HeldChange<V>>): readonly SessionId[] {
+    if (this.phase === "unread") {
+      this.early.push(...changes);
+      return [];
+    }
     let content = false;
     for (const change of changes)
       if (change.kind === "heard" || this.holds(change.key, change.value)) {
         if (toNewest(this.held, change.key)) this.behind = true;
-      } else {
-        this.held.delete(change.key);
-        if (change.value !== null) this.held.set(change.key, change.value);
+      } else if (putNewest(this.held, change.key, change.value)) {
         content = true;
         this.behind = true;
       }
@@ -140,9 +145,9 @@ export class HeldFile<V> {
     return this.held;
   }
 
-  // [LAW:no-ambient-temporal-coupling] The daemon's close: what the file
-  // still lags is written now, what is pending lands, and what is taken
-  // after it stays in memory.
+  // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
+  // is still owed is handed over now, what is pending lands, and what is
+  // taken after it stays in memory.
   // A save that throws (history's is synchronous) rejects the close.
   async close(): Promise<void> {
     try {

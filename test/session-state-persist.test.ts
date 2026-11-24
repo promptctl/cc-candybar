@@ -500,10 +500,8 @@ describe("the session state's file", () => {
 
   it("clear() of the last key removes the session entirely (no empty husk)", async () => {
     const { turn, stores } = daemonOver(storage());
-    turn((s) => {
-      s.set(S1, "endcaps", "plain");
-      s.clear(S1, "endcaps");
-    });
+    turn((s) => s.set(S1, "endcaps", "plain"));
+    turn((s) => s.clear(S1, "endcaps"));
     await stores.close();
     expect(onDisk()).toEqual({});
   });
@@ -615,6 +613,29 @@ describe("the session state's file", () => {
       );
     },
   );
+
+  // [LAW:single-enforcer] A link is set aside and saved where it points, so
+  // it stays a link and the unread bytes are never written over.
+  test("a symlinked file that does not read is kept beside its target, and the link stays a link", async () => {
+    const target = join(dir, "dotfiles", "session-state.json");
+    fs.mkdirSync(join(dir, "dotfiles"));
+    writeFileSync(target, "{ not json");
+    fs.symlinkSync(target, file);
+    const { turn, said, stores } = daemonOver(storage());
+    turn((s) => s.set(S2, "theme", "dracula"));
+    await stores.close();
+    const [aside] = fs
+      .readdirSync(join(dir, "dotfiles"))
+      .filter((f) => f.includes(".unread-"));
+    expect(readFileSync(join(dir, "dotfiles", aside!), "utf8")).toBe(
+      "{ not json",
+    );
+    expect(fs.lstatSync(file).isSymbolicLink()).toBe(true);
+    expect(JSON.parse(readFileSync(target, "utf8"))).toEqual({
+      s2: { theme: "dracula" },
+    });
+    expect(said).toContain(`it is kept as ${join(dir, "dotfiles", aside!)}`);
+  });
 
   const asRoot = process.getuid?.() === 0;
   (asRoot ? it.skip : it)(

@@ -345,11 +345,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       const text = reportText(report);
       log(text === null ? "info" : "warn", reportLine(report));
       if (text === null) continue;
-      if (found.kind === "refused")
+      // [LAW:single-enforcer] An occurrence restates through its family, which
+      // holds a recurrence back; a standing row restates here.
+      if (found.kind === "refused") {
         unsaved.set(file, { kind: "store-unsaved", file, message: text });
-      else storeLoads.occur({ file, text });
+        restateOnceBuilt();
+      } else storeLoads.occur({ file, text });
     }
-    restateOnceBuilt();
   };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);

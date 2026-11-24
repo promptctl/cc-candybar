@@ -25,7 +25,7 @@ import type {
   StoredState,
   StoreWrite,
 } from "../renderer-interface/stored-state";
-import { toNewest } from "../utils/recency";
+import { putNewest, toNewest } from "../utils/recency";
 import { StoredMoves } from "./stored-moves";
 import { withoutRetiredKeys } from "../renderer-interface/stored-state";
 
@@ -246,14 +246,13 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // written, here and in what the host is told.
   private changed(sessionId: SessionId, session: Session): void {
     session.revision = ++this.head;
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, session);
+    putNewest(this.sessions, sessionId, session);
     this.told(sessionId);
   }
 
   private dropped(sessionId: SessionId): void {
     this.head++;
-    this.sessions.delete(sessionId);
+    putNewest(this.sessions, sessionId, null);
     this.told(sessionId);
   }
 

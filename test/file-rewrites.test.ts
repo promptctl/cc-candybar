@@ -78,11 +78,16 @@ test("a set-aside lands before the rewrite, and a failed batch puts it back", ()
   const unread = () =>
     fs.readdirSync(dir).filter((name) => name.startsWith("book.json.unread-"));
   fs.writeFileSync(book, "{ not json");
+  const unreadBook = {
+    kind: "failed",
+    reason: `${book} is not JSON`,
+    file: book,
+  } as const;
   const seen: string[][] = [];
   const refused = new Error("the disk refused");
   const result = writeRevisions(
     {
-      setAside: book,
+      setAside: unreadBook,
       rewrites: [{ file: book, was: null, will: "{}\n" }],
       retire: null,
     },
@@ -98,7 +103,7 @@ test("a set-aside lands before the rewrite, and a failed batch puts it back", ()
   expect(unread()).toEqual([]);
 
   const landed = writeRevisions({
-    setAside: book,
+    setAside: unreadBook,
     rewrites: [{ file: book, was: null, will: "{}\n" }],
     retire: null,
   });
@@ -106,10 +111,50 @@ test("a set-aside lands before the rewrite, and a failed batch puts it back", ()
   expect(landed).toEqual({
     kind: "ok",
     files: [aside, book],
-    setAside: { from: book, to: aside },
+    setAside: {
+      file: book,
+      reason: `${book} is not JSON`,
+      from: book,
+      to: aside,
+    },
   });
   expect(fs.readFileSync(aside, "utf8")).toBe("{ not json");
   expect(fs.readFileSync(book, "utf8")).toBe("{}\n");
+});
+
+// [LAW:no-silent-failure] The one rollback that leaves the bytes aside says
+// where they are.
+test("a set-aside that cannot be put back names the copy its bytes are in", () => {
+  const book = path.join(dir, "book.json");
+  fs.writeFileSync(book, "{ not json");
+  const refused = new Error("the disk refused");
+  const result = writeRevisions(
+    {
+      setAside: { kind: "failed", reason: `${book} is not JSON`, file: book },
+      rewrites: [{ file: book, was: null, will: "{}\n" }],
+      retire: null,
+    },
+    () => {
+      // A directory with an entry now stands at the book's name, so the
+      // rename back fails.
+      fs.mkdirSync(path.join(book, "entry"), { recursive: true });
+      throw refused;
+    },
+  );
+  const [aside] = fs
+    .readdirSync(dir)
+    .filter((name) => name.startsWith("book.json.unread-"));
+  const kept = path.join(dir, aside!);
+  expect(fs.readFileSync(kept, "utf8")).toBe("{ not json");
+  expect(result).toMatchObject({
+    kind: "incomplete",
+    error: refused,
+    unrestored: [{ file: book }],
+  });
+  if (result.kind !== "incomplete") throw new Error("the rollback put it back");
+  expect(result.unrestored[0].error.message).toContain(
+    `its bytes are kept at ${kept}`,
+  );
 });
 
 // [LAW:single-enforcer] A link is written where it points, so the bytes a

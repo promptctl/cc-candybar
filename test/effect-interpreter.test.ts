@@ -23,7 +23,6 @@ import {
 } from "../src/daemon/config-discovery/repo-configs.js";
 import type { SessionId } from "../src/daemon/foundations/session-id.js";
 import { readTextIfPresent } from "../src/utils/regular-text.js";
-import type { StoreReport } from "../src/daemon/foundations/stored-file.js";
 import type {
   ConfigChange,
   EffectId,
@@ -169,7 +168,7 @@ describe("performChanges", () => {
   test("a file removed through a link removes its target and keeps the link", () => {
     const link = path.join(dir, "linked.json5");
     fs.symlinkSync("dotfiles.json5", link);
-    expect(perform([change(link, null, USER)], null)).toEqual({ kind: "ok", files: [path.join(fs.realpathSync(dir), "dotfiles.json5")] });
+    expect(perform([change(link, null, USER)], null)).toEqual({ kind: "ok", files: [path.join(fs.realpathSync(dir), "dotfiles.json5")], reports: [] });
     expect(perform([change(link, USER, null)], null)).toMatchObject({ kind: "ok" });
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(dir, "dotfiles.json5"))).toBe(false);
@@ -243,7 +242,7 @@ describe("performChanges with the trust book", () => {
     const said: string[] = [];
     const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
-      { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l), reported: () => {} },
+      { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
     );
     expect(outcome).toMatchObject({ kind: "ok" });
     expect(read(user)).toContain("dawn");
@@ -265,7 +264,6 @@ describe("performChanges with the trust book", () => {
       stateDir: state,
       answers: [answer(dir)],
       said: (line) => said.push(line),
-      reported: () => {},
     });
     if (outcome.kind !== "ok") throw new Error(JSON.stringify(outcome));
     const archive = outcome.files[2]!;
@@ -290,7 +288,7 @@ describe("performChanges with the trust book", () => {
       const said: string[] = [];
       const outcome = perform(
         [change(user, USER, USER.replace("dusk", "dawn"))],
-        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l), reported: () => {} },
+        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
       );
       expect(outcome).toMatchObject({ kind: "failed", reason: expect.stringContaining(old) });
       expect(read(user)).toBe(USER);
@@ -314,7 +312,7 @@ describe("performChanges with the trust book", () => {
       const said: string[] = [];
       const outcome = perform(
         [change(user, USER, USER.replace("dusk", "dawn"))],
-        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l), reported: () => {} },
+        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
       );
       expect(outcome).toMatchObject({ kind: "failed" });
       expect(outcome.kind === "failed" && outcome.reason).toMatch(
@@ -334,14 +332,9 @@ describe("performChanges with the trust book", () => {
     const book = repoConfigsPath(state);
     fs.mkdirSync(path.dirname(book), { recursive: true });
     fs.writeFileSync(book, "{ not json");
-    const reported: StoreReport[] = [];
-    const outcome = perform([], {
-      stateDir: state,
-      answers: [answer(dir)],
-      said: () => {},
-      reported: (r) => reported.push(r),
-    });
-    expect(outcome).toMatchObject({ kind: "ok" });
+    const outcome = perform([], { stateDir: state, answers: [answer(dir)], said: () => {} });
+    if (outcome.kind !== "ok") throw new Error(`the landing failed: ${outcome.kind}`);
+    const reported = outcome.reports;
     expect(repoConfigs(state).read()).toEqual({ kind: "ok", value: { [dir]: "approved" } });
     const to = expect.stringMatching(new RegExp(`^${book}\\.unread-`));
     expect(reported).toEqual([
@@ -365,14 +358,9 @@ describe("performChanges with the trust book", () => {
     fs.mkdirSync(path.dirname(target));
     fs.writeFileSync(target, "{ not json");
     fs.symlinkSync(target, book);
-    const reported: StoreReport[] = [];
-    const outcome = perform([], {
-      stateDir: state,
-      answers: [answer(dir)],
-      said: () => {},
-      reported: (r) => reported.push(r),
-    });
-    expect(outcome).toMatchObject({ kind: "ok" });
+    const outcome = perform([], { stateDir: state, answers: [answer(dir)], said: () => {} });
+    if (outcome.kind !== "ok") throw new Error(`the landing failed: ${outcome.kind}`);
+    const reported = outcome.reports;
     expect(fs.lstatSync(book).isSymbolicLink()).toBe(true);
     expect(JSON.parse(read(target))).toEqual({ [dir]: "approved" });
     const found = reported[0]!.found;
@@ -386,7 +374,7 @@ describe("performChanges with the trust book", () => {
     repos.set(dir, path.join(dir, "elsewhere"));
     const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
-      { stateDir: state, answers: [asked], said: () => {}, reported: () => {} },
+      { stateDir: state, answers: [asked], said: () => {} },
     );
     expect(outcome).toEqual({
       kind: "refused",
@@ -401,7 +389,7 @@ describe("performChanges with the trust book", () => {
     const asked = answer(dir);
     chains.delete(dir);
     expect(
-      perform([], { stateDir: state, answers: [asked], said: () => {}, reported: () => {} }),
+      perform([], { stateDir: state, answers: [asked], said: () => {} }),
     ).toMatchObject({ kind: "refused" });
     expect(fs.existsSync(repoConfigsPath(state))).toBe(false);
   });
@@ -411,7 +399,7 @@ describe("performChanges with the trust book", () => {
     fs.writeFileSync(user, USER.replace("dusk", "noon"));
     const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
-      { stateDir: state, answers: [answer(dir)], said: () => {}, reported: () => {} },
+      { stateDir: state, answers: [answer(dir)], said: () => {} },
     );
     expect(outcome.kind).toBe("refused");
     expect(fs.existsSync(repoConfigsPath(state))).toBe(false);

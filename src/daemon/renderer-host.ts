@@ -520,6 +520,8 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const landed = landConfig(changes, answers);
+    if (landed.kind === "ok")
+      recordTaken("landed config report", () => world.reported(landed.reports));
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
@@ -635,7 +637,7 @@ export function rendererHost(
       if (world.closing())
         return { kind: "closing", reason: "the daemon is closing" };
       if (changes.length + answers.length === 0)
-        return { kind: "ok", files: [] };
+        return { kind: "ok", files: [], reports: [] };
       return performChanges(
         changes,
         {
@@ -643,10 +645,6 @@ export function rendererHost(
           answers,
           said: (line) =>
             void recordTaken("trust book record", () => log("info", line)),
-          reported: (report) =>
-            void recordTaken("trust book report", () =>
-              world.reported([report]),
-            ),
         },
         world.configs,
         world.writeConfigFile,

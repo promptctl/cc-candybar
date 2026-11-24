@@ -141,10 +141,26 @@ describe("a load", () => {
     held.take([{ kind: "heard", key: S2 }]);
     expect(saves).toHaveLength(0);
     held.load();
+    // Replayed in the order taken: the put moves s1 to the newest end, then
+    // the hearing moves s2 past it.
     expect([...saves.at(-1)!]).toEqual([
-      [S2, "s2 value"],
       [S1, "newer"],
+      [S2, "s2 value"],
     ]);
+  });
+
+  test("a drop taken before the load is replayed over the file's sessions", () => {
+    const { held, saves } = holder({ kind: "ok", sessions: sessions(S1, S2) });
+    held.take([{ kind: "put", key: S1, value: null }]);
+    held.load();
+    expect([...held.entries().keys()]).toEqual([S2]);
+    expect([...saves.at(-1)!.keys()]).toEqual([S2]);
+  });
+
+  test("a second load throws", () => {
+    const { held } = holder();
+    held.load();
+    expect(() => held.load()).toThrow("The store is loaded twice");
   });
 
   test("a file over the bound loses its oldest at the load, and saves", () => {
@@ -222,6 +238,17 @@ describe("the order a restart reads", () => {
     expect(saves).toHaveLength(0);
     clock.advance(ORDER_PERIOD_MS);
     expect(saves.map((saved) => [...saved.keys()])).toEqual([[S2, S1]]);
+  });
+
+  test("a drop of a session it does not hold saves nothing and arms no write", () => {
+    const { held, saves, clock } = holder({
+      kind: "ok",
+      sessions: sessions(S1),
+    });
+    held.load();
+    held.take([{ kind: "put", key: S2, value: null }]);
+    clock.advance(ORDER_PERIOD_MS);
+    expect(saves).toHaveLength(0);
   });
 
   // [LAW:no-silent-failure] A save that throws leaves the file behind the

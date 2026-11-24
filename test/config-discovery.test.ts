@@ -1055,11 +1055,10 @@ test("the two renderers and an answer written through the host read each book re
         },
       ],
       said: () => {},
-      reported: () => {},
     },
     worker,
   );
-  expect(result).toEqual({ kind: "ok", files: [book] });
+  expect(result).toEqual({ kind: "ok", files: [book], reports: [] });
   // The same fresh observation supplies both the plan and the rollback bytes.
   expect(opens.slice(beforeWrite)).toEqual([book]);
   expect(reads.filter((path) => path === book)).toHaveLength(1);
@@ -1147,7 +1146,7 @@ test("a batch composes disjoint edits addressed through two names of one directo
     },
   );
   expect(fs.readFileSync(direct.file, "utf8")).toBe(changePadding(separator));
-  expect(result).toEqual({ kind: "ok", files: [file] });
+  expect(result).toEqual({ kind: "ok", files: [file], reports: [] });
   expect(published).toEqual([file]);
 });
 
@@ -1191,7 +1190,7 @@ test.each([
     const current = edited ? initial.replace('" "', '" | "') : initial;
     if (edited) fs.writeFileSync(file, current);
     const landed = performChanges([paddingEdit(origin, initial)], null, second);
-    expect(landed).toEqual({ kind: "ok", files: [file] });
+    expect(landed).toEqual({ kind: "ok", files: [file], reports: [] });
     expect(opens).toEqual([file, file]);
     expect(reads).toHaveLength(1 + newReads);
     if (landed.kind !== "ok") throw new Error(landed.reason);

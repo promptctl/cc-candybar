@@ -9,6 +9,7 @@ import {
   resolvedTarget,
   writeAtomic,
 } from "../utils/atomic-write.js";
+import type { SetAside, Unread } from "./foundations/stored-file.js";
 
 export interface FileRewrite {
   readonly file: string;
@@ -61,7 +62,7 @@ export type RevisionWrite =
       readonly kind: "ok";
       readonly files: readonly string[];
       // Where the batch set an unread file aside, if it did.
-      readonly setAside: FileRetirement | null;
+      readonly setAside: SetAside | null;
     }
   | { readonly kind: "failed"; readonly error: Error }
   | {
@@ -73,7 +74,7 @@ export type RevisionWrite =
 // One turn's batch: a state file that did not read, set aside before anything
 // is written, the rewrites, and a superseded file retired after them.
 export interface Revisions {
-  readonly setAside: string | null;
+  readonly setAside: Unread | null;
   readonly rewrites: Iterable<FileRewrite>;
   readonly retire: FileRetirement | null;
 }
@@ -87,9 +88,14 @@ export function writeRevisions(
   > = [];
   // [LAW:no-ambient-temporal-coupling] The set-aside lands first, so no
   // rewrite can touch the bytes it keeps, and it is undone last.
-  let aside: FileRetirement | null = null;
+  let aside: SetAside | null = null;
   try {
-    if (unread !== null) aside = setAside(unread);
+    if (unread !== null)
+      aside = {
+        file: unread.file,
+        reason: unread.reason,
+        ...setAside(unread.file),
+      };
     for (const rewrite of rewrites) {
       // [LAW:effects-at-boundaries] A removed file loses its mode with its
       // directory entry. Capture it before unlink so restoration can stage
@@ -129,7 +135,13 @@ export function writeRevisions(
       try {
         fs.renameSync(aside.to, aside.from);
       } catch (rollback) {
-        failed.push({ file: aside.from, error: asError(rollback) });
+        // [LAW:no-silent-failure] The one path where the bytes stay aside:
+        // the failure says where they are.
+        const { message } = asError(rollback);
+        failed.push({
+          file: aside.from,
+          error: new Error(`${message} — its bytes are kept at ${aside.to}`),
+        });
       }
     const [first, ...remaining] = failed;
     return first === undefined
