@@ -87861,7 +87861,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.237.0";
+var PACKAGE_VERSION = "1.237.1";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
