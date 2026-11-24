@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-953",
+      "ref": "refs/pull/953/merge",
+      "sha": "1ffa34fd8950de9044794335b31db73012ff463e",
+      "timestamp": "2026-11-24T18:29:47.932Z",
+      "commits": [
+        {
+          "sha": "1ffa34fd8950de9044794335b31db73012ff463e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T11:28:34-07:00",
+          "message": "Merge 3d7dac14e56961cef0bc634cdcccc82abb20eb8c into 6c7c981b224e645054c0e73a3bc2c8cd0e347174\n"
+        },
+        {
+          "sha": "3d7dac14e56961cef0bc634cdcccc82abb20eb8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T11:28:16-07:00",
+          "message": "fix(diagnostics): a message's about carries the rule that names it, so two load warnings are two messages\n\nabout was a bare string built four ways, and every load warning was about the bare kind, so two shared an identity and only list position told them apart: fixing the first left a viewer open on the second closed.\n\nabout is now a kind, a kind's subject, or the message's own text, built by its constructor, and the identity hashes each by rule. A load warning is about its text; the fault note reads its kind and subject from the same value.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "6c7c981b224e645054c0e73a3bc2c8cd0e347174",
