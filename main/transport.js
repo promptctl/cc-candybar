@@ -3668,28 +3668,6 @@ var require_path_browserify = __commonJS({
   }
 });
 
-// site/shims/url.ts
-var url_exports = {};
-__export(url_exports, {
-  URL: () => U,
-  URLSearchParams: () => S,
-  default: () => url_default,
-  fileURLToPath: () => fileURLToPath,
-  pathToFileURL: () => pathToFileURL
-});
-var fileURLToPath, pathToFileURL, U, S, url_default;
-var init_url = __esm({
-  "site/shims/url.ts"() {
-    "use strict";
-    init_globals();
-    fileURLToPath = (u) => decodeURIComponent(new URL(String(u)).pathname);
-    pathToFileURL = (p2) => new URL(`file://${encodeURI(p2)}`);
-    U = globalThis.URL;
-    S = globalThis.URLSearchParams;
-    url_default = { fileURLToPath, pathToFileURL, URL: U, URLSearchParams: S };
-  }
-});
-
 // node_modules/.pnpm/json5@2.2.3/node_modules/json5/dist/index.js
 var require_dist = __commonJS({
   "node_modules/.pnpm/json5@2.2.3/node_modules/json5/dist/index.js"(exports2, module2) {
@@ -5070,6 +5048,28 @@ var require_dist = __commonJS({
       var es5 = lib;
       return es5;
     }));
+  }
+});
+
+// site/shims/url.ts
+var url_exports = {};
+__export(url_exports, {
+  URL: () => U,
+  URLSearchParams: () => S,
+  default: () => url_default,
+  fileURLToPath: () => fileURLToPath,
+  pathToFileURL: () => pathToFileURL
+});
+var fileURLToPath, pathToFileURL, U, S, url_default;
+var init_url = __esm({
+  "site/shims/url.ts"() {
+    "use strict";
+    init_globals();
+    fileURLToPath = (u) => decodeURIComponent(new URL(String(u)).pathname);
+    pathToFileURL = (p2) => new URL(`file://${encodeURI(p2)}`);
+    U = globalThis.URL;
+    S = globalThis.URLSearchParams;
+    url_default = { fileURLToPath, pathToFileURL, URL: U, URLSearchParams: S };
   }
 });
 
@@ -28608,6 +28608,695 @@ init_globals();
 
 // src/config/loader/repo-gate.ts
 init_globals();
+
+// src/config/loader/diagnostics.ts
+init_globals();
+var import_json52 = __toESM(require_dist(), 1);
+
+// src/config/about.ts
+init_globals();
+var aboutKind = (kind) => ({
+  kind,
+  rule: "kind"
+});
+var aboutSubject = (kind, subject) => ({ kind, rule: "subject", subject });
+var aboutText = (kind, text5) => ({ kind, rule: "text", text: text5 });
+
+// src/config/json5-edit.ts
+init_globals();
+var import_json5 = __toESM(require_dist(), 1);
+var Json5EditError = class extends Error {
+  constructor(reason, offset) {
+    super(`${reason} (at offset ${offset})`);
+    this.reason = reason;
+    this.offset = offset;
+    this.name = "Json5EditError";
+  }
+  reason;
+  offset;
+};
+var IDENT_START = /[A-Za-z_$\p{L}]/u;
+var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
+var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
+var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var Scanner = class {
+  constructor(text5) {
+    this.text = text5;
+  }
+  text;
+  pos = 0;
+  peek() {
+    return this.text[this.pos] ?? "";
+  }
+  fail(message) {
+    throw new Json5EditError(message, this.pos);
+  }
+  skipTrivia() {
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") return;
+      if (WHITESPACE.test(c)) {
+        this.pos++;
+      } else if (c === "/" && this.text[this.pos + 1] === "/") {
+        const nl = this.text.indexOf("\n", this.pos);
+        this.pos = nl === -1 ? this.text.length : nl;
+      } else if (c === "/" && this.text[this.pos + 1] === "*") {
+        const close = this.text.indexOf("*/", this.pos + 2);
+        if (close === -1) this.fail("unterminated block comment");
+        this.pos = close + 2;
+      } else {
+        return;
+      }
+    }
+  }
+  expect(c) {
+    if (this.peek() !== c) this.fail(`expected "${c}"`);
+    this.pos++;
+  }
+  value() {
+    this.skipTrivia();
+    const c = this.peek();
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"' || c === "'") {
+      const span2 = this.stringSpan();
+      return { kind: "string", span: span2, value: this.decode(span2) };
+    }
+    if (c === "") this.fail("unexpected end of input");
+    const start = this.pos;
+    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
+      this.pos++;
+    }
+    if (this.pos === start) this.fail(`unexpected character "${c}"`);
+    const span = { start, end: this.pos };
+    const decoded = this.decode(span);
+    if (decoded === null) return { kind: "null", span };
+    if (typeof decoded === "boolean") {
+      return { kind: "boolean", span, value: decoded };
+    }
+    if (typeof decoded === "number") {
+      return { kind: "number", span, value: decoded };
+    }
+    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
+  }
+  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
+  decode(span) {
+    try {
+      return import_json5.default.parse(this.text.slice(span.start, span.end));
+    } catch (e) {
+      throw new Json5EditError(e.message, span.start);
+    }
+  }
+  stringSpan() {
+    const start = this.pos;
+    const quote2 = this.peek();
+    this.pos++;
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") this.fail("unterminated string");
+      if (c === "\\") {
+        const crlf = this.text.startsWith("\r\n", this.pos + 1);
+        this.pos += crlf ? 3 : 2;
+        continue;
+      }
+      this.pos++;
+      if (c === quote2) return { start, end: this.pos };
+      if (c === "\n") this.fail("unterminated string");
+    }
+  }
+  key() {
+    const c = this.peek();
+    if (c === '"' || c === "'") {
+      const span = this.stringSpan();
+      return { key: this.decode(span), span };
+    }
+    const start = this.pos;
+    if (!IDENT_START.test(c)) this.fail("expected an object key");
+    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
+      this.pos++;
+    }
+    return {
+      key: this.text.slice(start, this.pos),
+      span: { start, end: this.pos }
+    };
+  }
+  object() {
+    const start = this.pos;
+    this.expect("{");
+    const entries2 = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "}") break;
+      const { key, span: keySpan } = this.key();
+      if (entries2.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
+      this.skipTrivia();
+      this.expect(":");
+      const value = this.value();
+      entries2.push({
+        key,
+        keySpan,
+        value,
+        span: { start: keySpan.start, end: value.span.end }
+      });
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "}") this.fail('expected "," or "}"');
+    }
+    this.expect("}");
+    return { kind: "object", span: { start, end: this.pos }, entries: entries2 };
+  }
+  array() {
+    const start = this.pos;
+    this.expect("[");
+    const elements = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "]") break;
+      elements.push(this.value());
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "]") this.fail('expected "," or "]"');
+    }
+    this.expect("]");
+    return { kind: "array", span: { start, end: this.pos }, elements };
+  }
+};
+function parseDocument(text5) {
+  const s = new Scanner(text5);
+  const root = s.value();
+  s.skipTrivia();
+  if (s.pos !== text5.length) s.fail("trailing content after the document");
+  return root;
+}
+function entryOf(node, key) {
+  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
+}
+function nodeAt(root, path31) {
+  let node = root;
+  for (const key of path31) {
+    node = node === void 0 ? void 0 : entryOf(node, key)?.value;
+  }
+  return node;
+}
+function textOf(text5, node) {
+  return text5.slice(node.span.start, node.span.end);
+}
+function movableTextOf(text5, node) {
+  const indent2 = indentOfLine(text5, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text5, node).split("\n").map((line, i2) => {
+    const at = lineStart;
+    lineStart += line.length + 1;
+    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
+  }).join("\n");
+}
+function literalSpans(node) {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function keyText(key) {
+  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
+}
+var JSON5_DIALECT = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text5) => import_json5.default.parse(text5)
+};
+var JSON_DIALECT = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+  parse: (text5) => JSON.parse(text5)
+};
+function json5Text(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
+    return `[
+${items.join("\n")}
+]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries2 = Object.entries(value).filter(
+      ([, v]) => v !== void 0
+    );
+    if (entries2.length === 0) return "{}";
+    const items = entries2.map(
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
+    );
+    return `{
+${items.join("\n")}
+}`;
+  }
+  return JSON.stringify(value);
+}
+function eolOf(text5) {
+  return text5.includes("\r\n") ? "\r\n" : "\n";
+}
+function reindent(valueText, indent2, eol) {
+  return valueText.split("\n").join(`${eol}${indent2}`);
+}
+function entryText(path31, valueText, dialect) {
+  const [head, ...rest2] = path31;
+  const inner = rest2.length === 0 ? valueText : `{
+  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
+}`;
+  return `${dialect.key(head)}: ${inner}`;
+}
+function splice(text5, start, end, insert) {
+  return text5.slice(0, start) + insert + text5.slice(end);
+}
+function lineStartOf(text5, offset) {
+  return text5.lastIndexOf("\n", offset - 1) + 1;
+}
+function isBlank(s) {
+  return /^[ \t]*$/.test(s);
+}
+function indentOfLine(text5, offset) {
+  const ls = lineStartOf(text5, offset);
+  return /^[ \t]*/.exec(text5.slice(ls))[0];
+}
+function startsLine(text5, offset) {
+  return isBlank(text5.slice(lineStartOf(text5, offset), offset));
+}
+var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+function trailerAfter(text5, end) {
+  let i2 = end;
+  while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
+  const commaEnd = text5[i2] === "," ? i2 + 1 : -1;
+  if (commaEnd !== -1) i2 = commaEnd;
+  while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
+  LINE_TRAILER.lastIndex = i2;
+  const m = LINE_TRAILER.exec(text5);
+  if (m === null) return { commaEnd, line: null };
+  const next2 = i2 + m[0].length;
+  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
+}
+function removeMember(text5, span) {
+  const { commaEnd, line } = trailerAfter(text5, span.end);
+  if (startsLine(text5, span.start) && line !== null) {
+    return splice(text5, lineStartOf(text5, span.start), line.next, "");
+  }
+  if (commaEnd !== -1) {
+    let end = commaEnd;
+    while (end < text5.length && text5[end] === " ") end++;
+    return splice(text5, span.start, end, "");
+  }
+  let start = span.start;
+  while (start > 0 && (text5[start - 1] === " " || text5[start - 1] === "	")) {
+    start--;
+  }
+  if (text5[start - 1] === ",") return splice(text5, start - 1, span.end, "");
+  return splice(text5, span.start, span.end, "");
+}
+function insertLineAfter(text5, span, trailer, memberText, indent2) {
+  const hasComma = trailer.commaEnd !== -1;
+  const withComma = hasComma ? text5 : splice(text5, span.end, span.end, ",");
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text5);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
+}
+function appendMember(text5, container, memberText, dialect) {
+  const members = container.kind === "object" ? container.entries : container.elements;
+  const last2 = members[members.length - 1];
+  const baseIndent = indentOfLine(text5, container.span.start);
+  if (last2 === void 0) {
+    const inner = baseIndent + "  ";
+    const eol = eolOf(text5);
+    return splice(
+      text5,
+      container.span.start + 1,
+      container.span.end - 1,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
+    );
+  }
+  const { commaEnd, line } = trailerAfter(text5, last2.span.end);
+  if (startsLine(text5, last2.span.start) && line !== null) {
+    const indent2 = text5.slice(
+      lineStartOf(text5, last2.span.start),
+      last2.span.start
+    );
+    return insertLineAfter(
+      text5,
+      last2.span,
+      { commaEnd, line },
+      memberText,
+      indent2
+    );
+  }
+  const at = commaEnd === -1 ? last2.span.end : commaEnd;
+  const sep2 = commaEnd === -1 ? ", " : " ";
+  const tail = commaEnd === -1 ? "" : ",";
+  return splice(text5, at, at, `${sep2}${memberText}${tail}`);
+}
+function setValue(text5, path31, valueText, dialect) {
+  if (path31.length === 0) {
+    throw new Json5EditError("setValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text5)) {
+    const eol = eolOf(text5);
+    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+  }
+  return setBelow(text5, parseDocument(text5), path31, valueText, dialect);
+}
+function insertValue(text5, path31, valueText, dialect, precedes) {
+  const parentPath = path31.slice(0, -1);
+  if (/^\s*$/.test(text5) && parentPath.length === 0)
+    return setValue(text5, path31, valueText, dialect);
+  const leaf2 = path31[path31.length - 1];
+  const parent = nodeAt(parseDocument(text5), parentPath);
+  if (leaf2 === void 0 || parent?.kind !== "object")
+    throw new Json5EditError(
+      `cannot insert ${path31.join(".")}: its parent is not an object`,
+      parent?.span.start ?? 0
+    );
+  if (entryOf(parent, leaf2) !== void 0)
+    throw new Json5EditError(
+      `cannot insert ${path31.join(".")}: it is already there`,
+      parent.span.start
+    );
+  const member = entryText([leaf2], valueText, dialect);
+  const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
+  if (next2 === void 0) return appendMember(text5, parent, member, dialect);
+  if (!startsLine(text5, next2.span.start))
+    return splice(text5, next2.span.start, next2.span.start, `${member}, `);
+  const indent2 = indentOfLine(text5, next2.span.start);
+  const eol = eolOf(text5);
+  const at = lineStartOf(text5, next2.span.start);
+  return splice(
+    text5,
+    at,
+    at,
+    `${indent2}${reindent(member, indent2, eol)},${eol}`
+  );
+}
+function setBelow(text5, start, path31, valueText, dialect) {
+  let node = start;
+  for (let i2 = 0; i2 < path31.length; i2++) {
+    if (node.kind !== "object") {
+      throw new Json5EditError(
+        `cannot set ${path31.join(".")}: ${path31.slice(0, i2).join(".") || "the document"} is not an object`,
+        node.span.start
+      );
+    }
+    const entry = entryOf(node, path31[i2]);
+    if (entry === void 0) {
+      return appendMember(
+        text5,
+        node,
+        entryText(path31.slice(i2), valueText, dialect),
+        dialect
+      );
+    }
+    if (i2 === path31.length - 1) {
+      const indent2 = indentOfLine(text5, entry.keySpan.start);
+      return splice(
+        text5,
+        entry.value.span.start,
+        entry.value.span.end,
+        reindent(valueText, indent2, eolOf(text5))
+      );
+    }
+    node = entry.value;
+  }
+  throw new Json5EditError("unreachable: path exhausted", 0);
+}
+function deleteValue(text5, path31, keep = 0) {
+  if (path31.length === 0) {
+    throw new Json5EditError("deleteValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text5)) return text5;
+  const parentPath = path31.slice(0, -1);
+  const parent = nodeAt(parseDocument(text5), parentPath);
+  const entry = parent === void 0 ? void 0 : entryOf(parent, path31[path31.length - 1]);
+  if (entry === void 0 || parent?.kind !== "object") return text5;
+  const pruned = removeMember(text5, entry.span);
+  return parentPath.length > keep && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep) : pruned;
+}
+var CHILD_KEYS = ["h", "v", "children"];
+function placementIdOf(node) {
+  if (node.kind === "string") return node.value;
+  if (node.kind !== "object") return void 0;
+  const seg2 = entryOf(node, "seg")?.value;
+  const kind = entryOf(node, "kind")?.value;
+  const name = entryOf(node, "name")?.value;
+  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
+  if (segName === void 0) return void 0;
+  const id2 = entryOf(node, "id")?.value;
+  return id2?.kind === "string" ? id2.value : segName;
+}
+function childArraysOf(node) {
+  if (node.kind !== "object") return [];
+  return CHILD_KEYS.map((k) => entryOf(node, k)?.value).filter(
+    (v) => v?.kind === "array"
+  );
+}
+function rowEntriesOf(node) {
+  const rows = entryOf(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
+}
+function restagesFragment(node) {
+  if (node.kind !== "object") return true;
+  const rows = rowEntriesOf(node);
+  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
+}
+function* nodesIn(node, bareAt) {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row.value,
+      bareAt === null ? null : [...bareAt, "rows", row.key]
+    );
+  }
+}
+function hasSegmentRef(root, id2) {
+  for (const { node } of nodesIn(root, null)) {
+    if (placementIdOf(node) === id2) return true;
+  }
+  return false;
+}
+function refAt(text5, rootPath, id2) {
+  const root = nodeAt(parseDocument(text5), rootPath);
+  if (root === void 0) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (placementIdOf(node) !== id2) continue;
+    if (bareAt === null) return { text: text5, ref: node };
+    const wrapped = setValue(
+      text5,
+      bareAt,
+      `{ h: [${textOf(text5, node)}] }`,
+      JSON5_DIALECT
+    );
+    return refAt(wrapped, rootPath, id2);
+  }
+  return null;
+}
+function removeSegmentRef(text5, rootPath, target) {
+  const hit = refAt(text5, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
+}
+function insertSegmentRef(text5, rootPath, placement, anchor, relation) {
+  const hit = refAt(text5, rootPath, anchor);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const newText = `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
+    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
+      src,
+      ref.span.start,
+      ref.span.start,
+      `${newText},${eolOf(src)}${indent2}`
+    );
+  }
+  const refText = textOf(src, ref);
+  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
+  return splice(src, ref.span.start, ref.span.end, pair);
+}
+function setPlacementSetting(text5, rootPath, id2, setting, valueText) {
+  const hit = refAt(text5, rootPath, id2);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
+    );
+  }
+  return entryOf(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+}
+
+// src/config/loader/diagnostics.ts
+function parseJson5Syntax(source) {
+  try {
+    return { kind: "parsed", value: import_json52.default.parse(source) };
+  } catch (e) {
+    const error = e;
+    return {
+      kind: "invalid",
+      issue: {
+        path: "",
+        message: `JSON5 syntax error: ${error.message}`,
+        line: error.lineNumber,
+        col: error.columnNumber
+      }
+    };
+  }
+}
+var advisory = (subject, message) => ({
+  subject,
+  message
+});
+var loadAbout = (subject) => aboutSubject("load", JSON.stringify(subject));
+var ConfigError = class extends Error {
+  file;
+  issues;
+  /** Advisories the file earned before it failed — reported beside the error. */
+  warnings;
+  constructor(file, issues, warnings = []) {
+    super(formatIssues(file, issues));
+    this.name = "ConfigError";
+    this.file = file;
+    this.issues = issues;
+    this.warnings = warnings;
+  }
+};
+var DroppedFileError = class extends ConfigError {
+  prompt;
+  constructor(file, issues) {
+    super(file, issues);
+    this.name = "DroppedFileError";
+    this.prompt = [
+      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
+      `Config file to edit: ${file}`,
+      this.message,
+      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
+    ].join("\n\n");
+  }
+};
+function findKeyLine(source, pathParts) {
+  return keyLocator(source)(pathParts);
+}
+function keyLocator(source) {
+  let parsed2;
+  const document = () => {
+    parsed2 ??= { node: parseOrUndefined(source) };
+    return parsed2.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+function parseOrUndefined(source) {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return void 0;
+    throw e;
+  }
+}
+function keyLine(source, document, pathParts) {
+  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
+  if (indexed !== void 0) return indexed;
+  let cursor = 0;
+  let foundCursor;
+  for (const part of pathParts) {
+    if (part === "" || /^\d+$/.test(part)) continue;
+    const found2 = findKeyOccurrence(source, cursor, part);
+    if (found2 === -1) {
+      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+    }
+    cursor = found2;
+    foundCursor = found2;
+  }
+  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+}
+function elementPathLine(source, document, pathParts) {
+  if (document === void 0) return void 0;
+  let node = document;
+  let reached;
+  let indexed = false;
+  for (const part of pathParts) {
+    const element = node.kind === "array" && /^\d+$/.test(part);
+    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
+    if (next2 === void 0) break;
+    indexed ||= element;
+    node = next2;
+    reached = next2;
+  }
+  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
+}
+function findKeyOccurrence(source, from, key) {
+  const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
+  re.lastIndex = from;
+  const m = re.exec(source);
+  return m ? m.index : -1;
+}
+function lineFromOffset(source, offset) {
+  let line = 1;
+  for (let i2 = 0; i2 < offset && i2 < source.length; i2++) {
+    if (source.charCodeAt(i2) === 10) line++;
+  }
+  return line;
+}
+function editabilityNotice(filePath2, source) {
+  try {
+    parseDocument(source);
+    return null;
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    return advisory(
+      ["editability", filePath2],
+      `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`
+    );
+  }
+}
+function formatIssues(file, issues) {
+  if (issues.length === 0) return `${file}: invalid config (no details)`;
+  const lines2 = [
+    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
+  ];
+  for (const issue3 of issues) {
+    const locParts = [];
+    if (issue3.line !== void 0) {
+      locParts.push(
+        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
+      );
+    }
+    if (issue3.path) locParts.push(issue3.path);
+    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
+    lines2.push(`  ${loc}${issue3.message}`);
+  }
+  return lines2.join("\n");
+}
+
+// src/config/loader/repo-gate.ts
 var REPO_ANSWERS = ["approved", "declined"];
 function answerDir(d) {
   switch (d.link.kind) {
@@ -28657,10 +29346,16 @@ function withAnswer(book, dir, answer2, superseded) {
   return { ...Object.fromEntries(rest2), [dir]: answer2 };
 }
 function repoUnreadNotice(gate2) {
-  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
+  return gate2.unread === null ? null : advisory(
+    ["repository-answers"],
+    `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`
+  );
 }
 
 // src/render/diagnostics.ts
+init_globals();
+
+// src/utils/plain.ts
 init_globals();
 
 // site/shims/crypto.ts
@@ -28704,6 +29399,23 @@ function timingSafeEqual(a, b) {
 var randomUUID = () => globalThis.crypto.randomUUID();
 var randomBytes = (n) => import_buffer2.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
 var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/plain.ts
+function ownValue(record2, key) {
+  return Object.hasOwn(record2, key) ? record2[key] : void 0;
+}
+function digestOf(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
 init_globals();
@@ -41224,13 +41936,13 @@ var DISTRIBUTIONS = {
 };
 var DEFAULT_DISTRIBUTION = "van-der-corput";
 var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
-function entryOf(step4, size) {
+function entryOf2(step4, size) {
   if (step4 === void 0) return 0;
   const { place, quantize } = step4.distribution;
   return quantize(place(step4.index, step4.count), size);
 }
 function vocabularySelect(vocabulary, step4) {
-  const entry = vocabulary[entryOf(step4, vocabulary.length)];
+  const entry = vocabulary[entryOf2(step4, vocabulary.length)];
   if (entry === void 0)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -41241,7 +41953,7 @@ function rowAndCell(address) {
   const rows = at === -1 ? address : address.slice(0, at);
   return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
-var rowStart = (variation, row) => entryOf(row, variation.hues.length);
+var rowStart = (variation, row) => entryOf2(row, variation.hues.length);
 function decorEntryFor(palette, decor, address, drawnAt) {
   const { row, cell: cell3 } = rowAndCell(address);
   if (cell3 === void 0) return dealtAt(palette, decor, row, cell3, drawnAt);
@@ -41874,676 +42586,6 @@ var TRUNCATE_MODES = [
   "left",
   "middle"
 ];
-
-// src/config/loader/diagnostics.ts
-init_globals();
-var import_json52 = __toESM(require_dist(), 1);
-
-// src/config/json5-edit.ts
-init_globals();
-var import_json5 = __toESM(require_dist(), 1);
-var Json5EditError = class extends Error {
-  constructor(reason, offset) {
-    super(`${reason} (at offset ${offset})`);
-    this.reason = reason;
-    this.offset = offset;
-    this.name = "Json5EditError";
-  }
-  reason;
-  offset;
-};
-var IDENT_START = /[A-Za-z_$\p{L}]/u;
-var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
-var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
-var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
-var Scanner = class {
-  constructor(text5) {
-    this.text = text5;
-  }
-  text;
-  pos = 0;
-  peek() {
-    return this.text[this.pos] ?? "";
-  }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
-  }
-  skipTrivia() {
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") return;
-      if (WHITESPACE.test(c)) {
-        this.pos++;
-      } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
-      } else if (c === "/" && this.text[this.pos + 1] === "*") {
-        const close = this.text.indexOf("*/", this.pos + 2);
-        if (close === -1) this.fail("unterminated block comment");
-        this.pos = close + 2;
-      } else {
-        return;
-      }
-    }
-  }
-  expect(c) {
-    if (this.peek() !== c) this.fail(`expected "${c}"`);
-    this.pos++;
-  }
-  value() {
-    this.skipTrivia();
-    const c = this.peek();
-    if (c === "{") return this.object();
-    if (c === "[") return this.array();
-    if (c === '"' || c === "'") {
-      const span2 = this.stringSpan();
-      return { kind: "string", span: span2, value: this.decode(span2) };
-    }
-    if (c === "") this.fail("unexpected end of input");
-    const start = this.pos;
-    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
-      this.pos++;
-    }
-    if (this.pos === start) this.fail(`unexpected character "${c}"`);
-    const span = { start, end: this.pos };
-    const decoded = this.decode(span);
-    if (decoded === null) return { kind: "null", span };
-    if (typeof decoded === "boolean") {
-      return { kind: "boolean", span, value: decoded };
-    }
-    if (typeof decoded === "number") {
-      return { kind: "number", span, value: decoded };
-    }
-    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
-  }
-  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
-  decode(span) {
-    try {
-      return import_json5.default.parse(this.text.slice(span.start, span.end));
-    } catch (e) {
-      throw new Json5EditError(e.message, span.start);
-    }
-  }
-  stringSpan() {
-    const start = this.pos;
-    const quote2 = this.peek();
-    this.pos++;
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") this.fail("unterminated string");
-      if (c === "\\") {
-        const crlf = this.text.startsWith("\r\n", this.pos + 1);
-        this.pos += crlf ? 3 : 2;
-        continue;
-      }
-      this.pos++;
-      if (c === quote2) return { start, end: this.pos };
-      if (c === "\n") this.fail("unterminated string");
-    }
-  }
-  key() {
-    const c = this.peek();
-    if (c === '"' || c === "'") {
-      const span = this.stringSpan();
-      return { key: this.decode(span), span };
-    }
-    const start = this.pos;
-    if (!IDENT_START.test(c)) this.fail("expected an object key");
-    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
-      this.pos++;
-    }
-    return {
-      key: this.text.slice(start, this.pos),
-      span: { start, end: this.pos }
-    };
-  }
-  object() {
-    const start = this.pos;
-    this.expect("{");
-    const entries2 = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "}") break;
-      const { key, span: keySpan } = this.key();
-      if (entries2.some((e) => e.key === key)) {
-        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
-      }
-      this.skipTrivia();
-      this.expect(":");
-      const value = this.value();
-      entries2.push({
-        key,
-        keySpan,
-        value,
-        span: { start: keySpan.start, end: value.span.end }
-      });
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "}") this.fail('expected "," or "}"');
-    }
-    this.expect("}");
-    return { kind: "object", span: { start, end: this.pos }, entries: entries2 };
-  }
-  array() {
-    const start = this.pos;
-    this.expect("[");
-    const elements = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "]") break;
-      elements.push(this.value());
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "]") this.fail('expected "," or "]"');
-    }
-    this.expect("]");
-    return { kind: "array", span: { start, end: this.pos }, elements };
-  }
-};
-function parseDocument(text5) {
-  const s = new Scanner(text5);
-  const root = s.value();
-  s.skipTrivia();
-  if (s.pos !== text5.length) s.fail("trailing content after the document");
-  return root;
-}
-function entryOf2(node, key) {
-  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
-}
-function nodeAt(root, path31) {
-  let node = root;
-  for (const key of path31) {
-    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
-  }
-  return node;
-}
-function textOf(text5, node) {
-  return text5.slice(node.span.start, node.span.end);
-}
-function movableTextOf(text5, node) {
-  const indent2 = indentOfLine(text5, node.span.start);
-  const literals = literalSpans(node);
-  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
-  let lineStart = node.span.start;
-  return textOf(text5, node).split("\n").map((line, i2) => {
-    const at = lineStart;
-    lineStart += line.length + 1;
-    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
-    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
-  }).join("\n");
-}
-function literalSpans(node) {
-  switch (node.kind) {
-    case "object":
-      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
-    case "array":
-      return node.elements.flatMap(literalSpans);
-    case "string":
-      return [node.span];
-    default:
-      return [];
-  }
-}
-var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-function keyText(key) {
-  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
-}
-var JSON5_DIALECT = {
-  key: keyText,
-  trailingComma: ",",
-  parse: (text5) => import_json5.default.parse(text5)
-};
-var JSON_DIALECT = {
-  key: (key) => JSON.stringify(key),
-  trailingComma: "",
-  parse: (text5) => JSON.parse(text5)
-};
-function json5Text(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
-    return `[
-${items.join("\n")}
-]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries2 = Object.entries(value).filter(
-      ([, v]) => v !== void 0
-    );
-    if (entries2.length === 0) return "{}";
-    const items = entries2.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
-    );
-    return `{
-${items.join("\n")}
-}`;
-  }
-  return JSON.stringify(value);
-}
-function eolOf(text5) {
-  return text5.includes("\r\n") ? "\r\n" : "\n";
-}
-function reindent(valueText, indent2, eol) {
-  return valueText.split("\n").join(`${eol}${indent2}`);
-}
-function entryText(path31, valueText, dialect) {
-  const [head, ...rest2] = path31;
-  const inner = rest2.length === 0 ? valueText : `{
-  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
-}`;
-  return `${dialect.key(head)}: ${inner}`;
-}
-function splice(text5, start, end, insert) {
-  return text5.slice(0, start) + insert + text5.slice(end);
-}
-function lineStartOf(text5, offset) {
-  return text5.lastIndexOf("\n", offset - 1) + 1;
-}
-function isBlank(s) {
-  return /^[ \t]*$/.test(s);
-}
-function indentOfLine(text5, offset) {
-  const ls = lineStartOf(text5, offset);
-  return /^[ \t]*/.exec(text5.slice(ls))[0];
-}
-function startsLine(text5, offset) {
-  return isBlank(text5.slice(lineStartOf(text5, offset), offset));
-}
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text5, end) {
-  let i2 = end;
-  while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
-  const commaEnd = text5[i2] === "," ? i2 + 1 : -1;
-  if (commaEnd !== -1) i2 = commaEnd;
-  while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
-  LINE_TRAILER.lastIndex = i2;
-  const m = LINE_TRAILER.exec(text5);
-  if (m === null) return { commaEnd, line: null };
-  const next2 = i2 + m[0].length;
-  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
-}
-function removeMember(text5, span) {
-  const { commaEnd, line } = trailerAfter(text5, span.end);
-  if (startsLine(text5, span.start) && line !== null) {
-    return splice(text5, lineStartOf(text5, span.start), line.next, "");
-  }
-  if (commaEnd !== -1) {
-    let end = commaEnd;
-    while (end < text5.length && text5[end] === " ") end++;
-    return splice(text5, span.start, end, "");
-  }
-  let start = span.start;
-  while (start > 0 && (text5[start - 1] === " " || text5[start - 1] === "	")) {
-    start--;
-  }
-  if (text5[start - 1] === ",") return splice(text5, start - 1, span.end, "");
-  return splice(text5, span.start, span.end, "");
-}
-function insertLineAfter(text5, span, trailer, memberText, indent2) {
-  const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text5 : splice(text5, span.end, span.end, ",");
-  const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text5);
-  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line);
-}
-function appendMember(text5, container, memberText, dialect) {
-  const members = container.kind === "object" ? container.entries : container.elements;
-  const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text5, container.span.start);
-  if (last2 === void 0) {
-    const inner = baseIndent + "  ";
-    const eol = eolOf(text5);
-    return splice(
-      text5,
-      container.span.start + 1,
-      container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
-    );
-  }
-  const { commaEnd, line } = trailerAfter(text5, last2.span.end);
-  if (startsLine(text5, last2.span.start) && line !== null) {
-    const indent2 = text5.slice(
-      lineStartOf(text5, last2.span.start),
-      last2.span.start
-    );
-    return insertLineAfter(
-      text5,
-      last2.span,
-      { commaEnd, line },
-      memberText,
-      indent2
-    );
-  }
-  const at = commaEnd === -1 ? last2.span.end : commaEnd;
-  const sep2 = commaEnd === -1 ? ", " : " ";
-  const tail = commaEnd === -1 ? "" : ",";
-  return splice(text5, at, at, `${sep2}${memberText}${tail}`);
-}
-function setValue(text5, path31, valueText, dialect) {
-  if (path31.length === 0) {
-    throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text5)) {
-    const eol = eolOf(text5);
-    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
-  return setBelow(text5, parseDocument(text5), path31, valueText, dialect);
-}
-function insertValue(text5, path31, valueText, dialect, precedes) {
-  const parentPath = path31.slice(0, -1);
-  if (/^\s*$/.test(text5) && parentPath.length === 0)
-    return setValue(text5, path31, valueText, dialect);
-  const leaf2 = path31[path31.length - 1];
-  const parent = nodeAt(parseDocument(text5), parentPath);
-  if (leaf2 === void 0 || parent?.kind !== "object")
-    throw new Json5EditError(
-      `cannot insert ${path31.join(".")}: its parent is not an object`,
-      parent?.span.start ?? 0
-    );
-  if (entryOf2(parent, leaf2) !== void 0)
-    throw new Json5EditError(
-      `cannot insert ${path31.join(".")}: it is already there`,
-      parent.span.start
-    );
-  const member = entryText([leaf2], valueText, dialect);
-  const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
-  if (next2 === void 0) return appendMember(text5, parent, member, dialect);
-  if (!startsLine(text5, next2.span.start))
-    return splice(text5, next2.span.start, next2.span.start, `${member}, `);
-  const indent2 = indentOfLine(text5, next2.span.start);
-  const eol = eolOf(text5);
-  const at = lineStartOf(text5, next2.span.start);
-  return splice(
-    text5,
-    at,
-    at,
-    `${indent2}${reindent(member, indent2, eol)},${eol}`
-  );
-}
-function setBelow(text5, start, path31, valueText, dialect) {
-  let node = start;
-  for (let i2 = 0; i2 < path31.length; i2++) {
-    if (node.kind !== "object") {
-      throw new Json5EditError(
-        `cannot set ${path31.join(".")}: ${path31.slice(0, i2).join(".") || "the document"} is not an object`,
-        node.span.start
-      );
-    }
-    const entry = entryOf2(node, path31[i2]);
-    if (entry === void 0) {
-      return appendMember(
-        text5,
-        node,
-        entryText(path31.slice(i2), valueText, dialect),
-        dialect
-      );
-    }
-    if (i2 === path31.length - 1) {
-      const indent2 = indentOfLine(text5, entry.keySpan.start);
-      return splice(
-        text5,
-        entry.value.span.start,
-        entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text5))
-      );
-    }
-    node = entry.value;
-  }
-  throw new Json5EditError("unreachable: path exhausted", 0);
-}
-function deleteValue(text5, path31, keep = 0) {
-  if (path31.length === 0) {
-    throw new Json5EditError("deleteValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text5)) return text5;
-  const parentPath = path31.slice(0, -1);
-  const parent = nodeAt(parseDocument(text5), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf2(parent, path31[path31.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text5;
-  const pruned = removeMember(text5, entry.span);
-  return parentPath.length > keep && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep) : pruned;
-}
-var CHILD_KEYS = ["h", "v", "children"];
-function placementIdOf(node) {
-  if (node.kind === "string") return node.value;
-  if (node.kind !== "object") return void 0;
-  const seg2 = entryOf2(node, "seg")?.value;
-  const kind = entryOf2(node, "kind")?.value;
-  const name = entryOf2(node, "name")?.value;
-  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
-  if (segName === void 0) return void 0;
-  const id2 = entryOf2(node, "id")?.value;
-  return id2?.kind === "string" ? id2.value : segName;
-}
-function childArraysOf(node) {
-  if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
-    (v) => v?.kind === "array"
-  );
-}
-function rowEntriesOf(node) {
-  const rows = entryOf2(node, "rows")?.value;
-  return rows?.kind === "object" ? rows.entries : null;
-}
-function restagesFragment(node) {
-  if (node.kind !== "object") return true;
-  const rows = rowEntriesOf(node);
-  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
-}
-function* nodesIn(node, bareAt) {
-  yield { node, bareAt };
-  for (const array of childArraysOf(node)) {
-    for (const child of array.elements) yield* nodesIn(child, null);
-  }
-  for (const row of rowEntriesOf(node) ?? []) {
-    yield* nodesIn(
-      row.value,
-      bareAt === null ? null : [...bareAt, "rows", row.key]
-    );
-  }
-}
-function hasSegmentRef(root, id2) {
-  for (const { node } of nodesIn(root, null)) {
-    if (placementIdOf(node) === id2) return true;
-  }
-  return false;
-}
-function refAt(text5, rootPath, id2) {
-  const root = nodeAt(parseDocument(text5), rootPath);
-  if (root === void 0) return null;
-  for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text5, ref: node };
-    const wrapped = setValue(
-      text5,
-      bareAt,
-      `{ h: [${textOf(text5, node)}] }`,
-      JSON5_DIALECT
-    );
-    return refAt(wrapped, rootPath, id2);
-  }
-  return null;
-}
-function removeSegmentRef(text5, rootPath, target) {
-  const hit = refAt(text5, rootPath, target);
-  return hit === null ? null : removeMember(hit.text, hit.ref.span);
-}
-function insertSegmentRef(text5, rootPath, placement, anchor, relation) {
-  const hit = refAt(text5, rootPath, anchor);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const newText = `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line !== null) {
-    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
-      src,
-      ref.span.start,
-      ref.span.start,
-      `${newText},${eolOf(src)}${indent2}`
-    );
-  }
-  const refText = textOf(src, ref);
-  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(src, ref.span.start, ref.span.end, pair);
-}
-function setPlacementSetting(text5, rootPath, id2, setting, valueText) {
-  const hit = refAt(text5, rootPath, id2);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const settings = `{ ${keyText(setting)}: ${valueText} }`;
-  if (ref.kind === "string") {
-    return splice(
-      src,
-      ref.span.start,
-      ref.span.end,
-      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
-    );
-  }
-  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
-}
-
-// src/config/loader/diagnostics.ts
-function parseJson5Syntax(source) {
-  try {
-    return { kind: "parsed", value: import_json52.default.parse(source) };
-  } catch (e) {
-    const error = e;
-    return {
-      kind: "invalid",
-      issue: {
-        path: "",
-        message: `JSON5 syntax error: ${error.message}`,
-        line: error.lineNumber,
-        col: error.columnNumber
-      }
-    };
-  }
-}
-var ConfigError = class extends Error {
-  file;
-  issues;
-  /** Advisories the file earned before it failed — reported beside the error. */
-  warnings;
-  constructor(file, issues, warnings = []) {
-    super(formatIssues(file, issues));
-    this.name = "ConfigError";
-    this.file = file;
-    this.issues = issues;
-    this.warnings = warnings;
-  }
-};
-var DroppedFileError = class extends ConfigError {
-  prompt;
-  constructor(file, issues) {
-    super(file, issues);
-    this.name = "DroppedFileError";
-    this.prompt = [
-      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
-      `Config file to edit: ${file}`,
-      this.message,
-      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
-    ].join("\n\n");
-  }
-};
-function findKeyLine(source, pathParts) {
-  return keyLocator(source)(pathParts);
-}
-function keyLocator(source) {
-  let parsed2;
-  const document = () => {
-    parsed2 ??= { node: parseOrUndefined(source) };
-    return parsed2.node;
-  };
-  return (pathParts) => keyLine(source, document, pathParts);
-}
-function parseOrUndefined(source) {
-  try {
-    return parseDocument(source);
-  } catch (e) {
-    if (e instanceof Json5EditError) return void 0;
-    throw e;
-  }
-}
-function keyLine(source, document, pathParts) {
-  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
-  if (indexed !== void 0) return indexed;
-  let cursor = 0;
-  let foundCursor;
-  for (const part of pathParts) {
-    if (part === "" || /^\d+$/.test(part)) continue;
-    const found2 = findKeyOccurrence(source, cursor, part);
-    if (found2 === -1) {
-      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-    }
-    cursor = found2;
-    foundCursor = found2;
-  }
-  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-}
-function elementPathLine(source, document, pathParts) {
-  if (document === void 0) return void 0;
-  let node = document;
-  let reached;
-  let indexed = false;
-  for (const part of pathParts) {
-    const element = node.kind === "array" && /^\d+$/.test(part);
-    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
-    if (next2 === void 0) break;
-    indexed ||= element;
-    node = next2;
-    reached = next2;
-  }
-  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
-}
-function findKeyOccurrence(source, from, key) {
-  const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-  const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
-  re.lastIndex = from;
-  const m = re.exec(source);
-  return m ? m.index : -1;
-}
-function lineFromOffset(source, offset) {
-  let line = 1;
-  for (let i2 = 0; i2 < offset && i2 < source.length; i2++) {
-    if (source.charCodeAt(i2) === 10) line++;
-  }
-  return line;
-}
-function editabilityNotice(filePath2, source) {
-  try {
-    parseDocument(source);
-    return null;
-  } catch (e) {
-    if (!(e instanceof Json5EditError)) throw e;
-    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
-  }
-}
-function formatIssues(file, issues) {
-  if (issues.length === 0) return `${file}: invalid config (no details)`;
-  const lines2 = [
-    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
-  ];
-  for (const issue3 of issues) {
-    const locParts = [];
-    if (issue3.line !== void 0) {
-      locParts.push(
-        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
-      );
-    }
-    if (issue3.path) locParts.push(issue3.path);
-    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
-    lines2.push(`  ${loc}${issue3.message}`);
-  }
-  return lines2.join("\n");
-}
 
 // src/config/loader/validate-core.ts
 function requireString(ctx, path31, raw, field) {
@@ -48972,7 +49014,6 @@ var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
 function diagnosticSpan(text5, link) {
   return { text: sanitizeText(text5), link };
 }
-var aboutOf = (kind, subject) => subject === void 0 ? kind : `${kind}\0${subject}`;
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
   const plainOf3 = (text5, severity) => {
@@ -49033,9 +49074,11 @@ var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
 var PAGES = 4096;
 function identityOf(message) {
-  const digest2 = createHash("sha256").update(
-    `${message.severity.level}\0${message.severity.glyph}\0${message.about}`
-  ).digest("hex");
+  const digest2 = digestOf([
+    message.severity.level,
+    message.severity.glyph,
+    message.about
+  ]);
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
 var pageKey = (stop2, page2) => String(stop2 * PAGES + page2 + 1);
@@ -49187,7 +49230,7 @@ function repoQuestions(question, sessionId2) {
     const line = [diagnosticSpan(message, null), ...answers];
     return {
       severity: APPROVAL_SEVERITY,
-      about: aboutOf("repo-question", dir),
+      about: aboutSubject("repo-question", dir),
       message,
       copy: message,
       lines: [line]
@@ -49379,11 +49422,7 @@ function insertCells(root, cells) {
         return acc;
       const held = placed2.find((node2) => placementId(node2) === id2);
       if (held !== void 0)
-        return refuse(
-          acc,
-          cell3,
-          `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
-        );
+        return refuse(acc, cell3, { kind: "id-held", held: held.name });
       const node = {
         kind: "segment",
         name: cell3.seg,
@@ -49405,17 +49444,13 @@ function insertCells(root, cells) {
             rows.map(([name, row, placed3]) => [name, placed3 ?? row])
           )
         }
-      } : refuse(
-        acc,
-        cell3,
-        `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
-      );
+      } : refuse(acc, cell3, { kind: "no-anchor" });
     },
     { root, unplaced: [] }
   );
 }
-function refuse(acc, cell3, reason) {
-  return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
+function refuse(acc, cell3, cause) {
+  return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, cause }] };
 }
 function besideRow(row, anchor, cell3, relation) {
   if (row.kind === "segment" && placementId(row) === anchor) {
@@ -49512,10 +49547,14 @@ function placeInserts(config, cells, authored) {
     ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config.root), cells)
   }));
   const missed = /* @__PURE__ */ new Map();
-  const miss = (tree) => ({ cell: cell3, reason }) => {
-    const reasons = missed.get(cell3) ?? /* @__PURE__ */ new Map();
-    reasons.set(reason, [...reasons.get(reason) ?? [], tree]);
-    missed.set(cell3, reasons);
+  const miss = (tree) => ({ cell: cell3, cause }) => {
+    const kinds = missed.get(cell3) ?? /* @__PURE__ */ new Map();
+    const soFar = kinds.get(cause.kind);
+    kinds.set(
+      cause.kind,
+      soFar === void 0 ? [{ cause, tree }] : [...soFar, { cause, tree }]
+    );
+    missed.set(cell3, kinds);
   };
   (authored.root ? own2.unplaced : []).forEach(miss("the root"));
   for (const { name, unplaced } of restaged.filter(
@@ -49537,14 +49576,46 @@ function placeInserts(config, cells, authored) {
       }
     },
     notices: [...missed].flatMap(
-      ([cell3, reasons]) => [...reasons].map(
-        ([reason, trees]) => insertNotice(cell3, `${reason} (in ${trees.join(", ")})`)
-      )
+      ([cell3, kinds]) => [...kinds.values()].map((misses) => insertNotice(cell3, misses))
     )
   };
 }
-function insertNotice(cell3, what) {
-  return `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`;
+function insertNotice(cell3, misses) {
+  const place = `${cell3.relation} "${cell3.anchor}"`;
+  const id2 = cell3.id ?? cell3.seg;
+  const wordsOf = (cause) => {
+    switch (cause.kind) {
+      case "id-held":
+        return `as "${id2}", but placement "${id2}" is already segment "${cause.held}" \u2014 give the cell its own id`;
+      case "no-anchor":
+        return `${place}, but there is no placement "${cell3.anchor}"`;
+      case "refused":
+        return `${place}, but the bar refuses it there: ${cause.why}`;
+    }
+  };
+  const trees = /* @__PURE__ */ new Map();
+  for (const { cause, tree } of misses) {
+    const words2 = wordsOf(cause);
+    trees.set(words2, [
+      ...trees.get(words2) ?? [],
+      ...tree === null ? [] : [tree]
+    ]);
+  }
+  const sentences = [...trees].map(
+    ([words2, from]) => `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${words2}${from.length === 0 ? "" : ` (in ${from.join(", ")})`}`
+  );
+  return advisory(
+    [
+      "insert",
+      cell3.by.file,
+      cell3.seg,
+      cell3.id ?? null,
+      cell3.relation,
+      cell3.anchor,
+      misses[0].cause.kind
+    ],
+    sentences.join("\n")
+  );
 }
 function presetGlobals(config, name) {
   return { ...config.globals, ...presetByName(config.presets, name).globals };
@@ -51483,7 +51554,10 @@ function payloadDeclarationNotices(filePath2, source, declared) {
   return declared.filter(isPayloadInput).map((name) => {
     const line = lineOf(["variables", name]);
     const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
-    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
+    return advisory(
+      ["payload-declaration", filePath2, name],
+      `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`
+    );
   });
 }
 function isPayloadInput(name) {
@@ -61005,6 +61079,9 @@ var import_json53 = __toESM(require_dist(), 1);
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
 }
+function droppedPluginAdvisory(d) {
+  return advisory(["dropped-plugin", d.path], droppedPluginNotice(d));
+}
 var DEFINITION_KEYS = /* @__PURE__ */ new Set([
   "data",
   "sources",
@@ -62733,12 +62810,13 @@ function chainPlaces(resolved, locations2) {
   });
 }
 function configResolutionNotice(resolution) {
-  return [
+  const words2 = [
     ...noticeLines(resolution),
     ...resolution.unchecked.map(
       (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
     )
-  ].join("\n") || null;
+  ].join("\n");
+  return words2 === "" ? null : advisory(["config-resolution"], words2);
 }
 function noticeLines(resolution) {
   switch (resolution.kind) {
@@ -62785,7 +62863,10 @@ function loadConfigSource(path31, source, dflt, ctx, allowedPalettes) {
   return {
     source,
     raw: parsed2.raw,
-    warnings: [...parsed2.warnings, ...plugins2.dropped.map(droppedPluginNotice)],
+    warnings: [
+      ...parsed2.warnings,
+      ...plugins2.dropped.map(droppedPluginAdvisory)
+    ],
     plugins: {
       loaded: plugins2.loaded,
       dropped: plugins2.dropped,
@@ -62883,7 +62964,7 @@ function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
   const isReached = (d) => reached.has(d.path);
   const surfaced = plugins2.dropped.filter(isReached);
   const unreached = plugins2.dropped.filter((d) => !isReached(d));
-  trace.warned(surfaced.map(droppedPluginNotice));
+  trace.warned(surfaced.map(droppedPluginAdvisory));
   const rendering = layers.at(-1)?.plugins.rendering ?? plugins2.rendering;
   const installed = {
     checkout: ctx.checkout,
@@ -63030,10 +63111,9 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
             ...acc,
             refused: [
               ...acc.refused,
-              insertNotice(
-                cell3,
-                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why}`
-              )
+              insertNotice(cell3, [
+                { cause: { kind: "refused", why }, tree: null }
+              ])
             ]
           };
         }
@@ -65002,26 +65082,6 @@ function holds(doc, path31) {
 
 // src/config/config-snapshot.ts
 init_globals();
-
-// src/utils/plain.ts
-init_globals();
-function ownValue(record2, key) {
-  return Object.hasOwn(record2, key) ? record2[key] : void 0;
-}
-function digestOf(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
-
-// src/config/config-snapshot.ts
 function revisionOf(snapshot) {
   return { snapshot, digest: digestOf(snapshot) };
 }
@@ -70079,7 +70139,10 @@ function declareDslVariables(config, registry, cwd2, scopes) {
       );
     } catch (err) {
       loadWarnings.push(
-        `Variable "${name}": ${err.message ?? String(err)}`
+        advisory(
+          ["variable-declaration", name],
+          `Variable "${name}": ${err instanceof Error ? err.message : String(err)}`
+        )
       );
     }
   }
@@ -73589,50 +73652,49 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
   const questions = repoQuestions(entry.revision.snapshot.repo, sessionId2);
-  const sourced = (kind, about, text5) => ({ kind, about, text: text5, copy: text5 });
-  const said3 = (kind, text5) => sourced(kind, text5 ?? "", text5);
+  const said3 = (kind, text5) => text5 == null ? [] : [{ about: aboutText(kind, text5), text: text5, copy: text5 }];
   const { daemon: daemon2 } = document;
   const daemonEvents = daemonEventsAt(daemon2.held, at, drawing2.by);
   const threw2 = daemonEvents.filter(isThrew);
   const errors2 = [
-    said3("refused-args", refusedArgsError(req.refusedArgs)),
-    said3("hints", hintsError),
-    sourced(
-      "load",
-      "load",
-      configAccess.kind === "unavailable" ? configAccess.error : null
-    ),
+    ...said3("refused-args", refusedArgsError(req.refusedArgs)),
+    ...said3("hints", hintsError),
+    // A load's error is about the session's config, and a drop about the file
+    // that wrote it, so their text may change under an open viewer (an issue
+    // fixed) without becoming another message. A drop copies the prompt that
+    // fixes it.
+    ...configAccess.kind === "unavailable" ? [
+      {
+        about: aboutKind("load"),
+        text: configAccess.error,
+        copy: configAccess.error
+      }
+    ] : [],
     ...state.dropped.map(
       (e) => ({
-        kind: "dropped",
-        subject: e.file,
-        about: aboutOf("dropped", e.file),
+        about: aboutSubject("dropped", e.file),
         text: e.message,
         copy: e.prompt
       })
     ),
-    said3("click", clickShown?.text),
+    ...said3("click", clickShown?.text),
     // [LAW:no-silent-failure] A daemon task that threw is a fault in the
     // daemon, an error on every bar. Each task is one message about itself,
     // however often it threw.
     ...threw2.map(
       ({ shown }) => ({
-        kind: "task-threw",
-        subject: shown.about,
-        about: aboutOf("task-threw", shown.about),
+        about: aboutSubject("task-threw", shown.about),
         text: shown.event.text,
         copy: shown.event.text
       })
     )
-  ].flatMap(
-    ({ about, text: text5, copy: copy2, ...named2 }) => text5 != null && copy2 != null ? [{ ...named2, about, text: text5, copy: copy2 }] : []
-  );
+  ];
   const configWatch = entry.revision.snapshot.watch;
   const eventsShown = daemonEvents.map(({ shown }) => shown).filter(({ event }) => !event.answered);
   const daemonWarnings = daemonEvents.filter(isWarned).map(
     ({ shown, hold: hold2 }) => ({
       warning: { kind: shown.kind, message: shown.event.text, hold: hold2 },
-      subject: shown.about
+      about: aboutSubject(shown.kind, shown.about)
     })
   );
   const standing2 = [
@@ -73640,7 +73702,15 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     ...daemon2.launcher === null ? [] : [alone(daemon2.launcher)],
     ...daemonWarnings,
     ...configWatch === null ? [] : [alone({ kind: "config-watch", message: configWatch })],
-    ...entry.lastWarnings.map((message) => alone({ kind: "load", message })),
+    // [LAW:one-source-of-truth] A load's warnings arrive about what their
+    // producer knew, so fixing one leaves another's identity put whatever
+    // its words (a line number) become.
+    ...entry.lastWarnings.map(
+      ({ subject, message }) => ({
+        warning: { kind: "load", message },
+        about: loadAbout(subject)
+      })
+    ),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...failure2 === null ? [] : [
@@ -73658,17 +73728,14 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     errors2,
     questions,
     [
-      // A standing warning is one per kind, or per subject of a kind that
-      // recurs, whose words change as it does (a pipe event's count), so
-      // that is what it is about: a viewer open on it stays open. A render
-      // warning is about its words.
-      ...standing2.map(({ warning, subject }) => ({
-        about: aboutOf(warning.kind, subject),
+      ...standing2.map(({ about, warning }) => ({
+        about,
         text: warning.message,
         copy: warning.message
       })),
+      // A render warning is about its whole description.
       ...presentations.warnings(sessionId2, drawing2.by, config).map(({ key, warning }) => ({
-        about: key,
+        about: aboutText(warning.kind, key),
         text: warning.message,
         copy: warning.message
       }))
@@ -73761,9 +73828,9 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     ...warnings.map(({ tag }) => tag)
   ].join(",") || "-";
   const faults = [
-    ...errors2.map((e) => faultOf("error", e.kind, e.text, e.subject)),
+    ...errors2.map(({ about, text: text5 }) => faultAbout("error", about, text5)),
     ...standing2.map(
-      ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
+      ({ about, warning }) => faultAbout("warning", about, warning.message)
     ),
     ...warnings.map(
       ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
@@ -73851,6 +73918,12 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
   };
 }
 var faultOf = (level, kind, message, subject) => ({ level, kind, subject, message });
+var faultAbout = (level, about, message) => faultOf(
+  level,
+  about.kind,
+  message,
+  about.rule === "subject" ? about.subject : void 0
+);
 var isThrew = (event) => event.shown.kind === "task-threw";
 var isWarned = (event) => !isThrew(event);
 function daemonEventsAt(held, at, render3) {
@@ -73861,7 +73934,7 @@ function daemonEventsAt(held, at, render3) {
 }
 var alone = (warning) => ({
   warning,
-  subject: void 0
+  about: aboutKind(warning.kind)
 });
 function answerRequest(parts, req, presentation, facts) {
   var _stack = [];
@@ -92563,7 +92636,7 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 16;
+var RENDERER_WIRE_VERSION = 17;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -92600,11 +92673,11 @@ function contextProblem(request2) {
 }
 function configTextProblem(text5) {
   try {
-    const actions = entryOf2(parseDocument(text5), "actions")?.value;
+    const actions = entryOf(parseDocument(text5), "actions")?.value;
     if (actions?.kind !== "object") return null;
     for (const { value } of actions.entries) {
-      if (entryOf2(value, "run") === void 0) continue;
-      const env2 = entryOf2(value, "env")?.value;
+      if (entryOf(value, "run") === void 0) continue;
+      const env2 = entryOf(value, "env")?.value;
       if (env2 !== void 0 && env2.kind !== "null" && (env2.kind !== "object" || env2.entries.length > 0))
         return ACTION_ENVIRONMENT;
     }
@@ -93331,7 +93404,10 @@ function configCollisionNotice(locations2) {
       `${location.winner.file} shadows ${location.shadowed.map(({ file }) => file).join(", ")}`
     ] : []
   );
-  return collisions.length === 0 ? null : `config-extension collision: ${collisions.join("; ")} \u2014 remove the duplicate`;
+  return collisions.length === 0 ? null : advisory(
+    ["config-collision"],
+    `config-extension collision: ${collisions.join("; ")} \u2014 remove the duplicate`
+  );
 }
 
 // src/daemon/config-discovery/discover.ts
@@ -93392,7 +93468,10 @@ function sessionPlugins(roots, checkout, files = discoveryFiles()) {
   for (const { root, scope, listed } of roots) {
     if ("error" in listed) {
       notices.push(
-        `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
+        advisory(
+          ["plugin-folder", listed.path],
+          `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
+        )
       );
       continue;
     }
@@ -93405,7 +93484,9 @@ function sessionPlugins(roots, checkout, files = discoveryFiles()) {
       strays.push({ path: import_node_path34.default.join(root, name), scope });
   }
   if (checkout.kind === "failed")
-    notices.push(`Checkout could not be read: ${checkout.reason}`);
+    notices.push(
+      advisory(["checkout"], `Checkout could not be read: ${checkout.reason}`)
+    );
   return {
     plugins: [...byNs.values()].map(
       (file) => readDefinition(file.path, file.scope, files)
@@ -93472,7 +93553,10 @@ function discover(query, shared) {
     configCollisionNotice(locations2),
     configResolutionNotice(resolution),
     repoUnreadNotice(project),
-    unreadIdentity === null ? null : `Repository identity could not be read: ${unreadIdentity.dir} \u2014 ${unreadIdentity.reason}`,
+    unreadIdentity === null ? null : advisory(
+      ["repository-identity", unreadIdentity.dir],
+      `Repository identity could not be read: ${unreadIdentity.dir} \u2014 ${unreadIdentity.reason}`
+    ),
     ...session.notices
   ].filter((n) => n !== null);
   return {

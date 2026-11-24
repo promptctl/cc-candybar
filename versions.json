@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-953",
-      "ref": "refs/pull/953/merge",
-      "sha": "3d05dba827bb476c9b135a0d96d4f5f5bc96cbd9",
-      "timestamp": "2026-11-24T19:32:35.964Z",
-      "commits": [
-        {
-          "sha": "3d05dba827bb476c9b135a0d96d4f5f5bc96cbd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T19:31:27Z",
-          "message": "Merge 7f30ea91b91e0d6a26f748405862180e1a994a32 into 51471537b0aa6387c1e7d52963f056669843eeb8\n"
-        },
-        {
-          "sha": "7f30ea91b91e0d6a26f748405862180e1a994a32",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:31:00-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.aa1\n"
-        },
-        {
-          "sha": "3c6176975c002137dd33b5a20a79a9e061c57f27",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:26:30-07:00",
-          "message": "refactor(diagnostics): placeInserts' per-cell kinds map is typed, so its non-empty miss lists stay non-empty (candybar-law-review-ibyq.aa1)\n"
-        },
-        {
-          "sha": "f937c01f181b2c720b40a6b66d02aaf849dfc958",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:18:27-07:00",
-          "message": "fix(diagnostics): an advisory keeps its typed subject until the draw names it, one insert cell is one advisory per kind of cause, and the renderer wire version moves with the snapshot (candybar-law-review-ibyq.aa1)\n\nConfigSnapshot.notices changed shape, so RENDERER_WIRE_VERSION is 17 and an old recording is refused at the version check. Advisory carries a LoadSubject, derived into an About once by loadAbout, so the kind and text forms are unrepresentable for a load warning. An insert cell's misses group by kind of cause, naming each tree, matching what the identity names.\n"
-        },
-        {
-          "sha": "9c16ed3e1e91f7c08073947c95e147adecedcb05",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:05:29-07:00",
-          "message": "fix(diagnostics): a load warning is born about a typed subject, an insert cell is named by what it says and not its list position (candybar-law-review-ibyq.aa1)\n\nAbout moves below the loader so producers emit it; every load advisory is built by one constructor over a closed LoadSubject, so no producer spells its identity. Insert refusals carry a typed cause, the three discovery notices return their own advisory, and a non-Error thrown by a variable declaration no longer escapes its catch. The tests that read warnings as text are migrated, with producer-level identity tests.\n"
-        },
-        {
-          "sha": "a07446f39391172d1b847428bfa0a69f24774dd4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T11:46:36-07:00",
-          "message": "fix(diagnostics): a load warning carries the subject its producer knew, so fixing one leaves the viewer on another whose line moved (candybar-law-review-ibyq.aa1)\n"
-        },
-        {
-          "sha": "3d7dac14e56961cef0bc634cdcccc82abb20eb8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T11:28:16-07:00",
-          "message": "fix(diagnostics): a message's about carries the rule that names it, so two load warnings are two messages\n\nabout was a bare string built four ways, and every load warning was about the bare kind, so two shared an identity and only list position told them apart: fixing the first left a viewer open on the second closed.\n\nabout is now a kind, a kind's subject, or the message's own text, built by its constructor, and the identity hashes each by rule. A load warning is about its text; the fault note reads its kind and subject from the same value.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "51471537b0aa6387c1e7d52963f056669843eeb8",
-      "timestamp": "2026-11-24T19:27:20.739Z",
+      "sha": "0c0d303b41c1e63858bbaf9c6e95d702a27ab63a",
+      "timestamp": "2026-11-24T19:35:24.236Z",
       "commits": [
         {
-          "sha": "51471537b0aa6387c1e7d52963f056669843eeb8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T19:25:38Z",
-          "message": "chore(release): set `package.json` to 1.238.0\n\n## [1.238.0](https://github.com/promptctl/cc-candybar/compare/v1.237.1...v1.238.0) (2026-11-24)\n\n### Features\n\n* **bar-pane:** pane gestures and hover, and a click mode for the statusline ([#950](https://github.com/promptctl/cc-candybar/issues/950)) ([93e21b1](https://github.com/promptctl/cc-candybar/commit/93e21b1fbfc4aa90f16e25593aba94dbdeafa602))\n* **host:** each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer ([#951](https://github.com/promptctl/cc-candybar/issues/951)) ([8833392](https://github.com/promptctl/cc-candybar/commit/883339212b09112b044d4287f5e9b331d9697e1c))\n\n### Bug Fixes\n\n* **lint:** code outside Jest, src included, imports none of Jest's packages and reads none of its globals (candybar-later-fixes-nwu9.1d4) ([#952](https://github.com/promptctl/cc-candybar/issues/952)) ([6c7c981](https://github.com/promptctl/cc-candybar/commit/6c7c981b224e645054c0e73a3bc2c8cd0e347174))\n"
+          "sha": "0c0d303b41c1e63858bbaf9c6e95d702a27ab63a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T12:34:12-07:00",
+          "message": "fix(diagnostics): a diagnostic's identity says which rule built it, and two load warnings are not one message (candybar-law-review-ibyq.aa1) (#953)\n\n* fix(diagnostics): a message's about carries the rule that names it, so two load warnings are two messages\n\nabout was a bare string built four ways, and every load warning was about the bare kind, so two shared an identity and only list position told them apart: fixing the first left a viewer open on the second closed.\n\nabout is now a kind, a kind's subject, or the message's own text, built by its constructor, and the identity hashes each by rule. A load warning is about its text; the fault note reads its kind and subject from the same value.\n\n* fix(diagnostics): a load warning carries the subject its producer knew, so fixing one leaves the viewer on another whose line moved (candybar-law-review-ibyq.aa1)\n\n* fix(diagnostics): a load warning is born about a typed subject, an insert cell is named by what it says and not its list position (candybar-law-review-ibyq.aa1)\n\nAbout moves below the loader so producers emit it; every load advisory is built by one constructor over a closed LoadSubject, so no producer spells its identity. Insert refusals carry a typed cause, the three discovery notices return their own advisory, and a non-Error thrown by a variable declaration no longer escapes its catch. The tests that read warnings as text are migrated, with producer-level identity tests.\n\n* fix(diagnostics): an advisory keeps its typed subject until the draw names it, one insert cell is one advisory per kind of cause, and the renderer wire version moves with the snapshot (candybar-law-review-ibyq.aa1)\n\nConfigSnapshot.notices changed shape, so RENDERER_WIRE_VERSION is 17 and an old recording is refused at the version check. Advisory carries a LoadSubject, derived into an About once by loadAbout, so the kind and text forms are unrepresentable for a load warning. An insert cell's misses group by kind of cause, naming each tree, matching what the identity names.\n\n* refactor(diagnostics): placeInserts' per-cell kinds map is typed, so its non-empty miss lists stay non-empty (candybar-law-review-ibyq.aa1)"
         }
       ]
     }
