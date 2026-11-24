@@ -231,7 +231,9 @@ export function placeInserts(
   const miss =
     (tree: string) =>
     ({ cell, cause }: Unplaced): void => {
-      const kinds = missed.get(cell) ?? new Map();
+      const kinds =
+        missed.get(cell) ??
+        new Map<InsertRefusal["kind"], readonly [Miss, ...Miss[]]>();
       const soFar = kinds.get(cause.kind);
       kinds.set(
         cause.kind,
