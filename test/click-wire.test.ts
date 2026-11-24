@@ -481,29 +481,29 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
-  test("a batch never reaches past another effect or into another session", () => {
-    const set = (sid: string, k: string, v: string) => ({
-      verb: VERB_SET_STATE,
-      value: `${sid}/${k}/${v}`,
-    });
-    const copy = { verb: VERB_COPY, value: "x" };
-    // Order is the click's: the copy between two writes keeps its place.
-    expect(
-      batchAdjacentWrites([
-        set("a", "k1", "v1"),
-        set("a", "k2", "v2"),
-        copy,
-        set("a", "k3", "v3"),
-      ]),
-    ).toEqual([
-      { verb: VERB_SET_STATE, value: "a/k1/v1/k2/v2" },
-      copy,
-      set("a", "k3", "v3"),
+  test("a run of writes never reaches past another effect", async () => {
+    const sessionState = new SessionState();
+    // The failing step between the two writes closes the first run: the first
+    // write lands on its own, and the third, which fails, is not joined to it.
+    const url = effectsUrl([
+      { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
+      { verb: VERB_STEP_STATE, args: [SID, "no-such-key", "1"] },
+      { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
     ]);
-    // A different session id starts a new batch rather than joining one.
-    expect(
-      batchAdjacentWrites([set("a", "k", "v"), set("b", "k", "v")]),
-    ).toEqual([set("a", "k", "v"), set("b", "k", "v")]);
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(
+      /no-such-key/,
+    );
+    expect(sessionState.get(SID, "theme")).toBe("textual-dark");
+  });
+
+  test("a click cannot write the state of two sessions", async () => {
+    const url = effectsUrl([
+      { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
+      { verb: VERB_SET_STATE, args: [sessionIdOf("s2"), "theme", "nord"] },
+    ]);
+    await expect(clickUrl(url, ctx(new SessionState()))).rejects.toThrow(
+      /more than one session/,
+    );
   });
 
   test("adjacent resets for one session and layer join into one reset of every key, never with a set-state", () => {

@@ -129,9 +129,8 @@ test("the host signs the generated control and retains legacy authored click beh
       session: SESSION,
       steps: [
         {
-          kind: "session",
-          verb: VERB_SET_STATE,
-          args: [KEY, DISCLOSURE_CLOSED],
+          kind: "state-writes",
+          writes: [{ verb: VERB_SET_STATE, args: [KEY, DISCLOSURE_CLOSED] }],
         },
       ],
     },

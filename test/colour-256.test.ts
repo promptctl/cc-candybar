@@ -36,8 +36,7 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { VERB_SET_STATE } from "../src/click/wire";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, landsAt } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { WORLD } from "./helpers/host";
 import { instantOf } from "../src/utils/instant";
@@ -138,12 +137,13 @@ async function forEachStage(
     member: (v: string) => boolean,
   ): string => {
     const url = linkUrls(rendered).find((u) =>
-      effectsOf(u).some(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          e.args[1] === key &&
-          e.args[2] !== DISCLOSURE_CLOSED &&
-          member(e.args[2] ?? ""),
+      effectsOf(u).some((e) =>
+        landsAt(
+          rig.config,
+          e,
+          key,
+          (m) => m !== DISCLOSURE_CLOSED && member(m),
+        ),
       ),
     );
     if (url === undefined) throw new Error(`nothing on the bar opens ${key}`);

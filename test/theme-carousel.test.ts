@@ -44,7 +44,13 @@ import { drawnDepth, listResolvablePaletteNames } from "../src/themes/policy";
 import type { ColorCompatibility, Endcaps } from "../src/themes/policy";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick, CLICK_VERBS } from "./helpers/click";
-import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
+import {
+  testVerbContext,
+  effectsOf,
+  landsAt,
+  recordRender,
+  ringKeyOf,
+} from "./helpers/click";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { CAROUSEL_NEXT, CAROUSEL_PREV } from "../src/render/carousel";
 import { decorEntryColour, windowAt } from "../src/themes/decor";
@@ -173,7 +179,7 @@ function rig(
   // control among several that share a glyph (every closed toggle is ▸).
   const clickWriting = async (key: string, value: string): Promise<void> => {
     const hit = linksOf(last).find((l) =>
-      effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
+      effectsOf(l.url).some((e) => landsAt(config, e, key, value)),
     );
     if (hit === undefined) throw new Error(`no link writes ${key}=${value}`);
     await click(hit.url);
@@ -205,16 +211,6 @@ function rig(
   };
 }
 
-// The key a ring-step effect writes, from the action it names.
-function ringKeyOf(
-  config: ValidatedConfig,
-  e: { readonly verb: string; readonly args: readonly string[] },
-): string | undefined {
-  if (e.verb !== "ring-state" && e.verb !== "ring-config") return undefined;
-  const action = config.actions[e.args[e.verb === "ring-state" ? 1 : 2]!]!;
-  const head = "do" in action ? config.actions[action.do[0]]! : action;
-  return "set" in head ? head.set : "persist" in head ? head.persist : undefined;
-}
 
 // The session writes a link performs — [key, value] pairs.
 const writesOf = (url: string): string[][] =>
@@ -497,7 +493,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
       linksOf(drawn).find(
         (l) =>
           l.text === "▀▀▀" &&
-          effectsOf(l.url).some((e) => e.args[1] === PICKERS),
+          effectsOf(l.url).some((e) => ringKeyOf(rt.config, e) === PICKERS),
       )!;
     await rt.click(swatchButton(rendered).url);
     expect(rt.segments().has("candybar.list.theme.0")).toBe(true);
@@ -510,7 +506,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
     );
     // The gear opens the theme's configuration on the same accordion.
     const gear = linksOf(rendered).find((l) => l.text === "⚙")!;
-    expect(writesOf(gear.url)).toEqual([[PICKERS, "gear"]]);
+    expect(effectsOf(gear.url).map((e) => ringKeyOf(rt.config, e))).toEqual([PICKERS]);
     // The style, variation and shade controls are behind it, not in the tab.
     expect(rt.segments().has("candybar.style")).toBe(false);
     await rt.clickWriting(PICKERS, "gear");

@@ -16,7 +16,9 @@ import os from "node:os";
 import path from "node:path";
 
 import JSON5 from "json5";
-import { effectsOf } from "../../helpers/click";
+import { effectsOf, menuTriggerOf } from "../../helpers/click";
+import { parseAndValidate } from "../../../scripts/lib/draw-fixtures/parse-and-validate";
+import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config";
 import { linkUrls } from "../../helpers/frame";
 import { plainOf, type Frame, type Run } from "../../../src/render/frame";
 import { sameDraw } from "../../helpers/frame";
@@ -63,6 +65,12 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       root: { rows: { palettes: { h: ["directoryPaletteControl"] } } },
     });
     writeFileSync(userConfigPath, userConfigBody);
+    const userConfig = parseAndValidate(
+      "<user>",
+      userConfigBody,
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
 
     let daemon = startDaemon(env);
     try {
@@ -92,9 +100,8 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
         try {
           const effects = effectsOf(u);
           return (
-            effects.length === 1 &&
-            effects[0]!.verb === "set-state" &&
-            effects[0]!.args[2] === "applyDirectoryPalette"
+            menuTriggerOf(userConfig, effects)?.member ===
+            "applyDirectoryPalette"
           );
         } catch {
           return false;

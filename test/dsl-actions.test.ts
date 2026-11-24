@@ -767,23 +767,25 @@ describe("2de.4 — cycle set action", () => {
     root: 'bar',
   }`;
 
-  test("renders the current member's display; the click writes the successor", async () => {
+  test("renders the current member's display; the link steps the cycle and is the same on every draw", async () => {
     const { render, click, sessionState } = actionBar(SRC);
     const out = render();
     expect(textOf(out)).toContain("▸ details");
     const urls = ownUrls(out);
     expect(urls).toHaveLength(1);
     expect(effectsOf(urls[0]!)).toEqual([
-      { verb: "set-state", args: ["s1", "details-open", "1"] },
+      { verb: "ring-state", args: ["s1", "toggle", "1", ""] },
     ]);
     await click(urls[0]!);
     expect(sessionState.get(S1, "details-open")).toBe("1");
-    // Next render flips display AND write target (the toggle round trip).
+    // Next render flips the display, and the link means the same step.
     const out2 = render();
     expect(textOf(out2)).toContain("▾ details");
-    expect(effectsOf(ownUrls(out2)[0]!)).toEqual([
-      { verb: "set-state", args: ["s1", "details-open", "0"] },
-    ]);
+    expect(ownUrls(out2)).toEqual(urls);
+    // A terminal that kept the link it found steps again from where the key
+    // stands now, not from the draw it came from.
+    await click(urls[0]!);
+    expect(sessionState.get(S1, "details-open")).toBe("0");
   });
 
   test("a current value outside the domain counts as the first member", () => {
@@ -793,7 +795,7 @@ describe("2de.4 — cycle set action", () => {
     const out = render();
     expect(textOf(out)).toContain("▸ details");
     expect(effectsOf(ownUrls(out)[0]!)).toEqual([
-      { verb: "set-state", args: ["s1", "details-open", "1"] },
+      { verb: "ring-state", args: ["s1", "toggle", "1", ""] },
     ]);
   });
 

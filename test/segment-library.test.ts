@@ -17,10 +17,9 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { menuOfKey, menuPageKey } from "../src/config/menu-keys";
+import { menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/reserved-names";
-import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { isReservedName } from "../src/config/reserved-names";
 import {
   GROUP_LABELS,
@@ -34,8 +33,7 @@ import {
   libraryLayout,
 } from "../src/render/library";
 import { cellWidth } from "../src/render/picker";
-import { effectsOf } from "./helpers/click";
-import { VERB_SET_STATE } from "../src/click/wire";
+import { effectsOf, menuTriggerOf } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -85,24 +83,17 @@ function rig(width: number, userSegments = "") {
       padding: 1,
       width,
     }).frame;
-  // The `+` opener is the one coupled write whose 4th argument is the page
-  // key of its 2nd; opening applies exactly those writes.
+  // The `+` opener is the menu trigger whose member is edit mode's own;
+  // opening lands the member on the menu's key and resets its page cursor.
   let pageKey = "";
   const open = (): Frame => {
     const opener = linksOf(render())
-      .flatMap((l) => effectsOf(l.url))
-      .find(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          menuOfKey(e.args[1] ?? "")?.page === false &&
-          e.args[3] === menuPageKey(e.args[1]!) &&
-          e.args[2] !== DISCLOSURE_CLOSED &&
-          e.args[2]!.startsWith(EDIT_NS),
-      );
+      .map((l) => menuTriggerOf(config, effectsOf(l.url)))
+      .find((t) => t?.member.startsWith(EDIT_NS));
     if (opener === undefined) throw new Error("edit mode rendered no + opener");
-    for (let i = 1; i + 1 < opener.args.length; i += 2)
-      sessionState.set(SID, opener.args[i]!, opener.args[i + 1]!);
-    pageKey = opener.args[3]!;
+    pageKey = menuPageKey(opener.key);
+    sessionState.set(SID, opener.key, opener.member);
+    sessionState.set(SID, pageKey, "0");
     return render();
   };
   const page = (to: number): Frame => {

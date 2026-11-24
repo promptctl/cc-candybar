@@ -29,7 +29,11 @@ import {
   unprovenLink,
   type FrameSource,
 } from "../../src/click/link-signer";
-import { effectsOf, type DecodedEffect } from "./click";
+import { effectsOf, landsAt, type DecodedEffect } from "./click";
+import { parseAndValidate } from "../../scripts/lib/draw-fixtures/parse-and-validate";
+import { listResolvablePaletteNames } from "../../src/themes/policy";
+import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import type { DslConfig } from "../../src/config/dsl-types";
 import {
   endpointOf,
   REPLY_BUDGET_MS,
@@ -290,15 +294,29 @@ export function findUrl(
   });
 }
 
-// The affordance that writes `value` to `key`, as the user's own click would
-// find it: by what it does, from the drawn frame — never constructed.
+// The bar a daemon draws for a config no test wrote: the bundled default.
+// [LAW:one-source-of-truth] A cycle's link names its action and its step, so
+// "which link lands this value" is answered against the config the daemon
+// loaded; a test that ran a config of its own hands it in.
+export const BUNDLED = parseAndValidate(
+  "<bundled>",
+  "{}",
+  new Set(listResolvablePaletteNames()),
+  DEFAULT_DSL_CONFIG,
+);
+
+// The affordance that lands `value` at `key`, as the user's own click would
+// find it: by what it does, from the drawn frame — never constructed. A link
+// that writes the pair, or steps a cycle over `key` that has `value` as a
+// member, is one.
 export function urlWriting(
   rendered: Frame,
   key: string,
   value: string,
+  config: DslConfig = BUNDLED,
 ): string {
   const url = findUrl(linkUrls(rendered), (effects) =>
-    effects.some((e) => e.args[1] === key && e.args[2] === value),
+    effects.some((e) => landsAt(config, e, key, value)),
   );
   if (url === undefined) {
     throw new Error(`no rendered affordance writes ${key}=${value}`);

@@ -13,6 +13,7 @@ import { TEST_SIGNER } from "./link-signer";
 import type { LinkSigner } from "../../src/click/link-signer";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
+import { menuOfKey, menuPageKey } from "../../src/config/menu-keys";
 import { clickOf } from "../../src/click/read";
 import { changeDone, runClick } from "../../src/renderer/verbs";
 import {
@@ -61,6 +62,7 @@ import type { SessionStateRW } from "../../src/renderer-interface/session-state"
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
+import type { ActionDecl } from "../../src/config/action";
 import { instantOf } from "../../src/utils/instant";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
@@ -323,7 +325,49 @@ export function testVerbContext(
   });
 }
 
+import type { DecodedEffect } from "../../src/click/read";
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
+
+// The key a ring-step effect writes, and the action head it steps through, from
+// the action it names: the way a test reads a link that carries a step and no
+// value.
+function steppedRing(
+  config: DslConfig,
+  e: DecodedEffect,
+): { readonly key: string; readonly head: ActionDecl } | undefined {
+  if (e.verb !== "ring-state" && e.verb !== "ring-config") return undefined;
+  const action = config.actions[e.args[e.verb === "ring-state" ? 1 : 2]!]!;
+  const head = "do" in action ? config.actions[action.do[0]]! : action;
+  return "set" in head
+    ? { key: head.set, head }
+    : "persist" in head
+      ? { key: head.persist, head }
+      : undefined;
+}
+
+export function ringKeyOf(
+  config: DslConfig,
+  e: DecodedEffect,
+): string | undefined {
+  return steppedRing(config, e)?.key;
+}
+
+// Whether an effect can land `value` at `key`: a write of that pair, or a step
+// through a cycle over the key that holds `value` as a member. A cycle's link
+// names the action and the step, never the member it lands on, so a test finds
+// a toggle by the ring it steps; where it lands is shown by clicking it.
+export function landsAt(
+  config: DslConfig,
+  e: DecodedEffect,
+  key: string | ((key: string) => boolean),
+  value: string | ((member: string) => boolean),
+): boolean {
+  const wanted = typeof value === "string" ? (v: string) => v === value : value;
+  const named = typeof key === "string" ? (k: string) => k === key : key;
+  return landingsOf(config, e).some(
+    ({ key: at, member }) => named(at) && wanted(member),
+  );
+}
 
 // A rendered link as the daemon reads it; a test's links are always links.
 export const linkClick = clickOf;
@@ -451,4 +495,43 @@ export async function clickActing(
   const { verb, value } = linkClick(url);
   const { runEvidence } = clickVerb(verb, value, ctx);
   return performActs(ctx, deps, signer, runEvidence);
+}
+
+// The menu a link's effects trigger: a step through the menu's `[closed,
+// member]` cycle together with the reset of its page cursor, which is how a
+// `{{ menu }}` trigger opens and closes it. `member` is what the cycle opens
+// to, the menu's apply-action name.
+export function menuTriggerOf(
+  config: DslConfig,
+  effects: readonly DecodedEffect[],
+): { readonly key: string; readonly member: string } | undefined {
+  for (const e of effects) {
+    const ring = steppedRing(config, e);
+    if (ring === undefined || menuOfKey(ring.key)?.page !== false) continue;
+    const resetsPage = effects.some(
+      (p) => p.verb === "set-state" && p.args[1] === menuPageKey(ring.key),
+    );
+    if (resetsPage && "cycle" in ring.head)
+      return { key: ring.key, member: ring.head.cycle[1]! };
+  }
+  return undefined;
+}
+
+// Every (key, member) an effect can land: the pairs a set-state writes, and
+// each member of the cycle a ring-state steps through (it names the step, and
+// the member it lands on is read when the click arrives).
+export function landingsOf(
+  config: DslConfig,
+  e: DecodedEffect,
+): { readonly key: string; readonly member: string }[] {
+  const ring = steppedRing(config, e);
+  if (ring !== undefined)
+    return "cycle" in ring.head
+      ? ring.head.cycle.map((member) => ({ key: ring.key, member }))
+      : [];
+  if (e.verb !== "set-state") return [];
+  const pairs: { key: string; member: string }[] = [];
+  for (let i = 1; i + 1 < e.args.length; i += 2)
+    pairs.push({ key: e.args[i]!, member: e.args[i + 1]! });
+  return pairs;
 }

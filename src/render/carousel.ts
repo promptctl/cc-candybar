@@ -103,7 +103,7 @@ export function renderCarousel(
           runtime.compiled.get(openName)!,
           shown,
           undefined,
-          store,
+          binding,
           sessionId,
         ).effects,
       ),

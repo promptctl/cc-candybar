@@ -35,7 +35,7 @@ import { DIAGNOSTICS_CLOSED } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
 import { sessionKeyKind } from "../config/session-key.js";
-import { menuOfKey } from "../config/menu-keys.js";
+import { menuOfAction, menuOfKey } from "../config/menu-keys.js";
 import { parseStep } from "../render/option-ring.js";
 import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
@@ -272,11 +272,15 @@ const sayStep = (key: string, by: string): string =>
   `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 
 // An option ring's step in words: another option at random, or the option
-// some way round the ring.
+// some way round the ring. A menu's step opens or closes the member it names,
+// said by that name as a write to its key was, so two menus on one shared key
+// never read alike.
 function sayRing(action: string, raw: string): string {
   const parsed = parseStep(raw);
   if (!parsed.ok) return `step ${action} by ${raw}`;
   const { step } = parsed;
+  const menu = menuOfAction(action);
+  if (menu !== undefined) return `toggle ${menu.member}`;
   return step.kind === "random"
     ? `pick another option for ${action}`
     : `step ${action} ${step.by < 0 ? "back" : "on"} by ${Math.abs(step.by)}`;
@@ -474,23 +478,20 @@ export function parseEffects(rawValue: string): ParsedEffect[] {
   return new URLSearchParams(rawValue).getAll("e").map(splitVerb);
 }
 
-// [LAW:single-enforcer] One click's consecutive writes of one kind are one
-// write. A run of ADJACENT effects of a batched verb for one session becomes a
-// single effect whose tail carries every member's arguments: set-state's pairs,
-// which its handler validates whole before writing any of them, so a `do`
-// action's session members, or a picker option and its close writes, land
-// together or not at all; and reset-config's keys, which its handler clears in
+// [LAW:single-enforcer] One click's consecutive resets are one write. A run of
+// ADJACENT reset-config effects for one session and layer becomes a single
+// effect whose tail carries every member's keys, which its handler clears in
 // one file write and one reload, so `⟲ reset all` is one write however many
 // settings it names. Only adjacency merges: effects still run in the order the
-// click lists them, so an effect between two writes keeps its place, and a
-// different verb or a different head starts a new run rather than borrowing
-// the previous one's. The head is what a run's members share: a session
-// write's session, and a config write's session and the layer it writes, so
-// two layers are never one write. The tail stays encoded, so its segments
-// split at `/`, and joining encoded runs is the codec's own join.
+// click lists them, so an effect between two resets keeps its place, and a
+// different head starts a new run rather than borrowing the previous one's.
+// The head is what a run's members share: the session and the layer it
+// writes, so two layers are never one write. The tail stays encoded, so its
+// segments split at `/`, and joining encoded runs is the codec's own join.
+// A click's writes to the session's state are joined at admission instead
+// (admitClick), where each is a typed step.
 // [LAW:dataflow-not-control-flow] Each batched verb's head width, as data.
 const BATCHED_VERBS: ReadonlyMap<string, number> = new Map([
-  [VERB_SET_STATE, 1],
   [VERB_RESET_CONFIG, 2],
 ]);
 
@@ -615,15 +616,33 @@ export type GlobalStep =
       readonly value: string;
     };
 
+// A write to the session's state a click makes: as pairs (set-state), or as a
+// step through a ring that the click resolves to pairs (ring-state).
+export interface StateWriteEffect {
+  readonly verb: typeof VERB_SET_STATE | typeof VERB_RING_STATE;
+  readonly args: readonly string[];
+}
+
 export type ClickStep =
   | GlobalStep
   | {
       readonly kind: "session";
       readonly verb: Exclude<
         SessionVerb,
-        typeof VERB_REPO_CONFIG | typeof VERB_RUN
+        | typeof VERB_REPO_CONFIG
+        | typeof VERB_RUN
+        | typeof VERB_SET_STATE
+        | typeof VERB_RING_STATE
       >;
       readonly args: readonly string[];
+    }
+  // [LAW:single-enforcer] A click's adjacent writes to the session's state,
+  // whatever produced them (a set-state, a ring-state): one step, so the
+  // renderer resolves each ring step to its pairs and lands the run whole or
+  // not at all.
+  | {
+      readonly kind: "state-writes";
+      readonly writes: readonly StateWriteEffect[];
     }
   | {
       readonly kind: "repo-answer";
@@ -756,6 +775,10 @@ export function admitClick(
           });
           break;
         }
+        case VERB_SET_STATE:
+        case VERB_RING_STATE:
+          joinStateWrite(scoped.steps, { verb: name, args });
+          break;
         default:
           scoped.steps.push({ kind: "session", verb: name, args });
       }
@@ -769,6 +792,21 @@ export function admitClick(
       ? { scope: "global", verb, steps: global }
       : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
   return { click, runEvidence };
+}
+
+// [LAW:single-enforcer] A click's adjacent state writes are one step: the
+// renderer validates the run whole before it writes any of it, so a `do` that
+// steps a cycle and resets its page cursor, or a picker option and its close
+// writes, land together or not at all. Only adjacency joins: a step between
+// two writes keeps its place, and the next write opens a new run.
+function joinStateWrite(steps: ClickStep[], write: StateWriteEffect): void {
+  const last = steps.at(-1);
+  if (last?.kind === "state-writes")
+    steps[steps.length - 1] = {
+      kind: "state-writes",
+      writes: [...last.writes, write],
+    };
+  else steps.push({ kind: "state-writes", writes: [write] });
 }
 
 // [LAW:parse-dont-validate] An outer signature is also given to authored URLs.

@@ -139,7 +139,6 @@ import {
   VERB_RING_CONFIG,
   VERB_RING_STATE,
   VERB_SET_CONFIG,
-  VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_TURN_PAGE,
@@ -147,6 +146,7 @@ import {
   VERB_SLASH,
   VERB_COPY_DIAGNOSTIC,
   type AdmittedClick,
+  type StateWriteEffect,
   type ClickStep,
   type GlobalStep,
 } from "../../click/wire";
@@ -810,12 +810,13 @@ function headFor(config: DslConfig, name: string): ActionDecl | undefined {
   return action === undefined ? undefined : headOf(config.actions, action);
 }
 
-// The options an action lists: a ring's own, or the list a structural insert
-// picks from.
+// The options an action lists: a ring's own, a cycle's members, or the list a
+// structural insert picks from.
 function optionsOf(
   config: DslConfig,
   head: ActionDecl,
 ): readonly string[] | undefined {
+  if ("cycle" in head) return head.cycle;
   const domain =
     "from" in head
       ? head.from
@@ -827,16 +828,19 @@ function optionsOf(
     : resolveOptionDomain(domain, configOptionDomains(config)).members;
 }
 
-// The ring a `set` or `persist` head over a list of options holds, or nothing
-// for any other action (a structural insert has a list but holds no value).
+// The ring a `set` or `persist` head over a list of options, or a cycle's
+// members, holds, or nothing for any other action (a structural insert has a
+// list but holds no value).
 function ringHeld(
   ctx: ClickContext,
   config: DslConfig,
   head: ActionDecl,
 ): OptionRing | undefined {
-  if (!("from" in head)) return undefined;
+  // A structural insert lists options too, but holds no value.
+  const options =
+    "from" in head || "cycle" in head ? optionsOf(config, head) : undefined;
+  if (options === undefined) return undefined;
   const pick = (k: string) => ctx.sessionState.get(ctx.session, k);
-  const options = optionsOf(config, head)!;
   if ("set" in head)
     return {
       twin: "set",
@@ -961,9 +965,9 @@ function landRing(
   return { ring, next, turn: turnWrites(turn, ring.options, next) };
 }
 
-// The step lands in SessionState through the write every set action makes:
-// the same gate, the same batch (setState), the page turn riding in it.
-const ringState: VerbHandler = (args, ctx) => {
+// A step lands in SessionState through the write every set action makes: the
+// same gate, the same batch (setState), the page turn riding in it.
+function ringStatePairs(args: readonly string[], ctx: ClickContext): string[] {
   const [name = "", ...rest] = args;
   const { ring, next, turn } = landRing(
     "ring-state",
@@ -973,8 +977,24 @@ const ringState: VerbHandler = (args, ctx) => {
     rest,
     (r) => r.shown,
   );
-  setState([ring.key, next, ...turn], ctx);
-};
+  return [ring.key, next, ...turn];
+}
+
+// [LAW:single-enforcer] A click's adjacent state writes are one write: each
+// ring step is resolved to its pairs against the state the click found, and
+// setState validates every pair before it writes any, so a `do` that steps a
+// cycle and resets its page cursor lands both or neither.
+function landStateWrites(
+  writes: readonly StateWriteEffect[],
+  ctx: ClickContext,
+): void {
+  setState(
+    writes.flatMap(({ verb, args }) =>
+      verb === VERB_RING_STATE ? ringStatePairs(args, ctx) : args,
+    ),
+    ctx,
+  );
+}
 
 // The name a layer's text declares at a value key, or nothing when it declares
 // none or something that is no name.
@@ -983,10 +1003,11 @@ function declaredName(text: string | null, key: string): string | undefined {
   return declared.kind === "text" ? declared.value : undefined;
 }
 
-// `persist`'s twin of ringState: the option lands in the layer's file through
-// setConfig, and the page turn, which is session state, with it.
-// [LAW:one-source-of-truth] The ring steps the value of the layer it writes,
-// as step-config does: the name that layer's file declares, which carries an
+// `persist`'s twin of a ring-state step: the option lands in the layer's file
+// through setConfig, and the page turn, which is session state, with it.
+// [LAW:one-source-of-truth] The ring steps from what the bar wears while the
+// session holds a pick of the key; else the value of the layer it writes, as
+// step-config does: the name that layer's file declares, which carries an
 // earlier click's write the bar has not reloaded, else what the bar wears (the
 // layer declares no name, or a rule).
 const ringConfig: VerbHandler = (args, ctx) => {
@@ -1004,6 +1025,12 @@ const ringConfig: VerbHandler = (args, ctx) => {
     "persist",
     rest,
     (r) => {
+      if (
+        resetLayers(r.key).sessionKeys.some(
+          (k) => ctx.sessionState.get(ctx.session, k) !== null,
+        )
+      )
+        return r.shown;
       const key = durableLanding(
         config,
         (k) => ctx.sessionState.get(ctx.session, k),
@@ -1022,6 +1049,14 @@ const ringConfig: VerbHandler = (args, ctx) => {
     },
   );
   setConfig([role, ring.key, next], ctx);
+  // [LAW:one-source-of-truth] The step started from the pick, and the file now
+  // holds what it chose, so the pick stops shadowing the file: the bar follows
+  // the file, and the next click, finding no pick, steps from what this one
+  // wrote. The release lands with the click, whose consequence applies once the
+  // write has reloaded. A write that is no ring step (a persist `to`) leaves a
+  // pick standing: it repeats the same write however many times it is clicked.
+  for (const picked of resetLayers(ring.key).sessionKeys)
+    ctx.sessionState.clear(ctx.session, picked);
   // [LAW:dataflow-not-control-flow] exception: the page turn is optional on
   // the wire, and the session gate refuses an empty batch.
   if (turn.length > 0) setState(turn, ctx);
@@ -1486,9 +1521,7 @@ const SESSION_HANDLERS: Record<
   Extract<ClickStep, { kind: "session" }>["verb"],
   VerbHandler
 > = {
-  [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
-  [VERB_RING_STATE]: ringState,
   [VERB_RING_CONFIG]: ringConfig,
   [VERB_TURN_PAGE]: turnPage,
   [VERB_SET_CONFIG]: setConfig,
@@ -1506,6 +1539,15 @@ const SESSION_HANDLERS: Record<
   [VERB_SLASH]: slash,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic,
 };
+
+// A failure as the bar reports it: under its step's verb. A run of state writes
+// has no one verb: its refusal is the message of the handler that refused it,
+// a ring step's own, or the one batch's (set-state, which every pair lands by).
+const reported = (
+  step: Exclude<ClickStep, { kind: "invalid" }>,
+  message: string,
+): string =>
+  step.kind === "state-writes" ? message : `${step.verb}: ${message}`;
 
 // [LAW:no-silent-failure] Every admitted step runs in order even if an earlier
 // one failed. The host has turned malformed steps into error entries.
@@ -1547,7 +1589,7 @@ function foldEffects<Step extends Exclude<ClickStep, { kind: "invalid" }>>(
         throw e;
       }
       if (failure.kind === "threw") operational = true;
-      errors.push(`${step.verb}: ${failure.message}`);
+      errors.push(reported(step, failure.message));
     }
   }
   if (errors.length > 0) {
@@ -1758,6 +1800,9 @@ export function runClick(click: AdmittedClick, ctx: VerbContext): void {
               break;
             case "session":
               SESSION_HANDLERS[step.verb](step.args, c);
+              break;
+            case "state-writes":
+              landStateWrites(step.writes, c);
               break;
             case "repo-answer":
               c.configWrites.answer(step.dir, step.answer);

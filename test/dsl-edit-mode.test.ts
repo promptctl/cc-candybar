@@ -48,7 +48,7 @@ import {
   effectsOf,
   CLICK_VERBS,
 } from "./helpers/click";
-import { linkClick } from "./helpers/click";
+import { linkClick, landsAt, type DecodedEffect } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import type { VerbContext } from "../src/renderer/verbs";
 import { encodeLayoutOp } from "../src/config/layout-ops";
@@ -226,7 +226,11 @@ function buildEditRuntime(src: string, sessionId = S1) {
     ).frame;
   const ctx: VerbContext = verbContextWith(base, { configFor: effective });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
-  return { config, store, render, click, ctx, history, sessionState };
+  // Whether an effect can land `member` at `key`: a write of it, or a step
+  // through a cycle over the key that holds it (a cycle names no member).
+  const lands = (e: DecodedEffect, key: string, member: string): boolean =>
+    landsAt(effective(), e, key, member);
+  return { config, store, render, click, ctx, history, sessionState, lands };
 }
 
 // ─── loader: insertSegmentFrom's ActionDecl shape ─────────────────────────
@@ -499,10 +503,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       "directory: { template: 'd',",
       "directory: { width: 'fill', template: 'd',",
     );
-    const { render, click } = buildEditRuntime(src);
+    const { lands, render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
+        effectsOf(u).some((e) => lands(e, key, member)),
       )!;
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
@@ -517,10 +521,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       "template: 'g',",
       `template: '{{ fail "boom" }}',`,
     );
-    const { render, click } = buildEditRuntime(src);
+    const { lands, render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
+        effectsOf(u).some((e) => lands(e, key, member)),
       )!;
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
@@ -549,10 +553,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
         "variables: {",
         "variables: {\n    pick: { kind: 'state', key: 'pick', default: 'a' },",
       );
-    const { render, click } = buildEditRuntime(src);
+    const { lands, render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === member),
+        effectsOf(u).some((e) => lands(e, key, member)),
       )!;
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
@@ -575,10 +579,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   // An insertion point is drawn on no fill: its `✚` is green text on the
   // terminal's own ground, where `✖` sits inside its placement's cell.
   test("`✚` is drawn on no fill, `✖` on its segment's own cell", async () => {
-    const { render, click } = buildEditRuntime(BASE);
+    const { lands, render, click } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+        (e) => lands(e, EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
       ),
     )!;
     await click(toggle);
@@ -590,10 +594,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   });
 
   test("edit mode leads with ✓ done, top left, and it leaves edit mode", async () => {
-    const { render, click } = buildEditRuntime(BASE);
+    const { lands, render, click } = buildEditRuntime(BASE);
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+        (e) => lands(e, EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
       ),
     )!;
     await click(toggle);
@@ -751,7 +755,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     );
 
   test("a segment its own `when` or its container's hides still shows its name and its `-`", async () => {
-    const { render, click } = buildEditRuntime(HIDDEN);
+    const { lands, render, click } = buildEditRuntime(HIDDEN);
     const closed = textOf(render());
     expect(closed).not.toMatch(/idle|alone|boxed|IDLE|ALONE|BOXED/);
     // A hidden segment that is a whole row leaves no blank line behind.
@@ -759,7 +763,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
 
     const toggle = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+        (e) => lands(e, EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
       ),
     )!;
     await click(toggle);
@@ -781,7 +785,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     // the names view above is where a hidden segment is removed.
     const live = ownUrls(names).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === "open",
+        (e) => lands(e, EDIT_LIVE_KEY, "open"),
       ),
     )!;
     await click(live);
@@ -797,7 +801,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
   // under an ungated wrapper row (the door's), so the tail lands outside the
   // gate; edit mode needs `session.id`, which always brings the menu.
   test("`☐ live` under a gated root cannot hide the toggle that brings the names view back", async () => {
-    const { render, click, ctx } = buildEditRuntime(
+    const { lands, render, click, ctx } = buildEditRuntime(
       BASE.replace(
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
@@ -807,7 +811,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
-          (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === to,
+          (e) => lands(e, EDIT_LIVE_KEY, to),
         ),
       );
     await click(liveToggle(render(), "open")!);
@@ -840,13 +844,13 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
 
 describe("edit mode click flow: toggle → remove → insert (menu) → undo × 2", () => {
   test("toggling edit mode on makes the `-` chrome render; off hides it again", async () => {
-    const { render, click } = buildEditRuntime(BASE);
+    const { lands, render, click } = buildEditRuntime(BASE);
     const before = textOf(render());
     expect(before).not.toContain(REMOVE_GLYPH);
 
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+        (e) => lands(e, EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
       ),
     )!;
     expect(toggleUrl).toBeDefined();
@@ -860,14 +864,14 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     expect(opened).not.toContain(" e ");
     const liveUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_LIVE_KEY && e.args[2] === "open",
+        (e) => lands(e, EDIT_LIVE_KEY, "open"),
       ),
     )!;
     await click(liveUrl);
 
     const closeUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "closed",
+        (e) => lands(e, EDIT_MODE_KEY, "closed"),
       ),
     )!;
     await click(closeUrl);
@@ -875,7 +879,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
   });
 
   test("remove, insert, undo twice and redo twice preview each step without writing the file", async () => {
-    const { render, click, ctx } = buildEditRuntime(BASE);
+    const { lands, render, click, ctx } = buildEditRuntime(BASE);
     const original = durable.text()!;
     // A placement of `seg`: its own name, or the fresh id an insert gave it.
     const placed = (seg: string) =>
@@ -891,7 +895,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // Open edit mode.
     const openUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+        (e) => lands(e, EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
       ),
     )!;
     await click(openUrl);
@@ -913,7 +917,9 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // Open each remaining insertion menu and pick gitPr beside git.
     for (const menuOpenUrl of ownUrls(render()).filter((u) =>
       effectsOf(u).some(
-        (e) => e.verb === "set-state" && String(e.args[1]).startsWith(`${EDIT_NS}${MENU_NS}`),
+        (e) =>
+          (e.verb === "set-state" || e.verb === "ring-state") &&
+          String(e.args[1]).startsWith(`${EDIT_NS}${MENU_NS}`),
       ),
     )) {
       await click(menuOpenUrl);
@@ -949,11 +955,11 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
 
 describe("a segment row's chrome rides its row", () => {
   test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", async () => {
-    const { render, click } = buildEditRuntime(BASE);
+    const { lands, render, click } = buildEditRuntime(BASE);
     const closed = textOf(render()).split("\n");
     const toggleUrl = ownUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
+        (e) => lands(e, EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
       ),
     )!;
     await click(toggleUrl);
@@ -1008,10 +1014,7 @@ describe("edit mode's save and cancel", () => {
   ): string => ownUrls(rt.render()).find((u) => effectsOf(u).some(pick))!;
   const open = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
     await rt.click(
-      find(
-        rt,
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
-      ),
+      find(rt, (e) => rt.lands(e, EDIT_MODE_KEY, EDIT_MODE_ARRANGE)),
     );
   const removeGit = async (
     rt: ReturnType<typeof buildEditRuntime>,

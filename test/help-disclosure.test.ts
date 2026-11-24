@@ -30,7 +30,7 @@ import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_CLOSED, DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { EDIT_MODE_HELP, HELP_TEXT, LANE_HELP } from "../src/help-text";
 import { LANE_NAMES } from "../src/config/lanes";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, landsAt } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import type { DslConfig } from "../src/config/dsl-types";
 import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
@@ -111,7 +111,7 @@ function helpBar(src: string = TWO_SEGMENT_ROOT) {
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      effectsOf(u).some((e) => landsAt(rig.config, e, key, value)),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     await click(url);

@@ -38,8 +38,8 @@ const barLinks = (rendered: Frame): DrawnLink[] =>
 // segment it inserts after.
 const DRAWN_ONLY_AFTER = [
   /\.armed to armed$/,
-  /^set edit\.mode to arrange/,
-  /^open edit\.default\.insert\./,
+  /^step edit\.toggle /,
+  /^toggle edit\.default\.insert\./,
   /^turn .* to page /,
   /^turn .* (forward|back) a page$/,
 ];
@@ -81,7 +81,9 @@ async function walk(bar: Bar): Promise<Walked> {
   const clicked = new Set<string>();
   for (let n = 0; n < CLICKS; n++) {
     const frame = frames.at(-1)!;
-    const fresh = frame.filter((l) => !clicked.has(l.url));
+    const fresh = frame.filter(
+      (l) => !clicked.has(l.url) && !/clickMode/.test(doesOf(l.url)),
+    );
     const next =
       DRAWN_ONLY_AFTER.flatMap((drawn) =>
         fresh.filter((l) => drawn.test(doesOf(l.url))),

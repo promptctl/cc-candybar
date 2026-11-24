@@ -37,6 +37,7 @@ import type { PlacementIdentity } from "../placement-identity.js";
 import { fragmentNode } from "../root.js";
 import type { ValidateCtx } from "./validate-core.js";
 import {
+  FIRST_PAGE,
   menuActionName,
   menuMember,
   menuPageKey,
@@ -472,7 +473,11 @@ export function synthesizePlacementMenus(
         // int ACTION is what deriveActionValidators derives the ←/→/✕ wire
         // gate from — the one existing path, no parallel gate
         // [LAW:single-enforcer].
-        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+        variables[pageKey] = {
+          kind: "state",
+          key: pageKey,
+          default: FIRST_PAGE,
+        };
         actions[pageKey] = { set: pageKey, int: true };
       }
     }

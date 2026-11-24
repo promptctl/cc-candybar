@@ -42,6 +42,7 @@ import type { ValidatedConfig as DslConfig } from "../src/config/dsl-types";
 import {
   clickUrl,
   effectsOf,
+  landsAt,
   recordRender,
   testVerbContext,
 } from "./helpers/click";
@@ -251,12 +252,12 @@ describe("a global the menu has never seen gets its control from the generator",
     expect(
       linkUrls(out).some((u) =>
         effectsOf(u).some(
-          (e) => e.args[1] === LIST && e.args[2] === "closed",
+          (e) => landsAt(config, e, LIST, "closed"),
         ),
       ),
     ).toBe(true);
     const high = linkUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === "zoom" && e.args[2] === "high"),
+      effectsOf(u).some((e) => landsAt(config, e, "zoom", "high")),
     );
     recordRender(sessionState, S1);
     await clickUrl(high!, testVerbContext(sessionState, undefined, config));

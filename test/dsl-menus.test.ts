@@ -44,7 +44,7 @@ import { deriveActionValidators } from "../src/daemon/foundations/state-validato
 import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, landsAt, menuTriggerOf } from "./helpers/click";
 import type { RichText } from "@promptctl/rich-js";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
@@ -62,6 +62,8 @@ import {
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import {
   menuActionName,
+  menuOfAction,
+  menuOfKey,
   menuPageKey,
   menuStateKey,
   sharedMenuStateKey,
@@ -171,7 +173,7 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
   };
   const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = ownUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      effectsOf(u).some((e) => landsAt(rig.config, e, key, value)),
     );
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
     await rig.click(url);
@@ -202,6 +204,17 @@ const TKEY = menuKeyOf("themepicker", "applyTheme");
 const PKEY = menuPageKey(TKEY);
 
 describe("menu synthesis (derived identity, reserved namespace)", () => {
+  test("a disclosure's cycle action names its menu and member back, whatever characters the member holds", () => {
+    const stateKey = sharedMenuStateKey("settings");
+    for (const member of ["applyTheme", "apply.theme", "apply theme", "a/b"]) {
+      expect(menuOfAction(menuActionName(stateKey, member))).toEqual({
+        menu: menuOfKey(stateKey)!.menu,
+        member,
+      });
+    }
+    expect(menuOfAction("plain")).toBeUndefined();
+  });
+
   test("synthesizes state var + cycle action + page cursor keyed by (segment, apply); both gates derive", () => {
     const config = parseAndValidate("<test>", MENU_SRC, ALLOWED);
     expect(config.variables[TKEY]).toEqual({
@@ -659,21 +672,34 @@ describe("toggle round trip + drop stacking", () => {
     expect(open.get("themepicker")).not.toBe(closed.get("themepicker"));
   });
 
-  // [LAW:verifiable-goals] The pagination-reset contract: the disclosure click is
-  // ONE atomic set-state that toggles the open-state AND resets the SYNTHESIZED
-  // page cursor to page 0 — so a reopened menu is never stranded on a stale page
-  // left by ←/→ before the last close. The page key is derived from identity
-  // (menuPageKey), never from a page-action argument.
-  test("disclosure click resets the synthesized page cursor to 0 in the same atomic write", () => {
-    const { render } = menuBar(MENU_SRC);
+  // [LAW:verifiable-goals] The pagination-reset contract: the trigger steps the
+  // menu's open-state AND resets the SYNTHESIZED page cursor to page 0, landing
+  // together — so a reopened menu is never stranded on a stale page left by ←/→
+  // before the last close. The page key is derived from identity (menuPageKey),
+  // never from a page-action argument. The link names the step, never the
+  // state it lands on, so it is the same link on every draw.
+  test("the trigger steps the menu and resets its page cursor, and the same link opens then closes it", async () => {
+    const { render, click, sessionState } = menuBar(MENU_SRC);
     const url = ownUrls(render()).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === TKEY),
+      effectsOf(u).some((e) => e.args[1] === menuActionName(TKEY, "applyTheme")),
     );
     if (!url) throw new Error("no disclosure toggle rendered");
-    const eff = effectsOf(url)[0]!;
-    // [sessionId, openStateKey, successor, pageKey, "0"] — open-state + page reset
-    // in one batch. Both keys are independently gated; the batch passes one gate.
-    expect(eff.args.slice(1)).toEqual([TKEY, "applyTheme", PKEY, "0"]);
+    expect(effectsOf(url).map((e) => [e.verb, ...e.args.slice(1)])).toEqual([
+      ["ring-state", menuActionName(TKEY, "applyTheme"), "1", ""],
+      ["set-state", PKEY, "0"],
+    ]);
+    // Clicked twice with no redraw between: it opens, then closes. Every open
+    // lands on the list's first page, whichever page the last one left.
+    sessionState.set(S1, PKEY, "3");
+    await click(url);
+    expect(sessionState.get(S1, TKEY)).toBe("applyTheme");
+    expect(sessionState.get(S1, PKEY)).toBe("0");
+    sessionState.set(S1, PKEY, "2");
+    await click(url);
+    expect(sessionState.get(S1, TKEY)).toBe("closed");
+    await click(url);
+    expect(sessionState.get(S1, TKEY)).toBe("applyTheme");
+    expect(sessionState.get(S1, PKEY)).toBe("0");
   });
 
   // The body's ✕ delivers the SAME close the ▾ glyph promises: disclosure back
@@ -1037,13 +1063,13 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   }`;
 
   test("the picker renders one option per inline domain member, once opened", async () => {
-    const { render, click } = menuBar(SRC);
+    const { config, render, click } = menuBar(SRC);
     const closed = render();
     expect(textOf(closed)).not.toContain("buzz");
     expect(textOf(closed)).not.toContain("silent");
 
     const toggleUrl = ownUrls(closed).find((u) =>
-      effectsOf(u).some((e) => e.args[2] === "applySound"),
+      menuTriggerOf(config, effectsOf(u))?.member === "applySound",
     );
     expect(toggleUrl).toBeDefined();
     await click(toggleUrl!);
@@ -1057,7 +1083,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   test("clicking an option mutates the field through the real gate — the domain's own allow-list, derived with zero engine edits", async () => {
     const { config, render, click, sessionState } = menuBar(SRC);
     const toggleUrl = ownUrls(render()).find((u) =>
-      effectsOf(u).some((e) => e.args[2] === "applySound"),
+      menuTriggerOf(config, effectsOf(u))?.member === "applySound",
     );
     expect(toggleUrl).toBeDefined();
     await click(toggleUrl!);

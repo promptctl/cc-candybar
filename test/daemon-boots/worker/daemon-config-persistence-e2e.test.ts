@@ -43,7 +43,8 @@ const showsTheme = (out: Frame, theme: string): boolean =>
 // Opening the theme picker: the write its label's click makes.
 const OPEN_THEME_PICKER = [sharedMenuStateKey("candybar.pickers"), "candybar.apply.theme"];
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
+import { BUNDLED, click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
+import { landsAt } from "../../helpers/click";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
@@ -111,11 +112,13 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // the row's page cursor beside it). Click it before any per-theme
       // swatch exists to click.
       const themeMenuToggleUrl = findUrl(linkUrls(menuOpen), (effects) =>
-        effects.some(
-          (e) =>
-            e.verb === "set-state" &&
-            e.args[1] === sharedMenuStateKey("candybar.pickers") &&
-            e.args[2] === "candybar.apply.theme",
+        effects.some((e) =>
+          landsAt(
+            BUNDLED,
+            e,
+            sharedMenuStateKey("candybar.pickers"),
+            "candybar.apply.theme",
+          ),
         ),
       );
       expect(themeMenuToggleUrl).toBeDefined();

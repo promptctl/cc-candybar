@@ -19,6 +19,7 @@ import {
   escapeTemplateLiteral,
 } from "./disclosure.js";
 import {
+  FIRST_PAGE,
   menuActionName,
   menuPageKey,
   PAGE_HOLDING_CURRENT,
@@ -241,7 +242,7 @@ function optionPicker(
     },
     variables: {
       [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page]: { kind: "state", key: page, default: "0" },
+      [page]: { kind: "state", key: page, default: FIRST_PAGE },
     },
     list: { ref, rows },
   };
