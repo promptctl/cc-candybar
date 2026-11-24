@@ -1,3 +1,9 @@
+## [1.236.13](https://github.com/promptctl/cc-candybar/compare/v1.236.12...v1.236.13) (2026-11-24)
+
+### Bug Fixes
+
+* **release:** Publish job uses npm trusted publishing, no stored token ([#943](https://github.com/promptctl/cc-candybar/issues/943)) ([5ed9505](https://github.com/promptctl/cc-candybar/commit/5ed95054ad70e3716ce635aee35e03ee0896831f))
+
 ## [1.236.12](https://github.com/promptctl/cc-candybar/compare/v1.236.11...v1.236.12) (2026-11-23)
 
 ### Bug Fixes
