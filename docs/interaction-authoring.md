@@ -989,7 +989,10 @@ or an alt+click without a second region beside it:
   reports it while tmux `mouse` is on and clears it when the pointer moves onto
   a cell with no region or the pane stops drawing. tmux sends no motion to a
   pane the pointer is not over, so hover is the last region the pane saw, not
-  where the pointer is now.
+  where the pointer is now. An `on: { hover: … }` binding is what a click runs
+  in the statusline's hover mode, standing in for a pointer that surface cannot
+  see; on a surface that delivers hover itself the binding does not run, and
+  the pointer's place is `.hover`.
 - **`.surface` says what the drawing surface delivers**, as space-joined
   gestures (`left` for the statusline). One config draws on both surfaces, so a
   binding the surface cannot deliver is not an error; use `.surface` to
@@ -1028,7 +1031,7 @@ click steps it:
 | `⌖`   | `hover` | runs the region's `hover` binding; a region with none becomes the hovered region until another click or a mode change |
 | `⌥`   | `alt`   | runs the region's `alt+left` binding; a region with none is drawn with no link                                         |
 
-A link no action names (a menu's own rows, a picker's option, an authored href) is not a region and is the same in every mode. The mode belongs to the session. It returns to `click` after the same idle
+A link no action names (a menu's own rows, a picker's option, an authored href) is not a region and is the same in every mode. In the bar pane with `mouse` on, a press on an authored href is the pane's, and the pane runs nothing for it; any link-opening gesture the terminal keeps for itself is the terminal's. The mode belongs to the session. It returns to `click` after the same idle
 period that closes menus, and stepping it puts the hovered region away. A
 surface that delivers the mode's own gesture ignores the mode: a pane with
 `mouse` on draws every region by its own gestures.

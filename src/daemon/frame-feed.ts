@@ -191,6 +191,9 @@ function encodeFeed(
   // pane lane's carries the hit map, which holds the signed link of every
   // gesture, so the statusline lane's bytes never change with it. Each body is
   // published once, whichever lanes show it.
+  // [LAW:carrying-cost] The pane lane's answer is built when a pane-lane
+  // subscriber is first offered it, so a session no pane follows pays for one
+  // encode of its frame, as it did before the pane had a hit map.
   const answer = (
     published: Frame<string>,
     hits: HitMap | undefined,
@@ -202,12 +205,17 @@ function encodeFeed(
     displayedEvents: frame.displayedEvents,
   });
   const bar = publish(frame.bar, source);
-  const resp = answer(bar, hitMapOf(bar));
   const statusline = answer(
     frame.handoff === null ? bar : publish(frame.handoff, source),
     undefined,
   );
-  return { resp, statusline };
+  let resp: EncodedAnswer | undefined;
+  return {
+    statusline,
+    get resp() {
+      return (resp ??= answer(bar, hitMapOf(bar)));
+    },
+  };
 }
 
 // [LAW:no-ambient-temporal-coupling] Where the viewers stand with the
@@ -302,7 +310,9 @@ export class FrameFeeds<Req> {
       writes: new Set(),
       owner: sub.owner === null ? null : this.held(sub.owner),
     };
+    const owned = ownerOf(watched)?.id ?? null;
     watched.followers.set(sub, follower);
+    this.ownerMoved(sessionId, owned, watched);
     this.handover(sessionId, watched, sub, follower);
     this.deps.log(
       "info",
@@ -353,19 +363,37 @@ export class FrameFeeds<Req> {
   ):
     | { readonly kind: "ok" }
     | { readonly kind: "refused"; readonly reason: string } {
-    const reporting = [
-      ...(this.watched.get(sessionId)?.followers.values() ?? []),
-    ].filter((follower) => follower.owner?.id === pane.id);
-    if (reporting.length === 0)
+    const watched = this.watched.get(sessionId);
+    const reporting = [...(watched?.followers.values() ?? [])].filter(
+      (follower) => follower.owner?.id === pane.id,
+    );
+    if (watched === undefined || reporting.length === 0)
       return {
         kind: "refused",
         reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId)}`,
       };
     // A stream that reconnects over its old one holds the pane's facts twice.
+    const owned = ownerOf(watched)?.id ?? null;
     const admitted = this.held(pane);
     for (const follower of reporting) follower.owner = admitted;
+    this.ownerMoved(sessionId, owned, watched);
     this.announce();
     return { kind: "ok" };
+  }
+
+  // [LAW:nothing-unseen] Who holds a session's pointer is said when it changes
+  // hands, not on each report, which move at the pointer's speed.
+  private ownerMoved(
+    sessionId: SessionId,
+    before: string | null,
+    watched: Watched | undefined,
+  ): void {
+    const after = watched === undefined ? null : (ownerOf(watched)?.id ?? null);
+    if (after !== before)
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(sessionId)} pointer owner=${JSON.stringify(after)} was=${JSON.stringify(before)}`,
+      );
   }
 
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
@@ -592,7 +620,9 @@ export class FrameFeeds<Req> {
     const watched = this.watched.get(sessionId);
     const follower = watched?.followers.get(sub);
     if (watched === undefined || follower === undefined) return;
+    const owned = ownerOf(watched)?.id ?? null;
     watched.followers.delete(sub);
+    this.ownerMoved(sessionId, owned, watched);
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId);
       this.deps.log(

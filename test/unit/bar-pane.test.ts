@@ -4,7 +4,9 @@
 
 import { parseArgs, placementFrom, tmuxPatience } from "../../src/bar-pane";
 import { paint } from "../../src/bar-pane/paint";
+import { reportPointer } from "../../src/bar-pane/report";
 import { singleFlight } from "../../src/bar-pane/single-flight";
+import type { ClientOutcome } from "../../src/daemon/client";
 import type { TmuxRun } from "../../src/proc/tmux";
 import type { Monotonic } from "../../src/time";
 
@@ -122,6 +124,21 @@ describe("bar-pane tmux patience", () => {
     expect(() => patience(missed)).not.toThrow();
   });
 
+  // Two presses that missed twenty minutes apart are not twenty minutes of
+  // silence from tmux: the placement loop asks it every tick and says if it is
+  // gone.
+  it("starts a run of its own for a miss that comes long after the last one", () => {
+    let now = 0;
+    const patience = tmuxPatience({ monotonic: () => now as Monotonic });
+    patience(missed);
+    now = 1_200_000;
+    expect(() => patience(missed)).not.toThrow();
+    now = 1_204_000;
+    expect(() => patience(missed)).not.toThrow();
+    now = 1_205_001;
+    expect(() => patience(missed)).toThrow(/tmux has not answered for 5 s/);
+  });
+
   it("gives up when the misses run past the patience, and an answer ends the run", () => {
     let now = 0;
     const patience = tmuxPatience({ monotonic: () => now as Monotonic });
@@ -192,6 +209,53 @@ describe("bar-pane single flight", () => {
     flight();
     await settled();
     expect(failures).toEqual([new Error("boom")]);
+  });
+});
+
+// The host takes a pointer report only from a pane whose stream it holds.
+describe("bar-pane pointer report", () => {
+  const facts = { id: "pane", gestures: ["left"], hover: null };
+  const sends = () => {
+    const sent: string[] = [];
+    return {
+      sent,
+      send: async (sessionId: string): Promise<ClientOutcome> => {
+        sent.push(sessionId);
+        return { kind: "ok", value: "" } as ClientOutcome;
+      },
+    };
+  };
+
+  it("sends nothing while no stream is held, whether the pane follows no session or its lane is off", async () => {
+    const { sent, send } = sends();
+    const failures: string[] = [];
+    await reportPointer(null, send, () => facts, (m) => failures.push(m));
+    await reportPointer(
+      { sessionId: "s", wire: { attached: false } },
+      send,
+      () => facts,
+      (m) => failures.push(m),
+    );
+    expect(sent).toEqual([]);
+    expect(failures).toEqual([]);
+  });
+
+  it("sends the facts as they stand while the stream is held, and says a failure it meets", async () => {
+    const { sent, send } = sends();
+    const followed = { sessionId: "s", wire: { attached: true } };
+    await reportPointer(followed, send, () => facts, () => {});
+    expect(sent).toEqual(["s"]);
+    const failures: string[] = [];
+    await reportPointer(
+      followed,
+      async () =>
+        ({ kind: "busy", phase: "deadline", message: "slow" }) as ClientOutcome,
+      () => facts,
+      (m) => failures.push(m),
+    );
+    expect(failures).toEqual([
+      expect.stringContaining("pointer report failed: daemon busy (slow)"),
+    ]);
   });
 });
 

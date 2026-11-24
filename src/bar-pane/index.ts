@@ -35,6 +35,7 @@ import {
 } from "../daemon/pane-visibility";
 import { DRAWING, RESTORED, paint, paintedLines } from "./paint";
 import { readMouse } from "./mouse";
+import { reportPointer, type Followed } from "./report";
 import { singleFlight } from "./single-flight";
 import { touchOf } from "./hit-test";
 import { BAR_PANE_FORMAT, deliveredIn } from "./pointer";
@@ -125,19 +126,25 @@ async function askPlacement(
 // the bar pane gives up: a loaded machine misses a call now and then, a tmux
 // server that is gone misses them all. One per call the bar pane makes, so a
 // call that keeps failing is not excused by another that answers. The time
-// counts from the first miss of a run of misses, so a call made rarely (a
-// press) is not held to the time since its last answer.
+// counts from the first miss of a run of misses, and a miss that comes more
+// than the patience after the one before it starts a run of its own, so a call
+// made rarely (a press) is held to neither the time since its last answer nor
+// a miss from long ago.
 export function tmuxPatience(
   clock: Pick<Timekeeper, "monotonic">,
 ): (run: { readonly kind: "ok" } | TmuxMissed) => void {
   let missingSince: number | null = null;
+  let lastMiss = 0;
   return (run) => {
     if (run.kind === "ok") {
       missingSince = null;
       return;
     }
-    missingSince ??= clock.monotonic();
-    if (clock.monotonic() - missingSince > TMUX_PATIENCE_MS)
+    const now = clock.monotonic();
+    if (missingSince === null || now - lastMiss > TMUX_PATIENCE_MS)
+      missingSince = now;
+    lastMiss = now;
+    if (now - missingSince > TMUX_PATIENCE_MS)
       throw new Error(
         `tmux has not answered for ${TMUX_PATIENCE_MS / 1000} s: ${run.reason}`,
       );
@@ -219,12 +226,13 @@ async function drawBarPane(
   // The session's frames while the bar pane is shown: one follower, for the
   // session tmux pane `pane` holds now, and the last thing it said. Hidden, it
   // follows nothing, so the daemon draws nothing for it.
-  let following: {
-    readonly sessionId: string;
-    readonly said: { latest: string | null; hits: HitMap | null };
-    readonly say: (line: string) => void;
-    readonly follower: FrameFollower;
-  } | null = null;
+  let following:
+    | (Followed & {
+        readonly said: { latest: string | null; hits: HitMap | null };
+        readonly say: (line: string) => void;
+        readonly follower: FrameFollower;
+      })
+    | null = null;
   // [LAW:one-source-of-truth] What this pane says of its pointer: who it is,
   // what its terminal delivers, and the action the pointer last stood on. The
   // host holds the latest of it, and a stream that opens restates it.
@@ -239,14 +247,17 @@ async function drawBarPane(
   // [LAW:no-ambient-temporal-coupling] One report at a time, of the facts and
   // the session as they stand when it is sent: changes that arrive while one is
   // in flight are the one report after it, so the host never ends on an older
-  // one and a burst is not a queue of identical requests. With no session
-  // followed there is nobody to tell: the facts ride the subscribe that comes.
-  const report = singleFlight(async () => {
-    if (following === null) return;
-    const sent = await tryPointerViaDaemon(world, following.sessionId, facts());
-    if (sent.kind !== "ok")
-      fail(`pointer report failed: ${describeFailure(sent)}`);
-  }, die);
+  // one and a burst is not a queue of identical requests.
+  const report = singleFlight(
+    () =>
+      reportPointer(
+        following,
+        (sessionId, owned) => tryPointerViaDaemon(world, sessionId, owned),
+        facts,
+        fail,
+      ),
+    die,
+  );
 
   // What the loop last learned of the pane's session, shown until its follower
   // says something.
@@ -371,12 +382,21 @@ async function drawBarPane(
       said.hits = hits?.slice(0, paintedLines(line).length) ?? null;
       redraw();
     };
+    // A frame is the host's word that it holds the stream, and the facts the
+    // subscribe carried may be older than the pane's now: the first of each
+    // stream restates them.
+    const wire = { attached: false };
     following = {
       sessionId,
+      wire,
       said,
       say,
       follower: followFrames(world, socketPath(world.host), sessionId, "pane", {
         frame: (resp) => {
+          if (!wire.attached) {
+            wire.attached = true;
+            report();
+          }
           const outcome = renderOutcomeOf(resp);
           say(
             planOutcome(outcome, world.host.env.XDG_STATE_HOME).output,
@@ -385,8 +405,14 @@ async function drawBarPane(
               : null,
           );
         },
-        off: (resp) => say(resp.error),
-        fault: (reason) => say(reason),
+        off: (resp) => {
+          wire.attached = false;
+          say(resp.error);
+        },
+        fault: (reason) => {
+          wire.attached = false;
+          say(reason);
+        },
         exit: (reason) => die(new Error(reason)),
         owner: facts,
       }),

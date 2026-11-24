@@ -401,6 +401,24 @@ describe("the owner of a session's pointer", () => {
     expect(hover()).toBe("z");
   });
 
+  // [LAW:nothing-unseen] A change of hands is logged, a report that changes
+  // nothing of who holds the pointer is not.
+  test("is logged when it changes hands, and not for a report that leaves it", () => {
+    const r = rig();
+    const leaveA = r.feeds.subscribe(S, paneOwnedBy(owned("a")).sub);
+    r.feeds.subscribe(S, paneOwnedBy(owned("b")).sub);
+    r.feeds.pointerOf(S, owned("b", "x"));
+    r.feeds.pointerOf(S, owned("a", "y"));
+    leaveA();
+    const owners = r.logged.filter((line) => line.includes("pointer owner="));
+    expect(owners).toEqual([
+      `info feed sid="${S}" pointer owner="a" was=null`,
+      `info feed sid="${S}" pointer owner="b" was="a"`,
+      `info feed sid="${S}" pointer owner="a" was="b"`,
+      `info feed sid="${S}" pointer owner="b" was="a"`,
+    ]);
+  });
+
   test("keeps a pane's facts while another owns, for the pane it returns to", () => {
     const r = rig();
     const hover = () => r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover;
