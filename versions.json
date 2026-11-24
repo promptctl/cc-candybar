@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-948",
+      "ref": "refs/pull/948/merge",
+      "sha": "903f925dcd7b4a65fc56c16c5ff6471a6eedb4ae",
+      "timestamp": "2026-11-24T12:24:45.090Z",
+      "commits": [
+        {
+          "sha": "903f925dcd7b4a65fc56c16c5ff6471a6eedb4ae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T05:23:33-07:00",
+          "message": "Merge 1dd186435e17cf2da66d262fe9a9e206d0ed6538 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+        },
+        {
+          "sha": "1dd186435e17cf2da66d262fe9a9e206d0ed6538",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T05:23:11-07:00",
+          "message": "feat(host): a cold host starts from the bundle the install recorded\n\nEvery bar on the machine is drawn by one host, so a client that found it down must start the installed bundle, not its own. The install records its bundle in the state directory; both clients read that record at spawn time and refuse to start anything, showing why on the bar, when it is missing or unusable. The record is written only when the user's statusline command names the writing bundle, so a worktree's build or deploy never moves the host. The host's binary watch includes the record, so repointing it ends the running host, and a host no longer exits on a client with a newer protocol.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2",
