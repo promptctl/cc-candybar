@@ -36,6 +36,7 @@ import {
   type LoadedChain,
   type LoadedFile,
   ConfigError,
+  type Advisory,
   type DroppedFileError,
 } from "../config/dsl-loader.js";
 import type { LayerRole } from "../config/layer-role.js";
@@ -268,7 +269,7 @@ export interface DslRenderState {
   readonly loadKey: string;
   // The advisories its build earned (variables that failed to register or
   // declare), shown for as long as it is served, kept or built.
-  readonly buildWarnings: readonly string[];
+  readonly buildWarnings: readonly Advisory[];
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
@@ -450,7 +451,7 @@ export interface CacheEntry {
   // again on its next use (`reconcile`). A write that reads no config does
   // not read the load either, so it still lands on the host's offer.
   fault: string | null;
-  lastWarnings: readonly string[];
+  lastWarnings: readonly Advisory[];
   readonly state: DslRenderState;
 }
 
@@ -559,7 +560,7 @@ export function userAuthoredRoots(
 // (collision detection runs on a broken file too).
 export type LoadOutcome = {
   readonly layers: readonly string[];
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Advisory[];
 } & (
   | {
       readonly kind: "built" | "kept";
@@ -585,7 +586,7 @@ export type Settled = LoadOutcome["kind"];
 interface Failed {
   readonly kind: "failed";
   readonly cause: unknown;
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Advisory[];
 }
 
 // [LAW:types-are-the-program] The facts a build takes from an origin: its
@@ -603,7 +604,7 @@ interface ResolvedLoad extends LoadInputs {
   // [LAW:one-source-of-truth] The identity of everything a build derives a
   // state from: two loads with one key build interchangeable states.
   readonly key: string;
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Advisory[];
 }
 
 // An attempt at a state from a resolved load: the served state `kept` when it
@@ -693,7 +694,7 @@ function resolveLoad(
   snapshot: ConfigSnapshot,
   home: string,
 ): ResolvedLoad | Failed {
-  const warnings: string[] = [];
+  const warnings: Advisory[] = [];
   try {
     const loaded = loadSnapshot(snapshot, home, DEFAULT_DSL_CONFIG, {
       warned: (w) => warnings.push(...w),
@@ -732,7 +733,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // [LAW:one-source-of-truth] The advisories the build earns are facts of the
   // state it builds, carried on it, so a reload that keeps the state keeps
   // them too.
-  const warnings: string[] = [];
+  const warnings: Advisory[] = [];
 
   const store = new VariableStore(deps.clock);
   // The sessionState injection makes `kind: "state"` variables read/write the
@@ -848,7 +849,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
 // beside its error, and a reused state keeps the warnings its build earned.
 function settle(
   snapshot: ConfigSnapshot,
-  resolveWarnings: readonly string[],
+  resolveWarnings: readonly Advisory[],
   attempt: Attempt,
 ): LoadOutcome {
   const layers = configPaths(snapshot);
@@ -859,7 +860,7 @@ function settle(
   // discovery watches every candidate path, so creating/removing a duplicate
   // — or the named file appearing — hands in a snapshot that moved.
   // Each advisory its own, as the bar lists it.
-  const warnings = (own: readonly string[]): readonly string[] => [
+  const warnings = (own: readonly Advisory[]): readonly Advisory[] => [
     ...snapshot.notices,
     ...resolveWarnings,
     ...own,

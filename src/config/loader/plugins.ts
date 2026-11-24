@@ -34,7 +34,7 @@ import {
   type ActionDecl,
 } from "../action.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
-import { ConfigError, type ConfigIssue } from "./diagnostics.js";
+import { ConfigError, type Advisory, type ConfigIssue } from "./diagnostics.js";
 import { refuseMintedKeys } from "./authored-keys.js";
 import { checkMenuDecls } from "./menu-synth.js";
 import { resolveUserPath } from "../../utils/user-path.js";
@@ -117,6 +117,12 @@ export interface PluginContext {
 // How the bar identifies a plugin that failed to load.
 export function droppedPluginNotice(d: DroppedPlugin): string {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
+}
+
+// The advisory a load earns for it: about the plugin, whose reason may move
+// while it stays dropped.
+export function droppedPluginAdvisory(d: DroppedPlugin): Advisory {
+  return { subject: d.path, message: droppedPluginNotice(d) };
 }
 
 // [LAW:types-are-the-program] What a definition may say, every key optional.

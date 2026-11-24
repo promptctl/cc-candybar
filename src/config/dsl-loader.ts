@@ -42,6 +42,7 @@ import {
   findKeyLine,
   keyLocator,
   DroppedFileError,
+  type Advisory,
   type ConfigIssue,
   parseJson5Syntax,
 } from "./loader/diagnostics.js";
@@ -104,7 +105,7 @@ import { refuseSettingKeyOwners } from "./loader/setting-keys.js";
 import {
   applyPlugins,
   listedPlugins,
-  droppedPluginNotice,
+  droppedPluginAdvisory,
   type PluginContext,
   withDroppedPlacements,
   dropsOwning,
@@ -138,7 +139,11 @@ export {
   editabilityNotice,
   findKeyLine,
 } from "./loader/diagnostics.js";
-export type { ConfigIssue, DroppedFileError } from "./loader/diagnostics.js";
+export type {
+  Advisory,
+  ConfigIssue,
+  DroppedFileError,
+} from "./loader/diagnostics.js";
 export {
   dslConfigCandidatePaths,
   configResolutionNotice,
@@ -257,7 +262,10 @@ export function loadConfigSource(
   return {
     source,
     raw: parsed.raw,
-    warnings: [...parsed.warnings, ...plugins.dropped.map(droppedPluginNotice)],
+    warnings: [
+      ...parsed.warnings,
+      ...plugins.dropped.map(droppedPluginAdvisory),
+    ],
     plugins: {
       loaded: plugins.loaded,
       dropped: plugins.dropped,
@@ -463,7 +471,7 @@ function validateChain(
   const isReached = (d: DroppedPlugin): boolean => reached.has(d.path);
   const surfaced = plugins.dropped.filter(isReached);
   const unreached = plugins.dropped.filter((d) => !isReached(d));
-  trace.warned(surfaced.map(droppedPluginNotice));
+  trace.warned(surfaced.map(droppedPluginAdvisory));
   // [LAW:one-source-of-truth] The namespaces the chain renders, a repository's
   // own included: what a placement is judged against, so a placement under
   // a plugin this session lacks draws nothing and one under a plugin it has
@@ -537,7 +545,7 @@ function validateChain(
 }
 
 export interface ChainTrace {
-  readonly warned: (warnings: readonly string[]) => void;
+  readonly warned: (warnings: readonly Advisory[]) => void;
 }
 
 export interface LoadedChain {
@@ -569,7 +577,7 @@ export interface LoadedChain {
 export interface LoadedFile {
   readonly raw: RawDslConfig;
   readonly source: string;
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Advisory[];
   // The plugin definitions the file listed: those merged, and those dropped
   // with why. The bar surfaces the drop in its warnings.
   readonly plugins: {
@@ -680,7 +688,7 @@ export interface Renderable {
   readonly placed: DslConfig;
   // The advisories the chain earns as a whole: each insert cell a tree that
   // renders could not place.
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Advisory[];
 }
 
 // A file beneath the one validated, by its path.
@@ -720,7 +728,7 @@ export function validateRenderable(
   // that render and none places a cell again.
   const judge = (
     cells: readonly InsertCell[],
-    refused: readonly string[],
+    refused: readonly Advisory[],
   ): Renderable => {
     const inserted = placeInserts(
       authoredConfig.config,
@@ -754,7 +762,7 @@ export function validateRenderable(
     );
     const { taken, refused } = written.cells.reduce<{
       taken: readonly InsertCell[];
-      refused: readonly string[];
+      refused: readonly Advisory[];
     }>(
       (acc, cell) => {
         try {
@@ -772,6 +780,7 @@ export function validateRenderable(
               ...acc.refused,
               insertNotice(
                 cell,
+                "refused",
                 `${cell.relation} "${cell.anchor}", but the bar refuses it there: ${why}`,
               ),
             ],
@@ -795,7 +804,7 @@ function judgeRenderable(
   merged: DslConfig,
   presence: (name: string) => SegmentPresence,
   filed: readonly FiledIssue[],
-  notices: readonly string[],
+  notices: readonly Advisory[],
 ): Renderable {
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = {
@@ -1053,7 +1062,7 @@ function parseDslFile<L>(
     readonly inherited: ReadonlySet<string>;
     readonly layer: L;
   },
-): { raw: RawDslConfig; warnings: readonly string[]; layer: L } {
+): { raw: RawDslConfig; warnings: readonly Advisory[]; layer: L } {
   // ── Stage 1: JSON5 syntax. A parse error here is single, immediate, and
   // carries line/col from the json5 package — no point continuing to other
   // passes that need a parsed structure to inspect.

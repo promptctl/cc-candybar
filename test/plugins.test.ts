@@ -601,7 +601,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([
       path.join(dir, "q/plugin.json5"),
     ]);
-    expect(loaded.warnings.join("\n")).toContain("was not loaded");
+    expect(loaded.warnings.map(({ message }) => message).join("\n")).toContain("was not loaded");
   } finally {
     loaded.state?.registry.dispose();
   }

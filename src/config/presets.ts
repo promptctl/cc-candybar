@@ -59,6 +59,7 @@ import {
   type Unplaced,
 } from "./root.js";
 import { effectiveMemberName, type Folded } from "../themes/policy.js";
+import type { Advisory } from "./loader/diagnostics.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
@@ -210,7 +211,7 @@ export function placeInserts(
   cells: readonly InsertCell[],
   // The trees some config file writes.
   authored: AuthoredTrees,
-): { readonly config: DslConfig; readonly notices: readonly string[] } {
+): { readonly config: DslConfig; readonly notices: readonly Advisory[] } {
   if (cells.length === 0) return { config, notices: [] };
   const own = insertCells(config.root, cells);
   const restaged = Object.entries(config.presets)
@@ -250,7 +251,7 @@ export function placeInserts(
     },
     notices: [...missed].flatMap(([cell, reasons]) =>
       [...reasons].map(([reason, trees]) =>
-        insertNotice(cell, `${reason} (in ${trees.join(", ")})`),
+        insertNotice(cell, reason, `${reason} (in ${trees.join(", ")})`),
       ),
     ),
   };
@@ -263,9 +264,18 @@ export interface AuthoredTrees {
 }
 
 // [LAW:one-source-of-truth] THE spelling of an advisory about one insert
-// cell: the file and entry that wrote it, the segment, and what befell it.
-export function insertNotice(cell: InsertCell, what: string): string {
-  return `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${what}`;
+// cell: the file and entry that wrote it, the segment, and what befell it. It
+// is about the cell and the cause (`because`), which stay put while the words
+// of `what` move (the trees it missed).
+export function insertNotice(
+  cell: InsertCell,
+  because: string,
+  what: string,
+): Advisory {
+  return {
+    subject: `${cell.by.file}#${cell.by.entry} ${because}`,
+    message: `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${what}`,
+  };
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total

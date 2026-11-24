@@ -5,6 +5,7 @@
 
 import type { LayerRole } from "./layer-role.js";
 import type { PluginScope } from "./loader/plugin-scope.js";
+import type { Advisory } from "./loader/diagnostics.js";
 import type { Checkout } from "../utils/git-root.js";
 import type { ConfigTarget } from "../config-hint.js";
 import { digestOf } from "../utils/plain.js";
@@ -22,7 +23,7 @@ export interface ConfigSnapshot {
   // The root a plugin's `data.checkout` resolves against: the checkout of the
   // origin's working directory. A read failure supplies a notice and no root.
   readonly checkout: Checkout | null;
-  readonly notices: readonly string[]; // what discovery found wrong: a shadowed file, an unlistable root
+  readonly notices: readonly Advisory[]; // what discovery found wrong: a shadowed file, an unlistable root
   readonly watch: string | null; // what the config's watch cannot hear, or null
 }
 

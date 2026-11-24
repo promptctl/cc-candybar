@@ -117,19 +117,25 @@ describe("a config that cannot be drawn as written", () => {
 
   // Two load warnings are two messages: fixing the first leaves a viewer open
   // on the second showing the second, never the second under the first's place.
+  // The file is written over many lines, so fixing the first moves the line
+  // the second's words name.
   test("a viewer open on the second of two load warnings stays on it when the first is fixed", async () => {
     const sid = "broken-two-load-warnings";
     const declare = (...names: string[]) =>
-      JSON.stringify({
-        variables: Object.fromEntries(
-          names.map((name) => [
-            name,
-            { kind: "input", path: name, default: "" },
-          ]),
-        ),
-        segments: { mine: { template: "MINE" } },
-        root: { h: ["mine"] },
-      });
+      JSON.stringify(
+        {
+          variables: Object.fromEntries(
+            names.map((name) => [
+              name,
+              { kind: "input", path: name, default: "" },
+            ]),
+          ),
+          segments: { mine: { template: "MINE" } },
+          root: { h: ["mine"] },
+        },
+        null,
+        2,
+      );
     const a = args("two-load-warnings", declare("project_dir", "transcript_path"));
     const draw = () => render(daemon, sid, projectDir, {}, a);
     const bar = await draw();

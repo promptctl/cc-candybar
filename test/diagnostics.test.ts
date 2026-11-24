@@ -58,14 +58,9 @@ import {
 } from "../src/themes/policy";
 import { DIAGNOSTICS_VIEWING } from "../src/config/door";
 import { effectsOf } from "./helpers/click";
+import { shaped, sourced } from "./helpers/diagnostic-messages";
 
 const SID = "sid-1";
-// Messages each about their own text, unless a test says otherwise.
-const sourced = (text: string) => ({
-  about: aboutText("test", text),
-  text,
-  copy: text,
-});
 const collectDiagnostics = (
   errors: readonly string[],
   notices: readonly DiagnosticMessage[],
@@ -89,13 +84,8 @@ const ERROR = [
   `file ${LONG_PATH} is unreadable`,
 ].join("\n");
 
-const notice = (text: string): DiagnosticMessage => ({
-  severity: HANDOFF_SEVERITY,
-  about: aboutText("test", text),
-  message: text,
-  copy: text,
-  lines: [[diagnosticSpan(text, null)]],
-});
+const notice = (text: string): DiagnosticMessage =>
+  shaped(HANDOFF_SEVERITY, text);
 
 const encoded = (rows: readonly Row[], depth: ColorCompatibility): string =>
   encodeAnsi(
@@ -250,23 +240,27 @@ describe("the viewer", () => {
     );
   });
 
-  test("two load warnings are two messages: fixing the first leaves a viewer open on the second on the second", () => {
-    const warned = (...texts: string[]) =>
+  test("two load warnings are two messages: fixing the first leaves a viewer open on the second, whose words moved with it", () => {
+    const warned = (...found: readonly (readonly [string, string])[]) =>
       collectSourced(
         SID,
         "request",
         [],
         [],
-        texts.map((text) => ({
-          about: aboutText("load", text),
+        found.map(([subject, text]) => ({
+          about: aboutSubject("load", subject),
           text,
           copy: text,
         })),
       );
-    const both = warned("first warning", "second warning");
+    const both = warned(
+      ["f#variables.a", "f:3: a is ignored"],
+      ["f#variables.b", "f:6: b is ignored"],
+    );
     const onSecond = viewerKey(both, 1, 0);
     expect(viewerKey(both, 0, 0)).not.toBe(onSecond);
-    expect(viewedIndex(onSecond, warned("second warning"))).toEqual(at(1));
+    const fixed = warned(["f#variables.b", "f:3: b is ignored"]);
+    expect(viewedIndex(onSecond, fixed)).toEqual(at(1));
   });
 
   test("two alike messages are two stops: › from the first reaches the second, and past it", () => {

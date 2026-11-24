@@ -33,7 +33,7 @@ describe("unresolvedReads over the loader's own chain", () => {
     const loaded = loadChain(
       layers.map((name) => homeLayer(join(tmp, name))),
       DEFAULT_DSL_CONFIG,
-      { warned: (ws) => warnings.push(...ws) },
+      { warned: (ws) => warnings.push(...ws.map(({ message }) => message)) },
     );
     return { ...loaded, warnings };
   };

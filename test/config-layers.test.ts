@@ -606,7 +606,7 @@ describe("a project layer inserting into the user's row", () => {
     const loaded = loadChain(
       [homeLayer(userFile), { path: projectFile, role: "project" }],
       DEFAULT_DSL_CONFIG,
-      { warned: (w) => warnings.push(...w) },
+      { warned: (w) => warnings.push(...w.map(({ message }) => message)) },
       { locs: locations(host), cwd: project },
     );
     const drawn = (preset: string) =>

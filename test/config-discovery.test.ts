@@ -342,15 +342,15 @@ test.each([
     const worktree = service.forRenderer(rendererNameOf("next"));
     worktree.follow([origin]);
     const snapshot = () => discovery.snapshotOf(origin)!;
-    const errors = () => snapshot().notices.filter((n) => n.includes(pluginRoot));
-    expect(errors()).toEqual([expect.stringContaining("ENOTDIR")]);
+    const errors = () => snapshot().notices.filter(({ message }) => message.includes(pluginRoot));
+    expect(errors()).toEqual([expect.objectContaining({ message: expect.stringContaining("ENOTDIR") })]);
     expect(snapshot().repo).toBeNull();
-    expect(discovery.snapshotOf(only)?.notices.some((n) => n.includes(pluginRoot))).toBe(false);
+    expect(discovery.snapshotOf(only)?.notices.some(({ message }) => message.includes(pluginRoot))).toBe(false);
 
     const projectFile = path.join(dir, ".cc-candybar.json5");
     fs.writeFileSync(projectFile, "{}");
     clock.advance(POLL_MS + DEBOUNCE_MS);
-    expect(errors()).toEqual([expect.stringContaining("ENOTDIR")]);
+    expect(errors()).toEqual([expect.objectContaining({ message: expect.stringContaining("ENOTDIR") })]);
     expect(snapshot().repo).toMatchObject({ dir, standing });
     expect(snapshot().chain.filter((l) => l.role === "project").map((l) => l.content))
       .toEqual(admitted ? [{ kind: "text", text: "{}" }] : []);
@@ -1542,7 +1542,7 @@ test("an unchecked extension remains the unreadable layer at its actual path", (
       listed: {},
     },
   ]);
-  expect(snapshot.notices).toContain(
+  expect(snapshot.notices.map(({ message }) => message)).toContain(
     `Config location could not be checked: ${locked} — EACCES`,
   );
 });

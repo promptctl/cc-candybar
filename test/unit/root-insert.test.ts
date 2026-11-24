@@ -185,7 +185,12 @@ describe("placeInserts", () => {
     expect(
       placeInserts(config, missing, { ...none, root: true }).notices,
     ).toEqual([
-      '/repo/.cc-candybar.json5: insert.0 places "x" after "nope", but there is no placement "nope" (in the root)',
+      {
+        subject:
+          '/repo/.cc-candybar.json5#insert.0 after "nope", but there is no placement "nope"',
+        message:
+          '/repo/.cc-candybar.json5: insert.0 places "x" after "nope", but there is no placement "nope" (in the root)',
+      },
     ]);
   });
 });

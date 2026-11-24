@@ -2497,7 +2497,7 @@ describe("a file's load — editability advisory", () => {
     const { config, warnings } = loadFile(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
     expect(config.globals.padding).toBe(2);
     expect(warnings).toEqual([
-      `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+      { subject: file, message: `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed` },
     ]);
   });
 
@@ -2528,7 +2528,7 @@ describe("a file's load — editability advisory", () => {
     );
     const warnings: string[] = [];
     const loaded = loadSnapshot(snapshot, dir, DEFAULT_DSL_CONFIG, {
-      warned: (lines) => warnings.push(...lines),
+      warned: (lines) => warnings.push(...lines.map(({ message }) => message)),
     });
     expect(loaded.layers).toEqual([]);
     expect(loaded.config.segments.directory).toMatchObject({
@@ -2574,7 +2574,7 @@ describe("a file's load — the advisory survives a structural failure", () => {
       throw new Error("expected ConfigError");
     expect(caught.message).toContain('Unknown top-level key "bogus"');
     expect(caught.warnings).toEqual([
-      `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+      { subject: file, message: `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed` },
     ]);
   });
 

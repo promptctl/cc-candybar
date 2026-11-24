@@ -48,16 +48,26 @@ export function parseJson5Syntax(source: string): Json5Syntax {
   }
 }
 
+// [LAW:types-are-the-program] An advisory a load earned: its words, and the
+// subject it is about, which its producer knows and its words do not keep (a
+// line moves when another is fixed, a list of trees shrinks). The bar's viewer
+// names an advisory by its subject, so one stays the same message while its
+// words change, and two with other subjects are two messages.
+export interface Advisory {
+  readonly subject: string;
+  readonly message: string;
+}
+
 export class ConfigError extends Error {
   readonly file: string;
   readonly issues: readonly ConfigIssue[];
   /** Advisories the file earned before it failed — reported beside the error. */
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Advisory[];
 
   constructor(
     file: string,
     issues: readonly ConfigIssue[],
-    warnings: readonly string[] = [],
+    warnings: readonly Advisory[] = [],
   ) {
     super(formatIssues(file, issues));
     this.name = "ConfigError";
@@ -224,13 +234,16 @@ function lineFromOffset(source: string, offset: number): number {
 export function editabilityNotice(
   filePath: string,
   source: string,
-): string | null {
+): Advisory | null {
   try {
     parseDocument(source);
     return null;
   } catch (e) {
     if (!(e instanceof Json5EditError)) throw e;
-    return `${filePath}:${lineFromOffset(source, e.offset)}: ${e.reason} — the settings menu cannot edit this file until it is fixed`;
+    return {
+      subject: filePath,
+      message: `${filePath}:${lineFromOffset(source, e.offset)}: ${e.reason} — the settings menu cannot edit this file until it is fixed`,
+    };
   }
 }
 

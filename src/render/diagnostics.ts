@@ -12,7 +12,7 @@
 //
 // [LAW:effects-at-boundaries] Pure: (messages, geometry, viewing) → rows.
 
-import { createHash } from "node:crypto";
+import { digestOf } from "../utils/plain.js";
 
 import { RichText, Style, asCellCol, chopCells } from "@promptctl/rich-js";
 import { VERB_COPY_DIAGNOSTIC, VERB_SET_STATE } from "../click/wire.js";
@@ -118,8 +118,8 @@ export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
 // [LAW:types-are-the-program] What a message is about, and the rule that says
 // when two messages are one. The rule is part of the value, so a producer
 // picks it by the constructor it calls, never by how it spells a string, and
-// `identityOf` hashes each rule its own way, so no text can pass for a kind.
-// A rule that needs a subject cannot be built without one.
+// the identity digests the rule beside what it names, so no text can pass for
+// a kind. A rule that needs a subject cannot be built without one.
 export type About<Kind extends string = string> = {
   readonly kind: Kind;
 } & (
@@ -296,34 +296,19 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
 // message's identity, never as a position: a list that shifts under an open
 // viewer would otherwise show another message under the same position, and
 // one that shrank and grew again would reopen it. The identity is the
-// severity and what the message is about, digested by that rule, and which of
+// severity and what the message is about, digested, and which of
 // the list's messages of that identity it is, so two alike are two stops. The
 // page of the message shown rides in the same key, so a message has at most
 // PAGES pages: the viewer never draws a page its key cannot name.
 const IDENTITY_BITS = 32;
 const OCCURRENCES = 256;
 export const PAGES = 4096;
-const identifiedBy = (about: About): readonly string[] => {
-  switch (about.rule) {
-    case "kind":
-      return [about.kind];
-    case "subject":
-      return [about.kind, about.subject];
-    case "text":
-      return [about.kind, about.text];
-  }
-};
 function identityOf(message: DiagnosticMessage): number {
-  const digest = createHash("sha256")
-    .update(
-      JSON.stringify([
-        message.severity.level,
-        message.severity.glyph,
-        message.about.rule,
-        ...identifiedBy(message.about),
-      ]),
-    )
-    .digest("hex");
+  const digest = digestOf([
+    message.severity.level,
+    message.severity.glyph,
+    message.about,
+  ]);
   return (
     Number.parseInt(digest.slice(0, IDENTITY_BITS / 4 + 1), 16) %
     2 ** IDENTITY_BITS

@@ -10,7 +10,7 @@
 
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type { RawDslConfig } from "../dsl-types.js";
-import { findKeyLine, keyLocator } from "./diagnostics.js";
+import { findKeyLine, keyLocator, type Advisory } from "./diagnostics.js";
 import { scopeOf } from "./plugin-scope.js";
 import { PAYLOAD_INPUTS } from "../payload-inputs.js";
 
@@ -113,12 +113,15 @@ export function payloadDeclarationNotices(
   source: string,
   // The names the file's `variables` section declares.
   declared: readonly string[],
-): readonly string[] {
+): readonly Advisory[] {
   const lineOf = keyLocator(source);
   return declared.filter(isPayloadInput).map((name) => {
     const line = lineOf(["variables", name]);
     const at = line === undefined ? filePath : `${filePath}:${line}`;
-    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`;
+    return {
+      subject: `${filePath}#variables.${name}`,
+      message: `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`,
+    };
   });
 }
 
