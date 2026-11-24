@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "66287d6a5aaf2b2a5ac8868f5c5b148abb92e538",
-      "timestamp": "2026-11-24T11:55:04.297Z",
+      "sha": "8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2",
+      "timestamp": "2026-11-24T12:04:52.898Z",
       "commits": [
         {
-          "sha": "66287d6a5aaf2b2a5ac8868f5c5b148abb92e538",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T04:54:02-07:00",
-          "message": "fix(click): a click the daemon has read runs however late its turn comes (#947)\n\n* fix(click): a click the daemon has read runs however late its turn comes, and a click already waiting on its socket is read before the backstop answers\n\n* fix(click): the deferred backstop turn's order is part of the clock's contract, held and real, and the late-click TIMEOUT has its end-to-end case back\n\n* fix(click): the held clock keeps its turn order, the url frame's late click has its end-to-end case, and the guard's reach is stated as the wait for a complete frame\n\n* test(click): the real-loop defer case needs no directory, and two stale 'read in time' wordings say what the daemon read"
+          "sha": "8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T12:03:18Z",
+          "message": "chore(release): set `package.json` to 1.236.15\n\n## [1.236.15](https://github.com/promptctl/cc-candybar/compare/v1.236.14...v1.236.15) (2026-11-24)\n\n### Bug Fixes\n\n* **click:** a click the daemon has read runs however late its turn comes ([#947](https://github.com/promptctl/cc-candybar/issues/947)) ([66287d6](https://github.com/promptctl/cc-candybar/commit/66287d6a5aaf2b2a5ac8868f5c5b148abb92e538))\n"
         }
       ]
     }
