@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "f67f4c450a05e758242afad8216ea01f3ed1d0f9",
-      "timestamp": "2026-11-24T13:21:40.298Z",
-      "commits": [
-        {
-          "sha": "f67f4c450a05e758242afad8216ea01f3ed1d0f9",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T13:19:52Z",
-          "message": "chore(release): set `package.json` to 1.237.0\n\n## [1.237.0](https://github.com/promptctl/cc-candybar/compare/v1.236.15...v1.237.0) (2026-11-24)\n\n### Features\n\n* **host:** a cold host starts from the bundle the install recorded ([#948](https://github.com/promptctl/cc-candybar/issues/948)) ([7574f98](https://github.com/promptctl/cc-candybar/commit/7574f98bc0eebd5439fb90408397ed1194d33958))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-949",
       "ref": "refs/pull/949/merge",
-      "sha": "5ec51a1089cf082ffc877780dcec40df67646a82",
-      "timestamp": "2026-11-24T13:17:32.724Z",
+      "sha": "eaea0091c581b8193aec0de0393630c8b6b5568d",
+      "timestamp": "2026-11-24T13:55:28.028Z",
       "commits": [
         {
-          "sha": "5ec51a1089cf082ffc877780dcec40df67646a82",
+          "sha": "eaea0091c581b8193aec0de0393630c8b6b5568d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T13:16:20Z",
-          "message": "Merge 3690a405f7d0b502d1e482f9a28eef1bd9cb87d1 into 7574f98bc0eebd5439fb90408397ed1194d33958\n"
+          "timestamp": "2026-11-24T06:54:30-07:00",
+          "message": "Merge 1f41cd4026be4f8be26107bfb378be6ed7d1166f into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+        },
+        {
+          "sha": "1f41cd4026be4f8be26107bfb378be6ed7d1166f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:54:04-07:00",
+          "message": "fix(tools): scripts/lib is a zone of its own, and the tools lint holds every root outside Jest (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 1 on PR 949:\n\n- scripts/lib imports only the app and itself. Each import refusal names\n  why by the zone it reaches, and the lint config refuses to load if a\n  zone has no reason.\n- The tools lint runs over the roots the zone table names as outside\n  Jest. It refuses jest and @jest/* imports and every Jest global. The\n  suite's effect rules also cover scripts/lib.\n- Typecheck covers every TS file under scripts/.\n- The lint-rule tests share one harness.\n- The process tier runs pnpm bar, bar:web and bench --list from a plain\n  shell.\n- The Status hook fixture is one source: the tick every case extends,\n  and the bar's full tick built on it.\n- drive-bar reads session state at the daemon's own path.\n- The pane feed cases wait for the frame that shows what they assert.\n"
         },
         {
           "sha": "3690a405f7d0b502d1e482f9a28eef1bd9cb87d1",
@@ -42,6 +34,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T05:56:31-07:00",
           "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f67f4c450a05e758242afad8216ea01f3ed1d0f9",
+      "timestamp": "2026-11-24T13:21:40.298Z",
+      "commits": [
+        {
+          "sha": "f67f4c450a05e758242afad8216ea01f3ed1d0f9",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T13:19:52Z",
+          "message": "chore(release): set `package.json` to 1.237.0\n\n## [1.237.0](https://github.com/promptctl/cc-candybar/compare/v1.236.15...v1.237.0) (2026-11-24)\n\n### Features\n\n* **host:** a cold host starts from the bundle the install recorded ([#948](https://github.com/promptctl/cc-candybar/issues/948)) ([7574f98](https://github.com/promptctl/cc-candybar/commit/7574f98bc0eebd5439fb90408397ed1194d33958))\n"
         }
       ]
     }
