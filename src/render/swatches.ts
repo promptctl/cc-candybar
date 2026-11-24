@@ -27,8 +27,11 @@
 import type { Palette, RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import {
+  clickSession,
   readVar,
+  realizeRing,
   renderBinding,
+  type RingAction,
   renderLook,
   type ActionRuntime,
 } from "./action.js";
@@ -38,7 +41,7 @@ import {
 } from "./active-segment.js";
 import { closeOn } from "./band-style.js";
 import { CAROUSEL_NEXT, CAROUSEL_PREV } from "./carousel.js";
-import { STEP_RANDOM, stepOffset } from "./option-ring.js";
+import { STEP_RANDOM, stepOffset, type OptionStep } from "./option-ring.js";
 import { swatchPaint } from "./option-paint.js";
 import {
   renderPicker,
@@ -61,14 +64,21 @@ export function requireSwatchable(
   runtime: ActionRuntime,
   applyName: string,
   helper: "swatch" | "swatches" | "themePreview",
-): OptionAction & {
-  readonly stateVar: string;
+): RingAction & {
   readonly paletteOf: NonNullable<OptionAction["paletteOf"]>;
 } {
   const apply = requireOptionKind(runtime, applyName, helper);
   if (!("stateVar" in apply)) {
     throw new Error(
       `${helper} references action "${applyName}", which inserts a segment and holds no current value — a ${helper} needs a { set, from } or { persist, from } action`,
+    );
+  }
+  // [LAW:no-silent-failure] A key no variable reads back holds nothing the
+  // render can see, so a row over it would sit on its first option forever,
+  // as a carousel over it would: the same loud refusal, once, for every reader.
+  if (!renderBinding(runtime, helper).store.has(apply.stateVar)) {
+    throw new Error(
+      `${helper} references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to draw — declare { kind: "state", key: "${apply.stateVar}" } among the variables`,
     );
   }
   if (apply.paletteOf === undefined) {
@@ -151,10 +161,26 @@ export function swatchesFuncs(
         // step through the ring a carousel over the same key turns, and ? to
         // another option at random. Each carries its step, so the row is the
         // same on every draw and the click picks the instant it lands at.
+        const binding = renderBinding(runtime, "swatches");
+        const sessionId = clickSession(runtime, "swatches");
+        const declared = runtime.compiled.get(applyName)!;
+        const ring = (glyph: string, step: OptionStep): PickerStep => ({
+          glyph,
+          effects: (turn) =>
+            realizeRing(
+              declared,
+              apply,
+              applyName,
+              step,
+              turn,
+              binding,
+              sessionId,
+            ),
+        });
         const steps: readonly PickerStep[] = [
-          { glyph: CAROUSEL_PREV, step: stepOffset(-1) },
-          { glyph: SWATCHES_RANDOM, step: STEP_RANDOM },
-          { glyph: CAROUSEL_NEXT, step: stepOffset(1) },
+          ring(CAROUSEL_PREV, stepOffset(-1)),
+          ring(SWATCHES_RANDOM, STEP_RANDOM),
+          ring(CAROUSEL_NEXT, stepOffset(1)),
         ];
         const [line] = renderPicker(
           applyName,

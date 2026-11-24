@@ -515,6 +515,32 @@ describe("persist action click → the config file", () => {
     }
   });
 
+  // [LAW:no-ambient-temporal-coupling] A persist write is owed until the reload
+  // lands it, so each click starts from what the file declares after the click
+  // before it: three clicks on the one link the first draw drew land three steps.
+  test("N clicks on one persist ▶ link, with no redraw, land N steps in the file", async () => {
+    const themes = listResolvablePaletteNames();
+    const at = themes.indexOf("nord");
+    const { render, click } = buildPersistRuntime(
+      `{
+      globals: { palette: 'nord' },
+      actions: {
+        applyTheme: { persist: 'palette', from: 'themes' },
+        list: { set: 'listing', to: 'yes' },
+      },
+      segments: { bar: { template: '{{ carousel "applyTheme" "list" "theme" }}', bg: 'surface', fg: 'foreground' } },
+      root: 'bar',
+    }`,
+      S1,
+      DEFAULT_DSL_CONFIG,
+    );
+    const next = linksOf(render()).find((l) => l.text === "▶")!.url;
+    for (let i = 1; i <= 3; i++) {
+      await click(next);
+      expect(globalsInFile()).toEqual({ palette: themes[at + i] });
+    }
+  });
+
   test("clicking reset deletes the persisted key from the file", async () => {
     const { render, click } = buildPersistRuntime(SRC);
     const urls = ownUrls(render());

@@ -36,7 +36,7 @@ import {
   type ActionRuntime,
 } from "./action.js";
 import { labelPaint } from "./option-paint.js";
-import { ringAround, stepOffset } from "./option-ring.js";
+import { centreOf, stepOffset } from "./option-ring.js";
 import { assemble, requireOptionKind, type OptionAction } from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
@@ -59,7 +59,8 @@ export function renderCarousel(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on — a carousel needs a { set, from } or { persist, from } action`,
     );
   }
-  const store = renderBinding(runtime, "carousel").store;
+  const binding = renderBinding(runtime, "carousel");
+  const { store } = binding;
   if (!store.has(apply.stateVar)) {
     throw new Error(
       `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on — declare { kind: "state", key: "${apply.stateVar}" } among the variables`,
@@ -71,18 +72,17 @@ export function renderCarousel(
   // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
   // or show, so the ring is empty, as a grid over it has no cells.
   if (options.length === 0) return assemble([]);
-  const shown =
-    options[ringAround(options, readVar(store, apply.stateVar))(0)]!;
+  const shown = options[centreOf(options, readVar(store, apply.stateVar))]!;
   const step = (by: number): DrawnAction =>
     actionTarget(
       realizeRing(
         declared,
+        apply,
         applyName,
         stepOffset(by),
         [],
-        store,
+        binding,
         sessionId,
-        "carousel",
       ),
     );
 

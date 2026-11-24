@@ -5,6 +5,9 @@
 // and shows N moves (spec §7, 'A link means the same thing on every draw').
 
 import { linksOf } from "../src/click/read";
+import { encodeSegments } from "../src/click/wire";
+import { instantOf, type Instant } from "../src/utils/instant";
+import { CLICK_VERBS } from "./helpers/click";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -18,8 +21,8 @@ const THEMES = listResolvablePaletteNames();
 
 const rigOf = (source: string, width = 200) => {
   const rig = buildRig({ source, base: DEFAULT_DSL_CONFIG, sessionId: SID });
-  const draw = (cols = width): Frame =>
-    rig.draw({ opts: { width: cols, wrap: true } }).frame;
+  const draw = (cols = width, at?: Instant): Frame =>
+    rig.draw({ opts: { width: cols, wrap: true }, ...(at && { at }) }).frame;
   const urlOf = (frame: Frame, text: string): string => {
     const hit = linksOf(frame).find((l) => l.text === text);
     if (hit === undefined)
@@ -59,13 +62,19 @@ describe("a swatches row's ◀ ▶ ? land one step per click", () => {
       await rt.click(prev!);
       landed.push(rt.sessionState.get(SID, "theme"));
     }
-    expect(landed).toEqual([THEMES[4], THEMES[3], THEMES[2], THEMES[1], THEMES[0]]);
+    expect(landed).toEqual([
+      THEMES[4],
+      THEMES[3],
+      THEMES[2],
+      THEMES[1],
+      THEMES[0],
+    ]);
     // The links are the ones the first draw drew, drawn again.
     const again = rt.draw();
-    expect([rt.urlOf(again, CAROUSEL_NEXT), rt.urlOf(again, CAROUSEL_PREV)]).toEqual([
-      next,
-      prev,
-    ]);
+    expect([
+      rt.urlOf(again, CAROUSEL_NEXT),
+      rt.urlOf(again, CAROUSEL_PREV),
+    ]).toEqual([next, prev]);
     rt.dispose();
   });
 
@@ -82,24 +91,79 @@ describe("a swatches row's ◀ ▶ ? land one step per click", () => {
     rt.dispose();
   });
 
-  test("the ? link is the same on every draw, and each click lands an option other than the one held", async () => {
+  test("the ? link is the same on every draw of one state, and each click lands an option other than the one held", async () => {
     const rt = rigOf(SWATCHES);
     rt.sessionState.set(SID, "theme", THEMES[0]!);
     const random = rt.urlOf(rt.draw(), SWATCHES_RANDOM);
-    // Draws at other instants, with other values held, say the same link.
-    for (const held of [THEMES[3]!, THEMES.at(-1)!]) {
-      rt.sessionState.set(SID, "theme", held);
-      expect(rt.urlOf(rt.draw(), SWATCHES_RANDOM)).toBe(random);
+    // Draws at other instants say the same link: no clock rides in it.
+    for (const at of [1_000, 5_000_000, 987_654_321]) {
+      const frame = rt.draw(200, instantOf(new Date(at)));
+      expect(rt.urlOf(frame, SWATCHES_RANDOM)).toBe(random);
     }
-    const picked: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      const held = rt.sessionState.get(SID, "theme");
+    // Clicked with other values held, it still lands an option other than the one held.
+    for (const held of [THEMES[0]!, THEMES[3]!, THEMES.at(-1)!, THEMES[0]!]) {
+      rt.sessionState.set(SID, "theme", held);
       await rt.click(random);
       const landed = rt.sessionState.get(SID, "theme")!;
       expect(THEMES).toContain(landed);
       expect(landed).not.toBe(held);
-      picked.push(landed);
     }
+    rt.dispose();
+  });
+
+  // A theme chosen by a rule has no name until a render evaluates it, so the
+  // click reads none from the session: the link carries the name the draw wore.
+  test("a theme chosen by a rule steps from the name the bar wears, not from the first option", async () => {
+    const ruled = SWATCHES.replace(
+      "{\n  variables",
+      "{\n  globals: { palette: '{{ \"nord\" }}' },\n  variables",
+    );
+    const at = THEMES.indexOf("nord");
+    expect(at).toBeGreaterThan(1);
+    const next = rigOf(ruled);
+    await next.click(next.urlOf(next.draw(), CAROUSEL_NEXT));
+    expect(next.sessionState.get(SID, "theme")).toBe(THEMES[at + 1]);
+    const prev = rigOf(ruled);
+    await prev.click(prev.urlOf(prev.draw(), CAROUSEL_PREV));
+    expect(prev.sessionState.get(SID, "theme")).toBe(THEMES[at - 1]);
+    next.dispose();
+    prev.dispose();
+  });
+
+  test("a link whose page layout no longer covers the options is refused, not turned to a wrong page", () => {
+    const rt = rigOf(SWATCHES);
+    rt.draw();
+    const [name, step, centre, pageKey] = [
+      "applyTheme",
+      "1",
+      THEMES[0]!,
+      "themes-page",
+    ];
+    expect(() =>
+      CLICK_VERBS.get("ring-state")!(
+        encodeSegments([SID, name!, step!, centre!, pageKey!, "0.3-1.3"]),
+        rt.ctx,
+      ),
+    ).toThrow(/does not cover the \d+ option\(s\) now in the list/);
+    expect(rt.sessionState.get(SID, "theme")).toBeNull();
+    rt.dispose();
+  });
+
+  test("a ring step over an action that is no ring of options is refused, naming it", () => {
+    const rt = rigOf(SWATCHES);
+    rt.draw();
+    expect(() =>
+      CLICK_VERBS.get("ring-state")!(
+        encodeSegments([SID, "themesPage", "1", ""]),
+        rt.ctx,
+      ),
+    ).toThrow(/"themesPage" is not a set action over a list of options/);
+    expect(() =>
+      CLICK_VERBS.get("turn-page")!(
+        encodeSegments([SID, "themesPage", "themes-page", "1", "", ""]),
+        rt.ctx,
+      ),
+    ).toThrow(/"themesPage" lists no options to page through/);
     rt.dispose();
   });
 });

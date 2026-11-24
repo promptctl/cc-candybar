@@ -36,6 +36,7 @@ import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
 import { sessionKeyKind } from "../config/session-key.js";
 import { menuOfKey } from "../config/menu-keys.js";
+import { parseStep } from "../render/option-ring.js";
 import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
   parseSessionId,
@@ -269,10 +270,14 @@ const sayStep = (key: string, by: string): string =>
 
 // An option ring's step in words: another option at random, or the option
 // some way round the ring.
-const sayRing = (action: string, step: string): string =>
-  step === "random"
+function sayRing(action: string, raw: string): string {
+  const parsed = parseStep(raw);
+  if (!parsed.ok) return `step ${action} by ${raw}`;
+  const { step } = parsed;
+  return step.kind === "random"
     ? `pick another option for ${action}`
-    : `step ${action} ${step.startsWith("-") ? "back" : "on"} by ${step.replace("-", "")}`;
+    : `step ${action} ${step.by < 0 ? "back" : "on"} by ${Math.abs(step.by)}`;
+}
 
 // One session write in words. A disclosure's state keys read as the menu they
 // open or close, and a page cursor, which counts from 0, as the page the bar

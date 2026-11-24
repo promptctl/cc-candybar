@@ -16,7 +16,7 @@ import {
   SESSION_KEY_TO_SETTING,
   configOnlyField,
 } from "../../config/setting-projections";
-import { sessionConfigOnlyValue, sessionSettingValue } from "../setting-drafts";
+import { sessionSettingValue } from "../setting-drafts";
 
 // [LAW:one-source-of-truth] What a stepped SessionState key shows, in the
 // session whose config and picks these are — what a step moves from. A
@@ -44,24 +44,18 @@ export function stateKeyShown(
 }
 
 // [LAW:one-source-of-truth] What a persisted key shows: the value the bar
-// wears for the setting it writes (the `.effective` a persist action reads
-// back through), else what a declared `state` variable over the key holds. A
-// persist key with neither shows nothing, as its read-back variable holds
-// nothing on the draw.
+// wears for the setting or config-only field it writes (the `.effective` a
+// persist action reads back through), else what a declared `state` variable
+// over the key holds, as the draw's read-back variable does.
 export function configKeyShown(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
   key: string,
 ): string | null {
-  const setting = CONFIG_KEY_TO_SETTING.get(key);
-  if (setting !== undefined) {
-    return sessionSettingValue(config, sessionPick, setting);
-  }
-  const field = configOnlyField(key);
-  if (field !== undefined) {
-    return sessionConfigOnlyValue(config, sessionPick, field);
-  }
-  return stateKeyShown(config, sessionPick, key);
+  const field = CONFIG_KEY_TO_SETTING.get(key) ?? configOnlyField(key);
+  return field !== undefined
+    ? sessionSettingValue(config, sessionPick, field)
+    : stateKeyShown(config, sessionPick, key);
 }
 
 // [LAW:one-source-of-truth] What a stepped config key holds before the file

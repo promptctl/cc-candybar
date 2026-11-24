@@ -4,16 +4,11 @@
 // they are pinned as pure functions with no rig.
 
 import {
+  centreOf,
   landing,
-  pageCount,
-  pageHolding,
-  pageMapOf,
-  pageShown,
-  parsePageMap,
   parseStep,
   randomOther,
   ringAround,
-  spellPageMap,
   spellStep,
   stepOffset,
   STEP_RANDOM,
@@ -49,6 +44,8 @@ describe("a step lands on the ring the value is centred in", () => {
   test("a value outside the domain counts as the first option", () => {
     expect(landing(options, "x", stepOffset(1), 0)).toBe("b");
     expect(ringAround(options, "")(0)).toBe(0);
+    expect(centreOf(options, "x")).toBe(0);
+    expect(centreOf(options, "d")).toBe(3);
   });
 
   test("random never lands on the option in force, and reaches every other", () => {
@@ -73,61 +70,5 @@ describe("a step lands on the ring the value is centred in", () => {
 
   test("one option has no other: the pick is that option", () => {
     expect(randomOther(12345, 1, 0)).toBe(0);
-  });
-});
-
-describe("a page layout as a link carries it", () => {
-  // Three pages over eight options: the layout a narrow grid draws.
-  const pages = [
-    [{ indices: [0, 1, 2] }],
-    [{ indices: [3, 4, 5] }],
-    [{ indices: [6, 7] }],
-  ];
-  const map = pageMapOf(pages, 8);
-
-  test("the map is the page each option stands on", () => {
-    expect(map).toEqual([0, 0, 0, 1, 1, 1, 2, 2]);
-    expect(pageCount(map)).toBe(3);
-  });
-
-  test("a grid's layout is one short run per page, and reads back whole", () => {
-    expect(spellPageMap(map)).toBe("0.3-1.3-2.2");
-    expect(parsePageMap(spellPageMap(map))).toEqual({ ok: true, map });
-  });
-
-  test("a library page holds sections that need not be contiguous", () => {
-    const library = pageMapOf(
-      [[{ indices: [0, 2] }, { indices: [4] }], [{ indices: [1, 3] }]],
-      5,
-    );
-    expect(library).toEqual([0, 1, 0, 1, 0]);
-    expect(parsePageMap(spellPageMap(library))).toEqual({ ok: true, map: library });
-  });
-
-  test("an empty layout has no pages", () => {
-    expect(pageCount(pageMapOf([], 0))).toBe(0);
-    expect(parsePageMap("")).toEqual({ ok: true, map: [] });
-  });
-
-  test("anything that is not runs of <page>.<length> is refused", () => {
-    for (const raw of ["0", "0.0", "a.3", "0.3,1.3", "0.3-"]) {
-      expect(parsePageMap(raw)).toMatchObject({ ok: false });
-    }
-  });
-
-  test("a cursor shows its page; below zero it is the page holding the option in force", () => {
-    const held = pageHolding(map, 4);
-    expect(held).toBe(1);
-    expect(pageShown("2", held, 3)).toBe(2);
-    expect(pageShown("9", held, 3)).toBe(2);
-    expect(pageShown("-1", held, 3)).toBe(1);
-    // Never written, or not a number: the first page.
-    expect(pageShown("", held, 3)).toBe(0);
-    expect(pageShown("x", held, 3)).toBe(0);
-  });
-
-  test("an option on no page, and a value that is no option, hold the first page", () => {
-    expect(pageHolding(map, -1)).toBe(0);
-    expect(pageHolding(map, 99)).toBe(0);
   });
 });

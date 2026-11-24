@@ -72,11 +72,11 @@ describe("{{ carousel }} names what it sets", () => {
     // it lands on: the click reads where the key stands when it arrives.
     expect(writes("◀")[0]).toMatchObject({
       verb: "ring-state",
-      args: [expect.any(String), "pick", "-1"],
+      args: [expect.any(String), "pick", "-1", ""],
     });
     expect(writes("▶")[0]).toMatchObject({
       verb: "ring-state",
-      args: [expect.any(String), "pick", "1"],
+      args: [expect.any(String), "pick", "1", ""],
     });
     expect(writes("zoom").some((e) => e.verb === "ring-state")).toBe(false);
   });

@@ -182,24 +182,14 @@ function differing(
 // the value it steps from while the session holds no pick. It is the same
 // resolution a draft is measured against: under a preset that pins the field
 // it is the preset's value, never top-level globals the preset shadows. Edit
-// mode's staged fragment is chrome over that layer, not part of it.
+// mode's staged fragment is chrome over that layer, not part of it. A
+// config-only field no session picks resolves through the layers alone.
 export function sessionSettingValue(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
-  name: SettingName,
+  name: SettingName | ConfigOnlyField,
 ): string | null {
   return spelled(sessionGlobals(config, sessionPick), name);
-}
-
-// [LAW:one-source-of-truth] The value the session renders a config-only field
-// as: no session picks it, so it is the layers' resolution alone. The field is
-// one a `persist` reads back through its own `.effective` (CONFIG_ONLY_KEYS).
-export function sessionConfigOnlyValue(
-  config: DslConfig,
-  sessionPick: (key: string) => string | null,
-  field: ConfigOnlyField,
-): string | null {
-  return spelled(sessionGlobals(config, sessionPick), field);
 }
 
 // Every setting the session renders differently from the config file. The

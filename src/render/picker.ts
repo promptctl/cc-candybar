@@ -26,13 +26,7 @@
 import { RichText, Style, type ColorRgba } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { VERB_SET_STATE, VERB_TURN_PAGE } from "../click/wire.js";
-import {
-  pageHolding,
-  pageMapOf,
-  pageShown,
-  spellPageMap,
-  type OptionStep,
-} from "./option-ring.js";
+import { pageHolding, pageMapOf, pageShown, spellPageMap } from "./page-map.js";
 import {
   actionTarget,
   type DrawnAction,
@@ -43,9 +37,9 @@ import {
   linkFragment,
   linkOver,
   realize,
-  realizeRing,
   clickSession,
   readVar,
+  ruledName,
   renderBinding,
   renderLook,
   type ActionRuntime,
@@ -216,7 +210,9 @@ export type PickerClose =
 // reads below zero as closed) could take for something else.
 export interface PickerStep {
   readonly glyph: string;
-  readonly step: OptionStep;
+  // The step's effects, given the page cursor and layout it turns with
+  // (`pageKey, pageLayout`): the caller holds the ring action it steps.
+  readonly effects: (turn: readonly string[]) => readonly DrawnEffect[];
 }
 
 // [LAW:no-defensive-null-guards] The loader proves both picker arg names resolve
@@ -402,6 +398,11 @@ export function renderPicker(
   // [LAW:one-source-of-truth] The layout the draw shows is the layout its
   // links carry, so a page arrow and a swatches step turn by the pages drawn.
   const pageMap = pageMapOf(pages, apply.options.length);
+  // What a page arrow's click cannot read when a rule chooses the key.
+  const centre =
+    "stateVar" in apply
+      ? ruledName(renderBinding(runtime, "picker"), apply)
+      : "";
   const spelledPageMap = spellPageMap(pageMap);
   const pageIdx = pageShown(
     readVar(store, page.stateVar),
@@ -420,7 +421,14 @@ export function renderPicker(
     actionTarget([
       {
         verb: VERB_TURN_PAGE,
-        args: [sessionId, applyName, page.key, String(by), spelledPageMap],
+        args: [
+          sessionId,
+          applyName,
+          page.key,
+          String(by),
+          spelledPageMap,
+          centre,
+        ],
       },
     ]);
   // [LAW:dataflow-not-control-flow] The close writes arrive as data (see
@@ -467,20 +475,10 @@ export function renderPicker(
   // A step lands on an option and turns to the page holding it — one click,
   // one batch of session writes.
   nav.push(
-    ...steps.map(({ glyph, step }) =>
+    ...steps.map(({ glyph, effects }) =>
       linkFragment(
         glyph,
-        actionTarget(
-          realizeRing(
-            declared,
-            applyName,
-            step,
-            [page.key, spelledPageMap],
-            store,
-            sessionId,
-            "swatches",
-          ),
-        ),
+        actionTarget(effects([page.key, spelledPageMap])),
         false,
       ),
     ),

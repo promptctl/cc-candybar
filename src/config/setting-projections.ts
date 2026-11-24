@@ -73,29 +73,53 @@ export const SETTING_PROJECTIONS: readonly SettingProjection[] =
 
 // The projections no session picks: the config file is their only writer
 // (brandon-menu-ia-q30.5y4), by hand or through an authored `persist`.
+export type ConfigOnlyField = FieldsOfKind<"config">;
+
+const CONFIG_ONLY_FIELDS: readonly ConfigOnlyField[] = VALUED_FIELDS.filter(
+  (field): field is ConfigOnlyField => GLOBAL_FIELDS[field].kind === "config",
+);
+
 const CONFIG_ONLY_PROJECTIONS: readonly ConfigProjection[] =
-  VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
-    (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) }),
-  );
+  CONFIG_ONLY_FIELDS.map((field) => ({
+    configKey: field,
+    effectiveVar: effectiveVarOf(field),
+  }));
 
 // [LAW:no-silent-failure] The keys an authored `set` is refused on: a session
 // write there would render nothing, since no rung reads it.
-export type ConfigOnlyField = FieldsOfKind<"config">;
-
 export const CONFIG_ONLY_KEYS: ReadonlySet<string> = new Set(
-  CONFIG_ONLY_PROJECTIONS.map((p) => p.configKey),
+  CONFIG_ONLY_FIELDS,
 );
 
 // [LAW:parse-dont-validate] A persist key as a config-only field, or nothing:
 // the proof that the key is one travels in the type.
 export function configOnlyField(key: string): ConfigOnlyField | undefined {
-  return CONFIG_ONLY_KEYS.has(key) ? (key as ConfigOnlyField) : undefined;
+  return CONFIG_ONLY_FIELDS.find((field) => field === key);
 }
 
 // The setting a persist key writes, when the key is a controlled setting's
 // field.
 export const CONFIG_KEY_TO_SETTING: ReadonlyMap<string, SettingName> = new Map(
   SETTING_PROJECTIONS.map((p) => [p.configKey, p.sessionKey]),
+);
+
+// The settings a rule may choose instead of a name (theme, style, effect), by
+// every key a `set` or `persist` writes them at: a session key, or a config
+// field.
+export const RULE_CHOOSABLE_SETTING_OF_KEY: ReadonlyMap<
+  string,
+  "theme" | "style" | "effect"
+> = new Map(
+  SETTING_PROJECTIONS.flatMap((p) =>
+    p.sessionKey === "theme" ||
+    p.sessionKey === "style" ||
+    p.sessionKey === "effect"
+      ? ([
+          [p.sessionKey, p.sessionKey],
+          [p.configKey, p.sessionKey],
+        ] as const)
+      : [],
+  ),
 );
 
 // [LAW:one-source-of-truth] The current value of a setting is the one the bar

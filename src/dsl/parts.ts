@@ -281,6 +281,7 @@ export class ViewParts {
       get layout() {
         return phase.ruling ? undefined : layout;
       },
+      selections: () => this.selections(),
     };
     this.layout = this.derive("layout", source.layoutReadsInstant, () => {
       // [LAW:no-defensive-null-guards] The draw resolves the preset to a

@@ -726,6 +726,18 @@ export function readDeclared(text: string | null, key: string): Declared {
     : { kind: "other", source: textOf(text ?? "", node) };
 }
 
+// The name a layer's file declares at a value key, or nothing when it declares
+// none or declares something that is not a name (a rule).
+export function readDeclaredText(
+  text: string | null,
+  key: string,
+): string | undefined {
+  const target = requireValueTarget(key);
+  const doc = docOf(text ?? "");
+  const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
+  return node?.kind === "string" ? node.value : undefined;
+}
+
 /**
  * Set the value each key names, as ONE tracked write: `persist` writes one
  * pair, `save` every draft. The splices fold over the text in memory and the
