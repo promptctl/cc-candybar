@@ -158,8 +158,20 @@ const body = (text: string): WireFrame => ({
   pending: [],
 });
 
-const ansiAnswer = (text: string) =>
-  JSON.stringify({ ok: true, output: `${text}\n` });
+// What a lane is sent of a one-row frame: the pane lane's answer also holds
+// where a pointer can act on it, and the statusline lane's never does.
+const ansiAnswer = (text: string, lane: "pane" | "statusline" = "pane") =>
+  JSON.stringify({
+    ok: true,
+    output: `${text}\n`,
+    ...(lane === "pane" && { hits: [[]] }),
+  });
+
+// A pane lane's answer as the statusline lane is sent it.
+const withoutHits = (answer: string): string => {
+  const { hits: _hits, ...rest } = JSON.parse(answer) as { hits?: unknown };
+  return JSON.stringify(rest);
+};
 
 const frame = (
   session = S,
@@ -360,7 +372,7 @@ describe("a subscriber", () => {
     r.took([frame(S, "r1", "s1")]);
     r.took([frame(S, "r2", "s1")]);
     expect(pane.sent).toEqual([ansiAnswer("r1"), ansiAnswer("r2")]);
-    expect(line.sent).toEqual([ansiAnswer("s1")]);
+    expect(line.sent).toEqual([ansiAnswer("s1", "statusline")]);
     expect(r.feeds.getStats()).toMatchObject({
       feeds: 1,
       subscribers: 2,
@@ -368,7 +380,7 @@ describe("a subscriber", () => {
     });
   });
 
-  test("both lanes receive identical terminal bytes without a handoff and repeat frames are deduplicated", () => {
+  test("both lanes receive the same terminal bytes without a handoff, the pane lane alone with its hit map, and repeat frames are deduplicated", () => {
     const { feeds, took } = rig();
     const pane = subscriber("pane");
     const statusline = subscriber("statusline");
@@ -393,7 +405,7 @@ describe("a subscriber", () => {
       },
     ]);
     expect(pane.sent).toEqual([ansiAnswer("answer")]);
-    expect(statusline.sent).toEqual(pane.sent);
+    expect(statusline.sent).toEqual([ansiAnswer("answer", "statusline")]);
   });
 
   test("a failed draw uses the same refusal bytes in both lanes", () => {
@@ -475,7 +487,7 @@ describe("feed delivery", () => {
     replacement.finish(true);
     await r.deliver(0.1);
     expect(r.due(0.1)).toEqual([]);
-    expect(staying.sent).toEqual(old.sent);
+    expect(staying.sent).toEqual(old.sent.map(withoutHits));
     expect(r.settled).toEqual([[first, true]]);
     expect(r.feeds.getStats()).toMatchObject({
       feeds: 1,
@@ -595,7 +607,7 @@ describe("feed delivery", () => {
 
     took([pushed]);
     expect(pane.sent).toEqual([ansiAnswer("r")]);
-    expect(statusline.sent).toEqual([ansiAnswer("s")]);
+    expect(statusline.sent).toEqual([ansiAnswer("s", "statusline")]);
     expect(settled).toEqual([[pushed, true]]);
     pane.finish(false);
     expect(settled).toEqual([[pushed, true]]);
@@ -733,7 +745,7 @@ describe("feed delivery", () => {
     const pushed = frame();
 
     took([pushed]);
-    expect(statusline.sent).toEqual([ansiAnswer("s")]);
+    expect(statusline.sent).toEqual([ansiAnswer("s", "statusline")]);
     expect(settled).toEqual([[pushed, true]]);
     expect(logged).toContainEqual(
       expect.stringContaining("send failed: Error: broken subscriber"),
@@ -802,7 +814,7 @@ describe("a subscription's lane", () => {
     // The other lane streams on.
     r.took([frame(S)]);
     expect(pane.sent).toEqual([]);
-    expect(line.sent).toEqual([ansiAnswer("s")]);
+    expect(line.sent).toEqual([ansiAnswer("s", "statusline")]);
   });
 });
 
@@ -902,8 +914,8 @@ test.each([
 
     const fresh = deferredSubscriber(lane);
     feeds.subscribe(S, fresh.sub);
-    expect(initial.sent).toEqual([ansiAnswer(text)]);
-    expect(fresh.sent).toEqual([ansiAnswer(text)]);
+    expect(initial.sent).toEqual([ansiAnswer(text, lane)]);
+    expect(fresh.sent).toEqual([ansiAnswer(text, lane)]);
     expect(acknowledged).toEqual([]);
     fresh.finish(true);
     expect(acknowledged).toEqual([shown]);

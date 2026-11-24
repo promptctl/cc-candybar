@@ -26,6 +26,12 @@ import {
   type OptionDomain,
 } from "../action.js";
 import nodePath from "node:path";
+import {
+  gestureName,
+  parseGesture,
+  PLAIN_CLICK,
+  type GestureName,
+} from "../../click/gesture.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   parseSlashLine,
@@ -134,9 +140,77 @@ function validateActionDecl(
     return null;
   }
   const key = present[0] as ActionKey;
-  // [LAW:single-enforcer] The layer an action writes is read here, once, for
-  // every arm: the arm parses the rest of the record.
-  const { layer, ...rest } = raw;
+  // [LAW:single-enforcer] The layer an action writes and the gestures it
+  // answers are read here, once, for every arm: the arm parses the rest.
+  const { layer, on: rawOn, ...rest } = raw;
+  const on = rawOn === undefined ? {} : validateGestures(ctx, path, rawOn);
+  if (on === null) return null;
+  const parsed = armParsed(ctx, path, key, layer, rest, home);
+  return parsed === null || Object.keys(on).length === 0
+    ? parsed
+    : { ...parsed, on };
+}
+
+// [LAW:parse-dont-validate] An action's `on:` as canonical gestures, each
+// naming the action it runs. Whether those names resolve is a cross-ref
+// concern, as for a `do` member.
+function validateGestures(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): Record<GestureName, string> | null {
+  if (!isPlainObject(raw)) {
+    issue(
+      ctx,
+      `${path}.on`,
+      `${path}.on must map gestures to action names, got ${describeType(raw)}`,
+    );
+    return null;
+  }
+  const out: Record<GestureName, string> = Object.create(null) as Record<
+    GestureName,
+    string
+  >;
+  let valid = true;
+  for (const [spelling, target] of Object.entries(raw)) {
+    const at = `${path}.on.${spelling}`;
+    const gesture = parseGesture(spelling);
+    if (gesture.kind === "failed") {
+      issue(ctx, at, gesture.reason);
+      valid = false;
+      continue;
+    }
+    const name = gestureName(gesture.value);
+    if (name === PLAIN_CLICK) {
+      issue(
+        ctx,
+        at,
+        `"${spelling}" is the plain click, which is the action's own effects: declare them on the action`,
+      );
+      valid = false;
+    } else if (name in out) {
+      issue(ctx, at, `"${spelling}" is the gesture ${name}, bound twice`);
+      valid = false;
+    } else if (typeof target !== "string" || target === "") {
+      issue(
+        ctx,
+        at,
+        `${at} must name a declared action, got ${describeValue(target)}`,
+      );
+      valid = false;
+    } else out[name] = target;
+  }
+  return valid ? out : null;
+}
+
+function armParsed(
+  ctx: ValidateCtx,
+  path: string,
+  key: ActionKey,
+  layer: unknown,
+  rest: Record<string, unknown>,
+  home: ActionHome,
+): ActionDecl | null {
   const layers = LAYER_CHOICES[key];
   if (layer === undefined) return actionArms(home)[key](ctx, path, rest);
   if (layers === undefined) {
@@ -238,7 +312,19 @@ function actionDeclJson(): JsonNode {
       SLASH_ARM_JSON,
       RUN_ARM_JSON,
       DO_ARM_JSON,
-    ],
+    ].map(answersGestures),
+  };
+}
+
+// [LAW:one-source-of-truth] Every arm admits `on`, as validateActionDecl reads
+// it for every arm.
+function answersGestures(json: JsonNode): JsonNode {
+  return {
+    ...json,
+    properties: {
+      ...(json.properties as JsonNode),
+      on: { type: "object", additionalProperties: { type: "string" } },
+    },
   };
 }
 

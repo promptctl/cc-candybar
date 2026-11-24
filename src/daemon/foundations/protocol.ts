@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Duplex } from "node:stream";
 import type { RenderHookData } from "../../utils/claude";
 import type { StatsSnapshot } from "./stats-snapshot";
+import type { HitMap } from "../../render/hit-map.js";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { RecordingCommand } from "./recording-command.js";
 import type { TmuxHint } from "../../tmux-hint";
@@ -490,7 +491,8 @@ export type Request =
   | DebugRequest;
 
 export type Response =
-  | { ok: true; output: string }
+  // A frame pushed to the pane lane also carries where a pointer can act on it.
+  | { ok: true; output: string; hits?: HitMap }
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }

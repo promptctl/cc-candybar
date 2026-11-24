@@ -510,7 +510,10 @@ export function withDroppedPlacements(
       ])
     : [];
   const doMembers = anyTombstone
-    ? Object.values(config.actions).flatMap((a) => ("do" in a ? [...a.do] : []))
+    ? Object.values(config.actions).flatMap((a) => [
+        ...("do" in a ? a.do : []),
+        ...Object.values(a.on ?? {}),
+      ])
     : [];
   const missing = (
     names: readonly string[],
@@ -862,12 +865,19 @@ function mapActionNames(
   const seg = "segments.";
   const out: Record<string, unknown> = { ...a };
   if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
+  if (a.on !== undefined)
+    out.on = Object.fromEntries(
+      Object.entries(a.on).map(([gesture, target]) => [
+        gesture,
+        f(target, "on"),
+      ]),
+    );
   for (const field of ["removeSegment", "insertSegment", "anchor"] as const)
     if (field in a)
-      out[field] = f((a as Record<string, string>)[field]!, field);
+      out[field] = f((a as unknown as Record<string, string>)[field]!, field);
   if ("persist" in a && a.persist.startsWith(seg))
     out.persist = seg + f(a.persist.slice(seg.length), "persist");
-  return out as ActionDecl;
+  return out as unknown as ActionDecl;
 }
 
 // The template fields a segment declaration carries.

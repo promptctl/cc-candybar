@@ -21,6 +21,7 @@ import {
 import type { FrameSource } from "../click/link-signer.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
+import { hitMapOf, type HitMap } from "../render/hit-map.js";
 import {
   answerOf,
   LANE_NAMES,
@@ -150,12 +151,26 @@ function encodeFeed(
   source: FrameSource,
 ): EncodedFeed {
   if (frame.kind === "failed") return failedFeed(failedWith(frame.message));
-  const encode = (body: typeof frame.bar): EncodedAnswer => ({
-    json: JSON.stringify(RENDER_ANSWERS.ansi(publish(body, source))),
+  // [LAW:one-source-of-truth] Each lane's answer is its own value: only the
+  // pane lane's carries the hit map, which holds the signed link of every
+  // gesture, so the statusline lane's bytes never change with it. Each body is
+  // published once, whichever lanes show it.
+  const answer = (
+    published: Frame<string>,
+    hits: HitMap | undefined,
+  ): EncodedAnswer => ({
+    json: JSON.stringify({
+      ...RENDER_ANSWERS.ansi(published),
+      ...(hits !== undefined && { hits }),
+    }),
     displayedEvents: frame.displayedEvents,
   });
-  const resp = encode(frame.bar);
-  const statusline = frame.handoff === null ? resp : encode(frame.handoff);
+  const bar = publish(frame.bar, source);
+  const resp = answer(bar, hitMapOf(bar));
+  const statusline = answer(
+    frame.handoff === null ? bar : publish(frame.handoff, source),
+    undefined,
+  );
   return { resp, statusline };
 }
 

@@ -66,6 +66,7 @@ import {
   VERB_UNDO,
   VERB_SLASH,
 } from "../click/wire.js";
+import type { GestureName } from "../click/gesture.js";
 import {
   actionTarget,
   type DrawnEffect,
@@ -280,6 +281,9 @@ type CompiledActionShape =
 
 export type CompiledActionDecl = CompiledActionShape & {
   readonly bindsTemplateValue: boolean;
+  // The gestures the action answers besides its plain click, each as the
+  // name of the action it runs.
+  readonly on: Readonly<Record<GestureName, string>>;
 };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
@@ -471,6 +475,7 @@ export function compileActions(
     // binding rule. A compound action uses the same result as its actual head.
     out.set(name, {
       ...compiled,
+      on: action.on ?? {},
       bindsTemplateValue:
         compiled.kind === "do"
           ? compiled.head.bindsTemplateValue
@@ -1189,7 +1194,26 @@ export function renderAction(
     store,
     sessionId,
   );
-  return linkOver(display, actionTarget(effects), active);
+  // [LAW:one-source-of-truth] A gesture's effects are realized by the same
+  // fold as the click's, against the same state, so each link delivers what
+  // the frame drew for it.
+  const gestures = Object.fromEntries(
+    Object.entries(declared.on).map(([gesture, target]) => [
+      gesture,
+      realize(
+        runtime.compiled.get(target)!,
+        display.plain,
+        undefined,
+        store,
+        sessionId,
+      ).effects,
+    ]),
+  );
+  return linkOver(
+    display,
+    actionTarget(effects, undefined, { name, gestures }),
+    active,
+  );
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────

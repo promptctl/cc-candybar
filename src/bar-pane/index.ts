@@ -13,7 +13,11 @@
 
 import process from "node:process";
 import { parseArgs as parseCliArgs } from "node:util";
-import { renderOutcomeOf, trySessionInPane } from "../daemon/client";
+import {
+  renderOutcomeOf,
+  tryClickViaDaemon,
+  trySessionInPane,
+} from "../daemon/client";
 import { describeFailure } from "../daemon/client-transport";
 import { followFrames, type FrameFollower } from "../daemon/frame-follow";
 import { socketPath } from "../daemon/paths";
@@ -29,6 +33,9 @@ import {
   shownPanes,
 } from "../daemon/pane-visibility";
 import { DRAWING, RESTORED, paint } from "./paint";
+import { readMouse } from "./mouse";
+import { linkPressed } from "./hit-test";
+import type { HitMap } from "../render/hit-map";
 
 // How stale the pane's placement and its session may be: a window switched to
 // waits this long for its first frame, and a /clear this long for its new
@@ -157,8 +164,10 @@ async function drawBarPane(
   const tmux = detectTmuxHint(world.host.env);
   if (tmux === null)
     throw new Error("cc-candybar bar-pane runs in a tmux pane");
-  if (!process.stdout.isTTY)
-    throw new Error("cc-candybar bar-pane draws on its pane's terminal");
+  if (!process.stdout.isTTY || !process.stdin.isTTY)
+    throw new Error(
+      "cc-candybar bar-pane draws on, and reads the mouse from, its pane's terminal",
+    );
   // [LAW:no-silent-failure] A pane id this tmux server does not have is a
   // mistake to say, not a pane that closed.
   const first = await askPlacement(world, tmux, pane);
@@ -168,7 +177,13 @@ async function drawBarPane(
     throw new Error(`no pane ${pane} on this tmux server (${tmux.socket})`);
 
   process.stdout.write(DRAWING);
-  process.on("exit", () => process.stdout.write(RESTORED));
+  // [LAW:effects-at-boundaries] The terminal's mouse reports are read raw and
+  // put back with the rest of the terminal on every exit the pane traps.
+  process.stdin.setRawMode(true);
+  process.on("exit", () => {
+    process.stdout.write(RESTORED);
+    process.stdin.setRawMode(false);
+  });
   // Node runs no exit listener when a signal ends it; exiting from the
   // signal's handler does.
   for (const [signal, code] of [
@@ -188,7 +203,7 @@ async function drawBarPane(
   // follows nothing, so the daemon draws nothing for it.
   let following: {
     readonly sessionId: string;
-    readonly said: { latest: string | null };
+    readonly said: { latest: string | null; hits: HitMap | null };
     readonly follower: FrameFollower;
   } | null = null;
   // What the loop last learned of the pane's session, shown until its follower
@@ -246,6 +261,54 @@ async function drawBarPane(
     redraw();
   });
 
+  // [LAW:no-ambient-temporal-coupling] One press at a time, in the order the
+  // terminal reported them: each opens its link, then gives the keyboard back.
+  // tmux's own mouse binding selected this pane before the press reached it, so
+  // the user's next keystrokes would go to the bar and not Claude Code's prompt.
+  // A press on a cell with no link returns it too.
+  const focusAnswered = tmuxPatience(world.clock);
+  let pressing: Promise<void> = Promise.resolve();
+  const press = (link: string | undefined): void => {
+    pressing = pressing.then(async () => {
+      if (link !== undefined) {
+        const sent = await tryClickViaDaemon(world, link);
+        if (sent.kind !== "ok")
+          process.stderr.write(
+            `cc-candybar bar-pane: click failed: ${describeFailure(sent)}
+`,
+          );
+      }
+      focusAnswered(
+        await runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
+          "if-shell",
+          "-F",
+          "-t",
+          tmux.pane,
+          "#{pane_active}",
+          `last-pane -t ${tmux.pane}`,
+        ]),
+      );
+    });
+    void pressing.catch(die);
+  };
+  let unread = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk: string) => {
+    const read = readMouse(unread + chunk);
+    unread = read.rest;
+    for (const event of read.events) {
+      if (event.kind !== "press") continue;
+      press(
+        linkPressed(
+          following?.said.hits ?? [],
+          process.stdout.rows,
+          event.at,
+          event.gesture,
+        ),
+      );
+    }
+  });
+
   const follow = (sessionId: string | null): void => {
     if (following?.sessionId === sessionId) return;
     following?.follower.close();
@@ -253,9 +316,16 @@ async function drawBarPane(
       following = null;
       return;
     }
-    const said: { latest: string | null } = { latest: null };
-    const say = (line: string): void => {
+    const said: { latest: string | null; hits: HitMap | null } = {
+      latest: null,
+      hits: null,
+    };
+    // [LAW:one-source-of-truth] What a press can open is what the line said
+    // it can: a frame brings its hit map, and anything else the pane says
+    // (a refusal, a fault) has none.
+    const say = (line: string, hits: HitMap | null = null): void => {
       said.latest = line;
+      said.hits = hits;
       redraw();
     };
     following = {
@@ -264,10 +334,15 @@ async function drawBarPane(
       follower: followFrames(world, socketPath(world.host), sessionId, "pane", {
         frame: (resp) => {
           const outcome = renderOutcomeOf(resp);
-          say(planOutcome(outcome, world.host.env.XDG_STATE_HOME).output);
+          say(
+            planOutcome(outcome, world.host.env.XDG_STATE_HOME).output,
+            outcome.kind === "ok" && resp.ok && "hits" in resp
+              ? (resp.hits ?? null)
+              : null,
+          );
         },
         off: (resp) => say(resp.error),
-        fault: say,
+        fault: (reason) => say(reason),
         exit: (reason) => die(new Error(reason)),
       }),
     };

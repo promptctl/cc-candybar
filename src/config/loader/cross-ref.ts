@@ -1333,6 +1333,16 @@ function valuesWritten(
   return "int" in a ? ANY_INTEGER : null;
 }
 
+// [LAW:one-source-of-truth] The binding rule actionBindsTemplateValue states,
+// read through a `do` to its head, whose display the click is bound.
+function bindsTemplateValue(
+  actions: Readonly<Record<string, ActionDecl>>,
+  a: ActionDecl,
+): boolean {
+  const head = "do" in a ? actions[a.do[0]] : a;
+  return head !== undefined && actionBindsTemplateValue(head);
+}
+
 // A predicate naming the declarations a check is about: every one for a whole
 // config, a plugin's own for a plugin joining a layer that was checked.
 export type Subject = (name: string) => boolean;
@@ -1436,6 +1446,30 @@ export function validateDeclarations(
         });
       }
     });
+  }
+  // [LAW:no-silent-failure] A gesture's target resolves against the merged
+  // action table, as a `do` member does. A target that takes its value from
+  // the template is refused: the gesture's link is drawn beside the region's
+  // own and binds no display of its own, so it would write the region's.
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    for (const [gesture, member] of Object.entries(a.on ?? {})) {
+      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member)
+        ? cfg.actions[member]!
+        : undefined;
+      const problem =
+        target === undefined
+          ? `references unknown action "${member}"`
+          : bindsTemplateValue(cfg.actions, target)
+            ? `"${member}" takes its value from the template, so it cannot answer a gesture, which binds none`
+            : undefined;
+      if (problem !== undefined) {
+        ctx.issues.push({
+          path: `actions.${name}.on.${gesture}`,
+          message: `actions.${name} on ${gesture}: ${problem}`,
+          line: findKeyLine(ctx.source, ["actions", name, "on", gesture]),
+        });
+      }
+    }
   }
   // [LAW:types-are-the-program] A `run` refreshes only declared sources:
   // superseding — pending from the click until the program exits — is built

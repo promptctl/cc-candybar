@@ -14,6 +14,7 @@ import {
 import type { ColorCompatibility } from "../themes/policy.js";
 import { compareStructural } from "mobx";
 import { hrefOfDrawnLink, type DrawnLink } from "./drawn-link.js";
+import type { GestureName } from "../click/gesture.js";
 import {
   DIAGNOSTIC_ERROR_COLORS,
   type DiagnosticColors,
@@ -38,6 +39,16 @@ export interface Run<Link = DrawnLink> {
   readonly bg?: string;
   readonly attrs?: readonly Attribute[];
   readonly link?: Link;
+  // What a run's other gestures open, as links, once the host has published
+  // them (src/daemon/foundations/frame-publication.ts). A drawn run carries
+  // them in its link's target.
+  readonly region?: PublishedRegion;
+}
+
+// The action a run is bound to, and the link each other gesture opens.
+export interface PublishedRegion {
+  readonly name: string;
+  readonly gestures: Readonly<Record<GestureName, string>>;
 }
 
 // One line on screen. A row FlexStrip wrapped is one Row per line.

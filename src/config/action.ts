@@ -31,6 +31,7 @@
 // constant), and an inline array is its own domain, needing no registration
 // at all. Re-exported here so ActionDecl stays self-contained to read.
 import type { OptionDomain } from "./option-domain.js";
+import type { GestureName } from "../click/gesture.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import {
   DEFAULT_WRITE_LAYER,
@@ -214,7 +215,14 @@ export const LAYER_CHOICES: Partial<Record<ActionKey, readonly LayerChoice[]>> =
 interface Writes {
   readonly layer?: LayerRole;
 }
-export type ActionDecl =
+// [LAW:one-source-of-truth] The other gestures an action answers, as the
+// gesture's canonical name (src/click/gesture.ts) and the declared action each
+// runs. The action's own effects stay its plain click.
+export interface Gestures {
+  readonly on?: Readonly<Record<GestureName, string>>;
+}
+export type ActionDecl = ActionArm & Gestures;
+type ActionArm =
   | { readonly set: string; readonly to: string }
   | { readonly set: string; readonly from: OptionDomain }
   | {

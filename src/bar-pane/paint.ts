@@ -3,6 +3,8 @@
 // [LAW:effects-at-boundaries] Pure: the loop (src/bar-pane/index.ts) writes the
 // bytes and sizes the pane to `rows`; this only decides what they are.
 
+import { MOUSE_OFF, MOUSE_ON } from "./mouse.js";
+
 export interface Paint {
   readonly bytes: string;
   // The pane height that shows the frame whole — one row per bar line.
@@ -11,9 +13,11 @@ export interface Paint {
 
 // The pane's terminal while the bar is drawn in it, and as it is left: the
 // cursor hidden, and autowrap off, so a line wider than the pane clips at its
-// edge instead of taking a second row.
-export const DRAWING = "\x1b[?25l\x1b[?7l";
-export const RESTORED = "\x1b[?25h\x1b[?7h";
+// edge instead of taking a second row. The mouse is reported to the pane while
+// it draws, which also stops the terminal opening a link a click lands on: the
+// pane delivers it (src/bar-pane/index.ts).
+export const DRAWING = "\x1b[?25l\x1b[?7l" + MOUSE_ON;
+export const RESTORED = MOUSE_OFF + "\x1b[?25h\x1b[?7h";
 
 // Synchronized output: the terminal shows the whole frame at once.
 const FRAME_START = "\x1b[?2026h";
@@ -38,4 +42,19 @@ export function paint(frame: string): Paint {
       FRAME_END,
     rows: lines.length,
   };
+}
+
+// [LAW:one-source-of-truth] Which frame line the pane shows on a terminal row
+// (1-based), as paint places them: line i at row i + 1, and the rows past the
+// pane's bottom land on its last row, which so shows the frame's last line.
+// The hit test asks here, so a press lands on the line the user saw. Null for a
+// row below the frame, which is blank.
+export function lineAtRow(
+  row: number,
+  paneRows: number,
+  lines: number,
+): number | null {
+  const last = lines - 1;
+  if (row === paneRows && lines > paneRows) return last;
+  return row - 1 <= last ? row - 1 : null;
 }
