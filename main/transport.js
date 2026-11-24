@@ -57527,6 +57527,11 @@ Subcommands:
                            ~/.claude/settings.json. Re-run to update.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
+  record-host-bundle       Record this bundle as the one a cold host starts
+                           from, when the statusLine command in
+                           ~/.claude/settings.json names it. \`install\` does
+                           this; a checkout that is its own install runs it
+                           after a build (\`just deploy\`).
   url-handle URL           Send a cc-candybar:// link to the daemon as a
                            click. Terminal links use the URL handler app.
   plugin install SOURCE    Install a repository's plugins into
@@ -83145,30 +83150,17 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
     return refuse2("BAD_REQUEST", "malformed request");
   }
   if (req.v !== PROTOCOL_VERSION) {
-    if (req.v > PROTOCOL_VERSION) {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded \u2014 exiting after the response flushes`
-      );
-    } else {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
-      );
-    }
+    parts.log(
+      "info",
+      `version mismatch: client=${req.v} ${req.v > PROTOCOL_VERSION ? ">" : "<"} daemon=${PROTOCOL_VERSION}; staying up`
+    );
     return replied(
-      replyOf(
-        {
-          ok: false,
-          error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-          code: "VERSION_MISMATCH",
-          daemonV: PROTOCOL_VERSION
-        },
-        // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-        // Exit is sequenced on the response flush, so the client always sees
-        // the VERSION_MISMATCH diagnostic — never a dead socket.
-        req.v > PROTOCOL_VERSION ? 0 : null
-      )
+      stay({
+        ok: false,
+        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+        code: "VERSION_MISMATCH",
+        daemonV: PROTOCOL_VERSION
+      })
     );
   }
   if (req.kind === "subscribe") return subscription(req);

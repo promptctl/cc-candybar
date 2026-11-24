@@ -2,59 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-948",
-      "ref": "refs/pull/948/merge",
-      "sha": "f48a1f060bf5a1963022297f1011cc73b13e740f",
-      "timestamp": "2026-11-24T13:10:24.373Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7574f98bc0eebd5439fb90408397ed1194d33958",
+      "timestamp": "2026-11-24T13:13:27.995Z",
       "commits": [
         {
-          "sha": "f48a1f060bf5a1963022297f1011cc73b13e740f",
+          "sha": "7574f98bc0eebd5439fb90408397ed1194d33958",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T13:09:19Z",
-          "message": "Merge 545e7556cab67d4ab75c79b5366599aca0873940 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
-        },
-        {
-          "sha": "545e7556cab67d4ab75c79b5366599aca0873940",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:08:55-07:00",
-          "message": "merge main\n"
-        },
-        {
-          "sha": "f2b1e88c75c839f2c29e313913422fb1233cfe3e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:08:55-07:00",
-          "message": "test(host): a cold-start test waits for the host's answer and the node line, not the socket or the file alone\n"
-        },
-        {
-          "sha": "6a3dcd816c535b5781af659e4daf6d3ca6d40f87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:00:09-07:00",
-          "message": "fix(host): a customized statusline that runs the staged entry is recorded; undo a stray test reformat\n\nA wrapper or env command that runs the staged entry is the install, so the\ninstall records it without --force destroying the command. The previous\ncommit's prettier run over test/ rewrapped unrelated files; they return to\ntheir prior text.\n"
-        },
-        {
-          "sha": "24a759ac44ac67b289d8d854be6459dfc9d3e7dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T05:50:17-07:00",
-          "message": "fix(host): a symlinked entry names the bundle it runs, and the record reads through the shared helpers\n\nThe checkout's recorder resolves the entry's real path before taking the\nbundle beside it. The record reader uses the regular-file reader and the\npresence stat, so an unreadable bundle is not reported as missing. The\ndead state-dir guard, the vacuous mismatch-fixture flag and stale comments\ngo; the stale-lock reclaim test returns against the kick.\n"
-        },
-        {
-          "sha": "99882a2e5dae60edc263712ac5fb96b86d4e0796",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T05:39:02-07:00",
-          "message": "fix(host): the install records the bundle it staged, and the dead obtainDaemon path is gone\n\nThe install records the bundle it staged when it owns the statusline\ncommand instead of reading the command back; a checkout's deploy compares\nreal paths. A refused kick no longer claims to kick. obtainDaemon had no\nproduction caller and carried a second copy of the record read.\n"
-        },
-        {
-          "sha": "1dd186435e17cf2da66d262fe9a9e206d0ed6538",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T05:23:11-07:00",
-          "message": "feat(host): a cold host starts from the bundle the install recorded\n\nEvery bar on the machine is drawn by one host, so a client that found it down must start the installed bundle, not its own. The install records its bundle in the state directory; both clients read that record at spawn time and refuse to start anything, showing why on the bar, when it is missing or unusable. The record is written only when the user's statusline command names the writing bundle, so a worktree's build or deploy never moves the host. The host's binary watch includes the record, so repointing it ends the running host, and a host no longer exits on a client with a newer protocol.\n"
+          "timestamp": "2026-11-24T06:12:23-07:00",
+          "message": "feat(host): a cold host starts from the bundle the install recorded (#948)\n\n* feat(host): a cold host starts from the bundle the install recorded\n\nEvery bar on the machine is drawn by one host, so a client that found it down must start the installed bundle, not its own. The install records its bundle in the state directory; both clients read that record at spawn time and refuse to start anything, showing why on the bar, when it is missing or unusable. The record is written only when the user's statusline command names the writing bundle, so a worktree's build or deploy never moves the host. The host's binary watch includes the record, so repointing it ends the running host, and a host no longer exits on a client with a newer protocol.\n\n* fix(host): the install records the bundle it staged, and the dead obtainDaemon path is gone\n\nThe install records the bundle it staged when it owns the statusline\ncommand instead of reading the command back; a checkout's deploy compares\nreal paths. A refused kick no longer claims to kick. obtainDaemon had no\nproduction caller and carried a second copy of the record read.\n\n* fix(host): a symlinked entry names the bundle it runs, and the record reads through the shared helpers\n\nThe checkout's recorder resolves the entry's real path before taking the\nbundle beside it. The record reader uses the regular-file reader and the\npresence stat, so an unreadable bundle is not reported as missing. The\ndead state-dir guard, the vacuous mismatch-fixture flag and stale comments\ngo; the stale-lock reclaim test returns against the kick.\n\n* fix(host): a customized statusline that runs the staged entry is recorded; undo a stray test reformat\n\nA wrapper or env command that runs the staged entry is the install, so the\ninstall records it without --force destroying the command. The previous\ncommit's prettier run over test/ rewrapped unrelated files; they return to\ntheir prior text.\n\n* test(host): a cold-start test waits for the host's answer and the node line, not the socket or the file alone"
         }
       ]
     },
@@ -77,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T05:56:31-07:00",
           "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2",
-      "timestamp": "2026-11-24T12:04:52.898Z",
-      "commits": [
-        {
-          "sha": "8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T12:03:18Z",
-          "message": "chore(release): set `package.json` to 1.236.15\n\n## [1.236.15](https://github.com/promptctl/cc-candybar/compare/v1.236.14...v1.236.15) (2026-11-24)\n\n### Bug Fixes\n\n* **click:** a click the daemon has read runs however late its turn comes ([#947](https://github.com/promptctl/cc-candybar/issues/947)) ([66287d6](https://github.com/promptctl/cc-candybar/commit/66287d6a5aaf2b2a5ac8868f5c5b148abb92e538))\n"
         }
       ]
     }
