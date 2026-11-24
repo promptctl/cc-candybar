@@ -43400,17 +43400,29 @@ var SETTINGS = Object.fromEntries(
 );
 var SETTING_NAMES = Object.keys(SETTINGS);
 var SETTING_PROJECTIONS = Object.values(SETTINGS);
-var CONFIG_ONLY_PROJECTIONS = VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
-  (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) })
+var CONFIG_ONLY_FIELDS = VALUED_FIELDS.filter(
+  (field) => GLOBAL_FIELDS[field].kind === "config"
 );
+var CONFIG_ONLY_PROJECTIONS = CONFIG_ONLY_FIELDS.map((field) => ({
+  configKey: field,
+  effectiveVar: effectiveVarOf(field)
+}));
 var CONFIG_ONLY_KEYS = new Set(
-  CONFIG_ONLY_PROJECTIONS.map((p2) => p2.configKey)
+  CONFIG_ONLY_FIELDS
 );
 function configOnlyField(key) {
-  return CONFIG_ONLY_KEYS.has(key) ? key : void 0;
+  return CONFIG_ONLY_FIELDS.find((field) => field === key);
 }
 var CONFIG_KEY_TO_SETTING = new Map(
   SETTING_PROJECTIONS.map((p2) => [p2.configKey, p2.sessionKey])
+);
+var RULE_CHOOSABLE_SETTING_OF_KEY = new Map(
+  SETTING_PROJECTIONS.flatMap(
+    (p2) => p2.sessionKey === "theme" || p2.sessionKey === "style" || p2.sessionKey === "effect" ? [
+      [p2.sessionKey, p2.sessionKey],
+      [p2.configKey, p2.sessionKey]
+    ] : []
+  )
 );
 var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
   [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
@@ -43725,6 +43737,45 @@ function parseMenuOptions(entries2) {
   };
 }
 
+// src/render/option-ring.ts
+init_globals();
+var RANDOM = "random";
+var OFFSET_RE = /^-?\d+$/;
+var stepOffset = (by) => ({ kind: "offset", by });
+var STEP_RANDOM = { kind: "random" };
+function spellStep(step4) {
+  return step4.kind === "random" ? RANDOM : String(step4.by);
+}
+function parseStep(raw) {
+  if (raw === RANDOM) return { ok: true, step: STEP_RANDOM };
+  if (OFFSET_RE.test(raw)) return { ok: true, step: stepOffset(Number(raw)) };
+  return {
+    ok: false,
+    problem: `a step is a whole number of options or "${RANDOM}", got ${JSON.stringify(raw)}`
+  };
+}
+var centreOf = (options, current) => Math.max(options.indexOf(current), 0);
+function ringAround(options, current) {
+  const count = options.length;
+  const centre = centreOf(options, current);
+  return (offset) => ((centre + offset) % count + count) % count;
+}
+function randomOther(seed, count, centre) {
+  let h = Math.imul(seed ^ seed >>> 16, 73244475);
+  h = Math.imul(h ^ h >>> 16, 73244475);
+  h ^= h >>> 16;
+  return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
+}
+function landing(options, current, step4, instant) {
+  const at = ringAround(options, current);
+  switch (step4.kind) {
+    case "offset":
+      return options[at(step4.by)];
+    case "random":
+      return options[randomOther(instant, options.length, at(0))];
+  }
+}
+
 // src/daemon/foundations/session-id.ts
 init_globals();
 var SESSION_ID_MAX_BYTES = 250;
@@ -43792,7 +43843,12 @@ function configWriteEffect(verb, session, role, ...payload) {
   return { verb, args: [session, role, ...payload] };
 }
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
-var sayRing = (action2, step4) => step4 === "random" ? `pick another option for ${action2}` : `step ${action2} ${step4.startsWith("-") ? "back" : "on"} by ${step4.replace("-", "")}`;
+function sayRing(action2, raw) {
+  const parsed2 = parseStep(raw);
+  if (!parsed2.ok) return `step ${action2} by ${raw}`;
+  const { step: step4 } = parsed2;
+  return step4.kind === "random" ? `pick another option for ${action2}` : `step ${action2} ${step4.by < 0 ? "back" : "on"} by ${Math.abs(step4.by)}`;
+}
 function sayWrite(key, value) {
   const { kind } = sessionKeyKind(key);
   if (kind === "viewer")
@@ -57149,8 +57205,11 @@ function actionBindsTemplateValue(a) {
   return "from" in a || "int" in a || "insertSegmentFrom" in a || "save" in a && a.layer === "ask";
 }
 function bindsTemplateValue(actions, a) {
-  const head = "do" in a ? actions[a.do[0]] : a;
+  const head = headOf(actions, a);
   return head !== void 0 && actionBindsTemplateValue(head);
+}
+function headOf(actions, a) {
+  return "do" in a ? actions[a.do[0]] : a;
 }
 
 // src/config/loader/edit-mode.ts
@@ -64950,9 +65009,6 @@ function differing(rows, session, baseOf2, targetOf) {
 function sessionSettingValue(config, sessionPick, name) {
   return spelled(sessionGlobals(config, sessionPick), name);
 }
-function sessionConfigOnlyValue(config, sessionPick, field) {
-  return spelled(sessionGlobals(config, sessionPick), field);
-}
 function settingDrafts(config, sessionPick) {
   const session = sessionGlobals(config, sessionPick);
   return differing(
@@ -67182,85 +67238,6 @@ function mintPlacementId(segment, taken2, suffix) {
   );
 }
 
-// src/render/option-ring.ts
-init_globals();
-var RANDOM = "random";
-var OFFSET_RE = /^-?\d+$/;
-var stepOffset = (by) => ({ kind: "offset", by });
-var STEP_RANDOM = { kind: "random" };
-function spellStep(step4) {
-  return step4.kind === "random" ? RANDOM : String(step4.by);
-}
-function parseStep(raw) {
-  if (raw === RANDOM) return { ok: true, step: STEP_RANDOM };
-  if (OFFSET_RE.test(raw)) return { ok: true, step: stepOffset(Number(raw)) };
-  return {
-    ok: false,
-    problem: `a step is a whole number of options or "${RANDOM}", got ${JSON.stringify(raw)}`
-  };
-}
-function ringAround(options, current) {
-  const count = options.length;
-  const centre = Math.max(options.indexOf(current), 0);
-  return (offset) => ((centre + offset) % count + count) % count;
-}
-function randomOther(seed, count, centre) {
-  let h = Math.imul(seed ^ seed >>> 16, 73244475);
-  h = Math.imul(h ^ h >>> 16, 73244475);
-  h ^= h >>> 16;
-  return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
-}
-function landing(options, current, step4, instant) {
-  const at = ringAround(options, current);
-  return options[step4.kind === "offset" ? at(step4.by) : randomOther(instant, options.length, at(0))];
-}
-function pageMapOf(pages, optionCount) {
-  const map = new Array(optionCount).fill(0);
-  pages.forEach(
-    (sections, page2) => sections.forEach(
-      (section) => section.indices.forEach((index) => {
-        map[index] = page2;
-      })
-    )
-  );
-  return map;
-}
-function spellPageMap(map) {
-  const runs = [];
-  let start = 0;
-  for (let i2 = 1; i2 <= map.length; i2++) {
-    if (i2 === map.length || map[i2] !== map[start]) {
-      runs.push(`${map[start]}.${i2 - start}`);
-      start = i2;
-    }
-  }
-  return runs.join("-");
-}
-var RUN_RE = /^\d+\.[1-9]\d*$/;
-function parsePageMap(raw) {
-  const runs = raw === "" ? [] : raw.split("-");
-  if (!runs.every((run2) => RUN_RE.test(run2))) {
-    return {
-      ok: false,
-      problem: `a page layout is runs of <page>.<length> joined by "-", got ${JSON.stringify(raw)}`
-    };
-  }
-  return {
-    ok: true,
-    map: runs.flatMap((run2) => {
-      const [page2, length] = run2.split(".").map(Number);
-      return new Array(length).fill(page2);
-    })
-  };
-}
-var pageCount = (map) => map.length === 0 ? 0 : Math.max(...map) + 1;
-function pageShown(cursor, holding2, pages) {
-  const raw = parseInt(cursor, 10);
-  if (!Number.isInteger(raw)) return 0;
-  return raw < 0 ? holding2 : Math.min(raw, pages - 1);
-}
-var pageHolding = (map, index) => map[index] ?? 0;
-
 // src/render/action.ts
 function renderBinding(runtime, reader) {
   if (runtime.bound === void 0) {
@@ -67543,7 +67520,7 @@ function linkOver(cell3, target, current = false) {
   return linked;
 }
 function cycleIndex(c, store) {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+  return centreOf(c.members, readVar(store, c.stateVar));
 }
 function realize(c, display, boundValue, store, sessionId2) {
   switch (c.kind) {
@@ -67826,38 +67803,27 @@ function realize(c, display, boundValue, store, sessionId2) {
     }
   }
 }
-function realizeRing(c, name, step4, turn, store, sessionId2, helper) {
-  switch (c.kind) {
-    case "set-option":
-      return [
-        {
-          verb: VERB_RING_STATE,
-          args: [sessionId2, name, spellStep(step4), ...turn]
-        }
-      ];
-    case "persist-option":
-      return [
-        configWriteEffect(
-          VERB_RING_CONFIG,
-          sessionId2,
-          c.layer,
-          name,
-          spellStep(step4),
-          ...turn
-        )
-      ];
-    case "do":
-      return [
-        ...realizeRing(c.head, name, step4, turn, store, sessionId2, helper),
-        ...c.rest.flatMap(
-          (member) => realize(member, "", void 0, store, sessionId2).effects
-        )
-      ];
-    default:
-      throw new Error(
-        `${helper} steps through "${name}", which is a ${c.kind} action with no ring of options to step through`
-      );
-  }
+function ruledName(binding, head) {
+  const setting = RULE_CHOOSABLE_SETTING_OF_KEY.get(head.key);
+  return setting !== void 0 && binding.selections()[setting].kind !== "decided" ? readVar(binding.store, head.stateVar) : "";
+}
+function realizeRing(declared, head, name, step4, turn, binding, sessionId2) {
+  const { store } = binding;
+  const ring = [spellStep(step4), ruledName(binding, head), ...turn];
+  const stepped2 = head.kind === "set-option" ? { verb: VERB_RING_STATE, args: [sessionId2, name, ...ring] } : configWriteEffect(
+    VERB_RING_CONFIG,
+    sessionId2,
+    head.layer,
+    name,
+    ...ring
+  );
+  const followers = declared.kind === "do" ? declared.rest : [];
+  return [
+    stepped2,
+    ...followers.flatMap(
+      (member) => realize(member, "", void 0, store, sessionId2).effects
+    )
+  ];
 }
 function selectDisplay(name, action2, displays, store) {
   if (displays.length === 0) {
@@ -67969,6 +67935,65 @@ function disclosureCloseFragment(sessionId2, key) {
 
 // src/render/picker.ts
 init_globals();
+
+// src/render/page-map.ts
+init_globals();
+function pageMapOf(pages, optionCount) {
+  const map = new Array(optionCount).fill(0);
+  pages.forEach(
+    (sections, page2) => sections.forEach(
+      (section) => section.indices.forEach((index) => {
+        map[index] = page2;
+      })
+    )
+  );
+  return map;
+}
+function spellPageMap(map) {
+  const runs = [];
+  let start = 0;
+  for (let i2 = 1; i2 <= map.length; i2++) {
+    if (i2 === map.length || map[i2] !== map[start]) {
+      runs.push(`${map[start]}.${i2 - start}`);
+      start = i2;
+    }
+  }
+  return runs.join("-");
+}
+var RUN_RE = /^(\d+)\.([1-9]\d*)$/;
+function parsePageMap(raw, optionCount) {
+  const runs = (raw === "" ? [] : raw.split("-")).map(
+    (run2) => RUN_RE.exec(run2)
+  );
+  if (runs.some((run2) => run2 === null)) {
+    return {
+      ok: false,
+      problem: `a page layout is runs of <page>.<length> joined by "-", got ${JSON.stringify(raw)}`
+    };
+  }
+  const parsed2 = runs.map((run2) => ({
+    page: Number(run2[1]),
+    length: Number(run2[2])
+  }));
+  const covered = parsed2.reduce((sum, run2) => sum + run2.length, 0);
+  if (covered !== optionCount) {
+    return {
+      ok: false,
+      problem: `a page layout of ${covered} option(s) does not cover the ${optionCount} option(s) now in the list`
+    };
+  }
+  return {
+    ok: true,
+    map: parsed2.flatMap((run2) => new Array(run2.length).fill(run2.page))
+  };
+}
+var pageCount = (map) => map.length === 0 ? 0 : Math.max(...map) + 1;
+function pageShown(cursor, holding2, pages) {
+  const raw = parseInt(cursor, 10);
+  if (!Number.isInteger(raw)) return 0;
+  return raw < 0 ? holding2 : Math.min(raw, pages - 1);
+}
+var pageHolding = (map, index) => map[index] ?? 0;
 
 // src/render/band-style.ts
 init_globals();
@@ -68278,6 +68303,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
     navReserve
   );
   const pageMap = pageMapOf(pages, apply2.options.length);
+  const centre = "stateVar" in apply2 ? ruledName(renderBinding(runtime, "picker"), apply2) : "";
   const spelledPageMap = spellPageMap(pageMap);
   const pageIdx = pageShown(
     readVar(store, page2.stateVar),
@@ -68291,7 +68317,14 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
   const pageTurn = (by) => actionTarget([
     {
       verb: VERB_TURN_PAGE,
-      args: [sessionId2, applyName, page2.key, String(by), spelledPageMap]
+      args: [
+        sessionId2,
+        applyName,
+        page2.key,
+        String(by),
+        spelledPageMap,
+        centre
+      ]
     }
   ]);
   const closeWrite = close.kind === "led" ? [] : [
@@ -68316,19 +68349,9 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
   ];
   nav.push(
     ...steps2.map(
-      ({ glyph, step: step4 }) => linkFragment(
+      ({ glyph, effects }) => linkFragment(
         glyph,
-        actionTarget(
-          realizeRing(
-            declared,
-            applyName,
-            step4,
-            [page2.key, spelledPageMap],
-            store,
-            sessionId2,
-            "swatches"
-          )
-        ),
+        actionTarget(effects([page2.key, spelledPageMap])),
         false
       )
     )
@@ -68447,7 +68470,8 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
-  const store = renderBinding(runtime, "carousel").store;
+  const binding = renderBinding(runtime, "carousel");
+  const { store } = binding;
   if (!store.has(apply2.stateVar)) {
     throw new Error(
       `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
@@ -68457,16 +68481,16 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
   const sessionId2 = clickSession(runtime, "carousel");
   const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const shown = options[ringAround(options, readVar(store, apply2.stateVar))(0)];
+  const shown = options[centreOf(options, readVar(store, apply2.stateVar))];
   const step4 = (by) => actionTarget(
     realizeRing(
       declared,
+      apply2,
       applyName,
       stepOffset(by),
       [],
-      store,
-      sessionId2,
-      "carousel"
+      binding,
+      sessionId2
     )
   );
   return assemble([
@@ -68540,6 +68564,11 @@ function requireSwatchable(runtime, applyName, helper) {
       `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
     );
   }
+  if (!renderBinding(runtime, helper).store.has(apply2.stateVar)) {
+    throw new Error(
+      `${helper} references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to draw \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
+    );
+  }
   if (apply2.paletteOf === void 0) {
     throw new Error(
       `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
@@ -68597,10 +68626,25 @@ function swatchesFuncs(runtime, activeSegment) {
         const drawnAt = activeSegment.drawnAt();
         const { options } = apply2;
         const count = options.length;
+        const binding = renderBinding(runtime, "swatches");
+        const sessionId2 = clickSession(runtime, "swatches");
+        const declared = runtime.compiled.get(applyName);
+        const ring = (glyph, step4) => ({
+          glyph,
+          effects: (turn) => realizeRing(
+            declared,
+            apply2,
+            applyName,
+            step4,
+            turn,
+            binding,
+            sessionId2
+          )
+        });
         const steps2 = [
-          { glyph: CAROUSEL_PREV, step: stepOffset(-1) },
-          { glyph: SWATCHES_RANDOM, step: STEP_RANDOM },
-          { glyph: CAROUSEL_NEXT, step: stepOffset(1) }
+          ring(CAROUSEL_PREV, stepOffset(-1)),
+          ring(SWATCHES_RANDOM, STEP_RANDOM),
+          ring(CAROUSEL_NEXT, stepOffset(1))
         ];
         const [line] = renderPicker(
           applyName,
@@ -69555,7 +69599,8 @@ var ViewParts = class {
       },
       get layout() {
         return phase.ruling ? void 0 : layout;
-      }
+      },
+      selections: () => this.selections()
     };
     this.layout = this.derive("layout", source.layoutReadsInstant, () => {
       const root = source.roots.get(drawn.preset);
@@ -75988,15 +76033,8 @@ function stateKeyShown(config, sessionPick, key) {
   return sessionPick(key);
 }
 function configKeyShown(config, sessionPick, key) {
-  const setting = CONFIG_KEY_TO_SETTING.get(key);
-  if (setting !== void 0) {
-    return sessionSettingValue(config, sessionPick, setting);
-  }
-  const field = configOnlyField(key);
-  if (field !== void 0) {
-    return sessionConfigOnlyValue(config, sessionPick, field);
-  }
-  return stateKeyShown(config, sessionPick, key);
+  const field = CONFIG_KEY_TO_SETTING.get(key) ?? configOnlyField(key);
+  return field !== void 0 ? sessionSettingValue(config, sessionPick, field) : stateKeyShown(config, sessionPick, key);
 }
 function configKeySeed(globals, key) {
   const target = parsePersistTarget(key);
@@ -76501,6 +76539,12 @@ function readDeclared(text5, key) {
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   if (node === void 0) return { kind: "none" };
   return node.kind === "number" && Number.isInteger(node.value) ? { kind: "integer", value: node.value } : { kind: "other", source: textOf(text5 ?? "", node) };
+}
+function readDeclaredText(text5, key) {
+  const target = requireValueTarget(key);
+  const doc = docOf(text5 ?? "");
+  const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
+  return node?.kind === "string" ? node.value : void 0;
 }
 function writeValues(store, into, pairs2) {
   writeDrafts(store, into, pairs2, []);
@@ -77086,25 +77130,28 @@ var stepConfig = (args, ctx) => {
     `step-config: ${landing2.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
   );
 };
-function headOf(config, name) {
-  const named2 = config.actions[name];
-  return named2 !== void 0 && "do" in named2 ? config.actions[named2.do[0]] : named2;
+function headFor(config, name) {
+  const action2 = config.actions[name];
+  return action2 === void 0 ? void 0 : headOf(config.actions, action2);
+}
+function optionsOf2(config, head) {
+  const domain = "from" in head ? head.from : "insertSegmentFrom" in head ? head.insertSegmentFrom : void 0;
+  return domain === void 0 ? void 0 : resolveOptionDomain(domain, configOptionDomains(config)).members;
 }
 function ringHeld(ctx, config, head) {
   if (!("from" in head)) return void 0;
   const pick2 = (k) => ctx.sessionState.get(ctx.session, k);
-  const options = resolveOptionDomain(
-    head.from,
-    configOptionDomains(config)
-  ).members;
+  const options = optionsOf2(config, head);
   if ("set" in head)
     return {
+      twin: "set",
       key: head.set,
       options,
       shown: stateKeyShown(config, pick2, head.set)
     };
   if ("persist" in head)
     return {
+      twin: "persist",
       key: head.persist,
       options,
       shown: configKeyShown(config, pick2, head.persist)
@@ -77113,9 +77160,9 @@ function ringHeld(ctx, config, head) {
 }
 function ringOf(verb, ctx, name, twin) {
   const config = sessionConfig(ctx);
-  const head = headOf(config, name);
-  const ring = head === void 0 || !(twin in head) ? void 0 : ringHeld(ctx, config, head);
-  if (ring === void 0) {
+  const head = headFor(config, name);
+  const ring = head === void 0 ? void 0 : ringHeld(ctx, config, head);
+  if (ring === void 0 || ring.twin !== twin) {
     throw new BadVerbArgs(
       `${verb}: "${name}" is not a ${twin} action over a list of options`
     );
@@ -77129,72 +77176,102 @@ function stepOf2(verb, raw) {
   if (!parsed2.ok) throw new BadVerbArgs(`${verb}: ${parsed2.problem}`);
   return parsed2.step;
 }
-function pageMapOfLink(verb, raw) {
-  const parsed2 = parsePageMap(raw);
+function pageMapOfLink(verb, raw, options) {
+  const parsed2 = parsePageMap(raw, options.length);
   if (!parsed2.ok) throw new BadVerbArgs(`${verb}: ${parsed2.problem}`);
   return parsed2.map;
 }
-function turnOf2(verb, raw) {
+function turnOf2(verb, raw, options) {
   if (raw.length === 0) return void 0;
   const [key, layout, ...extra] = raw;
   if (!key || layout === void 0 || extra.length > 0)
     throw new BadVerbArgs(
       `${verb}: a page turn is <pageKey>/<pageLayout>, got ${raw.length} segment(s)`
     );
-  return { key, map: pageMapOfLink(verb, layout) };
+  return { key, map: pageMapOfLink(verb, layout, options) };
 }
 var turnWrites = (turn, options, landed) => turn === void 0 ? [] : [turn.key, String(pageHolding(turn.map, options.indexOf(landed)))];
-var ringState = (args, ctx) => {
-  const [name = "", stepRaw = "", ...turnRaw] = args;
-  const ring = ringOf("ring-state", ctx, name, "set");
-  const turn = turnOf2("ring-state", turnRaw);
-  const next2 = landing(
-    ring.options,
-    ring.shown ?? "",
-    stepOf2("ring-state", stepRaw),
-    ctx.now()
+function landRing(verb, ctx, name, twin, [stepRaw = "", centre = "", ...turnRaw], held) {
+  const ring = ringOf(verb, ctx, name, twin);
+  const turn = turnOf2(verb, turnRaw, ring.options);
+  const from = held(ring) ?? centre;
+  const step4 = stepOf2(verb, stepRaw);
+  const next2 = landing(ring.options, from, step4, ctx.now());
+  ctx.log(
+    "info",
+    `${verb}: ${ring.key} ${JSON.stringify(from)}\u2192${JSON.stringify(next2)} (step ${stepRaw}, session=${ctx.session})`
   );
-  setState([ring.key, next2, ...turnWrites(turn, ring.options, next2)], ctx);
+  return { ring, next: next2, turn: turnWrites(turn, ring.options, next2) };
+}
+var ringState = (args, ctx) => {
+  const [name = "", ...rest2] = args;
+  const { ring, next: next2, turn } = landRing(
+    "ring-state",
+    ctx,
+    name,
+    "set",
+    rest2,
+    (r) => r.shown
+  );
+  setState([ring.key, next2, ...turn], ctx);
 };
 var ringConfig = (args, ctx) => {
   const {
     role,
-    args: [name = "", stepRaw = "", ...turnRaw]
+    args: [name = "", ...rest2]
   } = configArgs("ring-config", args);
-  const ring = ringOf("ring-config", ctx, name, "persist");
-  const turn = turnOf2("ring-config", turnRaw);
-  const next2 = landing(
-    ring.options,
-    ring.shown ?? "",
-    stepOf2("ring-config", stepRaw),
-    ctx.now()
+  const origin = sessionOrigin(ctx);
+  const config = ctx.configFor(origin);
+  const into = heldLayer2(ctx, origin, role);
+  const { ring, next: next2, turn } = landRing(
+    "ring-config",
+    ctx,
+    name,
+    "persist",
+    rest2,
+    (r) => {
+      const declared = readDeclaredText(
+        requireLayerText(
+          into.path,
+          editStore(ctx, ctx.session).read(into.path)
+        ),
+        durableLanding(
+          config,
+          (k) => ctx.sessionState.get(ctx.session, k),
+          r.key
+        ).key
+      );
+      return declared !== void 0 && r.options.includes(declared) ? declared : r.shown;
+    }
   );
   setConfig([role, ring.key, next2], ctx);
-  if (turn !== void 0) setState(turnWrites(turn, ring.options, next2), ctx);
+  if (turn.length > 0) setState(turn, ctx);
 };
 var turnPage = (args, ctx) => {
-  const [name = "", pageKey2 = "", byRaw = "", layout = ""] = args;
+  const [name = "", pageKey2 = "", byRaw = "", layout = "", centre = ""] = args;
   if (!pageKey2) throw new BadVerbArgs("turn-page: <pageKey> is required");
-  if (!STEP_INT_RE.test(byRaw))
-    throw new BadVerbArgs(`turn-page: by must be an integer, got "${byRaw}"`);
-  const map = pageMapOfLink("turn-page", layout);
+  const by = stepOf2("turn-page", byRaw);
+  if (by.kind !== "offset")
+    throw new BadVerbArgs(
+      `turn-page: by must be a whole number of pages, got "${byRaw}"`
+    );
   const config = sessionConfig(ctx);
-  const head = headOf(config, name);
-  if (head === void 0)
-    throw new BadVerbArgs(`turn-page: no action "${name}" to page through`);
+  const head = headFor(config, name);
+  const options = head === void 0 ? void 0 : optionsOf2(config, head);
+  if (head === void 0 || options === void 0)
+    throw new BadVerbArgs(
+      `turn-page: "${name}" lists no options to page through`
+    );
+  const map = pageMapOfLink("turn-page", layout, options);
   const pick2 = (k) => ctx.sessionState.get(ctx.session, k);
-  const ring = ringHeld(ctx, config, head);
+  const inForce = ringHeld(ctx, config, head)?.shown ?? centre;
   const pages = pageCount(map);
-  const holding2 = pageHolding(
-    map,
-    ring?.shown == null ? -1 : ring.options.indexOf(ring.shown)
-  );
   const at = pageShown(
     stateKeyShown(config, pick2, pageKey2) ?? "",
-    holding2,
+    pageHolding(map, options.indexOf(inForce)),
     pages
   );
-  const next2 = Math.max(0, Math.min(at + Number(byRaw), pages - 1));
+  const next2 = Math.max(0, Math.min(at + by.by, pages - 1));
   setState([pageKey2, String(next2)], ctx);
 };
 var save = (args, ctx) => {

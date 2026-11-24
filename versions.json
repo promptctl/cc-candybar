@@ -4,15 +4,22 @@
     {
       "version": "pr-955",
       "ref": "refs/pull/955/merge",
-      "sha": "341c3f1863f20cc07cec9e489c2feae7f3982ce1",
-      "timestamp": "2026-11-24T20:04:52.840Z",
+      "sha": "ea904b29ac0cdc906d955841c627d14ab09fa452",
+      "timestamp": "2026-11-24T20:30:14.834Z",
       "commits": [
         {
-          "sha": "341c3f1863f20cc07cec9e489c2feae7f3982ce1",
+          "sha": "ea904b29ac0cdc906d955841c627d14ab09fa452",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T13:03:45-07:00",
-          "message": "Merge 7729de3c64a5c81fd5ef74e95acfdbb3c3b93964 into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+          "timestamp": "2026-11-24T20:29:08Z",
+          "message": "Merge 8609b4bcf0eb43d96f31227dd2e6988888ad8208 into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+        },
+        {
+          "sha": "8609b4bcf0eb43d96f31227dd2e6988888ad8208",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T13:27:29-07:00",
+          "message": "fix(links): a ring step starts from the layer's file for persist, from the rule's name for a rule-chosen key, and refuses a stale page layout (candybar-host-renderer-x96a.7qi)\n\nLaw review pass 1 on #955.\n"
         },
         {
           "sha": "7729de3c64a5c81fd5ef74e95acfdbb3c3b93964",
@@ -27,28 +34,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T13:03:16-07:00",
           "message": "fix(links): a stepping link carries its step and lands where the key stands when the click arrives (candybar-host-renderer-x96a.7qi)\n\nA carousel's or swatches row's ◀ ▶, the swatches `?` and a picker's page\narrows wrote the option or page the draw had computed. A terminal keeps the\nlink it found when the mouse last moved, so every click after the first wrote\nthe same neighbour and the control moved once however many times it was\nclicked.\n\nThe link now names the action and the step (ring-state, ring-config,\nturn-page). The handler resolves the ring from the clicking session's config\nand the value the bar wears when the click arrives, so N clicks move N steps\nand `?` is one link on every draw that lands an option other than the one\nheld. A picker's page layout rides in the link as runs of pages, since only\nthe draw knows where the width broke them; a swatches step turns the page\nholding its landing in the same handler, because a persist write lands a turn\nlater. Swatches no longer reads the clock, so the extra clock-function channel\nis removed.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-954",
-      "ref": "refs/pull/954/merge",
-      "sha": "f938b5c1b1d836c0c79d52ae4090976c53e2893f",
-      "timestamp": "2026-11-24T19:55:26.424Z",
-      "commits": [
-        {
-          "sha": "f938b5c1b1d836c0c79d52ae4090976c53e2893f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:54:29-07:00",
-          "message": "Merge 93d724adaf8236dbbf1545e4bed3426ffe45aa74 into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
-        },
-        {
-          "sha": "93d724adaf8236dbbf1545e4bed3426ffe45aa74",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:47:17-07:00",
-          "message": "fix(click): a cycle's link carries its step, so N clicks without a redraw land N steps (candybar-host-renderer-x96a.d7h)\n\nA cycle's link (a `{{ action }}` cycle, a persist-cycle, a menu's disclosure\ntoggle) named the member the click would land, read from the draw, so a link\nthe terminal kept from before a click wrote that member again and five clicks\nlanded one step. The link now carries the cycle's members and the click steps\nto the successor of what the key shows when it lands, as a stepper does: the\nnew `cycle-state` and `cycle-config` verbs, resolved by the one cycle rule the\ndraw picks its display with. A link means the same thing on every draw (§7).\n\nTests read what a link lands now through one helper that folds the session's\npicks by the handler's own rule, and identify a menu's opener by its click.\n"
         }
       ]
     },

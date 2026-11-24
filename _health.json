@@ -1,9 +1,9 @@
 {
   "status": "ok",
   "schema": 2,
-  "version_count": 3,
+  "version_count": 2,
   "latest_non_pr": "main",
   "latest_deploy_version": "pr-955",
-  "latest_deploy_sha": "341c3f1863f20cc07cec9e489c2feae7f3982ce1",
-  "generated_at": "2026-11-24T20:04:52.840Z"
+  "latest_deploy_sha": "ea904b29ac0cdc906d955841c627d14ab09fa452",
+  "generated_at": "2026-11-24T20:30:14.834Z"
 }
