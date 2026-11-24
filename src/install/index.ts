@@ -490,7 +490,7 @@ export interface UrlHandlePlan {
 // a second click on one that ran can revert it. It exits 0, as the click may
 // well have landed, and the text claims neither result.
 // `backstop` reads a TIMEOUT as a refusal, which holds only against a daemon
-// that answers a click read in time with its own outcome. A new url-handle
+// that answers a click it has read with its own outcome. A new url-handle
 // against an older daemon is told wrongly for a window: that daemon's TIMEOUT
 // could mean the click ran. The window is short, since the daemon restarts when
 // the binary changes, and the cure, a protocol version bump, would push every
@@ -500,7 +500,7 @@ const BUSY: {
 } = {
   connect: { why: "the click was never sent; click again", code: 1 },
   backstop: {
-    why: "the daemon read the click after its deadline and refused it; click again",
+    why: "the daemon had not read the click in time and refused it; click again",
     code: 1,
   },
   deadline: {

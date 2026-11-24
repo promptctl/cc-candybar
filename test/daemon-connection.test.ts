@@ -208,8 +208,9 @@ describe("a connection over a stream", () => {
   });
 
   // [LAW:verifiable-goals] A TIMEOUT to a click means its action did not run, so a
-  // click that was read in time is answered with its own outcome, however long
-  // it takes, and a click read after the backstop is the one refused.
+  // click that was read is answered with its own outcome, however long it
+  // takes. Only a click whose frame had not reached the daemon by the time the
+  // backstop answered was told TIMEOUT.
   describe("a click request", () => {
     const CLICK: Request = {
       v: PROTOCOL_VERSION,
@@ -238,6 +239,25 @@ describe("a connection over a stream", () => {
       expect(ended()).toBe(true);
       expect(settle.mock.calls).toEqual([[true]]);
       expect(daemon.stats.inFlight).toBe(0);
+    });
+
+    // A busy daemon runs its expired timers before it reads the socket the
+    // frame arrived on, so the frame is read first and the backstop never
+    // answers it.
+    test("already waiting on the socket when the backstop's timer fires is read, not answered TIMEOUT", async () => {
+      const request = held();
+      const daemon = standIn({ handle: request.handle });
+      const { client, received } = open(daemon);
+      client.write(encodeFrame(CLICK));
+      jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+      await settled();
+      expect(received).toEqual([]);
+      expect(request.timedOut()).toBe(false);
+      expect(daemon.stats.requestsTimedOut).toBe(0);
+
+      request.answer(replyWith());
+      await settled();
+      expect(received).toEqual([ANSWER]);
     });
 
     test("read after the backstop answered is told it was timed out, and its reply goes nowhere", async () => {
@@ -314,11 +334,9 @@ describe("a connection over a stream", () => {
   });
 
   // [LAW:dataflow-not-control-flow] The forwarder's hang-up is its design, not
-  // a client leaving: a url frame stays in flight until handled, no one is
-  // said to have left, and the request deadline still holds over it — so a
-  // click that waited past the deadline is refused, as every client's is
-  // (src/daemon/reply.ts), and a repeat click cannot revert it.
-  test("a url frame whose writer hung up stays in flight, under the deadline, with no client gone", async () => {
+  // a client leaving: a url frame stays in flight until handled, however long
+  // that takes, and no one is said to have left.
+  test("a url frame whose writer hung up stays in flight past the backstop, with no client gone", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });
     const { client } = open(daemon);
@@ -328,11 +346,11 @@ describe("a connection over a stream", () => {
     expect(request.clientLeft()).toBe(false);
     expect(request.timedOut()).toBe(false);
 
-    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS * 3);
     await settled();
-    expect(request.timedOut()).toBe(true);
+    expect(request.timedOut()).toBe(false);
     expect(request.clientLeft()).toBe(false);
-    expect(daemon.stats.requestsTimedOut).toBe(1);
+    expect(daemon.stats.requestsTimedOut).toBe(0);
     expect(daemon.stats.inFlight).toBe(1);
 
     request.answer(urlAnswer());
@@ -340,9 +358,9 @@ describe("a connection over a stream", () => {
     expect(daemon.stats.inFlight).toBe(0);
   });
 
-  // A busy daemon reads the frame only after the backstop has answered: the
-  // click still runs, refused at its turn, and TIMEOUT stays the socket's one
-  // answer, so a writer that reads a verdict is written nothing more.
+  // A frame that reaches the daemon only after the backstop answered finds
+  // TIMEOUT as the socket's one answer, so a writer that reads a verdict is
+  // written nothing more.
   test("a url frame read after the backstop answered is told nothing more, with no client gone", async () => {
     let land = () => {};
     const landed = new Promise<void>((done) => (land = done));
@@ -353,8 +371,9 @@ describe("a connection over a stream", () => {
     // Open on its side after the TIMEOUT, as a writer still waiting for its
     // verdict is, so a second write would be a write after end.
     client.allowHalfOpen = true;
-    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     await settled();
     request.answer(urlAnswer(landed, true));
     await settled();
@@ -433,7 +452,7 @@ describe("a connection over a stream", () => {
   });
 
   // The app is told at once whether its link opened, and the click it carries
-  // runs on under the deadline: a slow click that lands is never told failed.
+  // runs on however long it takes: a slow click that lands is never told failed.
   test("a url frame whose writer reads the verdict is told it at once, and stays in flight until its click lands", async () => {
     let land = () => {};
     const landed = new Promise<void>((done) => (land = done));
@@ -450,7 +469,7 @@ describe("a connection over a stream", () => {
     expect(daemon.stats.inFlight).toBe(1);
     jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
     await settled();
-    expect(request.timedOut()).toBe(true);
+    expect(request.timedOut()).toBe(false);
     expect(received).toHaveLength(1);
     land();
     await settled();
@@ -903,10 +922,10 @@ describe("a connection over a stream", () => {
       send(SUBSCRIBE);
       await settled();
 
-      // In one turn, so the subscribe lands while the TIMEOUT is still closing
-      // the stream: not yet destroyed, and a feed attached now would never
-      // hear the close.
+      // The subscribe lands once the TIMEOUT is the socket's answer, and a feed
+      // attached now would never hear the close.
       jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+      await settled();
       request.answer(SUBSCRIBED);
       await settled();
 

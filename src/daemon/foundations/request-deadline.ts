@@ -24,10 +24,10 @@ export const REQUEST_TIMEOUT_MS = 200;
 
 // [LAW:types-are-the-program] Whether the backstop still answers for a request
 // once its frame is read, by kind: the compiler names a kind added to the
-// protocol until it says. A click read in time is answered with its own
-// outcome however long its turn takes, so a TIMEOUT to a click means its frame
-// was unread when the backstop fired: it was refused at its turn, its action did
-// not run, and it can be sent again (src/daemon/reply.ts). A render's TIMEOUT stays
+// protocol until it says. A click the daemon has read is answered with its own
+// outcome however long its turn takes, so a TIMEOUT to a click means no frame
+// of it had reached the daemon when the backstop fired: its action did not
+// run, and it can be sent again (src/daemon/reply.ts). A render's TIMEOUT stays
 // bounded, since the statusline client relies on it for a draw that is slow.
 export const BACKSTOP_BOUNDS_READ: Readonly<Record<Request["kind"], boolean>> =
   {

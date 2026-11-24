@@ -681,10 +681,11 @@ async function clickEvent(
     ["req", String(accepted.id)],
     ["queued", `${spanMs(accepted.at, t0)}ms`],
   ];
-  // When a click still waiting in the mailbox is refused: the daemon's
-  // deadline, or a client that waited for the answer leaving. The connection
-  // knows which clients wait (the forwarder does not), so its `clientLeft`
-  // already says so.
+  // When a click still waiting in the mailbox is refused: its client was told
+  // TIMEOUT, which says the click did not run, or a client that waited for the
+  // answer left. The connection knows which clients wait (the forwarder does
+  // not), so its `clientLeft` already says so. A click is never refused for
+  // how long its turn took to come.
   const click: ClickInFlight = {
     gone: () => timedOut() || clientLeft(),
   };
@@ -692,8 +693,7 @@ async function clickEvent(
   // arm it took, so every click writes its event.
   const outcome = await run(facts, click).catch(failureOf);
   // Whether the client was told TIMEOUT, and whether a client that waited
-  // hung up, by the time the click was done. Only a url frame's click, whose
-  // writer waits for no answer, can land with `timedOut=Y`.
+  // hung up, by the time the click was done.
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N",
@@ -870,8 +870,8 @@ async function handleClick(
   noteFacts(facts, { verb, sid: session ?? "-", renderer: target.name });
   if (session !== null) parts.collector.clicked(session);
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
-  // client took a TIMEOUT or left while it waited never lands, so clicking
-  // again cannot revert a toggle.
+  // client took a TIMEOUT never lands, since TIMEOUT told that client it did
+  // not run, and one whose client left while it waited has no one to answer.
   const delivered = await target.answerClick(session, () =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))
