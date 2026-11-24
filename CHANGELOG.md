@@ -1,3 +1,9 @@
+## [1.237.0](https://github.com/promptctl/cc-candybar/compare/v1.236.15...v1.237.0) (2026-11-24)
+
+### Features
+
+* **host:** a cold host starts from the bundle the install recorded ([#948](https://github.com/promptctl/cc-candybar/issues/948)) ([7574f98](https://github.com/promptctl/cc-candybar/commit/7574f98bc0eebd5439fb90408397ed1194d33958))
+
 ## [1.236.15](https://github.com/promptctl/cc-candybar/compare/v1.236.14...v1.236.15) (2026-11-24)
 
 ### Bug Fixes
