@@ -28663,6 +28663,9 @@ function repoUnreadNotice(gate2) {
 // src/render/diagnostics.ts
 init_globals();
 
+// src/utils/plain.ts
+init_globals();
+
 // site/shims/crypto.ts
 init_globals();
 var import_buffer2 = __toESM(require_buffer(), 1);
@@ -28704,6 +28707,23 @@ function timingSafeEqual(a, b) {
 var randomUUID = () => globalThis.crypto.randomUUID();
 var randomBytes = (n) => import_buffer2.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
 var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/plain.ts
+function ownValue(record2, key) {
+  return Object.hasOwn(record2, key) ? record2[key] : void 0;
+}
+function digestOf(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/index.js
 init_globals();
@@ -42523,7 +42543,10 @@ function editabilityNotice(filePath2, source) {
     return null;
   } catch (e) {
     if (!(e instanceof Json5EditError)) throw e;
-    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
+    return {
+      subject: filePath2,
+      message: `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`
+    };
   }
 }
 function formatIssues(file, issues) {
@@ -49037,25 +49060,12 @@ function worstLevel(list2) {
 var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
 var PAGES = 4096;
-var identifiedBy = (about) => {
-  switch (about.rule) {
-    case "kind":
-      return [about.kind];
-    case "subject":
-      return [about.kind, about.subject];
-    case "text":
-      return [about.kind, about.text];
-  }
-};
 function identityOf(message) {
-  const digest2 = createHash("sha256").update(
-    JSON.stringify([
-      message.severity.level,
-      message.severity.glyph,
-      message.about.rule,
-      ...identifiedBy(message.about)
-    ])
-  ).digest("hex");
+  const digest2 = digestOf([
+    message.severity.level,
+    message.severity.glyph,
+    message.about
+  ]);
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
 var pageKey = (stop2, page2) => String(stop2 * PAGES + page2 + 1);
@@ -49558,13 +49568,16 @@ function placeInserts(config, cells, authored) {
     },
     notices: [...missed].flatMap(
       ([cell3, reasons]) => [...reasons].map(
-        ([reason, trees]) => insertNotice(cell3, `${reason} (in ${trees.join(", ")})`)
+        ([reason, trees]) => insertNotice(cell3, reason, `${reason} (in ${trees.join(", ")})`)
       )
     )
   };
 }
-function insertNotice(cell3, what) {
-  return `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`;
+function insertNotice(cell3, because, what) {
+  return {
+    subject: `${cell3.by.file}#${cell3.by.entry} ${because}`,
+    message: `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`
+  };
 }
 function presetGlobals(config, name) {
   return { ...config.globals, ...presetByName(config.presets, name).globals };
@@ -51503,7 +51516,10 @@ function payloadDeclarationNotices(filePath2, source, declared) {
   return declared.filter(isPayloadInput).map((name) => {
     const line = lineOf(["variables", name]);
     const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
-    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
+    return {
+      subject: `${filePath2}#variables.${name}`,
+      message: `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`
+    };
   });
 }
 function isPayloadInput(name) {
@@ -61025,6 +61041,9 @@ var import_json53 = __toESM(require_dist(), 1);
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
 }
+function droppedPluginAdvisory(d) {
+  return { subject: d.path, message: droppedPluginNotice(d) };
+}
 var DEFINITION_KEYS = /* @__PURE__ */ new Set([
   "data",
   "sources",
@@ -62805,7 +62824,10 @@ function loadConfigSource(path31, source, dflt, ctx, allowedPalettes) {
   return {
     source,
     raw: parsed2.raw,
-    warnings: [...parsed2.warnings, ...plugins2.dropped.map(droppedPluginNotice)],
+    warnings: [
+      ...parsed2.warnings,
+      ...plugins2.dropped.map(droppedPluginAdvisory)
+    ],
     plugins: {
       loaded: plugins2.loaded,
       dropped: plugins2.dropped,
@@ -62903,7 +62925,7 @@ function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
   const isReached = (d) => reached.has(d.path);
   const surfaced = plugins2.dropped.filter(isReached);
   const unreached = plugins2.dropped.filter((d) => !isReached(d));
-  trace.warned(surfaced.map(droppedPluginNotice));
+  trace.warned(surfaced.map(droppedPluginAdvisory));
   const rendering = layers.at(-1)?.plugins.rendering ?? plugins2.rendering;
   const installed = {
     checkout: ctx.checkout,
@@ -63052,6 +63074,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
               ...acc.refused,
               insertNotice(
                 cell3,
+                "refused",
                 `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why}`
               )
             ]
@@ -65022,26 +65045,6 @@ function holds(doc, path31) {
 
 // src/config/config-snapshot.ts
 init_globals();
-
-// src/utils/plain.ts
-init_globals();
-function ownValue(record2, key) {
-  return Object.hasOwn(record2, key) ? record2[key] : void 0;
-}
-function digestOf(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
-
-// src/config/config-snapshot.ts
 function revisionOf(snapshot) {
   return { snapshot, digest: digestOf(snapshot) };
 }
@@ -70098,9 +70101,10 @@ function declareDslVariables(config, registry, cwd2, scopes) {
         projections.has(name) ? "projection" : "computed"
       );
     } catch (err) {
-      loadWarnings.push(
-        `Variable "${name}": ${err.message ?? String(err)}`
-      );
+      loadWarnings.push({
+        subject: `variables.${name}`,
+        message: `Variable "${name}": ${err.message ?? String(err)}`
+      });
     }
   }
   return loadWarnings;
@@ -73587,18 +73591,24 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
   const questions = repoQuestions(entry.revision.snapshot.repo, sessionId2);
-  const sourced = (about, text4) => ({ about, text: text4, copy: text4 });
-  const said3 = (kind, text4) => sourced(aboutText(kind, text4 ?? ""), text4);
+  const said3 = (kind, text4) => text4 == null ? [] : [{ about: aboutText(kind, text4), text: text4, copy: text4 }];
   const { daemon: daemon2 } = document;
   const daemonEvents = daemonEventsAt(daemon2.held, at, drawing2.by);
   const threw2 = daemonEvents.filter(isThrew);
   const errors2 = [
-    said3("refused-args", refusedArgsError(req.refusedArgs)),
-    said3("hints", hintsError),
-    sourced(
-      aboutKind("load"),
-      configAccess.kind === "unavailable" ? configAccess.error : null
-    ),
+    ...said3("refused-args", refusedArgsError(req.refusedArgs)),
+    ...said3("hints", hintsError),
+    // A load's error is about the session's config, and a drop about the file
+    // that wrote it, so their text may change under an open viewer (an issue
+    // fixed) without becoming another message. A drop copies the prompt that
+    // fixes it.
+    ...configAccess.kind === "unavailable" ? [
+      {
+        about: aboutKind("load"),
+        text: configAccess.error,
+        copy: configAccess.error
+      }
+    ] : [],
     ...state.dropped.map(
       (e) => ({
         about: aboutSubject("dropped", e.file),
@@ -73606,7 +73616,7 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
         copy: e.prompt
       })
     ),
-    said3("click", clickShown?.text),
+    ...said3("click", clickShown?.text),
     // [LAW:no-silent-failure] A daemon task that threw is a fault in the
     // daemon, an error on every bar. Each task is one message about itself,
     // however often it threw.
@@ -73617,27 +73627,27 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
         copy: shown.event.text
       })
     )
-  ].flatMap(
-    ({ about, text: text4, copy: copy2 }) => text4 != null && copy2 != null ? [{ about, text: text4, copy: copy2 }] : []
-  );
+  ];
   const configWatch = entry.revision.snapshot.watch;
   const eventsShown = daemonEvents.map(({ shown }) => shown).filter(({ event }) => !event.answered);
-  const daemonWarnings = daemonEvents.filter(isWarned).map(({ shown, hold: hold2 }) => {
-    const warning = { kind: shown.kind, message: shown.event.text, hold: hold2 };
-    return { warning, about: aboutSubject(warning.kind, shown.about) };
-  });
+  const daemonWarnings = daemonEvents.filter(isWarned).map(
+    ({ shown, hold: hold2 }) => ({
+      warning: { kind: shown.kind, message: shown.event.text, hold: hold2 },
+      subject: shown.about
+    })
+  );
   const standing2 = [
     ...daemon2.fileEvents.map(alone),
     ...daemon2.launcher === null ? [] : [alone(daemon2.launcher)],
     ...daemonWarnings,
     ...configWatch === null ? [] : [alone({ kind: "config-watch", message: configWatch })],
-    // [LAW:one-source-of-truth] The loader hands a load's warnings over as
-    // their words alone, so the words are all a load warning is: two with other
-    // words are two messages, and fixing one leaves the other's identity put.
+    // [LAW:one-source-of-truth] A load's warnings arrive with the subject
+    // their producer knew, so fixing one leaves another's identity put
+    // whatever its words (a line number) become.
     ...entry.lastWarnings.map(
-      (message) => ({
+      ({ subject, message }) => ({
         warning: { kind: "load", message },
-        about: aboutText("load", message)
+        subject
       })
     ),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
@@ -73657,13 +73667,12 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     errors2,
     questions,
     [
-      // A standing warning names the rule that makes it one message; a
-      // render warning is about its whole description.
-      ...standing2.map(({ warning, about }) => ({
-        about,
-        text: warning.message,
-        copy: warning.message
+      ...standing2.map((one) => ({
+        about: standingAbout(one),
+        text: one.warning.message,
+        copy: one.warning.message
       })),
+      // A render warning is about its whole description.
       ...presentations.warnings(sessionId2, drawing2.by, config).map(({ key, warning }) => ({
         about: aboutText(warning.kind, key),
         text: warning.message,
@@ -73760,7 +73769,7 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
   const faults = [
     ...errors2.map(({ about, text: text4 }) => faultAbout("error", about, text4)),
     ...standing2.map(
-      ({ warning, about }) => faultAbout("warning", about, warning.message)
+      ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
     ),
     ...warnings.map(
       ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
@@ -73864,8 +73873,9 @@ function daemonEventsAt(held, at, render3) {
 }
 var alone = (warning) => ({
   warning,
-  about: aboutKind(warning.kind)
+  subject: void 0
 });
+var standingAbout = ({ warning, subject }) => subject === void 0 ? aboutKind(warning.kind) : aboutSubject(warning.kind, subject);
 function answerRequest(parts, req, presentation, facts) {
   var _stack = [];
   try {
@@ -93058,9 +93068,10 @@ function sessionPlugins(roots, checkout, files = discoveryFiles()) {
   const notices = [];
   for (const { root, scope, listed } of roots) {
     if ("error" in listed) {
-      notices.push(
-        `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
-      );
+      notices.push({
+        subject: listed.path,
+        message: `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
+      });
       continue;
     }
     for (const name of listed.folders) {
@@ -93072,7 +93083,10 @@ function sessionPlugins(roots, checkout, files = discoveryFiles()) {
       strays.push({ path: import_node_path34.default.join(root, name), scope });
   }
   if (checkout.kind === "failed")
-    notices.push(`Checkout could not be read: ${checkout.reason}`);
+    notices.push({
+      subject: "checkout",
+      message: `Checkout could not be read: ${checkout.reason}`
+    });
   return {
     plugins: [...byNs.values()].map(
       (file) => readDefinition(file.path, file.scope, files)
@@ -93135,11 +93149,15 @@ function discover(query, shared) {
     (at) => layerOf(at.role, at.path, at.content, locs.home, shared)
   );
   const { unreadIdentity } = project;
+  const advisoryFor = (subject, message) => message === null ? null : { subject, message };
   const notices = [
-    configCollisionNotice(locations2),
-    configResolutionNotice(resolution),
-    repoUnreadNotice(project),
-    unreadIdentity === null ? null : `Repository identity could not be read: ${unreadIdentity.dir} \u2014 ${unreadIdentity.reason}`,
+    advisoryFor("config collision", configCollisionNotice(locations2)),
+    advisoryFor("config resolution", configResolutionNotice(resolution)),
+    advisoryFor("repository answers", repoUnreadNotice(project)),
+    unreadIdentity === null ? null : {
+      subject: `repository identity ${unreadIdentity.dir}`,
+      message: `Repository identity could not be read: ${unreadIdentity.dir} \u2014 ${unreadIdentity.reason}`
+    },
     ...session.notices
   ].filter((n) => n !== null);
   return {

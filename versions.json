@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-953",
+      "ref": "refs/pull/953/merge",
+      "sha": "9e5963bab8ea89b26f674cf23c74d6ef0cfd5a10",
+      "timestamp": "2026-11-24T18:48:08.691Z",
+      "commits": [
+        {
+          "sha": "9e5963bab8ea89b26f674cf23c74d6ef0cfd5a10",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T18:46:49Z",
+          "message": "Merge a07446f39391172d1b847428bfa0a69f24774dd4 into 6c7c981b224e645054c0e73a3bc2c8cd0e347174\n"
+        },
+        {
+          "sha": "a07446f39391172d1b847428bfa0a69f24774dd4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T11:46:36-07:00",
+          "message": "fix(diagnostics): a load warning carries the subject its producer knew, so fixing one leaves the viewer on another whose line moved (candybar-law-review-ibyq.aa1)\n"
+        },
+        {
+          "sha": "3d7dac14e56961cef0bc634cdcccc82abb20eb8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T11:28:16-07:00",
+          "message": "fix(diagnostics): a message's about carries the rule that names it, so two load warnings are two messages\n\nabout was a bare string built four ways, and every load warning was about the bare kind, so two shared an identity and only list position told them apart: fixing the first left a viewer open on the second closed.\n\nabout is now a kind, a kind's subject, or the message's own text, built by its constructor, and the identity hashes each by rule. A load warning is about its text; the fault note reads its kind and subject from the same value.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-951",
       "ref": "refs/pull/951/merge",
       "sha": "80b562bb9c2fe89e6e8e57247096c2101decf190",
@@ -62,28 +91,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T08:36:50-07:00",
           "message": "feat(host): each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer\n\nThe backstop judged the host and its renderer as one sum, so one renderer's\nleak would have ended the daemon and every session's bar. Each process is now\nread at one moment and judged on its own charge. A renderer past the limit has\nits memory report and heap snapshot written under an identity naming it, and\nis ended through its supervisor, which starts it again as one that crashed;\nevery other renderer keeps drawing. The host past the limit ends the daemon as\nbefore.\n\nThe stats reply carries the host's memory and one panel per renderer: where\nits memory is (the host's process, no process and why, or its own process\nagainst the limit), its mailbox, and what it answered of itself or why it gave\nno answer. One down renderer fails only its own panel. The renderer-held\ncounts (render cache, effect cache, menu idle, turns, session state, frames\ndrawn) move from the top level onto the panels, and the restart forecast gives\nway to each reading's near-limit flag.\n\nA renderer the host has begun to end reads as not running, so a reading\nbetween its end and its exit cannot breach it twice.\n\nTicket: candybar-host-renderer-x96a.8xv\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-953",
-      "ref": "refs/pull/953/merge",
-      "sha": "1ffa34fd8950de9044794335b31db73012ff463e",
-      "timestamp": "2026-11-24T18:29:47.932Z",
-      "commits": [
-        {
-          "sha": "1ffa34fd8950de9044794335b31db73012ff463e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T11:28:34-07:00",
-          "message": "Merge 3d7dac14e56961cef0bc634cdcccc82abb20eb8c into 6c7c981b224e645054c0e73a3bc2c8cd0e347174\n"
-        },
-        {
-          "sha": "3d7dac14e56961cef0bc634cdcccc82abb20eb8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T11:28:16-07:00",
-          "message": "fix(diagnostics): a message's about carries the rule that names it, so two load warnings are two messages\n\nabout was a bare string built four ways, and every load warning was about the bare kind, so two shared an identity and only list position told them apart: fixing the first left a viewer open on the second closed.\n\nabout is now a kind, a kind's subject, or the message's own text, built by its constructor, and the identity hashes each by rule. A load warning is about its text; the fault note reads its kind and subject from the same value.\n"
         }
       ]
     },
