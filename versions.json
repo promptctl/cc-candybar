@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-945",
-      "ref": "refs/pull/945/merge",
-      "sha": "08beaf551956c20fb6f6e483a432f60749d297e5",
-      "timestamp": "2026-11-24T01:52:31.101Z",
-      "commits": [
-        {
-          "sha": "08beaf551956c20fb6f6e483a432f60749d297e5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:51:12-07:00",
-          "message": "Merge fdfdc022ea977646315f082270feb244172ff10b into 4c0197b0fdcaae7d8fed955746d9c7f65ca0a2d7\n"
-        },
-        {
-          "sha": "fdfdc022ea977646315f082270feb244172ff10b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:50:55-07:00",
-          "message": "fix(release): the Publish job's cap sits above the registry wait publish.mjs budgets (brandon-unfiled-3248.frhb)\n\npublish.mjs waits up to 10 minutes for the registry to serve the platform\npackages; the job was capped at 5. v1.236.13's wait ran past four minutes and\nthe job was cancelled with its packages already accepted.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "4c0197b0fdcaae7d8fed955746d9c7f65ca0a2d7",
-      "timestamp": "2026-11-24T01:41:26.173Z",
+      "sha": "75172bc2fc5c0d9718f43b5f28f3f7bc194d4306",
+      "timestamp": "2026-11-24T01:55:16.151Z",
       "commits": [
         {
-          "sha": "4c0197b0fdcaae7d8fed955746d9c7f65ca0a2d7",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T01:39:57Z",
-          "message": "chore(release): set `package.json` to 1.236.13\n\n## [1.236.13](https://github.com/promptctl/cc-candybar/compare/v1.236.12...v1.236.13) (2026-11-24)\n\n### Bug Fixes\n\n* **release:** Publish job uses npm trusted publishing, no stored token ([#943](https://github.com/promptctl/cc-candybar/issues/943)) ([5ed9505](https://github.com/promptctl/cc-candybar/commit/5ed95054ad70e3716ce635aee35e03ee0896831f))\n"
+          "sha": "75172bc2fc5c0d9718f43b5f28f3f7bc194d4306",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T18:54:04-07:00",
+          "message": "fix(release): the Publish job's cap sits above the registry wait (#945)\n\nfix(release): the Publish job's cap sits above the registry wait publish.mjs budgets (brandon-unfiled-3248.frhb)\n\npublish.mjs waits up to 10 minutes for the registry to serve the platform\npackages; the job was capped at 5. v1.236.13's wait ran past four minutes and\nthe job was cancelled with its packages already accepted."
         }
       ]
     }
