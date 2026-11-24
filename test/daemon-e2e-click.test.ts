@@ -15,7 +15,7 @@ import {
 import type { RequestId } from "../src/renderer-interface/interface";
 import { timeoutResponse } from "../src/daemon/foundations/request-deadline";
 import { click } from "./helpers/daemon-e2e";
-import { prepareIsolatedDaemonEnv } from "../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
 const TIMEOUT = (request: number): Response =>
   timeoutResponse(request as RequestId);

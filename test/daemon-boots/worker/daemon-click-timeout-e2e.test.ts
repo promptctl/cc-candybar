@@ -32,7 +32,7 @@ import { heldClock } from "../../helpers/held-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { openedOn } from "../../helpers/opened-connection";
 import { hearingEvents, holdable } from "../../helpers/renderers";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../../scripts/lib/until";
 import { fieldsOf } from "../../../src/utils/logfmt";
 

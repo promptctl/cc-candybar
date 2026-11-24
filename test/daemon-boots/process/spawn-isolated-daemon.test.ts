@@ -6,8 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { waitForExit } from "../../../scripts/lib/daemon/wire";
-import { prepareIsolatedDaemonEnv, type IsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
-import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import { type IsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 
 // An isolated env whose socket parent is open to its group and world, which the
 // daemon refuses before it binds anything

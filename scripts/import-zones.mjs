@@ -3,8 +3,9 @@
 // The CLI dispatches to every process. The renderer process constructs its
 // core using the shared contract and has no host dependencies. The test suite
 // is Jest's alone: what runs outside Jest (src, and the tools in scripts/,
-// site/ and proto-looks/) imports nothing from it, and what a tool and a test
-// share lives in scripts/lib/, which the tests import.
+// site/ and proto-looks/) imports nothing from it. What a tool and a test
+// share lives in scripts/lib/, which imports only the app and itself, so it
+// never loads a tool's entry. The tests may import the tools they test.
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -42,21 +43,32 @@ const ZONE_ROWS = {
   // The renderer process's composition root, the counterpart of the daemon's.
   "src/renderer-process.ts": "renderer-process",
   "test/": "test",
+  "scripts/lib/": "lib",
   "scripts/": "tools",
   "site/": "tools",
   "proto-looks/": "tools",
 };
 const rendererDependencies = ["renderer", "start", "shared"];
-const ZONE_IMPORTS = {
+// Every zone of the app in src, which its root and everything outside src may
+// import.
+const APP = ["renderer", "start", "shared", "rest", "root", "renderer-process"];
+export const ZONE_IMPORTS = {
   renderer: rendererDependencies,
   start: rendererDependencies,
   shared: ["shared"],
   rest: ["rest", "start", "shared"],
   "renderer-process": rendererDependencies,
-  root: ["renderer", "start", "shared", "rest", "root", "renderer-process"],
-  tools: ["renderer", "start", "shared", "rest", "root", "renderer-process", "tools"],
-  test: ["renderer", "start", "shared", "rest", "root", "renderer-process", "tools", "test"],
+  root: APP,
+  lib: [...APP, "lib"],
+  tools: [...APP, "lib", "tools"],
+  test: [...APP, "lib", "tools", "test"],
 };
+
+// The directories of code that runs outside Jest beside the app: the tools,
+// and what they share with the tests. eslint.tools.config.mjs lints them.
+export const OUTSIDE_JEST_ROOTS = Object.entries(ZONE_ROWS)
+  .filter(([, zone]) => zone === "tools" || zone === "lib")
+  .map(([row]) => row);
 
 export const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
 const ZONE_KEYS = Object.entries(ZONE_ROWS)

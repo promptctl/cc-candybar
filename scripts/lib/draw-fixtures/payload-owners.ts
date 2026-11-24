@@ -21,7 +21,7 @@ import type { ManagedStorage } from "../../../src/daemon/cache/managed-storage";
 
 // [LAW:no-silent-failure] The storage owner of a rig whose configs declare no
 // plugin source: a subscription naming one is a test that needs a real owner.
-export const NO_STORAGE: Pick<ManagedStorage, "declare"> = {
+const NO_STORAGE: Pick<ManagedStorage, "declare"> = {
   declare: (_holds, folder) => {
     throw new Error(`this rig reads no plugin source (${folder})`);
   },

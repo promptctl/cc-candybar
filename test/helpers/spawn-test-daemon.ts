@@ -5,6 +5,7 @@
 import {
   SOURCE_ENTRY,
   spawnDaemonProcess,
+  type AcquireSlot,
   type DaemonEntry,
   type DaemonProcess,
 } from "../../scripts/lib/daemon/process";
@@ -23,6 +24,10 @@ export const daemonPool: DaemonPool = createDaemonPool(
   DEFAULT_POOL_SIZE,
   processProbe,
 );
+
+// [LAW:one-source-of-truth] How a daemon the suite starts takes its place
+// under the machine's ceiling.
+export const fromThePool: AcquireSlot = () => daemonPool.acquire();
 
 // A daemon's slot is held in the jest worker's name, so while the worker lives
 // a daemon that is alive, stopped or not, counts against the machine's

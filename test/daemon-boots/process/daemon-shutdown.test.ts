@@ -7,8 +7,8 @@ import { leasePathFor, sessionStatePath } from "../../../src/daemon/paths";
 import { readLease } from "../../../src/daemon/socket-lease";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { click, render, drawnLink } from "../../helpers/daemon-e2e";
-import { prepareIsolatedDaemonEnv, type IsolatedDaemonHandle, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
-import { spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
+import { type IsolatedDaemonHandle, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
 import {
   sendDaemonRequest,
   waitForExit,

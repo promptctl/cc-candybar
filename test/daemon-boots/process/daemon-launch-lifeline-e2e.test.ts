@@ -12,8 +12,10 @@ import path from "node:path";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
-import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import {
+  prepareIsolatedDaemonEnv,
+  spawnDaemonWithEnv,
+} from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);

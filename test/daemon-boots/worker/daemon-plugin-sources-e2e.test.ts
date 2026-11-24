@@ -29,7 +29,7 @@ import {
   statsOf,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { loggedWhen, renderLines } from "../../../scripts/lib/daemon/log";
 import { valueOf } from "../../../src/utils/logfmt";
 import { effectsOf } from "../../helpers/click";
@@ -103,7 +103,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   });
 
   // The request the client sends for this session.
-  const body = (): Record<string, unknown> => ({
+  const body = () => ({
     hookData: hookData(SESSION, projectDir),
     args: ["cc-candybar", "--config", config],
     cwd: projectDir,

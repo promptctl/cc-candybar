@@ -103,6 +103,21 @@ describe("a connection to a daemon built in this worker", () => {
     return decodeAnsi(response.output).plain;
   };
 
+  // [LAW:no-ambient-temporal-coupling] A feed draws without waiting for a
+  // value still loading (the mark's cost, from the session's usage), and draws
+  // again when it lands, so what a case reads is the frame that shows `text`,
+  // not whichever frame came first.
+  const showing = async (opened: Opened, text: string): Promise<string> => {
+    const frames = () => opened.received.map(drawn);
+    let shown: string | undefined;
+    await until(
+      () =>
+        (shown = frames().find((frame) => frame.includes(text))) !== undefined,
+      () => `a frame showing "${text}"; received:\n${frames().join("\n")}`,
+    );
+    return shown!;
+  };
+
   // [LAW:no-ambient-temporal-coupling] The backstop here is the real one, and a
   // cold first render on a loaded runner outlasts it, so a render goes through
   // the helper that asks again on TIMEOUT.
@@ -156,7 +171,7 @@ describe("a connection to a daemon built in this worker", () => {
       sessionId: "connection-feed",
       lane: "statusline",
     } as Request);
-    expect(drawn(await answered(feed))).toContain("a drawn mark");
+    await showing(feed, "a drawn mark");
     expect(running.daemon.stats.inFlight).toBe(0);
     feed.client.destroy();
   });
@@ -263,8 +278,7 @@ describe("a connection to a daemon built in this worker", () => {
         sessionId: "pane-warning",
         lane: "pane",
       } as Request);
-      const pane = drawn(await answered(feed));
-      expect(pane).toContain("a drawn mark");
+      const pane = await showing(feed, "a drawn mark");
       expect(pane).toMatch(/⚠\s+1/);
       expect(await held()).toMatchObject({ revision: 1, answered: true });
     } finally {
@@ -390,7 +404,7 @@ describe("a connection to a daemon built in this worker", () => {
       live = openedOn(running.connect());
       live.send(request);
       await clock.settle(0);
-      expect(drawn(await answered(live))).toContain("a drawn mark");
+      await showing(live, "a drawn mark");
       expect((await statsOf(daemon)).frameFeeds).toMatchObject({
         feeds: 1,
         subscribers: 1,
@@ -609,7 +623,7 @@ describe("a connection to a daemon built in this worker", () => {
         expect(drawn(await answered(fresh))).toContain("a drawn mark 11");
         expect((await queuedDraw).mailbox.queued).toBeGreaterThan(0);
         await clock.settle(0);
-        expect(drawn(await answered(pane))).toContain("a drawn mark 97");
+        await showing(pane, "a drawn mark 97");
         expect(contexts).toEqual(["draw-a", "draw-b", "draw-a"]);
         expect(expiring.received).toHaveLength(1);
         expect(draws).toEqual(["draw-a"]);

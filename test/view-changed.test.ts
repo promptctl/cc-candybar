@@ -21,7 +21,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
-import { TEST_ENV } from "./helpers/session-environment";
+import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,7 +74,7 @@ function setUp() {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const runs = heldRuns(unscriptedLauncher, TEST_ENV, cleanups);
+  const runs = heldRuns(unscriptedLauncher, TEST_ENVIRONMENT, cleanups);
   const changed: string[] = [];
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
@@ -133,7 +133,10 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   await sleep(1000);
   expect(changed).toHaveLength(settled);
   writeAtomic(status, "red");
-  await until(() => held.view.store.stored("status") === "red", "the new value");
+  await until(
+    () => held.view.store.stored("status") === "red",
+    "the new value",
+  );
   expect(changed).toHaveLength(settled + 1);
   await sleep(300);
   expect(changed).toHaveLength(settled + 1);

@@ -19,9 +19,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { socketIn } from "./layout";
 import {
   spawnDaemonProcess,
-  type Admission,
+  type AcquireSlot,
   type DaemonEntry,
 } from "./process";
 import { sendDaemonRequest, type ExitResult } from "./wire";
@@ -29,6 +30,8 @@ import { logPath } from "../../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 
 export interface IsolatedDaemonEnv {
+  // The temporary directory everything below is under, removed with them.
+  root: string;
   env: NodeJS.ProcessEnv;
   sockPath: string;
   stateDir: string;
@@ -37,7 +40,8 @@ export interface IsolatedDaemonEnv {
 
 // The smaller of the two platform limits, so a path that passes here passes on
 // both. Linux allows 108; there is no gain in letting a test that works on
-// Linux fail on a maintainer's Mac.
+// Linux fail on a maintainer's Mac. The field holds the path's terminating NUL
+// too, so the longest path that binds is one byte shorter.
 const SUN_PATH_MAX = 104;
 
 // `mkdtempSync` replaces a trailing run of six X's — it always appends exactly
@@ -57,13 +61,10 @@ const MKDTEMP_SUFFIX = "XXXXXX";
 // mean a try/finally guarding a case that only exists because the check ran too
 // late [LAW:dataflow-not-control-flow].
 function requireSocketPathFits(tmpPrefix: string): void {
-  const longest = path.join(
-    os.tmpdir(),
-    `${tmpPrefix}-${MKDTEMP_SUFFIX}`,
-    "cc-candybar",
-    "socket",
+  const longest = socketIn(
+    path.join(os.tmpdir(), `${tmpPrefix}-${MKDTEMP_SUFFIX}`),
   );
-  if (Buffer.byteLength(longest) > SUN_PATH_MAX) {
+  if (Buffer.byteLength(longest) >= SUN_PATH_MAX) {
     throw new Error(
       `isolated daemon socket path would be ${Buffer.byteLength(longest)} ` +
         `bytes, over the ${SUN_PATH_MAX}-byte sockaddr_un limit: ${longest}\n` +
@@ -73,47 +74,46 @@ function requireSocketPathFits(tmpPrefix: string): void {
   }
 }
 
-export function prepareIsolatedDaemonEnv(tmpPrefix: string): IsolatedDaemonEnv {
+// The isolated env over `base`, the environment the caller's root runs the
+// daemon in: the test suite's worker env, or a dev tool's shell
+// (scripts/lib/shell.ts). Every directory the daemon writes is under one
+// temporary root, so one removal takes them all.
+export function prepareIsolatedDaemonEnv(
+  tmpPrefix: string,
+  base: NodeJS.ProcessEnv,
+): IsolatedDaemonEnv {
   requireSocketPathFits(tmpPrefix);
-  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${tmpPrefix}-`));
-  const stateDir = path.join(stateRoot, "cc-candybar");
-  // Socket parent must satisfy ensureSocketParentSafe (uid==me + mode 0700).
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const sockPath = path.join(stateDir, "socket");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `${tmpPrefix}-`));
+  const removeTmpDirs = (): void => {
+    fs.rmSync(root, { recursive: true, force: true });
+  };
+  const sockPath = socketIn(root);
+  const stateDir = path.dirname(sockPath);
+  const cache = path.join(root, "cache");
+  const config = path.join(root, "config");
+  try {
+    // Socket parent must satisfy ensureSocketParentSafe (uid==me + mode 0700).
+    fs.mkdirSync(stateDir, { mode: 0o700 });
+    fs.mkdirSync(cache);
+    fs.mkdirSync(config);
+  } catch (e) {
+    removeTmpDirs();
+    throw e;
+  }
 
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...base,
     CC_CANDYBAR_SOCKET: sockPath,
-    XDG_STATE_HOME: stateRoot,
-    XDG_CACHE_HOME: fs.mkdtempSync(
-      path.join(os.tmpdir(), `${tmpPrefix}-cache-`),
-    ),
-    XDG_CONFIG_HOME: fs.mkdtempSync(
-      path.join(os.tmpdir(), `${tmpPrefix}-config-`),
-    ),
+    XDG_STATE_HOME: root,
+    XDG_CACHE_HOME: cache,
+    XDG_CONFIG_HOME: config,
     // Both data locations name a directory with nothing in it, so the daemon
     // finds none of the host's installed plugins.
-    XDG_DATA_HOME: path.join(stateRoot, "data"),
-    XDG_DATA_DIRS: path.join(stateRoot, "data"),
+    XDG_DATA_HOME: path.join(root, "data"),
+    XDG_DATA_DIRS: path.join(root, "data"),
   };
 
-  const removeTmpDirs = (): void => {
-    try {
-      fs.rmSync(stateRoot, { recursive: true, force: true });
-    } catch {}
-    if (env.XDG_CACHE_HOME) {
-      try {
-        fs.rmSync(env.XDG_CACHE_HOME, { recursive: true, force: true });
-      } catch {}
-    }
-    if (env.XDG_CONFIG_HOME) {
-      try {
-        fs.rmSync(env.XDG_CONFIG_HOME, { recursive: true, force: true });
-      } catch {}
-    }
-  };
-
-  return { env, sockPath, stateDir, removeTmpDirs };
+  return { root, env, sockPath, stateDir, removeTmpDirs };
 }
 
 export interface RunningDaemon {
@@ -155,7 +155,7 @@ export interface RunningDaemon {
 // binds, never a caller-supplied guess.
 export async function startDaemonWithEnv(
   env: NodeJS.ProcessEnv,
-  admission: Admission,
+  acquire: AcquireSlot,
   entry?: DaemonEntry,
 ): Promise<RunningDaemon> {
   const sockPath = env.CC_CANDYBAR_SOCKET;
@@ -167,7 +167,7 @@ export async function startDaemonWithEnv(
   }
   const { child, signalDaemon, stop, stderrTail } = await spawnDaemonProcess(
     env,
-    admission,
+    acquire,
     entry,
   );
 
@@ -228,13 +228,18 @@ const READINESS_POLL_MS = 25;
 // exit-based check would catch that case only when the scheduler happened to
 // cooperate. A coin-flip detector for a race is worse than a documented one —
 // see the accepted-incumbent case in test/daemon-boots/process/spawn-isolated-daemon.test.ts.
-type BootPhase = "booting" | "bound" | "serving";
-type FailedPhase = Exclude<BootPhase, "serving">;
-
-export interface ReadinessFailure {
-  readonly phase: FailedPhase;
-  readonly exit: ExitResult | null;
-}
+//
+// A bound socket that never answered carries why its last stats probe did not:
+// while the daemon boots, a refused connect, a dying incumbent's closed
+// socket and a slow reply all mean "not yet", and the one that was still true
+// at the end is the failure's cause.
+export type ReadinessFailure =
+  | { readonly phase: "booting"; readonly exit: ExitResult | null }
+  | {
+      readonly phase: "bound";
+      readonly exit: ExitResult | null;
+      readonly lastProbe: string;
+    };
 
 type Readiness = { readonly phase: "serving" } | ReadinessFailure;
 
@@ -254,15 +259,19 @@ async function awaitReadiness(
   sockPath: string,
 ): Promise<Readiness> {
   const deadline = Date.now() + READINESS_BUDGET_MS;
-  let phase: FailedPhase = "booting";
+  let failed: (exit: ExitResult | null) => ReadinessFailure = (exit) => ({
+    phase: "booting",
+    exit,
+  });
   for (;;) {
     if (fs.existsSync(sockPath)) {
-      phase = "bound";
-      if (await answersStats(sockPath)) return { phase: "serving" };
+      const probe = await probeStats(sockPath);
+      if (probe === "served") return { phase: "serving" };
+      failed = (exit) => ({ phase: "bound", exit, lastProbe: probe });
     }
     const exit = exitedAlready(child);
-    if (exit !== null) return { phase, exit };
-    if (Date.now() >= deadline) return { phase, exit: null };
+    if (exit !== null) return failed(exit);
+    if (Date.now() >= deadline) return failed(null);
     await new Promise((r) => setTimeout(r, READINESS_POLL_MS));
   }
 }
@@ -270,7 +279,7 @@ async function awaitReadiness(
 // [LAW:one-source-of-truth] Node retains the terminal code/signal on the
 // ChildProcess after `exit` fires, which is what makes reading it directly
 // race-free — the same property `waitForExit`'s pre-check reads in
-// daemon-wire.ts. This is that read's polling half: one synchronous look per
+// scripts/lib/daemon/wire.ts. This is that read's polling half: one synchronous look per
 // poll, so no `once("exit")` listener accumulates across iterations. It is asked
 // only while nothing has answered yet, which is the whole window in which a
 // refusal is the explanation.
@@ -279,16 +288,17 @@ function exitedAlready(child: ChildProcess): ExitResult | null {
   return { code: child.exitCode, signal: child.signalCode };
 }
 
-async function answersStats(sockPath: string): Promise<boolean> {
+// "served", or why the round trip did not complete.
+async function probeStats(sockPath: string): Promise<"served" | string> {
   try {
     const resp = await sendDaemonRequest(
       sockPath,
       { v: PROTOCOL_VERSION, kind: "stats" },
       STATS_REPLY_BUDGET_MS,
     );
-    return resp.ok;
-  } catch {
-    return false;
+    return resp.ok ? "served" : `answered ${resp.error} (${resp.code})`;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -304,17 +314,17 @@ export function readinessFailure(
   stderr: string,
 ): string {
   return (
-    `daemon never became ready: ${socketDid(readiness.phase, sockPath)}; ` +
+    `daemon never became ready: ${socketDid(readiness, sockPath)}; ` +
     `${processDid(readiness.exit)}\n${daemonLogTail(env)}\nstderr:\n${stderr}`
   );
 }
 
-function socketDid(phase: FailedPhase, sockPath: string): string {
-  switch (phase) {
+function socketDid(readiness: ReadinessFailure, sockPath: string): string {
+  switch (readiness.phase) {
     case "booting":
       return `no socket at ${sockPath}, so it never got as far as binding`;
     case "bound":
-      return `it bound ${sockPath} but never answered a stats round trip`;
+      return `it bound ${sockPath} but never answered a stats round trip (the last: ${readiness.lastProbe})`;
   }
 }
 
@@ -356,14 +366,17 @@ export interface IsolatedDaemonHandle {
 
 export async function startIsolatedDaemon(
   tmpPrefix: string,
-  admission: Admission,
+  base: NodeJS.ProcessEnv,
+  acquire: AcquireSlot,
   entry?: DaemonEntry,
 ): Promise<IsolatedDaemonHandle> {
-  const { env, sockPath, stateDir, removeTmpDirs } =
-    prepareIsolatedDaemonEnv(tmpPrefix);
+  const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    tmpPrefix,
+    base,
+  );
   let daemon: RunningDaemon;
   try {
-    daemon = await startDaemonWithEnv(env, admission, entry);
+    daemon = await startDaemonWithEnv(env, acquire, entry);
   } catch (e) {
     removeTmpDirs();
     throw e;
@@ -374,11 +387,15 @@ export async function startIsolatedDaemon(
     stateDir,
     cleanup: async (): Promise<void> => {
       // The daemon is gone before its state directory is, since it would
-      // otherwise keep writing its log and lease into it. Safe to call again,
-      // or after the daemon's own exit, because once that exit is seen a stop
-      // sends nothing and only waits.
-      await daemon.stop();
-      removeTmpDirs();
+      // otherwise keep writing its log and lease into it. A stop that fails has
+      // still killed it and seen it exit, so the directories go either way.
+      // Safe to call again, or after the daemon's own exit, because once that
+      // exit is seen a stop sends nothing and only waits.
+      try {
+        await daemon.stop();
+      } finally {
+        removeTmpDirs();
+      }
     },
   };
 }

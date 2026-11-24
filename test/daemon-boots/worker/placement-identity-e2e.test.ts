@@ -28,6 +28,7 @@ import {
 } from "../../../scripts/lib/drive-bar";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { BAR_SESSION_ID as SESSION } from "../../../scripts/lib/hook-data";
+import { WORKER_SHELL } from "../../helpers/session-environment";
 
 jest.setTimeout(60_000);
 
@@ -61,7 +62,14 @@ async function barOf(config: string): Promise<Bar> {
   const file = path.join(dir, "config.json5");
   fs.writeFileSync(file, config);
   bar = await startBar(
-    { width: 200, rows: 60, config: file, cwd: dir, ssh: false },
+    {
+      width: 200,
+      rows: 60,
+      config: file,
+      cwd: dir,
+      ssh: false,
+      shell: WORKER_SHELL,
+    },
     startBarDaemon,
   );
   await bar.render();

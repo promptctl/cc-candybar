@@ -1,8 +1,8 @@
 // [LAW:single-enforcer] The one spawner of a real `cc-candybar daemon`
 // subprocess run from this checkout's source, for the test suite and the dev
-// tools alike. Every start passes through an admission first: the suite's is
-// its machine-wide daemon pool (test/helpers/spawn-test-daemon.ts), a dev
-// tool's admits at once.
+// tools alike. Every start acquires a slot first: the suite's come from its
+// machine-wide daemon pool (test/helpers/spawn-test-daemon.ts), a dev tool's
+// at once.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
@@ -10,20 +10,17 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { daemonArgs, daemonCommand } from "../../../src/daemon/acquire";
+import { systemSpawner } from "../../../src/proc/spawner";
+import { REPO } from "../repo";
 import type { ExitResult } from "./wire";
 
-const REPO_ROOT = process.cwd();
-
-// What a start waits on before it spawns: a slot it holds until the daemon
-// exits, when the slot is released.
-export interface AdmissionSlot {
+// A daemon's place under a ceiling on how many run at once, held until the
+// daemon exits.
+export interface DaemonSlot {
   release(): void;
 }
-export type Admission = () => Promise<AdmissionSlot>;
-
-// A start no ceiling counts: a dev tool's daemon, one per run, which dies
-// with the tool.
-export const unpooled: Admission = async () => ({ release: () => {} });
+// What a start waits on before it spawns.
+export type AcquireSlot = () => Promise<DaemonSlot>;
 
 // Enough of the end of a child's stderr to hold why it died.
 const STDERR_TAIL_BYTES = 4096;
@@ -47,12 +44,12 @@ type DaemonArgs = (script: string, env: NodeJS.ProcessEnv) => string[];
 // its own exec arguments from the state directory, where a bare `tsx` names
 // nothing.
 const TSX_LOADER = pathToFileURL(
-  createRequire(path.join(REPO_ROOT, "package.json")).resolve("tsx"),
+  createRequire(path.join(REPO, "package.json")).resolve("tsx"),
 ).href;
 
-// [LAW:single-enforcer] The one way a test runs the daemon's source: node
-// itself with tsx's loader imported, so the spawned pid IS the daemon and a
-// test's signal reaches the process whose shutdown it tests. The `tsx` CLI is a
+// [LAW:single-enforcer] The one way the daemon's source is run: node itself
+// with tsx's loader imported, so the spawned pid IS the daemon and a test's
+// signal reaches the process whose shutdown it tests. The `tsx` CLI is a
 // wrapper that relays a signal to a worker of its own and SIGKILLs that worker
 // if it has not answered within ~60 ms, so a daemon the scheduler is slow to
 // run dies before its shutdown runs.
@@ -63,7 +60,7 @@ const sourceDaemon =
     args: [
       "--import",
       TSX_LOADER,
-      ...argv(path.join(REPO_ROOT, "src", "index.ts"), env),
+      ...argv(path.join(REPO, "src", "index.ts"), env),
     ],
   });
 
@@ -85,8 +82,8 @@ export interface DaemonProcess {
   // A group that is already gone is the expected case and is ignored; any
   // other refusal throws. Once the daemon's exit has been observed this
   // signals nothing, so a teardown's signal can never reach a reused pid.
-  // [LAW:single-enforcer] A signal never frees the daemon's admission slot: its
-  // exit does, so a test that needs the slot back awaits that exit.
+  // [LAW:single-enforcer] A signal never frees the daemon's slot: its exit
+  // does, so a test that needs the slot back awaits that exit.
   // The signal has no default: a teardown that wants the daemon gone stops it,
   // and this is for a signal meant to leave the daemon running for now.
   signalDaemon(signal: NodeJS.Signals): void;
@@ -133,16 +130,16 @@ function started(child: ChildProcess): Promise<number> {
 
 export async function spawnDaemonProcess(
   env: NodeJS.ProcessEnv,
-  admission: Admission,
+  acquire: AcquireSlot,
   entry: DaemonEntry = SOURCE_ENTRY,
 ): Promise<DaemonProcess> {
-  const slot = await admission();
+  const slot = await acquire();
   let child: ChildProcess;
   let pid: number;
   try {
     const { bin, args } = entry(env);
     child = spawn(bin, args, {
-      cwd: REPO_ROOT,
+      cwd: REPO,
       env,
       stdio: ["ignore", "pipe", "pipe"],
       // New session + process group (pgid = child.pid), so a signal to the
@@ -162,8 +159,10 @@ export async function spawnDaemonProcess(
   // Drain stdio so the child's pipes don't fill and stall.
   child.stdout?.on("data", () => {});
   let stderr = "";
-  child.stderr?.on("data", (chunk: Buffer) => {
-    stderr = (stderr + chunk.toString()).slice(-STDERR_TAIL_BYTES);
+  // Decoded by the stream, so a character split across two chunks arrives whole.
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    stderr = (stderr + chunk).slice(-STDERR_TAIL_BYTES);
   });
   // [LAW:no-ambient-temporal-coupling] 'exit' can land before the pipe's last
   // bytes are read, and a process that dies before its log opens says why only
@@ -172,27 +171,18 @@ export async function spawnDaemonProcess(
     child.once("close", () => resolve(stderr));
   });
 
-  // [LAW:no-silent-failure] Called from teardown paths too, so a group that is
-  // already gone is the expected case. macOS answers ESRCH once the daemon is
-  // reaped, and EPERM while it has exited and is not reaped yet: a group whose
-  // only member is a zombie refuses every signal with EPERM. A live daemon is
-  // this user's, so it never answers EPERM. Anything else (a bad signal name)
-  // means the signal did not land, which a test must hear.
-  const signalGroup = (signal: NodeJS.Signals): void => {
-    try {
-      process.kill(-pid, signal);
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code !== "ESRCH" && code !== "EPERM") throw e;
-    }
-  };
+  // [LAW:single-enforcer] The group is signalled as src signals one it
+  // launched: a group already gone, or one whose members have all exited and
+  // are not yet reaped, takes nothing and is no failure; any other refusal is.
+  const signalGroup = (signal: NodeJS.Signals): void =>
+    systemSpawner.signalGroup(pid, signal);
   // [LAW:no-ambient-temporal-coupling] Where a signal goes is state the exit
   // moves: the daemon's group while it runs, nowhere once its exit is seen,
   // when its pid is free for the kernel to hand to anything.
   let deliver: (signal: NodeJS.Signals) => void = signalGroup;
 
   // [LAW:single-enforcer] The daemon's exit is the one release of its slot,
-  // so a daemon that is alive, stopped or not, holds its admission.
+  // so a daemon that is alive, stopped or not, holds it.
   const exited = new Promise<ExitResult>((resolve) => {
     child.once("exit", (code, signal) => {
       deliver = () => {};

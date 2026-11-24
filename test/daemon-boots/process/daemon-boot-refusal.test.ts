@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { RSS_LIMIT_ENV } from "../../../src/daemon/limits";
 import { waitForExit } from "../../../scripts/lib/daemon/wire";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { daemonPool, spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 import { HAND_RUN_SOURCE } from "../../../scripts/lib/daemon/process";
 

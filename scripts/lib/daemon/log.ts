@@ -82,7 +82,7 @@ const listedBy = (event: string, name: string): string[] =>
 
 // What the request waited for and its last draw still owed (`owed=`): the
 // draw's own statement, the one thing the host's wait reads.
-export const owedBy = (event: string): string[] => listedBy(event, "owed");
+const owedBy = (event: string): string[] => listedBy(event, "owed");
 
 // The values no request waits for: each draws pending on a first bar and lands
 // through its owner's refresh, which that owner logs as `<source> refresh`.

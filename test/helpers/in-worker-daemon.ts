@@ -170,7 +170,7 @@ function placeEnv(env: NodeJS.ProcessEnv): void {
 }
 
 // A bar on a daemon in this worker (scripts/lib/drive-bar.ts).
-export const startBarDaemon: StartBarDaemon = async (env) => {
+export const startBarDaemon: StartBarDaemon = async ({ env }) => {
   const daemon = startDaemon(env);
   return { target: daemon, stop: daemon.stop };
 };

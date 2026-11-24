@@ -4,7 +4,7 @@
 // the variation and shade, exactly as a click would make them. Writes
 // proto-looks/out/renders.json. Harness for brandon-menus-sjhy.4fi.
 //
-//   node --require ./scripts/version-stamp.cjs --import tsx proto-looks/render.ts
+//   node --require ./scripts/lib/version-stamp.cjs --import tsx proto-looks/render.ts
 import fs from "node:fs";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";

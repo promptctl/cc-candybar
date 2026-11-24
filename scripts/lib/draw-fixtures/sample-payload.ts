@@ -29,7 +29,7 @@ const SAMPLE_SESSION = sessionIdOf("test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 
 // `term` is the draw's (a bind writes it from the width), so it is left out;
 // `today` is the draw's projection of the document's facts, beside it.
-export type SamplePayload = Omit<ViewPayload, "term"> &
+type SamplePayload = Omit<ViewPayload, "term"> &
   ReturnType<typeof instantFacts>;
 
 export function samplePayload(

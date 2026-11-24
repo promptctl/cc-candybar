@@ -33,8 +33,11 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { collectedRuns, type CollectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
-import { TEST_ENV } from "./helpers/session-environment";
+import {
+  collectedRuns,
+  type CollectedRuns,
+} from "../scripts/lib/draw-fixtures/held-runs";
+import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
 const S_A = sessionIdOf("s-a");
@@ -69,7 +72,7 @@ let holding: { sourceRuns: SourceRuns; held: Map<SessionView, CollectedRuns> };
 const runsOf = (view: SessionView): CollectedRuns => {
   let held = holding.held.get(view);
   if (held === undefined) {
-    held = collectedRuns(holding.sourceRuns, view.registry, TEST_ENV);
+    held = collectedRuns(holding.sourceRuns, view.registry, TEST_ENVIRONMENT);
     holding.held.set(view, held);
   }
   return held;

@@ -1,18 +1,18 @@
 import os from "node:os";
 
-// What a hand-run tool takes from the developer's shell for the daemon it
-// starts and the sessions it reports: where programs live, the home, and the
-// temporary directory the tool itself writes under. Nothing else of the shell
-// reaches them, so a variable the developer exported (a memory limit, a tmux
-// pane, a socket) cannot make an isolated daemon behave as theirs does.
-export interface ShellEnvironment {
+// The environment an isolated daemon runs in and its sessions report their
+// PATH from: one known to hold where programs live, the home, and the
+// temporary directory the caller writes under.
+export type ShellEnvironment = NodeJS.ProcessEnv & {
   readonly PATH: string;
   readonly HOME: string;
   readonly TMPDIR: string;
-}
+};
 
-// [LAW:parse-dont-validate] The one place a tool's root reads its shell: a
-// variable the daemon needs and the shell lacks stops the run, naming it.
+// [LAW:parse-dont-validate] What a hand-run tool takes from the developer's
+// shell: those three and nothing else, so a variable the developer exported (a
+// memory limit, a tmux pane, a socket) cannot make an isolated daemon behave as
+// theirs does. A variable the shell lacks stops the run, naming it.
 export function shellEnvironment(env: NodeJS.ProcessEnv): ShellEnvironment {
   return { PATH: required(env, "PATH"), HOME: required(env, "HOME"), TMPDIR: os.tmpdir() };
 }

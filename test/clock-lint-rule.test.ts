@@ -4,36 +4,9 @@
 // the cases run the repo's own config over source text placed at a path in each
 // block, and every banned form must fail in every one.
 
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 
-const ROOT = path.resolve(__dirname, "..");
-
-// ESM config, so ESLint runs in a node of its own, once for all cases.
-const SCRIPT = `
-import { ESLint } from "eslint";
-const [root, casesJson] = process.argv.slice(1);
-// The probes are files the project does not hold, which the typed rules
-// cannot read; those rules have their own fixture (promise-lint-rule.test.ts).
-const eslint = new ESLint({
-  cwd: root,
-  overrideConfig: {
-    languageOptions: { parserOptions: { projectService: false } },
-    rules: {
-      "@typescript-eslint/no-floating-promises": "off",
-      "@typescript-eslint/no-misused-promises": "off",
-    },
-  },
-});
-const out = {};
-for (const [name, c] of Object.entries(JSON.parse(casesJson))) {
-  const [result] = await eslint.lintText(c.code, { filePath: root + "/" + c.file });
-  out[name] = result.messages
-    .filter((m) => m.message.includes("src/time.ts"))
-    .map((m) => m.ruleId);
-}
-console.log(JSON.stringify(out));
-`;
+import { lintCases, UNTYPED, type LintCase } from "./helpers/lint-cases";
 
 // A path in each block of the config that sets one of the clock's rules.
 const PATHS = {
@@ -107,7 +80,7 @@ const FORMS = {
   },
 } as const;
 
-const CASES: Record<string, { file: string; code: string }> = {};
+const CASES: Record<string, LintCase> = {};
 for (const [place, file] of Object.entries(PATHS)) {
   for (const [form, { code }] of Object.entries(FORMS)) {
     CASES[`${place} / ${form}`] = { file, code };
@@ -133,15 +106,16 @@ CASES["plain / new Date(ms)"] = {
 };
 
 describe("the clock rules", () => {
-  let found: Record<string, string[]>;
+  let found: Record<string, (string | null)[]>;
 
   beforeAll(() => {
-    found = JSON.parse(
-      execFileSync(
-        process.execPath,
-        ["--input-type=module", "-e", SCRIPT, ROOT, JSON.stringify(CASES)],
-        { cwd: ROOT, encoding: "utf8" },
-      ),
+    found = Object.fromEntries(
+      Object.entries(lintCases(CASES, UNTYPED)).map(([name, messages]) => [
+        name,
+        messages
+          .filter((m) => m.message.includes("src/time.ts"))
+          .map((m) => m.ruleId),
+      ]),
     );
   }, 120_000);
 

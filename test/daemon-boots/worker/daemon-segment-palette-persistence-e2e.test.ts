@@ -22,9 +22,7 @@ import { plainOf, type Frame, type Run } from "../../../src/render/frame";
 import { sameDraw } from "../../helpers/frame";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 // [LAW:one-source-of-truth] The shared transient contract: a render retried
 // on TIMEOUT and on an answer that drew a source pending.
 // [LAW:no-ambient-temporal-coupling] A persist's synchronous write completing

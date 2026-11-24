@@ -39,6 +39,7 @@ import { VariableStore } from "../../../src/var-system/store";
 import { samplePayload } from "./sample-payload";
 import { bindSample } from "./draw-payload";
 import { collectedRuns, type CollectedRuns } from "./held-runs";
+import { ok } from "../../../src/utils/outcome";
 
 // How long a prepare waits for its sources' first runs.
 const SETTLE_MS = 5000;
@@ -120,7 +121,7 @@ export function prepareSnapshot(
   const runs = collectedRuns(
     sourceRuns,
     registry,
-    plainEnvironment(world.host.env),
+    ok(plainEnvironment(world.host.env)),
     { cwd },
   );
   const dispose = (): void => {

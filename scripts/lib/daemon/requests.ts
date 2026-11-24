@@ -4,15 +4,17 @@
 // and the dev tools (`pnpm bar`) send through these, so the contract is
 // spelled once.
 
+import { interpretResponse } from "../../../src/daemon/client-transport";
 import {
   PROTOCOL_VERSION,
   type ClickRequest,
+  type ReaderRenderRequest,
   type Response,
+  type SessionRenderRequest,
 } from "../../../src/daemon/foundations/protocol";
 import type { Environment } from "../../../src/daemon/foundations/session-env";
 import { logLines } from "../../../src/daemon/log";
 import { parseFrame, type Frame } from "../../../src/render/frame";
-import type { ClaudeHookData } from "../../../src/utils/claude";
 import { until } from "../until";
 import {
   answeredRender,
@@ -21,17 +23,23 @@ import {
   renderEventsOf,
   retriedRender,
 } from "./log";
-import { endpointOf, sendDaemonRequest, type DaemonTarget } from "./wire";
+import {
+  endpointOf,
+  REPLY_BUDGET_MS,
+  sendDaemonRequest,
+  type DaemonTarget,
+} from "./wire";
 
-// [LAW:types-are-the-program] What a render request carries beyond its
-// version, kind and deadline. Like a real client's, it states the environment
-// its session was started in: the daemon runs the session's sources and
-// programs in it.
-export type RenderAsk = Readonly<Record<string, unknown>> & {
+// [LAW:types-are-the-program] A render request as a client sends one, less
+// its version. A full render states the environment its session was started
+// in, as a real client's does: the daemon runs the session's sources and
+// programs in it. A short-lived relay's names one the host already heard, by
+// its key. Its deadline is the reply budget's unless the case states its own.
+export type RenderAsk = Omit<ReaderRenderRequest, "v" | "kind" | "env"> & {
+  readonly kind?: "render";
   readonly env: Environment;
 };
-
-export const REPLY_BUDGET_MS = 5000;
+export type SessionRenderAsk = Omit<SessionRenderRequest, "v">;
 
 // [LAW:no-ambient-temporal-coupling] `TIMEOUT` (request-deadline.ts's REQUEST_TIMEOUT_MS
 // — a real 200ms per-request guard protecting the daemon from one slow request
@@ -59,14 +67,17 @@ export const REPLY_BUDGET_MS = 5000;
 // of its own (sendDaemonRequest).
 const PENDING_RETRY_BUDGET = 20;
 
-// [LAW:single-enforcer] The one rule for when a TIMEOUT is asked again: while
-// the budget, counted from the first ask, has time left.
+// [LAW:single-enforcer] The one rule for when an answer is asked again: one the
+// real client calls busy (interpretResponse), while the budget, counted from
+// the first ask, has time left.
 const askAgain = (
+  kind: "render" | "click",
   resp: Response,
   firstAskMs: number,
   budgetMs: number,
 ): boolean =>
-  !resp.ok && resp.code === "TIMEOUT" && Date.now() - firstAskMs < budgetMs;
+  interpretResponse(kind, resp, () => resp).kind === "busy" &&
+  Date.now() - firstAskMs < budgetMs;
 
 // A session's render events whose reply its client read, in log order.
 export function answeredEvents(log: string, sessionId: string): string[] {
@@ -78,13 +89,11 @@ export function answeredEvents(log: string, sessionId: string): string[] {
 // contract: `renderOutput` and `renderFrame` below both send through it.
 async function renderAnswer(
   target: DaemonTarget,
-  request: RenderAsk,
+  request: RenderAsk | SessionRenderAsk,
   replyBudgetMs: number,
 ): Promise<Extract<Response, { ok: true }>> {
   const { log, now } = endpointOf(target);
-  const sessionId = String(
-    (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
-  );
+  const sessionId = request.hookData.session_id;
   const asked = logLines(log).length;
   const firstAskMs = Date.now();
   for (let attempt = 1; ; attempt++) {
@@ -105,7 +114,7 @@ async function renderAnswer(
       replyBudgetMs,
     );
     if (!resp.ok) {
-      if (askAgain(resp, firstAskMs, replyBudgetMs)) continue;
+      if (askAgain("render", resp, firstAskMs, replyBudgetMs)) continue;
       // [LAW:nothing-unseen] What the daemon logged across every attempt,
       // so a runner that failed says where its turns' time went.
       throw new Error(
@@ -151,7 +160,7 @@ async function renderAnswer(
 // The bytes of a render, as Claude Code's client reads them.
 export async function renderOutput(
   target: DaemonTarget,
-  request: RenderAsk,
+  request: RenderAsk | SessionRenderAsk,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> {
   const resp = await renderAnswer(target, request, replyBudgetMs);
@@ -166,7 +175,7 @@ export async function renderOutput(
 // The Frame of a render, as a reader of one render's answer asks for it.
 export async function renderFrame(
   target: DaemonTarget,
-  request: RenderAsk,
+  request: RenderAsk | SessionRenderAsk,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Frame> {
   const resp = await renderAnswer(
@@ -208,7 +217,7 @@ export async function sendClick(
   const firstAskMs = Date.now();
   for (;;) {
     const resp = await sendDaemonRequest(target, clickBody(url), replyBudgetMs);
-    if (!askAgain(resp, firstAskMs, replyBudgetMs)) return resp;
+    if (!askAgain("click", resp, firstAskMs, replyBudgetMs)) return resp;
   }
 }
 

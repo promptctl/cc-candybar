@@ -18,7 +18,7 @@ import {
   realBarDaemon,
   startBar,
 } from "./lib/drive-bar";
-import { unpooled } from "./lib/daemon/process";
+import { shellEnvironment } from "./lib/shell";
 
 // `text#n` → the n-th link reading `text`; a bare `text` is the first.
 function parseStep(step: string): [string, number] {
@@ -47,7 +47,6 @@ async function main(): Promise<void> {
     },
     allowPositionals: true,
   });
-  // A hand-run bar starts one daemon of its own, outside the test suite's pool.
   const bar = await startBar(
     {
       width: cells("width", values.width),
@@ -55,8 +54,9 @@ async function main(): Promise<void> {
       config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
       cwd: path.resolve(invokedIn, values.cwd),
       ssh: values.ssh,
+      shell: shellEnvironment(process.env),
     },
-    realBarDaemon(unpooled),
+    realBarDaemon,
   );
   try {
     let out = await bar.render();

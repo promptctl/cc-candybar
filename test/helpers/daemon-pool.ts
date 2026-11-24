@@ -30,6 +30,8 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 
+import type { DaemonSlot } from "../../scripts/lib/daemon/process";
+
 import {
   readOwnStartTime,
   sameLiveProcess,
@@ -39,16 +41,13 @@ import {
 
 type SlotRecord = ProcessIdentity;
 
-export interface DaemonSlot {
-  // Idempotent. Removes the slot file only if it still named us AT THE TIME
-  // OF THE CHECK — same residual TOCTOU as tryClaim's reclaim (see its
-  // comment for the full rationale): a concurrent reclaimer's rename can
-  // land between our read and our unlink, in which case we delete their
-  // fresh record instead of our own stale one. Accepted for the same
-  // reason: test-only tooling, self-correcting (the next acquire's `wx`
-  // create just wins the now-empty slot), not a correctness hazard.
-  release(): void;
-}
+// A slot's `release` is idempotent. It removes the slot file only if it still
+// named us AT THE TIME OF THE CHECK — same residual TOCTOU as tryClaim's
+// reclaim (see its comment for the full rationale): a concurrent reclaimer's
+// rename can land between our read and our unlink, in which case we delete
+// their fresh record instead of our own stale one. Accepted for the same
+// reason: test-only tooling, self-correcting (the next acquire's `wx` create
+// just wins the now-empty slot), not a correctness hazard.
 
 export interface AcquireOpts {
   timeoutMs?: number;

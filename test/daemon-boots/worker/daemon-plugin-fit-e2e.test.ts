@@ -17,9 +17,7 @@ import { click, frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { loggedWhen } from "../../../scripts/lib/daemon/log";
 import { effectsOf } from "../../helpers/click";
 import { until } from "../../../scripts/lib/until";

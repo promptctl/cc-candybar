@@ -22,10 +22,8 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { answerRepo } from "../../helpers/repo-approval";
-import {
-  prepareIsolatedDaemonEnv,
-  type IsolatedDaemonEnv,
-} from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { type IsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 
 const git = (cwd: string, ...args: string[]): void => {
   execFileSync("git", args, { cwd, stdio: "pipe", timeout: 5_000 });

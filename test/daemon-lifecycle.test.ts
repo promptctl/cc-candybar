@@ -1,7 +1,7 @@
 import { startDaemon } from "./helpers/in-worker-daemon";
 import { renderBody, configFlag } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "../scripts/lib/daemon/wire";
-import { prepareIsolatedDaemonEnv } from "../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { hostHeld } from "./helpers/renderers";
 import { renderFailedFrame } from "../src/render/frame";
 import type { RendererPort } from "../src/daemon/renderer-process";

@@ -27,10 +27,8 @@ import {
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import {
-  prepareIsolatedDaemonEnv,
-  type IsolatedDaemonEnv,
-} from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { type IsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
 import { logPath } from "../../../src/daemon/paths";
 import {

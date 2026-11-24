@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { prepareIsolatedDaemonEnv, READINESS_BUDGET_MS, type IsolatedDaemonEnv, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
-import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import { READINESS_BUDGET_MS, type IsolatedDaemonEnv, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import {
   listRegistryFiles,
   readRegistryEntry,

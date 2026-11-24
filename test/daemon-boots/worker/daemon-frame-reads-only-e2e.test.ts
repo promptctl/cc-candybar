@@ -21,7 +21,7 @@ import {
   statsOf,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../../scripts/lib/until";
 
 const TTL_MS = 5_000;

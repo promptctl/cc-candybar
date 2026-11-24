@@ -22,9 +22,7 @@ import path from "node:path";
 
 import { render } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 

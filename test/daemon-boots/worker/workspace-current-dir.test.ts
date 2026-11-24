@@ -16,7 +16,7 @@ import {
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 // [LAW:behavior-not-structure] The client, hook and reported workspace name
 // distinct directories so a fallback can be checked against the actual bar.

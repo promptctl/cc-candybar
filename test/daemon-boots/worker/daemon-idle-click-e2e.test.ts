@@ -17,7 +17,7 @@ import { click, linkTo, render } from "../../helpers/daemon-e2e";
 import { loggedWhen, logLines } from "../../../scripts/lib/daemon/log";
 import { heldClock } from "../../helpers/held-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { fieldsOf } from "../../../src/utils/logfmt";
 
 jest.setTimeout(30_000);

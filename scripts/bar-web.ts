@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { serveBar } from "./bar-web/server";
-import { unpooled } from "./lib/daemon/process";
+import { shellEnvironment } from "./lib/shell";
 import { realBarDaemon } from "./lib/drive-bar";
 
 const invokedIn = process.env.INIT_CWD ?? process.cwd();
@@ -39,7 +39,8 @@ async function main(): Promise<void> {
     config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
     cwd: path.resolve(invokedIn, values.cwd),
     ssh: values.ssh,
-  }, realBarDaemon(unpooled));
+    shell: shellEnvironment(process.env),
+  }, realBarDaemon);
   console.log(`the live bar: ${web.url}  (ctrl-c stops it and its daemon)`);
   const stop = (): void => {
     void web.close().then(() => process.exit(0));

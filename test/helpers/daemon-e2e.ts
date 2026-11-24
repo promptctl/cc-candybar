@@ -30,15 +30,20 @@ import {
   type FrameSource,
 } from "../../src/click/link-signer";
 import { effectsOf, type DecodedEffect } from "./click";
-import { endpointOf, type DaemonTarget } from "../../scripts/lib/daemon/wire";
 import {
+  endpointOf,
   REPLY_BUDGET_MS,
+  type DaemonTarget,
+} from "../../scripts/lib/daemon/wire";
+import {
   renderFrame,
   renderOutput,
   saidOf,
   sendClick,
   type RenderAsk,
+  type SessionRenderAsk,
 } from "../../scripts/lib/daemon/requests";
+import { statusHook } from "../../scripts/lib/hook-data";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { until } from "../../scripts/lib/until";
 import { TEST_ENV } from "./session-environment";
@@ -50,37 +55,34 @@ export const configFlag = (p: string): string[] => [
   p,
 ];
 
-// The Status hook payload Claude Code sends, as `render` below relays it and
-// as the real client reads it from stdin.
-export function hookData(sessionId: string, cwd: string): ClaudeHookData {
-  return {
-    hook_event_name: "Status",
-    session_id: sessionId,
-    transcript_path: path.join(cwd, "transcript.jsonl"),
-    cwd,
-    model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-    workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-  };
-}
+// The Status hook payload Claude Code sends (scripts/lib/hook-data.ts), for
+// session `sessionId` in `cwd`, as `render` below relays it and as the real
+// client reads it from stdin.
+export const hookData = (sessionId: string, cwd: string): ClaudeHookData =>
+  statusHook(sessionId, cwd, path.join(cwd, "transcript.jsonl"));
 
 // A request as the suite's clients send it: they report the environment
 // test/setup.ts made for the worker, unless a case states its own.
-const asked = (request: Record<string, unknown>): RenderAsk => ({
-  env: TEST_ENV,
-  ...request,
-});
+// A relay's request names the environment by key, so it carries none.
+type SuiteAsk =
+  | (Omit<RenderAsk, "env"> & Partial<Pick<RenderAsk, "env">>)
+  | SessionRenderAsk;
+const asked = (request: SuiteAsk): RenderAsk | SessionRenderAsk =>
+  request.kind === "render-session"
+    ? request
+    : { ...request, env: request.env ?? TEST_ENV };
 
 // The bytes of a render, as Claude Code's client reads them.
 export const renderRequest = (
   target: DaemonTarget,
-  request: Record<string, unknown>,
+  request: SuiteAsk,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> => renderOutput(target, asked(request), replyBudgetMs);
 
 // The Frame of a render, as a reader of one render's answer asks for it.
 export const frameRequest = (
   target: DaemonTarget,
-  request: Record<string, unknown>,
+  request: SuiteAsk,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Frame> => renderFrame(target, asked(request), replyBudgetMs);
 
@@ -131,7 +133,7 @@ export function renderBody(
   cwd: string,
   hints: ClientHints = {},
   args: string[] = [],
-): Record<string, unknown> {
+): RenderAsk {
   return {
     hookData: hookData(sessionId, cwd),
     args,

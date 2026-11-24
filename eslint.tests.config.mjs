@@ -1,13 +1,14 @@
 import tsparser from "@typescript-eslint/parser";
 
 // [LAW:effects-at-boundaries] [LAW:no-shared-mutable-globals] A test states the
-// machine it runs on by handing src a Host (test/helpers/host.ts `hostOf`), and
+// machine it runs on by handing src a Host (scripts/lib/host.ts `hostOf`), and
 // never by writing `process.env`: the environment is one ambient value per
 // worker, so a write is a fixture every later test in the file inherits.
 //
-// This config holds that one rule and nothing else, because the test tree is
-// not under the src lint (formatting, imports). `pnpm lint` runs it beside the
-// src config.
+// This config holds the suite's effect rules and nothing else, because the test
+// tree is not under the src lint (formatting, imports). `pnpm lint` runs it
+// beside the src config, over the suite and the code it shares with the tools
+// (scripts/lib/), which runs in every worker that imports it.
 //
 // The writes that remain are the ones that isolate or feed what a run spawns:
 //   - the setup files, which isolate the worker from the host;
@@ -39,6 +40,7 @@ export const ENV_WRITES = [
 //   tmux                   candybar-testing-ihvy.dcv
 //   shell sources, verbs, jobs, ps   candybar-testing-ihvy.fvw.1dl
 const REAL_LAUNCHER_ADAPTERS = [
+  "scripts/lib/daemon/process.ts",
   "test/integration/**",
   "test/proc/**",
   "test/daemon-boots/process/**",
@@ -79,9 +81,12 @@ const REAL_LAUNCHER_EXCEPTIONS = [
 const REAL_LAUNCHER_MESSAGE =
   "Script the program on a fake launcher (scripts/lib/draw-fixtures/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
 
+// The suite, and what it shares with the tools.
+const SUITE = ["test/**/*.{ts,mts}", "scripts/lib/**/*.{ts,mts}"];
+
 export default [
   {
-    files: ["test/**/*.{ts,mts}"],
+    files: SUITE,
     ignores: [
       "test/setup.ts",
       "test/unit-global-setup.ts",
@@ -91,7 +96,7 @@ export default [
     rules: { "no-restricted-syntax": ["error", ...ENV_WRITES] },
   },
   {
-    files: ["test/**/*.{ts,mts}"],
+    files: SUITE,
     ignores: [...REAL_LAUNCHER_ADAPTERS, ...REAL_LAUNCHER_EXCEPTIONS],
     languageOptions: { parser: tsparser, ecmaVersion: "latest", sourceType: "module" },
     rules: {

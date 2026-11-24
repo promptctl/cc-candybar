@@ -25,7 +25,10 @@ import {
   SHELL_READ_TIMEOUT_MS,
   type SourceRunsDeps,
 } from "../src/daemon/source-runs";
-import { collectedRuns, type CollectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
+import {
+  collectedRuns,
+  type CollectedRuns,
+} from "../scripts/lib/draw-fixtures/held-runs";
 import { shellEnvOf } from "../src/config/shell-env";
 import {
   plainEnvironment,
@@ -34,7 +37,10 @@ import {
 import { MIN_SHELL_TTL_MS } from "../src/daemon/foundations/judge-run";
 import { PendingValueError } from "../src/var-system/types";
 import { timeoutSignal } from "../src/time";
-import { fakeLauncher, turns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import {
+  fakeLauncher,
+  turns,
+} from "../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 import {
   type Behaviour,
@@ -125,7 +131,7 @@ function hold(
   runs: SourceRuns,
   environment: Environment = plainEnvironment(process.env),
 ): void {
-  const held = collectedRuns(runs, registry, environment);
+  const held = collectedRuns(runs, registry, ok(environment));
   holders.set(registry, { held, runs });
   registry.bindInputs({
     session: () => {
@@ -1183,7 +1189,10 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      await until(() => store.read("val") === "v2", "a TTL tick reran the command");
+      await until(
+        () => store.read("val") === "v2",
+        "a TTL tick reran the command",
+      );
     } finally {
       cleanup();
     }
@@ -1214,8 +1223,15 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
       await ran(registry);
+      // The shell source's record, which its first refresh made.
+      const shellRecord = () => {
+        const record = ledger.snapshot().find((r) => r.name === "source.shell");
+        if (record === undefined)
+          throw new Error("the ledger holds no source.shell record");
+        return record;
+      };
       await until(
-        () => (ledger.snapshot()[1]?.refreshes.period ?? 0) >= 1,
+        () => (shellRecord().refreshes.period ?? 0) >= 1,
         "a TTL tick recorded a period refresh",
       );
       await ran(registry);
@@ -1245,7 +1261,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
           lastMs: expect.any(Number),
         },
       ]);
-      expect(ledger.snapshot()[1]!.refreshes.period).toBeGreaterThanOrEqual(1);
+      expect(shellRecord().refreshes.period).toBeGreaterThanOrEqual(1);
     } finally {
       cleanup();
     }

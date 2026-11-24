@@ -34,7 +34,7 @@ import {
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
 import { valueOf } from "../../../src/utils/logfmt";

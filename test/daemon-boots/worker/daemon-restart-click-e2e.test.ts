@@ -23,7 +23,7 @@ import type { AsyncLaunchOpts } from "../../../src/proc/launcher";
 import { fakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 
@@ -167,7 +167,7 @@ test("a click in either session uses its environment for desktop tools and both 
     };
     const compact = {
       v: PROTOCOL_VERSION,
-      kind: "render-session",
+      kind: "render-session" as const,
       envKey: environmentKey(reported),
       hookData: hookData(session, project),
       cwd,
@@ -189,7 +189,7 @@ test("a click in either session uses its environment for desktop tools and both 
       env: reported,
       tmux: null,
     });
-    return frameRequest(daemon, { ...compact, env: undefined });
+    return frameRequest(daemon, compact);
   };
   const categories = [
     "click.pbcopy",

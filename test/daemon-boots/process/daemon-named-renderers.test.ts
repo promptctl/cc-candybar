@@ -41,8 +41,8 @@ import {
   repoConfigs,
   repoConfigsPath,
 } from "../../../src/daemon/config-discovery/repo-configs";
-import { prepareIsolatedDaemonEnv, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
-import { spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
+import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
 
 const BUNDLE = path.resolve("dist/index.mjs");
 const builtDaemon = (env: NodeJS.ProcessEnv) => ({

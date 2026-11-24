@@ -17,7 +17,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { heldClock, type HeldClock } from "../../helpers/held-clock";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../../scripts/lib/daemon/log";
 
 jest.setTimeout(30_000);

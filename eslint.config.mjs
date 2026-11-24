@@ -5,7 +5,7 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import fs from "node:fs";
 import path from "node:path";
-import { mayImport, mayLoadRendererModule, withoutExtension, zoneOf } from "./scripts/import-zones.mjs";
+import { mayImport, mayLoadRendererModule, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -270,18 +270,28 @@ const HOST_NAMED_IMPORTS = [
   },
 ];
 
-const ZONE_MESSAGE = {
-  renderer: "Renderer code consumes the shared contract and owns its drawing state.",
-  start: "Renderer construction accepts the shared data contract.",
-  "renderer-process": "The renderer process starts the core from the shared contract.",
-  shared: "Shared code loads in both processes and imports neither side.",
-  rest: "The host reaches the renderer only through its start (src/renderer/main.ts).",
-  tools: "A tool reaches the app through src and shares with the tests through scripts/lib.",
-};
-// What a zone holds that decides the edge, whichever zone imports it.
-const TARGET_MESSAGE = {
+// [LAW:one-source-of-truth] Why an edge is refused, by what it reaches: what
+// the zone it imports holds decides it, whichever zone imports it.
+const REFUSAL = {
+  renderer: "The renderer is reached only through its start (src/renderer/main.ts).",
+  start: "Renderer construction is the host's and the renderer process's: shared code loads in both and imports neither side.",
+  "renderer-process": "The renderer process is an entry of its own, which only the CLI starts.",
+  rest: "Host code stays out of the renderer and shared code, which consume the shared contract.",
+  root: "The CLI's entry dispatches to every process, and nothing imports it.",
+  lib: "scripts/lib is what the tools and the tests share, and the app imports nothing from it.",
+  tools: "A tool runs by hand: the app and scripts/lib import nothing from one, and what it shares lives in scripts/lib.",
   test: "The test suite runs under Jest: code that runs outside it imports nothing from test/, and what a tool and a test share lives in scripts/lib.",
+  "outside the repo": "A module outside the repo is in no zone.",
 };
+// [LAW:no-silent-failure] Every zone an edge can be refused into has its
+// reason, or the config refuses to load.
+const unexplained = [...Object.keys(ZONE_IMPORTS), "outside the repo"].filter(
+  (to) =>
+    Object.values(ZONE_IMPORTS).some((allowed) => !allowed.includes(to)) &&
+    !(to in REFUSAL),
+);
+if (unexplained.length > 0)
+  throw new Error(`eslint.config.mjs: no refusal message for imports of ${unexplained.join(", ")}`);
 
 // A module's key is its repo-relative path without its extension, so
 // `../time.js`, `./time` and `src/time.ts` are one module, and a directory's
@@ -350,7 +360,7 @@ const importDirection = {
       if (!mayImport(fromZone, toZone)) {
         context.report({
           node,
-          message: `${fromZone} ${from} imports ${toZone} ${to}. ${TARGET_MESSAGE[toZone] ?? ZONE_MESSAGE[fromZone]} [LAW:one-way-deps]`,
+          message: `${fromZone} ${from} imports ${toZone} ${to}. ${REFUSAL[toZone]} [LAW:one-way-deps]`,
         });
       }
       // [LAW:effects-at-boundaries] The renderer reads no clock and sets no

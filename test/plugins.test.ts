@@ -38,7 +38,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { collectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
-import { TEST_ENV } from "./helpers/session-environment";
+import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 import {
   DiscoveringCache,
   loadDiscovered,
@@ -990,7 +990,11 @@ describe("an installed plugin", () => {
           );
           const s = held.state;
           expect(s).toBe(states[i]);
-          const runs = collectedRuns(sourceRuns, held.view.registry, TEST_ENV);
+          const runs = collectedRuns(
+            sourceRuns,
+            held.view.registry,
+            TEST_ENVIRONMENT,
+          );
           try {
             expect(await runs.settled(AbortSignal.timeout(5000))).toEqual([]);
             return textOf(

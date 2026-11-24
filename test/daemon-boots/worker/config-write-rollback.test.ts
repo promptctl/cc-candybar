@@ -18,7 +18,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { answerRepo } from "../../helpers/repo-approval";
-import { prepareIsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 

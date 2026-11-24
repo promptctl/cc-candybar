@@ -17,9 +17,7 @@ import type { DaemonTarget } from "../../../scripts/lib/daemon/wire";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 

@@ -11,6 +11,7 @@ import { textOf } from "../../../src/render/frame";
 import { startBar, type Bar } from "../../../scripts/lib/drive-bar";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { until } from "../../../scripts/lib/until";
+import { WORKER_SHELL } from "../../helpers/session-environment";
 
 let dir: string;
 beforeEach(() => {
@@ -58,7 +59,7 @@ describe("a plugin segment's state variable", () => {
       `{ plugins: [${JSON.stringify(path.join(dir, "x/plugin.json5"))}], root: { h: ["plugins.x.s"] } }`,
     );
     bar = await startBar(
-      { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
+      { width: 120, rows: 40, config: p, cwd: dir, ssh: false, shell: WORKER_SHELL },
       startBarDaemon,
     );
     // The data file is a watched source read after the load, so the first
@@ -109,7 +110,7 @@ describe("a plugin segment's state variable", () => {
       }`,
     );
     bar = await startBar(
-      { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
+      { width: 120, rows: 40, config: p, cwd: dir, ssh: false, shell: WORKER_SHELL },
       startBarDaemon,
     );
     expect(textOf(await bar.render())).toContain("mine=user");
@@ -143,7 +144,7 @@ describe("a plugin segment's state variable", () => {
       `{ plugins: [${JSON.stringify(path.join(dir, "x/plugin.json5"))}], root: { h: ["plugins.x.s"] } }`,
     );
     bar = await startBar(
-      { width: 120, rows: 40, config: p, cwd: dir, ssh: false },
+      { width: 120, rows: 40, config: p, cwd: dir, ssh: false, shell: WORKER_SHELL },
       startBarDaemon,
     );
     expect(textOf(await bar.render())).toContain("n=3");

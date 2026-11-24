@@ -4,7 +4,7 @@
 // preloads this (test/setup.ts requires it and threads it through NODE_OPTIONS
 // `--import`).
 // CommonJS so plain `node`, `tsx`, and Jest's sandbox all load it untransformed.
-const { version } = require("../package.json");
+const { version } = require("../../package.json");
 globalThis.__PACKAGE_VERSION__ = version;
 
 // The NODE_OPTIONS a caller spawns children with: whatever it already had,

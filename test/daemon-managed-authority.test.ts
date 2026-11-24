@@ -5,7 +5,7 @@ import type { RendererPort } from "../src/daemon/renderer-process";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { render } from "./helpers/daemon-e2e";
 import { startDaemon } from "./helpers/in-worker-daemon";
-import { prepareIsolatedDaemonEnv } from "../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
 test("a renderer's unmanaged claims cannot make folders or read session files", async () => {
   const { env, stateDir, removeTmpDirs } =

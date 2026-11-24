@@ -11,10 +11,8 @@ import {
   sendDaemonRequest,
 } from "../../../scripts/lib/daemon/wire";
 import { hostOf } from "../../../scripts/lib/host";
-import {
-  prepareIsolatedDaemonEnv,
-  type IsolatedDaemonEnv,
-} from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { type IsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 import { until } from "../../../scripts/lib/until";
 
 // [LAW:behavior-not-structure] A statusline client finds no host and starts

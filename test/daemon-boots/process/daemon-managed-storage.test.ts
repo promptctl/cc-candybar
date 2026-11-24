@@ -13,8 +13,8 @@ import { fieldOf, valueOf } from "../../../src/utils/logfmt";
 import { frameRequest, renderBody } from "../../helpers/daemon-e2e";
 import { logLines } from "../../../scripts/lib/daemon/log";
 import { TEST_ENV } from "../../helpers/session-environment";
-import { prepareIsolatedDaemonEnv, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
-import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../../scripts/lib/until";
 import { readProbe, readsOf } from "../../helpers/daemon-read-probe";
 
