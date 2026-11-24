@@ -1,3 +1,11 @@
+## [1.238.2](https://github.com/promptctl/cc-candybar/compare/v1.238.1...v1.238.2) (2026-11-24)
+
+### Bug Fixes
+
+* **links:** a carousel, swatches row or picker link carries its step, so N clicks land N moves (candybar-host-renderer-x96a.7qi) ([#955](https://github.com/promptctl/cc-candybar/issues/955)) ([74ff60b](https://github.com/promptctl/cc-candybar/commit/74ff60b9ef4ea73da1ff662ab9c57dca723ae730))
+* **links:** a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9) ([#957](https://github.com/promptctl/cc-candybar/issues/957)) ([08b56a0](https://github.com/promptctl/cc-candybar/commit/08b56a048eec900bbd8bd82fd0af9815071761cf))
+* **stored-state:** a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz) ([#956](https://github.com/promptctl/cc-candybar/issues/956)) ([870a2fd](https://github.com/promptctl/cc-candybar/commit/870a2fd08214c3d683fe9b3db477f34796e27f84))
+
 ## [1.238.1](https://github.com/promptctl/cc-candybar/compare/v1.238.0...v1.238.1) (2026-11-24)
 
 ### Bug Fixes
