@@ -14,9 +14,14 @@
 // new variant fails typecheck rather than silently falling out the bottom
 // of the switch.
 
-import { formatPermanentGlyph } from "./render/error-glyph";
+import {
+  formatHostBundleGlyph,
+  formatPermanentGlyph,
+} from "./render/error-glyph";
 import { ANSI_RESET } from "./render/diagnostic-style";
 import type { ClientOutcome } from "./daemon/client";
+import type { KickOutcome } from "./daemon/acquire";
+import { whyUnusable } from "./daemon/host-bundle";
 
 const BOLD = "\x1b[1m";
 const WAITING_FOR_DAEMON = "Candybar · waiting for daemon…";
@@ -32,6 +37,24 @@ export interface OutcomePlan {
   // Debug message the caller should log, or null when there is nothing
   // worth logging (the "ok" path). Held as data so this module stays pure.
   debug: string | null;
+}
+
+// [LAW:no-silent-failure] A kick the install's record refused leaves nothing
+// starting, so the waiting indicator would promise a daemon that never comes:
+// the plan's output becomes the refusal, and its reason joins the debug line.
+// `null` is a plan that asked for no kick. A kick that ran leaves the plan as
+// it was.
+export function planAfterKick(
+  plan: OutcomePlan,
+  kick: KickOutcome | null,
+): OutcomePlan {
+  return kick?.kind === "refused"
+    ? {
+        output: formatHostBundleGlyph(kick.record.kind),
+        kick: plan.kick,
+        debug: `${plan.debug ?? ""} — not spawned: ${whyUnusable(kick.record)}`,
+      }
+    : plan;
 }
 
 export function planOutcome(

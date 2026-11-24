@@ -144,15 +144,14 @@ describe("daemon shutdown contract", () => {
     }
   });
 
-  test("newer-client version mismatch: VERSION_MISMATCH is flushed before the daemon exits", async () => {
+  test("a newer client gets VERSION_MISMATCH and the host stays up", async () => {
     const handle = await spawnDaemon();
     try {
-      // [LAW:no-ambient-temporal-coupling] The race this pins: a client at
-      // v+1 (binary upgraded under the daemon) must receive the flushed
-      // VERSION_MISMATCH diagnostic, never a dead socket — the client-side
-      // classification is permanent/version_mismatch, never the
-      // transient/io_error a frameless close would produce. Then the stale
-      // daemon must actually exit so the next render respawns fresh.
+      // [LAW:one-source-of-truth] Only the install's record and the running
+      // bundle's own file move the host to other code. A client ahead of the
+      // installed protocol (a worktree's build) must not end the host that
+      // every other bar draws from: the next request is answered by the same
+      // process.
       const resp = await sendDaemonRequest(
         handle.sockPath,
         { v: PROTOCOL_VERSION + 1, kind: "render" },
@@ -163,7 +162,12 @@ describe("daemon shutdown contract", () => {
         expect(resp.code).toBe("VERSION_MISMATCH");
         expect(resp.daemonV).toBe(PROTOCOL_VERSION);
       }
-      await expectExitWithinBudget(handle.child);
+      const next = await sendDaemonRequest(
+        handle.sockPath,
+        { v: PROTOCOL_VERSION, kind: "stats" },
+        REPLY_BUDGET_MS,
+      );
+      expect(next.ok).toBe(true);
     } finally {
       await handle.cleanup();
     }

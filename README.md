@@ -176,7 +176,7 @@ Run the install once to stage the runtime, then point `~/.claude/settings.json` 
 
 ### Developing against a checkout
 
-`just deploy` builds `dist/index.mjs` and stages the native binary at `bin/cc-candybar-native` — point your statusline command at that path. On a machine without cargo, `pnpm install && pnpm build` builds only the bundle — point your statusline at the committed `bin/cc-candybar` node entry instead. Either way the bar renders HEAD; the daemon watches the built bundle and respawns itself on rebuild.
+`just deploy` builds `dist/index.mjs` and stages the native binary at `bin/cc-candybar-native` — point your statusline command at that path. On a machine without cargo, `pnpm install && pnpm build` builds only the bundle — point your statusline at the committed `bin/cc-candybar` node entry instead. Either way the bar renders HEAD once the statusline command names this checkout and its bundle is recorded: `just deploy` records it, and on a machine without cargo run `node dist/index.mjs record-host-bundle` after the build. The daemon watches the built bundle and the record, and respawns itself on a rebuild.
 
 `pnpm bar:web` serves the bar at http://127.0.0.1:7317/ in a browser terminal you can click: an isolated daemon (`--config my.json5` starts it from a copy of your config, `--ssh` shows the host segment). `pnpm site:build` builds the GitHub Pages version into `site/dist`, the same page with the daemon running inside it against a simulated machine (`site/`). `pnpm site:dev` serves that page at http://127.0.0.1:8931/ (`--port` picks another) and reloads it whenever the sources or the page change.
 

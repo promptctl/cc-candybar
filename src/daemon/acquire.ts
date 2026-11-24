@@ -12,6 +12,11 @@ import {
   daemonDir,
 } from "./paths";
 import { sleep, type Timekeeper } from "../time";
+import {
+  readHostBundle,
+  whyUnusable,
+  type UnusableRecord,
+} from "./host-bundle";
 
 // [LAW:single-enforcer] One primitive per runtime that owns the entire
 // "obtain a daemon" verb. Every spawn site in the Node runtime now flows
@@ -48,9 +53,10 @@ interface ObtainOpts {
   // contention instead of a multi-second availability gap. Default
   // totalTimeoutMs / 2.
   lockFallbackMs?: number;
-  // Test hook: replace the actual spawn call. Returning false simulates
-  // "spawn failed"; default spawns the real daemon.
-  spawn?: () => boolean;
+  // Test hook: replace the actual spawn call, given the recorded bundle it
+  // would have run. Returning false simulates "spawn failed"; default spawns
+  // the real daemon.
+  spawn?: (bundle: string) => boolean;
 }
 
 const DEFAULT_OPTS: Required<Omit<ObtainOpts, "spawn" | "lockFallbackMs">> = {
@@ -65,7 +71,6 @@ export async function obtainDaemon(
 ): Promise<ObtainResult> {
   const { host, clock } = world;
   const settings = { ...DEFAULT_OPTS, ...opts };
-  const spawnFn = opts.spawn ?? (() => spawnDaemonDetachedReal(world));
   const deadline = clock.monotonic() + settings.totalTimeoutMs;
   const lockFallbackMs =
     opts.lockFallbackMs ?? Math.floor(settings.totalTimeoutMs / 2);
@@ -81,7 +86,16 @@ export async function obtainDaemon(
     return { kind: "attached" };
   }
 
-  // No daemon yet. Try to win the spawn-lock so we are the one to bring it up.
+  // No daemon yet: the install's recorded bundle is the only code that may
+  // start one, never this client's own.
+  const bundle = readHostBundle(host);
+  if (bundle.kind !== "ok") {
+    return { kind: "failed", reason: whyUnusable(bundle) };
+  }
+  const spawnAt = opts.spawn ?? ((at) => spawnDaemonDetachedReal(world, at));
+  const spawnFn = () => spawnAt(bundle.value);
+
+  // Try to win the spawn-lock so we are the one to bring it up.
   const contentionStart = clock.monotonic();
   while (clock.monotonic() < deadline) {
     const lock = tryAcquireSpawnLock(host, clock);
@@ -245,13 +259,29 @@ async function pollUntilReady(
 // still recovering from a crashed-mid-spawn holder well before STALE_LOCK_MS.
 const KICK_CONTENDED_OVERRIDE_MS = 2_000;
 
+// [LAW:types-are-the-program] What a kick came to: it ran its lock-and-spawn
+// path (whatever that spawned, or found already in flight, is the daemon's boot
+// to show), or it was refused because the install recorded no bundle a host
+// could start from. The refusal carries the record's own failure so the bar
+// can say so; a spawn is never the client's own bundle instead.
+export type KickOutcome =
+  | { readonly kind: "kicked" }
+  | { readonly kind: "refused"; readonly record: UnusableRecord };
+
 export function obtainDaemonKick(
   world: World,
-  opts: { spawn?: () => boolean } = {},
-): void {
+  opts: { spawn?: (bundle: string) => boolean } = {},
+): KickOutcome {
+  const bundle = readHostBundle(world.host);
+  if (bundle.kind !== "ok") return { kind: "refused", record: bundle };
+  const spawnAt = opts.spawn ?? ((at) => spawnDaemonDetachedReal(world, at));
+  kickWith(world, () => spawnAt(bundle.value));
+  return { kind: "kicked" };
+}
+
+function kickWith(world: World, spawnFn: () => boolean): void {
   const { host, clock } = world;
   if (ensureStateDir(host) !== null) return;
-  const spawnFn = opts.spawn ?? (() => spawnDaemonDetachedReal(world));
   const lock = tryAcquireSpawnLock(host, clock);
 
   // [LAW:dataflow-not-control-flow] Lock outcome is data, not control flow.
@@ -707,10 +737,14 @@ export function daemonCommand(script: string): string[] {
 // [LAW:single-enforcer] Routes through src/proc/launch so daemon-spawn shows
 // up in subprocess metering (category "daemon-spawn"). The launch primitive
 // owns the only child_process import in this file.
-function spawnDaemonDetachedReal({ host, launcher }: World): boolean {
+// [LAW:one-source-of-truth] `script` is the install's recorded bundle: the
+// spawning client's own bundle (process.argv[1]) is a hint about the client
+// and never the host's code.
+function spawnDaemonDetachedReal(
+  { host, launcher }: World,
+  script: string,
+): boolean {
   const node = process.execPath;
-  const script = process.argv[1];
-  if (!script) return false;
   // [LAW:no-silent-failure] launchDetachedSync returns the typed outcome
   // synchronously, so the spawn-failure case (ENOENT, EACCES, EAGAIN under
   // process-table pressure) propagates as `false` instead of being silently

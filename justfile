@@ -1,11 +1,14 @@
 # Full local deploy: build the bundle and stage the native render-path
 # binary. After this, a statusline launcher pointing at the checkout
-# renders HEAD. On a machine without cargo, `pnpm install && pnpm build`
-# alone is a complete (node-entry) deploy.
+# renders HEAD. On a machine without cargo, `pnpm install && pnpm build &&
+# node dist/index.mjs record-host-bundle` is a complete (node-entry) deploy.
+# The last step records this checkout as the host's bundle only when the
+# statusLine command names it, so a worktree's deploy never moves the host.
 deploy:
     pnpm install
     pnpm build
     just install-rust
+    node dist/index.mjs record-host-bundle
 
 # Build the native render-path client and stage it at bin/cc-candybar-native.
 # The committed bin/cc-candybar node shim stays untouched — the native binary

@@ -268,38 +268,25 @@ export async function handleRequest(
   }
 
   if (req.v !== PROTOCOL_VERSION) {
-    // [LAW:types-are-the-program] The asymmetry is data, not control flow.
-    //   client > daemon: the *binary* probably upgraded under us. Exit so the
-    //     next client respawns from the current artifact.
-    //   client < daemon: the *client* is stale. Respawning daemon does not
-    //     help (the new daemon will have the same version). Stay up and
-    //     return VERSION_MISMATCH — the client is responsible for surfacing
-    //     the diagnostic and refusing to kick. Shutting down here was the
-    //     load-bearing half of the 452-corpse spiral (kz8.5).
-    if (req.v > PROTOCOL_VERSION) {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — exiting after the response flushes`,
-      );
-    } else {
-      parts.log(
-        "info",
-        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale — staying up`,
-      );
-    }
+    // [LAW:one-source-of-truth] A mismatch in either direction stays up and
+    // answers VERSION_MISMATCH, which the client surfaces without kicking.
+    // The host changes bundle only when the install's record or the running
+    // bundle moves (the binary watch), never because a client claims a newer
+    // protocol: a worktree's client ahead of the installed bundle would end the
+    // installed host on every respawn, and every bar would flap.
+    // Shutting down on an older client was the load-bearing half of the
+    // 452-corpse spiral (kz8.5).
+    parts.log(
+      "info",
+      `version mismatch: client=${req.v} ${req.v > PROTOCOL_VERSION ? ">" : "<"} daemon=${PROTOCOL_VERSION}; staying up`,
+    );
     return replied(
-      replyOf(
-        {
-          ok: false,
-          error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-          code: "VERSION_MISMATCH",
-          daemonV: PROTOCOL_VERSION,
-        },
-        // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-        // Exit is sequenced on the response flush, so the client always sees
-        // the VERSION_MISMATCH diagnostic — never a dead socket.
-        req.v > PROTOCOL_VERSION ? 0 : null,
-      ),
+      stay({
+        ok: false,
+        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+        code: "VERSION_MISMATCH",
+        daemonV: PROTOCOL_VERSION,
+      }),
     );
   }
 

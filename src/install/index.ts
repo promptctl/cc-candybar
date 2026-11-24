@@ -38,6 +38,7 @@ import {
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
 import { stageExecutable } from "./stage-executable.js";
+import { recordIfInstall } from "./record";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
@@ -593,6 +594,7 @@ export async function runInstall(
   }
 
   updateClaudeSettings(staged.binPath, argsToInstall, force, world.host);
+  recordHostBundleFollowingStatusLine(staged.distPath, world.host);
 
   process.stdout.write(installSuccessMessage());
 
@@ -612,6 +614,36 @@ export async function runInstall(
   process[report.stream].write(report.text);
 }
 
+// The CLI runs in the user's own shell, so its CLAUDE_CONFIG_DIR is the one
+// the Claude Code they launch from it reads.
+function userSettingsPath(host: Host): string {
+  return claudeSettingsPath(
+    claudeConfigDir(detectClaudeConfigDir(host.env, process.cwd()), host.home),
+  );
+}
+
+// [LAW:single-enforcer] Every path that can make a bundle the install ends
+// here: the statusline setting is read as it stands, and the host's bundle
+// record follows it (src/install/record.ts).
+function recordHostBundleFollowingStatusLine(bundle: string, host: Host): void {
+  const recording = recordIfInstall(
+    bundle,
+    readClaudeSettings(userSettingsPath(host)).statusLine,
+    host,
+  );
+  process.stdout.write(
+    recording.kind === "recorded"
+      ? `Recorded ${recording.bundle} as the host's bundle\n`
+      : `Host bundle not recorded: the statusLine command names ${recording.named ?? "no cc-candybar bundle"}, not ${bundle}\n`,
+  );
+}
+
+// The checkout's install step: a build is complete without staging, so this
+// is what makes a checkout whose statusline command names it the host's code.
+export function runRecordHostBundle(bundle: string, world: World): void {
+  recordHostBundleFollowingStatusLine(bundle, world.host);
+}
+
 // One value spliced at one key path of settings.json.
 type SettingsEdit = readonly [keyPath: readonly string[], value: unknown];
 
@@ -622,16 +654,7 @@ function updateClaudeSettings(
   host: Host,
   overridePath?: string,
 ): void {
-  // The CLI runs in the user's own shell, so its CLAUDE_CONFIG_DIR is the one
-  // the Claude Code they launch from it reads.
-  const target =
-    overridePath ??
-    claudeSettingsPath(
-      claudeConfigDir(
-        detectClaudeConfigDir(host.env, process.cwd()),
-        host.home,
-      ),
-    );
+  const target = overridePath ?? userSettingsPath(host);
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   const statusLine = readClaudeSettings(target).statusLine;

@@ -580,6 +580,23 @@ const CHECKS = [
     ts: lit(TS_PATHS, /const SPAWN_BACKOFF_FILE = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_MAIN, /const SPAWN_BACKOFF_FILE: &str = "((?:[^"\\]|\\.)*)";/),
   },
+  // The install's record of the host's bundle: both clients read the same file,
+  // and both say the same words when it gives them no bundle to start from.
+  {
+    label: "host-bundle filename",
+    ts: lit(TS_PATHS, /const HOST_BUNDLE_FILE = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const HOST_BUNDLE_FILE: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "glyph host bundle unrecorded",
+    ts: lit(TS_GLYPH, /const HOST_BUNDLE_UNRECORDED =\s*"((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_GLYPH, /const HOST_BUNDLE_UNRECORDED: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "glyph host bundle unusable",
+    ts: lit(TS_GLYPH, /const HOST_BUNDLE_UNUSABLE =\s*"((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_GLYPH, /const HOST_BUNDLE_UNUSABLE: &str = "((?:[^"\\]|\\.)*)";/),
+  },
   // The daemon's memory budget: both spawners derive node's --max-old-space-size
   // from it, the daemon derives its RSS backstop from it, and the cap must stay
   // above the backstop (limits.ts). All three pieces must agree or one runtime

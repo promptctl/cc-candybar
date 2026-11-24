@@ -17,6 +17,7 @@ import type { Timekeeper } from "./time";
 import {
   runInstall,
   runInstallUrlHandler,
+  runRecordHostBundle,
   runUrlHandle,
   stableAttachPreload,
 } from "./install";
@@ -29,7 +30,7 @@ import { DEBUG_WHATS } from "./daemon/foundations/debug-types";
 import { schemaPlan } from "./config-cli";
 import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
-import { planOutcome } from "./outcome-plan";
+import { planAfterKick, planOutcome } from "./outcome-plan";
 import { HELP_TEXT } from "./help-text";
 import { attachCommandLine } from "./attach-launcher";
 import fs from "node:fs";
@@ -89,6 +90,10 @@ type Subcommand = (args: readonly string[]) => Promise<void>;
 const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   install: async (args) => {
     await runInstall(args, RUNNING_BUNDLE, commandWorld());
+    process.exit(0);
+  },
+  "record-host-bundle": async () => {
+    runRecordHostBundle(RUNNING_BUNDLE, commandWorld());
     process.exit(0);
   },
   "install-url-handler": async () => {
@@ -232,12 +237,15 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // [LAW:dataflow-not-control-flow] planOutcome maps each variant to a
     // plan value (output, kick, debug); the side effects below run against
     // the plan in fixed order. Variability lives in the data.
-    const plan = planOutcome(outcome, host.env.XDG_STATE_HOME);
+    const asked = planOutcome(outcome, host.env.XDG_STATE_HOME);
+    // [LAW:no-silent-failure] A kick the install's record refuses reaches the
+    // bar: the frame is delivered after the kick's outcome is known.
+    const plan = planAfterKick(
+      asked,
+      asked.kick ? obtainDaemonKick(world) : null,
+    );
     if (plan.debug !== null) {
       debug(plan.debug);
-    }
-    if (plan.kick) {
-      obtainDaemonKick(world);
     }
     await exitWith({ stdout: plan.output, stderr: "", code: 0 });
   } catch (error) {
