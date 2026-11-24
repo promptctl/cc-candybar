@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-944",
-      "ref": "refs/pull/944/merge",
-      "sha": "3a72dcb98d547c141c2b12d9bae7d96502f30998",
-      "timestamp": "2026-11-24T01:34:34.303Z",
-      "commits": [
-        {
-          "sha": "3a72dcb98d547c141c2b12d9bae7d96502f30998",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:33:29-07:00",
-          "message": "Merge 234a9a6a6b8d84e95435ff284010c77f549adaef into 5ed95054ad70e3716ce635aee35e03ee0896831f\n"
-        },
-        {
-          "sha": "234a9a6a6b8d84e95435ff284010c77f549adaef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:31:58-07:00",
-          "message": "test(site): the site test waits for the branch to reach the page, as it already waits for the seek (brandon-unfiled-3248.frhb)\n\nThe first redraw drew before the daemon's branch read landed, so on a loaded\nrunner the page still showed the pending 'polled' segment. That failed the\nmain run of the trusted-publishing merge twice and held its Release job back.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5ed95054ad70e3716ce635aee35e03ee0896831f",
-      "timestamp": "2026-11-24T01:29:13.354Z",
+      "sha": "1c82bac9e5fbe33376414fbe0f00a8254dcbf5c5",
+      "timestamp": "2026-11-24T01:37:50.814Z",
       "commits": [
         {
-          "sha": "5ed95054ad70e3716ce635aee35e03ee0896831f",
+          "sha": "1c82bac9e5fbe33376414fbe0f00a8254dcbf5c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:28:06-07:00",
-          "message": "fix(release): Publish job uses npm trusted publishing, no stored token (#943)\n\nfix(release): the Publish job publishes by npm trusted publishing, with no stored token (brandon-unfiled-3248.frhb)\n\nNPM_TOKEN was a granular token with npm's 90-day cap; it expired and every\npublish since v1.236.6 failed, which npm reports as E404. Each @promptctl\npackage now names this repo's release.yml as its trusted publisher, so the\njob's OIDC identity is the credential. Trusted publishing needs npm 11.5.1+,\nwhich Node 22 does not ship."
+          "timestamp": "2026-11-23T18:36:43-07:00",
+          "message": "test(site): the site test waits for the branch to reach the page (#944)\n\ntest(site): the site test waits for the branch to reach the page, as it already waits for the seek (brandon-unfiled-3248.frhb)\n\nThe first redraw drew before the daemon's branch read landed, so on a loaded\nrunner the page still showed the pending 'polled' segment. That failed the\nmain run of the trusted-publishing merge twice and held its Release job back."
         }
       ]
     }
