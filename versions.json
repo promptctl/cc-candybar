@@ -4,15 +4,22 @@
     {
       "version": "pr-955",
       "ref": "refs/pull/955/merge",
-      "sha": "519cf8c4eb00b0c8b89260abb3b796ead227141d",
-      "timestamp": "2026-11-24T20:52:56.413Z",
+      "sha": "f8dc737244a1ff210720cde6b21cd1eee3d1b087",
+      "timestamp": "2026-11-24T21:05:42.818Z",
       "commits": [
         {
-          "sha": "519cf8c4eb00b0c8b89260abb3b796ead227141d",
+          "sha": "f8dc737244a1ff210720cde6b21cd1eee3d1b087",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T20:52:05Z",
-          "message": "Merge 820b870c0f1a9a83282d2c35ce1cbfeaeeecbd4a into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+          "timestamp": "2026-11-24T21:04:34Z",
+          "message": "Merge 1101d29d533b01fd03de7851e333674f649150bb into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+        },
+        {
+          "sha": "1101d29d533b01fd03de7851e333674f649150bb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T14:04:17-07:00",
+          "message": "fix(links): a swatches row over a key no variable reads back draws as it did, instead of throwing in the render (candybar-host-renderer-x96a.7qi)\n"
         },
         {
           "sha": "820b870c0f1a9a83282d2c35ce1cbfeaeeecbd4a",

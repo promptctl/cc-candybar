@@ -68291,13 +68291,6 @@ function requireOptionKind(runtime, name, helper) {
   }
   return action2;
 }
-function requireReadBack(runtime, applyName, apply2, helper) {
-  if (!renderBinding(runtime, helper).store.has(apply2.stateVar)) {
-    throw new Error(
-      `${helper} references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
-    );
-  }
-}
 function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
@@ -68493,9 +68486,13 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
-  requireReadBack(runtime, applyName, apply2, "carousel");
   const binding = renderBinding(runtime, "carousel");
   const { store } = binding;
+  if (!store.has(apply2.stateVar)) {
+    throw new Error(
+      `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
+    );
+  }
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = clickSession(runtime, "carousel");
   const { options } = apply2;
@@ -68592,7 +68589,6 @@ function requireSwatchable(runtime, applyName, helper) {
 }
 function optionPalette(runtime, applyName, helper, chosen) {
   const apply2 = requireSwatchable(runtime, applyName, helper);
-  if (chosen === void 0) requireReadBack(runtime, applyName, apply2, helper);
   const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply2.stateVar);
   if (!apply2.options.includes(option)) {
     throw new Error(
@@ -68625,7 +68621,6 @@ function swatchesFuncs(runtime, activeSegment) {
     swatches: {
       fn: (applyName, pageName) => {
         const apply2 = requireSwatchable(runtime, applyName, "swatches");
-        requireReadBack(runtime, applyName, apply2, "swatches");
         const page2 = requireKind(
           runtime,
           pageName,
