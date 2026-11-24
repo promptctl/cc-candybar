@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "75172bc2fc5c0d9718f43b5f28f3f7bc194d4306",
-      "timestamp": "2026-11-24T01:55:16.151Z",
+      "sha": "0a4c9e344d200164eb36b2069e8585ab5bfb1beb",
+      "timestamp": "2026-11-24T01:58:51.045Z",
       "commits": [
         {
-          "sha": "75172bc2fc5c0d9718f43b5f28f3f7bc194d4306",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:54:04-07:00",
-          "message": "fix(release): the Publish job's cap sits above the registry wait (#945)\n\nfix(release): the Publish job's cap sits above the registry wait publish.mjs budgets (brandon-unfiled-3248.frhb)\n\npublish.mjs waits up to 10 minutes for the registry to serve the platform\npackages; the job was capped at 5. v1.236.13's wait ran past four minutes and\nthe job was cancelled with its packages already accepted."
+          "sha": "0a4c9e344d200164eb36b2069e8585ab5bfb1beb",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T01:57:15Z",
+          "message": "chore(release): set `package.json` to 1.236.14\n\n## [1.236.14](https://github.com/promptctl/cc-candybar/compare/v1.236.13...v1.236.14) (2026-11-24)\n\n### Bug Fixes\n\n* **release:** the Publish job's cap sits above the registry wait ([#945](https://github.com/promptctl/cc-candybar/issues/945)) ([75172bc](https://github.com/promptctl/cc-candybar/commit/75172bc2fc5c0d9718f43b5f28f3f7bc194d4306))\n"
         }
       ]
     }
