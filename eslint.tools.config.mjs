@@ -7,7 +7,9 @@ import tsparser from "@typescript-eslint/parser";
 import globals from "globals";
 
 import { zonesPlugin } from "./eslint.config.mjs";
-import { CODE_GLOB, OUTSIDE_JEST_ROOTS } from "./scripts/import-zones.mjs";
+import { CODE_GLOB, JS_GLOB, OUTSIDE_JEST_ROOTS } from "./scripts/import-zones.mjs";
+
+const BROWSER_PAGE = "scripts/bar-web/**/*.js";
 
 export default [
   // Run over the repo, it lints those roots and nothing else.
@@ -20,15 +22,17 @@ export default [
   },
   // [LAW:one-way-deps] A tool's environment is closed: its TypeScript is
   // type-checked with Node's types alone, and its JavaScript reads only what
-  // Node provides (and the browser, for the page `pnpm bar:web` serves), so a
+  // Node provides, or the browser, for the page `pnpm bar:web` serves, so a
   // name only Jest installs is undefined, `typeof` included.
   {
-    files: OUTSIDE_JEST_ROOTS.map((root) => `${root}**/*.{js,mjs,cjs}`),
+    files: OUTSIDE_JEST_ROOTS.map((root) => `${root}${JS_GLOB}`),
+    ignores: [BROWSER_PAGE],
     languageOptions: { globals: globals.node },
     rules: { "no-undef": ["error", { typeof: true }] },
   },
   {
-    files: ["scripts/bar-web/**/*.js"],
+    files: [BROWSER_PAGE],
     languageOptions: { globals: globals.browser },
+    rules: { "no-undef": ["error", { typeof: true }] },
   },
 ];

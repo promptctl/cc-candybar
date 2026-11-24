@@ -83,10 +83,15 @@ export const OUTSIDE_JEST_ROOTS = Object.entries(ZONE_ROWS)
   .filter(([, zone]) => zone === "tools" || zone === "lib")
   .map(([row]) => row);
 
-// The extensions of code: every glob the zone rule runs over, and every key it
-// strips, spell them from here.
-export const CODE_EXTENSIONS = ["ts", "mts", "cts", "js", "mjs", "cjs"];
-export const CODE_GLOB = `**/*.{${CODE_EXTENSIONS.join(",")}}`;
+// [LAW:one-source-of-truth] The extensions of code: every glob a lint config
+// runs over, and every key the zone rule strips, spell them from here.
+const TS_EXTENSIONS = ["ts", "mts", "cts"];
+const JS_EXTENSIONS = ["js", "mjs", "cjs"];
+export const CODE_EXTENSIONS = [...TS_EXTENSIONS, ...JS_EXTENSIONS];
+const globOf = (extensions) => `**/*.{${extensions.join(",")}}`;
+export const CODE_GLOB = globOf(CODE_EXTENSIONS);
+export const TS_GLOB = globOf(TS_EXTENSIONS);
+export const JS_GLOB = globOf(JS_EXTENSIONS);
 const CODE_EXTENSION = new RegExp(`\\.(?:${CODE_EXTENSIONS.join("|")})$`);
 export const withoutExtension = (p) => p.replace(CODE_EXTENSION, "");
 const ZONE_KEYS = Object.entries(ZONE_ROWS)

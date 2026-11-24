@@ -98,6 +98,14 @@ const GLOBALS: Record<string, LintCase> = Object.fromEntries(
   ),
 );
 
+// The page `pnpm bar:web` serves runs in the browser, which has no Node.
+const PAGE: Record<string, LintCase> = {
+  "the page's read of Node's process": {
+    file: "scripts/bar-web/probe.js",
+    code: "export const env = process.env;\n",
+  },
+};
+
 const ALLOWED: Record<string, LintCase> = {
   ...Object.fromEntries(
     NOT_JEST_PACKAGES.map((pkg) => [
@@ -139,7 +147,7 @@ describe("the tools lint", () => {
 
   beforeAll(() => {
     const messages = lintCases(
-      { ...REFUSED, ...GLOBALS, ...ALLOWED },
+      { ...REFUSED, ...GLOBALS, ...PAGE, ...ALLOWED },
       {
         overrideConfigFile: "eslint.tools.config.mjs",
       },
@@ -172,6 +180,10 @@ describe("the tools lint", () => {
   test.each(Object.keys(GLOBALS))("Jest's %s fails lint", (name) => {
     const global = name.split(" ")[0];
     expect(found[name]).toEqual([`no-undef: '${global}' is not defined.`]);
+  });
+
+  test.each(Object.keys(PAGE))("%s fails lint", (name) => {
+    expect(found[name]).toEqual(["no-undef: 'process' is not defined."]);
   });
 
   test.each(Object.keys(ALLOWED))("%s passes lint", (name) => {

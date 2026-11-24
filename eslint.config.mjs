@@ -6,7 +6,7 @@ import prettierPlugin from "eslint-plugin-prettier";
 import globals from "globals";
 import fs from "node:fs";
 import path from "node:path";
-import { CODE_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
+import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -415,9 +415,12 @@ const importDirection = {
     // [LAW:one-way-deps] What a loader Node hands code loads is an edge like
     // an import's: `require`, `module.require`, `process.getBuiltinModule`,
     // and the loader `createRequire` makes, under whatever name it is bound
-    // to. A loader is used by a call with its source, which is judged, or by
-    // `.resolve`, which locates and loads nothing. Any other use (an alias,
-    // `.call`, an export) carries it where no lint follows, so it is refused.
+    // to. A loader it reads is used by a call with its source, which is
+    // judged, or by `.resolve`, which locates and loads nothing. Any other use
+    // (an alias, `.call`, an export) carries it where no lint follows, so it
+    // is refused. A loader reached by a name it does not read (an alias of
+    // `module` or `process`, `Module._load`, `globalThis`, `eval`) is not
+    // judged.
     const refuseUse = (node, what) =>
       context.report({
         node,
@@ -477,16 +480,26 @@ const importDirection = {
         ? loaderUse(node.parent, baseOf(node.parent), "A `createRequire` loader")
         : refuseUse(node, "`createRequire`");
     const builtinUse = (node) => loaderUse(node, dir, "`getBuiltinModule`");
-    // A loader destructured out of its module or of `process`.
-    const fromPattern = (property, use) => {
+    // A key's name: an identifier's, or a string's when computed.
+    const keyOf = (key, computed) =>
+      !computed && key.type === "Identifier"
+        ? key.name
+        : key.type === "Literal" && typeof key.value === "string"
+          ? key.value
+          : null;
+    const LOADER_USES = { createRequire: makerUse, getBuiltinModule: builtinUse };
+    // A loader destructured out of its module or of `process`, bound by a
+    // declaration whose reads are followed; destructured anywhere else (a
+    // parameter, a nested pattern, an assignment), it is not followed.
+    const fromPattern = (property, name) => {
       const pattern = property.parent;
       const declarator = pattern.parent;
-      if (pattern.type !== "ObjectPattern" || declarator.type !== "VariableDeclarator") return;
-      if (property.value.type !== "Identifier") {
-        refuseUse(property, `\`${property.key.name}\``);
+      if (pattern.type !== "ObjectPattern") return;
+      if (declarator.type !== "VariableDeclarator" || property.value.type !== "Identifier") {
+        refuseUse(property, `\`${name}\``);
         return;
       }
-      for (const read of readsOf(declarator, property.value.name)) use(read);
+      for (const read of readsOf(declarator, property.value.name)) LOADER_USES[name](read);
     };
     // The spellings of an edge it reads: `import`, `export … from`,
     // `import()`, the type `import("…").T`, `import x = require("…")`, a
@@ -542,10 +555,14 @@ const importDirection = {
         if (!LOADER_MODULES.includes(node.parent.source.value)) return;
         for (const read of readsOf(node, node.local.name)) makerUse(read);
       },
-      "MemberExpression[computed=false][property.name='createRequire']": makerUse,
-      "MemberExpression[computed=false][property.name='getBuiltinModule']": builtinUse,
-      "Property[key.name='createRequire']": (node) => fromPattern(node, makerUse),
-      "Property[key.name='getBuiltinModule']": (node) => fromPattern(node, builtinUse),
+      MemberExpression: (node) => {
+        const name = keyOf(node.property, node.computed);
+        if (Object.hasOwn(LOADER_USES, name)) LOADER_USES[name](node);
+      },
+      Property: (node) => {
+        const name = keyOf(node.key, node.computed);
+        if (Object.hasOwn(LOADER_USES, name)) fromPattern(node, name);
+      },
     };
   },
 };
@@ -560,7 +577,7 @@ export const zonesPlugin = { rules: { "import-direction": importDirection } };
 // [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
 // arrives in its inputs, so a renderer that opened one would read a disk its
 // host never chose and no snapshot recorded.
-const RENDERER_GLOB = "src/renderer/**/*.{ts,mts}";
+const RENDERER_GLOB = `src/renderer/${TS_GLOB}`;
 const RENDERER_FS_PATHS = [
   "fs",
   "node:fs",
@@ -607,7 +624,7 @@ function ownedImportBlocks() {
   ];
   return [
     {
-      files: ["src/**/*.{ts,mts}"],
+      files: [`src/${TS_GLOB}`],
       ignores: ["src/proc/**", CLOCK_FILE],
       rules: { "no-restricted-imports": restrictedImports(null) },
     },
@@ -620,7 +637,7 @@ function ownedImportBlocks() {
     // src/proc/spawner.ts alone may import child_process, so the rest of
     // src/proc keeps it with the clock's paths, and the spawner only the clock's.
     {
-      files: ["src/proc/**/*.{ts,mts}"],
+      files: [`src/proc/${TS_GLOB}`],
       ignores: [SPAWNER_FILE],
       rules: {
         "no-restricted-imports": [
@@ -653,34 +670,19 @@ function ownedImportBlocks() {
 export default [
   js.configs.recommended,
   {
-    files: ["**/*.{ts,mts}"],
+    files: [TS_GLOB],
     languageOptions: {
       parser: tsparser,
       ecmaVersion: "latest",
       sourceType: "module",
+      // Node's globals, as src's JavaScript reads them, and the names only
+      // TypeScript's types declare.
       globals: {
-        console: "readonly",
-        process: "readonly",
-        Buffer: "readonly",
-        BufferEncoding: "readonly",
+        ...globals.node,
         NodeJS: "readonly",
-        __dirname: "readonly",
-        __filename: "readonly",
+        BufferEncoding: "readonly",
         // The build stamp tsdown bakes (src/build-stamps.d.ts).
         __SOURCE_DIGEST__: "readonly",
-        URL: "readonly",
-        fetch: "readonly",
-        // A monotonic clock, global in Node and the browser page alike.
-        performance: "readonly",
-        AbortSignal: "readonly",
-        AbortController: "readonly",
-        DOMException: "readonly",
-        Response: "readonly",
-        setTimeout: "readonly",
-        clearTimeout: "readonly",
-        setInterval: "readonly",
-        clearInterval: "readonly",
-        require: "readonly",
       },
     },
     plugins: {
@@ -727,11 +729,11 @@ export default [
   // one Node, the browser page or the bundle provides, `typeof` included, so
   // nothing reaches for a global only a test's environment installs.
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${TS_GLOB}`],
     rules: { "no-undef": ["error", { typeof: true }] },
   },
   {
-    files: ["src/**/*.{js,mjs,cjs}"],
+    files: [`src/${JS_GLOB}`],
     languageOptions: { ecmaVersion: "latest", sourceType: "module", globals: globals.node },
     rules: { "no-undef": ["error", { typeof: true }] },
   },
@@ -741,7 +743,7 @@ export default [
   // `detach` runs it and reports what it throws, so `void` is no way out, and
   // a promise handed where a callback's return is dropped is refused too.
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${TS_GLOB}`],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -766,7 +768,7 @@ export default [
   // It also catches the destructured spelling (`const { env } = process`); an
   // alias of `process` itself is the one it cannot see.
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${TS_GLOB}`],
     ignores: [...HOST_READERS, CLOCK_FILE, ...KILL_OWNERS],
     rules: {
       "no-restricted-properties": [
@@ -803,7 +805,7 @@ export default [
   // argument. The blocks after this one repeat CLOCK_SYNTAX and CLOCK_GLOBALS
   // beside their own, because a later block replaces the rule.
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${TS_GLOB}`],
     ignores: [CLOCK_FILE],
     rules: {
       "no-restricted-globals": ["error", ...CLOCK_GLOBALS],

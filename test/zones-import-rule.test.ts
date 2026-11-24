@@ -175,6 +175,14 @@ const REFUSED = {
     file: IN_RENDERER,
     code: `export const fs = process.getBuiltinModule("node:fs");\n`,
   },
+  rendererComputedKeyBuiltinOfDisk: {
+    file: IN_RENDERER,
+    code: `export const fs = process["getBuiltinModule"]("node:fs");\n`,
+  },
+  createRequireDestructuredInAParameter: {
+    file: IN_REST,
+    code: `export const load = ({ createRequire }: typeof import("node:module")) => createRequire(".")("jest");\n`,
+  },
   rendererDestructuredBuiltinOfDisk: {
     file: IN_RENDERER,
     code: `const { getBuiltinModule } = process;\nexport const fs = getBuiltinModule("node:fs");\n`,
