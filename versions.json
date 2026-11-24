@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-950",
+      "ref": "refs/pull/950/merge",
+      "sha": "ac9214d7b7895b4055714931f629c8e98617f154",
+      "timestamp": "2026-11-24T14:21:41.236Z",
+      "commits": [
+        {
+          "sha": "ac9214d7b7895b4055714931f629c8e98617f154",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:20:15-07:00",
+          "message": "Merge 955bebc91f23ffeb74c1a13ff12e9820dc5d3079 into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+        },
+        {
+          "sha": "955bebc91f23ffeb74c1a13ff12e9820dc5d3079",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:19:46-07:00",
+          "message": "feat(bar-pane): the statusline gets a click mode that reaches an action's hover and alt+click bindings, and the toggle stays live in every mode\n"
+        },
+        {
+          "sha": "0401de276f6e487da2fb806cd90adb523b90a91d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:56:47-07:00",
+          "message": "feat(bar-pane): the pane that owns a session's pointer reports its gestures and hover, and the draw reads them as surface and hover\n"
+        },
+        {
+          "sha": "e3599d39a879ff84569112418d2d711e0fcdf1df",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:46:14-07:00",
+          "message": "feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n"
+        }
+      ]
+    },
+    {
       "version": "pr-949",
       "ref": "refs/pull/949/merge",
       "sha": "2d4330711db1c50c0c31b7e260c040c3c493eedb",
