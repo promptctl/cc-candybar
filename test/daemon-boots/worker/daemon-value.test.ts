@@ -24,7 +24,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { effectsUrl, VERB_SET_STATE, VERB_SLASH } from "../../../src/click/wire";
+import {
+  effectsUrl,
+  VERB_SET_STATE,
+  VERB_SLASH,
+} from "../../../src/click/wire";
 import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
 import type { ServedDaemon } from "../../../src/daemon/daemon";
@@ -38,9 +42,7 @@ import {
   rendererNameOf,
   type RendererName,
 } from "../../../src/daemon/foundations/renderer-name";
-import {
-  type RendererBoot,
-} from "../../../src/renderer-interface/interface";
+import { type RendererBoot } from "../../../src/renderer-interface/interface";
 import type { LaunchResult } from "../../../src/proc/launcher";
 import { type Timekeeper } from "../../../src/time";
 import { daemonClock } from "../../../src/host";
@@ -65,7 +67,9 @@ import { linkUrls } from "../../helpers/frame";
 import {
   buildDaemon,
   bundleAt,
+  frameOf,
   prepareDaemon,
+  replyOf,
   statsOf,
 } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
@@ -249,35 +253,8 @@ describe("the daemon is a value", () => {
     },
   });
 
-  const reply = async (
-    daemon: ServedDaemon,
-    req: Parameters<ServedDaemon["reply"]>[0],
-  ): Promise<Response> => {
-    const handled = await daemon.handle(
-      classifyInbound(req),
-      () => false,
-      daemon.stats.accept(),
-      () => false,
-    );
-    if (handled.kind !== "reply") throw new Error("expected a reply");
-    handled.settled(true);
-    if (!handled.resp.ok) throw new Error(handled.resp.error);
-    return handled.resp;
-  };
-
-  // A render's answer.
-  const answer = async (
-    daemon: ServedDaemon,
-    req: ReaderRenderRequest,
-  ): Promise<Frame> => {
-    const resp = await reply(daemon, req);
-    if (!("frame" in resp))
-      throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
-    return parseFrame(resp.frame);
-  };
-
   const clickLink = (daemon: ServedDaemon, url: string): Promise<Response> =>
-    reply(daemon, clickBody(url));
+    replyOf(daemon, clickBody(url));
 
   const writeConfig = (text: string): void => writeFileSync(config, text);
 
@@ -408,7 +385,7 @@ describe("the daemon is a value", () => {
     const renderer = waitingRenderer(WORKTREE);
     const daemon = construct({ clock, renderer: renderer.port });
     daemon.arm();
-    await answer(daemon, renderRequest("live-primary"));
+    await frameOf(daemon, renderRequest("live-primary"));
     const requested = daemon.handle(
       classifyInbound(worktreeRequest("down-worktree")),
       () => false,
@@ -484,7 +461,10 @@ describe("the daemon is a value", () => {
                 input.event.context.hookData.session_id === session
               )
                 await context.wait();
-              if (prepared.name === WORKTREE && input.event.kind === "close-journal")
+              if (
+                prepared.name === WORKTREE &&
+                input.event.kind === "close-journal"
+              )
                 await journal.wait();
               return link.renderer.answer(input);
             },
@@ -516,8 +496,8 @@ describe("the daemon is a value", () => {
         },
       }),
     });
-    await answer(daemon, worktreeRequest("worktree-drains"));
-    const pane = await answer(daemon, {
+    await frameOf(daemon, worktreeRequest("worktree-drains"));
+    const pane = await frameOf(daemon, {
       ...renderRequest("pane-during-drain"),
       tmux: {
         socket: path.join(root, "tmux.sock"),
@@ -527,7 +507,9 @@ describe("the daemon is a value", () => {
     });
     const slashLink = (line: string) =>
       findUrl(linkUrls(pane), (effects) =>
-        effects.some(({ verb, args }) => verb === VERB_SLASH && args[1] === line),
+        effects.some(
+          ({ verb, args }) => verb === VERB_SLASH && args[1] === line,
+        ),
       );
     const compact = slashLink("/compact");
     const clear = slashLink("/clear");
@@ -597,10 +579,14 @@ describe("the daemon is a value", () => {
   test("closing refuses requests and subscriptions without throwing or writing a click", async () => {
     writeConfig(PADDED);
     const daemon = construct();
-    await answer(daemon, renderRequest("value-refused"));
-    const click = clickBody(drawnHere(effectsUrl([
-      { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
-    ])));
+    await frameOf(daemon, renderRequest("value-refused"));
+    const click = clickBody(
+      drawnHere(
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
+        ]),
+      ),
+    );
     const closing = daemon.close();
     expect(daemon.close()).toBe(closing);
     const accepted = daemon.stats.accept();
@@ -610,12 +596,23 @@ describe("the daemon is a value", () => {
       accepted,
       () => false,
     );
-    expect(render).toMatchObject({ kind: "reply", resp: {
+    expect(render).toMatchObject({
+      kind: "reply",
+      resp: {
+        ok: false,
+        error: "the daemon closed: render refused",
+      },
+    });
+    const clicked = await daemon.reply(
+      click,
+      () => false,
+      daemon.stats.accept(),
+      () => false,
+    );
+    expect(clicked.resp).toMatchObject({
       ok: false,
-      error: "the daemon closed: render refused",
-    } });
-    const clicked = await daemon.reply(click, () => false, daemon.stats.accept(), () => false);
-    expect(clicked.resp).toMatchObject({ ok: false, error: "the daemon closed: click refused" });
+      error: "the daemon closed: click refused",
+    });
     const refused = jest.fn();
     const unsubscribe = daemon.subscribe(VALUE_REFUSED, {
       lane: "statusline",
@@ -626,15 +623,19 @@ describe("the daemon is a value", () => {
     });
     unsubscribe();
     expect(refused).toHaveBeenCalledTimes(1);
-    expect(refused).toHaveBeenCalledWith(expect.objectContaining({
-      error: "the daemon closed: subscribe refused",
-    }));
+    expect(refused).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "the daemon closed: subscribe refused",
+      }),
+    );
     expect(() => daemon.arm()).toThrow("the daemon closed");
     await close(daemon);
     expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
     await Promise.all(openLogs.map((log) => log.drained()));
     const lines = readFileSync(daemonPaths(hostNow()).log, "utf8").split("\n");
-    const event = lines.filter((line) => line.includes(` render req=${accepted.id} `));
+    const event = lines.filter((line) =>
+      line.includes(` render req=${accepted.id} `),
+    );
     expect(event).toHaveLength(1);
     expect(event[0]).toContain("[info]");
     expect(event[0]).toContain(" outcome=closing ");
@@ -647,8 +648,8 @@ describe("the daemon is a value", () => {
     const first = construct();
     const second = construct();
     expect(second).not.toBe(first);
-    await answer(first, renderRequest("value-first"));
-    await answer(second, renderRequest("value-second"));
+    await frameOf(first, renderRequest("value-first"));
+    await frameOf(second, renderRequest("value-second"));
     await close(first);
     await close(second);
   });
@@ -665,7 +666,7 @@ describe("the daemon is a value", () => {
     expect([...live.keys()].filter((id) => !settled.includes(id))).toEqual([]);
 
     const daemon = construct();
-    await answer(daemon, renderRequest("value-rebuilt"));
+    await frameOf(daemon, renderRequest("value-rebuilt"));
     await close(daemon);
   });
 
@@ -673,25 +674,25 @@ describe("the daemon is a value", () => {
     writeConfig(PADDED);
     const daemon = construct();
 
-    const before = await answer(daemon, renderRequest("value-click"));
+    const before = await frameOf(daemon, renderRequest("value-click"));
     expect(textOf(before)).toContain("[wide]");
     const [url] = linkUrls(before);
     await clickLink(daemon, url!);
 
-    const after = await answer(daemon, renderRequest("value-click"));
+    const after = await frameOf(daemon, renderRequest("value-click"));
     expect(width(after)).toBeGreaterThan(width(before));
   });
 
   test("a second daemon over the same storage sees the first's picks", async () => {
     writeConfig(PADDED);
     const first = construct();
-    const before = await answer(first, renderRequest("value-restart"));
+    const before = await frameOf(first, renderRequest("value-restart"));
     const [url] = linkUrls(before);
     await clickLink(first, url!);
     await close(first);
 
     const second = construct();
-    const after = await answer(second, renderRequest("value-restart"));
+    const after = await frameOf(second, renderRequest("value-restart"));
     expect(width(after)).toBeGreaterThan(width(before));
   });
 
@@ -709,7 +710,7 @@ describe("the daemon is a value", () => {
     const clock = { ...daemonClock(), now: () => frozen.getTime() };
     const daemon = construct({ clock });
 
-    const bar = await answer(
+    const bar = await frameOf(
       daemon,
       renderRequest("value-clock", clock.now() + 2_000),
     );
@@ -735,7 +736,7 @@ describe("the daemon is a value", () => {
     daemon.arm();
 
     // A recorded session and a source waiting in the background.
-    await answer(daemon, renderRequest("value-close"));
+    await frameOf(daemon, renderRequest("value-close"));
     const { setting, on } = LANES.statusline.switch;
     await clickLink(
       daemon,

@@ -10,9 +10,18 @@ export const MAIN_RENDERER = "main" as RendererName;
 // lowercase letters, digits and inner dashes: no spelling of one names
 // another's directory.
 export function rendererNameOf(raw: string): RendererName {
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
+  const name = parsedRendererName(raw);
+  if (name === null)
     throw new Error(
       `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`,
     );
-  return raw as RendererName;
+  return name;
+}
+
+// The same grammar, for a reader to whom a string that is no name is an
+// answer rather than an error: none.
+export function parsedRendererName(raw: string): RendererName | null {
+  return /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw)
+    ? (raw as RendererName)
+    : null;
 }

@@ -1,3 +1,14 @@
+## [1.238.0](https://github.com/promptctl/cc-candybar/compare/v1.237.1...v1.238.0) (2026-11-24)
+
+### Features
+
+* **bar-pane:** pane gestures and hover, and a click mode for the statusline ([#950](https://github.com/promptctl/cc-candybar/issues/950)) ([93e21b1](https://github.com/promptctl/cc-candybar/commit/93e21b1fbfc4aa90f16e25593aba94dbdeafa602))
+* **host:** each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer ([#951](https://github.com/promptctl/cc-candybar/issues/951)) ([8833392](https://github.com/promptctl/cc-candybar/commit/883339212b09112b044d4287f5e9b331d9697e1c))
+
+### Bug Fixes
+
+* **lint:** code outside Jest, src included, imports none of Jest's packages and reads none of its globals (candybar-later-fixes-nwu9.1d4) ([#952](https://github.com/promptctl/cc-candybar/issues/952)) ([6c7c981](https://github.com/promptctl/cc-candybar/commit/6c7c981b224e645054c0e73a3bc2c8cd0e347174))
+
 ## [1.237.1](https://github.com/promptctl/cc-candybar/compare/v1.237.0...v1.237.1) (2026-11-24)
 
 ### Bug Fixes

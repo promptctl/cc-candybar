@@ -6,13 +6,21 @@ import {
   type RoundTripOutcome,
 } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
-import { RuntimeStats } from "./stats";
+import { isPlainObject } from "../config/loader/validate-core.js";
+import { read } from "../utils/wire-shape.js";
+import { STATS_SHAPE } from "./foundations/stats-shape.js";
 import {
-  missingFields,
   type Durations,
+  type RendererPanel,
   type StatsSnapshot,
 } from "./foundations/stats-snapshot";
-export { missingFields } from "./foundations/stats-snapshot";
+import {
+  nearLimit,
+  chargeWords,
+  mb,
+  type ProcessMemory,
+  usageWords,
+} from "./foundations/memory-limit";
 import { fileEventsLine } from "./cache/file-events";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
@@ -38,7 +46,7 @@ export async function daemonStatsPlan(
 // said before anything is checked; a skewed daemon's JSON is still delivered,
 // beside the skew on stderr and a failing code.
 export function statsPlan(
-  outcome: RoundTripOutcome<StatsSnapshot>,
+  outcome: RoundTripOutcome<StatsReply>,
   wantJson: boolean,
 ): CliPlan {
   if (outcome.kind !== "ok") {
@@ -48,49 +56,74 @@ export function statsPlan(
       code: 1,
     };
   }
-  const json = wantJson ? JSON.stringify(outcome.value, null, 2) + "\n" : null;
-  const skew = shapeSkew(outcome.value);
-  if (skew !== null) {
-    return { stdout: json ?? "", stderr: `daemon-stats: ${skew}\n`, code: 1 };
+  const reply = outcome.value;
+  const said = reply.kind === "ours" ? reply.snapshot : reply.said;
+  const json = wantJson ? JSON.stringify(said, null, 2) + "\n" : null;
+  if (reply.kind === "another-build") {
+    return {
+      stdout: json ?? "",
+      stderr: `daemon-stats: ${reply.skew}\n`,
+      code: 1,
+    };
   }
-  return { stdout: json ?? formatStats(outcome.value), stderr: "", code: 0 };
+  return { stdout: json ?? formatStats(reply.snapshot), stderr: "", code: 0 };
 }
 
 export function fetchStats(
   world: ClientWorld,
-): Promise<RoundTripOutcome<StatsSnapshot>> {
-  // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
-  // an unchecked cast from socket JSON; the presence check is the explicit
-  // narrowing at the wire edge (an ok response without `stats` classifies as
-  // permanent/malformed_response in the transport).
+): Promise<RoundTripOutcome<StatsReply>> {
+  // [LAW:no-defensive-null-guards] exception: trust boundary. The presence
+  // check is the narrowing at the wire's edge: an ok response without `stats`
+  // classifies as permanent/malformed_response in the transport, and one with
+  // it is read once, here.
   return requestOutcome(
     world,
     () => ({ kind: "stats" }),
     BUDGETS,
-    (resp) => ("stats" in resp ? resp.stats : undefined),
+    (resp) => ("stats" in resp ? statsReplyOf(resp.stats) : undefined),
   );
 }
 
-// [LAW:no-silent-failure] The snapshot is typed as THIS build's, and a
-// daemon of another build answers with another shape: a field this build
-// added is absent, and reading it as ours would throw on the first such field
-// — `pnpm build` then `daemon-stats` inside the minute before the binary
-// watch restarts the daemon. The invariant is the SHAPE (every field this
-// client reads is there), not the build's identity: a worktree's client
-// reading the main checkout's daemon is a different digest and the same
-// shape, and it is refused by nothing. The fields are checked against this
-// build's own reference snapshot, never a second spelling of the type.
-export function shapeSkew(s: StatsSnapshot): string | null {
-  const missing = missingFields(RuntimeStats.referenceSnapshot(), s);
-  if (missing.length === 0) return null;
-  return `the daemon (${theirLabel(s)}) reports no ${missing.join(", ")}; ${anotherBuild}`;
+// [LAW:parse-dont-validate] A daemon's stats, read where they arrive: this
+// build's snapshot, or another build's, which answers with another shape (a
+// field this build added is absent) and is said, never read as ours —
+// `pnpm build` then `daemon-stats` inside the minute before the binary watch
+// restarts the daemon. The invariant is the SHAPE (every field this client
+// reads is there), not the build's identity: a worktree's client reading the
+// main checkout's daemon is a different digest and the same shape, and it is
+// refused by nothing. The reply is read against this build's declaration of
+// its own type, so a field, an arm or a word this build reads and the reply
+// lacks is the skew.
+export type StatsReply =
+  | { readonly kind: "ours"; readonly snapshot: StatsSnapshot }
+  | {
+      readonly kind: "another-build";
+      readonly said: unknown;
+      readonly skew: string;
+    };
+
+export function statsReplyOf(said: unknown): StatsReply {
+  const reply = read(STATS_SHAPE, said);
+  return reply.kind === "read"
+    ? { kind: "ours", snapshot: reply.value }
+    : {
+        kind: "another-build",
+        said,
+        skew: `this client cannot read ${reply.at.map((at) => at || "<snapshot>").join(", ")} from the daemon (${theirLabel(said)}); ${anotherBuild}`,
+      };
 }
 
-// [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot is
-// an unchecked cast from socket JSON, and an older daemon's carries no digest
-// field.
-const theirLabel = (s: StatsSnapshot): string =>
-  buildLabel(s.version, s.sourceDigest ?? null);
+// Another build's own words for which build it is, as far as it says them.
+// [LAW:no-defensive-null-guards] exception: trust boundary. The reply is
+// another build's, so either word may be absent or of another type, and each
+// is said as missing.
+function theirLabel(said: unknown): string {
+  const word = (key: string): string | null => {
+    const value = isPlainObject(said) ? said[key] : undefined;
+    return typeof value === "string" ? value : null;
+  };
+  return buildLabel(word("version") ?? "no version", word("sourceDigest"));
+}
 
 const myLabel = buildLabel(PACKAGE_VERSION, bakedDigest());
 const anotherBuild = `it is another build than this client (${myLabel}), and restarts only when its own bundle changes`;
@@ -139,12 +172,11 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  heapTotal     ${fmtBytes(s.heapTotalBytes)}`);
   lines.push(`  external      ${fmtBytes(s.externalBytes)}`);
   lines.push(`  arrayBuffers  ${fmtBytes(s.arrayBuffersBytes)}`);
+  lines.push(`  memory        ${memoryWords(s.host)}`);
   lines.push(``);
   lines.push(`requests`);
   lines.push(`  total         ${s.requests.total}`);
-  // Older daemons do not count the compact client's environment challenges.
-  if (s.requests.environmentMisses !== undefined)
-    lines.push(`  env misses    ${s.requests.environmentMisses}`);
+  lines.push(`  env misses    ${s.requests.environmentMisses}`);
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);
@@ -214,46 +246,13 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  long lines    ${s.transcriptReads.longLines}`);
   lines.push(`  largest line  ${fmtBytes(s.transcriptReads.largestLine)}`);
   lines.push(``);
-  lines.push(`renderCache`);
-  lines.push(`  size          ${s.renderCache.size}`);
-  lines.push(`  held          ${s.renderCache.held}`);
-  lines.push(`  retired       ${s.renderCache.retired}`);
-  lines.push(`  compiles      ${s.renderCache.compiles}`);
-  lines.push(`  views         ${s.renderCache.views}`);
-  lines.push(`  pinned        ${s.renderCache.pinned}`);
-  lines.push(`  retired views ${s.renderCache.retiredViews}`);
-  lines.push(`  passages      ${s.renderCache.passages}`);
-  lines.push(
-    `  accounted     ${fmtBytes(s.renderCache.accountedBytes)} / ${fmtBytes(s.renderCache.budgetBytes)}`,
-  );
-  lines.push(``);
   lines.push(`collector`);
   lines.push(`  sessions      ${s.collector.sessions}`);
   lines.push(`  retiring      ${s.collector.retiring}`);
   lines.push(``);
-  lines.push(`effectCache`);
-  lines.push(`  sessions      ${s.effectCache.sessions}`);
-  lines.push(`  effects       ${s.effectCache.effects}`);
-  lines.push(``);
-  lines.push(`menuIdle`);
-  lines.push(`  sessions      ${s.menuIdle.sessions}`);
-  lines.push(`  armed         ${s.menuIdle.armed}`);
-  lines.push(``);
-  lines.push(`mailbox`);
-  lines.push(`  holder        ${s.mailbox.holder ?? "-"}`);
-  lines.push(`  held          ${s.mailbox.heldMs}ms`);
-  lines.push(`  queued        ${s.mailbox.queued}`);
-  lines.push("");
-  lines.push("renderer turns");
-  lines.push(`  parked        ${s.rendererTurns.parked}`);
-  lines.push(`  presents      ${s.rendererTurns.presents}`);
-  lines.push(`  deferrals     ${s.rendererTurns.deferrals}`);
-  lines.push(``);
-  lines.push(`sessionState`);
-  lines.push(`  sessions      ${s.sessionState.sessions}`);
-  lines.push(`  observers     ${s.sessionState.observers}`);
-  lines.push(`  revision      ${s.sessionState.revision}`);
-  lines.push(``);
+  // [LAW:one-type-per-behavior] Every renderer's panel from one printer, so
+  // a worktree's reads as the main renderer's does.
+  for (const panel of s.renderers) lines.push(...rendererPanelLines(panel), ``);
   lines.push(`watchers`);
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);
@@ -296,9 +295,72 @@ export function formatStats(s: StatsSnapshot): string {
   for (const [label, n] of refusedRows) {
     lines.push(`  ${label.padEnd(colWidth)} ${n}`);
   }
-  if (s.nextRestartReason) {
-    lines.push(``);
-    lines.push(`nextRestart    ${s.nextRestartReason}`);
-  }
   return lines.join("\n") + "\n";
+}
+
+// [LAW:one-source-of-truth] A process's memory in one sentence: its charge
+// against the limit, what it said of itself beside it, and whether the charge
+// is past the daemon's line of near the limit.
+function memoryWords(process: ProcessMemory): string {
+  const { memory, limit } = process;
+  if (memory.kind === "unmeasured") return `unmeasured (limit ${mb(limit)} MB)`;
+  const { charge, usage, ageMs } = memory;
+  return `checked ${Math.round(ageMs / 1000)} s ago: ${chargeWords(charge)} of limit ${mb(limit)} MB (${usageWords(usage)})${nearLimit(process) ? ", approaching its limit" : ""}`;
+}
+
+function rendererPanelLines({
+  name,
+  process,
+  mailbox,
+  stats,
+}: RendererPanel): string[] {
+  const lines = [`renderer ${name}`];
+  switch (process.kind) {
+    case "in-host":
+      lines.push(`  process       the host's, charged as the host's`);
+      break;
+    case "not-running":
+      lines.push(`  process       not running: ${process.why}`);
+      break;
+    case "process":
+      lines.push(`  process       pid ${process.memory.pid}`);
+      lines.push(`  memory        ${memoryWords(process.memory)}`);
+      break;
+  }
+  lines.push(
+    `  mailbox       holder ${mailbox.holder ?? "-"} · held ${mailbox.heldMs}ms · queued ${mailbox.queued}`,
+  );
+  if (stats.kind === "failed") {
+    lines.push(`  stats         unanswered: ${stats.reason}`);
+    return lines;
+  }
+  const r = stats.value;
+  lines.push(`  renderCache`);
+  lines.push(`    size          ${r.renderCache.size}`);
+  lines.push(`    held          ${r.renderCache.held}`);
+  lines.push(`    retired       ${r.renderCache.retired}`);
+  lines.push(`    compiles      ${r.renderCache.compiles}`);
+  lines.push(`    views         ${r.renderCache.views}`);
+  lines.push(`    pinned        ${r.renderCache.pinned}`);
+  lines.push(`    retired views ${r.renderCache.retiredViews}`);
+  lines.push(`    passages      ${r.renderCache.passages}`);
+  lines.push(
+    `    accounted     ${fmtBytes(r.renderCache.accountedBytes)} / ${fmtBytes(r.renderCache.budgetBytes)}`,
+  );
+  lines.push(`  effectCache`);
+  lines.push(`    sessions      ${r.effectCache.sessions}`);
+  lines.push(`    effects       ${r.effectCache.effects}`);
+  lines.push(`  menuIdle`);
+  lines.push(`    sessions      ${r.menuIdle.sessions}`);
+  lines.push(`    armed         ${r.menuIdle.armed}`);
+  lines.push(`  turns`);
+  lines.push(`    parked        ${r.rendererTurns.parked}`);
+  lines.push(`    presents      ${r.rendererTurns.presents}`);
+  lines.push(`    deferrals     ${r.rendererTurns.deferrals}`);
+  lines.push(`  sessionState`);
+  lines.push(`    sessions      ${r.sessionState.sessions}`);
+  lines.push(`    observers     ${r.sessionState.observers}`);
+  lines.push(`    revision      ${r.sessionState.revision}`);
+  lines.push(`  framesDrawn   ${r.framesDrawn}`);
+  return lines;
 }

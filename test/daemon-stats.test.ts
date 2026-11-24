@@ -1,8 +1,13 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import {
-  type Durations,
-  type SourceSnapshots,
+import type {
+  Durations,
+  SourceSnapshots,
 } from "../src/daemon/foundations/stats-snapshot";
+import { EMPTY_RENDERER_STATS, emptyStats } from "./helpers/empty-stats";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+} from "../src/daemon/foundations/renderer-name";
 
 // No durations recorded: every reading zero, never NaN.
 const NO_DURATIONS: Durations = {
@@ -17,8 +22,7 @@ const NO_DURATIONS: Durations = {
 };
 import {
   formatStats,
-  missingFields,
-  shapeSkew,
+  statsReplyOf,
   statsPlan,
 } from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
@@ -26,6 +30,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { BYTES_PER_MB as MB } from "../src/daemon/foundations/memory-limit";
 
 const S1 = sessionIdOf("s1");
 
@@ -59,9 +64,7 @@ const SOURCES: SourceSnapshots = {
     daemon: 1,
     configDir: 1,
     repo: 4,
-    directory: 3,
     session: 10,
-    view: 2,
     pane: 2,
   },
   held: {
@@ -129,29 +132,11 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
   fileEvents: FILE_EVENTS,
   sourceRuns: SOURCE_RUNS,
   transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-  renderCache: {
-    size: 3,
-    held: 1,
-    retired: 0,
-    compiles: 1,
-    views: 0,
-    pinned: 0,
-    retiredViews: 0,
-    passages: 0,
-    accountedBytes: 3,
-    budgetBytes: 9,
-  },
   collector: { sessions: 1, retiring: 0 },
-  effectCache: { sessions: 2, effects: 5 },
-  menuIdle: { sessions: 2, armed: 1 },
-  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
-  mailbox: { holder: null, heldMs: 0, queued: 0 },
   runs: { started: 3, failed: 1, timedOut: 1, refused: 0, running: 0 },
-  sessionState: { sessions: 2, observers: 11, revision: 7 },
   frameFeeds: {
     feeds: 0,
     subscribers: 0,
-    drawn: 0,
     pushed: 0,
     refused: 0,
     lookups: 0,
@@ -175,11 +160,22 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
     },
   ],
   bundle: "/opt/cc/dist/index.mjs",
-  daemon: {
-    pid: 1234,
-    memory: { kind: "unmeasured" },
-    limit: 1,
-  },
+  host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, nearAt: 0 },
+  renderers: [
+    {
+      name: MAIN_RENDERER,
+      process: { kind: "in-host" },
+      mailbox: { holder: null, heldMs: 0, queued: 0 },
+      stats: {
+        kind: "ok",
+        value: {
+          ...EMPTY_RENDERER_STATS,
+          effectCache: { sessions: 2, effects: 5 },
+          sessionState: { sessions: 2, observers: 11, revision: 7 },
+        },
+      },
+    },
+  ],
 };
 
 describe("RuntimeStats.snapshot", () => {
@@ -226,19 +222,14 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.gitCache.held).toBe(1);
     expect(snap.usageCache.size).toBe(10);
     expect(snap.sources).toEqual(SOURCES);
-    expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
-    expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
+    expect(snap.host).toEqual(EXTRAS.host);
+    expect(snap.renderers).toEqual(EXTRAS.renderers);
     expect(snap.runs).toEqual({
       started: 3,
       failed: 1,
       timedOut: 1,
       refused: 0,
       running: 0,
-    });
-    expect(snap.sessionState).toEqual({
-      sessions: 2,
-      observers: 11,
-      revision: 7,
     });
     expect(snap.watchers).toEqual({
       active: 2,
@@ -258,7 +249,7 @@ describe("RuntimeStats.snapshot", () => {
   // stamp (what `cc-candybar --version` prints for the same build), and the
   // wire contract number lives under its own name — two facts, two fields.
   test("version is the package stamp; protocolVersion is the wire contract", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     expect(snap.version).toBe(pkg.version);
     expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
   });
@@ -329,55 +320,225 @@ describe("RuntimeStats.snapshot", () => {
   });
 });
 
-describe("shapeSkew", () => {
-  test("a snapshot from this build is none", () => {
-    expect(shapeSkew(RuntimeStats.referenceSnapshot())).toBeNull();
+describe("a stats reply", () => {
+  test("a snapshot from this build is ours", () => {
+    const snap = emptyStats();
+    expect(statsReplyOf(snap)).toEqual({ kind: "ours", snapshot: snap });
   });
 
-  test("a snapshot of another digest with every field is none: shape, not identity", () => {
-    const snap = RuntimeStats.referenceSnapshot();
-    expect(shapeSkew({ ...snap, sourceDigest: "abcdef0123456789" })).toBeNull();
-    expect(shapeSkew({ ...snap, version: "0.0.1" })).toBeNull();
+  test("a snapshot of another digest with every field is ours: shape, not identity", () => {
+    const snap = emptyStats();
+    for (const other of [
+      { ...snap, sourceDigest: "abcdef0123456789" },
+      { ...snap, version: "0.0.1" },
+    ])
+      expect(statsReplyOf(other)).toEqual({ kind: "ours", snapshot: other });
   });
 
-  test("a snapshot lacking fields this build reads names them and both builds", () => {
-    const snap = RuntimeStats.referenceSnapshot();
-    const { sessionState: _s, sourceDigest: _d, ...older } = snap;
-    const skew = shapeSkew(older as typeof snap);
-    expect(skew).toContain("reports no sourceDigest, sessionState");
-    expect(skew).toContain(`the daemon (${pkg.version} [no digest])`);
-    expect(skew).toContain(`this client (${pkg.version} [`);
+  test("a snapshot lacking fields this build reads is another build's, naming them and both builds", () => {
+    const snap = emptyStats();
+    const { renderers: _r, sourceDigest: _d, ...older } = snap;
+    const reply = statsReplyOf(older);
+    if (reply.kind !== "another-build") throw new Error("read as ours");
+    expect(reply.said).toBe(older);
+    expect(reply.skew).toContain(
+      `this client cannot read sourceDigest, renderers from the daemon (${pkg.version} [no digest]);`,
+    );
+    expect(reply.skew).toContain(`this client (${pkg.version} [`);
   });
 
-  test("missingFields names a nested field by its path, and an atom in place of an object", () => {
-    const snap = RuntimeStats.referenceSnapshot();
-    const { observers: _o, ...sessionState } = snap.sessionState;
-    expect(missingFields(snap, { ...snap, sessionState })).toEqual([
-      "sessionState.observers",
-    ]);
-    expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
-    // A list the reader maps, carried as anything else, is as absent to it.
-    expect(
-      missingFields(snap, { ...snap, clients: null }),
-    ).toEqual(["clients"]);
-    expect(missingFields(snap, snap)).toEqual([]);
-    // A union's arms differ: the reference's `unmeasured` arm is no spec of
-    // a `measured` one, so a tagged union is judged present, not below its
-    // tag.
-    const measured = {
-      ...snap,
-      daemon: {
-        ...snap.daemon,
-        memory: { kind: "measured", rss: 1 },
+  test("a reply that is no snapshot at all is another build's, its build unsaid", () => {
+    const reply = statsReplyOf(7);
+    expect(reply).toMatchObject({ kind: "another-build", said: 7 });
+    if (reply.kind !== "another-build") throw new Error("read as ours");
+    expect(reply.skew).toMatch(
+      /^this client cannot read <snapshot> from the daemon \(no version \[no digest\]\);/,
+    );
+  });
+
+  // Where a reply is not this build's, as the skew names it.
+  const skewOf = (said: unknown): string[] => {
+    const reply = statsReplyOf(said);
+    if (reply.kind === "ours") return [];
+    return /cannot read (.*) from the daemon \([^)]*\); it is another build/
+      .exec(reply.skew)![1]!
+      .split(", ");
+  };
+  const sizes = { rss: 1, heapTotal: 1 };
+  const panel = (fields: object) => ({
+    name: MAIN_RENDERER,
+    process: { kind: "in-host" },
+    mailbox: { holder: "render", heldMs: 3, queued: 1 },
+    stats: { kind: "ok", value: EMPTY_RENDERER_STATS },
+    ...fields,
+  });
+
+  test("the producer's snapshot is ours in every arm its parts report", () => {
+    const stats = new RuntimeStats(systemTimekeeper);
+    const memory = (reading: object) => ({
+      pid: 9,
+      memory: reading,
+      limit: 512 * MB,
+      nearAt: 384 * MB,
+    });
+    const snap = stats.snapshot({
+      ...EXTRAS,
+      sourceDigest: "abcdef",
+      sources: {
+        ...SOURCES,
+        records: [
+          {
+            name: "git",
+            scope: "repo",
+            refreshes: { first: 1, change: 2 },
+            failures: 0,
+            abandoned: 0,
+            lastMs: 4,
+          },
+        ],
       },
-    };
-    expect(missingFields(snap, measured)).toEqual([]);
+      fileEvents: {
+        ...FILE_EVENTS,
+        delivery: { kind: "unmeasured", since: 1, reason: "x", missedSince: 1 },
+      },
+      clients: [
+        {
+          ...EXTRAS.clients[0]!,
+          client: { kind: "native", bundle: "/b", source: null },
+          termCols: null,
+        },
+      ],
+      host: memory({
+        kind: "measured",
+        ageMs: 1,
+        charge: { kind: "charged", measure: "phys_footprint", bytes: 1 },
+        usage: { kind: "read", sizes },
+      }) as never,
+      renderers: [
+        panel({}),
+        panel({
+          process: { kind: "not-running", why: "it exited 1" },
+          stats: { kind: "failed", reason: "not asked" },
+        }),
+        panel({
+          process: {
+            kind: "process",
+            memory: memory({
+              kind: "measured",
+              ageMs: 1,
+              charge: { kind: "stand-in", rss: 1, gap: 0, unread: "x" },
+              usage: { kind: "unread", why: "no ping" },
+            }),
+          },
+        }),
+        panel({
+          process: {
+            kind: "process",
+            memory: memory({
+              kind: "measured",
+              ageMs: 1,
+              charge: { kind: "unread", gap: 0, unread: "x" },
+              usage: { kind: "read", sizes },
+            }),
+          },
+        }),
+      ] as never,
+    });
+    expect(skewOf(snap)).toEqual([]);
     expect(
-      missingFields(snap, {
+      skewOf({
         ...snap,
-        daemon: { ...snap.daemon, memory: 3 },
+        fileEvents: {
+          ...snap.fileEvents,
+          delivery: { kind: "stalled", missedSince: 1 },
+        },
       }),
-    ).toEqual(["daemon.memory"]);
+    ).toEqual([]);
+  });
+
+  test("a field missing below the top, an atom in place of an object, and a list carried as anything else are each named by path", () => {
+    const snap = emptyStats();
+    const { retiring: _r, ...collector } = snap.collector;
+    expect(skewOf({ ...snap, collector })).toEqual(["collector.retiring"]);
+    expect(skewOf({ ...snap, watchers: 3 })).toEqual(["watchers"]);
+    expect(skewOf({ ...snap, clients: null })).toEqual(["clients"]);
+    expect(skewOf({ ...snap, host: { ...snap.host, memory: 3 } })).toEqual([
+      "host.memory",
+    ]);
+  });
+
+  test("an arm or a word this build does not know is another build's, named at its tag", () => {
+    const snap = emptyStats();
+    expect(
+      skewOf({ ...snap, host: { ...snap.host, memory: { kind: "later" } } }),
+    ).toEqual(["host.memory.kind"]);
+    expect(
+      skewOf({
+        ...snap,
+        renderers: [
+          panel({ process: { kind: "later" } }),
+          panel({ stats: { kind: "later", value: {} } }),
+        ],
+      }),
+    ).toEqual(["renderers[0].process.kind", "renderers[1].stats.kind"]);
+    expect(
+      skewOf({
+        ...snap,
+        clients: [{ ...EXTRAS.clients[0]!, frame: "later" }],
+      }),
+    ).toEqual(["clients[0].frame"]);
+  });
+
+  test("a field of another type than this build's is another build's", () => {
+    const snap = emptyStats();
+    expect(skewOf({ ...snap, sourceDigest: {}, version: 7 })).toEqual([
+      "version",
+      "sourceDigest",
+    ]);
+    expect(
+      skewOf({
+        ...snap,
+        renderers: [panel({ mailbox: { holder: 3, heldMs: 0, queued: 0 } })],
+      }),
+    ).toEqual(["renderers[0].mailbox.holder"]);
+  });
+
+  test("each arm is read below its tag, and each element of a list", () => {
+    const snap = emptyStats();
+    const measured = (memory: object) => ({
+      ...snap,
+      host: {
+        ...snap.host,
+        memory: { kind: "measured", ageMs: 0, ...memory },
+      },
+    });
+    expect(skewOf(measured({ usage: { kind: "read", sizes } }))).toEqual([
+      "host.memory.charge",
+    ]);
+    expect(
+      skewOf(
+        measured({
+          charge: { kind: "stand-in", rss: 1, unread: "x" },
+          usage: { kind: "read", sizes },
+        }),
+      ),
+    ).toEqual(["host.memory.charge.gap"]);
+    const { refreshes: _f, ...unrefreshed } = {
+      name: "git",
+      scope: "repo",
+      refreshes: {},
+      failures: 0,
+      abandoned: 0,
+      lastMs: null,
+    };
+    const { frame: _d, ...undrawn } = EXTRAS.clients[0]!;
+    expect(
+      skewOf({
+        ...snap,
+        sources: { ...snap.sources, records: [unrefreshed] },
+        clients: [undrawn],
+      }),
+    ).toEqual(["sources.records[0].refreshes", "clients[0].frame"]);
   });
 });
 
@@ -427,29 +588,11 @@ describe("formatStats", () => {
       fileEvents: FILE_EVENTS,
       sourceRuns: SOURCE_RUNS,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      renderCache: {
-        size: 4,
-        held: 0,
-        retired: 1,
-        compiles: 2,
-        views: 0,
-        pinned: 0,
-        retiredViews: 0,
-        passages: 0,
-        accountedBytes: 32 * 1024 * 1024,
-        budgetBytes: 128 * 1024 * 1024,
-      },
       collector: { sessions: 1, retiring: 0 },
-      effectCache: { sessions: 2, effects: 3 },
-      menuIdle: { sessions: 2, armed: 1 },
-      rendererTurns: { parked: 2, presents: 1, deferrals: 3 },
-      mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 3, failed: 1, timedOut: 1, refused: 0, running: 0 },
-      sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: {
         feeds: 0,
         subscribers: 0,
-        drawn: 0,
         pushed: 0,
         refused: 0,
         lookups: 0,
@@ -476,16 +619,110 @@ describe("formatStats", () => {
         pipeErrors: 0,
         durations: {},
       },
-      nextRestartReason: null,
       clients: [],
       bundle: "/",
-      daemon: {
+      host: {
         pid: 1234,
-        memory: { kind: "unmeasured" },
-        limit: 1,
+        memory: {
+          kind: "measured",
+          ageMs: 42_000,
+          charge: {
+            kind: "charged",
+            measure: "phys_footprint",
+            bytes: 40 * MB,
+          },
+          usage: { kind: "read", sizes: { rss: 50 * MB, heapTotal: 30 * MB } },
+        },
+        limit: 512 * MB,
+        nearAt: 384 * MB,
       },
+      renderers: [
+        {
+          name: MAIN_RENDERER,
+          process: {
+            kind: "process",
+            memory: {
+              pid: 4343,
+              memory: {
+                kind: "measured",
+                ageMs: 7_400,
+                charge: {
+                  kind: "charged",
+                  measure: "phys_footprint",
+                  bytes: 420 * MB,
+                },
+                usage: {
+                  kind: "read",
+                  sizes: { rss: 450 * MB, heapTotal: 200 * MB },
+                },
+              },
+              limit: 512 * MB,
+              nearAt: 384 * MB,
+            },
+          },
+          mailbox: { holder: "render", heldMs: 12, queued: 2 },
+          stats: {
+            kind: "ok",
+            value: {
+              renderCache: {
+                size: 4,
+                held: 0,
+                retired: 1,
+                compiles: 2,
+                views: 0,
+                pinned: 0,
+                retiredViews: 0,
+                passages: 0,
+                accountedBytes: 32 * MB,
+                budgetBytes: 128 * MB,
+              },
+              effectCache: { sessions: 2, effects: 3 },
+              menuIdle: { sessions: 2, armed: 1 },
+              rendererTurns: { parked: 2, presents: 1, deferrals: 3 },
+              sessionState: { sessions: 2, observers: 11, revision: 7 },
+              framesDrawn: 9,
+            },
+          },
+        },
+        {
+          name: rendererNameOf("worktree"),
+          process: { kind: "not-running", why: "it exited 1" },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "failed", reason: "renderer worktree is down" },
+        },
+        {
+          name: rendererNameOf("site"),
+          process: { kind: "in-host" },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "ok", value: EMPTY_RENDERER_STATS },
+        },
+      ],
     });
     expect(out).toContain("pid           1234");
+    expect(out).toContain(
+      "memory        checked 42 s ago: phys_footprint 40 MB of limit 512 MB (rss 50 MB, v8 heap 30 MB)\n",
+    );
+    // Every renderer's panel from one printer, whatever its name.
+    expect(out).toContain(
+      [
+        "renderer main",
+        "  process       pid 4343",
+        "  memory        checked 7 s ago: phys_footprint 420 MB of limit 512 MB (rss 450 MB, v8 heap 200 MB), approaching its limit",
+        "  mailbox       holder render · held 12ms · queued 2",
+        "  renderCache",
+      ].join("\n"),
+    );
+    expect(out).toContain(
+      [
+        "renderer worktree",
+        "  process       not running: it exited 1",
+        "  mailbox       holder - · held 0ms · queued 0",
+        "  stats         unanswered: renderer worktree is down",
+      ].join("\n"),
+    );
+    expect(out).toContain(
+      "renderer site\n  process       the host's, charged as the host's\n",
+    );
     expect(out).toContain("env misses    3");
     // A name a client chose cannot forge a row: each is a JSON string.
     expect(out).toContain('unknownFields "fast_mode", "x\\n  inFlight      9"');
@@ -501,7 +738,7 @@ describe("formatStats", () => {
       "session/cache             failures=1 last=0ms refreshes first:1 period:0 change:2",
     );
     expect(out).toContain(
-      "homes         daemon:1 configDir:1 repo:4 directory:3 session:10 view:2 pane:2",
+      "homes         daemon:1 configDir:1 repo:4 session:10 pane:2",
     );
     expect(out).toContain(
       "held          git:1 tmux:1 host:2 today:1 pluginStorage:1 transcript:3",
@@ -528,8 +765,9 @@ describe("formatStats", () => {
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
     expect(out).toContain(
-      "renderer turns\n  parked        2\n  presents      1\n  deferrals     3",
+      "  turns\n    parked        2\n    presents      1\n    deferrals     3",
     );
+    expect(out).toContain("framesDrawn   9");
     expect(out).toContain("armed         1");
     expect(out).toContain("observers     11");
     expect(out).toContain("revision      7");
@@ -538,7 +776,7 @@ describe("formatStats", () => {
   });
 
   test("a refused row sits in the column the rows above it use", () => {
-    const snap = RuntimeStats.referenceSnapshot();
+    const snap = emptyStats();
     const out = formatStats({
       ...snap,
       subprocesses: {
@@ -552,6 +790,64 @@ describe("formatStats", () => {
     const width = "click.pbcopy refused".length;
     expect(out).toContain(`  ${"git".padEnd(width)} 1\n`);
     expect(out).toContain(`  ${"click.pbcopy refused".padEnd(width)} 3\n`);
+  });
+
+  test("near the limit is judged on the daemon's line, not this build's", () => {
+    const snap = emptyStats();
+    const at = (nearAt: number) =>
+      formatStats({
+        ...snap,
+        host: {
+          pid: 1234,
+          memory: {
+            kind: "measured",
+            ageMs: 0,
+            charge: { kind: "charged", measure: "rss", bytes: 40 * MB },
+            usage: { kind: "read", sizes: { rss: 40 * MB, heapTotal: 0 } },
+          },
+          limit: 512 * MB,
+          nearAt,
+        },
+      });
+    expect(at(32 * MB)).toContain(
+      "memory        checked 0 s ago: rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB), approaching its limit\n",
+    );
+    expect(at(384 * MB)).toContain(
+      "memory        checked 0 s ago: rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB)\n",
+    );
+  });
+
+  test("a renderer nothing could charge says so, and is never called near its limit", () => {
+    const snap = emptyStats();
+    const why =
+      "footprint printed no phys_footprint for pid 4343, and no ping has answered yet";
+    const out = formatStats({
+      ...snap,
+      renderers: [
+        {
+          name: MAIN_RENDERER,
+          process: {
+            kind: "process",
+            memory: {
+              pid: 4343,
+              memory: {
+                kind: "measured",
+                ageMs: 3_000,
+                charge: { kind: "unread", gap: 0, unread: why },
+                usage: { kind: "unread", why: "no ping has answered yet" },
+              },
+              limit: 512 * MB,
+              nearAt: 384 * MB,
+            },
+          },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "ok", value: EMPTY_RENDERER_STATS },
+        },
+      ],
+    });
+    expect(out).toContain(
+      `  memory        checked 3 s ago: unread (${why}) of limit 512 MB (no sizes: no ping has answered yet)\n`,
+    );
   });
 
   test("hit rate is n/a when no observations", () => {
@@ -586,33 +882,15 @@ describe("formatStats", () => {
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      sources: RuntimeStats.referenceSnapshot().sources,
-      fileEvents: RuntimeStats.referenceSnapshot().fileEvents,
-      sourceRuns: RuntimeStats.referenceSnapshot().sourceRuns,
+      sources: emptyStats().sources,
+      fileEvents: emptyStats().fileEvents,
+      sourceRuns: emptyStats().sourceRuns,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      renderCache: {
-        size: 0,
-        held: 0,
-        retired: 0,
-        compiles: 0,
-        views: 0,
-        pinned: 0,
-        retiredViews: 0,
-        passages: 0,
-        accountedBytes: 0,
-        budgetBytes: 0,
-      },
       collector: { sessions: 1, retiring: 0 },
-      effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0 },
-      rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
-      mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
-      sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
         subscribers: 0,
-        drawn: 0,
         pushed: 0,
         refused: 0,
         lookups: 0,
@@ -639,16 +917,13 @@ describe("formatStats", () => {
         pipeErrors: 0,
         durations: {},
       },
-      nextRestartReason: null,
       clients: [],
       bundle: "/",
-      daemon: {
-        pid: 1234,
-        memory: { kind: "unmeasured" },
-        limit: 1,
-      },
+      host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, nearAt: 0 },
+      renderers: [],
     });
     expect(out).toContain("hit rate      n/a");
+    expect(out).toContain("memory        unmeasured (limit 0 MB)");
   });
 });
 
@@ -656,25 +931,33 @@ describe("formatStats", () => {
 // plan value (src/cli-plan.ts delivers it), so it is pinned here without a
 // process.
 describe("statsPlan — the text/exit-code contract", () => {
-  const snap = RuntimeStats.referenceSnapshot();
+  const snap = emptyStats();
 
   it("JSON mode carries the whole snapshot on stdout and exits 0", () => {
-    const plan = statsPlan({ kind: "ok", value: snap }, true);
+    const plan = statsPlan(
+      { kind: "ok", value: { kind: "ours", snapshot: snap } },
+      true,
+    );
     expect(plan.code).toBe(0);
     expect(plan.stderr).toBe("");
     expect(JSON.parse(plan.stdout)).toEqual(JSON.parse(JSON.stringify(snap)));
   });
 
   it("text mode carries the formatted report", () => {
-    const plan = statsPlan({ kind: "ok", value: snap }, false);
+    const plan = statsPlan(
+      { kind: "ok", value: { kind: "ours", snapshot: snap } },
+      false,
+    );
     expect(plan).toEqual({ stdout: formatStats(snap), stderr: "", code: 0 });
   });
 
   it("a skewed daemon's JSON is still delivered, beside the skew and a failing code", () => {
     const { clients: _clients, ...older } = snap;
-    const plan = statsPlan({ kind: "ok", value: older as typeof snap }, true);
+    const plan = statsPlan({ kind: "ok", value: statsReplyOf(older) }, true);
     expect(plan.code).toBe(1);
-    expect(plan.stderr).toMatch(/^daemon-stats: .*reports no clients/);
+    expect(plan.stderr).toMatch(
+      /^daemon-stats: this client cannot read clients from the daemon /,
+    );
     expect(JSON.parse(plan.stdout)).not.toHaveProperty("clients");
   });
 
