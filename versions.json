@@ -4,15 +4,22 @@
     {
       "version": "pr-951",
       "ref": "refs/pull/951/merge",
-      "sha": "94c9a22e71cf53a8169ea4d949fa1175559f6f3a",
-      "timestamp": "2026-11-24T16:51:04.209Z",
+      "sha": "878c55e7b0cb2fcd013b8bfdc4d523fed88808b6",
+      "timestamp": "2026-11-24T16:53:11.854Z",
       "commits": [
         {
-          "sha": "94c9a22e71cf53a8169ea4d949fa1175559f6f3a",
+          "sha": "878c55e7b0cb2fcd013b8bfdc4d523fed88808b6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:49:48Z",
-          "message": "Merge 12684c417e6ddc7d9a300894750d537a0ce47f97 into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+          "timestamp": "2026-11-24T16:51:54Z",
+          "message": "Merge 1186cebca73cf9ad01324e70229aa0852d3f490a into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+        },
+        {
+          "sha": "1186cebca73cf9ad01324e70229aa0852d3f490a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T09:51:35-07:00",
+          "message": "test(stats): an unread renderer's fixture carries the gap its charge holds (candybar-host-renderer-x96a.8xv)\n"
         },
         {
           "sha": "12684c417e6ddc7d9a300894750d537a0ce47f97",
