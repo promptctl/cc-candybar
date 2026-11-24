@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-958",
+      "ref": "refs/pull/958/merge",
+      "sha": "885dd861f6fae9292c53e98ba594c3b708e49bfd",
+      "timestamp": "2026-11-24T23:44:30.805Z",
+      "commits": [
+        {
+          "sha": "885dd861f6fae9292c53e98ba594c3b708e49bfd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T23:42:39Z",
+          "message": "Merge 3621a571f8d16d4928037e3c78f573f0626ec0af into 1b60f481a32ccbc977686108a7b4498de1c72ade\n"
+        },
+        {
+          "sha": "3621a571f8d16d4928037e3c78f573f0626ec0af",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:29:44-07:00",
+          "message": "test(controls): each control is declared once with its mark and arrows, the ring is refused when the picker pages, and every ring comment says the link carries its step and never its landing (candybar-host-renderer-x96a.7o3)\n\nReview pass 2 on #958.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "f7446dc60e0add69fb095405105de1d65f639655",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:18:39-07:00",
+          "message": "test(controls): each control over a per-draw rule is read on its own row, and every ◀ ▶ ? steps from the option the draw wore; a ring step near the safe range lands exactly (candybar-host-renderer-x96a.7o3)\n\nReview pass 1 on #958. The test now reads each control's row alone, takes\nthe ring from the picker, clicks ◀ and ▶ of the carousel and the swatches\nrow in every domain after a draw at the other answer, and checks ? lands\noff the worn option. ringAround reduces the offset before adding the\ncentre, so its sum never rounds. The ring headers say the link carries the\nworn name while a rule decides the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "3fe4c4331841207f0b2c9188089460731ba3ae1e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:03:40-07:00",
+          "message": "test(controls): a carousel, picker, swatches row and swatch over a key a per-draw rule chooses mark and step from what the bar wears (candybar-host-renderer-x96a.7o3)\n\nA theme, style or effect rule that reads `now` is evaluated in each draw.\nEvery control that centres on the key already reads the name that draw's\nrule settled on; no test drew one under such a rule, only under a rule\nsettled once and kept. One rig is drawn at alternating instants, so a\nreader that kept the first draw's answer or fell to the floor fails it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1b60f481a32ccbc977686108a7b4498de1c72ade",
@@ -13,42 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-24T23:41:44Z",
           "message": "chore(release): set `package.json` to 1.238.2\n\n## [1.238.2](https://github.com/promptctl/cc-candybar/compare/v1.238.1...v1.238.2) (2026-11-24)\n\n### Bug Fixes\n\n* **links:** a carousel, swatches row or picker link carries its step, so N clicks land N moves (candybar-host-renderer-x96a.7qi) ([#955](https://github.com/promptctl/cc-candybar/issues/955)) ([74ff60b](https://github.com/promptctl/cc-candybar/commit/74ff60b9ef4ea73da1ff662ab9c57dca723ae730))\n* **links:** a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9) ([#957](https://github.com/promptctl/cc-candybar/issues/957)) ([08b56a0](https://github.com/promptctl/cc-candybar/commit/08b56a048eec900bbd8bd82fd0af9815071761cf))\n* **stored-state:** a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz) ([#956](https://github.com/promptctl/cc-candybar/issues/956)) ([870a2fd](https://github.com/promptctl/cc-candybar/commit/870a2fd08214c3d683fe9b3db477f34796e27f84))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-958",
-      "ref": "refs/pull/958/merge",
-      "sha": "f053da863c3472772701dbb11841bd984a590379",
-      "timestamp": "2026-11-24T23:31:22.389Z",
-      "commits": [
-        {
-          "sha": "f053da863c3472772701dbb11841bd984a590379",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T23:30:05Z",
-          "message": "Merge 8508a047087cdc4dd067a3e5bfe6e8a4c58b73ee into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
-        },
-        {
-          "sha": "8508a047087cdc4dd067a3e5bfe6e8a4c58b73ee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:29:44-07:00",
-          "message": "test(controls): each control is declared once with its mark and arrows, the ring is refused when the picker pages, and every ring comment says the link carries its step and never its landing (candybar-host-renderer-x96a.7o3)\n\nReview pass 2 on #958.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "a723e8510622d305a08dc311b94639342b73e88e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:18:39-07:00",
-          "message": "test(controls): each control over a per-draw rule is read on its own row, and every ◀ ▶ ? steps from the option the draw wore; a ring step near the safe range lands exactly (candybar-host-renderer-x96a.7o3)\n\nReview pass 1 on #958. The test now reads each control's row alone, takes\nthe ring from the picker, clicks ◀ and ▶ of the carousel and the swatches\nrow in every domain after a draw at the other answer, and checks ? lands\noff the worn option. ringAround reduces the offset before adding the\ncentre, so its sum never rounds. The ring headers say the link carries the\nworn name while a rule decides the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "629e75676a0f418aca76c5f3fa1221c521693f8d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:03:40-07:00",
-          "message": "test(controls): a carousel, picker, swatches row and swatch over a key a per-draw rule chooses mark and step from what the bar wears (candybar-host-renderer-x96a.7o3)\n\nA theme, style or effect rule that reads `now` is evaluated in each draw.\nEvery control that centres on the key already reads the name that draw's\nrule settled on; no test drew one under such a rule, only under a rule\nsettled once and kept. One rig is drawn at alternating instants, so a\nreader that kept the first draw's answer or fell to the floor fails it.\n"
         }
       ]
     }

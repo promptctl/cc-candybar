@@ -43701,6 +43701,7 @@ function placementOfKeyScope(scope) {
 
 // src/config/menu-keys.ts
 var PAGE_HOLDING_CURRENT = "-1";
+var FIRST_PAGE = "0";
 function menuMember(applyName) {
   return applyName;
 }
@@ -43730,6 +43731,13 @@ function menuOfKey(key) {
 }
 function menuActionName(stateKey, member) {
   return `${stateKey}.${escapedIdent(member)}`;
+}
+function menuOfAction(action2) {
+  const dot = action2.lastIndexOf(".");
+  if (dot === -1) return void 0;
+  const menu = menuOfKey(action2.slice(0, dot));
+  const member = unescapedIdent(action2.slice(dot + 1));
+  return menu === void 0 || member === void 0 ? void 0 : { menu: menu.menu, member };
 }
 function menuPageKey(stateKey) {
   const scope = menuScope(stateKey);
@@ -43904,6 +43912,8 @@ function sayRing(action2, raw) {
   const parsed2 = parseStep(raw);
   if (!parsed2.ok) return `step ${action2} by ${raw}`;
   const { step: step4 } = parsed2;
+  const menu = menuOfAction(action2);
+  if (menu !== void 0) return `toggle ${menu.member}`;
   return step4.kind === "random" ? `pick another option for ${action2}` : `step ${action2} ${step4.by < 0 ? "back" : "on"} by ${Math.abs(step4.by)}`;
 }
 function sayWrite(key, value) {
@@ -44014,7 +44024,6 @@ function parseEffects(rawValue) {
   return new S(rawValue).getAll("e").map(splitVerb);
 }
 var BATCHED_VERBS = /* @__PURE__ */ new Map([
-  [VERB_SET_STATE, 1],
   [VERB_RESET_CONFIG, 2]
 ]);
 function batchAdjacentWrites(effects) {
@@ -44148,6 +44157,10 @@ function admitClick(verb, value, signer) {
           });
           break;
         }
+        case VERB_SET_STATE:
+        case VERB_RING_STATE:
+          joinStateWrite(scoped.steps, { verb: name, args });
+          break;
         default:
           scoped.steps.push({ kind: "session", verb: name, args });
       }
@@ -44158,6 +44171,15 @@ function admitClick(verb, value, signer) {
   }
   const click2 = scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
   return { click: click2, runEvidence };
+}
+function joinStateWrite(steps2, write) {
+  const last2 = steps2.at(-1);
+  if (last2?.kind === "state-writes")
+    steps2[steps2.length - 1] = {
+      kind: "state-writes",
+      writes: [...last2.writes, write]
+    };
+  else steps2.push({ kind: "state-writes", writes: [write] });
 }
 function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
   const answer2 = REPO_ANSWERS.find((known) => known === value);
@@ -49910,7 +49932,7 @@ function optionPicker(key, name, listKey, from, face) {
     },
     variables: {
       [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page2]: { kind: "state", key: page2, default: "0" }
+      [page2]: { kind: "state", key: page2, default: FIRST_PAGE }
     },
     list: { ref, rows }
   };
@@ -57113,11 +57135,11 @@ function synthesizePlacementMenus(config, issues) {
   const variables = {};
   const actions = {};
   const callsOf = /* @__PURE__ */ new Map();
-  const reported = /* @__PURE__ */ new Set();
+  const reported2 = /* @__PURE__ */ new Set();
   const issue3 = (segName, message) => {
     const path31 = `segments.${segName}`;
-    if (reported.has(`${path31}\0${message}`)) return;
-    reported.add(`${path31}\0${message}`);
+    if (reported2.has(`${path31}\0${message}`)) return;
+    reported2.add(`${path31}\0${message}`);
     issues.push({ path: path31, message });
   };
   for (const preset of presetNames(config.presets)) {
@@ -57153,7 +57175,11 @@ function synthesizePlacementMenus(config, issues) {
         claimed.set(identity2, claimant);
         actions[identity2] = disclosureCycleAction(stateKey, member);
         variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
-        variables[pageKey2] = { kind: "state", key: pageKey2, default: "0" };
+        variables[pageKey2] = {
+          kind: "state",
+          key: pageKey2,
+          default: FIRST_PAGE
+        };
         actions[pageKey2] = { set: pageKey2, int: true };
       }
     }
@@ -58949,7 +58975,11 @@ function insertTerm(ctx, anchor, relation) {
     ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
     within: [EDIT_MODE_REF]
   };
-  artifacts.variables[pageKey2] = { kind: "state", key: pageKey2, default: "0" };
+  artifacts.variables[pageKey2] = {
+    kind: "state",
+    key: pageKey2,
+    default: FIRST_PAGE
+  };
   artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
   artifacts.actions[pageKey2] = { set: pageKey2, int: true };
   const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
@@ -62062,7 +62092,7 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       yield* unreadBelow(childPaths(child, path31), whereBelow(child, where));
     }
   }
-  const reported = /* @__PURE__ */ new Set();
+  const reported2 = /* @__PURE__ */ new Set();
   const checkLayoutTree = (root, layoutKey) => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
@@ -62097,7 +62127,7 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       }
       const placed2 = presence2(node.name);
       if (reportable(placed2)) {
-        reported.add(node.name);
+        reported2.add(node.name);
         ctx.unplaced.push({
           path: path31,
           message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
@@ -62123,10 +62153,10 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
   }
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
-      if (node.kind !== "segment" || reported.has(node.name)) continue;
+      if (node.kind !== "segment" || reported2.has(node.name)) continue;
       const placed2 = presence2(node.name);
       if (!reportable(placed2)) continue;
-      reported.add(node.name);
+      reported2.add(node.name);
       ctx.inherited.push({
         name: node.name,
         path: key,
@@ -67381,6 +67411,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
     if ("cycle" in action2) {
       return {
         kind: "set-cycle",
+        name,
         key: action2.set,
         stateVar,
         members: action2.cycle
@@ -67420,6 +67451,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
     if ("cycle" in action2) {
       return {
         kind: "persist-cycle",
+        name,
         key: action2.persist,
         layer,
         stateVar,
@@ -67579,7 +67611,8 @@ function linkOver(cell3, target, current = false) {
 function cycleIndex(c, store) {
   return centreOf(c.members, readVar(store, c.stateVar));
 }
-function realize(c, display, boundValue, store, sessionId2) {
+function realize(c, display, boundValue, binding, sessionId2) {
+  const { store } = binding;
   switch (c.kind) {
     case "set-literal": {
       const current = readVar(store, c.stateVar);
@@ -67604,13 +67637,24 @@ function realize(c, display, boundValue, store, sessionId2) {
         active: current === value
       };
     }
-    case "set-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+    // [LAW:one-source-of-truth] A cycle is a ring step of one: the link names
+    // the action and the step, and the click resolves where the key stands and
+    // which member is next (ring-state / ring-config). The ring rule the draw's
+    // display reads (centreOf) is the click's, so the two agree about order.
+    case "set-cycle":
+    case "persist-cycle":
       return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next2] }],
+        effects: realizeRing(
+          c,
+          c,
+          c.name,
+          stepOffset(1),
+          [],
+          binding,
+          sessionId2
+        ),
         active: false
       };
-    }
     case "set-bounded": {
       return {
         effects: [
@@ -67670,15 +67714,6 @@ function realize(c, display, boundValue, store, sessionId2) {
           configWriteEffect(VERB_SET_CONFIG, sessionId2, c.layer, c.key, value)
         ],
         active: current === value
-      };
-    }
-    case "persist-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
-      return {
-        effects: [
-          configWriteEffect(VERB_SET_CONFIG, sessionId2, c.layer, c.key, next2)
-        ],
-        active: false
       };
     }
     case "persist-bounded": {
@@ -67820,12 +67855,12 @@ function realize(c, display, boundValue, store, sessionId2) {
         active: false
       };
     case "do": {
-      const head = realize(c.head, display, boundValue, store, sessionId2);
+      const head = realize(c.head, display, boundValue, binding, sessionId2);
       return {
         effects: [
           ...head.effects,
           ...c.rest.flatMap(
-            (m) => realize(m, display, void 0, store, sessionId2).effects
+            (m) => realize(m, display, void 0, binding, sessionId2).effects
           )
         ],
         active: head.active
@@ -67865,9 +67900,8 @@ function ruledName(binding, head) {
   return slot !== void 0 && binding.ruled(slot) ? readVar(binding.store, head.stateVar) : "";
 }
 function realizeRing(declared, head, name, step4, turn, binding, sessionId2) {
-  const { store } = binding;
   const ring = [spellStep(step4), ruledName(binding, head), ...turn];
-  const stepped2 = head.kind === "set-option" ? { verb: VERB_RING_STATE, args: [sessionId2, name, ...ring] } : configWriteEffect(
+  const stepped2 = head.kind === "set-option" || head.kind === "set-cycle" ? { verb: VERB_RING_STATE, args: [sessionId2, name, ...ring] } : configWriteEffect(
     VERB_RING_CONFIG,
     sessionId2,
     head.layer,
@@ -67878,7 +67912,7 @@ function realizeRing(declared, head, name, step4, turn, binding, sessionId2) {
   return [
     stepped2,
     ...followers.flatMap(
-      (member) => realize(member, "", void 0, store, sessionId2).effects
+      (member) => realize(member, "", void 0, binding, sessionId2).effects
     )
   ];
 }
@@ -67907,7 +67941,8 @@ function renderAction(name, displays, runtime) {
   if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
-  const store = renderBinding(runtime, `action "${name}"`).store;
+  const binding = renderBinding(runtime, `action "${name}"`);
+  const { store } = binding;
   const { display, boundValue } = selectDisplay(
     name,
     presentedAction(declared),
@@ -67919,7 +67954,7 @@ function renderAction(name, displays, runtime) {
     declared,
     display.plain,
     boundValue,
-    store,
+    binding,
     sessionId2
   );
   const realized = Object.fromEntries(
@@ -67929,13 +67964,13 @@ function renderAction(name, displays, runtime) {
         runtime.compiled.get(target),
         display.plain,
         boundValue,
-        store,
+        binding,
         sessionId2
       ).effects
     ])
   );
   const { [HOVER]: hoverBinding, ...gestures } = realized;
-  const hover = hoverBinding ?? realize(runtime.compiled.get(HOVER_REGION), name, name, store, sessionId2).effects;
+  const hover = hoverBinding ?? realize(runtime.compiled.get(HOVER_REGION), name, name, binding, sessionId2).effects;
   return linkOver(
     display,
     actionTarget(effects, void 0, { name, gestures, hover }),
@@ -68341,7 +68376,8 @@ function requireOptionKind(runtime, name, helper) {
 }
 function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
-  const store = renderBinding(runtime, "picker").store;
+  const binding = renderBinding(runtime, "picker");
+  const { store } = binding;
   const sessionId2 = clickSession(runtime, "picker");
   const current = "stateVar" in apply2 ? readVar(store, apply2.stateVar) : void 0;
   const optionFace = (i2, label2) => {
@@ -68399,7 +68435,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
   ];
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
   const optionTarget = (option) => actionTarget([
-    ...realize(declared, option, option, store, sessionId2).effects,
+    ...realize(declared, option, option, binding, sessionId2).effects,
     ...closeEffects
   ]);
   const optionCell = (face, i2) => linkOver(face, optionTarget(apply2.options[i2]));
@@ -68493,7 +68529,7 @@ function pickerFuncs(runtime, activeSegment) {
           { key: page2.key, stateVar: page2.stateVar },
           inBody === true ? { kind: "led" } : {
             kind: "own",
-            writes: [[page2.key, "-1"]],
+            writes: [[page2.key, PAGE_HOLDING_CURRENT]],
             onPick: closeOnPick === true
           },
           paged === true,
@@ -68574,7 +68610,7 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
           runtime.compiled.get(openName),
           shown,
           void 0,
-          store,
+          binding,
           sessionId2
         ).effects
       )
@@ -68896,17 +68932,21 @@ function renderMenu(applyName, displays, options, runtime) {
   const stateKey = menuStateKey(placement.placement, applyName, options.key);
   const pageKey2 = menuPageKey(stateKey);
   const member = menuMember(applyName);
-  const store = renderBinding(action2, "menu").store;
-  const open2 = readVar(store, stateKey) === member;
+  const binding = renderBinding(action2, "menu");
+  const open2 = readVar(binding.store, stateKey) === member;
   const sessionId2 = clickSession(action2, "menu");
-  const successor = open2 ? DISCLOSURE_CLOSED : member;
+  const toggle = realize(
+    action2.compiled.get(menuActionName(stateKey, member)),
+    "",
+    void 0,
+    binding,
+    sessionId2
+  ).effects;
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
     actionTarget([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId2, stateKey, successor, pageKey2, "0"]
-      }
+      ...toggle,
+      { verb: VERB_SET_STATE, args: [sessionId2, pageKey2, FIRST_PAGE] }
     ]),
     false
   );
@@ -68926,7 +68966,7 @@ function renderMenu(applyName, displays, options, runtime) {
         kind: "own",
         writes: [
           [stateKey, DISCLOSURE_CLOSED],
-          [pageKey2, "0"]
+          [pageKey2, FIRST_PAGE]
         ],
         onPick: options.closeOnPick
       },
@@ -77316,13 +77356,14 @@ function headFor(config, name) {
   return action2 === void 0 ? void 0 : headOf(config.actions, action2);
 }
 function optionsOf2(config, head) {
+  if ("cycle" in head) return head.cycle;
   const domain = "from" in head ? head.from : "insertSegmentFrom" in head ? head.insertSegmentFrom : void 0;
   return domain === void 0 ? void 0 : resolveOptionDomain(domain, configOptionDomains(config)).members;
 }
 function ringHeld(ctx, config, head) {
-  if (!("from" in head)) return void 0;
+  const options = "from" in head || "cycle" in head ? optionsOf2(config, head) : void 0;
+  if (options === void 0) return void 0;
   const pick2 = (k) => ctx.sessionState.get(ctx.session, k);
-  const options = optionsOf2(config, head);
   if ("set" in head)
     return {
       twin: "set",
@@ -77388,7 +77429,7 @@ function landRing(verb, ctx, name, twin, [stepRaw, centre, ...turnRaw], held) {
   );
   return { ring, next: next2, turn: turnWrites(turn, ring.options, next2) };
 }
-var ringState = (args, ctx) => {
+function ringStatePairs(args, ctx) {
   const [name = "", ...rest2] = args;
   const { ring, next: next2, turn } = landRing(
     "ring-state",
@@ -77398,8 +77439,16 @@ var ringState = (args, ctx) => {
     rest2,
     (r) => r.shown
   );
-  setState([ring.key, next2, ...turn], ctx);
-};
+  return [ring.key, next2, ...turn];
+}
+function landStateWrites(writes, ctx) {
+  setState(
+    writes.flatMap(
+      ({ verb, args }) => verb === VERB_RING_STATE ? ringStatePairs(args, ctx) : args
+    ),
+    ctx
+  );
+}
 function declaredName(text5, key) {
   const declared = readDeclared(text5, key);
   return declared.kind === "text" ? declared.value : void 0;
@@ -77419,6 +77468,10 @@ var ringConfig = (args, ctx) => {
     "persist",
     rest2,
     (r) => {
+      if (resetLayers(r.key).sessionKeys.some(
+        (k) => ctx.sessionState.get(ctx.session, k) !== null
+      ))
+        return r.shown;
       const key = durableLanding(
         config,
         (k) => ctx.sessionState.get(ctx.session, k),
@@ -77435,6 +77488,8 @@ var ringConfig = (args, ctx) => {
     }
   );
   setConfig([role, ring.key, next2], ctx);
+  for (const picked of resetLayers(ring.key).sessionKeys)
+    ctx.sessionState.clear(ctx.session, picked);
   if (turn.length > 0) setState(turn, ctx);
 };
 var turnPage = (args, ctx) => {
@@ -77738,9 +77793,7 @@ function runOf3({ action: action2, capture: capture4 }, ctx) {
   };
 }
 var SESSION_HANDLERS = {
-  [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
-  [VERB_RING_STATE]: ringState,
   [VERB_RING_CONFIG]: ringConfig,
   [VERB_TURN_PAGE]: turnPage,
   [VERB_SET_CONFIG]: setConfig,
@@ -77758,6 +77811,7 @@ var SESSION_HANDLERS = {
   [VERB_SLASH]: slash,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
+var reported = (step4, message) => step4.kind === "state-writes" ? message : `${step4.verb}: ${message}`;
 function foldEffects(steps2, log, perform, recordErrors) {
   const errors2 = [];
   let operational = false;
@@ -77775,7 +77829,7 @@ function foldEffects(steps2, log, perform, recordErrors) {
         throw e;
       }
       if (failure2.kind === "threw") operational = true;
-      errors2.push(`${step4.verb}: ${failure2.message}`);
+      errors2.push(reported(step4, failure2.message));
     }
   }
   if (errors2.length > 0) {
@@ -77932,6 +77986,9 @@ function runClick(click2, ctx) {
               break;
             case "session":
               SESSION_HANDLERS[step4.verb](step4.args, c);
+              break;
+            case "state-writes":
+              landStateWrites(step4.writes, c);
               break;
             case "repo-answer":
               c.configWrites.answer(step4.dir, step4.answer);
@@ -79088,8 +79145,8 @@ var NOT_HEARD = {
   kind: "failed",
   reason: "the daemon holds no request from this session, so its environment is not known: none has arrived since the daemon started, or the session was among the oldest of more sessions than the daemon keeps"
 };
-function sessionEnvironment(reported, facts) {
-  const { [CLAUDE_CONFIG_DIR_ENV]: _reportedDir, ...rest2 } = reported;
+function sessionEnvironment(reported2, facts) {
+  const { [CLAUDE_CONFIG_DIR_ENV]: _reportedDir, ...rest2 } = reported2;
   return {
     ...rest2,
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
@@ -80297,9 +80354,9 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 
 // src/daemon/task-throws.ts
 init_globals();
-function thrownText(reported, more = 0) {
-  const failure2 = failureOf(reported.thrown);
-  const threw2 = `${reported.task} threw${recurrence(more)}`;
+function thrownText(reported2, more = 0) {
+  const failure2 = failureOf(reported2.thrown);
+  const threw2 = `${reported2.task} threw${recurrence(more)}`;
   return {
     shown: `${threw2}: ${failure2.message}`,
     logged: `${threw2}: ${failure2.detail}`
@@ -80308,9 +80365,9 @@ function thrownText(reported, more = 0) {
 var TaskThrowInbox = class {
   taking = { kind: "waiting", waiting: [] };
   report = (task, thrown2, at) => {
-    const reported = { task, thrown: thrown2, at };
-    if (this.taking.kind === "waiting") this.taking.waiting.push(reported);
-    else this.taking.take(reported);
+    const reported2 = { task, thrown: thrown2, at };
+    if (this.taking.kind === "waiting") this.taking.waiting.push(reported2);
+    else this.taking.take(reported2);
   };
   // [LAW:single-enforcer] The daemon takes every throw, those waiting first,
   // oldest first; one reported while they are taken waits behind them.
@@ -80326,8 +80383,8 @@ var TaskThrowInbox = class {
   handOver(to) {
     const { taking } = this;
     if (taking.kind === "waiting")
-      for (let reported = taking.waiting.shift(); reported !== void 0; reported = taking.waiting.shift())
-        to.take(reported);
+      for (let reported2 = taking.waiting.shift(); reported2 !== void 0; reported2 = taking.waiting.shift())
+        to.take(reported2);
     this.taking = to;
   }
 };
@@ -89365,7 +89422,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.238.1";
+var PACKAGE_VERSION = "1.238.2";
 
 // src/daemon/stats.ts
 var ROLLING_WINDOW_MS = 6e4;
@@ -91790,13 +91847,13 @@ var DeclaredBarPanes = class {
   // Re-elect demand only when a session changed panes or can take ownership.
   reported(session, previous2) {
     if (!Object.hasOwn(this.lanes, session)) return;
-    const reported = this.paneOf(session);
-    if (reported === void 0 && previous2 === null) return;
-    if (reported !== void 0 && previous2 !== null) {
-      const key = paneKey(reported.pane);
+    const reported2 = this.paneOf(session);
+    if (reported2 === void 0 && previous2 === null) return;
+    if (reported2 !== void 0 && previous2 !== null) {
+      const key = paneKey(reported2.pane);
       const held = this.held.get(key);
       if (paneKey(previous2) === key && held?.demand.session === session) {
-        held.demand = { ...reported, session, on: held.demand.on };
+        held.demand = { ...reported2, session, on: held.demand.on };
         this.reconcile(key, held);
         return;
       }
@@ -91806,12 +91863,12 @@ var DeclaredBarPanes = class {
   reconcileDemands() {
     const next2 = /* @__PURE__ */ new Map();
     for (const [session, switches] of Object.entries(this.lanes)) {
-      const reported = this.paneOf(session);
-      if (reported === void 0) continue;
-      const key = paneKey(reported.pane);
+      const reported2 = this.paneOf(session);
+      if (reported2 === void 0) continue;
+      const key = paneKey(reported2.pane);
       const competing = next2.get(key);
-      if (competing === void 0 || competing.order < reported.order)
-        next2.set(key, { ...reported, session, on: switches.pane });
+      if (competing === void 0 || competing.order < reported2.order)
+        next2.set(key, { ...reported2, session, on: switches.pane });
     }
     for (const [key, demand] of next2) {
       const held = this.held.get(key);
@@ -94984,9 +95041,9 @@ function createDaemon(inputs) {
   const taskThrows = new RecurringEvents(
     clock,
     "task-threw",
-    (reported) => reported.task,
-    (reported, more, at) => {
-      const { shown, logged } = thrownText(reported, more);
+    (reported2) => reported2.task,
+    (reported2, more, at) => {
+      const { shown, logged } = thrownText(reported2, more);
       log("error", logged);
       return environmentOutput(joinedEvent(null, shown, at), true);
     },
@@ -95060,17 +95117,17 @@ function createDaemon(inputs) {
     }
     if (changed) restateFaults();
   };
-  const taken2 = (reported) => {
+  const taken2 = (reported2) => {
     stats.tasksThrew++;
-    taskThrows.occur(reported);
+    taskThrows.occur(reported2);
   };
-  clock.throws.attach((reported) => {
+  clock.throws.attach((reported2) => {
     try {
-      taken2(reported);
+      taken2(reported2);
     } catch (failure2) {
       log(
         "error",
-        `taking what ${reported.task} threw failed: ${failureOf(failure2).detail}; it threw: ${failureOf(reported.thrown).detail}`
+        `taking what ${reported2.task} threw failed: ${failureOf(failure2).detail}; it threw: ${failureOf(reported2.thrown).detail}`
       );
     }
   });
@@ -95288,7 +95345,7 @@ function createDaemon(inputs) {
     frameFeeds.switched(lanes);
     declaredBarPanes.declare(lanes);
   };
-  function prepareRenderer(name, reported, entry) {
+  function prepareRenderer(name, reported2, entry) {
     const stores = new HeldStores(inputs.profile(name, log), clock);
     const boot = () => ({
       stored: stores.current(),
@@ -95303,11 +95360,11 @@ function createDaemon(inputs) {
       recording: () => recordings?.generation(name),
       node: bundle.node
     });
-    return { name, reported, entry, stores, prepared };
+    return { name, reported: reported2, entry, stores, prepared };
   }
   const connectRenderer = ({
     name,
-    reported,
+    reported: reported2,
     entry,
     stores,
     prepared
@@ -95400,7 +95457,7 @@ function createDaemon(inputs) {
         }
       }
     );
-    return { reported, entry, stores, link, renderer };
+    return { reported: reported2, entry, stores, link, renderer };
   };
   const primary = connectRenderer(primaryPrepared);
   renderers.set(inputs.rendererName, primary);
@@ -95678,7 +95735,7 @@ function createDaemon(inputs) {
         "held events close",
         () => {
           clock.throws.close(
-            (reported) => log("error", thrownText(reported).logged)
+            (reported2) => log("error", thrownText(reported2).logged)
           );
           for (const slot of [
             launchPipes,
@@ -96243,8 +96300,8 @@ function productionAdapters(paths2, daemonLog, machine) {
     }),
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
-    rendererEntryOf: (reported) => {
-      const entry = fs_default.realpathSync.native(reported);
+    rendererEntryOf: (reported2) => {
+      const entry = fs_default.realpathSync.native(reported2);
       if (!fs_default.statSync(entry).isFile()) throw new Error("not a file");
       return entry;
     },
