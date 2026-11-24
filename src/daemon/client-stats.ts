@@ -109,7 +109,7 @@ export function statsReplyOf(said: unknown): StatsReply {
     : {
         kind: "another-build",
         said,
-        skew: `the daemon (${theirLabel(said)}) reports no ${reply.at.map((at) => at || "<snapshot>").join(", ")}; ${anotherBuild}`,
+        skew: `this client cannot read ${reply.at.map((at) => at || "<snapshot>").join(", ")} from the daemon (${theirLabel(said)}); ${anotherBuild}`,
       };
 }
 
@@ -176,9 +176,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`requests`);
   lines.push(`  total         ${s.requests.total}`);
-  // Older daemons do not count the compact client's environment challenges.
-  if (s.requests.environmentMisses !== undefined)
-    lines.push(`  env misses    ${s.requests.environmentMisses}`);
+  lines.push(`  env misses    ${s.requests.environmentMisses}`);
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);
@@ -306,8 +304,8 @@ export function formatStats(s: StatsSnapshot): string {
 function memoryWords(process: ProcessMemory): string {
   const { memory, limit } = process;
   if (memory.kind === "unmeasured") return `unmeasured (limit ${mb(limit)} MB)`;
-  const { charge, usage } = memory;
-  return `${chargeWords(charge)} of limit ${mb(limit)} MB (${usageWords(usage)})${nearLimit(process) ? ", approaching its limit" : ""}`;
+  const { charge, usage, ageMs } = memory;
+  return `checked ${Math.round(ageMs / 1000)} s ago: ${chargeWords(charge)} of limit ${mb(limit)} MB (${usageWords(usage)})${nearLimit(process) ? ", approaching its limit" : ""}`;
 }
 
 function rendererPanelLines({

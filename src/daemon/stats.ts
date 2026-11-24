@@ -27,7 +27,6 @@ import type { Monotonic, Timekeeper } from "../time";
 import type { RequestId } from "../renderer-interface/interface.js";
 import type { Acceptance } from "./foundations/request-event.js";
 
-// A read kind no run of which has happened yet.
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
 //

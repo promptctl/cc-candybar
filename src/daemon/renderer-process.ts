@@ -220,6 +220,10 @@ interface Link {
   usage: OwnUsage;
   // When the ping owed an answer went out.
   pingSentAt: number | null;
+  // Its stop, once one is begun: the first stop owns it.
+  stopping: Promise<void> | null;
+  // Its exit, once said: the end it was, in the log and on the bar.
+  readonly reported: Promise<void>;
 }
 
 // A generation the host has ended, with the reason it did.
@@ -345,6 +349,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       heard: { stdout: stdout.push, stderr: stderr.push },
     });
     const recording = own.recording?.();
+    // [LAW:single-enforcer] The one report of this generation's exit, which a
+    // restart that finds it ending waits for.
+    const reported = channel.ended.then((result) => {
+      stdout.end();
+      stderr.end();
+      ended(link, link.endReason ?? (result.ok ? "exited" : whyFailed(result)));
+    });
     const link: Link = {
       recording,
       recordingBoot: recording?.snapshot(boot),
@@ -358,6 +369,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       receipts: new Map(),
       usage: { kind: "unread", why: "no ping has answered yet" },
       pingSentAt: null,
+      stopping: null,
+      reported,
       lines: rendererOverLines({
         send: (line) => write(channel, line),
         fault: (message) => {
@@ -379,12 +392,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // this is queued behind the state it changes.
     heardBy = (text) => heard(link, text);
     clock.detach(`renderer ${name} restore`, () => restore(link));
-    clock.detach(`renderer ${name} end`, async () => {
-      const result = await channel.ended;
-      stdout.end();
-      stderr.end();
-      ended(link, link.endReason ?? (result.ok ? "exited" : whyFailed(result)));
-    });
+    clock.detach(`renderer ${name} end`, () => reported);
   };
 
   const heard = (link: Link, text: string): void => {
@@ -668,17 +676,59 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // [LAW:single-enforcer] How a renderer's process is stopped, by the close,
   // a replacement or an end: its stdin closes, and one that has not ended
-  // after the grace is signalled.
-  const stopGracefully = async (link: Link, why: string): Promise<void> => {
-    link.channel.end();
-    const grace = clock.after(
-      `renderer ${name} close grace`,
-      CLOSE_GRACE_MS,
-      () => link.kill.abort(new Error(why)),
-    );
-    await link.channel.ended;
-    grace();
+  // after the grace is signalled. A process has one stop, the first one
+  // begun, which a later one awaits.
+  const stopGracefully = (link: Link, why: string): Promise<void> =>
+    (link.stopping ??= (async () => {
+      link.channel.end();
+      const grace = clock.after(
+        `renderer ${name} close grace`,
+        CLOSE_GRACE_MS,
+        () => link.kill.abort(new Error(why)),
+      );
+      await link.channel.ended;
+      grace();
+    })());
+  // A recording control's fresh generation: the renderer there now stops,
+  // and one starts in its place.
+  const restart = async (): Promise<void> => {
+    switch (phase.kind) {
+      case "idle":
+        return; // arm will start the first generation.
+      case "down":
+        phase.cancelRetry();
+        spawn();
+        return;
+      case "starting":
+        // A start that still holds the mailbox completes before a recording
+        // control slot. A retry can have started in the meantime.
+        for (const send of phase.queued.splice(0))
+          send(new RendererDown(`renderer ${name} is being replaced`));
+        break;
+      case "live":
+        break;
+      // [LAW:single-enforcer] An end the host gave keeps its report and its
+      // count toward the backoff: the recording starts once that end is
+      // said, as from down.
+      case "ending":
+        await phase.link.reported;
+        return restart();
+      default:
+        throw new DaemonClosing(`renderer ${name} replacement`);
+    }
+    const link = phase.link;
+    const retiring = {
+      kind: "replacing",
+      link,
+      ended: stopGracefully(link, "it is being replaced"),
+    } as const;
+    phase = retiring;
+    await retiring.ended;
+    if (phase !== retiring)
+      throw new DaemonClosing(`renderer ${name} replacement`);
+    spawn();
   };
+
   // [LAW:no-ambient-temporal-coupling] The close has begun, whichever phase it
   // finds: the live renderer stays to take the close's steps, and nothing else
   // runs or starts.
@@ -815,52 +865,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
                   `renderer ${name}[${link.generation}] is ${phase.kind}, so its heap was not written`,
                 ),
               ),
-        // [LAW:no-ambient-temporal-coupling] A handle is of the starting or
-        // live renderer it was handed for: one the close has begun to drain
-        // finishes its close steps, whatever a reading taken before the close
-        // finds of it.
+        // [LAW:no-ambient-temporal-coupling] The host's end is the one end,
+        // but for a renderer the close has begun to drain: it finishes its
+        // close steps, whatever a reading taken before the close finds of it.
         end: (why) =>
-          (phase.kind === "starting" || phase.kind === "live") &&
-          phase.link === link
-            ? endWith(link, why)
-            : notEnded(link, why, phase.kind),
+          phase.kind === "closing"
+            ? notEnded(link, why, phase.kind)
+            : endWith(link, why),
       },
     };
   };
   return {
     renderer: { answer },
-    restart: async () => {
-      switch (phase.kind) {
-        case "idle":
-          return; // arm will start the first generation.
-        case "down":
-          phase.cancelRetry();
-          spawn();
-          return;
-        case "starting":
-          // A start that still holds the mailbox completes before a recording
-          // control slot. A retry can have started in the meantime.
-          for (const send of phase.queued.splice(0))
-            send(new RendererDown(`renderer ${name} is being replaced`));
-          break;
-        case "live":
-        case "ending":
-          break;
-        default:
-          throw new DaemonClosing(`renderer ${name} replacement`);
-      }
-      const link = phase.link;
-      const retiring = {
-        kind: "replacing",
-        link,
-        ended: stopGracefully(link, "it is being replaced"),
-      } as const;
-      phase = retiring;
-      await retiring.ended;
-      if (phase !== retiring)
-        throw new DaemonClosing(`renderer ${name} replacement`);
-      spawn();
-    },
+    restart,
     serve: () => {},
     arm: () => {
       if (phase.kind !== "idle") return;

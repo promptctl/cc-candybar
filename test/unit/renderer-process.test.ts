@@ -57,7 +57,8 @@ import type { LogLine } from "../../src/utils/logger";
 interface Child {
   readonly opts: ChannelOpts;
   readonly written: HostLine[];
-  stdinEnded: boolean;
+  // How many times the host closed its stdin.
+  stdinEnds: number;
   say(line: RendererLine): void;
   exit(result: LaunchResult): void;
 }
@@ -105,7 +106,7 @@ function rig(start: () => Promise<void> = async () => {}) {
       const child: Child = {
         opts,
         written: [],
-        stdinEnded: false,
+        stdinEnds: 0,
         // A child's output arrives on a later turn than the write it answers.
         say: (line) => opts.heard.stdout(`${JSON.stringify(line)}\n`),
         exit: finish,
@@ -121,7 +122,7 @@ function rig(start: () => Promise<void> = async () => {}) {
             child.written.push(JSON.parse(line) as HostLine);
         },
         end: () => {
-          child.stdinEnded = true;
+          child.stdinEnds++;
         },
         ended,
       };
@@ -172,7 +173,7 @@ const settled = async (): Promise<void> => {
 // the grace.
 async function stopped(clock: HeldClock, child: Child): Promise<void> {
   await settled();
-  expect(child.stdinEnded).toBe(true);
+  expect(child.stdinEnds).toBe(1);
   expect(child.opts.signal?.aborted).toBe(false);
   clock.advance(CLOSE_GRACE_MS);
   await settled();
@@ -562,6 +563,30 @@ describe("a renderer process's start", () => {
     expect(children).toHaveLength(2);
   });
 
+  test("a recording asked of a renderer that is ending keeps its end: said, counted toward the backoff, and the recording starts once it exits", async () => {
+    const { link, children, clock, ends, logs } = rig();
+    const read = await readRenderer(link, children);
+    read.end("passed its memory limit: phys_footprint 900 MB > limit 800 MB");
+    const restarted = link.restart();
+    await settled();
+    expect(children).toHaveLength(1);
+    await stopped(clock, children[0]!);
+    await restarted;
+    expect(ends.map((e) => e.text)).toEqual([
+      expect.stringContaining(
+        "passed its memory limit: phys_footprint 900 MB > limit 800 MB",
+      ),
+    ]);
+    expect(logs).toContainEqual(
+      `renderer main[1] passed its memory limit: phys_footprint 900 MB > limit 800 MB after 0 s; next start in ${BACKOFF_FIRST_MS / 1000} s`,
+    );
+    expect(logs).not.toContainEqual(
+      expect.stringContaining("ended for a requested recording"),
+    );
+    // The recording does not wait out the backoff, as from down.
+    expect(children).toHaveLength(2);
+  });
+
   test("a renderer read before its close writes no heap and is not ended by it, so it takes the close's steps", async () => {
     const { link, children, logs } = rig();
     const read = await readRenderer(link, children);
@@ -571,7 +596,7 @@ describe("a renderer process's start", () => {
     );
     read.end("passed its memory limit");
     await settled();
-    expect(children[0]!.stdinEnded).toBe(false);
+    expect(children[0]!.stdinEnds).toBe(0);
     expect(logs).toContainEqual(
       "renderer main[1] was not ended for passed its memory limit: it is closing",
     );
@@ -1005,7 +1030,7 @@ describe("a renderer process's close", () => {
     child.say(startedLine(9001));
     await settled();
     const closed = link.close();
-    expect(child.stdinEnded).toBe(true);
+    expect(child.stdinEnds).toBe(1);
     expect(child.opts.signal?.aborted).toBe(false);
     clock.advance(1_000);
     await closed;
@@ -1027,7 +1052,7 @@ describe("a renderer process's close", () => {
     void link.renderer.answer(pin).catch(() => {});
     await settled();
     expect(child.written.length).toBeGreaterThan(heard);
-    expect(child.stdinEnded).toBe(false);
+    expect(child.stdinEnds).toBe(0);
     child.exit(CRASHED);
     await settled();
     clock.advance(BACKOFF_MAX_MS);
@@ -1075,7 +1100,7 @@ describe("a renderer process's close", () => {
     const child = children[0]!;
     const waiting = link.renderer.answer(pin);
     expect(link.beginClose()).toBe("closed");
-    expect(child.stdinEnded).toBe(true);
+    expect(child.stdinEnds).toBe(1);
     await expect(waiting).rejects.toThrow(
       new DaemonClosing("renderer main input"),
     );
@@ -1115,7 +1140,7 @@ describe("a renderer process's close", () => {
     await link.close();
   });
 
-  test("a renderer the close still waits on is judged by its pings", async () => {
+  test("a renderer the close still waits on is judged by its pings, and stopped once", async () => {
     const { link, children, clock, logs } = rig();
     link.arm();
     const child = children[0]!;
@@ -1132,12 +1157,16 @@ describe("a renderer process's close", () => {
     await settled();
     link.beginClose();
     clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
+    await settled();
+    // The close, inside the end's grace, awaits the stop the end began and
+    // begins no second.
+    const closed = link.close();
     await stopped(clock, child);
+    await closed;
     expect(logs).toContainEqual(
       expect.stringMatching(
         /^renderer main\[1\] stopped answering .* in the daemon's close$/,
       ),
     );
-    await link.close();
   });
 });

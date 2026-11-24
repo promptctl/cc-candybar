@@ -458,8 +458,10 @@ export async function replyTo(
         rendererPanel(
           {
             name: renderer.name,
-            ask: () =>
-              renderer.command({ kind: "stats" }).then(({ stats }) => stats),
+            ask: (until) =>
+              renderer
+                .command({ kind: "stats" }, until)
+                .then(({ stats }) => stats),
             process,
             mailbox,
           },
@@ -713,8 +715,8 @@ export async function rendererPanel(
     mailbox,
   }: {
     readonly name: RendererName;
-    // Its own answer of itself, through its mailbox.
-    readonly ask: () => Promise<RendererStats>;
+    // Its own answer of itself, through its mailbox, while it is waited for.
+    readonly ask: (until: AbortSignal) => Promise<RendererStats>;
     readonly process: RendererProcessState;
     readonly mailbox: MailboxStats;
   },
@@ -740,7 +742,7 @@ export async function rendererPanel(
 // stops waiting with it.
 async function askedWithin(
   name: RendererName,
-  ask: () => Promise<RendererStats>,
+  ask: (until: AbortSignal) => Promise<RendererStats>,
   clock: Pick<DaemonParts["clock"], "after" | "failed">,
   closing: AbortSignal,
 ): Promise<Asked<RendererStats>> {

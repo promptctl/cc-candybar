@@ -156,15 +156,19 @@ export type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
 // or none yet: `unmeasured` until a probe answers for it — the instant before
 // a daemon's first check, a renderer started since the last one, and for good
 // in the browser page, which never arms its limits. Never a construction-time
-// number passed off as a reading. Its charge is the platform's, read for
-// every process at once; its usage is what the process last said of itself.
+// number passed off as a reading. A reading is a check's, and a reply says
+// how long before it that check was, so a figure beside it read at the reply
+// is never taken for the same instant's.
 export type MemoryReading =
   | { readonly kind: "unmeasured" }
-  | {
-      readonly kind: "measured";
-      readonly charge: ReadCharge;
-      readonly usage: OwnUsage;
-    };
+  | ({ readonly kind: "measured"; readonly ageMs: number } & Checked);
+
+// What one check read of a process: its charge, the platform's, read for every
+// process at once, and its usage, what the process last said of itself.
+export interface Checked {
+  readonly charge: ReadCharge;
+  readonly usage: OwnUsage;
+}
 
 // [LAW:types-are-the-program] What a process last said of its own memory:
 // the host, at the reading itself; a renderer, at its latest ping, every few

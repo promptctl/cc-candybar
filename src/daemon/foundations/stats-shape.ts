@@ -127,7 +127,7 @@ const CHARGE = tagged<ReadCharge>({
 
 const READING = tagged<MemoryReading>({
   unmeasured: {},
-  measured: { charge: CHARGE, usage: USAGE },
+  measured: { ageMs: number, charge: CHARGE, usage: USAGE },
 });
 
 const PROCESS_MEMORY = object<ProcessMemory>({

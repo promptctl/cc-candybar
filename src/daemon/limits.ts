@@ -23,7 +23,7 @@ import {
   laterIdentity,
   measureOf,
   type BreachArtifact,
-  type MemoryReading,
+  type Checked,
   type ReadCharge,
   type MemorySizes,
   type ProcessMemory,
@@ -149,7 +149,7 @@ export function readCharge(probed: MemoryCharge, gap: number): ReadCharge {
 
 // How far a process's RSS ran over its charge at the latest reading that
 // measured both; a reading that did not carries the one before.
-function gapOf(reading: Measured, before: number): number {
+function gapOf(reading: Checked, before: number): number {
   const { charge, usage } = reading;
   return charge.kind === "charged" && usage.kind === "read"
     ? usage.sizes.rss - charge.bytes
@@ -178,7 +178,7 @@ function breachArtifactOf(base: string): BreachArtifact | null {
 export interface LimitsDeps {
   // The machine's clock: when a post-mortem is stamped, and the pace of the
   // readings.
-  clock: Pick<Timekeeper, "now" | "after" | "detach">;
+  clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach">;
   // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
   // writer's identity are injected, not reached for ambiently. Without these,
   // unit tests of check compute filenames against the real state directory and
@@ -258,12 +258,12 @@ interface Judged {
 
 type Ended = "daemon" | "process";
 
-type Measured = Extract<MemoryReading, { kind: "measured" }>;
-
 // A process's latest reading, and the gap it carries to the next.
 interface Latest {
-  readonly reading: Measured;
+  readonly reading: Checked;
   readonly gap: number;
+  // When the check read it.
+  readonly at: number;
 }
 
 export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
@@ -344,15 +344,18 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
     const chargeOf = await deps.memoryCharge(judged);
     const read = judged.map((process) => {
       const before = latest.get(process.key)?.gap ?? 0;
-      const reading: Measured = {
-        kind: "measured",
+      const reading: Checked = {
         charge: readCharge(chargeOf(process), before),
         usage: process.usage,
       };
       return { process, reading, gap: gapOf(reading, before) };
     });
+    const at = deps.clock.monotonic();
     latest = new Map(
-      read.map(({ process, reading, gap }) => [process.key, { reading, gap }]),
+      read.map(({ process, reading, gap }) => [
+        process.key,
+        { reading, gap, at },
+      ]),
     );
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
@@ -437,9 +440,17 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
   }
 
   function memoryOf(key: string, pid: number): ProcessMemory {
+    const checked = latest.get(key);
     return {
       pid,
-      memory: latest.get(key)?.reading ?? { kind: "unmeasured" },
+      memory:
+        checked === undefined
+          ? { kind: "unmeasured" }
+          : {
+              kind: "measured",
+              ...checked.reading,
+              ageMs: deps.clock.monotonic() - checked.at,
+            },
       limit,
       nearAt: nearAtOf(limit),
     };
@@ -498,7 +509,7 @@ function processWords(process: BreachedProcess): string {
 
 // The per-reading log line's fields: the limit, then each process's.
 function readingFields(
-  read: ReadonlyArray<{ readonly process: Judged; readonly reading: Measured }>,
+  read: ReadonlyArray<{ readonly process: Judged; readonly reading: Checked }>,
   limit: number,
 ): Field[] {
   return [
@@ -667,7 +678,7 @@ export function realLimitsDeps(
   owner: {
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
-    readonly clock: Pick<Timekeeper, "now" | "after" | "detach">;
+    readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach">;
     // The daemon's state directory, which its post-mortems are written to.
     readonly snapshotDir: string;
     // What the log holds, written before the loop blocks (log.ts).

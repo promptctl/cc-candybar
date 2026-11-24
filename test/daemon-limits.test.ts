@@ -28,6 +28,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
+import type { Monotonic } from "../src/time";
 
 // A renderer process, as the backstop is handed it.
 interface RendererFake {
@@ -57,6 +58,8 @@ interface Recorder {
   fakeCharge?: MemoryCharge;
   fakeHeapTotal: number;
   fakeNow: number;
+  // The reading's monotonic clock, which a test moves to age a reading.
+  fakeMono: number;
   startedAtMs: number;
   pid: number;
   snapshotDir: string;
@@ -88,6 +91,7 @@ function makeDeps(
   return {
     clock: {
       now: () => rec.fakeNow,
+      monotonic: () => rec.fakeMono as Monotonic,
       after: systemTimekeeper.after,
       detach: systemTimekeeper.detach,
     },
@@ -163,6 +167,7 @@ function newRec(): Recorder {
     fakeRss: 50 * MB,
     fakeHeapTotal: 20 * MB,
     fakeNow: Date.parse("2026-04-01T00:00:00Z"),
+    fakeMono: 0,
     startedAtMs: Date.parse("2026-04-01T00:00:00Z"),
     pid: 4242,
     snapshotDir: "/fake-snapshot-dir",
@@ -609,10 +614,13 @@ describe("a process's memory", () => {
       nearAt: 150 * MB,
     });
     await limits.check();
+    // It says how long before it is asked the check read it.
+    rec.fakeMono += 4_000;
     expect(limits.host()).toEqual({
       pid: rec.pid,
       memory: {
         kind: "measured",
+        ageMs: 4_000,
         charge: { kind: "charged", measure: "rss", bytes: rec.fakeRss },
         usage: {
           kind: "read",
@@ -646,6 +654,7 @@ describe("a process's memory", () => {
     });
     expect(limits.renderer(MAIN_FIRST).memory).toEqual({
       kind: "measured",
+      ageMs: 0,
       charge: { kind: "charged", measure: "phys_footprint", bytes: 400 * MB },
       usage: { kind: "read", sizes: { rss: 450 * MB, heapTotal: 60 * MB } },
     });

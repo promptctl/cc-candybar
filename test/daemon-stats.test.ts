@@ -341,8 +341,9 @@ describe("a stats reply", () => {
     const reply = statsReplyOf(older);
     if (reply.kind !== "another-build") throw new Error("read as ours");
     expect(reply.said).toBe(older);
-    expect(reply.skew).toContain("reports no sourceDigest, renderers");
-    expect(reply.skew).toContain(`the daemon (${pkg.version} [no digest])`);
+    expect(reply.skew).toContain(
+      `this client cannot read sourceDigest, renderers from the daemon (${pkg.version} [no digest]);`,
+    );
     expect(reply.skew).toContain(`this client (${pkg.version} [`);
   });
 
@@ -351,7 +352,7 @@ describe("a stats reply", () => {
     expect(reply).toMatchObject({ kind: "another-build", said: 7 });
     if (reply.kind !== "another-build") throw new Error("read as ours");
     expect(reply.skew).toMatch(
-      /^the daemon \(no version \[no digest\]\) reports no <snapshot>;/,
+      /^this client cannot read <snapshot> from the daemon \(no version \[no digest\]\);/,
     );
   });
 
@@ -359,7 +360,7 @@ describe("a stats reply", () => {
   const skewOf = (said: unknown): string[] => {
     const reply = statsReplyOf(said);
     if (reply.kind === "ours") return [];
-    return /reports no (.*); it is another build/
+    return /cannot read (.*) from the daemon \([^)]*\); it is another build/
       .exec(reply.skew)![1]!
       .split(", ");
   };
@@ -409,6 +410,7 @@ describe("a stats reply", () => {
       ],
       host: memory({
         kind: "measured",
+        ageMs: 1,
         charge: { kind: "charged", measure: "phys_footprint", bytes: 1 },
         usage: { kind: "read", sizes },
       }) as never,
@@ -423,6 +425,7 @@ describe("a stats reply", () => {
             kind: "process",
             memory: memory({
               kind: "measured",
+              ageMs: 1,
               charge: { kind: "stand-in", rss: 1, gap: 0, unread: "x" },
               usage: { kind: "unread", why: "no ping" },
             }),
@@ -433,6 +436,7 @@ describe("a stats reply", () => {
             kind: "process",
             memory: memory({
               kind: "measured",
+              ageMs: 1,
               charge: { kind: "unread", gap: 0, unread: "x" },
               usage: { kind: "read", sizes },
             }),
@@ -503,7 +507,10 @@ describe("a stats reply", () => {
     const snap = emptyStats();
     const measured = (memory: object) => ({
       ...snap,
-      host: { ...snap.host, memory: { kind: "measured", ...memory } },
+      host: {
+        ...snap.host,
+        memory: { kind: "measured", ageMs: 0, ...memory },
+      },
     });
     expect(skewOf(measured({ usage: { kind: "read", sizes } }))).toEqual([
       "host.memory.charge",
@@ -618,6 +625,7 @@ describe("formatStats", () => {
         pid: 1234,
         memory: {
           kind: "measured",
+          ageMs: 42_000,
           charge: {
             kind: "charged",
             measure: "phys_footprint",
@@ -637,6 +645,7 @@ describe("formatStats", () => {
               pid: 4343,
               memory: {
                 kind: "measured",
+                ageMs: 7_400,
                 charge: {
                   kind: "charged",
                   measure: "phys_footprint",
@@ -691,14 +700,14 @@ describe("formatStats", () => {
     });
     expect(out).toContain("pid           1234");
     expect(out).toContain(
-      "memory        phys_footprint 40 MB of limit 512 MB (rss 50 MB, v8 heap 30 MB)\n",
+      "memory        checked 42 s ago: phys_footprint 40 MB of limit 512 MB (rss 50 MB, v8 heap 30 MB)\n",
     );
     // Every renderer's panel from one printer, whatever its name.
     expect(out).toContain(
       [
         "renderer main",
         "  process       pid 4343",
-        "  memory        phys_footprint 420 MB of limit 512 MB (rss 450 MB, v8 heap 200 MB), approaching its limit",
+        "  memory        checked 7 s ago: phys_footprint 420 MB of limit 512 MB (rss 450 MB, v8 heap 200 MB), approaching its limit",
         "  mailbox       holder render · held 12ms · queued 2",
         "  renderCache",
       ].join("\n"),
@@ -792,6 +801,7 @@ describe("formatStats", () => {
           pid: 1234,
           memory: {
             kind: "measured",
+            ageMs: 0,
             charge: { kind: "charged", measure: "rss", bytes: 40 * MB },
             usage: { kind: "read", sizes: { rss: 40 * MB, heapTotal: 0 } },
           },
@@ -800,10 +810,10 @@ describe("formatStats", () => {
         },
       });
     expect(at(32 * MB)).toContain(
-      "memory        rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB), approaching its limit\n",
+      "memory        checked 0 s ago: rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB), approaching its limit\n",
     );
     expect(at(384 * MB)).toContain(
-      "memory        rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB)\n",
+      "memory        checked 0 s ago: rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB)\n",
     );
   });
 
@@ -822,6 +832,7 @@ describe("formatStats", () => {
               pid: 4343,
               memory: {
                 kind: "measured",
+                ageMs: 3_000,
                 charge: { kind: "unread", gap: 0, unread: why },
                 usage: { kind: "unread", why: "no ping has answered yet" },
               },
@@ -835,7 +846,7 @@ describe("formatStats", () => {
       ],
     });
     expect(out).toContain(
-      `  memory        unread (${why}) of limit 512 MB (no sizes: no ping has answered yet)\n`,
+      `  memory        checked 3 s ago: unread (${why}) of limit 512 MB (no sizes: no ping has answered yet)\n`,
     );
   });
 
@@ -944,7 +955,9 @@ describe("statsPlan — the text/exit-code contract", () => {
     const { clients: _clients, ...older } = snap;
     const plan = statsPlan({ kind: "ok", value: statsReplyOf(older) }, true);
     expect(plan.code).toBe(1);
-    expect(plan.stderr).toMatch(/^daemon-stats: .*reports no clients/);
+    expect(plan.stderr).toMatch(
+      /^daemon-stats: this client cannot read clients from the daemon /,
+    );
     expect(JSON.parse(plan.stdout)).not.toHaveProperty("clients");
   });
 

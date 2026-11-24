@@ -96,6 +96,26 @@ test("a rejection after the deadline is the clock's, as the wait's task after it
   ]);
 });
 
+test("work that stops at its signal, rejecting with its reason, ends with the wait and is no failure", async () => {
+  const reported: Array<{ task: string; thrown: unknown }> = [];
+  const clock = clockOver(systemTimers, (task, thrown) =>
+    reported.push({ task, thrown }),
+  );
+  const end = await waitWithin(
+    "test wait",
+    (signal) =>
+      new Promise<never>((_, reject) =>
+        signal.addEventListener("abort", () => reject(signal.reason)),
+      ),
+    5,
+    clock,
+    OPEN,
+  );
+  expect(end.end).toBe("deadline");
+  await after(20);
+  expect(reported).toEqual([]);
+});
+
 test("work that throws before it returns, in a wait begun closed, is the clock's", async () => {
   const closed = new AbortController();
   closed.abort();

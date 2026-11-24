@@ -125,9 +125,11 @@ export type Waited<T> =
 // `closing` aborted ends at once. `work` is handed the wait's signal, aborted
 // when the wait ends on any arm, with its timer cleared:
 // what it listens on through the signal stops with the wait, so a wait leaves
-// nothing behind. What it does not, a run it started, goes on, and a failure
-// of it after the wait ended is no one's answer: it is the clock's, as the
-// wait's task after its wait, saying what the work threw.
+// nothing behind, and work that stops there rejects with the signal's reason,
+// as `throwIfAborted` does, which is the wait's own end and no failure. What
+// it does not, a run it started, goes on, and a failure of it after the wait
+// ended is no one's answer: it is the clock's, as the wait's task after its
+// wait, saying what the work threw.
 export function waitWithin<T>(
   // The wait's task name: its deadline's, and its work's past the wait.
   task: string,
@@ -159,8 +161,9 @@ export function waitWithin<T>(
     working.then(
       (value) => resolve({ end: "answered", value }),
       (e: unknown) => {
-        if (wait.signal.aborted) clock.failed(`${task} after its wait`, e);
-        else reject(e);
+        if (!wait.signal.aborted) reject(e);
+        else if (e !== wait.signal.reason)
+          clock.failed(`${task} after its wait`, e);
       },
     );
   });

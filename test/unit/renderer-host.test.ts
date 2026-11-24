@@ -259,6 +259,41 @@ const answered = (): RendererOutput => ({
   frames: [],
 });
 
+test("a command whose asker stopped waiting before its slot is not made, and rejects with the asker's reason", async () => {
+  const heard: string[] = [];
+  let open = (): void => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const host = rendererHost(
+    MAIN_RENDERER,
+    clockAt({ wall: 0, mono: 0 }),
+    held({
+      answer: async ({ event }) => {
+        heard.push(event.kind);
+        if (event.kind === "close-journal") await opened;
+        return { ...answered(), reply: { kind: "close-journal" } };
+      },
+    }),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const busy = host.command({ kind: "close-journal" });
+  const wait = new AbortController();
+  const asked = host.command({ kind: "stats" }, wait.signal);
+  wait.abort("deadline");
+  open();
+  await busy;
+  await expect(asked).rejects.toBe("deadline");
+  expect(heard).toEqual(["close-journal"]);
+  expect(host.stats().queued).toBe(0);
+});
+
 test("a start heads the mailbox, behind only the slot in progress", async () => {
   const heard: string[] = [];
   const followed = jest.fn(NO_ACTS.configs.follow);
