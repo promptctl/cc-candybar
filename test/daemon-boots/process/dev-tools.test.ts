@@ -60,8 +60,11 @@ test("pnpm bar:web serves the bar, and ctrl-c stops it", () =>
     let said = "";
     server.stdout.on("data", (chunk: Buffer) => (said += chunk.toString()));
     server.stderr.on("data", (chunk: Buffer) => (said += chunk.toString()));
-    const exited = new Promise<number | null>((resolve) =>
-      server.on("exit", (code) => resolve(code)),
+    // How pnpm itself ends on the interrupt is its platform's: on macOS it
+    // reports the server's own exit, on Linux it dies of the signal its group
+    // got. That the job ended, and its server with it, holds on both.
+    const exited = new Promise<void>((resolve) =>
+      server.on("exit", () => resolve()),
     );
     const url = () => /the live bar: (\S+)/.exec(said)?.[1];
     try {
@@ -84,7 +87,10 @@ test("pnpm bar:web serves the bar, and ctrl-c stops it", () =>
       if (server.exitCode === null && server.signalCode === null)
         process.kill(-server.pid!, "SIGINT");
     }
-    expect(await exited).toBe(0);
+    await exited;
+    await expect(
+      fetch(new URL("/render", url()), { method: "POST", body: "{}" }),
+    ).rejects.toThrow();
   }));
 
 test("pnpm bench --list names the benchmarks", async () => {
