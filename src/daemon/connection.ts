@@ -343,23 +343,19 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // before it reads the sockets that filled meanwhile, so the backstop answers
   // on the turn after: a frame already waiting on the socket is read first,
   // and a click in it is never answered TIMEOUT for the daemon's own delay.
-  let cancelTurn = () => {};
-  const cancelTimer = daemon.clock.after(
+  // The deferred deadline is not cancelled: in a phase that is not armed the
+  // phase table moves nothing for it.
+  const clearBackstop = daemon.clock.after(
     "request backstop",
     REQUEST_TIMEOUT_MS,
-    () => {
-      cancelTurn = daemon.clock.defer("request backstop", () =>
+    () =>
+      daemon.clock.defer("request backstop", () =>
         on({
           kind: "deadline",
           answer: replyOf(timeoutResponse(accepted.id)),
         }),
-      );
-    },
+      ),
   );
-  const clearBackstop = () => {
-    cancelTimer();
-    cancelTurn();
-  };
 
   // [LAW:single-enforcer] The one move of the state. In flight, the backstop
   // and the timeout count are properties of the phase, so each changes

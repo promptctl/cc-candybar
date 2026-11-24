@@ -14,14 +14,17 @@ import {
 export interface HeldClock extends Timekeeper {
   // Moves time forward, running each timer that falls due at its own moment,
   // one due exactly at the end included. A timer already due, and a deferred
-  // run, wait for it too: `advance(0)` runs them. A callback that burns time
+  // run queued before the call, wait for it too: `advance(0)` runs them. A run
+  // deferred from inside the call waits for the next one, as it waits for the
+  // loop's next turn on the machine, so what the case does between two calls
+  // (a frame written to a stream) lands ahead of it. A callback that burns time
   // carries the clock past the end asked for. Nothing here takes a turn of the
   // real loop, so a case decides when.
   advance(ms: number): void;
   // `advance` for work a timer starts that awaits: after each timer fires,
   // what it queued settles before the next due one is sought, so a draw that
   // awaits its frame lands, and arms what follows, inside the span, as on a
-  // real loop.
+  // real loop. A run it deferred waits for the turn after that.
   settle(ms: number): Promise<void>;
   // Time a synchronous piece of work uses: moves time forward without firing
   // any timer, so what fell due while it ran waits for the next `advance`, as
@@ -71,9 +74,19 @@ export function heldClock(
     }
     due.fire();
   };
+  // [LAW:no-ambient-temporal-coupling] A deferred run is the loop's next turn,
+  // which comes after the timers due now and the input already waiting, so one
+  // queued while a timer runs is not in the set a call takes first. One cleared
+  // by an earlier run in the set does not run.
+  const turns = new Set<() => void>();
+  const runTurns = (queued: readonly (() => void)[]): void => {
+    for (const turn of queued) if (turns.delete(turn)) turn();
+  };
   const fireThrough = (end: number): void => {
+    const queued = [...turns];
     for (let due = nextDue(end); due; due = nextDue(end)) fire(due);
     elapsed = Math.max(elapsed, end);
+    runTurns(queued);
   };
   // The real loop's next check phase, which runs once every queued microtask
   // has: the held clock arms no real timer, so this is the case's only wait.
@@ -81,8 +94,12 @@ export function heldClock(
     new Promise<void>((resolve) => setImmediate(resolve));
   const settleThrough = async (end: number): Promise<void> => {
     await queuedSettled();
-    for (let due = nextDue(end); due; due = nextDue(end)) {
-      fire(due);
+    for (;;) {
+      const queued = [...turns];
+      const due = nextDue(end);
+      if (!due && queued.length === 0) break;
+      if (due) fire(due);
+      runTurns(queued);
       await queuedSettled();
     }
     elapsed = Math.max(elapsed, end);
@@ -110,7 +127,10 @@ export function heldClock(
     monotonic: () => elapsed as Monotonic,
     timer: (ms, fire) => arm(ms, fire),
     interval: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
-    turn: (fire) => arm(0, fire),
+    turn: (fire) => {
+      turns.add(fire);
+      return () => turns.delete(fire);
+    },
   };
   return {
     ...over(source),

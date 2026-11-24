@@ -684,8 +684,8 @@ async function clickEvent(
   // When a click still waiting in the mailbox is refused: its client was told
   // TIMEOUT, which says the click did not run, or a client that waited for the
   // answer left. The connection knows which clients wait (the forwarder does
-  // not), so its `clientLeft` already says so. A click is never refused for
-  // how long its turn took to come.
+  // not), so its `clientLeft` already says so. How long its turn took to come
+  // refuses nothing.
   const click: ClickInFlight = {
     gone: () => timedOut() || clientLeft(),
   };

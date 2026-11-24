@@ -60,7 +60,9 @@ export interface Timekeeper {
     fire: Task,
     options?: TimerOptions,
   ): () => void;
-  // Runs `fire` on the loop's next turn, after the work now running.
+  // Runs `fire` on the loop's next turn, after the work now running and after
+  // the input already waiting when that turn comes: a timer's run that defers
+  // lets a frame already on a socket be read first.
   defer(task: string, fire: Task): () => void;
   // Runs `fire` now, and nothing awaits it: the one way to start work whose
   // end no caller waits on. Its throw, sync or not, is settled as a rejection

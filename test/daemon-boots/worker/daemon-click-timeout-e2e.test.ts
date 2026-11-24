@@ -1,7 +1,10 @@
-// [LAW:verifiable-goals] What a click is answered when the daemon's loop is
-// held past its request guard. A click whose frame the daemon has reached runs
-// and is answered with its own outcome however long its turn takes. A bar's
-// click writes the file the link names, so a landed click is a file written.
+// [LAW:verifiable-goals] What a click's reader is told when the daemon's loop
+// is held past its request guard. A click the daemon has read runs and is
+// answered with its own outcome however long its turn takes, and one whose
+// frame it reads only after the guard answered is told TIMEOUT and its action
+// does not run. A bar's click writes the file the link names, so a landed click
+// is a file written. The reader the answer reaches is `cc-candybar
+// url-handle`, whose message is read off the daemon's own answer.
 
 import { reportingClock } from "../../../src/daemon/task-throws";
 import fs from "node:fs";
@@ -9,16 +12,21 @@ import JSON5 from "json5";
 import os from "node:os";
 import path from "node:path";
 
+import { interpretResponse } from "../../../src/daemon/client-transport";
+import type { Response } from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
+import { urlHandlePlan } from "../../../src/install/index";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { clickBody, linkTo, render } from "../../helpers/daemon-e2e";
+import { clickBody, click, linkTo, render } from "../../helpers/daemon-e2e";
+import { clickEventOf, loggedWhen, logLines } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { openedOn } from "../../helpers/opened-connection";
 import { hearingEvents, holdable } from "../../helpers/renderers";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
+import { fieldsOf } from "../../../src/utils/logfmt";
 
 jest.setTimeout(30_000);
 
@@ -51,6 +59,83 @@ function projectWithPin() {
     remove: () => fs.rmSync(project, { recursive: true, force: true }),
   };
 }
+
+test("a click whose frame the daemon reads after the guard answered is told TIMEOUT and its action does not run; url-handle says to click again", async () => {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-click-late");
+  const bar = projectWithPin();
+  const clock = heldClock(new Date(), reportingClock);
+  const daemon = startDaemon(env, { clock });
+  try {
+    const pin = linkTo(
+      await render(daemon, SID, bar.project, {}, bar.args),
+      "PIN",
+    );
+    const from = logLines(env).length;
+
+    // The frame arrives just after the loop read its sockets, so the guard's
+    // timer and then its deferred turn run before the next read.
+    const opened = openedOn(daemon.connect());
+    opened.send(clickBody(pin));
+    clock.advance(REQUEST_TIMEOUT_MS + 1);
+    clock.advance(0);
+    await until(() => opened.received.length > 0, "the click's answer");
+    const [answer] = opened.received;
+    expect(answer).toMatchObject({ ok: false, code: "TIMEOUT" });
+    const { request } = answer as Extract<Response, { code: "TIMEOUT" }>;
+
+    const lines = await loggedWhen(
+      env,
+      (all) => clickEventOf(all, from, request) !== undefined,
+      "the refused click's event",
+    );
+    const event = fieldsOf(clickEventOf(lines, from, request)!);
+    expect(event.get("outcome")).toBe("abandoned");
+    expect(event.get("timedOut")).toBe("Y");
+    expect(bar.pinned()).toBeUndefined();
+
+    // What its reader is told, from the answer itself.
+    const outcome = interpretResponse("click", answer!, () => undefined);
+    if (outcome.kind === "ok") throw new Error("a TIMEOUT read as ok");
+    const plan = urlHandlePlan(outcome);
+    expect(plan.code).toBe(1);
+    expect(plan.stderr).toMatch(/refused it; click again/);
+
+    // Sent again, as the message says, it lands once.
+    await click(daemon, pin);
+    expect(bar.pinned()).toBe(PALETTE);
+  } finally {
+    await daemon.stop();
+    removeTmpDirs();
+    bar.remove();
+  }
+});
+
+// The guard's timer is due while the frame still waits on its socket: the
+// deferred turn comes after the read, so the click is not answered TIMEOUT for
+// the daemon's own delay.
+test("a click already waiting on its socket when the guard's timer fires is read and runs", async () => {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-click-waiting");
+  const bar = projectWithPin();
+  const clock = heldClock(new Date(), reportingClock);
+  const daemon = startDaemon(env, { clock });
+  try {
+    const pin = linkTo(
+      await render(daemon, SID, bar.project, {}, bar.args),
+      "PIN",
+    );
+    const opened = openedOn(daemon.connect());
+    opened.send(clickBody(pin));
+    clock.advance(REQUEST_TIMEOUT_MS + 1);
+    await until(() => opened.received.length > 0, "the click's own answer");
+    expect(opened.received).toEqual([{ ok: true, output: "" }]);
+    expect(bar.pinned()).toBe(PALETTE);
+    expect(daemon.daemon.stats.requestsTimedOut).toBe(0);
+  } finally {
+    await daemon.stop();
+    removeTmpDirs();
+    bar.remove();
+  }
+});
 
 test("a click the daemon has read is answered with its own outcome though its turn outlasts the guard", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-click-held");

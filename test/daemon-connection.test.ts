@@ -209,7 +209,7 @@ describe("a connection over a stream", () => {
 
   // [LAW:verifiable-goals] A TIMEOUT to a click means its action did not run, so a
   // click that was read is answered with its own outcome, however long it
-  // takes. Only a click whose frame had not reached the daemon by the time the
+  // takes. Only a click whose frame was not read before the
   // backstop answered was told TIMEOUT.
   describe("a click request", () => {
     const CLICK: Request = {
@@ -918,19 +918,41 @@ describe("a connection over a stream", () => {
 
     test("one the backstop answered while it was on its way attaches nothing", async () => {
       const request = held();
-      const { send, received } = open(subscribing({ handle: request.handle }));
+      // The reply comes in the turn the deferred TIMEOUT runs, so the subscribe
+      // lands while the TIMEOUT is still closing the stream: not yet destroyed,
+      // and a feed attached now would never hear the close.
+      const clock = {
+        ...systemTimekeeper,
+        defer: (task: string, fire: () => unknown) =>
+          systemTimekeeper.defer(task, () => {
+            const ran = fire();
+            request.answer(SUBSCRIBED);
+            return ran;
+          }),
+      };
+      const { send, received } = open(
+        subscribing({ handle: request.handle, clock }),
+      );
       send(SUBSCRIBE);
       await settled();
 
-      // The subscribe lands once the TIMEOUT is the socket's answer, and a feed
-      // attached now would never hear the close.
       jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
-      await settled();
-      request.answer(SUBSCRIBED);
       await settled();
 
       expect(received).toMatchObject([{ code: "TIMEOUT" }]);
       expect(subscriptions).toEqual([]);
+    });
+
+    test("one already waiting on the socket when the backstop's timer fires attaches, and is not answered TIMEOUT", async () => {
+      const daemon = subscribing();
+      const { client, received } = open(daemon);
+      client.write(encodeFrame(SUBSCRIBE));
+      jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+      await settled();
+
+      expect(subscriptions).toHaveLength(1);
+      expect(daemon.stats.requestsTimedOut).toBe(0);
+      expect(received).toEqual([]);
     });
 
     test("one whose subscriber hung up first attaches nothing", async () => {

@@ -66,8 +66,8 @@ export interface TransientOutcome {
 // - "connect": our clock, before the listener accepted the request.
 // - "deadline": our clock, after the request was sent.
 // - "backstop": the daemon answered TIMEOUT. A click's TIMEOUT has one sender,
-//   the guard, so to a click it means the frame had not reached the daemon
-//   when the guard fired and the click was refused if it arrived
+//   the guard, so to a click it means no complete frame was read before the
+//   guard answered, and the click is refused if one arrives
 //   (request-deadline.ts).
 export type BusyPhase = TimeoutPhase | "backstop";
 
