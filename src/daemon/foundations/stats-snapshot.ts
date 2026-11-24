@@ -37,8 +37,9 @@ export const RENDERER_STATS_REFERENCE: RendererStats = {
 };
 
 // Paths whose fields are missing or unusable, in reference order. A
-// reference array describes a list, and a tagged union's reference arm
-// says nothing about fields of its other arms.
+// reference array's one element describes every element of the list, and a
+// tagged union's reference arm describes the values of that arm and says
+// nothing about fields of its other arms.
 export function missingFields(
   reference: unknown,
   value: unknown,
@@ -48,10 +49,17 @@ export function missingFields(
   if (typeof reference === "number") {
     return typeof value === "number" && Number.isFinite(value) ? [] : [label];
   }
-  if (Array.isArray(reference)) return Array.isArray(value) ? [] : [label];
+  if (Array.isArray(reference)) {
+    if (!Array.isArray(value)) return [label];
+    const [element] = reference as unknown[];
+    return value.flatMap((item, i) =>
+      missingFields(element, item, `${at}[${i}]`),
+    );
+  }
   if (!isPlainObject(reference)) return [];
   if (!isPlainObject(value)) return [label];
-  if ("kind" in reference) return [];
+  if ("kind" in reference && "kind" in value && reference.kind !== value.kind)
+    return [];
   const missing: string[] = [];
   for (const key of Object.keys(reference)) {
     const path = at === "" ? key : `${at}.${key}`;

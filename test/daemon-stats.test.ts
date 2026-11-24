@@ -350,9 +350,9 @@ describe("shapeSkew", () => {
     ]);
     expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
     // A list the reader maps, carried as anything else, is as absent to it.
-    expect(
-      missingFields(snap, { ...snap, clients: null }),
-    ).toEqual(["clients"]);
+    expect(missingFields(snap, { ...snap, clients: null })).toEqual([
+      "clients",
+    ]);
     expect(missingFields(snap, snap)).toEqual([]);
     // A union's arms differ: the reference's `unmeasured` arm is no spec of
     // a `measured` one, so a tagged union is judged present, not below its
@@ -371,6 +371,22 @@ describe("shapeSkew", () => {
         host: { ...snap.host, memory: 3 },
       }),
     ).toEqual(["host.memory"]);
+    // Every renderer's panel is read as the reference's one is, down into
+    // the arm it answers with.
+    const [panel] = snap.renderers;
+    const { mailbox: _m, ...unboxed } = panel!;
+    const { renderCache: _c, ...uncached } = RENDERER_STATS_REFERENCE;
+    expect(
+      missingFields(snap, {
+        ...snap,
+        renderers: [
+          panel,
+          unboxed,
+          { ...panel, stats: { kind: "ok", value: uncached } },
+          { ...panel, stats: { kind: "failed", reason: "down" } },
+        ],
+      }),
+    ).toEqual(["renderers[1].mailbox", "renderers[2].stats.value.renderCache"]);
   });
 });
 

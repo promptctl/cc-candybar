@@ -9,6 +9,7 @@ import {
   type Histogram,
 } from "./foundations/durations.js";
 import {
+  RENDERER_STATS_REFERENCE,
   type Durations,
   type RunStats,
   type FeedStats,
@@ -22,6 +23,7 @@ import type { RenderSighting } from "./foundations/sightings";
 import type { LaunchCategory } from "../proc/launcher";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
+import { MAIN_RENDERER } from "./foundations/renderer-name";
 import { PACKAGE_VERSION } from "../version";
 import type { Monotonic, Timekeeper } from "../time";
 import type { RequestId } from "../renderer-interface/interface.js";
@@ -287,7 +289,19 @@ export class RuntimeStats {
       bundle: "/",
       sourceDigest: null,
       host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },
-      renderers: [],
+      // [LAW:one-source-of-truth] One panel, which every panel is read as:
+      // the arms a reader descends into, so a field of theirs is checked.
+      renderers: [
+        {
+          name: MAIN_RENDERER,
+          process: {
+            kind: "process",
+            memory: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },
+          },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "ok", value: RENDERER_STATS_REFERENCE },
+        },
+      ],
     });
   }
 

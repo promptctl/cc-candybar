@@ -43,6 +43,7 @@ import type { RendererProcessState } from "./renderer-process.js";
 import type { Asked } from "../utils/outcome.js";
 import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
+import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererHost } from "./renderer-host.js";
 import {
   badRequest,
@@ -52,7 +53,7 @@ import {
   RendererDown,
   type Failure,
 } from "./foundations/verb-error";
-import { elapsedMs, spanMs } from "../time.js";
+import { elapsedMs, sleep, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import type { ClickArrival } from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
@@ -62,7 +63,10 @@ import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
 import { recordingCommandOf } from "./foundations/recording-command.js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { instantAt, instantOf } from "../utils/instant.js";
-import { renderDeadlines } from "./foundations/request-deadline.js";
+import {
+  renderDeadlines,
+  REQUEST_TIMEOUT_MS,
+} from "./foundations/request-deadline.js";
 import type { RendererStats } from "../renderer-interface/renderer-stats.js";
 import {
   noteFacts,
@@ -450,7 +454,19 @@ export async function replyTo(
       .renderers()
       .map((runtime) => ({ ...runtime, mailbox: runtime.renderer.stats() }));
     const renderers = await Promise.all(
-      held.map((runtime) => rendererPanel(runtime, limits)),
+      held.map(({ renderer, process, mailbox }) =>
+        rendererPanel(
+          {
+            name: renderer.name,
+            ask: () =>
+              renderer.command({ kind: "stats" }).then(({ stats }) => stats),
+            process,
+            mailbox,
+          },
+          limits,
+          clock,
+        ),
+      ),
     );
     return stay({
       ok: true,
@@ -677,42 +693,80 @@ export async function replyTo(
   throw new Error(`no reply for request ${inspect(unanswered)}`);
 }
 
+// [LAW:no-ambient-temporal-coupling] How long the stats reply waits for any
+// one renderer's own answer: half the connection backstop's bound on the
+// request, so the host's snapshot and the write fit in the rest.
+export const RENDERER_STATS_WAIT_MS = REQUEST_TIMEOUT_MS / 2;
+
 // [LAW:one-type-per-behavior] One renderer's panel, built alike for every
 // renderer: its memory where it is, its mailbox, and its own answer of
 // itself, or why there was none, so one renderer that cannot answer fails its
-// panel and not the reply.
-async function rendererPanel(
+// panel and not the reply. One not running is not asked, so a stats request
+// is no input it refused, and one starting or busy is waited for only as
+// long as the reply can spare: its mailbox says what holds it.
+export async function rendererPanel(
   {
-    renderer,
+    name,
+    ask,
     process: state,
     mailbox,
-  }: ReturnType<DaemonParts["renderers"]>[number] & {
+  }: {
+    readonly name: RendererName;
+    // Its own answer of itself, through its mailbox.
+    readonly ask: () => Promise<RendererStats>;
+    readonly process: RendererProcessState;
     readonly mailbox: MailboxStats;
   },
-  limits: DaemonParts["limits"],
+  limits: Pick<DaemonParts["limits"], "memoryOf">,
+  clock: Pick<DaemonParts["clock"], "after">,
 ): Promise<RendererPanel> {
-  let answered: Asked<RendererStats>;
-  try {
-    answered = {
-      kind: "ok",
-      value: (await renderer.command({ kind: "stats" })).stats,
-    };
-  } catch (thrown) {
-    answered = { kind: "failed", reason: failureOf(thrown).detail };
-  }
   return {
-    name: renderer.name,
+    name,
     process: memoryPanelOf(state, limits),
     mailbox,
-    stats: answered,
+    stats:
+      state.kind === "not-running"
+        ? {
+            kind: "failed",
+            reason: `not asked: it is not running: ${state.why}`,
+          }
+        : await askedWithin(name, ask, clock),
   };
 }
 
+async function askedWithin(
+  name: RendererName,
+  ask: () => Promise<RendererStats>,
+  clock: Pick<DaemonParts["clock"], "after">,
+): Promise<Asked<RendererStats>> {
+  const waited = new AbortController();
+  try {
+    return await Promise.race([
+      ask().then((value) => ({ kind: "ok", value }) as const),
+      sleep(
+        clock,
+        `renderer ${name} stats wait`,
+        RENDERER_STATS_WAIT_MS,
+        waited.signal,
+      ).then(
+        () =>
+          ({
+            kind: "failed",
+            reason: `no answer within ${RENDERER_STATS_WAIT_MS} ms`,
+          }) as const,
+      ),
+    ]);
+  } catch (thrown) {
+    return { kind: "failed", reason: failureOf(thrown).detail };
+  } finally {
+    waited.abort();
+  }
+}
 // Where a renderer's memory is, as its panel says it: a process of its own is
 // read against the limit as the backstop last read it.
 function memoryPanelOf(
   state: RendererProcessState,
-  limits: DaemonParts["limits"],
+  limits: Pick<DaemonParts["limits"], "memoryOf">,
 ): RendererMemoryPanel {
   switch (state.kind) {
     case "in-host":

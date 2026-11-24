@@ -199,10 +199,9 @@ interface Link {
   // Admission belongs to the connection and survives close while its
   // remaining stdout is drained. It makes no lifecycle decision.
   compatible: boolean;
-  // Why this generation ended, when the host ended it: a failed boot or
-  // restoration, no answer to its pings, or its memory. The first reason
-  // owns its end.
-  failure: string | null;
+  // Why the host ended this generation, which its exit reports whatever the
+  // phase has become by then. Set once, by the end's one transition.
+  endReason: string | null;
   // Each host receipt is meaningful only to the worker that issued it.
   readonly receipts: Map<EffectId, EffectId>;
   // Boot data is held only until the recording's construction result arrives.
@@ -212,6 +211,9 @@ interface Link {
   // When the ping owed an answer went out.
   pingSentAt: number | null;
 }
+
+// A generation the host has ended, with the reason it did.
+type EndedLink = Link & { readonly endReason: string };
 
 type Phase =
   | { readonly kind: "idle" }
@@ -230,6 +232,14 @@ type Phase =
       >;
     }
   | { readonly kind: "live"; readonly link: Link }
+  // The host has ended this generation: a failed boot or restoration, no
+  // answer to its pings, or its memory. It serves no input and is judged no
+  // more, and its exit starts the next.
+  | {
+      readonly kind: "ending";
+      readonly link: EndedLink;
+      readonly booted: boolean;
+    }
   // The daemon's close has begun: the live renderer takes its steps, and its
   // end starts no other.
   | { readonly kind: "closing"; readonly link: Link }
@@ -264,7 +274,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       ? phase.link
       : null;
   const unavailable = (
-    at: Extract<Phase, { kind: "idle" | "down" | "closed" | "replacing" }>,
+    at: Extract<
+      Phase,
+      { kind: "idle" | "down" | "closed" | "replacing" | "ending" }
+    >,
   ): DaemonClosing | RendererDown => {
     switch (at.kind) {
       case "closed":
@@ -276,6 +289,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       case "replacing":
         return new RendererDown(
           `renderer ${name} is starting a fresh generation`,
+        );
+      case "ending":
+        return new RendererDown(
+          `renderer ${name} is ending: ${at.link.endReason}`,
         );
     }
   };
@@ -293,16 +310,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         "error",
         `renderer ${name}[${link.generation}] start failed: ${failure.detail}`,
       );
-      // [LAW:no-ambient-temporal-coupling] A late failure belongs only to its
-      // own live generation. The usual exit path supplies the retry and backoff.
-      if (
-        (phase.kind === "starting" || phase.kind === "live") &&
-        phase.link === link &&
-        link.failure === null
-      ) {
-        link.failure = `failed to start: ${failure.message}`;
-        link.kill.abort(new Error(link.failure));
-      }
+      // The usual exit path supplies the retry and backoff.
+      endWith(link, `failed to start: ${failure.message}`);
     }
   };
 
@@ -338,7 +347,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       kill,
       spawnedAt: clock.monotonic(),
       compatible: false,
-      failure: null,
+      endReason: null,
       receipts: new Map(),
       usage: null,
       pingSentAt: null,
@@ -367,12 +376,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       const result = await channel.ended;
       stdout.end();
       stderr.end();
-      ended(link, link.failure ?? (result.ok ? "exited" : whyFailed(result)));
+      ended(link, link.endReason ?? (result.ok ? "exited" : whyFailed(result)));
     });
   };
 
   const heard = (link: Link, text: string): void => {
-    if (link.failure !== null) return;
+    // An ended generation's answers are its interrupted inputs' to report.
+    if (link.endReason !== null) return;
     let raw: unknown;
     try {
       raw = JSON.parse(text);
@@ -493,26 +503,64 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     ping(link);
   };
 
-  // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log.
-  // The stack is the log's alone, and the first refusal owns the reason.
-  const refusedBoot = (link: Link, reason: string, detail = reason): void => {
-    link.failure = `refused its boot: ${reason}`;
+  // [LAW:single-enforcer] Every end the host decides: the generation keeps
+  // the reason its exit reports, and the first reason owns it. One starting
+  // or live moves to ending, and what waited for its boot fails. One the
+  // close still waits on stays the close's, whose end starts nothing, and is
+  // ended only by a reason that `takes` it. A reason the end refuses is said:
+  // a second one, or an end of a renderer the phase has moved past.
+  const toEnding = (
+    link: Link,
+    why: string,
+    takes: ReadonlyArray<"starting" | "live" | "closing"> = [
+      "starting",
+      "live",
+    ],
+  ): boolean => {
+    const at = phase;
+    const mine =
+      (at.kind === "starting" || at.kind === "live" || at.kind === "closing") &&
+      takes.includes(at.kind) &&
+      at.link === link;
+    if (!mine || link.endReason !== null) {
+      log(
+        "info",
+        `renderer ${name}[${link.generation}] was not ended for ${why}: ${link.endReason !== null ? `it is already ending: ${link.endReason}` : `it is ${at.kind}`}`,
+      );
+      return false;
+    }
+    const ended: EndedLink = Object.assign(link, { endReason: why });
+    if (at.kind !== "closing") {
+      phase = { kind: "ending", link: ended, booted: at.kind === "live" };
+      if (at.kind === "starting")
+        for (const send of at.queued) send(unavailable(phase));
+    }
+    return true;
+  };
+  const endWith = (
+    link: Link,
+    why: string,
+    takes?: ReadonlyArray<"starting" | "live" | "closing">,
+  ): void => {
+    if (toEnding(link, why, takes)) link.kill.abort(new Error(why));
+  };
+
+  // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log. The
+  // stack is the log's alone. A renderer that refused exits by itself.
+  const refusedBoot = (
+    link: Link,
+    reason: string,
+    detail = reason,
+  ): boolean => {
     log(
       "error",
       `renderer ${name}[${link.generation}] refused its boot: ${detail}`,
     );
-  };
-
-  // [LAW:single-enforcer] How the host ends a renderer it judged: the reason
-  // is its end's, unless an earlier one already is.
-  const endWith = (link: Link, why: string): void => {
-    link.failure ??= why;
-    link.kill.abort(new Error(link.failure));
+    return toEnding(link, `refused its boot: ${reason}`);
   };
 
   const rejectBoot = (link: Link, reason: string): void => {
-    refusedBoot(link, reason);
-    link.kill.abort(new Error(reason));
+    if (refusedBoot(link, reason)) link.kill.abort(new Error(reason));
   };
 
   const ended = (link: Link, how: string): void => {
@@ -559,7 +607,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       );
       return;
     }
-    const booted = phase.kind === "live";
+    const booted =
+      phase.kind === "live" || (phase.kind === "ending" && phase.booted);
     const queued = phase.kind === "starting" ? phase.queued : [];
     const lived = clock.monotonic() - link.spawnedAt;
     // A boot that never answered ended young, however long it was judged.
@@ -598,7 +647,12 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     const owedSince =
       phase.kind === "starting" ? link.spawnedAt : link.pingSentAt;
     if (owedSince !== null && now - owedSince > HUNG_AFTER_MS) {
-      endWith(link, `stopped answering for ${HUNG_AFTER_MS / 1000} s`);
+      // One that stopped answering cannot take the close's steps either.
+      endWith(link, `stopped answering for ${HUNG_AFTER_MS / 1000} s`, [
+        "starting",
+        "live",
+        "closing",
+      ]);
       return;
     }
     // A renderer the close still waits on is judged as a live one is.
@@ -625,7 +679,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // [LAW:single-enforcer] How the close ends a renderer: its stdin closes,
   // and one that has not ended after the grace is signalled.
-  const ending = async (link: Link): Promise<void> => {
+  const closeGracefully = async (link: Link): Promise<void> => {
     link.channel.end();
     const grace = clock.after(
       `renderer ${name} close grace`,
@@ -642,13 +696,16 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     switch (phase.kind) {
       case "replacing":
         return (phase = { kind: "closed", ended: phase.ended });
+      // Already ended by the host: the close awaits its exit.
+      case "ending":
+        return (phase = { kind: "closed", ended: phase.link.channel.ended });
       case "live":
         return (phase = { kind: "closing", link: phase.link });
       // A boot holds nothing to flush, and the close's steps would wait on it:
       // it ends now, beside them, and what waited for it is cancelled.
       case "starting": {
         const { link, queued } = phase;
-        const begun = { kind: "closed", ended: ending(link) } as const;
+        const begun = { kind: "closed", ended: closeGracefully(link) } as const;
         phase = begun;
         for (const send of queued) send(unavailable(begun));
         return begun;
@@ -744,19 +801,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
               }),
       };
     });
-  // A spawned renderer as the host can charge it: its pid from its spawn, its
-  // memory from its first ping's answer.
-  const runningState = (link: Link): RendererProcessState => {
+  // [LAW:types-are-the-program] A spawned renderer as the host can charge
+  // it: its pid from its spawn, its memory from its first ping's answer. Only
+  // a live one is running, the one state whose end and heap the host can
+  // take: an end the phase has moved past by the time it is asked for is
+  // said by the end itself.
+  const spawnedState = (
+    link: Link,
+    at: "starting" | "live",
+  ): RendererProcessState => {
     const pid = link.channel.pid;
     const usage = link.usage;
     if (pid === null) return { kind: "not-running", why: "it has no pid" };
-    // [LAW:types-are-the-program] One the host has begun to end serves no
-    // input and is judged no more: a reading between its end and its exit
-    // would breach it a second time.
-    if (link.failure !== null)
-      return { kind: "not-running", why: `it is ending: ${link.failure}` };
-    if (usage === null) return { kind: "unread", pid };
-    const live = (): boolean => phase.kind === "live" && phase.link === link;
+    if (at === "starting" || usage === null) return { kind: "unread", pid };
     return {
       kind: "running",
       process: {
@@ -764,24 +821,14 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         pid,
         usage,
         heapSnapshot: (file) =>
-          live()
+          phase.kind === "live" && phase.link === link
             ? streamedToFile(file, (write) => link.lines.heapSnapshot(write))
             : Promise.reject(
                 new Error(
-                  `renderer ${name}[${link.generation}] is not live, so its heap was not written`,
+                  `renderer ${name}[${link.generation}] is ${phase.kind}, so its heap was not written`,
                 ),
               ),
-        end: (why) => {
-          if (live()) {
-            endWith(link, why);
-            return;
-          }
-          // [LAW:nothing-unseen] A breach whose end the phase refused.
-          log(
-            "warn",
-            `renderer ${name}[${link.generation}] is ${phase.kind}, so it was not ended: ${why}`,
-          );
-        },
+        end: (why) => endWith(link, why),
       },
     };
   };
@@ -802,6 +849,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
             send(new RendererDown(`renderer ${name} is being replaced`));
           break;
         case "live":
+        case "ending":
           break;
         default:
           throw new DaemonClosing(`renderer ${name} replacement`);
@@ -810,7 +858,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       const retiring = {
         kind: "replacing",
         link,
-        ended: ending(link),
+        ended: closeGracefully(link),
       } as const;
       phase = retiring;
       await retiring.ended;
@@ -829,7 +877,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     beginClose: () => beginClose().kind,
     close: async () => {
       const begun = beginClose();
-      const ended = begun.kind === "closing" ? ending(begun.link) : begun.ended;
+      const ended =
+        begun.kind === "closing" ? closeGracefully(begun.link) : begun.ended;
       phase = { kind: "closed", ended };
       stopPings();
       await ended;
@@ -844,10 +893,16 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           return { kind: "not-running", why: phase.why };
         case "closed":
           return { kind: "not-running", why: "the daemon closed it" };
+        case "closing":
+          return { kind: "not-running", why: "the daemon is closing it" };
+        case "ending":
+          return {
+            kind: "not-running",
+            why: `it is ending: ${phase.link.endReason}`,
+          };
         case "starting":
         case "live":
-        case "closing":
-          return runningState(phase.link);
+          return spawnedState(phase.link, phase.kind);
       }
     },
   };
