@@ -4,15 +4,22 @@
     {
       "version": "pr-957",
       "ref": "refs/pull/957/merge",
-      "sha": "1099df41cc81bc4af928856673b7d741e6769cfc",
-      "timestamp": "2026-11-24T23:09:42.724Z",
+      "sha": "de684de799edb600e88e20188d2a5d1bb07434fa",
+      "timestamp": "2026-11-24T23:18:03.915Z",
       "commits": [
         {
-          "sha": "1099df41cc81bc4af928856673b7d741e6769cfc",
+          "sha": "de684de799edb600e88e20188d2a5d1bb07434fa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T23:08:39Z",
-          "message": "Merge 88c5611f4ad8e61bec377a01988c89f8fe04d9aa into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
+          "timestamp": "2026-11-24T23:16:55Z",
+          "message": "Merge 9d33b475f5dcf1c206aaffb40316c647224b6dd4 into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
+        },
+        {
+          "sha": "9d33b475f5dcf1c206aaffb40316c647224b6dd4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:16:41-07:00",
+          "message": "docs(links): the state-writes refusal comment says whose message it is (candybar-host-renderer-x96a.5f9)\n"
         },
         {
           "sha": "88c5611f4ad8e61bec377a01988c89f8fe04d9aa",
