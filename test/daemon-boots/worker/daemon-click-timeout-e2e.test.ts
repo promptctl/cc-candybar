@@ -1,10 +1,10 @@
 // [LAW:verifiable-goals] What a click's reader is told when the daemon's loop
-// is held past its request guard. A click read after the guard fired is
-// answered TIMEOUT and its action does not run, and a click read in time is
-// answered with its own outcome however long its turn takes. A bar's click writes the file
-// the link names, so a landed click is a file written. The reader the answer
-// reaches is `cc-candybar url-handle`, whose message is read off the daemon's
-// own answer.
+// is held past its request guard. A click the daemon has read runs and is
+// answered with its own outcome however long its turn takes, and one whose
+// frame it reads only after the guard answered is told TIMEOUT and its action
+// does not run. A bar's click writes the file the link names, so a landed click
+// is a file written. The reader the answer reaches is `cc-candybar
+// url-handle`, whose message is read off the daemon's own answer.
 
 import { reportingClock } from "../../../src/daemon/task-throws";
 import fs from "node:fs";
@@ -13,7 +13,14 @@ import os from "node:os";
 import path from "node:path";
 
 import { interpretResponse } from "../../../src/daemon/client-transport";
-import type { Response } from "../../../src/daemon/foundations/protocol";
+import {
+  URL_FRAME_KIND,
+  URL_FRAME_VERSION,
+  encodeFrame,
+  type Request,
+  type Response,
+  type UrlFrame,
+} from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import { urlHandlePlan } from "../../../src/install/index";
@@ -60,7 +67,7 @@ function projectWithPin() {
   };
 }
 
-test("a click read after the guard fired is answered TIMEOUT and its action does not run; url-handle says to click again", async () => {
+test("a click whose frame the daemon reads after the guard answered is told TIMEOUT and its action does not run; url-handle says to click again", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-click-late");
   const bar = projectWithPin();
   const clock = heldClock(new Date(), reportingClock);
@@ -72,8 +79,9 @@ test("a click read after the guard fired is answered TIMEOUT and its action does
     );
     const from = logLines(env).length;
 
-    // The loop is held past the guard with the click's frame unread: the
-    // backstop's timer comes due, in the same turn, ahead of the stream's data.
+    // The frame arrives just after the loop read its sockets, so the guard's
+    // timer and its deferred turn run, on a held clock in the same advance,
+    // before the next read.
     const opened = openedOn(daemon.connect());
     opened.send(clickBody(pin));
     clock.advance(REQUEST_TIMEOUT_MS + 1);
@@ -109,8 +117,13 @@ test("a click read after the guard fired is answered TIMEOUT and its action does
   }
 });
 
-test("a click read in time is answered with its own outcome though its turn outlasts the guard", async () => {
-  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-click-held");
+// A daemon whose renderer holds the click's turn until `release`, over a bar
+// whose link pins the palette.
+async function holdingClicks(
+  prefix: string,
+  body: (pin: string) => Request | UrlFrame,
+) {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(prefix);
   const bar = projectWithPin();
   const clock = heldClock(new Date(), reportingClock);
   const entered = Promise.withResolvers<void>();
@@ -125,27 +138,61 @@ test("a click read in time is answered with its own outcome though its turn outl
     });
   });
   const daemon = startDaemon(env, { clock, renderer });
+  const pin = linkTo(
+    await render(daemon, SID, bar.project, {}, bar.args),
+    "PIN",
+  );
+  const opened = openedOn(daemon.connect());
+  opened.client.write(encodeFrame(body(pin)));
+  return {
+    bar,
+    clock,
+    daemon,
+    opened,
+    entered: entered.promise,
+    release: () => release(),
+    async stop() {
+      release();
+      await daemon.stop();
+      removeTmpDirs();
+      bar.remove();
+    },
+  };
+}
+
+test("a click the daemon has read is answered with its own outcome though its turn outlasts the guard", async () => {
+  const held = await holdingClicks("ccb-click-held", clickBody);
   try {
-    const pin = linkTo(
-      await render(daemon, SID, bar.project, {}, bar.args),
-      "PIN",
-    );
-    const opened = openedOn(daemon.connect());
-    opened.send(clickBody(pin));
-    await entered.promise;
+    await held.entered;
 
-    await clock.settle(REQUEST_TIMEOUT_MS * 3);
-    expect(opened.received).toEqual([]);
-    expect(daemon.daemon.stats.requestsTimedOut).toBe(0);
+    await held.clock.settle(REQUEST_TIMEOUT_MS * 3);
+    expect(held.opened.received).toEqual([]);
+    expect(held.daemon.daemon.stats.requestsTimedOut).toBe(0);
 
-    release();
-    await until(() => opened.received.length > 0, "the click's own answer");
-    expect(opened.received).toEqual([{ ok: true, output: "" }]);
-    expect(bar.pinned()).toBe(PALETTE);
+    held.release();
+    await until(() => held.opened.received.length > 0, "the click's own answer");
+    expect(held.opened.received).toEqual([{ ok: true, output: "" }]);
+    expect(held.bar.pinned()).toBe(PALETTE);
   } finally {
-    release();
-    await daemon.stop();
-    removeTmpDirs();
-    bar.remove();
+    await held.stop();
+  }
+});
+
+test("a url frame's click runs though its turn outlasts the guard", async () => {
+  const held = await holdingClicks("ccb-url-held", (url) => ({
+    kind: URL_FRAME_KIND,
+    urlV: URL_FRAME_VERSION,
+    url,
+  }));
+  try {
+    await held.entered;
+
+    await held.clock.settle(REQUEST_TIMEOUT_MS * 3);
+    expect(held.daemon.daemon.stats.requestsTimedOut).toBe(0);
+
+    held.release();
+    await until(() => held.bar.pinned() === PALETTE, "the click's file");
+  } finally {
+    await held.stop();
   }
 });

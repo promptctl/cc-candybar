@@ -24,7 +24,7 @@ The code declares 20 leaf verbs and `dispatch` (`src/click/wire.ts`). A verb's h
 - **Idle close.** A menu's idle timer closes the menus through the same journaled write the ✕ makes (`closeIdleMenus`), so savepoints and back treat it like a click, with no click involved.
 - **Closing view.** Every session write clears the disclosures nested inside a closed one in the same transaction (`src/renderer/closing-view.ts`).
 - **Click errors.** A failed click and each act it asked for hold their errors in the clicking session's state; the request boundary marks them carried once an answer went out.
-- **Client timeout.** A click read in time is answered with its own outcome. A TIMEOUT to a click means it was refused unread and its action did not run. A url frame's click is under the guard too: one whose turn starts after the guard is refused, though its writer stopped waiting long before.
+- **Client timeout.** A click the daemon has read is answered with its own outcome however long its turn takes. A TIMEOUT to a click means no complete frame of it was read before the guard answered, so its action did not run. Once a url frame is read its click is under no deadline: its writer waits for no answer, and its click runs however late its turn comes. A url frame the guard answered before it was read has its click refused.
 
 ## Key files
 

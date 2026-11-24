@@ -47,12 +47,8 @@ const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
 // - `unattended`: a url frame is read. The URL handler app waits for no
 //   outcome, reading the verdict on its link at most, so its hanging up is its
 //   design, not a peer leaving: the frame stays in flight until its click is
-//   handled, under the backstop's deadline, which a click read in time is the
-//   one request to escape (`BACKSTOP_BOUNDS_READ`): a url frame's click whose
-//   turn starts past it is refused, so a repeat click cannot revert it
-//   (src/daemon/reply.ts).
-//   `lapsed`: the deadline passed, and no one was told. `told`: its writer
-//   was written its verdict, the socket's one answer.
+//   handled, however long that takes. `told`: its writer was written its
+//   verdict, the socket's one answer.
 // - `answered`: the socket's one answer is written: the reply (a refusal of
 //   a subscribe included), or the backstop's TIMEOUT.
 // - `streaming`: the session's subscription stands.
@@ -63,11 +59,7 @@ type Open =
   | { readonly kind: "awaiting" }
   | { readonly kind: "answering" }
   | { readonly kind: "held" }
-  | {
-      readonly kind: "unattended";
-      readonly lapsed: boolean;
-      readonly told: boolean;
-    }
+  | { readonly kind: "unattended"; readonly told: boolean }
   | { readonly kind: "answered"; readonly by: "reply" | "backstop" }
   | { readonly kind: "streaming"; readonly unsubscribe: () => void };
 type Phase = Open | { readonly kind: "closed"; readonly from: Open };
@@ -120,17 +112,13 @@ const inFlight = (p: Phase): boolean =>
   p.kind !== "streaming" && p.kind !== "closed";
 
 // While the backstop is armed: an answer is owed under the deadline. `held`
-// is not armed: reading it disarms the backstop.
+// and `unattended` are not armed: reading either disarms the backstop.
 const armed = (p: Phase): boolean =>
-  p.kind === "awaiting" ||
-  p.kind === "answering" ||
-  (p.kind === "unattended" && !p.lapsed);
+  p.kind === "awaiting" || p.kind === "answering";
 
 // [LAW:one-source-of-truth] Whether the deadline passed, read off the phase.
 function lapsed(p: Phase): boolean {
   switch (p.kind) {
-    case "unattended":
-      return p.lapsed;
     case "answered":
       return p.by === "backstop";
     case "closed":
@@ -138,6 +126,7 @@ function lapsed(p: Phase): boolean {
     case "awaiting":
     case "answering":
     case "held":
+    case "unattended":
     case "streaming":
       return false;
   }
@@ -155,7 +144,7 @@ const left = (p: Phase): boolean =>
 // a fact of what was sent.
 const opened = (inbound: Inbound): Open =>
   inbound.kind === "url"
-    ? { kind: "unattended", lapsed: false, told: false }
+    ? { kind: "unattended", told: false }
     : backstopBoundsRead(inbound.req?.kind)
       ? { kind: "answering" }
       : { kind: "held" };
@@ -183,7 +172,7 @@ const STEP: {
   // [LAW:dataflow-not-control-flow] Whether a client waits for the answer is
   // a fact of what it sent. A frame read in any later phase moves nothing:
   // its work runs, and its answer goes nowhere. A render read late warms the
-  // next tick, and a click read late writes its refused click event.
+  // next tick.
   read: (p, e) => (p.kind === "awaiting" ? [e.opens, NONE] : [p, NONE]),
   unparsed: (p, e) =>
     p.kind === "awaiting"
@@ -194,12 +183,12 @@ const STEP: {
       case "awaiting":
       case "answering":
         return [{ kind: "answered", by: "backstop" }, write(e.answer)];
-      // A url frame's click still runs, and is refused at its turn.
-      case "unattended":
-        return [{ ...p, lapsed: true }, NONE];
-      // The backstop is not armed in `held` (`armed`), so no deadline reaches
-      // it; a click's wait ends with its own outcome or its client.
+      // A deadline deferred before the frame was read still arrives in `held`
+      // or `unattended`, and moves nothing: reading the frame disarmed the
+      // backstop (`armed`). A click's wait ends with its own outcome or its
+      // client, and a url frame's click runs however late its turn comes.
       case "held":
+      case "unattended":
       case "answered":
       case "streaming":
       case "closed":
@@ -230,7 +219,7 @@ const STEP: {
     }
   },
   // The app is told at once whether its link opened, when it reads that, and
-  // the click runs on under the deadline, still unattended. A url frame read
+  // the click runs on, still unattended. A url frame read
   // after the backstop answered is told nothing more: TIMEOUT was the
   // socket's one answer.
   verdict: (p, e) =>
@@ -350,14 +339,23 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // duplicating. A timeout therefore adds zero new fs work — there is never
   // more than one scan per key to orphan. Cancellation would be both messier
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
+  //
+  // [LAW:no-ambient-temporal-coupling] A busy daemon runs its expired timers
+  // before it reads the sockets that filled meanwhile, so the backstop answers
+  // on the turn after: a frame already waiting on the socket is read first,
+  // and a click in it is never answered TIMEOUT for the daemon's own delay.
+  // The deferred deadline is not cancelled: in a phase that is not armed the
+  // phase table moves nothing for it.
   const clearBackstop = daemon.clock.after(
     "request backstop",
     REQUEST_TIMEOUT_MS,
     () =>
-      on({
-        kind: "deadline",
-        answer: replyOf(timeoutResponse(accepted.id)),
-      }),
+      daemon.clock.defer("request backstop", () =>
+        on({
+          kind: "deadline",
+          answer: replyOf(timeoutResponse(accepted.id)),
+        }),
+      ),
   );
 
   // [LAW:single-enforcer] The one move of the state. In flight, the backstop
