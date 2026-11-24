@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "08b56a048eec900bbd8bd82fd0af9815071761cf",
-      "timestamp": "2026-11-24T23:32:36.610Z",
+      "sha": "1b60f481a32ccbc977686108a7b4498de1c72ade",
+      "timestamp": "2026-11-24T23:43:27.767Z",
       "commits": [
         {
-          "sha": "08b56a048eec900bbd8bd82fd0af9815071761cf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:31:34-07:00",
-          "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9) (#957)\n\n* fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n\n* fix(links): one fold joins a click's state writes, and review pass 1's smaller findings (candybar-host-renderer-x96a.5f9)\n\nA click's adjacent set-state and ring-state effects are joined once, at admission, into one state-writes step; set-state leaves the text batching beside reset-config. The step carries no verb of its own, and its write type no longer shares a name with the disclosure's. The menu trigger shares one render binding; the picker's close names the holding-current sentinel; the menu-action inverse sits beside its producer with a round-trip test; test helpers read a stepped ring through one lookup.\n\n* fix(links): a structural insert holds no ring, the step-config log keeps its space, and a run of state writes reports under each write's own verb (candybar-host-renderer-x96a.5f9)\n\n* docs(links): the state-writes refusal comment says whose message it is (candybar-host-renderer-x96a.5f9)"
+          "sha": "1b60f481a32ccbc977686108a7b4498de1c72ade",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T23:41:44Z",
+          "message": "chore(release): set `package.json` to 1.238.2\n\n## [1.238.2](https://github.com/promptctl/cc-candybar/compare/v1.238.1...v1.238.2) (2026-11-24)\n\n### Bug Fixes\n\n* **links:** a carousel, swatches row or picker link carries its step, so N clicks land N moves (candybar-host-renderer-x96a.7qi) ([#955](https://github.com/promptctl/cc-candybar/issues/955)) ([74ff60b](https://github.com/promptctl/cc-candybar/commit/74ff60b9ef4ea73da1ff662ab9c57dca723ae730))\n* **links:** a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9) ([#957](https://github.com/promptctl/cc-candybar/issues/957)) ([08b56a0](https://github.com/promptctl/cc-candybar/commit/08b56a048eec900bbd8bd82fd0af9815071761cf))\n* **stored-state:** a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz) ([#956](https://github.com/promptctl/cc-candybar/issues/956)) ([870a2fd](https://github.com/promptctl/cc-candybar/commit/870a2fd08214c3d683fe9b3db477f34796e27f84))\n"
         }
       ]
     },
