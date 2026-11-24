@@ -103,11 +103,15 @@ import type { RenderCacheStats } from "../renderer-interface/renderer-stats";
 // test/render-cache-sharing.test.ts, which fails when either is exceeded.
 // Measured 2026-10-20 over the bundled default: a rendered entry 1.8 MB (2.4
 // MB in a daemon serving a full user config from forty real worktree
-// directories); a compile 7.1 MB, counted as an evicted builder leaves it —
-// its own heap and the part of that builder's config it still reaches. It was
-// 9.3 MB an entry, every one compiling its own.
+// directories). It was 9.3 MB an entry, every one compiling its own. A
+// compile is counted as an evicted builder leaves it — its own heap and the
+// part of that builder's config it still reaches — and is charged for the
+// heaviest platform that runs it: measured 2026-11-24, 8.8 MB on macOS and
+// 10.7 MB on CI's Linux runner. About 1 MB of that is the template parser
+// holding each interpreted string literal as a rope of its characters
+// (go-template-js template-unfiled-792a.yxt).
 export const ENTRY_BYTES = 3 * 1024 * 1024;
-export const COMPILE_BYTES = 10 * 1024 * 1024;
+export const COMPILE_BYTES = 12 * 1024 * 1024;
 // A session's view (SessionView): its store of the session's values over the
 // entry's, and the parts of every placement it has drawn, kept until it is
 // disposed (src/dsl/parts.ts). Measured 2026-10-23 over the bundled default:
