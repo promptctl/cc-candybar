@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "93e21b1fbfc4aa90f16e25593aba94dbdeafa602",
+      "timestamp": "2026-11-24T17:20:00.159Z",
+      "commits": [
+        {
+          "sha": "93e21b1fbfc4aa90f16e25593aba94dbdeafa602",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T10:18:32-07:00",
+          "message": "feat(bar-pane): pane gestures and hover, and a click mode for the statusline (#950)\n\n* feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n\n* feat(bar-pane): the pane that owns a session's pointer reports its gestures and hover, and the draw reads them as surface and hover\n\n* feat(bar-pane): the statusline gets a click mode that reaches an action's hover and alt+click bindings, and the toggle stays live in every mode\n\n* fix(bar-pane): review pass 1 — an action's gestures are walked everywhere, the pane survives one missed press, and the pointer's owner is derived from its followers\n\nA gesture's target is an action reference every walker follows (unused, value reads, plugin names) through one list. The pane counts tmux's silence from the first miss of a run, exits on Ctrl-C, reads `mouse` from the list-panes call it already makes, sends one coalesced pointer report, and cuts its hit map to the lines it paints. The click mode is parsed once and derived once per draw. Recording export admits the pointer keys' modes. When the newest pane leaves, the one before it owns the pointer again.\n\n* fix(bar-pane): the gesture tests import the helpers where main moved them\n\n* fix(bar-pane): review pass 2 — a report made with no session followed no longer shuts the gate, the pointer is the pane that spoke last, and a side button runs nothing\n\n* fix(bar-pane): review pass 3 — a pane reports only while the host holds its stream, a frame no pane follows is encoded once, and a missed press from long ago no longer counts against tmux\n\n* fix(frame-feed): a failure building the pane's answer is the frame's, and the action-walk comment says which walks it covers\n\n* test(bar-pane): the single-flight cases wait on microtasks, not the clock the unit tier refuses"
+        }
+      ]
+    },
+    {
       "version": "pr-952",
       "ref": "refs/pull/952/merge",
       "sha": "aca631fa520e5295c560d46f039f603da93f1267",
@@ -91,113 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T08:36:50-07:00",
           "message": "feat(host): each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer\n\nThe backstop judged the host and its renderer as one sum, so one renderer's\nleak would have ended the daemon and every session's bar. Each process is now\nread at one moment and judged on its own charge. A renderer past the limit has\nits memory report and heap snapshot written under an identity naming it, and\nis ended through its supervisor, which starts it again as one that crashed;\nevery other renderer keeps drawing. The host past the limit ends the daemon as\nbefore.\n\nThe stats reply carries the host's memory and one panel per renderer: where\nits memory is (the host's process, no process and why, or its own process\nagainst the limit), its mailbox, and what it answered of itself or why it gave\nno answer. One down renderer fails only its own panel. The renderer-held\ncounts (render cache, effect cache, menu idle, turns, session state, frames\ndrawn) move from the top level onto the panels, and the restart forecast gives\nway to each reading's near-limit flag.\n\nA renderer the host has begun to end reads as not running, so a reading\nbetween its end and its exit cannot breach it twice.\n\nTicket: candybar-host-renderer-x96a.8xv\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-950",
-      "ref": "refs/pull/950/merge",
-      "sha": "43d0bc1e3b26b060d443054f906f8e5bb572c604",
-      "timestamp": "2026-11-24T16:18:51.147Z",
-      "commits": [
-        {
-          "sha": "43d0bc1e3b26b060d443054f906f8e5bb572c604",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:17:26Z",
-          "message": "Merge f9c8b24497d22cd56c0d82ab9907b663c94b0168 into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
-        },
-        {
-          "sha": "f9c8b24497d22cd56c0d82ab9907b663c94b0168",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T09:17:05-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into brandon-unfiled-3248.zbas\n"
-        },
-        {
-          "sha": "a77c52157798bc0d87170eb4aa528fe3a630b77d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:50:58-07:00",
-          "message": "test(bar-pane): the single-flight cases wait on microtasks, not the clock the unit tier refuses\n"
-        },
-        {
-          "sha": "fc3b2f7254f5abe973cec02ae2391e3230ff233a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:40:55-07:00",
-          "message": "fix(frame-feed): a failure building the pane's answer is the frame's, and the action-walk comment says which walks it covers\n"
-        },
-        {
-          "sha": "ca65e918c858363bb23057596f898e3cfec3330f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:27:00-07:00",
-          "message": "fix(bar-pane): review pass 3 — a pane reports only while the host holds its stream, a frame no pane follows is encoded once, and a missed press from long ago no longer counts against tmux\n"
-        },
-        {
-          "sha": "2bdded7ba7929903d30d7b9f07c4326c8084393d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:10:31-07:00",
-          "message": "fix(bar-pane): review pass 2 — a report made with no session followed no longer shuts the gate, the pointer is the pane that spoke last, and a side button runs nothing\n"
-        },
-        {
-          "sha": "0e8ca32da8d2acd4ab3e864fc20cc2d7752d81f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:53:18-07:00",
-          "message": "fix(bar-pane): the gesture tests import the helpers where main moved them\n"
-        },
-        {
-          "sha": "0273d612492515d7ab1dd30d6b01d813c002a4f7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:52:16-07:00",
-          "message": "chore: merge main into the pane-gestures branch\n"
-        },
-        {
-          "sha": "6ec3f64d9894d0cdf856e2d8acd9bf57994c4cdc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:49:53-07:00",
-          "message": "fix(bar-pane): review pass 1 — an action's gestures are walked everywhere, the pane survives one missed press, and the pointer's owner is derived from its followers\n\nA gesture's target is an action reference every walker follows (unused, value reads, plugin names) through one list. The pane counts tmux's silence from the first miss of a run, exits on Ctrl-C, reads `mouse` from the list-panes call it already makes, sends one coalesced pointer report, and cuts its hit map to the lines it paints. The click mode is parsed once and derived once per draw. Recording export admits the pointer keys' modes. When the newest pane leaves, the one before it owns the pointer again.\n"
-        },
-        {
-          "sha": "955bebc91f23ffeb74c1a13ff12e9820dc5d3079",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:19:46-07:00",
-          "message": "feat(bar-pane): the statusline gets a click mode that reaches an action's hover and alt+click bindings, and the toggle stays live in every mode\n"
-        },
-        {
-          "sha": "0401de276f6e487da2fb806cd90adb523b90a91d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:56:47-07:00",
-          "message": "feat(bar-pane): the pane that owns a session's pointer reports its gestures and hover, and the draw reads them as surface and hover\n"
-        },
-        {
-          "sha": "e3599d39a879ff84569112418d2d711e0fcdf1df",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:46:14-07:00",
-          "message": "feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c",
-      "timestamp": "2026-11-24T14:55:10.500Z",
-      "commits": [
-        {
-          "sha": "cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T14:53:52Z",
-          "message": "chore(release): set `package.json` to 1.237.1\n\n## [1.237.1](https://github.com/promptctl/cc-candybar/compare/v1.237.0...v1.237.1) (2026-11-24)\n\n### Bug Fixes\n\n* **tools:** the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4) ([#949](https://github.com/promptctl/cc-candybar/issues/949)) ([fecf785](https://github.com/promptctl/cc-candybar/commit/fecf78573e7a1a45407726874bb48cd3cdf83443))\n"
         }
       ]
     }
