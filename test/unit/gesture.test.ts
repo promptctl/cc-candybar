@@ -8,7 +8,7 @@ import {
   parseGesture,
 } from "../../src/click/gesture";
 import { MOUSE_OFF, MOUSE_ON, readMouse } from "../../src/bar-pane/mouse";
-import { deliveredBy } from "../../src/bar-pane/pointer";
+import { deliveredIn } from "../../src/bar-pane/pointer";
 
 describe("what a surface delivers", () => {
   it("is every button with each subset of the modifiers, once, in canonical spelling", () => {
@@ -41,9 +41,15 @@ describe("what a surface delivers", () => {
   });
 
   it("follows tmux's mouse option: every gesture and hover while it is on, the plain click while off", () => {
-    expect(deliveredBy("on\n")).toEqual([...ALL_GESTURES, "hover"]);
-    expect(deliveredBy("off\n")).toEqual(["left"]);
-    expect(deliveredBy("")).toEqual(["left"]);
+    // tmux's `#{mouse}` after the daemon's six fields, on the pane's own line.
+    const listed = (own: string, mouse: string): string =>
+      `%3 $1 1 1 0 1 1\n${own} $1 1 1 0 0 ${mouse}\n`;
+    expect(deliveredIn(listed("%4", "1"), "%4")).toEqual([
+      ...ALL_GESTURES,
+      "hover",
+    ]);
+    expect(deliveredIn(listed("%4", "0"), "%4")).toEqual(["left"]);
+    expect(deliveredIn("", "%4")).toEqual(["left"]);
   });
 });
 

@@ -52,6 +52,7 @@ import {
   CLICK_MODE_KEY,
   DEFAULT_CLICK_MODE,
   HOVER_KEY,
+  clickModeOf,
   modeIsOpen,
   NO_HOVER,
 } from "../../config/click-mode";
@@ -1504,7 +1505,7 @@ export function closeIdleMenus(
     // [LAW:no-ambient-temporal-coupling] A click mode left on ends with the
     // menus, and the region it made hovered with it.
     const modeOpen = modeIsOpen(
-      c.sessionState.get(sid, CLICK_MODE_KEY) ?? undefined,
+      clickModeOf(c.sessionState.get(sid, CLICK_MODE_KEY)),
     );
     c.menu.choose(
       sid,

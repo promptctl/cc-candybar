@@ -10,7 +10,7 @@
 // the one resolver (`variableRead`), so every walk lands it on the same
 // declarations the draw does.
 
-import { actionTemplates, type ActionDecl } from "../action.js";
+import { actionMembers, actionTemplates, type ActionDecl } from "../action.js";
 import {
   hasCacheField,
   variableTemplates,
@@ -61,16 +61,16 @@ export interface ValueReads {
 }
 
 export function valueReads({ names, helpers, actions }: ReadBasis): ValueReads {
-  // The texts one bound action realizes: its own, and its members'. An action
-  // no declaration names realizes nothing: cross-ref refuses it where it is
-  // bound [LAW:no-silent-failure].
+  // The texts one bound action realizes: its own, and its members' and its
+  // gestures' targets'. An action no declaration names realizes nothing:
+  // cross-ref refuses it where it is bound [LAW:no-silent-failure].
   const actionTexts = (name: string, seen: Set<string>): string[] => {
     const decl = Object.hasOwn(actions, name) ? actions[name] : undefined;
     if (decl === undefined || seen.has(name)) return [];
     seen.add(name);
     return [
       ...[...actionTemplates(decl)].map(([, source]) => source),
-      ...("do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []),
+      ...actionMembers(decl).flatMap((m) => actionTexts(m, seen)),
     ];
   };
   // Every text a template's draw evaluates: itself, then its bound actions'.

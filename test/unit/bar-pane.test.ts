@@ -2,8 +2,10 @@
 // tmux, and the arguments it takes. The frames themselves are the daemon's push,
 // covered by test/frame-feed.test.ts and test/daemon-frame-feed-e2e.test.ts.
 
-import { parseArgs, placementFrom } from "../../src/bar-pane";
+import { parseArgs, placementFrom, tmuxPatience } from "../../src/bar-pane";
 import { paint } from "../../src/bar-pane/paint";
+import type { TmuxRun } from "../../src/proc/tmux";
+import type { Monotonic } from "../../src/time";
 
 describe("bar-pane paint", () => {
   it("places each bar line on its own row and erases what is below", () => {
@@ -98,6 +100,39 @@ describe("bar-pane placement", () => {
     expect(placementFrom(at("%4 $1 1 1 0 1"), client, "%3", "%4")).toEqual({
       kind: "gone",
     });
+  });
+});
+
+describe("bar-pane tmux patience", () => {
+  const missed: TmuxRun = { kind: "failed", reason: "no answer" };
+  const ok: TmuxRun = { kind: "ok", stdout: "" };
+
+  // A call made rarely, as a press is, counts its silence from its own first
+  // miss: the time since its last answer says nothing of how long tmux has been
+  // silent.
+  it("tolerates one miss however long ago the call last answered", () => {
+    let now = 0;
+    const patience = tmuxPatience({ monotonic: () => now as Monotonic });
+    now = 60_000;
+    expect(() => patience(missed)).not.toThrow();
+    now = 61_000;
+    expect(() => patience(ok)).not.toThrow();
+    now = 200_000;
+    expect(() => patience(missed)).not.toThrow();
+  });
+
+  it("gives up when the misses run past the patience, and an answer ends the run", () => {
+    let now = 0;
+    const patience = tmuxPatience({ monotonic: () => now as Monotonic });
+    patience(missed);
+    now = 4_000;
+    patience(ok);
+    now = 5_000;
+    patience(missed);
+    now = 9_000;
+    expect(() => patience(missed)).not.toThrow();
+    now = 10_001;
+    expect(() => patience(missed)).toThrow(/tmux has not answered for 5 s/);
   });
 });
 

@@ -421,27 +421,21 @@ export async function replyTo(
   }
 
   if (req.kind === "pointer") {
-    const refused = (error: string): Response => ({
-      ok: false,
-      error,
-      code: "BAD_REQUEST",
-      daemonV: PROTOCOL_VERSION,
-    });
+    const refused = (error: string) =>
+      stay({
+        ok: false,
+        error,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      });
     const session = parseSessionId(req.sessionId);
+    if (!session.ok) return refused(`pointer's sessionId ${session.problem}`);
     const owner = parseOwner(req.owner);
-    const refusal = !session.ok
-      ? `pointer's sessionId ${session.problem}`
-      : owner.kind !== "ok"
-        ? `pointer's ${owner.reason}`
-        : null;
-    if (refusal !== null || !session.ok || owner.kind !== "ok")
-      return stay(refused(refusal ?? "pointer is malformed"));
+    if (owner.kind !== "ok") return refused(`pointer's ${owner.reason}`);
     const admitted = frameFeeds.pointerOf(session.id, owner.value);
-    return stay(
-      admitted.kind === "ok"
-        ? { ok: true, output: "" }
-        : refused(admitted.reason),
-    );
+    return admitted.kind === "ok"
+      ? stay({ ok: true, output: "" })
+      : refused(admitted.reason);
   }
 
   if (req.kind === "stats") {

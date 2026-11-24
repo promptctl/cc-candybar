@@ -42,7 +42,7 @@ While a lane that draws the bar somewhere else is on and actually followed, Clau
 
 ## A pane's pointer
 
-The pane that draws a session reports what it delivers (the gestures its tmux `mouse` setting lets through, and hover) and the region under the pointer, and the host keeps those per subscription. A report is not an input of the session's frames: the renderer draws from it as it draws from the viewers, and a pane that stops drawing takes its facts with it. tmux's `mouse` is read per pane, since a session's value overrides the global one, and the pane turns the mouse modes on when it starts drawing and restores them on exit.
+The pane that draws a session reports what it delivers (the gestures its tmux `mouse` setting lets through, and hover) and the region under the pointer, and the host keeps those per subscription. A report is not an input of the session's frames: the renderer draws from it as it draws from the viewers, and a pane that stops drawing takes its facts with it. tmux's `mouse` is read per pane, since a session's value overrides the global one, from the same `list-panes` call that places the pane (a format spells it 1 or 0), so it costs the tick no process of its own, and the pane turns the mouse modes on when it starts drawing and restores them on exit.
 
 ## The attach launcher
 

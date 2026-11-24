@@ -38,7 +38,6 @@
 
 import { sharedMenuStateKey } from "./menu-keys.js";
 import { QUIET_TEXT } from "./quiet-text.js";
-import { HOVER } from "../click/gesture.js";
 import {
   CLICK_MODE_KEY,
   CLICK_MODES,
@@ -424,16 +423,21 @@ const CLICK_MODE_GLYPHS: Readonly<Record<ClickMode, string>> = {
 };
 const SURFACE_HAS = (gesture: string): string =>
   `(has ${templateLiteral(gesture)} (splitList " " .${SURFACE_VAR}))`;
-const CLICK_MODE_WHEN = `{{ not (and ${SURFACE_HAS(HOVER)} ${SURFACE_HAS(MODE_GESTURE.alt)}) }}`;
+// The gestures a mode other than the default stands for, which the plain click
+// every surface has cannot stand in for.
+const MODE_GESTURES = CLICK_MODES.filter((m) => m !== DEFAULT_CLICK_MODE).map(
+  (m) => MODE_GESTURE[m],
+);
+const CLICK_MODE_WHEN = `{{ not (and ${MODE_GESTURES.map(SURFACE_HAS).join(" ")}) }}`;
 
 // [LAW:dataflow-not-control-flow] What keeps a control working in every mode:
-// its click under the hover and alt+click gestures is its own, declared as
-// data on the action, so the draw has no exemption to remember and a mode
-// change cannot strand the control that ends it.
+// its click under each mode's gesture is its own, declared as data on the
+// action, so the draw has no exemption to remember and a mode change cannot
+// strand the control that ends it.
 const worksInEveryMode = (
   action: string,
 ): { readonly on: Readonly<Record<string, string>> } => ({
-  on: { [HOVER]: action, [MODE_GESTURE.alt]: action },
+  on: Object.fromEntries(MODE_GESTURES.map((gesture) => [gesture, action])),
 });
 export const POLLED = "polled";
 const AT_MOST = "≤";

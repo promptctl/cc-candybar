@@ -3,8 +3,8 @@
 // by the host's one signer, so the pane can only find one, never make one.
 
 import { parseGesture } from "../../src/click/gesture";
-import { actionAt, linkPressed } from "../../src/bar-pane/hit-test";
-import { lineAtRow } from "../../src/bar-pane/paint";
+import { actionAt, linkPressed, touchOf } from "../../src/bar-pane/hit-test";
+import { lineAtRow, paintedLines } from "../../src/bar-pane/paint";
 import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
 import { effectsUrl, VERB_COPY } from "../../src/click/wire";
 import type { Frame, Run } from "../../src/render/frame";
@@ -150,5 +150,52 @@ describe("what a press finds", () => {
     expect(
       openedAs(linkPressed(hits, 1, { column: 1, row: 1 }, gesture("left"))!),
     ).toBe(hrefOf("below"));
+  });
+
+  // A frame's blank last lines are not painted, so the pane is as tall as the
+  // lines it shows, and the hit map is cut to them: the row the last painted
+  // line is on is not mistaken for a blank line below it.
+  it("finds the last painted line when the frame ends in blank ones", () => {
+    const cut = hitMapOf(
+      published([{ text: "a" }], [{ text: "b", link: region }], [{ text: "" }]),
+    ).slice(0, paintedLines("a\nb\n\n").length);
+    expect(cut).toHaveLength(2);
+    expect(actionAt(cut, 2, { column: 1, row: 2 })).toBe("copyIt");
+  });
+
+  describe("one report, decoded", () => {
+    const at = { column: 4, row: 1 };
+
+    it("is a press: the hover it lands on and the link it opens", () => {
+      const touch = touchOf(hits, 2, {
+        kind: "press",
+        gesture: gesture("right"),
+        at,
+      });
+      expect(touch?.hover).toBe("copyIt");
+      expect(openedAs(touch!.press!.link!)).toBe(hrefOf("right"));
+    });
+
+    it("is motion: the hover alone, and no press", () => {
+      expect(touchOf(hits, 2, { kind: "motion", at })).toEqual({
+        hover: "copyIt",
+        press: null,
+      });
+    });
+
+    it("is a press on a cell with no link: a press with nothing to open", () => {
+      expect(
+        touchOf(hits, 2, {
+          kind: "press",
+          gesture: gesture("left"),
+          at: { column: 1, row: 1 },
+        }),
+      ).toEqual({ hover: null, press: { link: undefined } });
+    });
+
+    it("asks nothing of a release or a wheel turn", () => {
+      expect(touchOf(hits, 2, { kind: "release", at })).toBeNull();
+      expect(touchOf(hits, 2, { kind: "wheel", at })).toBeNull();
+    });
   });
 });

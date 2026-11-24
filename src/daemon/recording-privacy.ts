@@ -1,4 +1,5 @@
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
+import { CLICK_MODES, NO_HOVER } from "../config/click-mode.js";
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
 import { GLOBAL_FIELDS } from "../config/globals-fields.js";
 import { entryOf, parseDocument } from "../config/json5-edit.js";
@@ -207,6 +208,10 @@ export function recordingOutputProblem(output: RendererOutput): string | null {
 function knownPick(key: string, value: string): boolean {
   const kind = sessionKeyKind(key).kind;
   if (kind === "plain") return false;
+  // The pointer keys hold a mode, or the action a click made hovered: a
+  // region's name is config text, so only the modes and "no hover" are known.
+  if (kind === "pointer")
+    return CLICK_MODES.some((mode) => mode === value) || value === NO_HOVER;
   if (kind !== "setting") {
     return (
       value === DISCLOSURE_CLOSED ||

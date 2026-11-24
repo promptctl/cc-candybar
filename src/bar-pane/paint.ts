@@ -26,6 +26,11 @@ const FRAME_END = "\x1b[?2026l";
 const ERASE_RIGHT = "\x1b[0m\x1b[K";
 const ERASE_BELOW = "\x1b[J";
 
+// [LAW:one-source-of-truth] The lines a frame paints: its trailing blank lines
+// are not drawn, so a hit map is cut to this count to describe what shows.
+export const paintedLines = (frame: string): string[] =>
+  frame.replace(/\n+$/, "").split("\n");
+
 // Each line is placed on its own row by cursor position and no newline is
 // ever written, so no frame scrolls the pane, whatever height tmux granted it:
 // in a pane shorter than the frame, the rows past its bottom land on its last
@@ -33,7 +38,7 @@ const ERASE_BELOW = "\x1b[J";
 // its remainder erased, because a row erased first shows blank until its text
 // lands, and an animated bar repaints every row on every frame.
 export function paint(frame: string): Paint {
-  const lines = frame.replace(/\n+$/, "").split("\n");
+  const lines = paintedLines(frame);
   return {
     bytes:
       FRAME_START +

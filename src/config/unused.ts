@@ -24,7 +24,7 @@ import {
 import { isReservedName } from "./reserved-names.js";
 import { templateActionRefs, templateHelperRefs } from "./loader/refs.js";
 import { valueReadsOf } from "./loader/value-reads.js";
-import { actionTemplates } from "./action.js";
+import { actionMembers, actionTemplates } from "./action.js";
 import { presetGlobals, presetNames, presetRoot } from "./presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 
@@ -106,13 +106,13 @@ export function unusedDeclarations(
       for (const name of reaches) read.add(name);
   }
 
-  // A `do` fires its members, so binding it clicks each of them.
+  // A `do` fires its members and a gesture runs its target, so binding an
+  // action clicks each of them.
   const clicked = new Set(bound);
   for (const name of bound) {
     const action = config.actions[name];
-    if (action !== undefined && "do" in action) {
-      for (const member of action.do) clicked.add(member);
-    }
+    if (action !== undefined)
+      for (const member of actionMembers(action)) clicked.add(member);
   }
 
   // A clicked `set` reads its key's current value back through the `state`

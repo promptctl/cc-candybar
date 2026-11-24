@@ -30,14 +30,13 @@ import { sleep, type Timekeeper } from "../time";
 import { runTmuxAsync, type TmuxRun } from "../proc/tmux";
 import {
   LIST_CLIENTS_FORMAT,
-  LIST_PANES_FORMAT,
   controlledSessions,
   shownPanes,
 } from "../daemon/pane-visibility";
-import { DRAWING, RESTORED, paint } from "./paint";
+import { DRAWING, RESTORED, paint, paintedLines } from "./paint";
 import { readMouse } from "./mouse";
-import { actionAt, linkPressed } from "./hit-test";
-import { deliveredBy } from "./pointer";
+import { touchOf } from "./hit-test";
+import { BAR_PANE_FORMAT, deliveredIn } from "./pointer";
 import type { Delivered } from "../click/gesture";
 import type { OwnerFacts } from "../daemon/foundations/protocol";
 import type { HitMap } from "../render/hit-map";
@@ -97,50 +96,47 @@ async function askPlacement(
     }
   | TmuxMissed
 > {
-  const [panes, clients, mouse] = await Promise.all([
+  const [panes, clients] = await Promise.all([
     runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
       "list-panes",
       "-a",
       "-f",
       `#{||:#{==:#{pane_id},${pane}},#{==:#{pane_id},${tmux.pane}}}`,
       "-F",
-      LIST_PANES_FORMAT,
+      BAR_PANE_FORMAT,
     ]),
     runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
       "list-clients",
       "-F",
       LIST_CLIENTS_FORMAT,
     ]),
-    // -A reads the value in effect, the session's own or the one it inherits.
-    runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
-      "show-options",
-      "-Av",
-      "-t",
-      tmux.pane,
-      "mouse",
-    ]),
   ]);
   if (panes.kind !== "ok") return panes;
   if (clients.kind !== "ok") return clients;
-  if (mouse.kind !== "ok") return mouse;
   return {
     kind: "ok",
     placement: placementFrom(panes.stdout, clients.stdout, pane, tmux.pane),
-    delivered: deliveredBy(mouse.stdout),
+    delivered: deliveredIn(panes.stdout, tmux.pane),
   };
 }
 
 // [LAW:one-type-per-behavior] How long one tmux call may go unanswered before
 // the bar pane gives up: a loaded machine misses a call now and then, a tmux
 // server that is gone misses them all. One per call the bar pane makes, so a
-// call that keeps failing is not excused by another that answers.
-function tmuxPatience(
+// call that keeps failing is not excused by another that answers. The time
+// counts from the first miss of a run of misses, so a call made rarely (a
+// press) is not held to the time since its last answer.
+export function tmuxPatience(
   clock: Pick<Timekeeper, "monotonic">,
 ): (run: { readonly kind: "ok" } | TmuxMissed) => void {
-  let answeredAt = clock.monotonic();
+  let missingSince: number | null = null;
   return (run) => {
-    if (run.kind === "ok") answeredAt = clock.monotonic();
-    else if (clock.monotonic() - answeredAt > TMUX_PATIENCE_MS)
+    if (run.kind === "ok") {
+      missingSince = null;
+      return;
+    }
+    missingSince ??= clock.monotonic();
+    if (clock.monotonic() - missingSince > TMUX_PATIENCE_MS)
       throw new Error(
         `tmux has not answered for ${TMUX_PATIENCE_MS / 1000} s: ${run.reason}`,
       );
@@ -238,19 +234,33 @@ async function drawBarPane(
     gestures: [...delivered],
     hover,
   });
-  // [LAW:no-ambient-temporal-coupling] One report at a time, in the order the
-  // facts changed, so the host never ends on an older one.
-  let reporting: Promise<void> = Promise.resolve();
+  // [LAW:no-ambient-temporal-coupling] One report at a time, of the facts and
+  // the session as they stand when it is sent: changes that arrive while one is
+  // in flight are the one report after it, so the host never ends on an older
+  // one and a burst is not a queue of identical requests.
+  let reporting: Promise<void> | null = null;
+  let reportDue = false;
   const report = (): void => {
-    if (following === null) return;
-    const { sessionId } = following;
-    reporting = reporting.then(async () => {
-      const sent = await tryPointerViaDaemon(world, sessionId, facts());
-      if (sent.kind !== "ok")
-        process.stderr.write(
-          `cc-candybar bar-pane: pointer report failed: ${describeFailure(sent)}\n`,
-        );
-    });
+    reportDue = true;
+    reporting ??= (async () => {
+      try {
+        while (reportDue) {
+          reportDue = false;
+          if (following === null) continue;
+          const sent = await tryPointerViaDaemon(
+            world,
+            following.sessionId,
+            facts(),
+          );
+          if (sent.kind !== "ok")
+            process.stderr.write(
+              `cc-candybar bar-pane: pointer report failed: ${describeFailure(sent)}\n`,
+            );
+        }
+      } finally {
+        reporting = null;
+      }
+    })();
     void reporting.catch(die);
   };
 
@@ -342,21 +352,26 @@ async function drawBarPane(
   let unread = "";
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk: string) => {
+    // Raw mode takes the interrupt key from the terminal, so it ends the pane
+    // here as it would anywhere else.
+    if (chunk.includes("\x03")) process.exit(130);
     const read = readMouse(unread + chunk);
     unread = read.rest;
     for (const event of read.events) {
-      if (event.kind === "release" || event.kind === "wheel") continue;
-      const hits = following?.said.hits ?? [];
+      const touch = touchOf(
+        following?.said.hits ?? [],
+        process.stdout.rows,
+        event,
+      );
+      if (touch === null) continue;
       // [LAW:single-enforcer] Hover is where the pointer last was, whatever
       // moved it there: only a change of action is reported, so moving within
       // one costs nothing.
-      const under = actionAt(hits, process.stdout.rows, event.at);
-      if (under !== hover) {
-        hover = under;
+      if (touch.hover !== hover) {
+        hover = touch.hover;
         report();
       }
-      if (event.kind === "press")
-        press(linkPressed(hits, process.stdout.rows, event.at, event.gesture));
+      if (touch.press !== null) press(touch.press.link);
     }
   });
 
@@ -374,11 +389,11 @@ async function drawBarPane(
       hits: null,
     };
     // [LAW:one-source-of-truth] What a press can open is what the line said
-    // it can: a frame brings its hit map, and anything else the pane says
-    // (a refusal, a fault) has none.
+    // it can: a frame brings its hit map, cut to the lines the pane paints
+    // of it, and anything else the pane says (a refusal, a fault) has none.
     const say = (line: string, hits: HitMap | null = null): void => {
       said.latest = line;
-      said.hits = hits;
+      said.hits = hits?.slice(0, paintedLines(line).length) ?? null;
       redraw();
     };
     following = {

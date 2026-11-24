@@ -40,20 +40,23 @@ export const MODE_GESTURE: Readonly<Record<ClickMode, Delivered>> = {
   alt: "alt+left",
 };
 
-// The mode in force: the session's, unless the surface delivers that mode's
-// gesture natively. A value no mode spells (a key never written) is the
-// default.
-export function modeInForce(
-  stored: string | undefined,
-  surface: string,
-): ClickMode {
-  const mode = CLICK_MODES.find((m) => m === stored) ?? DEFAULT_CLICK_MODE;
-  return surface.split(" ").includes(MODE_GESTURE[mode])
-    ? DEFAULT_CLICK_MODE
-    : mode;
-}
+// [LAW:parse-dont-validate] What the session's key holds, read as a mode: the
+// one place a stored string becomes one. A value no mode spells (a key never
+// written) is the default.
+export const clickModeOf = (stored: string | null | undefined): ClickMode =>
+  CLICK_MODES.find((m) => m === stored) ?? DEFAULT_CLICK_MODE;
 
-// Whether the session holds a mode other than the default: state that stands
-// open until the idle period that closes menus ends it.
-export const modeIsOpen = (stored: string | undefined): boolean =>
-  CLICK_MODES.some((m) => m === stored && m !== DEFAULT_CLICK_MODE);
+// The mode in force: the session's, unless the surface delivers that mode's
+// gesture natively.
+export const modeInForce = (
+  stored: string | null | undefined,
+  surface: readonly Delivered[],
+): ClickMode => {
+  const mode = clickModeOf(stored);
+  return surface.includes(MODE_GESTURE[mode]) ? DEFAULT_CLICK_MODE : mode;
+};
+
+// Whether a mode is other than the default: state that stands open until the
+// idle period that closes menus ends it.
+export const modeIsOpen = (mode: ClickMode): boolean =>
+  mode !== DEFAULT_CLICK_MODE;

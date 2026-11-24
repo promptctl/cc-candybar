@@ -5,7 +5,7 @@
 
 import { gestureName, type Gesture } from "../click/gesture.js";
 import type { Hit, HitMap } from "../render/hit-map.js";
-import type { Cell } from "./mouse.js";
+import type { Cell, MouseEvent } from "./mouse.js";
 import { lineAtRow } from "./paint.js";
 
 // [LAW:one-source-of-truth] The region under a cell, through the paint's own
@@ -39,4 +39,28 @@ export function actionAt(
   at: Cell,
 ): string | null {
   return hitAt(hits, paneRows, at)?.action ?? null;
+}
+
+// What one decoded report does at the pane: the action the pointer is now on,
+// which hover follows whatever moved it there, and for a press the link to
+// open, which is none on a cell with no link. A release or a wheel turn moves
+// nothing, so it asks nothing.
+export interface Touch {
+  readonly hover: string | null;
+  readonly press: { readonly link: string | undefined } | null;
+}
+
+export function touchOf(
+  hits: HitMap,
+  paneRows: number,
+  event: MouseEvent,
+): Touch | null {
+  if (event.kind === "release" || event.kind === "wheel") return null;
+  return {
+    hover: actionAt(hits, paneRows, event.at),
+    press:
+      event.kind === "press"
+        ? { link: linkPressed(hits, paneRows, event.at, event.gesture) }
+        : null,
+  };
 }

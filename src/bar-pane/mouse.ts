@@ -5,6 +5,7 @@
 // modes and feeds this what stdin delivers.
 
 import {
+  BUTTONS,
   MODIFIERS,
   type Button,
   type Gesture,
@@ -32,11 +33,6 @@ export type MouseEvent =
 
 // The report's button number: bits 0-1 the button (3 is none), 4 shift, 8 alt,
 // 16 ctrl, 32 motion, 64 wheel.
-const BUTTON_OF: Readonly<Record<number, Button>> = {
-  0: "left",
-  1: "middle",
-  2: "right",
-};
 const MODIFIER_BIT: Readonly<Record<Modifier, number>> = {
   shift: 4,
   alt: 8,
@@ -68,7 +64,9 @@ function eventOf(
   if ((code & WHEEL_BIT) !== 0) return { kind: "wheel", at };
   if ((code & MOTION_BIT) !== 0) return { kind: "motion", at };
   if (final === "m") return { kind: "release", at };
-  const button = BUTTON_OF[code & 3];
+  // [LAW:one-source-of-truth] The terminal numbers the buttons in the order
+  // the gestures name them, so no second table says which is which.
+  const button: Button | undefined = BUTTONS[code & 3];
   if (button === undefined) return undefined;
   return {
     kind: "press",

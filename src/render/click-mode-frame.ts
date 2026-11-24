@@ -1,8 +1,10 @@
 // The one step that gives a drawn frame the links its lane's click mode means
-// (src/config/click-mode.ts). A cell is drawn once and shown by every lane, and
-// a lane's surface is what decides the mode, so no cell reads the mode: each
-// region carries what a click means in every mode, and the frame's links are
-// picked here, after the draw.
+// (src/config/click-mode.ts). A cell is drawn once, and the mode is the draw's:
+// the session's, unless the surface of the pane that owns the pointer (a link's
+// surface, with none) delivers the mode's gesture itself. So no cell reads the
+// mode: each region carries what a click means in every mode, and the frame's
+// links are picked here, after the draw. Only one lane shows a frame that has
+// regions: while a pane draws the bar, the statusline shows the handoff line.
 
 import { MODE_GESTURE, type ClickMode } from "../config/click-mode.js";
 import type { DrawnAction, DrawnEffect } from "./drawn-link.js";

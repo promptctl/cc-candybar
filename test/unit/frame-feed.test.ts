@@ -399,6 +399,19 @@ describe("the owner of a session's pointer", () => {
     expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("y");
   });
 
+  test("returns to the pane it replaced when the newer one leaves", () => {
+    const r = rig();
+    r.feeds.subscribe(S, paneOwnedBy(owned("first", "x")).sub);
+    const leaveSecond = r.feeds.subscribe(
+      S,
+      paneOwnedBy(owned("second", "y")).sub,
+    );
+    leaveSecond();
+    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("x");
+    expect(r.feeds.pointerOf(S, owned("first", "z"))).toEqual({ kind: "ok" });
+    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("z");
+  });
+
   test("keeps what it holds when the stream it replaced ends after it", () => {
     const r = rig();
     const leaveOld = r.feeds.subscribe(

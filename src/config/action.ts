@@ -351,6 +351,14 @@ export function runDeclaration(a: RunAction): string {
 
 export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
 
+// [LAW:one-source-of-truth] The actions one action fires or answers with: a
+// `do`'s members, and the target of each gesture it binds. Every walk of the
+// action graph asks this, so a new reference field is listed once.
+export const actionMembers = (a: ActionDecl): readonly string[] => [
+  ...("do" in a ? a.do : []),
+  ...Object.values(a.on ?? {}),
+];
+
 // [LAW:one-source-of-truth] The templates an action's own text holds, by
 // field: `copy`'s and `open`'s text, a preset delete's `name`, and a `run`'s
 // program, arguments and environment values, each evaluated where the action

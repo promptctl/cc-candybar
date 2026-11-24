@@ -64,6 +64,15 @@ export function parseGesture(text: string): Asked<Gesture> {
 export const HOVER = "hover";
 export type Delivered = GestureName | typeof HOVER;
 
+// [LAW:one-source-of-truth] What the pane that owns a session's pane lane says
+// of its pointer: the gestures its terminal delivers, and the action the
+// pointer last stood on (null: none). It lives as long as the owner's
+// subscription and is never session state.
+export interface PanePointer {
+  readonly gestures: readonly Delivered[];
+  readonly hover: string | null;
+}
+
 // [LAW:one-source-of-truth] Every gesture a pane can decode: each button with
 // each subset of the modifiers, in canonical spelling. What a pane with a
 // working mouse says it delivers, beside hover.
@@ -92,8 +101,8 @@ export function parseOneDelivered(entry: unknown): Asked<Delivered> {
 }
 
 // [LAW:parse-dont-validate] A pane's list of what it delivers, read once: each
-// entry canonical, none twice, and a spelling that is neither a gesture nor
-// hover refused by name.
+// entry canonical, a repeat read once, and a spelling that is neither a gesture
+// nor hover refused by name.
 export function parseDelivered(
   entries: readonly unknown[],
 ): Asked<readonly Delivered[]> {

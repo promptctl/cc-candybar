@@ -29,10 +29,10 @@ import {
 } from "../config/lanes.js";
 import type { Frame } from "../render/frame.js";
 import type { PrepareDelivery } from "./draw-bar.js";
+import type { PanePointer } from "../click/gesture.js";
 import {
   followingOf,
   type FeedFrame,
-  type PanePointer,
   type PushedFrame,
   type SessionViewers,
   type Viewers,

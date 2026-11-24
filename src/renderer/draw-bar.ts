@@ -63,7 +63,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
-import type { PanePointer } from "../renderer-interface/interface.js";
+import type { PanePointer } from "../click/gesture.js";
 import { pointerFacts, surfaceOf } from "../render/pointer-facts.js";
 import { inClickMode } from "../render/click-mode-frame.js";
 import {
@@ -603,15 +603,19 @@ export function drawRender(
         })),
     ],
   );
-  const held = {
-    mode: sessionState.get(sessionId, CLICK_MODE_KEY),
-    hover: sessionState.get(sessionId, HOVER_KEY),
-  };
+  // [LAW:one-source-of-truth] The mode this draw is in, once: the session's,
+  // unless the surface of the pane that owns the pointer (a link's, with none)
+  // delivers its gesture itself. Hover, the frame's links and the idle clock
+  // all read this one value.
+  const mode = modeInForce(
+    sessionState.get(sessionId, CLICK_MODE_KEY),
+    surfaceOf(pointer),
+  );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
     feeds,
-    ...pointerFacts(pointer, held),
+    ...pointerFacts(pointer, mode, sessionState.get(sessionId, HOVER_KEY)),
     ...instantFacts(document.builtins, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
@@ -680,12 +684,10 @@ export function drawRender(
   // the frame reaches its client, so a draw that throws, or an answer that
   // never arrives, leaves the shown frame's copies.
   const copies = diagnosticCopies(diagnostics);
-  // [LAW:single-enforcer] The one place a lane's click mode picks the links its
-  // frame shows: a cell is drawn once for every lane (src/render/click-mode-frame.ts).
-  const frame = inClickMode(
-    drawnFrame,
-    modeInForce(held.mode ?? undefined, surfaceOf(pointer)),
-  );
+  // [LAW:single-enforcer] The one place the click mode picks the links a frame
+  // shows: a cell is drawn once, so no cell reads the mode
+  // (src/render/click-mode-frame.ts).
+  const frame = inClickMode(drawnFrame, mode);
   // [LAW:one-source-of-truth] The idle period this walk drew with.
   noteFacts(facts, {
     menuIdle:
@@ -838,8 +840,7 @@ export function drawRender(
           // [LAW:no-ambient-temporal-coupling] A click mode the user left on
           // is open state as a menu is: the same idle period ends it.
           shown:
-            frame.rows.some((row) => row.kind === "menu") ||
-            modeIsOpen(held.mode ?? undefined),
+            frame.rows.some((row) => row.kind === "menu") || modeIsOpen(mode),
           timeoutS: effective.menuTimeout,
         },
       },

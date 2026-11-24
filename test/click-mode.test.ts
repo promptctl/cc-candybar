@@ -25,7 +25,7 @@ import {
   modeInForce,
   NO_HOVER,
 } from "../src/config/click-mode";
-import { hoverOf } from "../src/render/pointer-facts";
+import { hoverOf, surfaceOf } from "../src/render/pointer-facts";
 import { inClickMode } from "../src/render/click-mode-frame";
 import { buildRig } from "./helpers/rig";
 import { clickUrl } from "./helpers/click";
@@ -90,9 +90,10 @@ function draw(held: Held, surface = "left"): readonly Run[] {
     OPTS,
   );
   // The draw's own step, as draw-bar takes it, over the same two facts.
-  return inClickMode(frame, modeInForce(held.mode, surface)).rows.flatMap(
-    (row) => row.runs,
-  );
+  return inClickMode(
+    frame,
+    modeInForce(held.mode, surface.split(" ")),
+  ).rows.flatMap((row) => row.runs);
 }
 
 // What a click on the region named `name` runs, or "no link" for a region the
@@ -175,10 +176,7 @@ describe("a click in hover mode", () => {
       linkUrls(
         inClickMode(
           rig.draw({ payload: PAYLOAD, at: instantOf(new Date()) }).frame,
-          modeInForce(
-            rig.sessionState.get(S1, CLICK_MODE_KEY) ?? undefined,
-            "left",
-          ),
+          modeInForce(rig.sessionState.get(S1, CLICK_MODE_KEY), ["left"]),
         ),
       );
     const clickWriting = async (key: string, value: string): Promise<void> => {
@@ -197,24 +195,29 @@ describe("a click in hover mode", () => {
 });
 
 describe("the hovered region a draw reads", () => {
-  const held = (mode: string | null, hover: string | null) => ({ mode, hover });
+  // The hover a draw reads, over the mode it is in, as draw-bar derives it.
+  const hovered = (
+    pointer: Parameters<typeof hoverOf>[0],
+    mode: string | null,
+    held: string | null,
+  ) => hoverOf(pointer, modeInForce(mode, surfaceOf(pointer)), held);
   const pane = { gestures: ["left", "hover"], hover: "open" };
 
   test("is the pane's where the pane sees the pointer move", () => {
-    expect(hoverOf(pane, held("hover", "plain"))).toBe("open");
+    expect(hovered(pane, "hover", "plain")).toBe("open");
   });
 
   test("is the region a click last hovered, in hover mode on a surface that cannot see the pointer", () => {
-    expect(hoverOf(null, held("hover", "plain"))).toBe("plain");
-    expect(
-      hoverOf({ gestures: ["left"], hover: null }, held("hover", "plain")),
-    ).toBe("plain");
+    expect(hovered(null, "hover", "plain")).toBe("plain");
+    expect(hovered({ gestures: ["left"], hover: null }, "hover", "plain")).toBe(
+      "plain",
+    );
   });
 
   test("is none outside hover mode, and after the toggle put it away", () => {
-    expect(hoverOf(null, held("click", "plain"))).toBe("");
-    expect(hoverOf(null, held("alt", "plain"))).toBe("");
-    expect(hoverOf(null, held("hover", NO_HOVER))).toBe("");
-    expect(hoverOf(null, held(null, null))).toBe("");
+    expect(hovered(null, "click", "plain")).toBe("");
+    expect(hovered(null, "alt", "plain")).toBe("");
+    expect(hovered(null, "hover", NO_HOVER)).toBe("");
+    expect(hovered(null, null, null)).toBe("");
   });
 });

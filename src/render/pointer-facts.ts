@@ -3,43 +3,40 @@
 // src/config/payload-inputs.ts), never stored: a pane's pointer ends with its
 // subscription, so nothing here outlives the pane that reported it.
 
-import { PLAIN_CLICK } from "../click/gesture.js";
-import { modeInForce, NO_HOVER } from "../config/click-mode.js";
-import type { PanePointer } from "../renderer-interface/interface.js";
+import {
+  PLAIN_CLICK,
+  type Delivered,
+  type PanePointer,
+} from "../click/gesture.js";
+import { NO_HOVER, type ClickMode } from "../config/click-mode.js";
 
-// [LAW:one-source-of-truth] The gestures a draw's surface delivers, as the
-// space-joined canonical names a template tests with
-// `has "alt+left" (splitList " " .surface)`. A surface with no pane that owns
-// a pointer is a link's: the plain click and nothing else.
-export const surfaceOf = (pointer: PanePointer | null): string =>
-  pointer === null ? PLAIN_CLICK : pointer.gestures.join(" ");
-
-// What the session holds of the click mode (src/config/click-mode.ts): the
-// mode, and the action a click last made hovered. Null for a key never
-// written.
-export interface HeldPointer {
-  readonly mode: string | null;
-  readonly hover: string | null;
-}
+// [LAW:one-source-of-truth] The gestures a draw's surface delivers. A surface
+// with no pane that owns a pointer is a link's: the plain click and nothing
+// else.
+export const surfaceOf = (pointer: PanePointer | null): readonly Delivered[] =>
+  pointer === null ? [PLAIN_CLICK] : pointer.gestures;
 
 // The action under the pointer, or "" for none: a template compares it as it
 // does any string, and no action is named "". Where the surface sees the
 // pointer move, that is the pane's report; where it does not and the session
-// is in hover mode, it is the region a click last made hovered, and a change of
-// mode puts it away.
+// is in hover mode, it is the region a click last made hovered (`held`, null
+// for a key never written), and a change of mode puts it away.
 export function hoverOf(
   pointer: PanePointer | null,
-  held: HeldPointer,
+  mode: ClickMode,
+  held: string | null,
 ): string {
-  if (modeInForce(held.mode ?? undefined, surfaceOf(pointer)) !== "hover")
-    return pointer?.hover ?? "";
-  return held.hover === null || held.hover === NO_HOVER ? "" : held.hover;
+  if (mode !== "hover") return pointer?.hover ?? "";
+  return held === null || held === NO_HOVER ? "" : held;
 }
 
+// What the payload carries of the pointer: the surface's gestures space-joined,
+// as a template tests them with `has "alt+left" (splitList " " .surface)`.
 export const pointerFacts = (
   pointer: PanePointer | null,
-  held: HeldPointer,
+  mode: ClickMode,
+  held: string | null,
 ): { readonly surface: string; readonly hover: string } => ({
-  surface: surfaceOf(pointer),
-  hover: hoverOf(pointer, held),
+  surface: surfaceOf(pointer).join(" "),
+  hover: hoverOf(pointer, mode, held),
 });
