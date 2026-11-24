@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-951",
+      "ref": "refs/pull/951/merge",
+      "sha": "23f51aa74adc65a00e03393193b8b1bf7fda02c3",
+      "timestamp": "2026-11-24T17:21:42.784Z",
+      "commits": [
+        {
+          "sha": "23f51aa74adc65a00e03393193b8b1bf7fda02c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T17:20:31Z",
+          "message": "Merge f908c69240abe981852e271d47e4104695ab1d22 into 93e21b1fbfc4aa90f16e25593aba94dbdeafa602\n"
+        },
+        {
+          "sha": "f908c69240abe981852e271d47e4104695ab1d22",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T10:20:17-07:00",
+          "message": "fix(limits): each process's charge is asked of it, a gap carries, and rotation keeps the host's apart from one renderer pool (candybar-host-renderer-x96a.8xv)\n"
+        },
+        {
+          "sha": "947d9b33f35585092b020a74f95ac77d31e38d72",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T10:08:43-07:00",
+          "message": "fix(renderer): an end is one owned transition, and a stats reply is read against every arm (candybar-host-renderer-x96a.8xv)\n"
+        },
+        {
+          "sha": "1186cebca73cf9ad01324e70229aa0852d3f490a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T09:51:35-07:00",
+          "message": "test(stats): an unread renderer's fixture carries the gap its charge holds (candybar-host-renderer-x96a.8xv)\n"
+        },
+        {
+          "sha": "12684c417e6ddc7d9a300894750d537a0ce47f97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T09:22:36-07:00",
+          "message": "fix(host): every spawned renderer is judged from its spawn on its own reading, and each process's breaches rotate apart (candybar-host-renderer-x96a.8xv)\n\n- A renderer enters every reading from its spawn. One no ping has read yet\n  is charged by the platform, and one nothing could charge is unread,\n  logged as such and never judged, so it is told apart from a renderer\n  that is down.\n- A reading is keyed by its spawn (name and generation), so a later spawn\n  given an earlier one's pid inherits neither its reading nor its gap.\n- Rotation keeps the newest breaches of each process, so a renderer that\n  breaches over and over never evicts the host's post-mortem. Earlier\n  builds' renderer heap files are listed and rotated with their host\n  breach, and a name no breach could have written is skipped.\n- footprint's sections are bounded by their headers, so a header that\n  names no pid credits no process and is said.\n- The breach's words, the stats sentence and the warning come from one\n  spelling. Approaching the limit is derived from the charge, never stored.\n- The memory limit is a required input. capture-heap and the bench read\n  every renderer's panel, and capture-heap uses the daemon's footprint\n  parser.\n- The stats reply is parsed where it arrives, as this build's snapshot or\n  another build's skew.\n- The design doc says what the backstop reads at one moment and what a\n  named renderer's profile holds.\n"
+        },
+        {
+          "sha": "b2ba2618289ba2105cf79368e3ef7c89c982b5a7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T09:04:22-07:00",
+          "message": "fix(host): an ended renderer is a phase of its own, and the stats reply asks only a renderer that can answer, within its budget (candybar-host-renderer-x96a.8xv)\n\n- The supervisor's end is one transition into an ending phase: it serves no\n  input, is judged no more, and its exit reports the reason the generation\n  keeps. A second reason, or an end the phase refuses, is said. Only a hung\n  renderer is ended from the close.\n- A renderer is running, the state that carries its end and heap, only while\n  live; one closing or ending is not running, with why.\n- The stats reply does not ask a renderer that is not running, so a stats poll\n  is no input it refused, and waits for any other at most half the\n  connection's backstop, so one starting or busy renderer fails its own panel\n  and not the reply.\n- The stats skew check reads every renderer panel against one reference\n  panel, down into the arm it answers with.\n"
+        },
+        {
+          "sha": "6f8a1688436f07c1530ea78671fc3d51a971af02",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T08:36:50-07:00",
+          "message": "feat(host): each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer\n\nThe backstop judged the host and its renderer as one sum, so one renderer's\nleak would have ended the daemon and every session's bar. Each process is now\nread at one moment and judged on its own charge. A renderer past the limit has\nits memory report and heap snapshot written under an identity naming it, and\nis ended through its supervisor, which starts it again as one that crashed;\nevery other renderer keeps drawing. The host past the limit ends the daemon as\nbefore.\n\nThe stats reply carries the host's memory and one panel per renderer: where\nits memory is (the host's process, no process and why, or its own process\nagainst the limit), its mailbox, and what it answered of itself or why it gave\nno answer. One down renderer fails only its own panel. The renderer-held\ncounts (render cache, effect cache, menu idle, turns, session state, frames\ndrawn) move from the top level onto the panels, and the restart forecast gives\nway to each reading's near-limit flag.\n\nA renderer the host has begun to end reads as not running, so a reading\nbetween its end and its exit cannot breach it twice.\n\nTicket: candybar-host-renderer-x96a.8xv\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "93e21b1fbfc4aa90f16e25593aba94dbdeafa602",
@@ -63,49 +120,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T08:46:53-07:00",
           "message": "fix(lint): code outside Jest, src included, imports none of Jest's packages and reads none of its globals (candybar-later-fixes-nwu9.1d4)\n\nsrc could import @jest/globals, jest-mock or expect, or call a Jest global,\nand pass both lint and typecheck: the Jest refusal covered only the tool roots,\nand test/ shares src's tsconfig, so Jest's global types reach src.\n\n- Jest's packages are the test zone's in the zone map, so the one zone rule\n  refuses them in every spelling of an edge (import, require, import(), type\n  import) from every zone but test: src through its config, the tools through\n  theirs. The separate no-restricted-imports pattern, which missed require,\n  is gone.\n- The roots the Jest-globals refusal covers are derived from the zone map:\n  every top-level directory a row outside the test zone lies in, src among them.\n- The lint-rule tests prove both for every root outside Jest.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-951",
-      "ref": "refs/pull/951/merge",
-      "sha": "878c55e7b0cb2fcd013b8bfdc4d523fed88808b6",
-      "timestamp": "2026-11-24T16:53:11.854Z",
-      "commits": [
-        {
-          "sha": "878c55e7b0cb2fcd013b8bfdc4d523fed88808b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:51:54Z",
-          "message": "Merge 1186cebca73cf9ad01324e70229aa0852d3f490a into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
-        },
-        {
-          "sha": "1186cebca73cf9ad01324e70229aa0852d3f490a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T09:51:35-07:00",
-          "message": "test(stats): an unread renderer's fixture carries the gap its charge holds (candybar-host-renderer-x96a.8xv)\n"
-        },
-        {
-          "sha": "12684c417e6ddc7d9a300894750d537a0ce47f97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T09:22:36-07:00",
-          "message": "fix(host): every spawned renderer is judged from its spawn on its own reading, and each process's breaches rotate apart (candybar-host-renderer-x96a.8xv)\n\n- A renderer enters every reading from its spawn. One no ping has read yet\n  is charged by the platform, and one nothing could charge is unread,\n  logged as such and never judged, so it is told apart from a renderer\n  that is down.\n- A reading is keyed by its spawn (name and generation), so a later spawn\n  given an earlier one's pid inherits neither its reading nor its gap.\n- Rotation keeps the newest breaches of each process, so a renderer that\n  breaches over and over never evicts the host's post-mortem. Earlier\n  builds' renderer heap files are listed and rotated with their host\n  breach, and a name no breach could have written is skipped.\n- footprint's sections are bounded by their headers, so a header that\n  names no pid credits no process and is said.\n- The breach's words, the stats sentence and the warning come from one\n  spelling. Approaching the limit is derived from the charge, never stored.\n- The memory limit is a required input. capture-heap and the bench read\n  every renderer's panel, and capture-heap uses the daemon's footprint\n  parser.\n- The stats reply is parsed where it arrives, as this build's snapshot or\n  another build's skew.\n- The design doc says what the backstop reads at one moment and what a\n  named renderer's profile holds.\n"
-        },
-        {
-          "sha": "b2ba2618289ba2105cf79368e3ef7c89c982b5a7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T09:04:22-07:00",
-          "message": "fix(host): an ended renderer is a phase of its own, and the stats reply asks only a renderer that can answer, within its budget (candybar-host-renderer-x96a.8xv)\n\n- The supervisor's end is one transition into an ending phase: it serves no\n  input, is judged no more, and its exit reports the reason the generation\n  keeps. A second reason, or an end the phase refuses, is said. Only a hung\n  renderer is ended from the close.\n- A renderer is running, the state that carries its end and heap, only while\n  live; one closing or ending is not running, with why.\n- The stats reply does not ask a renderer that is not running, so a stats poll\n  is no input it refused, and waits for any other at most half the\n  connection's backstop, so one starting or busy renderer fails its own panel\n  and not the reply.\n- The stats skew check reads every renderer panel against one reference\n  panel, down into the arm it answers with.\n"
-        },
-        {
-          "sha": "6f8a1688436f07c1530ea78671fc3d51a971af02",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:36:50-07:00",
-          "message": "feat(host): each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer\n\nThe backstop judged the host and its renderer as one sum, so one renderer's\nleak would have ended the daemon and every session's bar. Each process is now\nread at one moment and judged on its own charge. A renderer past the limit has\nits memory report and heap snapshot written under an identity naming it, and\nis ended through its supervisor, which starts it again as one that crashed;\nevery other renderer keeps drawing. The host past the limit ends the daemon as\nbefore.\n\nThe stats reply carries the host's memory and one panel per renderer: where\nits memory is (the host's process, no process and why, or its own process\nagainst the limit), its mailbox, and what it answered of itself or why it gave\nno answer. One down renderer fails only its own panel. The renderer-held\ncounts (render cache, effect cache, menu idle, turns, session state, frames\ndrawn) move from the top level onto the panels, and the restart forecast gives\nway to each reading's near-limit flag.\n\nA renderer the host has begun to end reads as not running, so a reading\nbetween its end and its exit cannot breach it twice.\n\nTicket: candybar-host-renderer-x96a.8xv\n"
         }
       ]
     }

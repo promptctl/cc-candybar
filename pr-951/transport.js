@@ -43426,6 +43426,94 @@ function confirmStep(key, labels, fires) {
   };
 }
 
+// src/config/click-mode.ts
+init_globals();
+
+// src/click/gesture.ts
+init_globals();
+var BUTTONS = ["left", "middle", "right"];
+var MODIFIERS = ["ctrl", "alt", "shift"];
+var PLAIN_CLICK = "left";
+function gestureName({ button, modifiers }) {
+  return [...MODIFIERS.filter((m) => modifiers.has(m)), button].join("+");
+}
+function parseGesture(text4) {
+  const words2 = text4.split("+");
+  const last2 = words2.pop();
+  const button = BUTTONS.find((b) => b === last2);
+  if (button === void 0)
+    return {
+      kind: "failed",
+      reason: `"${text4}" is not a gesture: it ends in a button (${BUTTONS.join(", ")}), after any of ${MODIFIERS.join(", ")} joined by +`
+    };
+  const modifiers = /* @__PURE__ */ new Set();
+  for (const word of words2) {
+    const modifier = MODIFIERS.find((m) => m === word);
+    if (modifier === void 0)
+      return {
+        kind: "failed",
+        reason: `"${text4}" is not a gesture: "${word}" is not a modifier (${MODIFIERS.join(", ")})`
+      };
+    if (modifiers.has(modifier))
+      return {
+        kind: "failed",
+        reason: `"${text4}" is not a gesture: it names ${modifier} twice`
+      };
+    modifiers.add(modifier);
+  }
+  return { kind: "ok", value: { button, modifiers } };
+}
+var HOVER = "hover";
+var ALL_GESTURES = BUTTONS.flatMap(
+  (button) => Array.from(
+    { length: 1 << MODIFIERS.length },
+    (_, bits) => gestureName({
+      button,
+      modifiers: new Set(MODIFIERS.filter((_m, i2) => (bits & 1 << i2) !== 0))
+    })
+  )
+);
+function parseOneDelivered(entry) {
+  if (typeof entry !== "string")
+    return {
+      kind: "failed",
+      reason: `a delivered gesture is a string: got ${JSON.stringify(entry)}`
+    };
+  if (entry === HOVER) return { kind: "ok", value: HOVER };
+  const gesture = parseGesture(entry);
+  return gesture.kind === "ok" ? { kind: "ok", value: gestureName(gesture.value) } : gesture;
+}
+function parseDelivered(entries) {
+  const delivered = [];
+  for (const entry of entries) {
+    const name = parseOneDelivered(entry);
+    if (name.kind !== "ok") return name;
+    if (!delivered.includes(name.value)) delivered.push(name.value);
+  }
+  return { kind: "ok", value: delivered };
+}
+
+// src/config/click-mode.ts
+var CLICK_MODES = ["click", "hover", "alt"];
+var DEFAULT_CLICK_MODE = CLICK_MODES[0];
+var CLICK_MODE_KEY = `${SETTINGS_NS}clickMode`;
+var HOVER_KEY = `${SETTINGS_NS}hover`;
+var NO_HOVER = `${SETTINGS_NS}none`;
+var SURFACE_VAR = "surface";
+var HOVER_REGION = `${SETTINGS_NS}hoverRegion`;
+var HOVER_CLEAR = `${SETTINGS_NS}hoverClear`;
+var MODE_GESTURE = {
+  click: PLAIN_CLICK,
+  hover: HOVER,
+  alt: "alt+left"
+};
+var clickModeOf = (stored) => CLICK_MODES.find((m) => m === stored) ?? DEFAULT_CLICK_MODE;
+var modeInForce = (stored, surface) => {
+  const mode = clickModeOf(stored);
+  return surface.includes(MODE_GESTURE[mode]) ? DEFAULT_CLICK_MODE : mode;
+};
+var modeIsOpen = (mode) => mode !== DEFAULT_CLICK_MODE;
+
 // src/config/session-key.ts
 function sessionKeyKind(key) {
   if (isEditNamespaced(key))
@@ -43438,6 +43526,7 @@ function sessionKeyKind(key) {
   if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
   if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
   if (key === CLICK_ERROR_KEY) return { kind: "record" };
+  if (key === CLICK_MODE_KEY || key === HOVER_KEY) return { kind: "pointer" };
   return reservedNamespaceOf(key) === void 0 ? { kind: "plain" } : { kind: "menu" };
 }
 var isEditModeKey = (key) => sessionKeyKind(key).kind === "edit";
@@ -43446,7 +43535,10 @@ var isPlacementDraftKey = (key) => {
   const k = sessionKeyKind(key);
   return k.kind === "edit" && k.part === "draft";
 };
-var isHeldByEdit = (key) => sessionKeyKind(key).kind !== "record";
+var isHeldByEdit = (key) => {
+  const { kind } = sessionKeyKind(key);
+  return kind !== "record" && kind !== "pointer";
+};
 function isUndoStepKey(key) {
   return isSettingKey(key) || isPlacementDraftKey(key);
 }
@@ -43942,11 +44034,12 @@ var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
 
 // src/render/drawn-link.ts
 init_globals();
-function actionTarget(effects, description) {
+function actionTarget(effects, description, region) {
   return {
     kind: "action",
     effects,
-    ...description === void 0 ? {} : { description }
+    ...description === void 0 ? {} : { description },
+    ...region === void 0 ? {} : { region }
   };
 }
 function hrefOfDrawnLink(link) {
@@ -44011,7 +44104,27 @@ var LinkProof = class {
   constructor(target) {
     this.target = target.kind === "action" ? Object.freeze({
       ...target,
-      effects: Object.freeze(target.effects.map(capture))
+      effects: Object.freeze(target.effects.map(capture)),
+      ...target.region === void 0 ? {} : {
+        region: Object.freeze({
+          name: target.region.name,
+          ...target.region.hover === void 0 ? {} : {
+            hover: Object.freeze(
+              target.region.hover.map(capture)
+            )
+          },
+          gestures: Object.freeze(
+            Object.fromEntries(
+              Object.entries(target.region.gestures).map(
+                ([gesture, effects]) => [
+                  gesture,
+                  Object.freeze(effects.map(capture))
+                ]
+              )
+            )
+          )
+        })
+      }
     }) : Object.freeze({ ...target });
     this.marker = MARKER + encodeURIComponent(JSON.stringify(this.target));
   }
@@ -49471,7 +49584,10 @@ function perConfigDomainsFor(config) {
     // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
     // whether or not a config declares it, and presetNames is where that is
     // stated (once, for the gate and the render alike).
-    ["presets", { members: presetNames(config.presets) }]
+    ["presets", { members: presetNames(config.presets) }],
+    // The regions a click can make hovered are the actions the config
+    // declares, which the hover write's gate admits as its values.
+    ["regions", { members: Object.keys(config.actions) }]
   ]);
 }
 function knownOptionDomainNames(perConfigDomains) {
@@ -51098,6 +51214,11 @@ var PAYLOAD_INPUTS = {
     type: "number",
     default: 0
   },
+  // What the drawing surface delivers, and the action the pointer is on
+  // (src/render/pointer-facts.ts): the gestures it delivers, space-joined (a
+  // link's surface delivers only `left`), and the action's name, "" for none.
+  [SURFACE_VAR]: { kind: "input", path: "surface", default: PLAIN_CLICK },
+  hover: { kind: "input", path: "hover", default: "" },
   // The settings door's indicator (src/render/diagnostics.ts,
   // DiagnosticsProjection): its label, "" while there is nothing to show, the
   // colours of the worst level the draw's diagnostics hold, and the key of
@@ -51178,6 +51299,8 @@ var DRAW_PROJECTIONS = {
   today: "the day the draw is at",
   feeds: "the frames a lane was sent up to the draw's instant",
   drawing: "who the draw is for",
+  surface: "the gestures the drawing surface delivers",
+  hover: "the action the pointer is on",
   diagnostics: "the errors and warnings the draw owes its reader"
 };
 function drawProjectionAt(path31) {
@@ -56838,6 +56961,100 @@ init_globals();
 init_globals();
 var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
 
+// src/config/action.ts
+init_globals();
+
+// src/config/layer-role.ts
+init_globals();
+var LAYER_ROLES = ["user", "project", "local"];
+var DEFAULT_WRITE_LAYER = "user";
+function layerFlags(roles) {
+  const [user, project, local] = LAYER_ROLES;
+  return {
+    [user]: roles.includes(user),
+    [project]: roles.includes(project),
+    [local]: roles.includes(local)
+  };
+}
+function layerRoleOf(raw) {
+  return LAYER_ROLES.find((role) => role === raw) ?? null;
+}
+
+// src/config/action.ts
+var ACTION_KEYS = [
+  "set",
+  "persist",
+  "copy",
+  "open",
+  "reset",
+  "undo",
+  "redo",
+  "back",
+  "rewind",
+  "save",
+  "preset",
+  "themeDefault",
+  "slash",
+  "run",
+  "do"
+];
+var LAYER_CHOICES = {
+  persist: LAYER_ROLES,
+  reset: LAYER_ROLES,
+  preset: LAYER_ROLES,
+  themeDefault: LAYER_ROLES,
+  save: [...LAYER_ROLES, "ask"]
+};
+var defaultLayer = (choice) => choice ?? DEFAULT_WRITE_LAYER;
+function resolveActionLayer(action2) {
+  if ("save" in action2) return { ...action2, layer: defaultLayer(action2.layer) };
+  if ("persist" in action2 || "reset" in action2 || "preset" in action2 || "themeDefault" in action2)
+    return { ...action2, layer: defaultLayer(action2.layer) };
+  return action2;
+}
+function runDeclaration(a) {
+  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
+}
+var actionMembers = (a) => [
+  ..."do" in a ? a.do : [],
+  ...Object.values(a.on ?? {})
+];
+function* actionTemplates(a) {
+  const found2 = [];
+  mapActionTemplates(a, (source, field) => {
+    found2.push([field, source]);
+    return source;
+  });
+  yield* found2;
+}
+function mapActionTemplates(a, f) {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
+  if ("run" in a) {
+    const run2 = a.run.map((item, i2) => f(item, `run.${i2}`));
+    return {
+      ...a,
+      run: run2,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`)
+        ])
+      )
+    };
+  }
+  return a;
+}
+function actionBindsTemplateValue(a) {
+  return "from" in a || "int" in a || "insertSegmentFrom" in a || "save" in a && a.layer === "ask";
+}
+function bindsTemplateValue(actions, a) {
+  const head = "do" in a ? actions[a.do[0]] : a;
+  return head !== void 0 && actionBindsTemplateValue(head);
+}
+
 // src/config/loader/edit-mode.ts
 var EDIT_CONFIGURE_KEY = "edit.configure";
 var EDIT_TOGGLE_ACTION = "edit.toggle";
@@ -56861,7 +57078,7 @@ function referencesEditToggle(template) {
 }
 function fileWantsEditMode(out) {
   if (Object.values(out.actions ?? {}).some(
-    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
+    (a) => actionMembers(a).includes(EDIT_TOGGLE_ACTION)
   )) {
     return true;
   }
@@ -57340,22 +57557,6 @@ function autocompactControl(prefix, formatCount) {
 init_globals();
 var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
 
-// src/config/layer-role.ts
-init_globals();
-var LAYER_ROLES = ["user", "project", "local"];
-var DEFAULT_WRITE_LAYER = "user";
-function layerFlags(roles) {
-  const [user, project, local] = LAYER_ROLES;
-  return {
-    [user]: roles.includes(user),
-    [project]: roles.includes(project),
-    [local]: roles.includes(local)
-  };
-}
-function layerRoleOf(raw) {
-  return LAYER_ROLES.find((role) => role === raw) ?? null;
-}
-
 // src/config/menu-places.ts
 init_globals();
 var TABS = [
@@ -57687,6 +57888,21 @@ var laneReadout = (lane) => {
 };
 var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
 var FPS_SEG = `${SETTINGS_NS}fps`;
+var CLICK_MODE_CYCLE = `${CLICK_MODE_KEY}.cycle`;
+var CLICK_MODE_TOGGLE = `${CLICK_MODE_KEY}.toggle`;
+var CLICK_MODE_GLYPHS = {
+  click: "\u261D",
+  hover: "\u2316",
+  alt: "\u2325"
+};
+var SURFACE_HAS = (gesture) => `(has ${templateLiteral(gesture)} (splitList " " .${SURFACE_VAR}))`;
+var MODE_GESTURES = CLICK_MODES.filter((m) => m !== DEFAULT_CLICK_MODE).map(
+  (m) => MODE_GESTURE[m]
+);
+var CLICK_MODE_WHEN = `{{ not (and ${MODE_GESTURES.map(SURFACE_HAS).join(" ")}) }}`;
+var worksInEveryMode = (action2) => ({
+  on: Object.fromEntries(MODE_GESTURES.map((gesture) => [gesture, action2]))
+});
 var POLLED = "polled";
 var AT_MOST = "\u2264";
 var FPS_UNIT = " fps";
@@ -57902,7 +58118,8 @@ function expandAnchor(node) {
       direction: "horizontal",
       children: [
         disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
-        seg(FPS_SEG)
+        seg(FPS_SEG),
+        seg(CLICK_MODE_KEY)
       ]
     } : node;
   }
@@ -57944,12 +58161,33 @@ function settingsArtifacts(doorGlyph) {
         kind: "state",
         key: DIAGNOSTICS_VIEWING,
         default: "0"
+      },
+      [CLICK_MODE_KEY]: {
+        kind: "state",
+        key: CLICK_MODE_KEY,
+        default: DEFAULT_CLICK_MODE
       }
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
+      [DIAGNOSTICS_VIEWING]: {
+        set: DIAGNOSTICS_VIEWING,
+        int: true,
+        ...worksInEveryMode(DIAGNOSTICS_VIEWING)
+      },
+      [SETTINGS_ANCHOR]: {
+        do: [DOOR_TOGGLE, ...DOOR_DISARMS],
+        ...worksInEveryMode(SETTINGS_ANCHOR)
+      },
+      [CLICK_MODE_CYCLE]: { set: CLICK_MODE_KEY, cycle: [...CLICK_MODES] },
+      // A click in hover mode makes its region the hovered one, and stepping
+      // the mode puts the hovered region away.
+      [HOVER_REGION]: { set: HOVER_KEY, from: "regions" },
+      [HOVER_CLEAR]: { set: HOVER_KEY, to: NO_HOVER },
+      [CLICK_MODE_TOGGLE]: {
+        do: [CLICK_MODE_CYCLE, HOVER_CLEAR],
+        ...worksInEveryMode(CLICK_MODE_TOGGLE)
+      },
       ...TOOLBAR.actions,
       ...COMMANDS2.actions,
       ...AUTOCOMPACT.actions,
@@ -57986,6 +58224,10 @@ function settingsArtifacts(doorGlyph) {
         template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
       [FPS_SEG]: { template: FRAME_RATE },
+      [CLICK_MODE_KEY]: {
+        template: `{{ action "${CLICK_MODE_TOGGLE}" ${CLICK_MODES.map((m) => templateLiteral(CLICK_MODE_GLYPHS[m])).join(" ")} }}`,
+        when: CLICK_MODE_WHEN
+      },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
       [AUTOCOMPACT_SEG]: {
@@ -58689,74 +58931,6 @@ function synthesizeEditChrome(config) {
   };
 }
 
-// src/config/action.ts
-init_globals();
-var ACTION_KEYS = [
-  "set",
-  "persist",
-  "copy",
-  "open",
-  "reset",
-  "undo",
-  "redo",
-  "back",
-  "rewind",
-  "save",
-  "preset",
-  "themeDefault",
-  "slash",
-  "run",
-  "do"
-];
-var LAYER_CHOICES = {
-  persist: LAYER_ROLES,
-  reset: LAYER_ROLES,
-  preset: LAYER_ROLES,
-  themeDefault: LAYER_ROLES,
-  save: [...LAYER_ROLES, "ask"]
-};
-var defaultLayer = (choice) => choice ?? DEFAULT_WRITE_LAYER;
-function resolveActionLayer(action2) {
-  if ("save" in action2) return { ...action2, layer: defaultLayer(action2.layer) };
-  if ("persist" in action2 || "reset" in action2 || "preset" in action2 || "themeDefault" in action2)
-    return { ...action2, layer: defaultLayer(action2.layer) };
-  return action2;
-}
-function runDeclaration(a) {
-  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
-}
-function* actionTemplates(a) {
-  const found2 = [];
-  mapActionTemplates(a, (source, field) => {
-    found2.push([field, source]);
-    return source;
-  });
-  yield* found2;
-}
-function mapActionTemplates(a, f) {
-  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
-  if ("open" in a) return { ...a, open: f(a.open, "open") };
-  if ("preset" in a && a.preset === "delete")
-    return { ...a, name: f(a.name, "name") };
-  if ("run" in a) {
-    const run2 = a.run.map((item, i2) => f(item, `run.${i2}`));
-    return {
-      ...a,
-      run: run2,
-      env: Object.fromEntries(
-        Object.entries(a.env).map(([name, value]) => [
-          name,
-          f(value, `env.${name}`)
-        ])
-      )
-    };
-  }
-  return a;
-}
-function actionBindsTemplateValue(a) {
-  return "from" in a || "int" in a || "insertSegmentFrom" in a || "save" in a && a.layer === "ask";
-}
-
 // src/config/loader/actions.ts
 init_globals();
 var import_node_path4 = __toESM(require_path_browserify(), 1);
@@ -58811,7 +58985,54 @@ function validateActionDecl(ctx, path31, raw, home) {
     return null;
   }
   const key = present[0];
-  const { layer, ...rest2 } = raw;
+  const { layer, on: rawOn, ...rest2 } = raw;
+  const on2 = rawOn === void 0 ? {} : validateGestures(ctx, path31, rawOn);
+  const parsed2 = armParsed(ctx, path31, key, layer, rest2, home);
+  if (on2 === null || parsed2 === null) return null;
+  return Object.keys(on2).length === 0 ? parsed2 : { ...parsed2, on: on2 };
+}
+function validateGestures(ctx, path31, raw) {
+  if (!isPlainObject(raw)) {
+    issue2(
+      ctx,
+      `${path31}.on`,
+      `${path31}.on must map gestures to action names, got ${describeType(raw)}`
+    );
+    return null;
+  }
+  const out = /* @__PURE__ */ Object.create(null);
+  let valid = true;
+  for (const [spelling, target] of Object.entries(raw)) {
+    const at = `${path31}.on.${spelling}`;
+    const gesture = parseOneDelivered(spelling);
+    if (gesture.kind === "failed") {
+      issue2(ctx, at, gesture.reason);
+      valid = false;
+      continue;
+    }
+    const name = gesture.value;
+    if (name === PLAIN_CLICK) {
+      issue2(
+        ctx,
+        at,
+        `"${spelling}" is the plain click, which is the action's own effects: declare them on the action`
+      );
+      valid = false;
+    } else if (name in out) {
+      issue2(ctx, at, `"${spelling}" is the gesture ${name}, bound twice`);
+      valid = false;
+    } else if (typeof target !== "string" || target === "") {
+      issue2(
+        ctx,
+        at,
+        `${at} must name a declared action, got ${describeValue(target)}`
+      );
+      valid = false;
+    } else out[name] = target;
+  }
+  return valid ? out : null;
+}
+function armParsed(ctx, path31, key, layer, rest2, home) {
   const layers = LAYER_CHOICES[key];
   if (layer === void 0) return actionArms(home)[key](ctx, path31, rest2);
   if (layers === void 0) {
@@ -60611,7 +60832,7 @@ function valueReads({ names, helpers, actions }) {
     seen.add(name);
     return [
       ...[...actionTemplates(decl)].map(([, source]) => source),
-      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []
+      ...actionMembers(decl).flatMap((m) => actionTexts(m, seen))
     ];
   };
   const texts = perTemplate((template) => {
@@ -60999,7 +61220,7 @@ function withDroppedPlacements(config, owning, inserted) {
     // (candybar-templates-zh8b.53s).
     ...Object.values(seg2.partials ?? {})
   ]) : [];
-  const doMembers = anyTombstone ? Object.values(config.actions).flatMap((a) => "do" in a ? [...a.do] : []) : [];
+  const doMembers = anyTombstone ? Object.values(config.actions).flatMap(actionMembers) : [];
   const missing = (names2, declared) => [...new Set(names2)].flatMap((name) => {
     const cause = name in declared ? void 0 : tombstoned(name);
     return cause === void 0 ? [] : [[name, cause]];
@@ -61256,12 +61477,22 @@ function selfDepends(v, named2) {
 function mapActionNames(a, f) {
   const seg2 = "segments.";
   const out = { ...a };
-  if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
-  for (const field of ["removeSegment", "insertSegment", "anchor"])
-    if (field in a)
-      out[field] = f(a[field], field);
-  if ("persist" in a && a.persist.startsWith(seg2))
-    out.persist = seg2 + f(a.persist.slice(seg2.length), "persist");
+  if ("do" in out)
+    out.do = out.do.map((m) => f(m, "do"));
+  if (out.on !== void 0)
+    out.on = Object.fromEntries(
+      Object.entries(out.on).map(([gesture, target]) => [
+        gesture,
+        f(target, "on")
+      ])
+    );
+  if ("removeSegment" in out)
+    out.removeSegment = f(out.removeSegment, "removeSegment");
+  if ("insertSegment" in out)
+    out.insertSegment = f(out.insertSegment, "insertSegment");
+  if ("anchor" in out) out.anchor = f(out.anchor, "anchor");
+  if ("persist" in out && out.persist.startsWith(seg2))
+    out.persist = seg2 + f(out.persist.slice(seg2.length), "persist");
   return out;
 }
 var SEGMENT_TEMPLATE_FIELDS = [
@@ -62186,6 +62417,19 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
         });
       }
     });
+  }
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    for (const [gesture, member] of Object.entries(a.on ?? {})) {
+      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member) ? cfg.actions[member] : void 0;
+      const problem = target === void 0 ? `references unknown action "${member}"` : bindsTemplateValue(cfg.actions, target) && !bindsTemplateValue(cfg.actions, a) ? `"${member}" takes its value from the template, and ${name} binds none to give it` : void 0;
+      if (problem !== void 0) {
+        ctx.issues.push({
+          path: `actions.${name}.on.${gesture}`,
+          message: `actions.${name} on ${gesture}: ${problem}`,
+          line: findKeyLine(ctx.source, ["actions", name, "on", gesture])
+        });
+      }
+    }
   }
   for (const [name, a] of subjects(cfg.actions, subject)) {
     if (!("run" in a)) continue;
@@ -66905,7 +67149,8 @@ function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
     );
     out.set(name, {
       ...compiled,
-      bindsTemplateValue: compiled.kind === "do" ? compiled.head.bindsTemplateValue : actionBindsTemplateValue(action2)
+      on: action2.on ?? {},
+      bindsTemplateValue: bindsTemplateValue(actions, action2)
     });
   }
   return out;
@@ -67458,7 +67703,25 @@ function renderAction(name, displays, runtime) {
     store,
     sessionId2
   );
-  return linkOver(display, actionTarget(effects), active2);
+  const realized = Object.fromEntries(
+    Object.entries(declared.on).map(([gesture, target]) => [
+      gesture,
+      realize(
+        runtime.compiled.get(target),
+        display.plain,
+        boundValue,
+        store,
+        sessionId2
+      ).effects
+    ])
+  );
+  const { [HOVER]: hoverBinding, ...gestures } = realized;
+  const hover = hoverBinding ?? realize(runtime.compiled.get(HOVER_REGION), name, name, store, sessionId2).effects;
+  return linkOver(
+    display,
+    actionTarget(effects, void 0, { name, gestures, hover }),
+    active2
+  );
 }
 function actionFuncs(runtime) {
   return {
@@ -70387,12 +70650,13 @@ function laterIdentity(a, b) {
   return a > b;
 }
 var NEAR_LIMIT = 0.75;
+var nearAtOf = (limit) => limit * NEAR_LIMIT;
 function chargeWords(charge) {
   switch (charge.kind) {
     case "charged":
       return `${charge.measure} ${mb(charge.bytes)} MB`;
     case "stand-in":
-      return `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+      return `rss ${mb(charge.rss)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
     case "unread":
       return `unread (${charge.unread})`;
   }
@@ -70418,6 +70682,9 @@ var BREACH_ARTIFACTS = {
   heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" },
   rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" }
 };
+function judgedBytes(charge) {
+  return charge.kind === "charged" ? charge.bytes : charge.rss - charge.gap;
+}
 
 // src/daemon/foundations/gates.ts
 init_globals();
@@ -70865,9 +71132,8 @@ function unusedDeclarations(raw, config, inserted) {
   const clicked = new Set(bound);
   for (const name of bound) {
     const action2 = config.actions[name];
-    if (action2 !== void 0 && "do" in action2) {
-      for (const member of action2.do) clicked.add(member);
-    }
+    if (action2 !== void 0)
+      for (const member of actionMembers(action2)) clicked.add(member);
   }
   const writtenKeys = /* @__PURE__ */ new Set();
   const placed2 = new Set(inserted);
@@ -72987,6 +73253,53 @@ function projectGitInfo(info, pullRequest, pending2) {
   };
 }
 
+// src/render/pointer-facts.ts
+init_globals();
+var surfaceOf = (pointer) => pointer === null ? [PLAIN_CLICK] : pointer.gestures;
+function hoverOf(pointer, mode, held) {
+  if (mode !== "hover") return pointer?.hover ?? "";
+  return held === null || held === NO_HOVER ? "" : held;
+}
+var pointerFacts = (pointer, mode, held) => ({
+  surface: surfaceOf(pointer).join(" "),
+  hover: hoverOf(pointer, mode, held)
+});
+
+// src/render/click-mode-frame.ts
+init_globals();
+var CLICK_OF = {
+  click: (link) => link.effects,
+  hover: (_link, region) => region.hover,
+  alt: (_link, region) => region.gestures[MODE_GESTURE.alt]
+};
+function runIn2(run2, mode) {
+  const { link } = run2;
+  if (link === void 0 || typeof link === "string" || link.kind !== "action" || link.region === void 0)
+    return run2;
+  const { region } = link;
+  const effects = CLICK_OF[mode](link, region);
+  if (effects === void 0) {
+    const { link: _dropped, ...bare } = run2;
+    return bare;
+  }
+  return {
+    ...run2,
+    link: actionTarget(effects, link.description, {
+      name: region.name,
+      gestures: region.gestures
+    })
+  };
+}
+function inClickMode(frame2, mode) {
+  return {
+    ...frame2,
+    rows: frame2.rows.map((row) => ({
+      ...row,
+      runs: row.runs.map((run2) => runIn2(run2, mode))
+    }))
+  };
+}
+
 // src/daemon/foundations/click-error.ts
 init_globals();
 var KEY = CLICK_ERROR_KEY;
@@ -73105,14 +73418,14 @@ var RENDER_ANSWERS = {
 };
 
 // src/renderer/draw-bar.ts
-function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare) {
+function renderFrame(parts, sessionId2, fps, readings, following, feeds, pointer, prepare) {
   const facts = [];
   try {
     var _stack = [];
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, readings, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate, eventsShown } = drawRender(parts, setup, { by: "feed", fps }, feeds);
+      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate, eventsShown } = drawRender(parts, setup, { by: "feed", fps }, feeds, pointer);
       const bar = drawn.body;
       const { frame: statusline } = statuslineOf(
         setup,
@@ -73249,7 +73562,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
     throw e;
   }
 }
-function drawRender(parts, setup, drawing2, feeds) {
+function drawRender(parts, setup, drawing2, feeds, pointer) {
   const {
     sessionState,
     renderCache: { presentations }
@@ -73360,10 +73673,15 @@ function drawRender(parts, setup, drawing2, feeds) {
       }))
     ]
   );
+  const mode = modeInForce(
+    sessionState.get(sessionId2, CLICK_MODE_KEY),
+    surfaceOf(pointer)
+  );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing: drawing2,
     feeds,
+    ...pointerFacts(pointer, mode, sessionState.get(sessionId2, HOVER_KEY)),
     ...instantFacts(document.builtins, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
@@ -73402,7 +73720,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     }
   );
   const {
-    frame: frame2,
+    frame: drawnFrame,
     waited,
     memory,
     warnings: drawnWarnings,
@@ -73412,6 +73730,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     rules
   } = width === payload.term.cols ? draw2() : partsOf(state.compiled, view.store).withTerminalWidth(width, draw2);
   const copies = diagnosticCopies(diagnostics);
+  const frame2 = inClickMode(drawnFrame, mode);
   noteFacts(facts, {
     menuIdle: idleSince === null ? "-" : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
@@ -73521,7 +73840,9 @@ function drawRender(parts, setup, drawing2, feeds) {
         copies,
         menu: {
           tick: readings.tick,
-          shown: frame2.rows.some((row) => row.kind === "menu"),
+          // [LAW:no-ambient-temporal-coupling] A click mode the user left on
+          // is open state as a menu is: the same idle period ends it.
+          shown: frame2.rows.some((row) => row.kind === "menu") || modeIsOpen(mode),
           timeoutS: effective.menuTimeout
         }
       }
@@ -73557,7 +73878,8 @@ function answerRequest(parts, req, presentation, facts) {
       parts,
       setup,
       ANSWERING,
-      feeds.feedsOf(sessionId2, time.tick)
+      feeds.feedsOf(sessionId2, time.tick),
+      null
     );
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(presentation.client ?? null) === "statusline";
@@ -73929,6 +74251,12 @@ var Feeds = class {
   following(sessionId2) {
     return followingOf(this.feeds.get(sessionId2)?.viewers);
   }
+  // [LAW:one-source-of-truth] What the pane that owns the session's pointer
+  // last said of it, as the host handed it with who watches: none while no
+  // pane owns it.
+  pointerOf(sessionId2) {
+    return this.feeds.get(sessionId2)?.viewers.lanes.pane?.pointer ?? null;
+  }
   // [LAW:nothing-unseen] What each lane of the session's frames is doing at
   // `tick`: its subscribers, the frames that went out to it in the last
   // second, and whether the session's pane is on a screen. Like every value
@@ -74014,6 +74342,7 @@ var Feeds = class {
       { at: drawAt, tick },
       this.following(feed2.sessionId),
       this.feedsOf(feed2.sessionId, tick),
+      this.pointerOf(feed2.sessionId),
       prepare
     );
     if (drawn === null) {
@@ -77039,14 +77368,20 @@ function closeIdleMenus(sid, context, idle, ctx, effects) {
     const roots = openRoots(nest, (key) => c.sessionState.get(sid, key)).filter(
       (root) => !hasWork || !nest.inside(root).some(({ key }) => key === EDIT_MODE_KEY)
     );
-    c.menu.choose(
-      sid,
-      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
-      () => menuContext(c, sid, sessionConfig(c))
+    const modeOpen = modeIsOpen(
+      clickModeOf(c.sessionState.get(sid, CLICK_MODE_KEY))
     );
+    const closed = [
+      ...roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+      ...modeOpen ? [
+        { key: CLICK_MODE_KEY, value: DEFAULT_CLICK_MODE },
+        { key: HOVER_KEY, value: NO_HOVER }
+      ] : []
+    ];
+    c.menu.choose(sid, closed, () => menuContext(c, sid, sessionConfig(c)));
     c.log(
       "info",
-      `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
+      `menu-idle: closed=${closed.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
     );
   });
 }
@@ -77950,13 +78285,14 @@ function build2(inputs, turnLog) {
     };
   };
   const feeds = new Feeds({
-    draw: (sessionId2, fps, readings, following, laneFeeds, prepare) => renderFrame(
+    draw: (sessionId2, fps, readings, following, laneFeeds, pointer, prepare) => renderFrame(
       parts,
       sessionId2,
       fps,
       readings,
       following,
       laneFeeds,
+      pointer,
       prepare
     ),
     pin,
@@ -78546,10 +78882,10 @@ function track(state, work) {
   return entry;
 }
 function admit(state, category, signal) {
-  const refusal = refusalOf(state, category, signal);
-  if (refusal !== null) {
+  const refusal2 = refusalOf(state, category, signal);
+  if (refusal2 !== null) {
     state.scope.stats?.onRefused(category);
-    return refusal;
+    return refusal2;
   }
   state.lastStartAt.set(category, state.scope.clock.monotonic());
   return null;
@@ -80919,11 +81255,11 @@ var FileEventDelivery = class {
     };
     this.instrument = probing;
     this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.deaf;
-    if (refusal !== void 0) {
+    const [refusal2] = probing.handle.deaf;
+    if (refusal2 !== void 0) {
       this.end(
         stopPeriod,
-        `the OS refused the probe folder's watch: ${refusal.reason}`
+        `the OS refused the probe folder's watch: ${refusal2.reason}`
       );
       return;
     }
@@ -82004,6 +82340,7 @@ var BACKSTOP_BOUNDS_READ = {
   [SESSION_RENDER_KIND]: true,
   subscribe: true,
   "pane-session": true,
+  pointer: true,
   shutdown: true,
   stats: true,
   click: false,
@@ -83145,13 +83482,37 @@ var REPLY_EVENTS = {
   render: "render",
   [SESSION_RENDER_KIND]: "render",
   "pane-session": "request",
+  pointer: "request",
   shutdown: "request",
   stats: "request",
   click: "click",
   debug: "request"
 };
 var eventOf = (kind) => typeof kind === "string" && Object.hasOwn(REPLY_EVENTS, kind) ? REPLY_EVENTS[kind] : "request";
-var refuse2 = (code2, error) => replied(stay({ ok: false, error, code: code2, daemonV: PROTOCOL_VERSION }));
+var refusal = (code2, error) => stay({ ok: false, error, code: code2, daemonV: PROTOCOL_VERSION });
+var refuse2 = (code2, error) => replied(refusal(code2, error));
+function parseOwner(raw) {
+  const bad = (reason) => ({
+    kind: "failed",
+    reason
+  });
+  if (typeof raw !== "object" || raw === null)
+    return bad("owner is an object of id, gestures and hover");
+  const { id: id2, gestures, hover } = raw;
+  if (typeof id2 !== "string" || id2 === "")
+    return bad("owner.id is a non-empty string");
+  if (!Array.isArray(gestures))
+    return bad("owner.gestures is a list of the gestures delivered");
+  if (hover !== null && typeof hover !== "string")
+    return bad("owner.hover is the hovered action's name, or null");
+  const delivered = parseDelivered(gestures);
+  if (delivered.kind !== "ok")
+    return bad(`owner.gestures: ${delivered.reason}`);
+  return {
+    kind: "ok",
+    value: { id: id2, pointer: { gestures: delivered.value, hover } }
+  };
+}
 function subscription(req) {
   const sessionId2 = parseSessionId(req.sessionId);
   if (!sessionId2.ok)
@@ -83167,7 +83528,22 @@ function subscription(req) {
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`
     );
-  return { kind: "subscribe", sessionId: sessionId2.id, lane };
+  if (req.owner === void 0)
+    return { kind: "subscribe", sessionId: sessionId2.id, lane, owner: null };
+  if (lane !== "pane")
+    return refuse2(
+      "BAD_REQUEST",
+      `only the pane lane has an owner: got ${lane}`
+    );
+  const owner = parseOwner(req.owner);
+  if (owner.kind !== "ok")
+    return refuse2("BAD_REQUEST", `subscribe's ${owner.reason}`);
+  return {
+    kind: "subscribe",
+    sessionId: sessionId2.id,
+    lane,
+    owner: owner.value
+  };
 }
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   if (inbound.kind === "url")
@@ -83244,6 +83620,16 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       )
     });
   }
+  if (req.kind === "pointer") {
+    const session = parseSessionId(req.sessionId);
+    if (!session.ok)
+      return refusal("BAD_REQUEST", `pointer's sessionId ${session.problem}`);
+    const owner = parseOwner(req.owner);
+    if (owner.kind !== "ok")
+      return refusal("BAD_REQUEST", `pointer's ${owner.reason}`);
+    const admitted = frameFeeds.pointerOf(session.id, owner.value);
+    return admitted.kind === "ok" ? stay({ ok: true, output: "" }) : refusal("BAD_REQUEST", admitted.reason);
+  }
   if (req.kind === "stats") {
     const held = parts.renderers().map((runtime) => ({ ...runtime, mailbox: runtime.renderer.stats() }));
     const renderers = await Promise.all(
@@ -83256,7 +83642,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
             mailbox
           },
           limits,
-          clock
+          clock,
+          parts.closing
         )
       )
     );
@@ -83445,7 +83832,7 @@ async function rendererPanel({
   ask: ask2,
   process: state,
   mailbox
-}, limits, clock) {
+}, limits, clock, closing) {
   return {
     name,
     process: memoryPanelOf(state, limits),
@@ -83453,30 +83840,31 @@ async function rendererPanel({
     stats: state.kind === "not-running" ? {
       kind: "failed",
       reason: `not asked: it is not running: ${state.why}`
-    } : await askedWithin(name, ask2, clock)
+    } : await askedWithin(name, ask2, clock, closing)
   };
 }
-async function askedWithin(name, ask2, clock) {
-  const waited = new AbortController();
+async function askedWithin(name, ask2, clock, closing) {
   try {
-    return await Promise.race([
-      ask2().then((value) => ({ kind: "ok", value })),
-      sleep(
-        clock,
-        `renderer ${name} stats wait`,
-        RENDERER_STATS_WAIT_MS,
-        waited.signal
-      ).then(
-        () => ({
+    const waited = await waitWithin(
+      `renderer ${name} stats wait`,
+      ask2,
+      RENDERER_STATS_WAIT_MS,
+      clock,
+      closing
+    );
+    switch (waited.end) {
+      case "answered":
+        return { kind: "ok", value: waited.value };
+      case "deadline":
+        return {
           kind: "failed",
           reason: `no answer within ${RENDERER_STATS_WAIT_MS} ms`
-        })
-      )
-    ]);
+        };
+      case "closed":
+        return { kind: "failed", reason: "the daemon closed" };
+    }
   } catch (thrown2) {
     return { kind: "failed", reason: failureOf(thrown2).detail };
-  } finally {
-    waited.abort();
   }
 }
 function memoryPanelOf(state, limits) {
@@ -87913,30 +88301,44 @@ var RENDERER_STATS_REFERENCE = {
   sessionState: { sessions: 0, observers: 0, revision: 0 },
   framesDrawn: 0
 };
-function missingFields(reference, value, at = "") {
+function missingFields(references, value, at = "") {
   const label2 = at || "<snapshot>";
-  if (typeof reference === "number") {
-    return typeof value === "number" && Number.isFinite(value) ? [] : [label2];
+  const sort = sortOf(value);
+  const same2 = references.filter((reference) => sortOf(reference) === sort);
+  if (same2.length === 0)
+    return references.some((reference) => sortOf(reference) !== "atom") ? [label2] : [];
+  switch (sort) {
+    case "number":
+      return Number.isFinite(value) ? [] : [label2];
+    case "atom":
+      return [];
+    case "list": {
+      const elements = same2.flatMap((reference) => reference);
+      return value.flatMap(
+        (item, i2) => missingFields(elements, item, `${at}[${i2}]`)
+      );
+    }
+    case "object": {
+      const object = value;
+      const objects = same2;
+      const arm2 = objects.some((reference) => "kind" in reference) ? objects.filter((reference) => reference.kind === object.kind) : objects;
+      const keys2 = [
+        ...new Set(arm2.flatMap((reference) => Object.keys(reference)))
+      ];
+      return keys2.flatMap((key) => {
+        const path31 = at === "" ? key : `${at}.${key}`;
+        return key in object ? missingFields(
+          arm2.flatMap(
+            (reference) => key in reference ? [reference[key]] : []
+          ),
+          object[key],
+          path31
+        ) : [path31];
+      });
+    }
   }
-  if (Array.isArray(reference)) {
-    if (!Array.isArray(value)) return [label2];
-    const [element] = reference;
-    return value.flatMap(
-      (item, i2) => missingFields(element, item, `${at}[${i2}]`)
-    );
-  }
-  if (!isPlainObject(reference)) return [];
-  if (!isPlainObject(value)) return [label2];
-  if ("kind" in reference && "kind" in value && reference.kind !== value.kind)
-    return [];
-  const missing = [];
-  for (const key of Object.keys(reference)) {
-    const path31 = at === "" ? key : `${at}.${key}`;
-    if (!(key in value)) missing.push(path31);
-    else missing.push(...missingFields(reference[key], value[key], path31));
-  }
-  return missing;
 }
+var sortOf = (value) => typeof value === "number" ? "number" : Array.isArray(value) ? "list" : isPlainObject(value) ? "object" : "atom";
 
 // src/version.ts
 init_globals();
@@ -88107,6 +88509,82 @@ var RuntimeStats = class _RuntimeStats {
   // from whichever daemon is running, and an older build's lacks fields this
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
+  // [LAW:parse-dont-validate] Every arm a reader descends into, across a set
+  // of references, so a field of each arm is checked: the base, and the base
+  // with each other arm of each union in its place. Each list holds an
+  // element, so its elements are checked too.
+  static referenceSnapshots() {
+    const base = _RuntimeStats.referenceSnapshot();
+    const panel = base.renderers[0];
+    const sizes = { rss: 0, heapTotal: 0 };
+    const measured3 = [
+      {
+        kind: "measured",
+        charge: { kind: "charged", measure: "rss", bytes: 0 },
+        usage: { kind: "read", sizes }
+      },
+      {
+        kind: "measured",
+        charge: { kind: "stand-in", rss: 0, gap: 0, unread: "" },
+        usage: { kind: "unread", why: "" }
+      },
+      {
+        kind: "measured",
+        charge: { kind: "unread", gap: 0, unread: "" },
+        usage: { kind: "read", sizes }
+      }
+    ];
+    const withDelivery = (delivery) => ({
+      ...base.fileEvents,
+      delivery
+    });
+    return [
+      base,
+      ...measured3.map(
+        (memory) => ({
+          ...base,
+          host: { pid: 0, memory, limit: 0, nearAt: 0 },
+          renderers: [
+            {
+              ...panel,
+              process: {
+                kind: "process",
+                memory: { pid: 0, memory, limit: 0, nearAt: 0 }
+              }
+            }
+          ]
+        })
+      ),
+      {
+        ...base,
+        renderers: [
+          { ...panel, process: { kind: "in-host" } },
+          {
+            ...panel,
+            process: { kind: "not-running", why: "" },
+            stats: { kind: "failed", reason: "" }
+          }
+        ],
+        fileEvents: withDelivery({ kind: "stalled", missedSince: 0 }),
+        sources: {
+          ...base.sources,
+          records: base.sources.records.map((record2) => ({
+            ...record2,
+            lastMs: 0
+          }))
+        }
+      },
+      {
+        ...base,
+        fileEvents: withDelivery({
+          kind: "unmeasured",
+          since: 0,
+          reason: "",
+          missedSince: 0
+        })
+      }
+    ];
+  }
   static referenceSnapshot() {
     return new _RuntimeStats({
       now: () => 0,
@@ -88122,7 +88600,16 @@ var RuntimeStats = class _RuntimeStats {
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       sources: {
-        records: [],
+        records: [
+          {
+            name: "",
+            scope: "daemon",
+            refreshes: {},
+            failures: 0,
+            abandoned: 0,
+            lastMs: null
+          }
+        ],
         homes: {
           daemon: 0,
           configDir: 0,
@@ -88170,10 +88657,23 @@ var RuntimeStats = class _RuntimeStats {
       watchersActive: 0,
       dirWatchesActive: 0,
       polledPaths: 0,
-      clients: [],
+      clients: [
+        {
+          client: null,
+          sessionId: "",
+          termCols: 0,
+          rateLimits: "carried",
+          claudeConfigDir: "",
+          projectDir: "",
+          transcript: { path: "", answered: false },
+          frame: "still",
+          role: "statusline",
+          ago: 0
+        }
+      ],
       bundle: "/",
       sourceDigest: null,
-      host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },
+      host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0, nearAt: 0 },
       // [LAW:one-source-of-truth] One panel, which every panel is read as:
       // the arms a reader descends into, so a field of theirs is checked.
       renderers: [
@@ -88181,7 +88681,12 @@ var RuntimeStats = class _RuntimeStats {
           name: MAIN_RENDERER,
           process: {
             kind: "process",
-            memory: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 }
+            memory: {
+              pid: 0,
+              memory: { kind: "unmeasured" },
+              limit: 0,
+              nearAt: 0
+            }
           },
           mailbox: { holder: null, heldMs: 0, queued: 0 },
           stats: { kind: "ok", value: RENDERER_STATS_REFERENCE }
@@ -88301,14 +88806,7 @@ function chargeProbe(launcher, platform3) {
       timeoutMs: PROBE_TIMEOUT_MS,
       category: "limits.charge"
     })
-  ) : async (processes) => processes.map((process2) => ({
-    process: process2,
-    charge: process2.usage.kind === "read" ? {
-      kind: "charged",
-      measure: "rss",
-      bytes: process2.usage.sizes.rss
-    } : { kind: "unread", unread: process2.usage.why }
-  }));
+  ) : async () => ({ usage }) => usage.kind === "read" ? { kind: "charged", measure: "rss", bytes: usage.sizes.rss } : { kind: "unread", unread: usage.why };
 }
 function footprintCharge(run2) {
   return async (processes) => {
@@ -88322,12 +88820,11 @@ function footprintCharge(run2) {
     const unnamed = printed.unnamed.map(
       (header) => `; its section ${JSON.stringify(header)} names no pid`
     );
-    return processes.map((process2) => {
-      const bytes = printed.byPid.get(process2.pid);
-      const unread2 = result.ok ? `footprint printed no phys_footprint for pid ${process2.pid}${unnamed.join("")}` : `footprint ${failureText(result)}`;
-      const charge = bytes !== void 0 ? { kind: "charged", measure: "phys_footprint", bytes } : process2.usage.kind === "read" ? { kind: "stand-in", bytes: process2.usage.sizes.rss, unread: unread2 } : { kind: "unread", unread: `${unread2}, and ${process2.usage.why}` };
-      return { process: process2, charge };
-    });
+    return ({ pid: pid2, usage }) => {
+      const bytes = printed.byPid.get(pid2);
+      const unread2 = result.ok ? `footprint printed no phys_footprint for pid ${pid2}${unnamed.join("")}` : `footprint ${failureText(result)}`;
+      return bytes !== void 0 ? { kind: "charged", measure: "phys_footprint", bytes } : usage.kind === "read" ? { kind: "stand-in", rss: usage.sizes.rss, unread: unread2 } : { kind: "unread", unread: `${unread2}, and ${usage.why}` };
+    };
   };
 }
 function physFootprintsOf(text4) {
@@ -88407,16 +88904,12 @@ function memoryLimitBytes(env2) {
 }
 var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
 var HEAP_SNAPSHOT_KEEP = 3;
-function readCharge(probed, previous2) {
-  if (probed.kind === "charged") return probed;
-  const gap = gapOf(previous2);
-  return probed.kind === "unread" ? { ...probed, gap } : { ...probed, bytes: probed.bytes - gap, gap };
+function readCharge(probed, gap) {
+  return probed.kind === "charged" ? probed : { ...probed, gap };
 }
-function gapOf(previous2) {
-  if (previous2.kind === "unmeasured") return 0;
-  const { charge, usage } = previous2;
-  if (charge.kind !== "charged") return charge.gap;
-  return usage.kind === "read" ? usage.sizes.rss - charge.bytes : 0;
+function gapOf(reading, before) {
+  const { charge, usage } = reading;
+  return charge.kind === "charged" && usage.kind === "read" ? usage.sizes.rss - charge.bytes : before;
 }
 function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -88461,7 +88954,10 @@ function makeLimits(deps) {
           `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
         );
       },
-      end: () => deps.shutdown(0)
+      end: () => {
+        deps.shutdown(0);
+        return "daemon";
+      }
     };
     const renderers = deps.renderers().map(
       (renderer) => ({
@@ -88476,35 +88972,36 @@ function makeLimits(deps) {
             `renderer ${renderer.name} heap snapshot written: ${file}`
           );
         },
-        end: (why) => renderer.end(why)
+        end: (why) => {
+          renderer.end(why);
+          return "process";
+        }
       })
     );
-    const read2 = (await deps.memoryCharge([host, ...renderers])).map(
-      ({ process: process2, charge }) => {
-        const reading = {
-          kind: "measured",
-          charge: readCharge(
-            charge,
-            latest.get(process2.key) ?? { kind: "unmeasured" }
-          ),
-          usage: process2.usage
-        };
-        return { process: process2, reading };
-      }
-    );
+    const judged = [host, ...renderers];
+    const chargeOf = await deps.memoryCharge(judged);
+    const read2 = judged.map((process2) => {
+      const before = latest.get(process2.key)?.gap ?? 0;
+      const reading = {
+        kind: "measured",
+        charge: readCharge(chargeOf(process2), before),
+        usage: process2.usage
+      };
+      return { process: process2, reading, gap: gapOf(reading, before) };
+    });
     latest = new Map(
-      read2.map(({ process: process2, reading }) => [process2.key, reading])
+      read2.map(({ process: process2, reading, gap }) => [process2.key, { reading, gap }])
     );
     deps.log("info", eventLine("memory", readingFields(read2, limit)));
-    if (disarmed) return false;
     for (const { process: process2, reading } of read2) {
+      if (disarmed) return false;
       const { charge } = reading;
-      if (charge.kind === "unread" || charge.bytes <= limit) continue;
-      if (process2.process.kind === "host") {
+      if (charge.kind === "unread" || judgedBytes(charge) <= limit) continue;
+      const ended = await breach(process2, charge, reading.usage);
+      if (ended === "daemon") {
         triggered = true;
-        return breach(process2, charge, reading.usage);
+        return true;
       }
-      await breach(process2, charge, reading.usage);
     }
     return false;
   }
@@ -88531,7 +89028,7 @@ function makeLimits(deps) {
         );
       return disarmed;
     };
-    if (closedDuring()) return false;
+    if (closedDuring()) return null;
     await attempt3(
       deps.log,
       `${who} heap snapshot`,
@@ -88539,7 +89036,7 @@ function makeLimits(deps) {
         artifactFile(deps.snapshotDir, "heapSnapshot", identity2)
       )
     );
-    if (closedDuring()) return false;
+    if (closedDuring()) return null;
     await attempt3(deps.log, "artifact rotation", async () => {
       for (const { artifacts } of evicted(
         postMortemsOf(deps.listArtifacts()),
@@ -88554,11 +89051,15 @@ function makeLimits(deps) {
         }
       }
     });
-    judged.end(why);
-    return true;
+    return judged.end(why);
   }
   function memoryOf(key, pid2) {
-    return { pid: pid2, memory: latest.get(key) ?? { kind: "unmeasured" }, limit };
+    return {
+      pid: pid2,
+      memory: latest.get(key)?.reading ?? { kind: "unmeasured" },
+      limit,
+      nearAt: nearAtOf(limit)
+    };
   }
   function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
     const tick = async () => {
@@ -88605,7 +89106,7 @@ function readingFields(read2, limit) {
       return [
         [`${at}.pid`, String(process2.pid)],
         [`${at}.measure`, measureOf(charge)],
-        ...charge.kind === "unread" ? [] : [[`${at}.charge`, `${mb(charge.bytes)}MB`]],
+        ...charge.kind === "unread" ? [] : [[`${at}.charge`, `${mb(judgedBytes(charge))}MB`]],
         ...usage.kind === "read" ? [
           [`${at}.rss`, `${mb(usage.sizes.rss)}MB`],
           [`${at}.heap`, `${mb(usage.sizes.heapTotal)}MB`]
@@ -88635,12 +89136,10 @@ function breachedOf(identity2) {
   return renderer === null ? null : { kind: "renderer", name: renderer };
 }
 function evicted(postMortems, keep) {
-  const seen = /* @__PURE__ */ new Map();
+  const seen = { host: 0, other: 0 };
   return postMortems.filter(({ process: process2 }) => {
-    const name = processWords(process2);
-    const newer = seen.get(name) ?? 0;
-    seen.set(name, newer + 1);
-    return newer >= keep;
+    const pool = process2.kind === "host" ? "host" : "other";
+    return seen[pool]++ >= keep;
   });
 }
 async function attempt3(log, what, body) {
@@ -88671,20 +89170,15 @@ function postMortemsOf(files) {
     byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
   }
   const kinds = Object.keys(BREACH_ARTIFACTS);
-  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).flatMap(([identity2, found2]) => {
-    const process2 = breachedOf(identity2);
-    return process2 === null ? [] : [
-      {
-        identity: identity2,
-        process: process2,
-        artifacts: Object.fromEntries(
-          kinds.flatMap(
-            (k) => found2[k] === void 0 ? [] : [[k, found2[k]]]
-          )
-        )
-      }
-    ];
-  });
+  return [...byIdentity].sort(
+    ([a], [b]) => STAMP.test(a) !== STAMP.test(b) ? STAMP.test(a) ? -1 : 1 : laterIdentity(a, b) ? -1 : 1
+  ).map(([identity2, found2]) => ({
+    identity: identity2,
+    process: breachedOf(identity2) ?? { kind: "unnamed" },
+    artifacts: Object.fromEntries(
+      kinds.flatMap((k) => found2[k] === void 0 ? [] : [[k, found2[k]]])
+    )
+  }));
 }
 function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
   const dir = owner.snapshotDir;
@@ -89352,9 +89846,47 @@ var Collector = class {
 
 // src/daemon/frame-feed.ts
 init_globals();
+
+// src/render/hit-map.ts
+init_globals();
+var linksOf2 = (run2) => run2.link !== void 0 && isBarLink(run2.link) ? { [PLAIN_CLICK]: run2.link, ...run2.region?.gestures } : null;
+var sameRegion2 = (a, links, run2) => a.action === (run2.region?.name ?? null) && Object.keys(a.links).length === Object.keys(links).length && Object.entries(links).every(([gesture, link]) => a.links[gesture] === link);
+function hitMapOf(frame2) {
+  return frame2.rows.map(({ runs }) => {
+    const hits = [];
+    let column = 0;
+    for (const run2 of runs) {
+      const to = column + cellLen(run2.text);
+      const links = linksOf2(run2);
+      const last2 = hits.at(-1);
+      if (links !== null) {
+        if (last2 !== void 0 && last2.to === column && sameRegion2(last2, links, run2))
+          hits[hits.length - 1] = { ...last2, to };
+        else
+          hits.push({
+            from: column,
+            to,
+            action: run2.region?.name ?? null,
+            links
+          });
+      }
+      column = to;
+    }
+    return hits;
+  });
+}
+
+// src/daemon/frame-feed.ts
 var MAX_REQUESTS = 256;
-var failedFeed = (refusal) => {
-  const encoded = { json: JSON.stringify(refusal) };
+function ownerOf(watched) {
+  let found2 = null;
+  for (const { owner } of watched.followers.values())
+    if (owner !== null && (found2 === null || owner.said > found2.said))
+      found2 = owner;
+  return found2;
+}
+var failedFeed = (refusal2) => {
+  const encoded = { json: JSON.stringify(refusal2) };
   return { resp: encoded, statusline: encoded };
 };
 function covers(prior, offered) {
@@ -89370,13 +89902,25 @@ function settleWrite(write, delivered) {
 }
 function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
-  const encode = (body) => ({
-    json: JSON.stringify(RENDER_ANSWERS.ansi(publish(body, source))),
+  const answer2 = (published, hits) => ({
+    json: JSON.stringify({
+      ...RENDER_ANSWERS.ansi(published),
+      ...hits !== void 0 && { hits }
+    }),
     displayedEvents: frame2.displayedEvents
   });
-  const resp = encode(frame2.bar);
-  const statusline = frame2.handoff === null ? resp : encode(frame2.handoff);
-  return { resp, statusline };
+  const bar = publish(frame2.bar, source);
+  const statusline = answer2(
+    frame2.handoff === null ? bar : publish(frame2.handoff, source),
+    void 0
+  );
+  let resp;
+  return {
+    statusline,
+    get resp() {
+      return resp ??= answer2(bar, hitMapOf(bar));
+    }
+  };
 }
 var FrameFeeds = class {
   constructor(deps) {
@@ -89396,6 +89940,7 @@ var FrameFeeds = class {
   // what it holds is unknown (a delivery failed).
   handed = JSON.stringify({});
   frameDemands = 0;
+  panesSaid = 0;
   pushed = 0;
   refused = 0;
   lookups = 0;
@@ -89442,14 +89987,25 @@ var FrameFeeds = class {
     }
     let watched = this.watched.get(sessionId2);
     if (watched === void 0) {
-      watched = { followers: /* @__PURE__ */ new Map(), last: null, frameDemand: 0, pushed: 0 };
+      watched = {
+        followers: /* @__PURE__ */ new Map(),
+        last: null,
+        frameDemand: 0,
+        pushed: 0
+      };
       this.watched.set(sessionId2, watched);
       this.stopWatching ??= this.deps.watching();
     }
     if (watched.followers.has(sub2))
       return () => this.unsubscribe(sessionId2, sub2);
-    const follower = { confirmed: null, writes: /* @__PURE__ */ new Set() };
+    const follower = {
+      confirmed: null,
+      writes: /* @__PURE__ */ new Set(),
+      owner: sub2.owner === null ? null : this.held(sub2.owner)
+    };
+    const owned = ownerOf(watched)?.id ?? null;
     watched.followers.set(sub2, follower);
+    this.ownerMoved(sessionId2, owned, watched);
     this.handover(sessionId2, watched, sub2, follower);
     this.deps.log(
       "info",
@@ -89472,6 +90028,41 @@ var FrameFeeds = class {
         this.announce();
       }
     });
+  }
+  // [LAW:single-enforcer] A pane's facts of its pointer, as a subscribe and
+  // each report admit them: its latest, and the latest word of any pane.
+  held(pane) {
+    return { ...pane, said: ++this.panesSaid };
+  }
+  // A pane's report of its pointer: held for the pane, which then owns the
+  // session's pointer, and the renderer is handed the change like any change
+  // of who watches. A pane that does not follow the session is refused.
+  pointerOf(sessionId2, pane) {
+    const watched = this.watched.get(sessionId2);
+    const reporting = [...watched?.followers.values() ?? []].filter(
+      (follower) => follower.owner?.id === pane.id
+    );
+    if (watched === void 0 || reporting.length === 0)
+      return {
+        kind: "refused",
+        reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId2)}`
+      };
+    const owned = ownerOf(watched)?.id ?? null;
+    const admitted = this.held(pane);
+    for (const follower of reporting) follower.owner = admitted;
+    this.ownerMoved(sessionId2, owned, watched);
+    this.announce();
+    return { kind: "ok" };
+  }
+  // [LAW:nothing-unseen] Who holds a session's pointer is said when it changes
+  // hands, not on each report, which move at the pointer's speed.
+  ownerMoved(sessionId2, before, watched) {
+    const after = watched === void 0 ? null : ownerOf(watched)?.id ?? null;
+    if (after !== before)
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(sessionId2)} pointer owner=${JSON.stringify(after)} was=${JSON.stringify(before)}`
+      );
   }
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
   // its world state read.
@@ -89496,11 +90087,16 @@ var FrameFeeds = class {
   }
   seen(sessionId2, watched) {
     const lanes = {};
-    for (const sub2 of watched.followers.keys()) {
+    const owner = ownerOf(watched);
+    for (const [sub2, follower] of watched.followers) {
       const seen = lanes[sub2.lane];
       lanes[sub2.lane] = {
+        ...seen,
         subscribers: (seen?.subscribers ?? 0) + 1,
-        drawing: (seen?.drawing ?? false) || sub2.drawing()
+        drawing: (seen?.drawing ?? false) || sub2.drawing(),
+        // [LAW:one-source-of-truth] The owner's facts ride on its own lane: the
+        // renderer reads the pointer where it reads who watches.
+        ...owner !== null && follower.owner === owner && { pointer: owner.pointer }
       };
     }
     return {
@@ -89578,6 +90174,8 @@ var FrameFeeds = class {
           renderer,
           session
         });
+        for (const { lane } of watched.followers.keys())
+          answerOf2(encoded, lane);
       } catch (error) {
         const refused2 = renderFailed(error);
         encoded = failedFeed(refused2);
@@ -89658,7 +90256,9 @@ var FrameFeeds = class {
     const watched = this.watched.get(sessionId2);
     const follower = watched?.followers.get(sub2);
     if (watched === void 0 || follower === void 0) return;
+    const owned = ownerOf(watched)?.id ?? null;
     watched.followers.delete(sub2);
+    this.ownerMoved(sessionId2, owned, watched);
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId2);
       this.deps.log(
@@ -90516,9 +91116,25 @@ function publishingFrames(signer) {
           if (link === void 0) return run2;
           const href = publishedHref(link, signer.sign);
           const issuer = typeof link !== "string" && link.kind !== "href" ? source : void 0;
+          const published = (url) => isBarLink(url) ? signer.signLink(url, issuer) : url;
           return {
             ...run2,
-            link: isBarLink(href) ? signer.signLink(href, issuer) : href
+            link: published(href),
+            ...typeof link !== "string" && link.kind === "action" && link.region !== void 0 && {
+              region: {
+                name: link.region.name,
+                gestures: Object.fromEntries(
+                  Object.entries(link.region.gestures).map(
+                    ([gesture, effects]) => [
+                      gesture,
+                      published(
+                        publishedHref(actionTarget(effects), signer.sign)
+                      )
+                    ]
+                  )
+                )
+              }
+            }
           };
         })
       }))
@@ -90545,7 +91161,7 @@ function segmentRow(value) {
 }
 function inspectionPayloadProblem(reply) {
   if (reply.kind === "stats") {
-    const missing = missingFields(RENDERER_STATS_REFERENCE, reply.stats);
+    const missing = missingFields([RENDERER_STATS_REFERENCE], reply.stats);
     return missing.length === 0 ? null : `invalid stats snapshot: ${missing.join(", ")}`;
   }
   if (reply.kind !== "debug") return null;
@@ -92002,6 +92618,8 @@ function recordingOutputProblem(output) {
 function knownPick(key, value) {
   const kind = sessionKeyKind(key).kind;
   if (kind === "plain") return false;
+  if (kind === "pointer")
+    return CLICK_MODES.some((mode) => mode === value) || value === NO_HOVER;
   if (kind !== "setting") {
     return value === DISCLOSURE_CLOSED || value === DISCLOSURE_OPEN || TABS.some(({ member }) => member === value) || SUBMENU_NAMES.some((member) => member === value);
   }
