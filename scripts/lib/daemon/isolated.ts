@@ -1,8 +1,8 @@
-// [LAW:single-enforcer] The ONE place that spins up a real, request-serving
+// [LAW:single-enforcer] The place that spins up a real, request-serving
 // `cc-candybar daemon` subprocess against an isolated XDG_STATE_HOME/
 // XDG_CACHE_HOME/XDG_CONFIG_HOME/XDG_DATA_HOME + short socket path, for every
 // caller that needs a real daemon over a real socket: the tests (through the
-// suite's pool, test/helpers/spawn-isolated-daemon.ts) and the dev tools.
+// suite's pool, test/helpers/spawn-isolated-daemon.ts) and the bar tools.
 // One spawn+readiness+cleanup implementation, so the short-socket-path and
 // connect-round-trip-readiness gotchas are solved once.
 //
@@ -28,6 +28,7 @@ import {
 import { sendDaemonRequest, type ExitResult } from "./wire";
 import { logPath } from "../../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
+import { failAfter } from "../fail-after";
 
 export interface IsolatedDaemonEnv {
   // The temporary directory everything below is under, removed with them.
@@ -97,8 +98,7 @@ export function prepareIsolatedDaemonEnv(
     fs.mkdirSync(cache);
     fs.mkdirSync(config);
   } catch (e) {
-    removeTmpDirs();
-    throw e;
+    failAfter(e, removeTmpDirs);
   }
 
   const env: NodeJS.ProcessEnv = {
@@ -259,15 +259,18 @@ async function awaitReadiness(
   sockPath: string,
 ): Promise<Readiness> {
   const deadline = Date.now() + READINESS_BUDGET_MS;
-  let failed: (exit: ExitResult | null) => ReadinessFailure = (exit) => ({
-    phase: "booting",
-    exit,
-  });
+  // Why the last probe of the bound socket was not served, or `null` while
+  // there is no socket to probe.
+  let lastProbe: string | null = null;
+  const failed = (exit: ExitResult | null): ReadinessFailure =>
+    lastProbe === null
+      ? { phase: "booting", exit }
+      : { phase: "bound", exit, lastProbe };
   for (;;) {
     if (fs.existsSync(sockPath)) {
       const probe = await probeStats(sockPath);
-      if (probe === "served") return { phase: "serving" };
-      failed = (exit) => ({ phase: "bound", exit, lastProbe: probe });
+      if (probe.served) return { phase: "serving" };
+      lastProbe = probe.why;
     }
     const exit = exitedAlready(child);
     if (exit !== null) return failed(exit);
@@ -288,17 +291,26 @@ function exitedAlready(child: ChildProcess): ExitResult | null {
   return { code: child.exitCode, signal: child.signalCode };
 }
 
-// "served", or why the round trip did not complete.
-async function probeStats(sockPath: string): Promise<"served" | string> {
+// A stats round trip: served, or why it was not.
+type Probe =
+  | { readonly served: true }
+  | { readonly served: false; readonly why: string };
+
+async function probeStats(sockPath: string): Promise<Probe> {
   try {
     const resp = await sendDaemonRequest(
       sockPath,
       { v: PROTOCOL_VERSION, kind: "stats" },
       STATS_REPLY_BUDGET_MS,
     );
-    return resp.ok ? "served" : `answered ${resp.error} (${resp.code})`;
+    return resp.ok
+      ? { served: true }
+      : { served: false, why: `answered ${resp.error} (${resp.code})` };
   } catch (e) {
-    return e instanceof Error ? e.message : String(e);
+    return {
+      served: false,
+      why: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
@@ -378,8 +390,7 @@ export async function startIsolatedDaemon(
   try {
     daemon = await startDaemonWithEnv(env, acquire, entry);
   } catch (e) {
-    removeTmpDirs();
-    throw e;
+    failAfter(e, removeTmpDirs);
   }
   return {
     child: daemon.child,
@@ -393,9 +404,10 @@ export async function startIsolatedDaemon(
       // exit is seen a stop sends nothing and only waits.
       try {
         await daemon.stop();
-      } finally {
-        removeTmpDirs();
+      } catch (e) {
+        failAfter(e, removeTmpDirs);
       }
+      removeTmpDirs();
     },
   };
 }

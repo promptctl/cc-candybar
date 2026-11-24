@@ -8,7 +8,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { lintCases, ROOT, UNTYPED } from "./helpers/lint-cases";
+import { REPO } from "../scripts/lib/repo.cjs";
+import { lintCases, UNTYPED } from "./helpers/lint-cases";
 
 const IN_RENDERER = "src/renderer/probe.ts";
 const IN_START = "src/renderer/main.ts";
@@ -30,7 +31,7 @@ const REFUSED = {
   rendererToRestTypeOnly: { file: IN_RENDERER, code: typeImp("../daemon/x") },
   rendererToAbsoluteHostType: {
     file: IN_RENDERER,
-    code: typeImp(path.join(ROOT, "src/host")),
+    code: typeImp(path.join(REPO, "src/host")),
   },
   rendererToHostIdentity: {
     file: IN_RENDERER,
@@ -120,6 +121,8 @@ const REFUSED = {
   },
   restToLib: { file: IN_REST, code: imp("../../scripts/lib/x") },
   restToTools: { file: IN_REST, code: imp("../../scripts/drive-bar") },
+  // A path no row of the table names is in no zone.
+  restToUnlisted: { file: IN_REST, code: imp("../../docs/design/probes/p6") },
 };
 
 const ALLOWED = {
@@ -158,7 +161,7 @@ describe("the zones import rule", () => {
 
   beforeAll(() => {
     // As an editor or runner started in `cwd` lints the checkout at `root`.
-    const lintFrom = (cwd: string, root = ROOT) =>
+    const lintFrom = (cwd: string, root = REPO) =>
       Object.fromEntries(
         Object.entries(
           lintCases({ ...REFUSED, ...ALLOWED }, UNTYPED, { cwd, root }),
@@ -175,11 +178,11 @@ describe("the zones import rule", () => {
       fs.mkdtempSync(path.join(os.tmpdir(), "zones-")),
       "repo",
     );
-    fs.symlinkSync(ROOT, link);
+    fs.symlinkSync(REPO, link);
     try {
       found = {
-        root: lintFrom(ROOT),
-        src: lintFrom(path.join(ROOT, "src")),
+        root: lintFrom(REPO),
+        src: lintFrom(path.join(REPO, "src")),
         link: lintFrom(link, link),
       };
     } finally {

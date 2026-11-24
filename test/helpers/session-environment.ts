@@ -32,12 +32,8 @@ function workerVariable(name: string): string {
   return value;
 }
 
-// The worker's environment whole, as the base a bar a test starts runs its
-// daemon in: test/setup.ts already isolated it from the developer's.
-export const WORKER_SHELL: ShellEnvironment = {
-  ...process.env,
-  ...shellEnvironment(process.env),
-};
+// The worker's shell, as a bar a test starts takes it.
+export const WORKER_SHELL: ShellEnvironment = shellEnvironment(process.env);
 
 export const TEST_ENVIRONMENT: SessionEnvironment = {
   kind: "ok",

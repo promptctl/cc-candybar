@@ -4,22 +4,18 @@
 // and bar-web.test.ts's; here, that each tool starts and answers.
 
 import { execFile, spawn } from "node:child_process";
-import os from "node:os";
 import { promisify } from "node:util";
 
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
+import { shellEnvironment } from "../../../scripts/lib/shell";
 import { until } from "../../../scripts/lib/until";
 import { daemonPool } from "../../helpers/spawn-test-daemon";
 
 jest.setTimeout(30_000);
 
-// A shell's own: where the tools live, the home and the temporary directory.
-// No variable this worker's setup made.
-const SHELL = {
-  PATH: process.env.PATH,
-  HOME: os.homedir(),
-  TMPDIR: os.tmpdir(),
-};
+// A shell's own, as a tool takes it (scripts/lib/shell.ts): no variable this
+// worker's setup made.
+const SHELL = shellEnvironment(process.env);
 // Under the case's own budget, so a tool that hangs fails with what it said.
 const TOOL_BUDGET_MS = 20_000;
 

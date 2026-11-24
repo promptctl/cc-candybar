@@ -1,8 +1,8 @@
-// [LAW:single-enforcer] The one spawner of a real `cc-candybar daemon`
-// subprocess run from this checkout's source, for the test suite and the dev
-// tools alike. Every start acquires a slot first: the suite's come from its
-// machine-wide daemon pool (test/helpers/spawn-test-daemon.ts), a dev tool's
-// at once.
+// [LAW:single-enforcer] The spawner of a real `cc-candybar daemon` subprocess
+// for the test suite and the bar tools (`pnpm bar`, `pnpm bar:web`). Every
+// start acquires a slot first: the suite's come from its machine-wide daemon
+// pool (test/helpers/spawn-test-daemon.ts), a bar tool's at once. The
+// benchmark still starts its own (scripts/bench/world.ts).
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 
 import { daemonArgs, daemonCommand } from "../../../src/daemon/acquire";
 import { systemSpawner } from "../../../src/proc/spawner";
-import { REPO } from "../repo";
+import { REPO } from "../repo.cjs";
 import type { ExitResult } from "./wire";
 
 // A daemon's place under a ceiling on how many run at once, held until the

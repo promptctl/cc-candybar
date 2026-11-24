@@ -1,5 +1,7 @@
 // [LAW:one-way-deps] ESLint and the production bundle use this ownership table.
-// Unlisted application modules belong to the host. More specific entries win.
+// Application modules no narrower row names belong to the host. More specific
+// entries win. A path no row names is in no zone, so nothing may import it:
+// a new root says which side of Jest it runs on before anything reaches it.
 // The CLI dispatches to every process. The renderer process constructs its
 // core using the shared contract and has no host dependencies. The test suite
 // is Jest's alone: what runs outside Jest (src, and the tools in scripts/,
@@ -39,10 +41,15 @@ const ZONE_ROWS = {
   "src/claude-input/typing.ts": "shared",
   "src/claude-input/prompt-screen.ts": "shared",
   "src/help-text.ts": "shared",
+  // The package's manifest is data that imports nothing, so every side reads it.
+  "package.json": "shared",
+  "src/": "rest",
   "src/index.ts": "root",
   // The renderer process's composition root, the counterpart of the daemon's.
   "src/renderer-process.ts": "renderer-process",
   "test/": "test",
+  // The nightly audits run under Jest, over the suite's helpers.
+  "audits/": "test",
   "scripts/lib/": "lib",
   "scripts/": "tools",
   "site/": "tools",
@@ -63,6 +70,8 @@ export const ZONE_IMPORTS = {
   tools: [...APP, "lib", "tools"],
   test: [...APP, "lib", "tools", "test"],
 };
+// The zone of a path no row names: no zone imports it.
+export const NO_ZONE = "unlisted";
 
 // The directories of code that runs outside Jest beside the app: the tools,
 // and what they share with the tests. eslint.tools.config.mjs lints them.
@@ -81,7 +90,7 @@ export const zoneOf = (file) => {
   const key = withoutExtension(file).replaceAll("\\", "/");
   return ZONE_KEYS.find(({ row }) =>
     row.endsWith("/") ? `${key}/`.startsWith(row) : key === row,
-  )?.zone ?? "rest";
+  )?.zone ?? NO_ZONE;
 };
 
 export const mayImport = (from, to) => ZONE_IMPORTS[from].includes(to);

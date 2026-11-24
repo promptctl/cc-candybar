@@ -30,7 +30,7 @@ import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.j
 import { presetNames } from "../../../src/config/presets.js";
 import { ansiOf } from "../../../src/render/frame.js";
 import { instantOf } from "../../../src/utils/instant.js";
-import { REPO } from "../../lib/repo.js";
+import { REPO } from "../../lib/repo.cjs";
 import { removeTree, scratchDir } from "../fixtures.js";
 import { repeat } from "../measure.js";
 import { measured, type Benchmark } from "../types.js";

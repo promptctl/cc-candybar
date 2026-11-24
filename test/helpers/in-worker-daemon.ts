@@ -170,8 +170,11 @@ function placeEnv(env: NodeJS.ProcessEnv): void {
 }
 
 // A bar on a daemon in this worker (scripts/lib/drive-bar.ts).
+// The daemon runs in this worker, whose environment it swaps to the one it
+// is given, so the bar's isolated env lands over the worker's own, which
+// test/setup.ts already isolated from the developer's.
 export const startBarDaemon: StartBarDaemon = async ({ env }) => {
-  const daemon = startDaemon(env);
+  const daemon = startDaemon({ ...process.env, ...env });
   return { target: daemon, stop: daemon.stop };
 };
 

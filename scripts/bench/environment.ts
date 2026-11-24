@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { crateDigest, sourceDigest } from "../../src/source-digest.js";
-import { REPO } from "../lib/repo.js";
+import { REPO } from "../lib/repo.cjs";
 
 export const BUNDLE = path.join(REPO, "dist", "index.mjs");
 export const BUNDLED_CLIENT_SHIM = path.join(REPO, "bin", "cc-candybar");

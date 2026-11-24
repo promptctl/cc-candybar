@@ -3,9 +3,8 @@
 // ESM, so ESLint runs in a node of its own, once per call.
 
 import { execFileSync } from "node:child_process";
-import path from "node:path";
 
-export const ROOT = path.resolve(__dirname, "..", "..");
+import { REPO } from "../../scripts/lib/repo.cjs";
 
 // Text, and the repo path it is linted as.
 export interface LintCase {
@@ -48,7 +47,7 @@ console.log(JSON.stringify(out));
 export function lintCases<K extends string>(
   cases: Readonly<Record<K, LintCase>>,
   options: object,
-  { cwd = ROOT, root = ROOT }: { cwd?: string; root?: string } = {},
+  { cwd = REPO, root = REPO }: { cwd?: string; root?: string } = {},
 ): Record<K, Message[]> {
   return JSON.parse(
     execFileSync(

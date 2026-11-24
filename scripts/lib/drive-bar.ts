@@ -40,7 +40,7 @@ import { BAR_SESSION_ID, barHook } from "./hook-data";
 import { withStamp } from "./version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
 import { renderFrame, saidOf, sendClick } from "./daemon/requests";
-import type { DaemonTarget } from "./daemon/wire";
+import { REPLY_BUDGET_MS, type DaemonTarget } from "./daemon/wire";
 import {
   prepareIsolatedDaemonEnv,
   startDaemonWithEnv,
@@ -57,9 +57,9 @@ import {
   type DrawnLink,
 } from "../../src/click/read";
 import { isBarLink } from "../../src/click/wire";
+import { failAfter } from "./fail-after";
 
 const SESSION_ID = BAR_SESSION_ID;
-const REPLY_BUDGET_MS = 10_000;
 /** The terminal the client reports: columns, and rows. */
 export interface TerminalSize {
   readonly width: number;
@@ -197,8 +197,7 @@ export async function startBar(
     );
     daemon = await startDaemon(isolated);
   } catch (e) {
-    daemonEnv.removeTmpDirs();
-    throw e;
+    failAfter(e, daemonEnv.removeTmpDirs);
   }
   let size: TerminalSize = { width: opts.width, rows: opts.rows };
   // [LAW:one-source-of-truth] The file the daemon keeps, named by the daemon's
@@ -302,9 +301,10 @@ export async function startBar(
     stop: async () => {
       try {
         await daemon.stop();
-      } finally {
-        daemonEnv.removeTmpDirs();
+      } catch (e) {
+        failAfter(e, daemonEnv.removeTmpDirs);
       }
+      daemonEnv.removeTmpDirs();
     },
   };
 }
