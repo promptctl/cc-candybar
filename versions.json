@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-958",
+      "ref": "refs/pull/958/merge",
+      "sha": "f053da863c3472772701dbb11841bd984a590379",
+      "timestamp": "2026-11-24T23:31:22.389Z",
+      "commits": [
+        {
+          "sha": "f053da863c3472772701dbb11841bd984a590379",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T23:30:05Z",
+          "message": "Merge 8508a047087cdc4dd067a3e5bfe6e8a4c58b73ee into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
+        },
+        {
+          "sha": "8508a047087cdc4dd067a3e5bfe6e8a4c58b73ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:29:44-07:00",
+          "message": "test(controls): each control is declared once with its mark and arrows, the ring is refused when the picker pages, and every ring comment says the link carries its step and never its landing (candybar-host-renderer-x96a.7o3)\n\nReview pass 2 on #958.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "a723e8510622d305a08dc311b94639342b73e88e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:18:39-07:00",
+          "message": "test(controls): each control over a per-draw rule is read on its own row, and every ◀ ▶ ? steps from the option the draw wore; a ring step near the safe range lands exactly (candybar-host-renderer-x96a.7o3)\n\nReview pass 1 on #958. The test now reads each control's row alone, takes\nthe ring from the picker, clicks ◀ and ▶ of the carousel and the swatches\nrow in every domain after a draw at the other answer, and checks ? lands\noff the worn option. ringAround reduces the offset before adding the\ncentre, so its sum never rounds. The ring headers say the link carries the\nworn name while a rule decides the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "629e75676a0f418aca76c5f3fa1221c521693f8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:03:40-07:00",
+          "message": "test(controls): a carousel, picker, swatches row and swatch over a key a per-draw rule chooses mark and step from what the bar wears (candybar-host-renderer-x96a.7o3)\n\nA theme, style or effect rule that reads `now` is evaluated in each draw.\nEvery control that centres on the key already reads the name that draw's\nrule settled on; no test drew one under such a rule, only under a rule\nsettled once and kept. One rig is drawn at alternating instants, so a\nreader that kept the first draw's answer or fell to the floor fails it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-957",
       "ref": "refs/pull/957/merge",
       "sha": "55e511936ac7be2ab8a86b56a997ebabf75c09f6",
@@ -41,35 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T15:29:01-07:00",
           "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-958",
-      "ref": "refs/pull/958/merge",
-      "sha": "73978971c1584ca8b657407b68ec3d74444b3256",
-      "timestamp": "2026-11-24T23:21:10.982Z",
-      "commits": [
-        {
-          "sha": "73978971c1584ca8b657407b68ec3d74444b3256",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T23:20:07Z",
-          "message": "Merge a723e8510622d305a08dc311b94639342b73e88e into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
-        },
-        {
-          "sha": "a723e8510622d305a08dc311b94639342b73e88e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:18:39-07:00",
-          "message": "test(controls): each control over a per-draw rule is read on its own row, and every ◀ ▶ ? steps from the option the draw wore; a ring step near the safe range lands exactly (candybar-host-renderer-x96a.7o3)\n\nReview pass 1 on #958. The test now reads each control's row alone, takes\nthe ring from the picker, clicks ◀ and ▶ of the carousel and the swatches\nrow in every domain after a draw at the other answer, and checks ? lands\noff the worn option. ringAround reduces the offset before adding the\ncentre, so its sum never rounds. The ring headers say the link carries the\nworn name while a rule decides the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "629e75676a0f418aca76c5f3fa1221c521693f8d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:03:40-07:00",
-          "message": "test(controls): a carousel, picker, swatches row and swatch over a key a per-draw rule chooses mark and step from what the bar wears (candybar-host-renderer-x96a.7o3)\n\nA theme, style or effect rule that reads `now` is evaluated in each draw.\nEvery control that centres on the key already reads the name that draw's\nrule settled on; no test drew one under such a rule, only under a rule\nsettled once and kept. One rig is drawn at alternating instants, so a\nreader that kept the first draw's answer or fell to the floor fails it.\n"
         }
       ]
     },
