@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-947",
+      "ref": "refs/pull/947/merge",
+      "sha": "7e601900484b4fc0fa1481b44a6fb44000aeb1dc",
+      "timestamp": "2026-11-24T11:13:43.415Z",
+      "commits": [
+        {
+          "sha": "7e601900484b4fc0fa1481b44a6fb44000aeb1dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T04:12:45-07:00",
+          "message": "Merge 011f19b122c6e8d75f3e282d85ebd34479208182 into f5c82561857634d22bec3fa05bbf58d6b4d43580\n"
+        },
+        {
+          "sha": "011f19b122c6e8d75f3e282d85ebd34479208182",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T04:12:25-07:00",
+          "message": "fix(click): a click the daemon has read runs however late its turn comes, and a click already waiting on its socket is read before the backstop answers\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f5c82561857634d22bec3fa05bbf58d6b4d43580",
