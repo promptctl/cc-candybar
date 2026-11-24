@@ -1,3 +1,9 @@
+## [1.236.14](https://github.com/promptctl/cc-candybar/compare/v1.236.13...v1.236.14) (2026-11-24)
+
+### Bug Fixes
+
+* **release:** the Publish job's cap sits above the registry wait ([#945](https://github.com/promptctl/cc-candybar/issues/945)) ([75172bc](https://github.com/promptctl/cc-candybar/commit/75172bc2fc5c0d9718f43b5f28f3f7bc194d4306))
+
 ## [1.236.13](https://github.com/promptctl/cc-candybar/compare/v1.236.12...v1.236.13) (2026-11-24)
 
 ### Bug Fixes
