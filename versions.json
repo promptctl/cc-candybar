@@ -4,15 +4,22 @@
     {
       "version": "pr-949",
       "ref": "refs/pull/949/merge",
-      "sha": "749515d22eb4e4ff536dbd129cc615b6f654c7b8",
-      "timestamp": "2026-11-24T14:26:18.332Z",
+      "sha": "fe3491c8dcfbf32734c4f5a096917f3cf71f6755",
+      "timestamp": "2026-11-24T14:41:41.459Z",
       "commits": [
         {
-          "sha": "749515d22eb4e4ff536dbd129cc615b6f654c7b8",
+          "sha": "fe3491c8dcfbf32734c4f5a096917f3cf71f6755",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:23:31-07:00",
-          "message": "Merge 616f4fd7ec71cda1b3af3ef4295426baeee615f9 into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+          "timestamp": "2026-11-24T07:40:30-07:00",
+          "message": "Merge 44c27a3f218b868cb6f08df4345134940b1898aa into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+        },
+        {
+          "sha": "44c27a3f218b868cb6f08df4345134940b1898aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:40:15-07:00",
+          "message": "test(tools): bar:web's interrupt case asserts the server stopped, not pnpm's exit status (candybar-later-fixes-nwu9.1d4)\n"
         },
         {
           "sha": "616f4fd7ec71cda1b3af3ef4295426baeee615f9",
