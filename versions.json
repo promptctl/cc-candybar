@@ -4,15 +4,22 @@
     {
       "version": "pr-955",
       "ref": "refs/pull/955/merge",
-      "sha": "ea904b29ac0cdc906d955841c627d14ab09fa452",
-      "timestamp": "2026-11-24T20:30:14.834Z",
+      "sha": "519cf8c4eb00b0c8b89260abb3b796ead227141d",
+      "timestamp": "2026-11-24T20:52:56.413Z",
       "commits": [
         {
-          "sha": "ea904b29ac0cdc906d955841c627d14ab09fa452",
+          "sha": "519cf8c4eb00b0c8b89260abb3b796ead227141d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T20:29:08Z",
-          "message": "Merge 8609b4bcf0eb43d96f31227dd2e6988888ad8208 into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+          "timestamp": "2026-11-24T20:52:05Z",
+          "message": "Merge 820b870c0f1a9a83282d2c35ce1cbfeaeeecbd4a into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+        },
+        {
+          "sha": "820b870c0f1a9a83282d2c35ce1cbfeaeeecbd4a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T13:51:49-07:00",
+          "message": "fix(links): one owner for each ring input — a read-back refusal every centred control shares, a loud refusal for a link missing its centre or a layout that places no page, a whole-millisecond random seed (candybar-host-renderer-x96a.7qi)\n"
         },
         {
           "sha": "8609b4bcf0eb43d96f31227dd2e6988888ad8208",

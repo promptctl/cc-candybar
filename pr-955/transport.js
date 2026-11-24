@@ -43416,13 +43416,14 @@ function configOnlyField(key) {
 var CONFIG_KEY_TO_SETTING = new Map(
   SETTING_PROJECTIONS.map((p2) => [p2.configKey, p2.sessionKey])
 );
-var RULE_CHOOSABLE_SETTING_OF_KEY = new Map(
-  SETTING_PROJECTIONS.flatMap(
-    (p2) => p2.sessionKey === "theme" || p2.sessionKey === "style" || p2.sessionKey === "effect" ? [
-      [p2.sessionKey, p2.sessionKey],
-      [p2.configKey, p2.sessionKey]
-    ] : []
-  )
+var EXPRESSION_SLOT_OF_KEY = new Map(
+  SETTING_PROJECTIONS.flatMap((p2) => {
+    const slot = EXPRESSION_SLOTS.find((s) => s === p2.configKey);
+    return slot === void 0 ? [] : [
+      [p2.sessionKey, slot],
+      [p2.configKey, slot]
+    ];
+  })
 );
 var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
   [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
@@ -43746,9 +43747,17 @@ var STEP_RANDOM = { kind: "random" };
 function spellStep(step4) {
   return step4.kind === "random" ? RANDOM : String(step4.by);
 }
+function parseOffset(raw) {
+  const by = Number(raw);
+  return OFFSET_RE.test(raw) && Number.isSafeInteger(by) ? { ok: true, by } : {
+    ok: false,
+    problem: `a whole number was expected, got ${JSON.stringify(raw)}`
+  };
+}
 function parseStep(raw) {
   if (raw === RANDOM) return { ok: true, step: STEP_RANDOM };
-  if (OFFSET_RE.test(raw)) return { ok: true, step: stepOffset(Number(raw)) };
+  const offset = parseOffset(raw);
+  if (offset.ok) return { ok: true, step: stepOffset(offset.by) };
   return {
     ok: false,
     problem: `a step is a whole number of options or "${RANDOM}", got ${JSON.stringify(raw)}`
@@ -43772,7 +43781,7 @@ function landing(options, current, step4, instant) {
     case "offset":
       return options[at(step4.by)];
     case "random":
-      return options[randomOther(instant, options.length, at(0))];
+      return options[randomOther(Math.round(instant * 1e3), options.length, at(0))];
   }
 }
 
@@ -67804,8 +67813,8 @@ function realize(c, display, boundValue, store, sessionId2) {
   }
 }
 function ruledName(binding, head) {
-  const setting = RULE_CHOOSABLE_SETTING_OF_KEY.get(head.key);
-  return setting !== void 0 && binding.selections()[setting].kind !== "decided" ? readVar(binding.store, head.stateVar) : "";
+  const slot = EXPRESSION_SLOT_OF_KEY.get(head.key);
+  return slot !== void 0 && binding.ruled(slot) ? readVar(binding.store, head.stateVar) : "";
 }
 function realizeRing(declared, head, name, step4, turn, binding, sessionId2) {
   const { store } = binding;
@@ -67938,8 +67947,9 @@ init_globals();
 
 // src/render/page-map.ts
 init_globals();
+var UNPLACED = -1;
 function pageMapOf(pages, optionCount) {
-  const map = new Array(optionCount).fill(0);
+  const map = new Array(optionCount).fill(UNPLACED);
   pages.forEach(
     (sections, page2) => sections.forEach(
       (section) => section.indices.forEach((index) => {
@@ -67947,6 +67957,12 @@ function pageMapOf(pages, optionCount) {
       })
     )
   );
+  const unplaced = map.indexOf(UNPLACED);
+  if (unplaced >= 0) {
+    throw new Error(
+      `the page layout places no page for option ${unplaced} of ${optionCount}`
+    );
+  }
   return map;
 }
 function spellPageMap(map) {
@@ -68275,6 +68291,13 @@ function requireOptionKind(runtime, name, helper) {
   }
   return action2;
 }
+function requireReadBack(runtime, applyName, apply2, helper) {
+  if (!renderBinding(runtime, helper).store.has(apply2.stateVar)) {
+    throw new Error(
+      `${helper} references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
+    );
+  }
+}
 function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
@@ -68470,13 +68493,9 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
+  requireReadBack(runtime, applyName, apply2, "carousel");
   const binding = renderBinding(runtime, "carousel");
   const { store } = binding;
-  if (!store.has(apply2.stateVar)) {
-    throw new Error(
-      `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
-    );
-  }
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = clickSession(runtime, "carousel");
   const { options } = apply2;
@@ -68564,11 +68583,6 @@ function requireSwatchable(runtime, applyName, helper) {
       `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
     );
   }
-  if (!renderBinding(runtime, helper).store.has(apply2.stateVar)) {
-    throw new Error(
-      `${helper} references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to draw \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
-    );
-  }
   if (apply2.paletteOf === void 0) {
     throw new Error(
       `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
@@ -68578,6 +68592,7 @@ function requireSwatchable(runtime, applyName, helper) {
 }
 function optionPalette(runtime, applyName, helper, chosen) {
   const apply2 = requireSwatchable(runtime, applyName, helper);
+  if (chosen === void 0) requireReadBack(runtime, applyName, apply2, helper);
   const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply2.stateVar);
   if (!apply2.options.includes(option)) {
     throw new Error(
@@ -68610,6 +68625,7 @@ function swatchesFuncs(runtime, activeSegment) {
     swatches: {
       fn: (applyName, pageName) => {
         const apply2 = requireSwatchable(runtime, applyName, "swatches");
+        requireReadBack(runtime, applyName, apply2, "swatches");
         const page2 = requireKind(
           runtime,
           pageName,
@@ -69600,7 +69616,7 @@ var ViewParts = class {
       get layout() {
         return phase.ruling ? void 0 : layout;
       },
-      selections: () => this.selections()
+      ruled: (slot) => this.selections()[SELECTION_OF[slot]].kind !== "decided"
     };
     this.layout = this.derive("layout", source.layoutReadsInstant, () => {
       const root = source.roots.get(drawn.preset);
@@ -76538,13 +76554,10 @@ function readDeclared(text5, key) {
   const doc = docOf(text5 ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   if (node === void 0) return { kind: "none" };
-  return node.kind === "number" && Number.isInteger(node.value) ? { kind: "integer", value: node.value } : { kind: "other", source: textOf(text5 ?? "", node) };
-}
-function readDeclaredText(text5, key) {
-  const target = requireValueTarget(key);
-  const doc = docOf(text5 ?? "");
-  const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
-  return node?.kind === "string" ? node.value : void 0;
+  const source = textOf(text5 ?? "", node);
+  if (node.kind === "number" && Number.isInteger(node.value))
+    return { kind: "integer", value: node.value };
+  return node.kind === "string" ? { kind: "text", value: node.value, source } : { kind: "other", source };
 }
 function writeValues(store, into, pairs2) {
   writeDrafts(store, into, pairs2, []);
@@ -77110,7 +77123,7 @@ var stepConfig = (args, ctx) => {
     requireLayerText(into.path, store.read(into.path)),
     landing2.key
   );
-  if (declared.kind === "other") {
+  if (declared.kind === "other" || declared.kind === "text") {
     throw new BadVerbArgs(
       `step-config: ${landing2.key} holds ${declared.source} in ${into.path}, not an integer to step`
     );
@@ -77191,7 +77204,11 @@ function turnOf2(verb, raw, options) {
   return { key, map: pageMapOfLink(verb, layout, options) };
 }
 var turnWrites = (turn, options, landed) => turn === void 0 ? [] : [turn.key, String(pageHolding(turn.map, options.indexOf(landed)))];
-function landRing(verb, ctx, name, twin, [stepRaw = "", centre = "", ...turnRaw], held) {
+function landRing(verb, ctx, name, twin, [stepRaw, centre, ...turnRaw], held) {
+  if (stepRaw === void 0 || centre === void 0)
+    throw new BadVerbArgs(
+      `${verb}: a ring step is <step>/<centre>[/<pageKey>/<pageLayout>]`
+    );
   const ring = ringOf(verb, ctx, name, twin);
   const turn = turnOf2(verb, turnRaw, ring.options);
   const from = held(ring) ?? centre;
@@ -77215,6 +77232,10 @@ var ringState = (args, ctx) => {
   );
   setState([ring.key, next2, ...turn], ctx);
 };
+function declaredName(text5, key) {
+  const declared = readDeclared(text5, key);
+  return declared.kind === "text" ? declared.value : void 0;
+}
 var ringConfig = (args, ctx) => {
   const {
     role,
@@ -77230,16 +77251,17 @@ var ringConfig = (args, ctx) => {
     "persist",
     rest2,
     (r) => {
-      const declared = readDeclaredText(
+      const key = durableLanding(
+        config,
+        (k) => ctx.sessionState.get(ctx.session, k),
+        r.key
+      ).key;
+      const declared = declaredName(
         requireLayerText(
           into.path,
           editStore(ctx, ctx.session).read(into.path)
         ),
-        durableLanding(
-          config,
-          (k) => ctx.sessionState.get(ctx.session, k),
-          r.key
-        ).key
+        key
       );
       return declared !== void 0 && r.options.includes(declared) ? declared : r.shown;
     }
@@ -77248,17 +77270,17 @@ var ringConfig = (args, ctx) => {
   if (turn.length > 0) setState(turn, ctx);
 };
 var turnPage = (args, ctx) => {
-  const [name = "", pageKey2 = "", byRaw = "", layout = "", centre = ""] = args;
-  if (!pageKey2) throw new BadVerbArgs("turn-page: <pageKey> is required");
-  const by = stepOf2("turn-page", byRaw);
-  if (by.kind !== "offset")
+  const [name = "", pageKey2, byRaw, layout, centre] = args;
+  if (!pageKey2 || byRaw === void 0 || layout === void 0 || centre === void 0)
     throw new BadVerbArgs(
-      `turn-page: by must be a whole number of pages, got "${byRaw}"`
+      "turn-page: <action>/<pageKey>/<by>/<pageLayout>/<centre> is required"
     );
+  const by = parseOffset(byRaw);
+  if (!by.ok) throw new BadVerbArgs(`turn-page: by is ${by.problem}`);
   const config = sessionConfig(ctx);
   const head = headFor(config, name);
   const options = head === void 0 ? void 0 : optionsOf2(config, head);
-  if (head === void 0 || options === void 0)
+  if (head === void 0 || options === void 0 || options.length === 0)
     throw new BadVerbArgs(
       `turn-page: "${name}" lists no options to page through`
     );
