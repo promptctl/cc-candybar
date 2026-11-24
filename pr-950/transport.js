@@ -89885,6 +89885,8 @@ var FrameFeeds = class {
           renderer,
           session
         });
+        for (const { lane } of watched.followers.keys())
+          answerOf2(encoded, lane);
       } catch (error) {
         const refused2 = renderFailed(error);
         encoded = failedFeed(refused2);

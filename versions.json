@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-951",
-      "ref": "refs/pull/951/merge",
-      "sha": "c9742a2e8a93d1d299930124c1de9a2857ca639b",
-      "timestamp": "2026-11-24T15:38:25.376Z",
-      "commits": [
-        {
-          "sha": "c9742a2e8a93d1d299930124c1de9a2857ca639b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:37:17-07:00",
-          "message": "Merge 6f8a1688436f07c1530ea78671fc3d51a971af02 into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
-        },
-        {
-          "sha": "6f8a1688436f07c1530ea78671fc3d51a971af02",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:36:50-07:00",
-          "message": "feat(host): each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer\n\nThe backstop judged the host and its renderer as one sum, so one renderer's\nleak would have ended the daemon and every session's bar. Each process is now\nread at one moment and judged on its own charge. A renderer past the limit has\nits memory report and heap snapshot written under an identity naming it, and\nis ended through its supervisor, which starts it again as one that crashed;\nevery other renderer keeps drawing. The host past the limit ends the daemon as\nbefore.\n\nThe stats reply carries the host's memory and one panel per renderer: where\nits memory is (the host's process, no process and why, or its own process\nagainst the limit), its mailbox, and what it answered of itself or why it gave\nno answer. One down renderer fails only its own panel. The renderer-held\ncounts (render cache, effect cache, menu idle, turns, session state, frames\ndrawn) move from the top level onto the panels, and the restart forecast gives\nway to each reading's near-limit flag.\n\nA renderer the host has begun to end reads as not running, so a reading\nbetween its end and its exit cannot breach it twice.\n\nTicket: candybar-host-renderer-x96a.8xv\n"
-        }
-      ]
-    },
-    {
       "version": "pr-950",
       "ref": "refs/pull/950/merge",
-      "sha": "f4bcf956ee3b5e1b33e807416edbf8a4f1b74c9f",
-      "timestamp": "2026-11-24T15:28:33.503Z",
+      "sha": "7d3aefb08a75f5f2b154ab2921e56e426e22e67f",
+      "timestamp": "2026-11-24T15:42:17.606Z",
       "commits": [
         {
-          "sha": "f4bcf956ee3b5e1b33e807416edbf8a4f1b74c9f",
+          "sha": "7d3aefb08a75f5f2b154ab2921e56e426e22e67f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:27:15Z",
-          "message": "Merge ca65e918c858363bb23057596f898e3cfec3330f into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+          "timestamp": "2026-11-24T15:41:10Z",
+          "message": "Merge fc3b2f7254f5abe973cec02ae2391e3230ff233a into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+        },
+        {
+          "sha": "fc3b2f7254f5abe973cec02ae2391e3230ff233a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T08:40:55-07:00",
+          "message": "fix(frame-feed): a failure building the pane's answer is the frame's, and the action-walk comment says which walks it covers\n"
         },
         {
           "sha": "ca65e918c858363bb23057596f898e3cfec3330f",
@@ -91,6 +76,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T06:46:14-07:00",
           "message": "feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-951",
+      "ref": "refs/pull/951/merge",
+      "sha": "c9742a2e8a93d1d299930124c1de9a2857ca639b",
+      "timestamp": "2026-11-24T15:38:25.376Z",
+      "commits": [
+        {
+          "sha": "c9742a2e8a93d1d299930124c1de9a2857ca639b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T08:37:17-07:00",
+          "message": "Merge 6f8a1688436f07c1530ea78671fc3d51a971af02 into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+        },
+        {
+          "sha": "6f8a1688436f07c1530ea78671fc3d51a971af02",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T08:36:50-07:00",
+          "message": "feat(host): each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer\n\nThe backstop judged the host and its renderer as one sum, so one renderer's\nleak would have ended the daemon and every session's bar. Each process is now\nread at one moment and judged on its own charge. A renderer past the limit has\nits memory report and heap snapshot written under an identity naming it, and\nis ended through its supervisor, which starts it again as one that crashed;\nevery other renderer keeps drawing. The host past the limit ends the daemon as\nbefore.\n\nThe stats reply carries the host's memory and one panel per renderer: where\nits memory is (the host's process, no process and why, or its own process\nagainst the limit), its mailbox, and what it answered of itself or why it gave\nno answer. One down renderer fails only its own panel. The renderer-held\ncounts (render cache, effect cache, menu idle, turns, session state, frames\ndrawn) move from the top level onto the panels, and the restart forecast gives\nway to each reading's near-limit flag.\n\nA renderer the host has begun to end reads as not running, so a reading\nbetween its end and its exit cannot breach it twice.\n\nTicket: candybar-host-renderer-x96a.8xv\n"
         }
       ]
     },
