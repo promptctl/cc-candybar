@@ -338,7 +338,14 @@ jobs:
             file "npm/cc-candybar-${platform}/bin/cc-candybar-url-handler"
           done
 
+      # [LAW:one-source-of-truth] npm holds who may publish: each @promptctl
+      # package names this repo and this workflow file as its trusted
+      # publisher, and the job's OIDC identity (id-token: write above) is the
+      # credential. No token is stored, so none expires. Trusted publishing
+      # needs npm 11.5.1 or newer, and Node 22 ships an older one; without it
+      # npm answers an unauthorized publish with a bare E404.
+      - name: Newer npm for trusted publishing
+        run: npm install --global npm@^11.5.1
+
       - name: Publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/publish.mjs "${{ github.ref_name }}"
