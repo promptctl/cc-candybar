@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f67f4c450a05e758242afad8216ea01f3ed1d0f9",
+      "timestamp": "2026-11-24T13:21:40.298Z",
+      "commits": [
+        {
+          "sha": "f67f4c450a05e758242afad8216ea01f3ed1d0f9",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T13:19:52Z",
+          "message": "chore(release): set `package.json` to 1.237.0\n\n## [1.237.0](https://github.com/promptctl/cc-candybar/compare/v1.236.15...v1.237.0) (2026-11-24)\n\n### Features\n\n* **host:** a cold host starts from the bundle the install recorded ([#948](https://github.com/promptctl/cc-candybar/issues/948)) ([7574f98](https://github.com/promptctl/cc-candybar/commit/7574f98bc0eebd5439fb90408397ed1194d33958))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-949",
       "ref": "refs/pull/949/merge",
       "sha": "5ec51a1089cf082ffc877780dcec40df67646a82",
@@ -27,21 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T05:56:31-07:00",
           "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7574f98bc0eebd5439fb90408397ed1194d33958",
-      "timestamp": "2026-11-24T13:13:27.995Z",
-      "commits": [
-        {
-          "sha": "7574f98bc0eebd5439fb90408397ed1194d33958",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:12:23-07:00",
-          "message": "feat(host): a cold host starts from the bundle the install recorded (#948)\n\n* feat(host): a cold host starts from the bundle the install recorded\n\nEvery bar on the machine is drawn by one host, so a client that found it down must start the installed bundle, not its own. The install records its bundle in the state directory; both clients read that record at spawn time and refuse to start anything, showing why on the bar, when it is missing or unusable. The record is written only when the user's statusline command names the writing bundle, so a worktree's build or deploy never moves the host. The host's binary watch includes the record, so repointing it ends the running host, and a host no longer exits on a client with a newer protocol.\n\n* fix(host): the install records the bundle it staged, and the dead obtainDaemon path is gone\n\nThe install records the bundle it staged when it owns the statusline\ncommand instead of reading the command back; a checkout's deploy compares\nreal paths. A refused kick no longer claims to kick. obtainDaemon had no\nproduction caller and carried a second copy of the record read.\n\n* fix(host): a symlinked entry names the bundle it runs, and the record reads through the shared helpers\n\nThe checkout's recorder resolves the entry's real path before taking the\nbundle beside it. The record reader uses the regular-file reader and the\npresence stat, so an unreadable bundle is not reported as missing. The\ndead state-dir guard, the vacuous mismatch-fixture flag and stale comments\ngo; the stale-lock reclaim test returns against the kick.\n\n* fix(host): a customized statusline that runs the staged entry is recorded; undo a stray test reformat\n\nA wrapper or env command that runs the staged entry is the install, so the\ninstall records it without --force destroying the command. The previous\ncommit's prettier run over test/ rewrapped unrelated files; they return to\ntheir prior text.\n\n* test(host): a cold-start test waits for the host's answer and the node line, not the socket or the file alone"
         }
       ]
     }
