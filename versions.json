@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-949",
-      "ref": "refs/pull/949/merge",
-      "sha": "81bb3e1c8d694e9d3c8220d5ef958717404cbc78",
-      "timestamp": "2026-11-24T12:58:10.891Z",
-      "commits": [
-        {
-          "sha": "81bb3e1c8d694e9d3c8220d5ef958717404cbc78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T05:57:12-07:00",
-          "message": "Merge 7dc5fb68cfc5cad09368761ebf9d4790f96afaf2 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
-        },
-        {
-          "sha": "7dc5fb68cfc5cad09368761ebf9d4790f96afaf2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T05:56:31-07:00",
-          "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-948",
       "ref": "refs/pull/948/merge",
-      "sha": "c3b38729bacfc2b05407088bb073b15a5bafa4f4",
-      "timestamp": "2026-11-24T12:51:45.234Z",
+      "sha": "a043066ed04fb09df4f00b8641a3090535faee63",
+      "timestamp": "2026-11-24T13:01:34.749Z",
       "commits": [
         {
-          "sha": "c3b38729bacfc2b05407088bb073b15a5bafa4f4",
+          "sha": "a043066ed04fb09df4f00b8641a3090535faee63",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T12:50:41Z",
-          "message": "Merge 24a759ac44ac67b289d8d854be6459dfc9d3e7dd into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+          "timestamp": "2026-11-24T13:00:28Z",
+          "message": "Merge 6a3dcd816c535b5781af659e4daf6d3ca6d40f87 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+        },
+        {
+          "sha": "6a3dcd816c535b5781af659e4daf6d3ca6d40f87",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:00:09-07:00",
+          "message": "fix(host): a customized statusline that runs the staged entry is recorded; undo a stray test reformat\n\nA wrapper or env command that runs the staged entry is the install, so the\ninstall records it without --force destroying the command. The previous\ncommit's prettier run over test/ rewrapped unrelated files; they return to\ntheir prior text.\n"
         },
         {
           "sha": "24a759ac44ac67b289d8d854be6459dfc9d3e7dd",
@@ -56,6 +41,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T05:23:11-07:00",
           "message": "feat(host): a cold host starts from the bundle the install recorded\n\nEvery bar on the machine is drawn by one host, so a client that found it down must start the installed bundle, not its own. The install records its bundle in the state directory; both clients read that record at spawn time and refuse to start anything, showing why on the bar, when it is missing or unusable. The record is written only when the user's statusline command names the writing bundle, so a worktree's build or deploy never moves the host. The host's binary watch includes the record, so repointing it ends the running host, and a host no longer exits on a client with a newer protocol.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-949",
+      "ref": "refs/pull/949/merge",
+      "sha": "81bb3e1c8d694e9d3c8220d5ef958717404cbc78",
+      "timestamp": "2026-11-24T12:58:10.891Z",
+      "commits": [
+        {
+          "sha": "81bb3e1c8d694e9d3c8220d5ef958717404cbc78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T05:57:12-07:00",
+          "message": "Merge 7dc5fb68cfc5cad09368761ebf9d4790f96afaf2 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+        },
+        {
+          "sha": "7dc5fb68cfc5cad09368761ebf9d4790f96afaf2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T05:56:31-07:00",
+          "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n"
         }
       ]
     },
