@@ -598,8 +598,8 @@ export class FrameFeeds<Req> {
     return this.requests.get(sessionId);
   }
 
-  // The frames the renderer drew are its own count (`RendererStats`).
-  getStats(): Omit<FeedStats, "drawn"> {
+  // The frames each renderer drew are its own count, on its panel.
+  getStats(): FeedStats {
     let subscribers = 0;
     for (const { followers } of this.watched.values())
       subscribers += followers.size;

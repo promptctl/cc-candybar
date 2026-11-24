@@ -17,7 +17,11 @@ import { linksOf } from "../../../src/click/read.js";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
 import { tryClickViaDaemon } from "../../../src/daemon/client.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
-import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot.js";
+import {
+  rendererStatsOf,
+  type StatsSnapshot,
+} from "../../../src/daemon/foundations/stats-snapshot.js";
+import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name.js";
 import { composeBar } from "../../../src/render/frame.js";
 import type { RepoShape } from "../fixtures.js";
 import { sleep } from "../measure.js";
@@ -68,10 +72,12 @@ function warmVouched(
     );
   }
   const moved: string[] = [];
+  const cacheBefore = rendererStatsOf(before, MAIN_RENDERER).renderCache;
+  const cacheAfter = rendererStatsOf(after, MAIN_RENDERER).renderCache;
   for (const key of ["size", "views", "compiles"] as const) {
-    if (after.renderCache[key] !== before.renderCache[key]) {
+    if (cacheAfter[key] !== cacheBefore[key]) {
       moved.push(
-        `renderCache.${key} ${before.renderCache[key]} -> ${after.renderCache[key]}`,
+        `renderCache.${key} ${cacheBefore[key]} -> ${cacheAfter[key]}`,
       );
     }
   }

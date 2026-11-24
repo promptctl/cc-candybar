@@ -17,6 +17,7 @@ import type { RendererName } from "./foundations/renderer-name.js";
 import type { RequestId } from "../renderer-interface/interface.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { RendererHost } from "./renderer-host.js";
+import type { RendererProcessState } from "./renderer-process.js";
 import type { RecordingCommand } from "./foundations/recording-command.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
@@ -58,6 +59,12 @@ export interface DaemonParts {
   readonly limits: LimitsHandle;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).
   readonly renderer: RendererHost;
+  // Every renderer the host holds, each with where its memory is now: what
+  // the stats reply draws one panel of each from.
+  readonly renderers: () => ReadonlyArray<{
+    readonly renderer: RendererHost;
+    readonly process: RendererProcessState;
+  }>;
   readonly rendererForClick: (name: RendererName) => RendererHost | undefined;
   readonly rendererFor?: (
     request: CheckedRenderRequest,

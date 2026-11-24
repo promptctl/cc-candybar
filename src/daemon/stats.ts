@@ -9,7 +9,6 @@ import {
   type Histogram,
 } from "./foundations/durations.js";
 import {
-  RENDERER_STATS_REFERENCE,
   type Durations,
   type RunStats,
   type FeedStats,
@@ -20,7 +19,6 @@ import {
 } from "./foundations/stats-snapshot.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { RenderSighting } from "./foundations/sightings";
-import type { ServingDaemon } from "./foundations/memory-limit";
 import type { LaunchCategory } from "../proc/launcher";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
@@ -223,7 +221,6 @@ export class RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot(): StatsSnapshot {
-    const { framesDrawn, ...rendererStats } = RENDERER_STATS_REFERENCE;
     return new RuntimeStats({
       now: () => 0,
       monotonic: () => 0 as Monotonic,
@@ -243,9 +240,7 @@ export class RuntimeStats {
           daemon: 0,
           configDir: 0,
           repo: 0,
-          directory: 0,
           session: 0,
-          view: 0,
           pane: 0,
         },
         held: {
@@ -275,14 +270,11 @@ export class RuntimeStats {
         watches: 0,
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      ...rendererStats,
       collector: { sessions: 0, retiring: 0 },
-      mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       frameFeeds: {
         feeds: 0,
         subscribers: 0,
-        drawn: framesDrawn,
         pushed: 0,
         refused: 0,
         lookups: 0,
@@ -294,11 +286,8 @@ export class RuntimeStats {
       clients: [],
       bundle: "/",
       sourceDigest: null,
-      daemon: {
-        pid: 0,
-        memory: { kind: "unmeasured" },
-        limit: 0,
-      },
+      host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },
+      renderers: [],
     });
   }
 
@@ -309,23 +298,17 @@ export class RuntimeStats {
     fileEvents: FileEventsStats;
     sourceRuns: SourceRunsStats;
     transcriptReads: TranscriptReads;
-    renderCache: StatsSnapshot["renderCache"];
     collector: StatsSnapshot["collector"];
-    effectCache: StatsSnapshot["effectCache"];
-    menuIdle: StatsSnapshot["menuIdle"];
-    rendererTurns: StatsSnapshot["rendererTurns"];
-    mailbox: StatsSnapshot["mailbox"];
     runs: RunStats;
-    sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
     watchersActive: number;
     dirWatchesActive: number;
     polledPaths: number;
-    nextRestartReason?: string | null;
     clients: readonly RenderSighting[];
     bundle: string;
     sourceDigest: string | null;
-    daemon: ServingDaemon;
+    host: StatsSnapshot["host"];
+    renderers: StatsSnapshot["renderers"];
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -358,14 +341,8 @@ export class RuntimeStats {
       fileEvents: extras.fileEvents,
       sourceRuns: extras.sourceRuns,
       transcriptReads: extras.transcriptReads,
-      renderCache: extras.renderCache,
       collector: extras.collector,
-      effectCache: extras.effectCache,
-      menuIdle: extras.menuIdle,
-      rendererTurns: extras.rendererTurns,
-      mailbox: extras.mailbox,
       runs: extras.runs,
-      sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
       watchers: {
         active: extras.watchersActive,
@@ -381,10 +358,10 @@ export class RuntimeStats {
         polled: extras.polledPaths,
       },
       subprocesses: this.snapshotSubprocesses(),
-      nextRestartReason: extras.nextRestartReason ?? null,
       clients: extras.clients,
       bundle: extras.bundle,
-      daemon: extras.daemon,
+      host: extras.host,
+      renderers: extras.renderers,
     };
   }
 }

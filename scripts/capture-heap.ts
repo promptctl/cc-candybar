@@ -42,6 +42,8 @@ import { parseArgs } from "node:util";
 
 import { startWorld, type Session } from "./bench/world.js";
 import { sleep } from "./bench/measure.js";
+import { rendererStatsOf } from "../src/daemon/foundations/stats-snapshot.js";
+import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name.js";
 
 const { values } = parseArgs({
   options: {
@@ -191,7 +193,7 @@ try {
     },
     // What the daemon says it holds: sources started, entries kept.
     held: after.sources.held,
-    renderCache: after.renderCache,
+    renderCache: rendererStatsOf(after, MAIN_RENDERER).renderCache,
     gitCache: after.gitCache,
     usageCache: after.usageCache,
     snapshot,

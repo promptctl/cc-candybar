@@ -15,6 +15,8 @@ import {
   backoffMs,
   processRenderer,
   rendererNodeArgs,
+  type RendererLink,
+  type RendererProcess,
 } from "../../src/daemon/renderer-process";
 import type {
   Channel,
@@ -165,6 +167,27 @@ function rig(start: () => Promise<void> = async () => {}) {
 const settled = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
+
+// A live renderer its boot's ping has read, as the backstop is handed it.
+async function readRenderer(
+  link: RendererLink,
+  children: readonly Child[],
+): Promise<RendererProcess> {
+  link.arm();
+  const child = children[0]!;
+  child.say(startedLine(9001));
+  await settled();
+  const ping = child.written.find(
+    (l): l is Extract<HostLine, { kind: "ping" }> => l.kind === "ping",
+  );
+  if (ping === undefined) throw new Error("the renderer was sent no ping");
+  child.say({ kind: "ping", n: ping.n, usage: { rss: 5, heapTotal: 3 } });
+  await settled();
+  const state = link.process();
+  if (state.kind !== "running")
+    throw new Error(`the renderer is ${state.kind}, not read`);
+  return state.process;
+}
 
 const pin: EventInput = {
   kind: "event",
@@ -430,14 +453,47 @@ describe("a renderer process's start", () => {
     await refused;
     expect(logs.join("\n")).not.toContain("foreign diagnostic");
   });
-  test("a booting renderer counts as its process, and writes no heap until it is live", async () => {
+  test("a booting renderer is its process, unread until a ping answers", () => {
     const { link } = rig();
     link.arm();
-    const booting = link.process();
-    expect(booting).toMatchObject({ pid: 9001, usage: null });
-    await expect(booting!.heapSnapshot("/s/heap")).rejects.toThrow(
+    expect(link.process()).toEqual({ kind: "unread", pid: 9001 });
+  });
+
+  test("a renderer ended for its memory says why, and starts again after its backoff", async () => {
+    const { link, children, clock, ends } = rig();
+    const read = await readRenderer(link, children);
+    read.end("passed its memory limit: phys_footprint 900 MB > limit 800 MB");
+    // Ending, it is judged no more, though its process has yet to exit.
+    expect(link.process()).toEqual({
+      kind: "not-running",
+      why: "it is ending: passed its memory limit: phys_footprint 900 MB > limit 800 MB",
+    });
+    await settled();
+    expect(children[0]!.opts.signal?.aborted).toBe(true);
+    expect(ends.map((e) => e.text)).toEqual([
+      expect.stringContaining(
+        "passed its memory limit: phys_footprint 900 MB > limit 800 MB",
+      ),
+    ]);
+    clock.advance(BACKOFF_FIRST_MS);
+    await settled();
+    expect(children).toHaveLength(2);
+  });
+
+  test("a renderer read before its close writes no heap and is not ended by it", async () => {
+    const { link, children, logs } = rig();
+    const read = await readRenderer(link, children);
+    link.beginClose();
+    await expect(read.heapSnapshot("/s/heap")).rejects.toThrow(
       "renderer main[1] is not live, so its heap was not written",
     );
+    read.end("passed its memory limit");
+    expect(children[0]!.opts.signal?.aborted).toBe(false);
+    expect(logs).toContainEqual(
+      "renderer main[1] is closing, so it was not ended: passed its memory limit",
+    );
+    children[0]!.exit(EXITED);
+    await link.close();
   });
 
   test("a boot ended for hanging counts as young, so the next waits its backoff", async () => {
@@ -556,8 +612,8 @@ describe("a renderer process's end", () => {
     });
     await settled();
     expect(link.process()).toMatchObject({
-      pid: 9001,
-      usage: { rss: 5, heapTotal: 3 },
+      kind: "running",
+      process: { pid: 9001, usage: { rss: 5, heapTotal: 3 } },
     });
     clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
     await settled();
@@ -582,7 +638,7 @@ test("a failed restoration ends that generation and starts its successor after b
   children[1]!.say(startedLine(9002));
   await settled();
   expect(attempt).toBe(2);
-  expect(link.process()?.pid).toBe(9002);
+  expect(link.process()).toEqual({ kind: "unread", pid: 9002 });
 });
 
 describe("ids a renderer mints", () => {

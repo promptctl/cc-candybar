@@ -2,14 +2,17 @@
 // breach's post-mortem, what a reading charges and how near the limit it is.
 // Shared, so everything the daemon says of its memory says it in one set of words.
 
+import type { RendererName } from "./renderer-name";
+
 export const BYTES_PER_MB = 1024 * 1024;
 
 // [LAW:one-source-of-truth] Bytes in the unit the budget is set in, as every
 // sentence about the daemon's memory says them.
 export const mb = (bytes: number): number => Math.round(bytes / BYTES_PER_MB);
 
-// [LAW:types-are-the-program] One breach's post-mortem: its `<stamp>-<pid>`
-// identity and each artifact it left, by kind. Keyed rather than listed
+// [LAW:types-are-the-program] One breach's post-mortem: its identity (the
+// stamp, the renderer's name when a renderer breached, and the pid) and each
+// artifact it left, by kind. Keyed rather than listed
 // because the two are written in separate attempts and either may be missing,
 // so a reader asks for the memory report by name instead of searching paths.
 // [LAW:one-source-of-truth] THE order of post-mortem identities, by code
@@ -21,22 +24,30 @@ export function laterIdentity(a: string, b: string): boolean {
 
 export interface PostMortem {
   readonly identity: string;
+  // The process whose breach it records.
+  readonly process: BreachedProcess;
   readonly artifacts: Readonly<Partial<Record<BreachArtifact, string>>>;
 }
 
-// The daemon as its stats reply reports it: which process it is and how much
-// of its budget it holds. Its post-mortems are files, which
-// `listPostMortems` (src/daemon/limits.ts) lists and only tests call today, so
-// they are no part of what only the running daemon can say of itself.
-export interface ServingDaemon {
+// [LAW:types-are-the-program] Every process is judged against the limit on
+// its own, so a breach is one process's: the host's, which ends the daemon,
+// or a renderer's, which ends that renderer alone.
+export type BreachedProcess =
+  | { readonly kind: "host" }
+  | { readonly kind: "renderer"; readonly name: RendererName };
+
+// One process as the stats reply reports it: which it is, and how much of the
+// limit it holds. Its post-mortems are files, which `listPostMortems`
+// (src/daemon/limits.ts) lists and only tests call today, so they are no part
+// of what only the running daemon can say of itself.
+export interface ProcessMemory {
   readonly pid: number;
   readonly memory: MemoryReading;
   readonly limit: number;
 }
 
-// [LAW:single-enforcer] THE judgment of "near the limit": the restart
-// forecast in daemon-stats asks it, and the render cache's share is sized
-// under it.
+// [LAW:single-enforcer] THE judgment of "near the limit": every measured
+// reading carries it, and the render cache's share is sized under it.
 export const NEAR_LIMIT = 0.75;
 
 export function approachingLimit(bytes: number, limit: number): boolean {
@@ -44,7 +55,7 @@ export function approachingLimit(bytes: number, limit: number): boolean {
 }
 
 // [LAW:one-source-of-truth] The one spelling of a charge in a sentence: the
-// breach line and the restart forecast say it this way.
+// breach line, the end it gives a renderer and daemon-stats say it this way.
 export function chargeWords(charge: ReadCharge): string {
   return charge.kind === "charged"
     ? `${charge.measure} ${mb(charge.bytes)} MB`
@@ -85,46 +96,36 @@ export type MemoryCharge =
 
 // [LAW:one-source-of-truth] The artifacts a breach leaves, spelled ONCE. The
 // writer names them from this table, the real lister filters by it, and rotation
-// strips it to recover the `<stamp>-<pid>` identity the pair shares. Three
+// strips it to recover the identity a breach's files share. Three
 // independent spellings of one pair — which is what adding the memory report
 // naively produced — is exactly how a rotation quietly stops matching what the
 // writer emits, leaving a directory that grows forever or a heap snapshot whose
 // attribution was evicted from under it.
-// The renderer's heap is its own process's, so its snapshot is its own file.
+// Which process breached is the identity's to say, so its heap is a heap
+// snapshot like any other's.
 export const BREACH_ARTIFACTS = {
   memoryReport: { prefix: "memory-", suffix: ".txt" },
-  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
   heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" },
 } as const;
 
 export type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
 
-// [LAW:types-are-the-program] The backstop's latest reading, or none yet:
-// `unmeasured` until the first probe answers — the instant before a daemon's
-// first check, and for good in the browser page, which never arms its limits.
-// Never a construction-time number passed off as a reading.
-// [LAW:one-source-of-truth] The limit is the daemon's whole: the charge,
-// `rss` and `heapTotal` are over every process it runs as, and `processes`
-// says each one's share, the host's first. A renderer in a process of its
-// own is read as its latest ping answered, which goes out as it starts. Its
-// pid is in the platform's charge from its spawn; where the charge is RSS
-// (Linux, or a stand-in), it counts from its first ping's answer.
+// [LAW:types-are-the-program] The backstop's latest reading of one process,
+// or none yet: `unmeasured` until a probe answers for it — the instant before
+// a daemon's first check, a renderer started since the last one, and for good
+// in the browser page, which never arms its limits. Never a construction-time
+// number passed off as a reading. A renderer's sizes are its latest ping's,
+// and its pid is in the platform's charge once that ping has answered.
+// `nearLimit` is said only of a charge, so a process nobody has read is never
+// reported as far from its limit.
 export type MemoryReading =
   | { readonly kind: "unmeasured" }
   | {
       readonly kind: "measured";
       readonly charge: ReadCharge;
-      readonly rss: number;
-      readonly heapTotal: number;
-      readonly processes: readonly ProcessMemory[];
+      readonly sizes: MemorySizes;
+      readonly nearLimit: boolean;
     };
-
-export interface ProcessMemory {
-  readonly role: "host" | "renderer";
-  readonly pid: number;
-  // Null for a renderer no ping has answered yet.
-  readonly sizes: MemorySizes | null;
-}
 
 // What `process.memoryUsage()` reports, beside every charge: RSS (the charge
 // itself on Linux, the stand-in on macOS) and heapTotal, the part V8 admits to

@@ -121,15 +121,18 @@ const REAL = os.platform() === "darwin" || os.platform() === "linux";
 
 // brandon-unfiled-3248.2j3m: the charge the memory backstop judges.
 describe("the memory charge", () => {
-  const FOOTPRINT = [
-    "======================================================================",
-    "node [91378]: 64-bit    Footprint: 224904552 B (16384 bytes per page)",
-    "======================================================================",
-    "",
-    "Auxiliary data:",
-    "    phys_footprint: 224953704 B",
-    "    phys_footprint_peak: 432772224 B",
-  ].join("\n");
+  // footprint's block for one process, as it prints it.
+  const footprintOf = (pid: number, bytes: number): string =>
+    [
+      "======================================================================",
+      `node [${pid}]: 64-bit    Footprint: ${bytes - 48152} B (16384 bytes per page)`,
+      "======================================================================",
+      "",
+      "Auxiliary data:",
+      `    phys_footprint: ${bytes} B`,
+      "    phys_footprint_peak: 432772224 B",
+    ].join("\n");
+  const FOOTPRINT = footprintOf(91378, 224953704);
   const ran = (stdout: string): LaunchResult => ({
     ok: true,
     stdout,
@@ -137,52 +140,68 @@ describe("the memory charge", () => {
     exitCode: 0,
   });
 
-  test("footprint's byte output is read off its phys_footprint lines, never the peak", async () => {
-    expect(physFootprintsOf(FOOTPRINT)).toEqual([224953704]);
-    expect(physFootprintsOf("phys_footprint_peak: 9 B")).toEqual([]);
-    expect(physFootprintsOf("phys_footprint: 216 MB")).toEqual([]);
+  test("footprint's byte output is read off each process's phys_footprint line, never the peak", async () => {
+    expect(physFootprintsOf(FOOTPRINT)).toEqual(new Map([[91378, 224953704]]));
+    expect(
+      physFootprintsOf(
+        `${footprintOf(77, 1000)}\n${footprintOf(78, 2000)}\n${"=".repeat(70)}\nSummary Footprint: 3000 B`,
+      ),
+    ).toEqual(
+      new Map([
+        [77, 1000],
+        [78, 2000],
+      ]),
+    );
+    expect(physFootprintsOf("phys_footprint_peak: 9 B")).toEqual(new Map());
+    expect(physFootprintsOf("node [1]:\nphys_footprint: 216 MB")).toEqual(
+      new Map(),
+    );
   });
 
-  test("footprint answering is the charge; asked for exact bytes", async () => {
+  test("each process is charged its own footprint, all from one call", async () => {
     const asked: string[][] = [];
     const probe = footprintCharge(async (args) => {
       asked.push(args);
-      return ran(FOOTPRINT);
+      // footprint's order is its own, not the order asked.
+      return ran(`${footprintOf(78, 2000)}\n${footprintOf(77, 1000)}`);
     });
-    expect(await probe([77], 1)).toEqual({
-      kind: "charged",
-      measure: "phys_footprint",
-      bytes: 224953704,
-    });
-    expect(asked).toEqual([["-p", "77", "--noCategories", "-f", "bytes"]]);
-  });
-
-  test("the host and its renderer are charged together, from one call", async () => {
-    const asked: string[][] = [];
-    const probe = footprintCharge(async (args) => {
-      asked.push(args);
-      return ran(`${FOOTPRINT}\n${FOOTPRINT.replace("224953704", "1000")}`);
-    });
-    expect(await probe([77, 78], 1)).toEqual({
-      kind: "charged",
-      measure: "phys_footprint",
-      bytes: 224953704 + 1000,
-    });
+    const host = { pid: 77, sizes: { rss: 1 } };
+    const renderer = { pid: 78, sizes: { rss: 1 } };
+    expect(await probe([host, renderer])).toEqual([
+      {
+        process: host,
+        charge: { kind: "charged", measure: "phys_footprint", bytes: 1000 },
+      },
+      {
+        process: renderer,
+        charge: { kind: "charged", measure: "phys_footprint", bytes: 2000 },
+      },
+    ]);
     expect(asked).toEqual([
       ["-p", "77", "-p", "78", "--noCategories", "-f", "bytes"],
     ]);
   });
 
-  test("a footprint missing a process charges none of them", async () => {
-    const probe = footprintCharge(async () => ran(FOOTPRINT));
-    expect(await probe([77, 78], 5)).toEqual({
-      kind: "stand-in",
-      bytes: 5,
-      unread: "footprint printed 1 phys_footprint lines for 2 processes",
-    });
+  test("a process footprint printed nothing for stands in on its own RSS, and no other does", async () => {
+    const probe = footprintCharge(async () => ran(footprintOf(77, 1000)));
+    expect(
+      (
+        await probe([
+          { pid: 77, sizes: { rss: 4 } },
+          { pid: 78, sizes: { rss: 5 } },
+        ])
+      ).map(({ charge }) => charge),
+    ).toEqual([
+      { kind: "charged", measure: "phys_footprint", bytes: 1000 },
+      {
+        kind: "stand-in",
+        bytes: 5,
+        unread: "footprint printed no phys_footprint for pid 78",
+      },
+    ]);
   });
 
-  test("footprint failing or unreadable leaves RSS standing in, saying why", async () => {
+  test("footprint failing leaves every process's RSS standing in, saying why", async () => {
     const failed = footprintCharge(async () => ({
       ok: false,
       reason: "timeout",
@@ -191,39 +210,66 @@ describe("the memory charge", () => {
       exitCode: null,
       signal: "SIGTERM",
     }));
-    expect(await failed([77], 5)).toEqual({
-      kind: "stand-in",
-      bytes: 5,
-      unread: "footprint timeout: footprint: hung",
-    });
-    const garbled = footprintCharge(async () => ran("nothing here"));
-    expect(await garbled([77], 5)).toEqual({
-      kind: "stand-in",
-      bytes: 5,
-      unread: "footprint printed 0 phys_footprint lines for 1 processes",
-    });
+    expect(
+      (
+        await failed([
+          { pid: 77, sizes: { rss: 5 } },
+          { pid: 78, sizes: { rss: 6 } },
+        ])
+      ).map(({ charge }) => charge),
+    ).toEqual([
+      {
+        kind: "stand-in",
+        bytes: 5,
+        unread: "footprint timeout: footprint: hung",
+      },
+      {
+        kind: "stand-in",
+        bytes: 6,
+        unread: "footprint timeout: footprint: hung",
+      },
+    ]);
   });
 
-  test("off macOS, RSS is the charge", async () => {
-    expect(await chargeProbe(processLauncher, "linux")([1], 42)).toEqual({
-      kind: "charged",
-      measure: "rss",
-      bytes: 42,
-    });
+  test("off macOS, each process's RSS is its charge", async () => {
+    expect(
+      (
+        await chargeProbe(
+          processLauncher,
+          "linux",
+        )([
+          { pid: 1, sizes: { rss: 42 } },
+          { pid: 2, sizes: { rss: 43 } },
+        ])
+      ).map(({ charge }) => charge),
+    ).toEqual([
+      { kind: "charged", measure: "rss", bytes: 42 },
+      { kind: "charged", measure: "rss", bytes: 43 },
+    ]);
   });
 
   (os.platform() === "darwin" ? test : test.skip)(
-    "on this Mac, footprint answers for this process",
+    "on this Mac, footprint answers for this process and its parent, each its own",
     async () => {
-      const charge = await chargeProbe(processLauncher, "darwin")(
-        [process.pid],
-        process.memoryUsage().rss,
-      );
-      expect(charge).toMatchObject({
-        kind: "charged",
-        measure: "phys_footprint",
-      });
-      expect(charge.bytes).toBeGreaterThan(0);
+      const charged = await chargeProbe(
+        processLauncher,
+        "darwin",
+      )([
+        { pid: process.pid, sizes: { rss: process.memoryUsage().rss } },
+        { pid: process.ppid, sizes: { rss: 1 } },
+      ]);
+      expect(charged.map(({ process: { pid } }) => pid)).toEqual([
+        process.pid,
+        process.ppid,
+      ]);
+      for (const { charge } of charged) {
+        expect(charge).toMatchObject({
+          kind: "charged",
+          measure: "phys_footprint",
+        });
+        expect(charge.bytes).toBeGreaterThan(0);
+      }
+      expect(charged[0]!.charge.bytes).not.toBe(charged[1]!.charge.bytes);
     },
   );
 });

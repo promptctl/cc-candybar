@@ -398,8 +398,10 @@ test("the supervisor names the unanswered input when its built worker is killed"
     link.arm();
     await ready.promise;
     const child = link.process();
-    if (child === null) throw new Error("renderer lost after its START");
-    process.kill(child.pid, "SIGSTOP");
+    if (child.kind !== "unread" && child.kind !== "running")
+      throw new Error(`renderer ${child.kind} after its START`);
+    const pid = child.kind === "unread" ? child.pid : child.process.pid;
+    process.kill(pid, "SIGSTOP");
     const unanswered = expect(
       link.renderer.answer({
         kind: "event",
@@ -408,7 +410,7 @@ test("the supervisor names the unanswered input when its built worker is killed"
       }),
     ).rejects.toThrow(RendererDown);
     const n = await sent.promise;
-    process.kill(child.pid, "SIGKILL");
+    process.kill(pid, "SIGKILL");
     await unanswered;
     const interrupted = logged.filter((line) =>
       line.startsWith("renderer input interrupted "),

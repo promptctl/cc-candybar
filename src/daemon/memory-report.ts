@@ -20,7 +20,7 @@ import {
   type LaunchResult,
   type Launcher,
 } from "../proc/launcher.js";
-import type { MemoryCharge } from "./foundations/memory-limit";
+import type { MemoryCharge, MemorySizes } from "./foundations/memory-limit";
 
 // [LAW:parse-dont-validate] A probe either produced text or could not, and the
 // reason travels with the failure — it is what the post-mortem reads when no
@@ -65,15 +65,6 @@ export async function memoryReport(
   ].join("\n");
 }
 
-// Each process's report, in the order its probes are given: the host's, then
-// its renderer's. [LAW:no-ambient-temporal-coupling] Taken together, so both
-// describe one moment of a breach that is still growing.
-export async function memoryReports(
-  each: ReadonlyArray<readonly MemoryProbe[]>,
-): Promise<string> {
-  return (await Promise.all(each.map(memoryReport))).join("\n\n");
-}
-
 // [LAW:dataflow-not-control-flow] The platform difference is a LIST in
 // preference order, not a branch inside the reader: `memoryReport` folds whatever
 // it is handed, so a better probe — or a platform this does not know yet — is a
@@ -111,13 +102,25 @@ export function platformProbes(
   return [];
 }
 
-// Reads the charge of the processes together, given their RSS read at the
-// same moment (the charge itself where the platform charges RSS, and the
-// stand-in where its probe fails).
-export type ChargeProbe = (
-  pids: readonly number[],
-  rss: number,
-) => Promise<MemoryCharge>;
+// A process as a reading finds it: its pid, and its RSS read at that moment
+// (the charge itself where the platform charges RSS, and the stand-in where
+// its probe fails).
+export interface ReadProcess {
+  readonly pid: number;
+  readonly sizes: Pick<MemorySizes, "rss">;
+}
+
+// Reads each process's charge, handing each process back beside its own, in
+// the order given.
+// [LAW:no-ambient-temporal-coupling] All of them at one moment, by one read.
+export type ChargeProbe = <P extends ReadProcess>(
+  processes: readonly P[],
+) => Promise<ReadonlyArray<Charged<P>>>;
+
+export interface Charged<P> {
+  readonly process: P;
+  readonly charge: MemoryCharge;
+}
 
 // [LAW:dataflow-not-control-flow] The platform is the discriminator, chosen
 // once: the backstop asks the probe it was handed, never which platform runs.
@@ -134,50 +137,59 @@ export function chargeProbe(
           category: "limits.charge",
         }),
       )
-    : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+    : async (processes) =>
+        processes.map((process) => ({
+          process,
+          charge: { kind: "charged", measure: "rss", bytes: process.sizes.rss },
+        }));
 }
 
 // `footprint --noCategories -f bytes` prints each process's auxiliary data as
-// exact byte counts; the charge is the sum of their `phys_footprint:` lines,
-// one call for every process, so the processes are read at one moment.
+// exact byte counts under a `name [pid]:` header, in one call for every
+// process.
 export function footprintCharge(
   run: (args: string[]) => Promise<LaunchResult>,
 ): ChargeProbe {
-  return async (pids, rss) => {
+  return async (processes) => {
     const result = await run([
-      ...pids.flatMap((pid) => ["-p", String(pid)]),
+      ...processes.flatMap(({ pid }) => ["-p", String(pid)]),
       "--noCategories",
       "-f",
       "bytes",
     ]);
-    if (!result.ok) {
-      return {
-        kind: "stand-in",
-        bytes: rss,
-        unread: `footprint ${failureText(result)}`,
-      };
-    }
-    const each = physFootprintsOf(result.stdout);
-    // [LAW:no-silent-failure] A process footprint left out (one that ended
-    // between the read and the call) is no charge of the whole.
-    return each.length !== pids.length
-      ? {
-          kind: "stand-in",
-          bytes: rss,
-          unread: `footprint printed ${each.length} phys_footprint lines for ${pids.length} processes`,
-        }
-      : {
-          kind: "charged",
-          measure: "phys_footprint",
-          bytes: each.reduce((total, bytes) => total + bytes, 0),
-        };
+    const charged = result.ok ? physFootprintsOf(result.stdout) : new Map();
+    // [LAW:no-silent-failure] A process the call printed no footprint for
+    // (one that ended between the read and the call), or every process when
+    // the call failed, stands in on its own RSS, saying why.
+    return processes.map((process) => {
+      const bytes = charged.get(process.pid);
+      const charge: MemoryCharge =
+        bytes !== undefined
+          ? { kind: "charged", measure: "phys_footprint", bytes }
+          : {
+              kind: "stand-in",
+              bytes: process.sizes.rss,
+              unread: result.ok
+                ? `footprint printed no phys_footprint for pid ${process.pid}`
+                : `footprint ${failureText(result)}`,
+            };
+      return { process, charge };
+    });
   };
 }
 
-export function physFootprintsOf(text: string): number[] {
-  return [...text.matchAll(/^\s*phys_footprint:\s+(\d+) B\s*$/gm)].map((m) =>
-    Number(m[1]),
-  );
+// Each process's `phys_footprint:`, by the pid of the header above it
+// (`phys_footprint_peak:` is another line).
+export function physFootprintsOf(text: string): ReadonlyMap<number, number> {
+  const each = new Map<number, number>();
+  let pid: number | null = null;
+  for (const line of text.split("\n")) {
+    const header = /^\S.*\[(\d+)\]:/.exec(line);
+    if (header !== null) pid = Number(header[1]);
+    const footprint = /^\s*phys_footprint:\s+(\d+) B\s*$/.exec(line);
+    if (footprint !== null && pid !== null) each.set(pid, Number(footprint[1]));
+  }
+  return each;
 }
 
 function commandProbe(

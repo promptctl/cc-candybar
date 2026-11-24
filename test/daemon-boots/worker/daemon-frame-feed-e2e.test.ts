@@ -38,7 +38,10 @@ import {
   PROTOCOL_VERSION,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
-import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot";
+import {
+  rendererStatsOf,
+  type StatsSnapshot,
+} from "../../../src/daemon/foundations/stats-snapshot";
 import {
   click,
   frameRequest,
@@ -78,6 +81,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
 
 jest.setTimeout(30_000);
 
@@ -198,8 +202,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     return frames;
   }
 
-  const feedStats = async (): Promise<StatsSnapshot["frameFeeds"]> =>
-    (await statsOf(daemon.daemon)).frameFeeds;
+  // The host's feed counts, beside the frames the one renderer drew.
+  const feedStats = async (): Promise<
+    StatsSnapshot["frameFeeds"] & { readonly drawn: number }
+  > => {
+    const stats = await statsOf(daemon.daemon);
+    return {
+      ...stats.frameFeeds,
+      drawn: rendererStatsOf(stats, MAIN_RENDERER).framesDrawn,
+    };
+  };
 
   const decoded = (response: Response) =>
     response.ok && "output" in response ? decodeAnsi(response.output) : null;
@@ -1155,7 +1167,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a frame records nothing: no session-state write", async () => {
     const sid = "feed-frame-records-nothing";
     const revision = async (): Promise<number> =>
-      (await statsOf(daemon.daemon)).sessionState.revision;
+      rendererStatsOf(await statsOf(daemon.daemon), MAIN_RENDERER).sessionState
+        .revision;
     await render(sockPath, sid, projectDir, {}, args("warned"));
     const before = await revision();
     const drawnBefore = (await feedStats()).drawn;
@@ -1327,9 +1340,11 @@ test("a running pane recovers from a failed view on the next config edit", async
       "failure on the same pane stream",
     );
     const running = daemon.daemon;
-    const failedAt = (await statsOf(running)).frameFeeds.drawn;
+    const drawnOf = async (): Promise<number> =>
+      rendererStatsOf(await statsOf(running), MAIN_RENDERER).framesDrawn;
+    const failedAt = await drawnOf();
     await until(
-      async () => (await statsOf(running)).frameFeeds.drawn > failedAt,
+      async () => (await drawnOf()) > failedAt,
       "another frame tick during the failure",
     );
     expect(attempts).toEqual(["paneBefore", "paneBroken"]);

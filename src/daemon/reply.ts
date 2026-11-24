@@ -33,7 +33,14 @@ import { parseDelivered } from "../click/gesture.js";
 import type { PaneOwner } from "./frame-feed.js";
 import type { Asked } from "../utils/outcome.js";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
-import { type SourceSnapshots } from "./foundations/stats-snapshot";
+import type {
+  MailboxStats,
+  RendererMemoryPanel,
+  RendererPanel,
+  SourceSnapshots,
+} from "./foundations/stats-snapshot";
+import type { RendererProcessState } from "./renderer-process.js";
+import type { Asked } from "../utils/outcome.js";
 import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import type { RendererHost } from "./renderer-host.js";
@@ -437,35 +444,34 @@ export async function replyTo(
   if (req.kind === "stats") {
     // [LAW:single-enforcer] Stats requests do NOT bump request counters —
     // observability shouldn't pollute the metric being observed.
-    // [LAW:nothing-unseen] The mailbox as the request found it, before its
+    // [LAW:nothing-unseen] Each mailbox as the request found it, before its
     // own input joins it: the input holding it and everything ahead.
-    const mailbox = parts.renderer.stats();
-    const {
-      stats: { framesDrawn, ...drawn },
-    } = await renderer.command({ kind: "stats" });
+    const held = parts
+      .renderers()
+      .map((runtime) => ({ ...runtime, mailbox: runtime.renderer.stats() }));
+    const renderers = await Promise.all(
+      held.map((runtime) => rendererPanel(runtime, limits)),
+    );
     return stay({
       ok: true,
       stats: stats.snapshot({
         gitCache: gitProvider.getStats(),
         usageCache: usageStore.getStats(),
-        sources: sourceSnapshots(parts, drawn.renderCache),
+        sources: sourceSnapshots(parts),
         fileEvents: fileEvents.stats(),
         sourceRuns: sourceRuns.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
-        ...drawn,
         collector: parts.collector.stats(),
-        mailbox,
-        // The frames drawn are the renderer's count, the rest the host's.
-        frameFeeds: { ...frameFeeds.getStats(), drawn: framesDrawn },
+        frameFeeds: frameFeeds.getStats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
         polledPaths: watcherRegistry.polledPaths(),
-        nextRestartReason: limits.describeNextRestart(),
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
-        daemon: limits.serving(),
+        host: limits.host(),
+        renderers,
       }),
     });
   }
@@ -671,12 +677,58 @@ export async function replyTo(
   throw new Error(`no reply for request ${inspect(unanswered)}`);
 }
 
+// [LAW:one-type-per-behavior] One renderer's panel, built alike for every
+// renderer: its memory where it is, its mailbox, and its own answer of
+// itself, or why there was none, so one renderer that cannot answer fails its
+// panel and not the reply.
+async function rendererPanel(
+  {
+    renderer,
+    process: state,
+    mailbox,
+  }: ReturnType<DaemonParts["renderers"]>[number] & {
+    readonly mailbox: MailboxStats;
+  },
+  limits: DaemonParts["limits"],
+): Promise<RendererPanel> {
+  let answered: Asked<RendererStats>;
+  try {
+    answered = {
+      kind: "ok",
+      value: (await renderer.command({ kind: "stats" })).stats,
+    };
+  } catch (thrown) {
+    answered = { kind: "failed", reason: failureOf(thrown).detail };
+  }
+  return {
+    name: renderer.name,
+    process: memoryPanelOf(state, limits),
+    mailbox,
+    stats: answered,
+  };
+}
+
+// Where a renderer's memory is, as its panel says it: a process of its own is
+// read against the limit as the backstop last read it.
+function memoryPanelOf(
+  state: RendererProcessState,
+  limits: DaemonParts["limits"],
+): RendererMemoryPanel {
+  switch (state.kind) {
+    case "in-host":
+    case "not-running":
+      return state;
+    case "unread":
+      return { kind: "process", memory: limits.memoryOf(state.pid) };
+    case "running":
+      return { kind: "process", memory: limits.memoryOf(state.process.pid) };
+  }
+}
+
 // [LAW:nothing-unseen] Every source's refreshes from the one ledger, beside
-// how many homes of each scope the owners keep and how many a view holds.
-function sourceSnapshots(
-  parts: DaemonParts,
-  cache: RendererStats["renderCache"],
-): SourceSnapshots {
+// how many homes of each scope the host's owners keep and how many a view
+// holds.
+function sourceSnapshots(parts: DaemonParts): SourceSnapshots {
   const {
     payloadProviders: {
       gitProvider,
@@ -698,9 +750,7 @@ function sourceSnapshots(
       daemon: 1,
       configDir: today.entries,
       repo: git.size,
-      directory: cache.size,
       session: usageStore.getStats().size,
-      view: cache.views,
       pane: tmux.entries,
     },
     held: {

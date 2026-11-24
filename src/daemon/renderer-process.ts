@@ -65,19 +65,31 @@ export interface RendererLink {
   // Ends the renderer's process, after the daemon's close has run the
   // renderer's own steps of it.
   close(): Promise<void>;
-  // The renderer's own process from its spawn to its end, booting included:
-  // its pid, and its memory as its latest ping read it. Null in process,
-  // where the host's charge is the renderer's.
-  process(): RendererProcess | null;
+  // The renderer's own process as the memory backstop and the stats see it.
+  process(): RendererProcessState;
 }
 
+// [LAW:types-are-the-program] Where a renderer's memory is: in the host's
+// process, charged as the host's; in no process, and why; in a process no
+// ping has read yet; or in a running process, read by its latest ping.
+export type RendererProcessState =
+  | { readonly kind: "in-host" }
+  | { readonly kind: "not-running"; readonly why: string }
+  | { readonly kind: "unread"; readonly pid: number }
+  | { readonly kind: "running"; readonly process: RendererProcess };
+
 export interface RendererProcess {
+  readonly name: RendererName;
   readonly pid: number;
-  readonly usage: MemorySizes | null;
+  readonly usage: MemorySizes;
   // A breach's heap snapshot of this process, never of a renderer started
-  // since: one that has ended, or has not finished booting, writes none and
-  // says so.
+  // since: one that has ended writes none and says so.
   heapSnapshot(file: string): Promise<void>;
+  // A breach's end of this process, said as any end is and followed by a
+  // fresh start. [LAW:no-ambient-temporal-coupling] Only while it is the live
+  // renderer: one the close is draining finishes its close steps, and one
+  // being replaced is already ending.
+  end(why: string): void;
 }
 
 // Where a daemon's renderer runs, in two steps of the daemon's build: the
@@ -184,12 +196,12 @@ interface Link {
   readonly lines: RendererOverLines;
   readonly kill: AbortController;
   readonly spawnedAt: number;
-  // That the supervisor ended it for not answering.
-  hung: boolean;
   // Admission belongs to the connection and survives close while its
   // remaining stdout is drained. It makes no lifecycle decision.
   compatible: boolean;
-  // A failed boot or restoration ends this generation with its original reason.
+  // Why this generation ended, when the host ended it: a failed boot or
+  // restoration, no answer to its pings, or its memory. The first reason
+  // owns its end.
   failure: string | null;
   // Each host receipt is meaningful only to the worker that issued it.
   readonly receipts: Map<EffectId, EffectId>;
@@ -325,7 +337,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       channel,
       kill,
       spawnedAt: clock.monotonic(),
-      hung: false,
       compatible: false,
       failure: null,
       receipts: new Map(),
@@ -356,12 +367,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       const result = await channel.ended;
       stdout.end();
       stderr.end();
-      ended(
-        link,
-        link.hung
-          ? `stopped answering for ${HUNG_AFTER_MS / 1000} s`
-          : (link.failure ?? (result.ok ? "exited" : whyFailed(result))),
-      );
+      ended(link, link.failure ?? (result.ok ? "exited" : whyFailed(result)));
     });
   };
 
@@ -497,6 +503,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     );
   };
 
+  // [LAW:single-enforcer] How the host ends a renderer it judged: the reason
+  // is its end's, unless an earlier one already is.
+  const endWith = (link: Link, why: string): void => {
+    link.failure ??= why;
+    link.kill.abort(new Error(link.failure));
+  };
+
   const rejectBoot = (link: Link, reason: string): void => {
     refusedBoot(link, reason);
     link.kill.abort(new Error(reason));
@@ -585,8 +598,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     const owedSince =
       phase.kind === "starting" ? link.spawnedAt : link.pingSentAt;
     if (owedSince !== null && now - owedSince > HUNG_AFTER_MS) {
-      link.hung = true;
-      link.kill.abort(new Error("the renderer stopped answering"));
+      endWith(link, `stopped answering for ${HUNG_AFTER_MS / 1000} s`);
       return;
     }
     // A renderer the close still waits on is judged as a live one is.
@@ -732,6 +744,47 @@ export function processRenderer(own: ProcessOwner): RendererLink {
               }),
       };
     });
+  // A spawned renderer as the host can charge it: its pid from its spawn, its
+  // memory from its first ping's answer.
+  const runningState = (link: Link): RendererProcessState => {
+    const pid = link.channel.pid;
+    const usage = link.usage;
+    if (pid === null) return { kind: "not-running", why: "it has no pid" };
+    // [LAW:types-are-the-program] One the host has begun to end serves no
+    // input and is judged no more: a reading between its end and its exit
+    // would breach it a second time.
+    if (link.failure !== null)
+      return { kind: "not-running", why: `it is ending: ${link.failure}` };
+    if (usage === null) return { kind: "unread", pid };
+    const live = (): boolean => phase.kind === "live" && phase.link === link;
+    return {
+      kind: "running",
+      process: {
+        name,
+        pid,
+        usage,
+        heapSnapshot: (file) =>
+          live()
+            ? streamedToFile(file, (write) => link.lines.heapSnapshot(write))
+            : Promise.reject(
+                new Error(
+                  `renderer ${name}[${link.generation}] is not live, so its heap was not written`,
+                ),
+              ),
+        end: (why) => {
+          if (live()) {
+            endWith(link, why);
+            return;
+          }
+          // [LAW:nothing-unseen] A breach whose end the phase refused.
+          log(
+            "warn",
+            `renderer ${name}[${link.generation}] is ${phase.kind}, so it was not ended: ${why}`,
+          );
+        },
+      },
+    };
+  };
   return {
     renderer: { answer },
     restart: async () => {
@@ -781,25 +834,21 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       stopPings();
       await ended;
     },
-    process: () => {
-      const link = current();
-      const pid = link === null ? null : link.channel.pid;
-      return link === null || pid === null
-        ? null
-        : {
-            pid,
-            usage: link.usage,
-            heapSnapshot: (file) =>
-              phase.kind === "live" && phase.link === link
-                ? streamedToFile(file, (write) =>
-                    link.lines.heapSnapshot(write),
-                  )
-                : Promise.reject(
-                    new Error(
-                      `renderer ${name}[${link.generation}] is not live, so its heap was not written`,
-                    ),
-                  ),
-          };
+    process: (): RendererProcessState => {
+      switch (phase.kind) {
+        case "idle":
+          return { kind: "not-running", why: "it has not started" };
+        case "replacing":
+          return { kind: "not-running", why: "it is being replaced" };
+        case "down":
+          return { kind: "not-running", why: phase.why };
+        case "closed":
+          return { kind: "not-running", why: "the daemon closed it" };
+        case "starting":
+        case "live":
+        case "closing":
+          return runningState(phase.link);
+      }
     },
   };
 }

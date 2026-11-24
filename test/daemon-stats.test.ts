@@ -1,8 +1,15 @@
 import { RuntimeStats } from "../src/daemon/stats";
 import {
+  RENDERER_STATS_REFERENCE,
   type Durations,
   type SourceSnapshots,
 } from "../src/daemon/foundations/stats-snapshot";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+} from "../src/daemon/foundations/renderer-name";
+
+const MB = 1024 * 1024;
 
 // No durations recorded: every reading zero, never NaN.
 const NO_DURATIONS: Durations = {
@@ -59,9 +66,7 @@ const SOURCES: SourceSnapshots = {
     daemon: 1,
     configDir: 1,
     repo: 4,
-    directory: 3,
     session: 10,
-    view: 2,
     pane: 2,
   },
   held: {
@@ -129,29 +134,11 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
   fileEvents: FILE_EVENTS,
   sourceRuns: SOURCE_RUNS,
   transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-  renderCache: {
-    size: 3,
-    held: 1,
-    retired: 0,
-    compiles: 1,
-    views: 0,
-    pinned: 0,
-    retiredViews: 0,
-    passages: 0,
-    accountedBytes: 3,
-    budgetBytes: 9,
-  },
   collector: { sessions: 1, retiring: 0 },
-  effectCache: { sessions: 2, effects: 5 },
-  menuIdle: { sessions: 2, armed: 1 },
-  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
-  mailbox: { holder: null, heldMs: 0, queued: 0 },
   runs: { started: 3, failed: 1, timedOut: 1, refused: 0, running: 0 },
-  sessionState: { sessions: 2, observers: 11, revision: 7 },
   frameFeeds: {
     feeds: 0,
     subscribers: 0,
-    drawn: 0,
     pushed: 0,
     refused: 0,
     lookups: 0,
@@ -175,11 +162,22 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
     },
   ],
   bundle: "/opt/cc/dist/index.mjs",
-  daemon: {
-    pid: 1234,
-    memory: { kind: "unmeasured" },
-    limit: 1,
-  },
+  host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1 },
+  renderers: [
+    {
+      name: MAIN_RENDERER,
+      process: { kind: "in-host" },
+      mailbox: { holder: null, heldMs: 0, queued: 0 },
+      stats: {
+        kind: "ok",
+        value: {
+          ...RENDERER_STATS_REFERENCE,
+          effectCache: { sessions: 2, effects: 5 },
+          sessionState: { sessions: 2, observers: 11, revision: 7 },
+        },
+      },
+    },
+  ],
 };
 
 describe("RuntimeStats.snapshot", () => {
@@ -226,19 +224,14 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.gitCache.held).toBe(1);
     expect(snap.usageCache.size).toBe(10);
     expect(snap.sources).toEqual(SOURCES);
-    expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
-    expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
+    expect(snap.host).toEqual(EXTRAS.host);
+    expect(snap.renderers).toEqual(EXTRAS.renderers);
     expect(snap.runs).toEqual({
       started: 3,
       failed: 1,
       timedOut: 1,
       refused: 0,
       running: 0,
-    });
-    expect(snap.sessionState).toEqual({
-      sessions: 2,
-      observers: 11,
-      revision: 7,
     });
     expect(snap.watchers).toEqual({
       active: 2,
@@ -342,18 +335,18 @@ describe("shapeSkew", () => {
 
   test("a snapshot lacking fields this build reads names them and both builds", () => {
     const snap = RuntimeStats.referenceSnapshot();
-    const { sessionState: _s, sourceDigest: _d, ...older } = snap;
+    const { renderers: _r, sourceDigest: _d, ...older } = snap;
     const skew = shapeSkew(older as typeof snap);
-    expect(skew).toContain("reports no sourceDigest, sessionState");
+    expect(skew).toContain("reports no sourceDigest, renderers");
     expect(skew).toContain(`the daemon (${pkg.version} [no digest])`);
     expect(skew).toContain(`this client (${pkg.version} [`);
   });
 
   test("missingFields names a nested field by its path, and an atom in place of an object", () => {
     const snap = RuntimeStats.referenceSnapshot();
-    const { observers: _o, ...sessionState } = snap.sessionState;
-    expect(missingFields(snap, { ...snap, sessionState })).toEqual([
-      "sessionState.observers",
+    const { retiring: _r, ...collector } = snap.collector;
+    expect(missingFields(snap, { ...snap, collector })).toEqual([
+      "collector.retiring",
     ]);
     expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
     // A list the reader maps, carried as anything else, is as absent to it.
@@ -366,8 +359,8 @@ describe("shapeSkew", () => {
     // tag.
     const measured = {
       ...snap,
-      daemon: {
-        ...snap.daemon,
+      host: {
+        ...snap.host,
         memory: { kind: "measured", rss: 1 },
       },
     };
@@ -375,9 +368,9 @@ describe("shapeSkew", () => {
     expect(
       missingFields(snap, {
         ...snap,
-        daemon: { ...snap.daemon, memory: 3 },
+        host: { ...snap.host, memory: 3 },
       }),
-    ).toEqual(["daemon.memory"]);
+    ).toEqual(["host.memory"]);
   });
 });
 
@@ -427,29 +420,11 @@ describe("formatStats", () => {
       fileEvents: FILE_EVENTS,
       sourceRuns: SOURCE_RUNS,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      renderCache: {
-        size: 4,
-        held: 0,
-        retired: 1,
-        compiles: 2,
-        views: 0,
-        pinned: 0,
-        retiredViews: 0,
-        passages: 0,
-        accountedBytes: 32 * 1024 * 1024,
-        budgetBytes: 128 * 1024 * 1024,
-      },
       collector: { sessions: 1, retiring: 0 },
-      effectCache: { sessions: 2, effects: 3 },
-      menuIdle: { sessions: 2, armed: 1 },
-      rendererTurns: { parked: 2, presents: 1, deferrals: 3 },
-      mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 3, failed: 1, timedOut: 1, refused: 0, running: 0 },
-      sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: {
         feeds: 0,
         subscribers: 0,
-        drawn: 0,
         pushed: 0,
         refused: 0,
         lookups: 0,
@@ -476,16 +451,105 @@ describe("formatStats", () => {
         pipeErrors: 0,
         durations: {},
       },
-      nextRestartReason: null,
       clients: [],
       bundle: "/",
-      daemon: {
+      host: {
         pid: 1234,
-        memory: { kind: "unmeasured" },
-        limit: 1,
+        memory: {
+          kind: "measured",
+          charge: {
+            kind: "charged",
+            measure: "phys_footprint",
+            bytes: 40 * MB,
+          },
+          sizes: { rss: 50 * MB, heapTotal: 30 * MB },
+          nearLimit: false,
+        },
+        limit: 512 * MB,
       },
+      renderers: [
+        {
+          name: MAIN_RENDERER,
+          process: {
+            kind: "process",
+            memory: {
+              pid: 4343,
+              memory: {
+                kind: "measured",
+                charge: {
+                  kind: "charged",
+                  measure: "phys_footprint",
+                  bytes: 420 * MB,
+                },
+                sizes: { rss: 450 * MB, heapTotal: 200 * MB },
+                nearLimit: true,
+              },
+              limit: 512 * MB,
+            },
+          },
+          mailbox: { holder: "render", heldMs: 12, queued: 2 },
+          stats: {
+            kind: "ok",
+            value: {
+              renderCache: {
+                size: 4,
+                held: 0,
+                retired: 1,
+                compiles: 2,
+                views: 0,
+                pinned: 0,
+                retiredViews: 0,
+                passages: 0,
+                accountedBytes: 32 * MB,
+                budgetBytes: 128 * MB,
+              },
+              effectCache: { sessions: 2, effects: 3 },
+              menuIdle: { sessions: 2, armed: 1 },
+              rendererTurns: { parked: 2, presents: 1, deferrals: 3 },
+              sessionState: { sessions: 2, observers: 11, revision: 7 },
+              framesDrawn: 9,
+            },
+          },
+        },
+        {
+          name: rendererNameOf("worktree"),
+          process: { kind: "not-running", why: "it exited 1" },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "failed", reason: "renderer worktree is down" },
+        },
+        {
+          name: rendererNameOf("site"),
+          process: { kind: "in-host" },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "ok", value: RENDERER_STATS_REFERENCE },
+        },
+      ],
     });
     expect(out).toContain("pid           1234");
+    expect(out).toContain(
+      "memory        phys_footprint 40 MB of limit 512 MB (rss 50 MB, v8 heap 30 MB)\n",
+    );
+    // Every renderer's panel from one printer, whatever its name.
+    expect(out).toContain(
+      [
+        "renderer main",
+        "  process       pid 4343",
+        "  memory        phys_footprint 420 MB of limit 512 MB (rss 450 MB, v8 heap 200 MB), approaching its limit",
+        "  mailbox       holder render · held 12ms · queued 2",
+        "  renderCache",
+      ].join("\n"),
+    );
+    expect(out).toContain(
+      [
+        "renderer worktree",
+        "  process       not running: it exited 1",
+        "  mailbox       holder - · held 0ms · queued 0",
+        "  stats         unanswered: renderer worktree is down",
+      ].join("\n"),
+    );
+    expect(out).toContain(
+      "renderer site\n  process       the host's, charged as the host's\n",
+    );
     expect(out).toContain("env misses    3");
     // A name a client chose cannot forge a row: each is a JSON string.
     expect(out).toContain('unknownFields "fast_mode", "x\\n  inFlight      9"');
@@ -501,7 +565,7 @@ describe("formatStats", () => {
       "session/cache             failures=1 last=0ms refreshes first:1 period:0 change:2",
     );
     expect(out).toContain(
-      "homes         daemon:1 configDir:1 repo:4 directory:3 session:10 view:2 pane:2",
+      "homes         daemon:1 configDir:1 repo:4 session:10 pane:2",
     );
     expect(out).toContain(
       "held          git:1 tmux:1 host:2 today:1 pluginStorage:1 transcript:3",
@@ -528,8 +592,9 @@ describe("formatStats", () => {
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
     expect(out).toContain(
-      "renderer turns\n  parked        2\n  presents      1\n  deferrals     3",
+      "  turns\n    parked        2\n    presents      1\n    deferrals     3",
     );
+    expect(out).toContain("framesDrawn   9");
     expect(out).toContain("armed         1");
     expect(out).toContain("observers     11");
     expect(out).toContain("revision      7");
@@ -590,29 +655,11 @@ describe("formatStats", () => {
       fileEvents: RuntimeStats.referenceSnapshot().fileEvents,
       sourceRuns: RuntimeStats.referenceSnapshot().sourceRuns,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      renderCache: {
-        size: 0,
-        held: 0,
-        retired: 0,
-        compiles: 0,
-        views: 0,
-        pinned: 0,
-        retiredViews: 0,
-        passages: 0,
-        accountedBytes: 0,
-        budgetBytes: 0,
-      },
       collector: { sessions: 1, retiring: 0 },
-      effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0 },
-      rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
-      mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
-      sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
         subscribers: 0,
-        drawn: 0,
         pushed: 0,
         refused: 0,
         lookups: 0,
@@ -639,16 +686,13 @@ describe("formatStats", () => {
         pipeErrors: 0,
         durations: {},
       },
-      nextRestartReason: null,
       clients: [],
       bundle: "/",
-      daemon: {
-        pid: 1234,
-        memory: { kind: "unmeasured" },
-        limit: 1,
-      },
+      host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1 },
+      renderers: [],
     });
     expect(out).toContain("hit rate      n/a");
+    expect(out).toContain("memory        unmeasured (limit 0 MB)");
   });
 });
 

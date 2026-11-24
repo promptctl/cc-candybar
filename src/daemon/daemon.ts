@@ -470,10 +470,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       log,
     }),
     limitBytes: memoryLimitBytes,
-    // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
-    // renderer's process counts in it while one runs. Read only once armed,
-    // by when the link below exists.
-    renderer: () => (serving() ? primary.link.process() : null),
+    // Every renderer running in a process of its own, each judged on its own
+    // charge beside the host's. Read only once armed, by when the links below
+    // exist.
+    renderers: () =>
+      serving()
+        ? [...renderers.values()].flatMap(({ link }) => {
+            const state = link.process();
+            return state.kind === "running" ? [state.process] : [];
+          })
+        : [],
   });
   const renderSightings = new RenderSightings();
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
@@ -983,6 +989,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     limits,
     collector,
     renderer: primary.renderer,
+    renderers: () =>
+      [...renderers.values()].map(({ renderer, link }) => ({
+        renderer,
+        process: link.process(),
+      })),
     // [LAW:single-enforcer] Only a render request binds or starts a bundle.
     rendererForClick: (name) => renderers.get(name)?.renderer,
     rendererFor,
