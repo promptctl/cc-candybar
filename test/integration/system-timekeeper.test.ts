@@ -1,7 +1,4 @@
-import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 import { systemTimekeeper } from "../helpers/system-clock";
 import { timekeeperContract } from "../contract/timekeeper.contract";
 
@@ -16,16 +13,16 @@ describe("the system timekeeper", () => {
   // input that arrived meanwhile is read, then the run it deferred. The
   // daemon's request backstop relies on it (src/daemon/connection.ts).
   test("a run a timer defers comes after the input already waiting on a socket", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-timekeeper-"));
     const ran: string[] = [];
     const heard = Promise.withResolvers<net.Socket>();
     const server = net.createServer((conn) => {
       conn.on("data", () => ran.push("input"));
       heard.resolve(conn);
     });
-    const sock = path.join(dir, "s");
-    await new Promise<void>((listening) => server.listen(sock, listening));
-    const client = net.connect(sock);
+    await new Promise<void>((listening) =>
+      server.listen(0, "127.0.0.1", listening),
+    );
+    const client = net.connect((server.address() as net.AddressInfo).port, "127.0.0.1");
     // Both ends are up before the write, so its bytes are in the kernel when
     // the loop is held.
     const [conn] = await Promise.all([
@@ -51,7 +48,6 @@ describe("the system timekeeper", () => {
       client.destroy();
       conn.destroy();
       await new Promise((closed) => server.close(closed));
-      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 

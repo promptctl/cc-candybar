@@ -218,7 +218,7 @@ describe("a connection over a stream", () => {
       url: "cc-candybar://x",
     };
 
-    test("read in time outlives the backstop and is answered with its own reply", async () => {
+    test("read before the backstop answered outlives it and is answered with its own reply", async () => {
       const request = held();
       const daemon = standIn({ handle: request.handle });
       const { send, received, ended } = open(daemon);
