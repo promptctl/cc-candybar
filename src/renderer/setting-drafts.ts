@@ -44,6 +44,7 @@ import {
   SETTINGS,
   SETTING_PROJECTIONS,
   perSetting,
+  type ConfigOnlyField,
   type SettingName,
   type SettingProjection,
 } from "../config/setting-projections.js";
@@ -74,7 +75,10 @@ export interface SettingDraft extends SettingProjection {
 // A theme or style chosen by RULE has no name until a render evaluates it, so
 // it is `null`: it equals only the same rule, and saving a picked name
 // replaces the rule with it.
-function spelled(e: EffectiveGlobals, name: SettingName): string | null {
+function spelled(
+  e: EffectiveGlobals,
+  name: SettingName | ConfigOnlyField,
+): string | null {
   const value: string | number | boolean | Selection<unknown> = e[name];
   switch (typeof value) {
     case "boolean":
@@ -178,11 +182,12 @@ function differing(
 // the value it steps from while the session holds no pick. It is the same
 // resolution a draft is measured against: under a preset that pins the field
 // it is the preset's value, never top-level globals the preset shadows. Edit
-// mode's staged fragment is chrome over that layer, not part of it.
+// mode's staged fragment is chrome over that layer, not part of it. A
+// config-only field no session picks resolves through the layers alone.
 export function sessionSettingValue(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
-  name: SettingName,
+  name: SettingName | ConfigOnlyField,
 ): string | null {
   return spelled(sessionGlobals(config, sessionPick), name);
 }

@@ -281,6 +281,7 @@ export class ViewParts {
       get layout() {
         return phase.ruling ? undefined : layout;
       },
+      ruled: (slot) => this.selections()[SELECTION_OF[slot]].kind !== "decided",
     };
     this.layout = this.derive("layout", source.layoutReadsInstant, () => {
       // [LAW:no-defensive-null-guards] The draw resolves the preset to a

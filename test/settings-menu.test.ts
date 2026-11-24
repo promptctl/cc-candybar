@@ -197,7 +197,7 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(ctx.edits.view.get(S1, EDIT_MODE_KEY)).toBeNull();
   });
 
-  test("the preset picker's click is admitted by the derived gate", async () => {
+  test("the preset picker's ▶ is admitted by the derived gate and lands the next preset", async () => {
     const { render, click, clickWriting, sessionState } = menuBar(
       userConfig(TWO_SEGMENT_ROW),
     );
@@ -212,7 +212,15 @@ describe("the global settings menu is reachable from a user config", () => {
     );
     expect(pickerUrl).toBeDefined();
     await click(pickerUrl!);
-    await clickWriting(render(), "preset", "compact");
+    // The picker's ring steps one preset on from the one the bar wears, and
+    // lands it through the same derived gate.
+    const nextPreset = linkUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.verb === "ring-state" && e.args[1] === "candybar.apply.preset" && e.args[2] === "1",
+      ),
+    );
+    expect(nextPreset).toBeDefined();
+    await click(nextPreset!);
     expect(sessionState.get(S1, "preset")).toBe("compact");
   });
 });

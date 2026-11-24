@@ -59,7 +59,8 @@ import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
 import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { PLACE, TABS, within } from "../src/config/menu-places";
 import type { SettingName } from "../src/config/setting-projections";
-import { randomOther, SWATCHES_RANDOM } from "../src/render/swatches";
+import { SWATCHES_RANDOM } from "../src/render/swatches";
+import { randomOther } from "../src/render/option-ring";
 import {
   EDIT_MODE_KEY,
   EDIT_MODE_ARRANGE,
@@ -178,10 +179,15 @@ function rig(
     await click(hit.url);
     render();
   };
-  // The link whose visible text is `text` among those writing `key`.
+  // The link whose visible text is `text` among those writing `key`, as a
+  // write of the key or a step through the ring of the action that writes it.
   const linkOn = (key: string, text: string) =>
     linksOf(last).find(
-      (l) => l.text === text && effectsOf(l.url).some((e) => e.args[1] === key),
+      (l) =>
+        l.text === text &&
+        effectsOf(l.url).some(
+          (e) => e.args[1] === key || ringKeyOf(config, e) === key,
+        ),
     )!;
   return {
     config,
@@ -199,6 +205,17 @@ function rig(
   };
 }
 
+// The key a ring-step effect writes, from the action it names.
+function ringKeyOf(
+  config: ValidatedConfig,
+  e: { readonly verb: string; readonly args: readonly string[] },
+): string | undefined {
+  if (e.verb !== "ring-state" && e.verb !== "ring-config") return undefined;
+  const action = config.actions[e.args[e.verb === "ring-state" ? 1 : 2]!]!;
+  const head = "do" in action ? config.actions[action.do[0]]! : action;
+  return "set" in head ? head.set : "persist" in head ? head.persist : undefined;
+}
+
 // The session writes a link performs — [key, value] pairs.
 const writesOf = (url: string): string[][] =>
   effectsOf(url).map((e) => e.args.slice(1));
@@ -214,14 +231,7 @@ const CAROUSEL_ONLY = `{
 }`;
 
 describe("the carousel rotates by applying", () => {
-  const arrows = (rendered: Frame) => {
-    const all = linksOf(rendered);
-    const at = (glyph: string) =>
-      writesOf(all.find((l) => l.text === glyph)!.url);
-    return { prev: at(CAROUSEL_PREV), next: at(CAROUSEL_NEXT) };
-  };
-
-  test("◀ writes the option before the centre and ▶ the one after, wrapping at both ends", () => {
+  test("◀ lands the option before the centre and ▶ the one after, wrapping at both ends", async () => {
     const rt = rig(CAROUSEL_ONLY);
     const expected: Record<string, [string, string]> = {
       a: ["e", "b"],
@@ -229,14 +239,41 @@ describe("the carousel rotates by applying", () => {
       e: ["d", "a"],
     };
     for (const [centre, [prev, next]] of Object.entries(expected)) {
-      rt.sessionState.set(SID, "pick", centre);
-      const { prev: p, next: n } = arrows(rt.render());
-      expect([centre, p, n]).toEqual([
-        centre,
-        [["pick", prev]],
-        [["pick", next]],
-      ]);
+      const landed: string[] = [];
+      for (const glyph of [CAROUSEL_PREV, CAROUSEL_NEXT]) {
+        rt.sessionState.set(SID, "pick", centre);
+        rt.render();
+        await rt.clickText(glyph);
+        landed.push(rt.sessionState.get(SID, "pick")!);
+      }
+      expect([centre, landed]).toEqual([centre, [prev, next]]);
     }
+    rt.dispose();
+  });
+
+  // [LAW:one-source-of-truth] A link means the same on every draw: the arrows
+  // carry their step and never the option it lands on, so a terminal that keeps
+  // the link it found when the mouse last moved still lands one step per click.
+  test("an arrow is the same link on every draw, and five clicks on one link land five steps", async () => {
+    const rt = rig(CAROUSEL_ONLY);
+    rt.render();
+    const urlOf = (glyph: string): string =>
+      linksOf(rt.render()).find((l) => l.text === glyph)!.url;
+    const next = urlOf(CAROUSEL_NEXT);
+    const prev = urlOf(CAROUSEL_PREV);
+    const landed: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      await rt.click(next);
+      landed.push(rt.sessionState.get(SID, "pick")!);
+    }
+    expect(landed).toEqual(["b", "c", "d", "e", "a"]);
+    expect([urlOf(CAROUSEL_NEXT), urlOf(CAROUSEL_PREV)]).toEqual([next, prev]);
+    landed.length = 0;
+    for (let i = 0; i < 5; i++) {
+      await rt.click(prev);
+      landed.push(rt.sessionState.get(SID, "pick")!);
+    }
+    expect(landed).toEqual(["e", "d", "c", "b", "a"]);
     rt.dispose();
   });
 
@@ -270,7 +307,9 @@ describe("the carousel rotates by applying", () => {
       ]);
       expect(
         linksOf(rendered)
-          .filter((l) => writesOf(l.url).some(([k]) => k === "pick"))
+          .filter((l) =>
+            effectsOf(l.url).some((e) => ringKeyOf(rt.config, e) === "pick"),
+          )
           .map((l) => l.text),
       ).toEqual([CAROUSEL_PREV, CAROUSEL_NEXT]);
     }
@@ -581,13 +620,10 @@ describe("the settings menu's look controls are pickers whose label opens a list
     const next = THEMES[(THEMES.indexOf("nord") + 1) % THEMES.length]!;
     const before = rt.segments().get("directory")![0]!.style;
     const step = rt.linkOn("theme", CAROUSEL_NEXT);
-    const [apply, turn] = writesOf(step.url);
-    expect(apply).toEqual(["theme", next]);
-    // The page it lands on, as itself: a page number, never a sentinel.
-    expect(turn![0]).toBe(menuPageKey(PICKERS));
-    expect(turn![1]).toMatch(/^\d+$/);
     await rt.click(step.url);
     expect(rt.sessionState.get(SID, "theme")).toBe(next);
+    // The page it turned to, as itself: a page number, never a sentinel.
+    expect(rt.sessionState.get(SID, menuPageKey(PICKERS))).toMatch(/^\d+$/);
     expect(textOf(rt.render())).toContain(`${next} ▀▀▀`);
     expect(swatchLinks(rt.render()).find((c) => c.writes === next)?.text).toBe(
       "[▀▀▀]",
@@ -640,12 +676,10 @@ describe("the settings menu's look controls are pickers whose label opens a list
     const rt = rig(`{ globals: { palette: 'nord' } }`);
     await openPicker(rt, "theme");
     const random = rt.linkOn("theme", SWATCHES_RANDOM);
-    const [key, value] = writesOf(random.url)[0]!;
-    expect(key).toBe("theme");
-    expect(THEMES).toContain(value);
-    expect(value).not.toBe("nord");
     await rt.click(random.url);
-    expect(rt.sessionState.get(SID, "theme")).toBe(value);
+    const landed = rt.sessionState.get(SID, "theme")!;
+    expect(THEMES).toContain(landed);
+    expect(landed).not.toBe("nord");
     rt.dispose();
   });
 
@@ -719,10 +753,6 @@ describe("the variation control", () => {
     const before = ["directory", "model"].map(
       (n) => rt.segments().get(n)![0]!.style,
     );
-    const trial = effectsOf(rt.linkOn("variation", CAROUSEL_NEXT).url);
-    expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
-      ["set-state", "variation", "duo"],
-    ]);
     await rt.click(rt.linkOn("variation", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "variation")).toBe("duo");
     const after = ["directory", "model"].map(
@@ -746,10 +776,6 @@ describe("the shade control", () => {
     const before = ["directory", "model"].map(
       (n) => rt.segments().get(n)![0]!.style,
     );
-    const trial = effectsOf(rt.linkOn("shade", CAROUSEL_NEXT).url);
-    expect(trial.map((e) => [e.verb, e.args[1], e.args[2]])).toEqual([
-      ["set-state", "shade", "brighter"],
-    ]);
     await rt.click(rt.linkOn("shade", CAROUSEL_NEXT).url);
     expect(rt.sessionState.get(SID, "shade")).toBe("brighter");
     const after = ["directory", "model"].map(

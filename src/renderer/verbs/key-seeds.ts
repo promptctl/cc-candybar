@@ -11,7 +11,11 @@ import {
 import { placementFold, settingTable } from "../../config/setting-table";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { parsePersistTarget } from "../../config/loader/persist-target";
-import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
+import {
+  CONFIG_KEY_TO_SETTING,
+  SESSION_KEY_TO_SETTING,
+  configOnlyField,
+} from "../../config/setting-projections";
 import { sessionSettingValue } from "../setting-drafts";
 
 // [LAW:one-source-of-truth] What a stepped SessionState key shows, in the
@@ -37,6 +41,21 @@ export function stateKeyShown(
     if (decl.key === key) return sessionPick(key) ?? decl.default ?? null;
   }
   return sessionPick(key);
+}
+
+// [LAW:one-source-of-truth] What a persisted key shows: the value the bar
+// wears for the setting or config-only field it writes (the `.effective` a
+// persist action reads back through), else what a declared `state` variable
+// over the key holds, as the draw's read-back variable does.
+export function configKeyShown(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  key: string,
+): string | null {
+  const field = CONFIG_KEY_TO_SETTING.get(key) ?? configOnlyField(key);
+  return field !== undefined
+    ? sessionSettingValue(config, sessionPick, field)
+    : stateKeyShown(config, sessionPick, key);
 }
 
 // [LAW:one-source-of-truth] What a stepped config key holds before the file

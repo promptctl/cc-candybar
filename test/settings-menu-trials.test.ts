@@ -12,6 +12,7 @@ import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf } from "./helpers/click";
 import { sessionBar } from "../scripts/lib/draw-fixtures/session-bar";
+import { buildRig, DEFAULT_DSL_CONFIG } from "./helpers/rig";
 
 function menu() {
   const bar = sessionBar(`{}`, 400);
@@ -52,14 +53,28 @@ test.each([
   },
 );
 
-test("a value on trial is on its ring: ▶ steps on from it", () => {
-  const { open, set } = menu();
-  set("shade", TRIAL_SHADE_NAMES[0]!);
-  const next = linksOf(open(`${SETTINGS_NS}apply.shade`))
-    .filter((l) => l.text === "▶")
-    .flatMap((l) => effectsOf(l.url))
-    .filter((e) => e.args[1] === "shade");
-  expect(next.map((e) => e.args[2])).toEqual([TRIAL_SHADE_NAMES[1]]);
+// The ring is the shade action's own list, trials included, centred on the
+// value the bar wears when the click arrives.
+test("a value on trial is on its ring: ▶ steps on from it", async () => {
+  const rig = buildRig({ base: DEFAULT_DSL_CONFIG });
+  const { sessionState, sessionId } = rig;
+  sessionState.set(sessionId, SETTINGS_ANCHOR, SETTINGS_OPEN);
+  sessionState.set(sessionId, sharedMenuStateKey(`${SETTINGS_NS}pickers`), "gear");
+  sessionState.set(
+    sessionId,
+    sharedMenuStateKey(`${SETTINGS_NS}gearPickers`),
+    `${SETTINGS_NS}apply.shade`,
+  );
+  sessionState.set(sessionId, "shade", TRIAL_SHADE_NAMES[0]!);
+  const next = linksOf(rig.draw({ opts: { width: 400 } }).frame).find(
+    (l) =>
+      l.text === "▶" &&
+      effectsOf(l.url).some((e) => e.args[1] === `${SETTINGS_NS}apply.shade`),
+  );
+  expect(next).toBeDefined();
+  await rig.click(next!.url);
+  expect(sessionState.get(sessionId, "shade")).toBe(TRIAL_SHADE_NAMES[1]);
+  rig.dispose();
 });
 
 test.each(["variations", "shades"])(

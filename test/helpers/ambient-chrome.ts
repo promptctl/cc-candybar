@@ -29,6 +29,9 @@ import { parsePersistTarget } from "../../src/config/loader/persist-target";
 import { SETTINGS_WRITTEN_KEYS } from "../../src/config/settings-menu";
 import {
   VERB_RESET_CONFIG,
+  VERB_RING_CONFIG,
+  VERB_RING_STATE,
+  VERB_TURN_PAGE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
@@ -131,10 +134,23 @@ const KEY_WRITING_VERBS = new Set<string>([
   VERB_RESET_CONFIG,
 ]);
 
+// A ring step or a page arrow names the ACTION whose key it writes, not the key
+// (the click resolves it), at the slot after the session (and the layer, for a
+// config write). The action's name carries its author as a key does: the
+// settings menu's own are `candybar.…`.
+const ACTION_NAMING_VERBS: ReadonlyMap<string, number> = new Map([
+  [VERB_RING_STATE, 1],
+  [VERB_TURN_PAGE, 1],
+  [VERB_RING_CONFIG, 2],
+]);
+
 function keysWrittenBy(url: string): string[] {
   return effectsOf(url)
-    .filter((e) => KEY_WRITING_VERBS.has(e.verb))
-    .map((e) => e.args[1])
+    .map((e) =>
+      KEY_WRITING_VERBS.has(e.verb)
+        ? e.args[1]
+        : e.args[ACTION_NAMING_VERBS.get(e.verb) ?? -1],
+    )
     .filter((k): k is string => k !== undefined);
 }
 

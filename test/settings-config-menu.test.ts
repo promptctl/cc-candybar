@@ -466,7 +466,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(writesTo(open, "theme").length).toBeGreaterThan(0);
     for (const url of linkUrls(open)) {
       const durableWrites = effectsOf(url).filter((e) =>
-        ["set-config", "step-config"].includes(e.verb),
+        ["set-config", "step-config", "ring-config"].includes(e.verb),
       );
       expect(durableWrites).toEqual([]);
     }

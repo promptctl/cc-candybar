@@ -2,14 +2,14 @@
 
 An inventory of what a click can do, read from the code. Verify a claim against the code before building on it. Decisions live in the design docs, which override anything here.
 
-The code declares 20 leaf verbs and `dispatch` (`src/click/wire.ts`). A verb's handler runs in the renderer (`src/renderer/verbs/index.ts`) and returns effects; the host performs them (`src/daemon/acts.ts`).
+The code declares 23 leaf verbs and `dispatch` (`src/click/wire.ts`). A verb's handler runs in the renderer (`src/renderer/verbs/index.ts`) and returns effects; the host performs them (`src/daemon/acts.ts`).
 
 ## Verbs and what each reaches
 
 | Verbs | Reach |
 |---|---|
-| `set-state`, `step-state`, `back` | The session's picks and navigation, in the renderer's own state. A settings pick or an edit-mode toggle also writes the settings history. |
-| `set-config`, `step-config`, `reset-config`, `save`, `save-preset`, `save-theme-default`, `delete-preset`, `apply-layout-op` | A config file of the session's chain, spliced in place, through a `change` effect the host applies. Every one of them names its layer by role as its second argument. |
+| `set-state`, `step-state`, `ring-state`, `turn-page`, `back` | The session's picks and navigation, in the renderer's own state. A settings pick or an edit-mode toggle also writes the settings history. `ring-state` steps through an option action's ring and `turn-page` turns a picker's page cursor, each from where the key stands when the click arrives. |
+| `set-config`, `step-config`, `ring-config`, `reset-config`, `save`, `save-preset`, `save-theme-default`, `delete-preset`, `apply-layout-op` | A config file of the session's chain, spliced in place, through a `change` effect the host applies. Every one of them names its layer by role as its second argument. |
 | `undo`, `redo`, `rewind` | The settings history's own steps: the files a step wrote, and the session's picks. |
 | `repo-config` | The user's answer about a repository's config, in the trust book under the state directory. |
 | `copy`, `copy-diagnostic` | The clipboard, by `pbcopy`, as an act the host performs. |

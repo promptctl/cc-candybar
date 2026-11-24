@@ -601,17 +601,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
         ctx,
       );
       const afterStyle = render();
-      // The style control names the setting, so its value shows in where its
-      // ▶ steps to: the option after the style in force.
+      // The style control names the setting, and its ▶ lands the option after
+      // the style in force, read from the session when the click arrives.
       const styles = Object.keys(parsed.styles);
       const after = styles[(styles.indexOf(targetStyle) + 1) % styles.length];
       expect(names(afterStyle, "◀ ◐ style ▀▀▀ ▶")).toBe(true);
-      expect(
-        linkUrls(afterStyle).some((u) =>
-          effectsOf(u).some((e) => e.args[1] === "style" && e.args[2] === after),
-        ),
-      ).toBe(true);
       expect(afterStyle.rows).not.toEqual(afterTheme.rows);
+      const nextStyle = linkUrls(afterStyle).find((u) =>
+        effectsOf(u).some(
+          (e) => e.verb === "ring-state" && e.args[1] === "candybar.apply.style" && e.args[2] === "1",
+        ),
+      );
+      expect(nextStyle).toBeDefined();
+      await clickUrl(nextStyle!, ctx);
+      expect(sessionState.get(SID, "style")).toBe(after);
     } finally {
       registry.dispose();
     }

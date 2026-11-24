@@ -36,6 +36,7 @@ import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
 import { sessionKeyKind } from "../config/session-key.js";
 import { menuOfKey } from "../config/menu-keys.js";
+import { parseStep } from "../render/option-ring.js";
 import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
   parseSessionId,
@@ -69,6 +70,20 @@ export const VERB_SET_STATE = "set-state";
 // from live state, so the link carries no `current` snapshot and N rapid clicks
 // each re-read-and-write. Additive: old set-state links still resolve.
 export const VERB_STEP_STATE = "step-state";
+// [LAW:types-are-the-program] A step through an option action's ring, resolved
+// when the click lands. Args: `[sessionId, action, step, centre, ...turn]`:
+// the action whose domain is the ring, a step (a signed whole number of
+// options, or "random"), the name the draw wore while a rule chooses the
+// key's value (else empty), and optionally the page cursor to turn to the page
+// holding the option landed on, as `pageKey, pageLayout`. The ring, the value
+// it starts from and the landing are read at click time, so the link is the
+// same on every draw and N clicks without a redraw land N steps.
+export const VERB_RING_STATE = "ring-state";
+// One page arrow: `[sessionId, action, pageKey, by, pageLayout, centre]`. The
+// click reads the cursor and the option in force (`centre` as for ring-state),
+// then turns the page by `by`, stopping at the first and last page the layout
+// holds.
+export const VERB_TURN_PAGE = "turn-page";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 // Every config write's args begin `[sessionId, layer]`: the session whose
@@ -84,6 +99,10 @@ export const VERB_SET_CONFIG = "set-config";
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
 // `[sessionId, layer, key, by]`.
 export const VERB_STEP_CONFIG = "step-config";
+// The config twin of ring-state. Args: `[sessionId, layer, action, step,
+// centre, ...turn]`; the page turn, which is session state, lands with the
+// write.
+export const VERB_RING_CONFIG = "ring-config";
 // [LAW:no-ambient-temporal-coupling] Write every one of the session's unsaved
 // settings (src/renderer/setting-drafts.ts) to its config file, then release
 // them from the session — one handler, so a refused write keeps every draft.
@@ -227,6 +246,7 @@ export interface Effect {
 type ConfigWriteVerb =
   | typeof VERB_SET_CONFIG
   | typeof VERB_STEP_CONFIG
+  | typeof VERB_RING_CONFIG
   | typeof VERB_RESET_CONFIG
   | typeof VERB_APPLY_LAYOUT_OP
   | typeof VERB_SAVE
@@ -250,6 +270,17 @@ export function configWriteEffect(
 
 const sayStep = (key: string, by: string): string =>
   `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
+
+// An option ring's step in words: another option at random, or the option
+// some way round the ring.
+function sayRing(action: string, raw: string): string {
+  const parsed = parseStep(raw);
+  if (!parsed.ok) return `step ${action} by ${raw}`;
+  const { step } = parsed;
+  return step.kind === "random"
+    ? `pick another option for ${action}`
+    : `step ${action} ${step.by < 0 ? "back" : "on"} by ${Math.abs(step.by)}`;
+}
 
 // One session write in words. A disclosure's state keys read as the menu they
 // open or close, and a page cursor, which counts from 0, as the page the bar
@@ -307,6 +338,14 @@ const SAYS = {
       i % 2 === 0 ? [said(sayWrite(key, pairs[i + 1]!))] : [],
     ),
   [VERB_STEP_STATE]: ([, key, by]) => [said(sayStep(key!, by!))],
+  [VERB_RING_STATE]: ([, action, step]) => [said(sayRing(action!, step!))],
+  // A turn names the list it turns, as a write to its page key does, so two
+  // pickers on one screen never read alike.
+  [VERB_TURN_PAGE]: ([, , pageKey, by]) => [
+    said(
+      `turn ${menuOfKey(pageKey!)?.menu ?? pageKey} ${by!.startsWith("-") ? "back" : "forward"} a page`,
+    ),
+  ],
   [VERB_COPY]: ([text]) => {
     const copied = saidCopy(text!);
     return [said(`copy ${copied}`, copied)];
@@ -318,6 +357,9 @@ const SAYS = {
   ],
   [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
     said(`save ${sayStep(key!, by!)} in ${layer} config`),
+  ],
+  [VERB_RING_CONFIG]: ([, layer, action, step]) => [
+    said(`save ${sayRing(action!, step!)} in ${layer} config`),
   ],
   [VERB_SAVE]: ([, layer]) => [said(`save settings to ${layer} config`)],
   [VERB_SAVE_PRESET]: ([, layer]) => [
@@ -364,7 +406,10 @@ const spell = (text: string): string =>
 // first, but what it does is what it fires.
 export function saysOf(effects: readonly Effect[]): Said[] {
   const writesSession = (e: Effect): boolean =>
-    e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
+    e.verb === VERB_SET_STATE ||
+    e.verb === VERB_STEP_STATE ||
+    e.verb === VERB_RING_STATE ||
+    e.verb === VERB_TURN_PAGE;
   return [
     ...effects.filter((e) => !writesSession(e)),
     ...effects.filter(writesSession),
@@ -534,8 +579,11 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
 export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_SET_STATE,
   VERB_STEP_STATE,
+  VERB_RING_STATE,
+  VERB_TURN_PAGE,
   VERB_SET_CONFIG,
   VERB_STEP_CONFIG,
+  VERB_RING_CONFIG,
   VERB_RESET_CONFIG,
   VERB_SAVE,
   VERB_SAVE_PRESET,

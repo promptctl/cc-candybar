@@ -41,6 +41,7 @@ const DRAWN_ONLY_AFTER = [
   /^set edit\.mode to arrange/,
   /^open edit\.default\.insert\./,
   /^turn .* to page /,
+  /^turn .* (forward|back) a page$/,
 ];
 
 // Every `2/6` a frame draws: where each paged list stands.
@@ -55,9 +56,11 @@ const moved = (before: readonly string[], after: readonly string[]): string[] =>
     [...after],
   );
 
-// A click that named a page, and the positions the bar drew around it.
+// A click that turned a page, and the positions the bar drew around it. A link
+// that names a page says which; one that turns a list on or back says only the
+// direction, since the page it lands on is read when the click arrives.
 interface Turn {
-  readonly page: string;
+  readonly page: number | "forward" | "back";
   readonly before: readonly string[];
   readonly after: readonly string[];
 }
@@ -90,8 +93,16 @@ async function walk(bar: Bar): Promise<Walked> {
     const { rendered } = await bar.follow(next.url);
     frames.push(barLinks(rendered));
     const after = positionsIn(rendered);
-    const page = /to page (\d+)/.exec(doesOf(next.url))?.[1];
-    if (page !== undefined) turns.push({ page, before, after });
+    const said = doesOf(next.url);
+    const page =
+      /to page (\d+)/.exec(said)?.[1] ??
+      /^turn .* (forward|back) a page$/.exec(said)?.[1];
+    if (page !== undefined)
+      turns.push({
+        page: page === "forward" || page === "back" ? page : Number(page),
+        before,
+        after,
+      });
     before = after;
   }
   return { frames, turns };
@@ -176,10 +187,18 @@ describe.each([
 
   test("a link that names a page lands on the page the bar numbers so", () => {
     expect(turns.length).toBeGreaterThan(0);
-    for (const { page, before, after } of turns)
-      expect(moved(before, after)).toEqual([
-        expect.stringMatching(new RegExp(`^${page}/`)),
-      ]);
+    for (const { page, before, after } of turns) {
+      const [now, ...more] = moved(before, after);
+      expect(more).toEqual([]);
+      const landed = Number(now!.split("/")[0]);
+      if (page === "forward" || page === "back") {
+        // One list moved one page, the way the link said.
+        const [was] = moved(after, before);
+        expect(landed - Number(was!.split("/")[0])).toBe(page === "forward" ? 1 : -1);
+      } else {
+        expect(landed).toBe(page);
+      }
+    }
   });
 
   test("no link's words hold a number the bar never shows", () => {
@@ -204,7 +223,11 @@ describe.each([
   test("a click that acts beyond the session never reads as a session write", () => {
     const acting = links.filter((l) =>
       effectsOf(l.url).some(
-        (e) => e.verb !== "set-state" && e.verb !== "step-state",
+        (e) =>
+          e.verb !== "set-state" &&
+          e.verb !== "step-state" &&
+          e.verb !== "ring-state" &&
+          e.verb !== "turn-page",
       ),
     );
     expect(acting.length).toBeGreaterThan(0);

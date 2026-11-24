@@ -709,11 +709,13 @@ function refuseNewDrops(into: Seen, was: Was, will: LoadedChain): void {
 /**
  * What the file declares at a value target. A string, a null, a list, an
  * object and a fraction are each declared (`other`, with the text as written),
- * so a reader that steps an integer can tell them from nothing.
+ * so a reader that steps an integer can tell them from nothing. A string is
+ * `text`, the name a ring starts from, and its `source` is as written.
  */
 export type Declared =
   | { readonly kind: "none" }
   | { readonly kind: "integer"; readonly value: number }
+  | { readonly kind: "text"; readonly value: string; readonly source: string }
   | { readonly kind: "other"; readonly source: string };
 
 export function readDeclared(text: string | null, key: string): Declared {
@@ -721,9 +723,12 @@ export function readDeclared(text: string | null, key: string): Declared {
   const doc = docOf(text ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
   if (node === undefined) return { kind: "none" };
-  return node.kind === "number" && Number.isInteger(node.value)
-    ? { kind: "integer", value: node.value }
-    : { kind: "other", source: textOf(text ?? "", node) };
+  const source = textOf(text ?? "", node);
+  if (node.kind === "number" && Number.isInteger(node.value))
+    return { kind: "integer", value: node.value };
+  return node.kind === "string"
+    ? { kind: "text", value: node.value, source }
+    : { kind: "other", source };
 }
 
 /**

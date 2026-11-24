@@ -429,6 +429,16 @@ export function bindsTemplateValue(
   actions: Readonly<Record<string, ActionDecl>>,
   a: ActionDecl,
 ): boolean {
-  const head = "do" in a ? actions[a.do[0]] : a;
+  const head = headOf(actions, a);
   return head !== undefined && actionBindsTemplateValue(head);
+}
+
+// [LAW:one-source-of-truth] The action a click on `a` presents as: a `do`'s
+// head, else the action itself. The click-time handlers that read an action's
+// domain resolve it here, as the loader's gesture check does.
+export function headOf(
+  actions: Readonly<Record<string, ActionDecl>>,
+  a: ActionDecl,
+): ActionDecl | undefined {
+  return "do" in a ? actions[a.do[0]] : a;
 }

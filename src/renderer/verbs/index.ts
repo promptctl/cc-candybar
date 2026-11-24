@@ -40,7 +40,22 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeyShown, configKeySeed } from "./key-seeds";
+import { stateKeyShown, configKeyShown, configKeySeed } from "./key-seeds";
+import {
+  landing as landOnOption,
+  parseOffset,
+  parseStep,
+  type OptionStep,
+} from "../../render/option-ring";
+import {
+  pageCount,
+  pageHolding,
+  pageShown,
+  parsePageMap,
+  type PageMap,
+} from "../../render/page-map";
+import { resolveOptionDomain } from "../../config/option-domain";
+import { configOptionDomains } from "../../config/edit-chrome";
 import {
   disclosureNest,
   NO_NEST,
@@ -121,10 +136,13 @@ import {
   VERB_SAVE_PRESET,
   VERB_SAVE_THEME_DEFAULT,
   VERB_DELETE_PRESET,
+  VERB_RING_CONFIG,
+  VERB_RING_STATE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
+  VERB_TURN_PAGE,
   VERB_UNDO,
   VERB_SLASH,
   VERB_COPY_DIAGNOSTIC,
@@ -148,7 +166,12 @@ import type {
   DeclaredSources,
   SessionContext,
 } from "../../renderer-interface/request-context";
-import { runDeclaration, type SlashAction } from "../../config/action";
+import {
+  headOf,
+  runDeclaration,
+  type ActionDecl,
+  type SlashAction,
+} from "../../config/action";
 import type { ClickArrival } from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
@@ -743,7 +766,7 @@ const stepConfig: VerbHandler = (args, ctx) => {
   // step from (clamped into the stepper's own range), or something else, which
   // is refused naming what the layer holds: a step from the value the bar draws
   // would overwrite what its author wrote.
-  if (declared.kind === "other") {
+  if (declared.kind === "other" || declared.kind === "text") {
     throw new BadVerbArgs(
       `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer to step`,
     );
@@ -765,6 +788,283 @@ const stepConfig: VerbHandler = (args, ctx) => {
     "info",
     `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${into.path} (session=${sid})`,
   );
+};
+
+// [LAW:one-source-of-truth] The option ring an action's link names, read the
+// way the draw reads it: the options are the head's own domain, resolved over
+// this session's config as the compile resolved them, and the value the ring
+// starts from is the one the bar wears (the fold behind its `.effective`),
+// except for a persist twin, which steps its own layer's value (ringConfig). A
+// `do` is its head's ring.
+interface OptionRing {
+  readonly twin: "set" | "persist";
+  readonly key: string;
+  readonly options: readonly string[];
+  // What the key shows now, or null when it names nothing yet (a theme chosen
+  // by a rule has no name until a render evaluates it).
+  readonly shown: string | null;
+}
+
+function headFor(config: DslConfig, name: string): ActionDecl | undefined {
+  const action = config.actions[name];
+  return action === undefined ? undefined : headOf(config.actions, action);
+}
+
+// The options an action lists: a ring's own, or the list a structural insert
+// picks from.
+function optionsOf(
+  config: DslConfig,
+  head: ActionDecl,
+): readonly string[] | undefined {
+  const domain =
+    "from" in head
+      ? head.from
+      : "insertSegmentFrom" in head
+        ? head.insertSegmentFrom
+        : undefined;
+  return domain === undefined
+    ? undefined
+    : resolveOptionDomain(domain, configOptionDomains(config)).members;
+}
+
+// The ring a `set` or `persist` head over a list of options holds, or nothing
+// for any other action (a structural insert has a list but holds no value).
+function ringHeld(
+  ctx: ClickContext,
+  config: DslConfig,
+  head: ActionDecl,
+): OptionRing | undefined {
+  if (!("from" in head)) return undefined;
+  const pick = (k: string) => ctx.sessionState.get(ctx.session, k);
+  const options = optionsOf(config, head)!;
+  if ("set" in head)
+    return {
+      twin: "set",
+      key: head.set,
+      options,
+      shown: stateKeyShown(config, pick, head.set),
+    };
+  if ("persist" in head)
+    return {
+      twin: "persist",
+      key: head.persist,
+      options,
+      shown: configKeyShown(config, pick, head.persist),
+    };
+  return undefined;
+}
+
+function ringOf(
+  verb: string,
+  ctx: ClickContext,
+  name: string,
+  twin: OptionRing["twin"],
+): OptionRing {
+  const config = sessionConfig(ctx);
+  const head = headFor(config, name);
+  const ring = head === undefined ? undefined : ringHeld(ctx, config, head);
+  if (ring === undefined || ring.twin !== twin) {
+    throw new BadVerbArgs(
+      `${verb}: "${name}" is not a ${twin} action over a list of options`,
+    );
+  }
+  if (ring.options.length === 0)
+    throw new BadVerbArgs(`${verb}: "${name}" has no options to step through`);
+  return ring;
+}
+
+// [LAW:parse-dont-validate] The step a link carried, or a refusal naming it.
+function stepOf(verb: string, raw: string): OptionStep {
+  const parsed = parseStep(raw);
+  if (!parsed.ok) throw new BadVerbArgs(`${verb}: ${parsed.problem}`);
+  return parsed.step;
+}
+
+function pageMapOfLink(
+  verb: string,
+  raw: string,
+  options: readonly string[],
+): PageMap {
+  const parsed = parsePageMap(raw, options.length);
+  if (!parsed.ok) throw new BadVerbArgs(`${verb}: ${parsed.problem}`);
+  return parsed.map;
+}
+
+// The page cursor a ring step also turns, as the link carried it, or nothing:
+// `pageKey, pageLayout`.
+interface PageTurn {
+  readonly key: string;
+  readonly map: PageMap;
+}
+
+function turnOf(
+  verb: string,
+  raw: readonly string[],
+  options: readonly string[],
+): PageTurn | undefined {
+  if (raw.length === 0) return undefined;
+  const [key, layout, ...extra] = raw;
+  if (!key || layout === undefined || extra.length > 0)
+    throw new BadVerbArgs(
+      `${verb}: a page turn is <pageKey>/<pageLayout>, got ${raw.length} segment(s)`,
+    );
+  return { key, map: pageMapOfLink(verb, layout, options) };
+}
+
+// [LAW:no-ambient-temporal-coupling] The page the landed option stands on is
+// derived here, from the landing, and written with it: a persist write lands
+// after the click, so a second effect that read the key would turn the row to
+// the page of the value from before the click.
+const turnWrites = (
+  turn: PageTurn | undefined,
+  options: readonly string[],
+  landed: string,
+): string[] =>
+  turn === undefined
+    ? []
+    : [turn.key, String(pageHolding(turn.map, options.indexOf(landed)))];
+
+interface RingLanding {
+  readonly ring: OptionRing;
+  readonly next: string;
+  readonly turn: string[];
+}
+
+// [LAW:one-source-of-truth] A step through an option ring, resolved against the
+// value the key holds NOW, which `held` reads, so the same link fires every
+// draw and N clicks without a redraw land N steps. A key that holds no name
+// starts where the draw centred (`centre`, the value its read-back variable
+// had): the one thing only a render can evaluate.
+function landRing(
+  verb: string,
+  ctx: ClickContext,
+  name: string,
+  twin: OptionRing["twin"],
+  [stepRaw, centre, ...turnRaw]: readonly string[],
+  held: (ring: OptionRing) => string | null,
+): RingLanding {
+  // [LAW:no-silent-failure] `centre` is empty when no rule chooses the key; a
+  // link that lacks the slot is malformed, never a ring from the first option.
+  if (stepRaw === undefined || centre === undefined)
+    throw new BadVerbArgs(
+      `${verb}: a ring step is <step>/<centre>[/<pageKey>/<pageLayout>]`,
+    );
+  const ring = ringOf(verb, ctx, name, twin);
+  const turn = turnOf(verb, turnRaw, ring.options);
+  const from = held(ring) ?? centre;
+  const step = stepOf(verb, stepRaw);
+  const next = landOnOption(ring.options, from, step, ctx.now());
+  ctx.log(
+    "info",
+    `${verb}: ${ring.key} ${JSON.stringify(from)}→${JSON.stringify(next)} (step ${stepRaw}, session=${ctx.session})`,
+  );
+  return { ring, next, turn: turnWrites(turn, ring.options, next) };
+}
+
+// The step lands in SessionState through the write every set action makes:
+// the same gate, the same batch (setState), the page turn riding in it.
+const ringState: VerbHandler = (args, ctx) => {
+  const [name = "", ...rest] = args;
+  const { ring, next, turn } = landRing(
+    "ring-state",
+    ctx,
+    name,
+    "set",
+    rest,
+    (r) => r.shown,
+  );
+  setState([ring.key, next, ...turn], ctx);
+};
+
+// The name a layer's text declares at a value key, or nothing when it declares
+// none or something that is no name.
+function declaredName(text: string | null, key: string): string | undefined {
+  const declared = readDeclared(text, key);
+  return declared.kind === "text" ? declared.value : undefined;
+}
+
+// `persist`'s twin of ringState: the option lands in the layer's file through
+// setConfig, and the page turn, which is session state, with it.
+// [LAW:one-source-of-truth] The ring steps the value of the layer it writes,
+// as step-config does: the name that layer's file declares, which carries an
+// earlier click's write the bar has not reloaded, else what the bar wears (the
+// layer declares no name, or a rule).
+const ringConfig: VerbHandler = (args, ctx) => {
+  const {
+    role,
+    args: [name = "", ...rest],
+  } = configArgs("ring-config", args);
+  const origin = sessionOrigin(ctx);
+  const config = ctx.configFor(origin);
+  const into = heldLayer(ctx, origin, role);
+  const { ring, next, turn } = landRing(
+    "ring-config",
+    ctx,
+    name,
+    "persist",
+    rest,
+    (r) => {
+      const key = durableLanding(
+        config,
+        (k) => ctx.sessionState.get(ctx.session, k),
+        r.key,
+      ).key;
+      const declared = declaredName(
+        requireLayerText(
+          into.path,
+          editStore(ctx, ctx.session).read(into.path),
+        ),
+        key,
+      );
+      return declared !== undefined && r.options.includes(declared)
+        ? declared
+        : r.shown;
+    },
+  );
+  setConfig([role, ring.key, next], ctx);
+  // [LAW:dataflow-not-control-flow] exception: the page turn is optional on
+  // the wire, and the session gate refuses an empty batch.
+  if (turn.length > 0) setState(turn, ctx);
+};
+
+// [LAW:one-source-of-truth] A page arrow: the page the cursor shows now, turned
+// by the arrow's direction and stopped at the first and last page the drawn
+// layout holds, as the draw's boundary arrows stop. The cursor folds as the
+// draw folds it (pageShown): a cursor below zero is the page holding the
+// option in force, which this reads from the session, else from where the draw
+// centred (`centre`), not from the link's layout.
+const turnPage: VerbHandler = (args, ctx) => {
+  const [name = "", pageKey, byRaw, layout, centre] = args;
+  if (
+    !pageKey ||
+    byRaw === undefined ||
+    layout === undefined ||
+    centre === undefined
+  )
+    throw new BadVerbArgs(
+      "turn-page: <action>/<pageKey>/<by>/<pageLayout>/<centre> is required",
+    );
+  const by = parseOffset(byRaw);
+  if (!by.ok) throw new BadVerbArgs(`turn-page: by is ${by.problem}`);
+  const config = sessionConfig(ctx);
+  const head = headFor(config, name);
+  const options = head === undefined ? undefined : optionsOf(config, head);
+  if (head === undefined || options === undefined || options.length === 0)
+    throw new BadVerbArgs(
+      `turn-page: "${name}" lists no options to page through`,
+    );
+  const map = pageMapOfLink("turn-page", layout, options);
+  const pick = (k: string) => ctx.sessionState.get(ctx.session, k);
+  // A structural insert holds no value in force, as its draw has none.
+  const inForce = ringHeld(ctx, config, head)?.shown ?? centre;
+  const pages = pageCount(map);
+  const at = pageShown(
+    stateKeyShown(config, pick, pageKey) ?? "",
+    pageHolding(map, options.indexOf(inForce)),
+    pages,
+  );
+  const next = Math.max(0, Math.min(at + by.by, pages - 1));
+  setState([pageKey, String(next)], ctx);
 };
 
 // Save (brandon-save-undo-bwi.hpi): every unsaved setting lands in the config
@@ -1188,6 +1488,9 @@ const SESSION_HANDLERS: Record<
 > = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
+  [VERB_RING_STATE]: ringState,
+  [VERB_RING_CONFIG]: ringConfig,
+  [VERB_TURN_PAGE]: turnPage,
   [VERB_SET_CONFIG]: setConfig,
   [VERB_STEP_CONFIG]: stepConfig,
   [VERB_RESET_CONFIG]: resetConfig,

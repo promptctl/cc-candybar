@@ -43,7 +43,11 @@ import {
 } from "../config/option-domain.js";
 import { pickCycleDisplay } from "../config/disclosure.js";
 import { resolvedStyle } from "./rich-theme.js";
-import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
+import {
+  CONFIG_KEY_TO_EFFECTIVE_VAR,
+  EXPRESSION_SLOT_OF_KEY,
+} from "../config/setting-projections.js";
+import type { ExpressionSlot } from "../themes/policy.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
 import {
@@ -55,6 +59,8 @@ import {
   VERB_BACK,
   VERB_REWIND,
   VERB_RESET_CONFIG,
+  VERB_RING_CONFIG,
+  VERB_RING_STATE,
   VERB_SAVE,
   VERB_SAVE_PRESET,
   VERB_SAVE_THEME_DEFAULT,
@@ -66,6 +72,7 @@ import {
   VERB_UNDO,
   VERB_SLASH,
 } from "../click/wire.js";
+import { centreOf, spellStep, type OptionStep } from "./option-ring.js";
 import { HOVER, type GestureName } from "../click/gesture.js";
 import { HOVER_REGION } from "../config/click-mode.js";
 import {
@@ -356,6 +363,8 @@ export interface RenderBinding {
   // `renderLook` / `renderLayout`.
   readonly look: RenderLook | undefined;
   readonly layout: (() => PreviewRows) | undefined;
+  // Whether a rule, not a name, chooses this slot's value in this render.
+  readonly ruled: (slot: ExpressionSlot) => boolean;
 }
 
 /**
@@ -786,7 +795,7 @@ function cycleIndex(
   c: Extract<CompiledActionDecl, { kind: "set-cycle" | "persist-cycle" }>,
   store: VariableStore,
 ): number {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+  return centreOf(c.members, readVar(store, c.stateVar));
 }
 
 // [LAW:dataflow-not-control-flow] The single total projection of a compiled action
@@ -1120,6 +1129,71 @@ export function realize(
       };
     }
   }
+}
+
+// [LAW:one-source-of-truth] The name a key's read-back variable holds while a
+// RULE chooses the key's value, else nothing. A rule's answer exists only in a
+// render, so a click cannot read it from the session; the link carries it, for
+// exactly as long as no pick or name decides the key. Everywhere else the
+// click reads the key itself, and the link is the same whatever the key holds.
+export function ruledName(
+  binding: RenderBinding,
+  head: { readonly key: string; readonly stateVar: string },
+): string {
+  const slot = EXPRESSION_SLOT_OF_KEY.get(head.key);
+  return slot !== undefined && binding.ruled(slot)
+    ? readVar(binding.store, head.stateVar)
+    : "";
+}
+
+// The option actions a ring steps: a value written to the session or to a
+// layer's file, over a list of options.
+export type RingAction = Extract<
+  CompiledActionDecl,
+  { kind: "set-option" | "persist-option" }
+>;
+
+// [LAW:one-source-of-truth] A step through an option action's ring, as the
+// link carries it: the action's name and the step, never the option the step
+// lands on. Where it lands is read when the click arrives, from the value the
+// key holds then (ring-state / ring-config, src/renderer/verbs/index.ts), so a
+// terminal that keeps the link it found when the mouse last moved still lands
+// one step per click. A key a rule chooses holds no name the click can read,
+// so the link also carries the name the draw wore (ruledName). `turn` is the page
+// cursor to turn to the page holding the option landed on (`pageKey,
+// pageLayout`), or nothing.
+//
+// `declared` is the action the click presents as, `head` the ring it steps:
+// a `do` steps through its head's ring, and its other members ride behind as
+// they always have.
+export function realizeRing(
+  declared: CompiledActionDecl,
+  head: RingAction,
+  name: string,
+  step: OptionStep,
+  turn: readonly string[],
+  binding: RenderBinding,
+  sessionId: SessionId,
+): readonly DrawnEffect[] {
+  const { store } = binding;
+  const ring = [spellStep(step), ruledName(binding, head), ...turn];
+  const stepped: DrawnEffect =
+    head.kind === "set-option"
+      ? { verb: VERB_RING_STATE, args: [sessionId, name, ...ring] }
+      : configWriteEffect(
+          VERB_RING_CONFIG,
+          sessionId,
+          head.layer,
+          name,
+          ...ring,
+        );
+  const followers = declared.kind === "do" ? declared.rest : [];
+  return [
+    stepped,
+    ...followers.flatMap(
+      (member) => realize(member, "", undefined, store, sessionId).effects,
+    ),
+  ];
 }
 
 // [LAW:dataflow-not-control-flow] Which text a region shows is a pure function
