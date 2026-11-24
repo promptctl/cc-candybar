@@ -3,9 +3,10 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
+import globals from "globals";
 import fs from "node:fs";
 import path from "node:path";
-import { mayImport, mayLoadRendererModule, NO_ZONE, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
+import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -280,7 +281,7 @@ const REFUSAL = {
   root: "The CLI's entry dispatches to every process, and nothing imports it.",
   lib: "scripts/lib is what the tools and the tests share, and the app imports nothing from it.",
   tools: "A tool runs by hand: the app and scripts/lib import nothing from one, and what it shares lives in scripts/lib.",
-  test: "The test suite runs under Jest: code that runs outside it imports nothing from test/, and what a tool and a test share lives in scripts/lib.",
+  test: "The test suite runs under Jest: code that runs outside it imports nothing from test/ or from Jest, and what a tool and a test share lives in scripts/lib.",
   [NO_ZONE]: "A path no row of scripts/import-zones.mjs names is in no zone: give its root a row there, saying which side of Jest it runs on.",
   "outside the repo": "A module outside the repo is in no zone.",
 };
@@ -345,7 +346,22 @@ const importDirection = {
       };
     }
     const rendering = fromZone === "renderer" || fromZone === "start" || fromZone === "renderer-process";
-    const check = (node, source) => {
+    // Where an edge's source leads: a package, whose zone is the one that
+    // owns it or none; a path in the repo, whose zone is its row's; or a path
+    // outside the repo, which is in no zone.
+    const targetOf = (source, base) => {
+      if (!source.startsWith(".") && !path.isAbsolute(source))
+        return { kind: "package", name: source, zone: packageZoneOf(source) };
+      const key = moduleKey(path.resolve(base, source));
+      return {
+        kind: "path",
+        name: key,
+        zone: outside(key) ? "outside the repo" : zoneOf(key),
+      };
+    };
+    // `base` is the directory a relative source resolves from: this file's,
+    // or null for a loader built on a base no lint can read.
+    const check = (node, source, base = dir) => {
       if (source === null) {
         context.report({
           node,
@@ -353,27 +369,33 @@ const importDirection = {
         });
         return;
       }
-      if (!source.startsWith(".") && !path.isAbsolute(source)) {
-        if (rendering && !typeOnly(node) && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
-          context.report({
-            node,
-            message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
-          });
-        }
-        return;
-      }
-      const to = moduleKey(path.resolve(dir, source));
-      const toZone = outside(to) ? "outside the repo" : zoneOf(to);
-      if (!mayImport(fromZone, toZone)) {
+      if (base === null && (source.startsWith(".") || path.isAbsolute(source))) {
         context.report({
           node,
-          message: `${fromZone} ${from} imports ${toZone} ${to}. ${REFUSAL[toZone]} [LAW:one-way-deps]`,
+          message: `A loader whose base is computed loads ${source} from no place a lint can read. [LAW:one-way-deps]`,
+        });
+        return;
+      }
+      const to = targetOf(source, base);
+      // [LAW:one-way-deps] One judgment of every edge, a package's as a
+      // path's: Jest's packages are the test zone's.
+      if (to.zone !== null && !mayImport(fromZone, to.zone)) {
+        context.report({
+          node,
+          message: `${fromZone} ${from} imports ${to.zone} ${to.name}. ${REFUSAL[to.zone]} [LAW:one-way-deps]`,
+        });
+      }
+      if (!rendering || typeOnly(node)) return;
+      if (to.kind === "package" && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
+        context.report({
+          node,
+          message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
         });
       }
       // [LAW:effects-at-boundaries] The renderer reads no clock and sets no
       // timer: its time is the readings each input carries, and what it holds
       // for later waits for a `due`. It may name the clock's types.
-      if (rendering && to === CLOCK_KEY && !typeOnly(node)) {
+      if (to.kind === "path" && to.name === CLOCK_KEY) {
         context.report({
           node,
           message: `${from} imports the clock. The renderer's time is its turn's (src/renderer/turn-time.ts). [LAW:effects-at-boundaries]`,
@@ -388,24 +410,165 @@ const importDirection = {
         : node.type === "TemplateLiteral" && node.expressions.length === 0
           ? node.quasis[0].value.cooked
           : null;
-    // Every spelling of an edge: `import`, `export … from`, `import()`, the
-    // type `import("…").T`, `import x = require("…")` and `require("…")`.
     const fromSource = (node) =>
       node.source && check(node, sourceOf(node.source));
+    // [LAW:one-way-deps] What a loader Node hands code loads is an edge like
+    // an import's: `require`, `module.require`, `process.getBuiltinModule`,
+    // and the loader `createRequire` makes, under whatever name it is bound
+    // to. A loader it reads is used by a call with its source, which is
+    // judged, or by `.resolve`, which locates and loads nothing. Any other use
+    // (an alias, `.call`, an export) carries it where no lint follows, so it
+    // is refused. A loader reached by a name it does not read (an alias of
+    // `module` or `process`, `Module._load`, `globalThis`, `eval`) is not
+    // judged.
+    const refuseUse = (node, what) =>
+      context.report({
+        node,
+        message: `${what} is used other than by a call with its source, so what it loads no lint can place. [LAW:one-way-deps]`,
+      });
+    // Each read of a variable a declaration binds, by its name in the
+    // declaration.
+    const readsOf = (declaration, name) =>
+      context.sourceCode
+        .getDeclaredVariables(declaration)
+        .filter((variable) => variable.name === name)
+        .flatMap((variable) => variable.references)
+        .filter((reference) => !reference.init)
+        .map((reference) => reference.identifier);
+    const calledAs = (node) =>
+      node.parent.type === "CallExpression" && node.parent.callee === node;
+    // An expression whose value is a loader, judged where it stands.
+    const loaderUse = (node, base, what) => {
+      const { parent } = node;
+      if (calledAs(node)) {
+        check(parent, parent.arguments[0] ? sourceOf(parent.arguments[0]) : null, base);
+        return;
+      }
+      if (
+        parent.type === "MemberExpression" &&
+        parent.object === node &&
+        !parent.computed &&
+        parent.property.name === "resolve" &&
+        calledAs(parent)
+      )
+        return;
+      if (
+        parent.type === "VariableDeclarator" &&
+        parent.init === node &&
+        parent.id.type === "Identifier" &&
+        parent.parent.parent.type !== "ExportNamedDeclaration"
+      ) {
+        for (const read of readsOf(parent, parent.id.name)) loaderUse(read, base, what);
+        return;
+      }
+      refuseUse(node, what);
+    };
+    // A `createRequire` call resolves relative sources from its base: this
+    // file's directory when the base names this file, and none a lint can
+    // read otherwise.
+    const baseOf = (call) => {
+      const [at] = call.arguments;
+      const namesThisFile =
+        (at?.type === "MemberExpression" &&
+          at.object.type === "MetaProperty" &&
+          at.property.name === "url") ||
+        (at?.type === "Identifier" && at.name === "__filename");
+      return namesThisFile ? dir : null;
+    };
+    const makerUse = (node) =>
+      calledAs(node)
+        ? loaderUse(node.parent, baseOf(node.parent), "A `createRequire` loader")
+        : refuseUse(node, "`createRequire`");
+    const builtinUse = (node) => loaderUse(node, dir, "`getBuiltinModule`");
+    // A key's name: an identifier's, or a string's when computed.
+    const keyOf = (key, computed) =>
+      !computed && key.type === "Identifier"
+        ? key.name
+        : key.type === "Literal" && typeof key.value === "string"
+          ? key.value
+          : null;
+    const LOADER_USES = { createRequire: makerUse, getBuiltinModule: builtinUse };
+    // A loader destructured out of its module or of `process`, bound by a
+    // declaration whose reads are followed; destructured anywhere else (a
+    // parameter, a nested pattern, an assignment), it is not followed.
+    const fromPattern = (property, name) => {
+      const pattern = property.parent;
+      const declarator = pattern.parent;
+      if (pattern.type !== "ObjectPattern") return;
+      if (declarator.type !== "VariableDeclarator" || property.value.type !== "Identifier") {
+        refuseUse(property, `\`${name}\``);
+        return;
+      }
+      for (const read of readsOf(declarator, property.value.name)) LOADER_USES[name](read);
+    };
+    // The spellings of an edge it reads: `import`, `export … from`,
+    // `import()`, the type `import("…").T`, `import x = require("…")`, a
+    // triple-slash reference to types or a path, and a loader's call.
     return {
+      Program: () => {
+        for (const comment of context.sourceCode.getAllComments()) {
+          const reference = /^\/\s*<reference\s+(types|path)\s*=\s*["']([^"']+)["']/.exec(
+            comment.value,
+          );
+          if (comment.type !== "Line" || reference === null) continue;
+          const [, kind, source] = reference;
+          // A path reference is relative whether or not it says so.
+          check(
+            comment,
+            kind === "path" && !source.startsWith(".") && !path.isAbsolute(source)
+              ? `./${source}`
+              : source,
+          );
+        }
+        // Node's `require` and `module`, wherever this file reads them.
+        for (const scope of context.sourceCode.scopeManager.scopes) {
+          for (const { identifier, resolved } of scope.references) {
+            if (resolved !== null && resolved.scope.type !== "global") continue;
+            if (identifier.name === "require") loaderUse(identifier, dir, "`require`");
+            const { parent } = identifier;
+            if (
+              identifier.name === "module" &&
+              parent.type === "MemberExpression" &&
+              parent.object === identifier &&
+              parent.property.name === "require"
+            )
+              loaderUse(parent, dir, "`module.require`");
+          }
+        }
+      },
       ImportDeclaration: fromSource,
-      ExportNamedDeclaration: fromSource,
-      ExportAllDeclaration: fromSource,
+      ExportNamedDeclaration: (node) => {
+        fromSource(node);
+        if (!LOADER_MODULES.includes(node.source?.value)) return;
+        for (const specifier of node.specifiers)
+          if (specifier.local.name === "createRequire") makerUse(specifier.local);
+      },
+      ExportAllDeclaration: (node) => {
+        fromSource(node);
+        if (LOADER_MODULES.includes(node.source.value)) refuseUse(node, "`createRequire`");
+      },
       ImportExpression: fromSource,
       TSImportType: (node) => check(node, sourceOf(node.source)),
       TSExternalModuleReference: (node) =>
         check(node, sourceOf(node.expression)),
-      "CallExpression[callee.type='Identifier'][callee.name='require']": (
-        node,
-      ) => check(node, node.arguments[0] ? sourceOf(node.arguments[0]) : null),
+      "ImportSpecifier[imported.name='createRequire']": (node) => {
+        if (!LOADER_MODULES.includes(node.parent.source.value)) return;
+        for (const read of readsOf(node, node.local.name)) makerUse(read);
+      },
+      MemberExpression: (node) => {
+        const name = keyOf(node.property, node.computed);
+        if (Object.hasOwn(LOADER_USES, name)) LOADER_USES[name](node);
+      },
+      Property: (node) => {
+        const name = keyOf(node.key, node.computed);
+        if (Object.hasOwn(LOADER_USES, name)) fromPattern(node, name);
+      },
     };
   },
 };
+
+// The module whose `createRequire` makes a loader.
+const LOADER_MODULES = ["module", "node:module"];
 
 // The one import-direction rule: src's config runs it, and so does the tools'
 // (eslint.tools.config.mjs). [LAW:single-enforcer]
@@ -414,7 +577,7 @@ export const zonesPlugin = { rules: { "import-direction": importDirection } };
 // [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
 // arrives in its inputs, so a renderer that opened one would read a disk its
 // host never chose and no snapshot recorded.
-const RENDERER_GLOB = "src/renderer/**/*.{ts,mts}";
+const RENDERER_GLOB = `src/renderer/${TS_GLOB}`;
 const RENDERER_FS_PATHS = [
   "fs",
   "node:fs",
@@ -461,7 +624,7 @@ function ownedImportBlocks() {
   ];
   return [
     {
-      files: ["src/**/*.{ts,mts}"],
+      files: [`src/${TS_GLOB}`],
       ignores: ["src/proc/**", CLOCK_FILE],
       rules: { "no-restricted-imports": restrictedImports(null) },
     },
@@ -474,7 +637,7 @@ function ownedImportBlocks() {
     // src/proc/spawner.ts alone may import child_process, so the rest of
     // src/proc keeps it with the clock's paths, and the spawner only the clock's.
     {
-      files: ["src/proc/**/*.{ts,mts}"],
+      files: [`src/proc/${TS_GLOB}`],
       ignores: [SPAWNER_FILE],
       rules: {
         "no-restricted-imports": [
@@ -507,42 +670,19 @@ function ownedImportBlocks() {
 export default [
   js.configs.recommended,
   {
-    files: ["**/*.{ts,mts}"],
+    files: [TS_GLOB],
     languageOptions: {
       parser: tsparser,
       ecmaVersion: "latest",
       sourceType: "module",
+      // Node's globals, as src's JavaScript reads them, and the names only
+      // TypeScript's types declare.
       globals: {
-        console: "readonly",
-        process: "readonly",
-        Buffer: "readonly",
-        BufferEncoding: "readonly",
+        ...globals.node,
         NodeJS: "readonly",
-        __dirname: "readonly",
-        __filename: "readonly",
+        BufferEncoding: "readonly",
         // The build stamp tsdown bakes (src/build-stamps.d.ts).
         __SOURCE_DIGEST__: "readonly",
-        URL: "readonly",
-        fetch: "readonly",
-        // A monotonic clock, global in Node and the browser page alike.
-        performance: "readonly",
-        AbortSignal: "readonly",
-        AbortController: "readonly",
-        DOMException: "readonly",
-        Response: "readonly",
-        setTimeout: "readonly",
-        clearTimeout: "readonly",
-        setInterval: "readonly",
-        clearInterval: "readonly",
-        jest: "readonly",
-        describe: "readonly",
-        it: "readonly",
-        expect: "readonly",
-        beforeEach: "readonly",
-        afterEach: "readonly",
-        beforeAll: "readonly",
-        afterAll: "readonly",
-        require: "readonly",
       },
     },
     plugins: {
@@ -575,13 +715,35 @@ export default [
       "@typescript-eslint/no-explicit-any": "warn",
     },
   },
+  // [LAW:one-way-deps] Jest's globals are the test zone's: an editor linting a
+  // test with this config knows them, and the suite's own fixture hook
+  // (test/helpers/quarantine-environment.cjs). Everywhere else each is
+  // undefined.
+  {
+    files: TEST_ROOTS.map((root) => `${root}${CODE_GLOB}`),
+    languageOptions: {
+      globals: { ...globals.jest, releaseTestFixture: "readonly" },
+    },
+  },
+  // [LAW:one-way-deps] The app's environment is closed: a name it reads is
+  // one Node, the browser page or the bundle provides, `typeof` included, so
+  // nothing reaches for a global only a test's environment installs.
+  {
+    files: [`src/${TS_GLOB}`],
+    rules: { "no-undef": ["error", { typeof: true }] },
+  },
+  {
+    files: [`src/${JS_GLOB}`],
+    languageOptions: { ecmaVersion: "latest", sourceType: "module", globals: globals.node },
+    rules: { "no-undef": ["error", { typeof: true }] },
+  },
   prettierConfig,
   ...ownedImportBlocks(),
   // [LAW:no-silent-failure] A promise nobody awaits is a task: the clock's
   // `detach` runs it and reports what it throws, so `void` is no way out, and
   // a promise handed where a callback's return is dropped is refused too.
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${TS_GLOB}`],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -597,7 +759,7 @@ export default [
     },
   },
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${CODE_GLOB}`],
     plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },
@@ -606,7 +768,7 @@ export default [
   // It also catches the destructured spelling (`const { env } = process`); an
   // alias of `process` itself is the one it cannot see.
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${TS_GLOB}`],
     ignores: [...HOST_READERS, CLOCK_FILE, ...KILL_OWNERS],
     rules: {
       "no-restricted-properties": [
@@ -643,7 +805,7 @@ export default [
   // argument. The blocks after this one repeat CLOCK_SYNTAX and CLOCK_GLOBALS
   // beside their own, because a later block replaces the rule.
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: [`src/${TS_GLOB}`],
     ignores: [CLOCK_FILE],
     rules: {
       "no-restricted-globals": ["error", ...CLOCK_GLOBALS],
@@ -725,6 +887,7 @@ export default [
       "dist/",
       "**/*.d.ts",
       "**/*.js",
+      "!src/**/*.js",
       "!eslint.config.mjs",
     ],
   },

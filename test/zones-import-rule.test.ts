@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { REPO } from "../scripts/lib/repo.cjs";
+import { JEST_PACKAGES, NOT_JEST_PACKAGES } from "./helpers/jest-names";
 import { lintCases, UNTYPED } from "./helpers/lint-cases";
 
 const IN_RENDERER = "src/renderer/probe.ts";
@@ -119,6 +120,73 @@ const REFUSED = {
     file: IN_RENDERER,
     code: `export const x = require("../../test/helpers/x");\n`,
   },
+  // Jest's packages are the test zone's, from any file of the app, its
+  // JavaScript included.
+  ...Object.fromEntries(
+    JEST_PACKAGES.flatMap((pkg) => [
+      [`restTo ${pkg}`, { file: IN_REST, code: imp(pkg) }],
+      [
+        `sharedRequireOf ${pkg}`,
+        { file: IN_SHARED, code: `export const x = require("${pkg}");\n` },
+      ],
+    ]),
+  ),
+  javascriptToJest: { file: "src/daemon/probe.js", code: `import "jest";\n` },
+  moduleJavascriptToJest: {
+    file: "src/daemon/probe.mjs",
+    code: `import "@jest/globals";\n`,
+  },
+  moduleRequireOfJest: {
+    file: "src/daemon/probe.cjs",
+    code: `module.exports = module.require("jest-mock");\n`,
+  },
+  referenceToJestTypes: {
+    file: IN_REST,
+    code: `/// <reference types="jest" />\nexport const x = 1;\n`,
+  },
+  referenceToTestPath: {
+    file: IN_REST,
+    code: `/// <reference path="../../test/helpers/x.ts" />\nexport const x = 1;\n`,
+  },
+  // What a loader loads is an edge like an import's, whatever name binds it.
+  ...Object.fromEntries(
+    Object.entries({
+      createRequireOfJest: `import { createRequire } from "node:module";\nexport const x = createRequire(import.meta.url)("jest");\n`,
+      boundLoaderOfJest: `import { createRequire } from "node:module";\nconst load = createRequire(import.meta.url);\nexport const x = load("jest");\n`,
+      renamedCreateRequireOfJest: `import { createRequire as make } from "node:module";\nexport const x = make(import.meta.url)("@jest/globals");\n`,
+      memberCreateRequireOfJest: `import * as m from "node:module";\nexport const x = m.createRequire(import.meta.url)("jest");\n`,
+      builtinLoaderOfJest: `export const x = process.getBuiltinModule("node:module").createRequire(import.meta.url)("jest");\n`,
+      loaderOfTestPath: `import { createRequire } from "node:module";\nexport const x = createRequire(import.meta.url)("../../test/helpers/x.cjs");\n`,
+      // A base no lint can read places no relative source.
+      loaderOfComputedBase: `import { createRequire } from "node:module";\nexport const x = createRequire(process.cwd())("./x");\n`,
+      // A loader used other than by a call with its source.
+      requireAliased: `const load = require;\nexport const x = load("jest");\n`,
+      requireCalledThroughCall: `export const x = require.call(null, "jest");\n`,
+      loaderExported: `import { createRequire } from "node:module";\nexport const load = createRequire(import.meta.url);\n`,
+      createRequireHandedOn: `import { createRequire } from "node:module";\nexport const make = [createRequire];\n`,
+      createRequireReexported: `export { createRequire } from "node:module";\n`,
+    }).map(([name, code]) => [name, { file: IN_REST, code }]),
+  ),
+  destructuredCreateRequireOfJest: {
+    file: "src/daemon/probe.cjs",
+    code: `const { createRequire } = require("node:module");\nmodule.exports = createRequire(__filename)("jest");\n`,
+  },
+  rendererBuiltinOfDisk: {
+    file: IN_RENDERER,
+    code: `export const fs = process.getBuiltinModule("node:fs");\n`,
+  },
+  rendererComputedKeyBuiltinOfDisk: {
+    file: IN_RENDERER,
+    code: `export const fs = process["getBuiltinModule"]("node:fs");\n`,
+  },
+  createRequireDestructuredInAParameter: {
+    file: IN_REST,
+    code: `export const load = ({ createRequire }: typeof import("node:module")) => createRequire(".")("jest");\n`,
+  },
+  rendererDestructuredBuiltinOfDisk: {
+    file: IN_RENDERER,
+    code: `const { getBuiltinModule } = process;\nexport const fs = getBuiltinModule("node:fs");\n`,
+  },
   restToLib: { file: IN_REST, code: imp("../../scripts/lib/x") },
   restToTools: { file: IN_REST, code: imp("../../scripts/drive-bar") },
   // A path no row of the table names is in no zone.
@@ -126,6 +194,26 @@ const REFUSED = {
 };
 
 const ALLOWED = {
+  ...Object.fromEntries(
+    NOT_JEST_PACKAGES.map((pkg) => [
+      `restTo ${pkg}`,
+      { file: IN_REST, code: imp(pkg) },
+    ]),
+  ),
+  // `.resolve` locates a file and loads nothing, whatever its source.
+  loaderResolvingComputedSource: {
+    file: IN_REST,
+    code: `import { createRequire } from "node:module";\nexport const at = (name: string) => createRequire(process.cwd()).resolve(\`\${name}/package.json\`);\n`,
+  },
+  localLoaderOfShared: {
+    file: IN_REST,
+    code: `import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\nexport const x = require("../utils/outcome");\n`,
+  },
+  // A method that is no loader shares the name.
+  methodNamedRequire: {
+    file: IN_REST,
+    code: `export const x = { require: (s: string) => s }.require("../renderer/x");\n`,
+  },
   rendererToRenderer: { file: IN_RENDERER, code: imp("./draw-bar") },
   rendererToShared: {
     file: IN_RENDERER,
@@ -164,7 +252,10 @@ describe("the zones import rule", () => {
     const lintFrom = (cwd: string, root = REPO) =>
       Object.fromEntries(
         Object.entries(
-          lintCases({ ...REFUSED, ...ALLOWED }, UNTYPED, { cwd, root }),
+          lintCases({ ...REFUSED, ...ALLOWED }, UNTYPED, {
+            cwd,
+            root,
+          }),
         ).map(([name, messages]) => [
           name,
           messages
