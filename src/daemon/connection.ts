@@ -183,8 +183,9 @@ const STEP: {
       case "awaiting":
       case "answering":
         return [{ kind: "answered", by: "backstop" }, write(e.answer)];
-      // The backstop is not armed in `held` or `unattended` (`armed`), so no
-      // deadline reaches them; a click's wait ends with its own outcome or its
+      // A deadline deferred before the frame was read still arrives in `held`
+      // or `unattended`, and moves nothing: reading the frame disarmed the
+      // backstop (`armed`). A click's wait ends with its own outcome or its
       // client, and a url frame's click runs however late its turn comes.
       case "held":
       case "unattended":

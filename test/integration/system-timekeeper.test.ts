@@ -26,7 +26,12 @@ describe("the system timekeeper", () => {
     const sock = path.join(dir, "s");
     await new Promise<void>((listening) => server.listen(sock, listening));
     const client = net.connect(sock);
-    const conn = await heard.promise;
+    // Both ends are up before the write, so its bytes are in the kernel when
+    // the loop is held.
+    const [conn] = await Promise.all([
+      heard.promise,
+      new Promise<void>((connected) => client.once("connect", connected)),
+    ]);
     const deferred = Promise.withResolvers<void>();
     try {
       systemTimekeeper.after("test task", 1, () => {

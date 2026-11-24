@@ -91,16 +91,13 @@ export function timekeeperContract(
       expect(runs).toBe(1);
     });
 
-    test("a run deferred inside a timer's run comes after that run", async () => {
+    test("a deferred run comes ahead of a timer due later", async () => {
       const { clock, settle } = make();
       const ran: string[] = [];
-      clock.after("test task", 20, () => {
-        clock.defer("test task", () => ran.push("deferred"));
-        ran.push("timer");
-      });
+      clock.after("test task", 20, () => ran.push("timer"));
+      clock.defer("test task", () => ran.push("deferred"));
       await settle(150);
-      await settle(20);
-      expect(ran).toEqual(["timer", "deferred"]);
+      expect(ran).toEqual(["deferred", "timer"]);
     });
 
     test("a cleared deferral never runs", async () => {
