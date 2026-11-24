@@ -78,11 +78,11 @@ describe("do: several declared actions, one click", () => {
     const out = rt.render();
     // The head is a two-member cycle, so the `do` shows its per-member display.
     expect(textOf(out)).toContain("◎ focus");
-    const [url] = linkUrls(out).filter((u) => u.includes("focus"));
+    const [url] = linkUrls(out).filter((u) => u.includes("toggleFocus"));
     // Members' effects, head first; the daemon joins the adjacent session
     // writes into one batch (test/click-wire.test.ts pins that).
     expect(effectsOf(url!)).toEqual([
-      { verb: "set-state", args: ["s1", "focus", "on"] },
+      { verb: "ring-state", args: ["s1", "toggleFocus", "1", ""] },
       { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
     await rt.click(url!);

@@ -9,7 +9,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, landsAt } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { menuKeyOf } from "./helpers/menu-key";
 import { mintPlacement } from "../src/config/layout-ops";
@@ -130,7 +130,7 @@ describe("two placements of a menu-hosting segment open independently", () => {
     const open = async (key: string): Promise<void> => {
       const url = linkUrls(rt.render()).find((u) =>
         effectsOf(u).some(
-          (e) => e.args[1] === key && e.args[2] === "applyTheme",
+          (e) => landsAt(rt.config, e, key, "applyTheme"),
         ),
       );
       if (url === undefined) throw new Error(`no toggle for ${key}`);

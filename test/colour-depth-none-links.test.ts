@@ -12,7 +12,6 @@ import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { VERB_SET_STATE } from "../src/click/wire";
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -29,6 +28,7 @@ import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validat
 import {
   clickUrl,
   effectsOf,
+  landsAt,
   recordRender,
   testVerbContext,
 } from "./helpers/click";
@@ -100,12 +100,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
       member: (v: string) => boolean,
     ): string[] =>
       linkUrls(rendered).filter((url) =>
-        effectsOf(url).some(
-          (e) =>
-            e.verb === VERB_SET_STATE &&
-            e.args[1] === key &&
-            member(e.args[2] ?? ""),
-        ),
+        effectsOf(url).some((e) => landsAt(config, e, key, member)),
       );
     const click = async (
       rendered: Frame,

@@ -68,6 +68,7 @@ import { EDIT_MODE_HELP } from "../help-text.js";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./edit-glyphs.js";
 import { UNSAVED_VAR, USER_LAYER_WRITABLE } from "./settings-menu.js";
 import {
+  FIRST_PAGE,
   menuActionName,
   menuMember,
   menuPageKey,
@@ -637,7 +638,11 @@ function insertTerm(
     ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
     within: [EDIT_MODE_REF],
   };
-  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+  artifacts.variables[pageKey] = {
+    kind: "state",
+    key: pageKey,
+    default: FIRST_PAGE,
+  };
   artifacts.actions[identity] = disclosureCycleAction(stateKey, member);
   artifacts.actions[pageKey] = { set: pageKey, int: true };
 

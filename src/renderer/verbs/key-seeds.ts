@@ -14,6 +14,7 @@ import { parsePersistTarget } from "../../config/loader/persist-target";
 import {
   CONFIG_KEY_TO_SETTING,
   SESSION_KEY_TO_SETTING,
+  SETTINGS,
   configOnlyField,
 } from "../../config/setting-projections";
 import { sessionSettingValue } from "../setting-drafts";
@@ -56,6 +57,15 @@ export function configKeyShown(
   return field !== undefined
     ? sessionSettingValue(config, sessionPick, field)
     : stateKeyShown(config, sessionPick, key);
+}
+
+// [LAW:one-source-of-truth] The SessionState key a persist key's write
+// supersedes: the setting's own, else the key itself (the `state` variable a
+// persist action reads back through, as configKeyShown does). A key that holds
+// no pick there has nothing for a write to release.
+export function configKeyPickedAt(key: string): string {
+  const setting = CONFIG_KEY_TO_SETTING.get(key);
+  return setting === undefined ? key : SETTINGS[setting].sessionKey;
 }
 
 // [LAW:one-source-of-truth] What a stepped config key holds before the file

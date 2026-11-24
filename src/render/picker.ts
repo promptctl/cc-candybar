@@ -328,7 +328,8 @@ export function renderPicker(
   // `do` is, and there is no second projection of "what does this option
   // write" to drift from realize's.
   const declared = runtime.compiled.get(applyName)!;
-  const store = renderBinding(runtime, "picker").store;
+  const binding = renderBinding(runtime, "picker");
+  const { store } = binding;
   const sessionId = clickSession(runtime, "picker");
   // [LAW:no-defensive-null-guards] layout-op-option carries no `stateVar` —
   // a structural insert is a one-shot trigger, not a persisted single value,
@@ -454,7 +455,7 @@ export function renderPicker(
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
   const optionTarget = (option: string): DrawnAction =>
     actionTarget([
-      ...realize(declared, option, option, store, sessionId).effects,
+      ...realize(declared, option, option, binding, sessionId).effects,
       ...closeEffects,
     ]);
 

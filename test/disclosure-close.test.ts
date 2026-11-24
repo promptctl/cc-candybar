@@ -48,7 +48,7 @@ import {
   effectsOf,
   CLICK_VERBS,
 } from "./helpers/click";
-import { linkClick } from "./helpers/click";
+import { linkClick, landsAt } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
@@ -178,7 +178,7 @@ function build(src: string, withDefault: boolean) {
     const link = lines
       .flatMap(rowLinks)
       .find((l) =>
-        effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
+        effectsOf(l.url).some((e) => landsAt(config, e, key, value)),
       );
     if (link === undefined) throw new Error(`nothing writes ${key}=${value}`);
     await click(link.url);

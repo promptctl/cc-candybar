@@ -72,7 +72,12 @@ import {
   VERB_UNDO,
   VERB_SLASH,
 } from "../click/wire.js";
-import { centreOf, spellStep, type OptionStep } from "./option-ring.js";
+import {
+  centreOf,
+  spellStep,
+  stepOffset,
+  type OptionStep,
+} from "./option-ring.js";
 import { HOVER, type GestureName } from "../click/gesture.js";
 import { HOVER_REGION } from "../config/click-mode.js";
 import {
@@ -147,15 +152,17 @@ type CompiledActionShape =
     }
   | {
       // [LAW:types-are-the-program] An enumerated-domain stepper: the click
-      // writes the SUCCESSOR of the current value in `members` (wrapping; a
-      // current value outside the domain counts as the first member). Unlike
-      // set-bounded — which emits a RELATIVE nudge so rapid clicks accumulate —
-      // a cycle emits the ABSOLUTE successor computed at render: the rendered
-      // display names the current state, so the click's meaning is "go to the
-      // successor of what I showed you". A stale link then lands on the state
-      // the user saw promised, not an extra flip past it — for toggles the
-      // absolute write IS the correct intent.
+      // moves one member on from the value the key holds WHEN IT LANDS (wrapping;
+      // a value outside the domain counts as the first member). The link names
+      // this action and the step, never the member it lands on, so it means the
+      // same thing on every draw: a terminal keeps the link it found when the
+      // mouse last moved, and a link that wrote the draw's successor would
+      // repeat that write on every click after the first. The display still
+      // names the state the bar shows (cycleIndex), which is all a draw knows.
       readonly kind: "set-cycle";
+      // The action's own name: the link carries it, and the click resolves the
+      // members from the clicking session's config by it.
+      readonly name: string;
       readonly key: string;
       readonly stateVar: string;
       readonly members: readonly string[];
@@ -196,6 +203,7 @@ type CompiledActionShape =
     }
   | {
       readonly kind: "persist-cycle";
+      readonly name: string;
       readonly key: string;
       readonly layer: LayerRole;
       readonly stateVar: string;
@@ -532,6 +540,7 @@ function compileAction(
     if ("cycle" in action) {
       return {
         kind: "set-cycle",
+        name,
         key: action.set,
         stateVar,
         members: action.cycle,
@@ -572,6 +581,7 @@ function compileAction(
     if ("cycle" in action) {
       return {
         kind: "persist-cycle",
+        name,
         key: action.persist,
         layer,
         stateVar,
@@ -787,8 +797,8 @@ export function linkOver(
 }
 
 // [LAW:one-source-of-truth] THE "unknown current counts as the first member"
-// rule — the one resolution both the display selection and the successor write
-// fold over. Members are ordered default-state-first, so an unset/foreign value
+// rule — the one resolution both the display selection and the click's step
+// (centreOf) fold over. Members are ordered default-state-first, so an unset/foreign value
 // renders the first display and clicks to the second member (an accordion
 // sibling's path "counts as closed", a never-written toggle "counts as off").
 function cycleIndex(
@@ -822,9 +832,10 @@ export function realize(
   c: CompiledActionDecl,
   display: string,
   boundValue: string | undefined,
-  store: VariableStore,
+  binding: RenderBinding,
   sessionId: SessionId,
 ): { effects: readonly DrawnEffect[]; active: boolean } {
+  const { store } = binding;
   switch (c.kind) {
     case "set-literal": {
       const current = readVar(store, c.stateVar);
@@ -858,17 +869,24 @@ export function realize(
         active: current === value,
       };
     }
-    case "set-cycle": {
-      // [LAW:one-source-of-truth] The same current-index resolution that picked
-      // the rendered display picks the write target — display and write derive
-      // from one read, so the click delivers exactly the transition the glyph
-      // promised.
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
+    // [LAW:one-source-of-truth] A cycle is a ring step of one: the link names
+    // the action and the step, and the click resolves where the key stands and
+    // which member is next (ring-state / ring-config). The ring rule the draw's
+    // display reads (centreOf) is the click's, so the two agree about order.
+    case "set-cycle":
+    case "persist-cycle":
       return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId, c.key, next] }],
+        effects: realizeRing(
+          c,
+          c,
+          c.name,
+          stepOffset(1),
+          [],
+          binding,
+          sessionId,
+        ),
         active: false,
       };
-    }
     case "set-bounded": {
       // [LAW:one-source-of-truth] Emit a RELATIVE nudge — the irreducible intent
       // (key + signed delta), never an absolute target derived from a render-time
@@ -934,15 +952,6 @@ export function realize(
           configWriteEffect(VERB_SET_CONFIG, sessionId, c.layer, c.key, value),
         ],
         active: current === value,
-      };
-    }
-    case "persist-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
-      return {
-        effects: [
-          configWriteEffect(VERB_SET_CONFIG, sessionId, c.layer, c.key, next),
-        ],
-        active: false,
       };
     }
     case "persist-bounded": {
@@ -1085,17 +1094,17 @@ export function realize(
       };
     case "do": {
       // [LAW:single-enforcer] The members' effects, head first, concatenated.
-      // Every member is realized against the state this render shows, not the
-      // state an earlier member will leave: the click delivers what the bar
-      // displayed. Nothing here makes them one transaction — the daemon's
-      // dispatch joins adjacent session writes into one batch, for this
-      // producer and every other.
-      const head = realize(c.head, display, boundValue, store, sessionId);
+      // Each member is the link it would be alone: a write the template binds,
+      // or a step the click resolves against the state it finds, so none reads
+      // the state an earlier member leaves. Nothing here makes them one
+      // transaction — the daemon's dispatch joins adjacent session writes into
+      // one batch, for this producer and every other.
+      const head = realize(c.head, display, boundValue, binding, sessionId);
       return {
         effects: [
           ...head.effects,
           ...c.rest.flatMap(
-            (m) => realize(m, display, undefined, store, sessionId).effects,
+            (m) => realize(m, display, undefined, binding, sessionId).effects,
           ),
         ],
         active: head.active,
@@ -1153,6 +1162,11 @@ export type RingAction = Extract<
   { kind: "set-option" | "persist-option" }
 >;
 
+// What a ring step can head: an option action, or a cycle over its members.
+type RingHead =
+  | RingAction
+  | Extract<CompiledActionDecl, { kind: "set-cycle" | "persist-cycle" }>;
+
 // [LAW:one-source-of-truth] A step through an option action's ring, as the
 // link carries it: the action's name and the step, never the option the step
 // lands on. Where it lands is read when the click arrives, from the value the
@@ -1168,17 +1182,16 @@ export type RingAction = Extract<
 // they always have.
 export function realizeRing(
   declared: CompiledActionDecl,
-  head: RingAction,
+  head: RingHead,
   name: string,
   step: OptionStep,
   turn: readonly string[],
   binding: RenderBinding,
   sessionId: SessionId,
 ): readonly DrawnEffect[] {
-  const { store } = binding;
   const ring = [spellStep(step), ruledName(binding, head), ...turn];
   const stepped: DrawnEffect =
-    head.kind === "set-option"
+    head.kind === "set-option" || head.kind === "set-cycle"
       ? { verb: VERB_RING_STATE, args: [sessionId, name, ...ring] }
       : configWriteEffect(
           VERB_RING_CONFIG,
@@ -1191,7 +1204,7 @@ export function realizeRing(
   return [
     stepped,
     ...followers.flatMap(
-      (member) => realize(member, "", undefined, store, sessionId).effects,
+      (member) => realize(member, "", undefined, binding, sessionId).effects,
     ),
   ];
 }
@@ -1247,7 +1260,8 @@ export function renderAction(
   if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
-  const store = renderBinding(runtime, `action "${name}"`).store;
+  const binding = renderBinding(runtime, `action "${name}"`);
+  const { store } = binding;
   // [LAW:dataflow-not-control-flow] DISPLAY selection reads the action the
   // click presents as, while REALIZATION is handed the declaration itself — a
   // `do` realizes as every member, and that belongs to the one fold that owns
@@ -1263,7 +1277,7 @@ export function renderAction(
     declared,
     display.plain,
     boundValue,
-    store,
+    binding,
     sessionId,
   );
   // [LAW:one-source-of-truth] A gesture's effects are realized by the same
@@ -1276,7 +1290,7 @@ export function renderAction(
         runtime.compiled.get(target)!,
         display.plain,
         boundValue,
-        store,
+        binding,
         sessionId,
       ).effects,
     ]),
@@ -1287,7 +1301,7 @@ export function renderAction(
   const { [HOVER]: hoverBinding, ...gestures } = realized;
   const hover =
     hoverBinding ??
-    realize(runtime.compiled.get(HOVER_REGION)!, name, name, store, sessionId)
+    realize(runtime.compiled.get(HOVER_REGION)!, name, name, binding, sessionId)
       .effects;
   // [LAW:one-source-of-truth] The region carries what a click means in every
   // mode, and nothing here reads the mode or the surface: those are one

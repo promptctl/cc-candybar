@@ -54,17 +54,25 @@ describe("bar-web", () => {
     expect(closed.status).toBe(200);
     expect(rowsOf(narrow.json)).toBeGreaterThan(rowsOf(closed.json));
     const door = closed.json.links.find((l) => l.text === DOOR_GLYPH)!;
-    expect(door.does).toMatch(/^set-state <session> candybar\.menu open/);
+    // The door's link steps its cycle: it says so, and not what it lands on.
+    expect(door.does).toMatch(/^ring-state <session> candybar\.menu\.toggle 1/);
 
     const opened = await post("/click", { url: door.url, width: 80, rows: 40 });
     expect(opened.status).toBe(200);
     expect(opened.json.refused).toBeNull();
     expect(opened.json.links.map((l) => l.text)).toContain(DOOR_CLOSE_GLYPH);
 
-    // The door's closed-state link is no longer drawn: refused, named.
-    const stale = await post("/click", { url: door.url, width: 80, rows: 40 });
+    // The same link on the open bar is the door's ✖: a second click closes it.
+    const closedLinks = new Set(closed.json.links.map((l) => l.url));
+    const onlyOpen = opened.json.links.find((l) => !closedLinks.has(l.url))!;
+    const shut = await post("/click", { url: door.url, width: 80, rows: 40 });
+    expect(shut.status).toBe(200);
+    expect(shut.json.links.map((l) => l.text)).not.toContain(DOOR_CLOSE_GLYPH);
+
+    // A link the bar no longer draws is refused, named.
+    const stale = await post("/click", { url: onlyOpen.url, width: 80, rows: 40 });
     expect(stale.status).toBe(409);
-    expect(stale.json.error).toContain(door.url);
+    expect(stale.json.error).toContain(onlyOpen.url);
   });
 
   test("only the page drives it: a request must be JSON, sent to this server's own host", async () => {

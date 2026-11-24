@@ -13,6 +13,7 @@ import { TEST_SIGNER } from "./link-signer";
 import type { LinkSigner } from "../../src/click/link-signer";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
+import { menuOfKey, menuPageKey } from "../../src/config/menu-keys";
 import { clickOf } from "../../src/click/read";
 import { changeDone, runClick } from "../../src/renderer/verbs";
 import {
@@ -323,7 +324,40 @@ export function testVerbContext(
   });
 }
 
+import type { DecodedEffect } from "../../src/click/read";
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
+
+// The key a ring-step effect writes, from the action it names: the way a test
+// reads a link that carries a step and no value.
+export function ringKeyOf(
+  config: DslConfig,
+  e: DecodedEffect,
+): string | undefined {
+  if (e.verb !== "ring-state" && e.verb !== "ring-config") return undefined;
+  const action = config.actions[e.args[e.verb === "ring-state" ? 1 : 2]!]!;
+  const head = "do" in action ? config.actions[action.do[0]]! : action;
+  return "set" in head ? head.set : "persist" in head ? head.persist : undefined;
+}
+
+// Whether an effect can land `value` at `key`: a write of that pair, or a step
+// through a cycle over the key that holds `value` as a member. A cycle's link
+// names the action and the step, never the member it lands on, so a test finds
+// a toggle by the ring it steps; where it lands is shown by clicking it.
+export function landsAt(
+  config: DslConfig,
+  e: DecodedEffect,
+  key: string | ((key: string) => boolean),
+  value: string | ((member: string) => boolean),
+): boolean {
+  const wanted = typeof value === "string" ? (v: string) => v === value : value;
+  const named = typeof key === "string" ? (k: string) => k === key : key;
+  if (named(e.args[1] ?? "") && wanted(e.args[2] ?? "")) return true;
+  const ringKey = ringKeyOf(config, e);
+  if (ringKey === undefined || !named(ringKey)) return false;
+  const action = config.actions[e.args[e.verb === "ring-state" ? 1 : 2]!]!;
+  const head = "do" in action ? config.actions[action.do[0]]! : action;
+  return "cycle" in head && head.cycle.some(wanted);
+}
 
 // A rendered link as the daemon reads it; a test's links are always links.
 export const linkClick = clickOf;
@@ -451,4 +485,45 @@ export async function clickActing(
   const { verb, value } = linkClick(url);
   const { runEvidence } = clickVerb(verb, value, ctx);
   return performActs(ctx, deps, signer, runEvidence);
+}
+
+// The menu a link's effects trigger: a step through the menu's `[closed,
+// member]` cycle together with the reset of its page cursor, which is how a
+// `{{ menu }}` trigger opens and closes it. `member` is what the cycle opens
+// to, the menu's apply-action name.
+export function menuTriggerOf(
+  config: DslConfig,
+  effects: readonly DecodedEffect[],
+): { readonly key: string; readonly member: string } | undefined {
+  for (const e of effects) {
+    const key = ringKeyOf(config, e);
+    if (key === undefined || menuOfKey(key)?.page !== false) continue;
+    if (!effects.some((p) => p.verb === "set-state" && p.args[1] === menuPageKey(key))) continue;
+    const action = config.actions[e.args[e.verb === "ring-state" ? 1 : 2]!]!;
+    const head = "do" in action ? config.actions[action.do[0]]! : action;
+    if ("cycle" in head) return { key, member: head.cycle[1]! };
+  }
+  return undefined;
+}
+
+// Every (key, member) an effect can land: the pairs a set-state writes, and
+// each member of the cycle a ring-state steps through (it names the step, and
+// the member it lands on is read when the click arrives).
+export function landingsOf(
+  config: DslConfig,
+  e: DecodedEffect,
+): { readonly key: string; readonly member: string }[] {
+  const ringKey = ringKeyOf(config, e);
+  if (ringKey !== undefined) {
+    const action = config.actions[e.args[e.verb === "ring-state" ? 1 : 2]!]!;
+    const head = "do" in action ? config.actions[action.do[0]]! : action;
+    return "cycle" in head
+      ? head.cycle.map((member) => ({ key: ringKey, member }))
+      : [];
+  }
+  if (e.verb !== "set-state") return [];
+  const pairs: { key: string; member: string }[] = [];
+  for (let i = 1; i + 1 < e.args.length; i += 2)
+    pairs.push({ key: e.args[i]!, member: e.args[i + 1]! });
+  return pairs;
 }

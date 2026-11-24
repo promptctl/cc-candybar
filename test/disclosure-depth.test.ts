@@ -65,7 +65,7 @@ import {
   effectsOf,
   CLICK_VERBS,
 } from "./helpers/click";
-import { linkClick } from "./helpers/click";
+import { linkClick, landsAt, menuTriggerOf } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { hrefOfDrawnLink } from "../src/render/drawn-link";
@@ -282,7 +282,7 @@ function build(src: string, withDefault = false) {
     value: string,
   ): Promise<void> => {
     const url = urlsIn(name).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      effectsOf(u).some((e) => landsAt(config, e, key, value)),
     );
     if (url === undefined) {
       throw new Error(`"${name}" renders nothing writing ${key}=${value}`);
@@ -295,12 +295,7 @@ function build(src: string, withDefault = false) {
   // test/default-menu-bytes.test.ts identifies openers by.
   const openMenuIn = async (name: string): Promise<void> => {
     const url = urlsIn(name).find((u) =>
-      effectsOf(u).some(
-        (e) =>
-          e.verb === VERB_SET_STATE &&
-          e.args[3] === menuPageKey(e.args[1] ?? "") &&
-          e.args[2] !== DISCLOSURE_CLOSED,
-      ),
+      menuTriggerOf(config, effectsOf(u)),
     );
     if (url === undefined) throw new Error(`"${name}" hosts no menu opener`);
     await click(url);

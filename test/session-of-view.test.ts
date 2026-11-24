@@ -5,7 +5,7 @@
 import { textOf } from "../src/render/frame";
 import { buildRig } from "./helpers/rig";
 import { linkUrls } from "./helpers/frame";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, landingsOf } from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import {
   ConfigError,
@@ -69,7 +69,7 @@ describe("a view's session", () => {
     });
     const writes = linkUrls(rig.draw().frame)
       .map((u) => effectsOf(u)[0])
-      .filter((e) => e?.args[1] === "pick");
+      .filter((e) => e !== undefined && landingsOf(rig.config, e).some((l) => l.key === "pick"));
     expect(writes).not.toHaveLength(0);
     for (const write of writes) expect(write?.args[0]).toBe(OWN);
   });

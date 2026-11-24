@@ -40,7 +40,12 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeyShown, configKeyShown, configKeySeed } from "./key-seeds";
+import {
+  stateKeyShown,
+  configKeyShown,
+  configKeyPickedAt,
+  configKeySeed,
+} from "./key-seeds";
 import {
   landing as landOnOption,
   parseOffset,
@@ -147,6 +152,7 @@ import {
   VERB_SLASH,
   VERB_COPY_DIAGNOSTIC,
   type AdmittedClick,
+  type StateWrite,
   type ClickStep,
   type GlobalStep,
 } from "../../click/wire";
@@ -810,12 +816,13 @@ function headFor(config: DslConfig, name: string): ActionDecl | undefined {
   return action === undefined ? undefined : headOf(config.actions, action);
 }
 
-// The options an action lists: a ring's own, or the list a structural insert
-// picks from.
+// The options an action lists: a ring's own, a cycle's members, or the list a
+// structural insert picks from.
 function optionsOf(
   config: DslConfig,
   head: ActionDecl,
 ): readonly string[] | undefined {
+  if ("cycle" in head) return head.cycle;
   const domain =
     "from" in head
       ? head.from
@@ -827,14 +834,15 @@ function optionsOf(
     : resolveOptionDomain(domain, configOptionDomains(config)).members;
 }
 
-// The ring a `set` or `persist` head over a list of options holds, or nothing
-// for any other action (a structural insert has a list but holds no value).
+// The ring a `set` or `persist` head over a list of options, or a cycle's
+// members, holds, or nothing for any other action (a structural insert has a
+// list but holds no value).
 function ringHeld(
   ctx: ClickContext,
   config: DslConfig,
   head: ActionDecl,
 ): OptionRing | undefined {
-  if (!("from" in head)) return undefined;
+  if (!("from" in head || "cycle" in head)) return undefined;
   const pick = (k: string) => ctx.sessionState.get(ctx.session, k);
   const options = optionsOf(config, head)!;
   if ("set" in head)
@@ -963,7 +971,7 @@ function landRing(
 
 // The step lands in SessionState through the write every set action makes:
 // the same gate, the same batch (setState), the page turn riding in it.
-const ringState: VerbHandler = (args, ctx) => {
+function ringStatePairs(args: readonly string[], ctx: ClickContext): string[] {
   const [name = "", ...rest] = args;
   const { ring, next, turn } = landRing(
     "ring-state",
@@ -973,8 +981,27 @@ const ringState: VerbHandler = (args, ctx) => {
     rest,
     (r) => r.shown,
   );
-  setState([ring.key, next, ...turn], ctx);
-};
+  return [ring.key, next, ...turn];
+}
+
+const ringState: VerbHandler = (args, ctx) =>
+  setState(ringStatePairs(args, ctx), ctx);
+
+// [LAW:single-enforcer] A click's adjacent state writes are one write: each
+// ring step is resolved to its pairs against the state the click found, and
+// setState validates every pair before it writes any, so a `do` that steps a
+// cycle and resets its page cursor lands both or neither.
+function landStateWrites(
+  writes: readonly StateWrite[],
+  ctx: ClickContext,
+): void {
+  setState(
+    writes.flatMap(({ verb, args }) =>
+      verb === VERB_RING_STATE ? ringStatePairs(args, ctx) : args,
+    ),
+    ctx,
+  );
+}
 
 // The name a layer's text declares at a value key, or nothing when it declares
 // none or something that is no name.
@@ -985,10 +1012,12 @@ function declaredName(text: string | null, key: string): string | undefined {
 
 // `persist`'s twin of ringState: the option lands in the layer's file through
 // setConfig, and the page turn, which is session state, with it.
-// [LAW:one-source-of-truth] The ring steps the value of the layer it writes,
-// as step-config does: the name that layer's file declares, which carries an
-// earlier click's write the bar has not reloaded, else what the bar wears (the
-// layer declares no name, or a rule).
+// [LAW:one-source-of-truth] One start for every persist ring: what the bar
+// wears while the session holds a pick of the key (the first click moves on
+// from the pick, and setConfig releases it, so no pick shadows the file for
+// the next); else the name the layer's file declares, as step-config reads it,
+// which carries an earlier click's write the bar has not reloaded; else what
+// the bar wears (the layer declares no name, or a rule).
 const ringConfig: VerbHandler = (args, ctx) => {
   const {
     role,
@@ -1004,6 +1033,8 @@ const ringConfig: VerbHandler = (args, ctx) => {
     "persist",
     rest,
     (r) => {
+      if (ctx.sessionState.get(ctx.session, configKeyPickedAt(r.key)) !== null)
+        return r.shown;
       const key = durableLanding(
         config,
         (k) => ctx.sessionState.get(ctx.session, k),
@@ -1022,6 +1053,19 @@ const ringConfig: VerbHandler = (args, ctx) => {
     },
   );
   setConfig([role, ring.key, next], ctx);
+  // [LAW:one-source-of-truth] The file now holds what this step chose, so the
+  // session's pick of the key stops shadowing it: the bar follows the file, and
+  // the next step starts from what this one wrote. The release is the click's
+  // own, landing with the write (a click lands whole before the next is
+  // admitted).
+  const picked = configKeyPickedAt(ring.key);
+  if (ctx.sessionState.get(ctx.session, picked) !== null) {
+    ctx.sessionState.clear(ctx.session, picked);
+    ctx.log(
+      "info",
+      `ring-config: released the pick of ${picked} (session=${ctx.session})`,
+    );
+  }
   // [LAW:dataflow-not-control-flow] exception: the page turn is optional on
   // the wire, and the session gate refuses an empty batch.
   if (turn.length > 0) setState(turn, ctx);
@@ -1758,6 +1802,9 @@ export function runClick(click: AdmittedClick, ctx: VerbContext): void {
               break;
             case "session":
               SESSION_HANDLERS[step.verb](step.args, c);
+              break;
+            case "state-writes":
+              landStateWrites(step.writes, c);
               break;
             case "repo-answer":
               c.configWrites.answer(step.dir, step.answer);

@@ -9,6 +9,9 @@
 // nobody can see is drawn at the still rate however it moves, and a request
 // the daemon cannot take is refused with a reply, never a thrown handler.
 
+import { parseAndValidate } from "../../../scripts/lib/draw-fixtures/parse-and-validate";
+import { listResolvablePaletteNames } from "../../../src/themes/policy";
+import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config";
 import {
   chmodSync,
   existsSync,
@@ -116,6 +119,14 @@ const CONFIGS = {
   pointed: `{ globals: { experimentalPane: true }, segments: { mark: { template: '{{ if eq .hover "" }}no hover{{ else }}over {{ .hover }}{{ end }} on {{ .surface }}' } }, root: { h: ['mark'] } }`,
   toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
+
+// The `toggle` config as the daemon loads it, to tell which link steps `face`.
+const TOGGLE_CONFIG = parseAndValidate(
+  "<toggle>",
+  CONFIGS.toggle,
+  new Set(listResolvablePaletteNames()),
+  DEFAULT_DSL_CONFIG,
+);
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -457,13 +468,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       async ({ received, elapsed, waitFor }) => {
         // The click lands the moment the bar's first frame is in.
         await waitFor(() => received.length > 0, "the bar before the click");
-        await click(sockPath, urlWriting(shut, "face", "open"));
+        await click(sockPath, urlWriting(shut, "face", "open", TOGGLE_CONFIG));
         await waitFor(() => received.length > 1, "the clicked bar");
         // A second click 100 ms after the first, inside the still period the
         // first one's frame started: it too is drawn within the feed's spacing,
         // not when the still bar's next frame falls due, about 900 ms after it.
         await sleep(100);
-        await click(sockPath, urlWriting(bars(received)[1]!, "face", "shut"));
+        await click(sockPath, urlWriting(bars(received)[1]!, "face", "shut", TOGGLE_CONFIG));
         secondAt = elapsed();
         await waitFor(() => received.length > 2, "the bar clicked again");
       },

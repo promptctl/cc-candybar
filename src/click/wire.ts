@@ -35,7 +35,7 @@ import { DIAGNOSTICS_CLOSED } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
 import { sessionKeyKind } from "../config/session-key.js";
-import { menuOfKey } from "../config/menu-keys.js";
+import { menuOfAction, menuOfKey } from "../config/menu-keys.js";
 import { parseStep } from "../render/option-ring.js";
 import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
@@ -272,11 +272,15 @@ const sayStep = (key: string, by: string): string =>
   `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 
 // An option ring's step in words: another option at random, or the option
-// some way round the ring.
+// some way round the ring. A menu's step opens or closes the member it names,
+// said by that name as a write to its key was, so two menus on one shared key
+// never read alike.
 function sayRing(action: string, raw: string): string {
   const parsed = parseStep(raw);
   if (!parsed.ok) return `step ${action} by ${raw}`;
   const { step } = parsed;
+  const menu = menuOfAction(action);
+  if (menu !== undefined) return `toggle ${menu.member}`;
   return step.kind === "random"
     ? `pick another option for ${action}`
     : `step ${action} ${step.by < 0 ? "back" : "on"} by ${Math.abs(step.by)}`;
@@ -615,6 +619,13 @@ export type GlobalStep =
       readonly value: string;
     };
 
+// A write to the session's state a click makes: as pairs (set-state), or as a
+// step through a ring that the click resolves to pairs (ring-state).
+export interface StateWrite {
+  readonly verb: typeof VERB_SET_STATE | typeof VERB_RING_STATE;
+  readonly args: readonly string[];
+}
+
 export type ClickStep =
   | GlobalStep
   | {
@@ -624,6 +635,14 @@ export type ClickStep =
         typeof VERB_REPO_CONFIG | typeof VERB_RUN
       >;
       readonly args: readonly string[];
+    }
+  // [LAW:single-enforcer] Adjacent writes to the session's state (a set-state
+  // and a ring-state, or two ring-states): one step, so the renderer resolves
+  // each to its pairs and lands them whole or not at all.
+  | {
+      readonly kind: "state-writes";
+      readonly verb: typeof VERB_SET_STATE;
+      readonly writes: readonly StateWrite[];
     }
   | {
       readonly kind: "repo-answer";
@@ -767,8 +786,48 @@ export function admitClick(
   const click: AdmittedClick =
     scoped === undefined
       ? { scope: "global", verb, steps: global }
-      : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+      : {
+          scope: "session",
+          verb,
+          session: scoped.id,
+          steps: groupStateWrites(scoped.steps),
+        };
   return { click, runEvidence };
+}
+
+const isStateWrite = (
+  step: ClickStep,
+): step is Extract<ClickStep, { kind: "session" }> & StateWrite =>
+  step.kind === "session" &&
+  (step.verb === VERB_SET_STATE || step.verb === VERB_RING_STATE);
+
+// [LAW:single-enforcer] A run of adjacent state writes is one step. A set-state
+// run is already one effect (batchAdjacentWrites); a ring-state is resolved by
+// the click that lands it, so a run holding one cannot merge as text, and this
+// is the one place it becomes a single write: a `do` that steps a cycle and
+// resets its page cursor lands both or neither. A lone write stays a plain step.
+function groupStateWrites(steps: readonly ClickStep[]): ClickStep[] {
+  const out: ClickStep[] = [];
+  let run: StateWrite[] = [];
+  const flush = (): void => {
+    if (run.length === 0) return;
+    out.push(
+      run.length === 1
+        ? { kind: "session", verb: run[0]!.verb, args: run[0]!.args }
+        : { kind: "state-writes", verb: VERB_SET_STATE, writes: run },
+    );
+    run = [];
+  };
+  for (const step of steps) {
+    if (isStateWrite(step)) {
+      run.push({ verb: step.verb, args: step.args });
+    } else {
+      flush();
+      out.push(step);
+    }
+  }
+  flush();
+  return out;
 }
 
 // [LAW:parse-dont-validate] An outer signature is also given to authored URLs.

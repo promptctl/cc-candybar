@@ -7,7 +7,7 @@ import { textOf } from "../src/render/frame";
 import { SessionState } from "../src/renderer/session-state";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { placementDraftKey } from "../src/config/edit-chrome";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, landsAt } from "./helpers/click";
 import { linkUrls } from "./helpers/frame";
 import { menuKeyOf } from "./helpers/menu-key";
 import { buildRig } from "./helpers/rig";
@@ -27,7 +27,7 @@ function bar(source: string, sessionState: SessionState) {
     });
   const open = async (key: string, preset?: string): Promise<void> => {
     const url = linkUrls(drawIn(preset).frame).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === OPEN),
+      effectsOf(u).some((e) => landsAt(rig.config, e, key, OPEN)),
     );
     if (url === undefined) throw new Error(`no toggle for ${key}`);
     await rig.click(url);

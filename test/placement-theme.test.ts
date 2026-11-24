@@ -27,7 +27,7 @@ import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { runUrl } from "./helpers/frame";
 import { settingsOf } from "../src/config/dsl-types";
-import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
+import { clickUrl, effectsOf, menuTriggerOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERB_SAVE } from "../src/click/wire";
 import { type VerbContext } from "../src/renderer/verbs";
@@ -228,9 +228,7 @@ describe("configure mode picks a placement's theme", () => {
     // 8v9r); its label opens the row of swatches. The open click is the one
     // whose write names the theme control's own segment as the open member.
     const open = linkUrls(rt.render(BAR_A)).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] !== key && (e.args[2] ?? "").endsWith(".theme"),
-      ),
+      (menuTriggerOf(rt.config, effectsOf(u))?.member ?? "").endsWith(".theme"),
     );
     expect(open).toBeDefined();
     await rt.click(open!);
@@ -317,7 +315,7 @@ describe("configure mode over a placement several presets share", () => {
     configurePlacement(rt.ctx, SID, "default", "tag");
     // The theme picker's label: the click opening its swatches.
     const controls = linkUrls(rt.render(BAR_A)).filter((u) =>
-      effectsOf(u).some((e) => (e.args[2] ?? "").endsWith(".theme")),
+      (menuTriggerOf(rt.config, effectsOf(u))?.member ?? "").endsWith(".theme"),
     );
     expect(controls.length).toBeGreaterThan(0);
   });

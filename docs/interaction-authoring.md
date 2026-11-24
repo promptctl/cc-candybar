@@ -70,7 +70,7 @@ declares exactly one value source:
 | `{ set: key, from: "themes" \| "endcaps" \| "styles" \| "variations" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
-| `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
+| `{ set: key, cycle: ["a", "b", "c"] }` | step to the **successor** of the value the key holds when the click arrives, wrapping; order members default-state-first. The link names the step, never the member, so it is the same on every draw and clicks that land before the bar redraws add up |
 | `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the field into your **config file** (every session, survives daemon restart) instead of one session: `globals.<field>`, or `presets.<name>.globals.<field>` when the preset your session renders names that field, since a top-level value is shadowed there — see below. No `int` arm: a page cursor is never persisted. |
 | `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment and, for `shade`, `variation` or `style`, in every theme's default) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
@@ -927,10 +927,10 @@ derives, so nothing a `do` fires could not be clicked alone.
   includes `from`, `int`, `insertSegmentFrom`, and a save with `layer: "ask"`.
   The loader rejects these actions as followers because the template only binds
   the first member. A save with a fixed layer can follow another action.
-- **Members fire in the order listed, each against what the bar showed.**
-  Every member computes its write from the state the render displayed, not
-  from the state an earlier member leaves: a cycle writes the successor of
-  the value on screen.
+- **Members fire in the order listed, each against the state the click
+  found.** Every member computes its write from the state as the click
+  arrives, not from the state an earlier member leaves: a cycle steps to the
+  successor of the value its key holds then.
 - **Adjacent session writes are one transaction.** Members that write
   SessionState one after another travel as one batch, checked whole before
   any of it lands, so that run never half-applies. A durable write

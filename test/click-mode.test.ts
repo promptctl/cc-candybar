@@ -28,7 +28,7 @@ import {
 import { hoverOf, surfaceOf } from "../src/render/pointer-facts";
 import { inClickMode } from "../src/render/click-mode-frame";
 import { buildRig } from "./helpers/rig";
-import { clickUrl } from "./helpers/click";
+import { clickUrl, landsAt } from "./helpers/click";
 import { linkUrls } from "./helpers/frame";
 
 const S1 = sessionIdOf("s1");
@@ -148,10 +148,16 @@ describe("the click mode on a surface that delivers only the plain click", () =>
   });
 
   test("the toggle steps the mode and puts the hovered region away", () => {
-    expect(clicked(draw({ mode: "hover", hover: "plain" }), TOGGLE)).toEqual([
-      ...set(CLICK_MODE_KEY, "alt"),
+    // The link names the step, and the mode it lands on is where the key
+    // stands when the click arrives: the same link on every draw.
+    const step = [
+      { verb: "ring-state", args: ["s1", "candybar.clickMode.cycle", "1", ""] },
       ...set(HOVER_KEY, "candybar.none"),
-    ]);
+    ];
+    expect(clicked(draw({ mode: "hover", hover: "plain" }), TOGGLE)).toEqual(
+      step,
+    );
+    expect(clicked(draw({ mode: "alt" }), TOGGLE)).toEqual(step);
   });
 
   test("the toggle is drawn where the surface lacks a mode's gesture, and not where it delivers both", () => {
@@ -181,7 +187,7 @@ describe("a click in hover mode", () => {
       );
     const clickWriting = async (key: string, value: string): Promise<void> => {
       const url = drawn().find((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+        effectsOf(u).some((e) => landsAt(rig.config, e, key, value)),
       );
       if (!url) throw new Error(`no affordance writing ${key}=${value}`);
       await clickUrl(url, rig.ctx);

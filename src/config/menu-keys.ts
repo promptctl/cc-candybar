@@ -57,6 +57,11 @@ import {
 // (render/picker.ts), so a list opened with it opens where its value is.
 export const PAGE_HOLDING_CURRENT = "-1";
 
+// [LAW:one-source-of-truth] The page cursor's value for the list's first page:
+// what a trigger resets it to on every open, and what its state variable
+// declares as its default.
+export const FIRST_PAGE = "0";
+
 export function menuMember(applyName: string): string {
   return applyName;
 }
@@ -133,6 +138,21 @@ export function menuOfKey(
 // as the key's parts are, so two members never nest.
 export function menuActionName(stateKey: string, member: string): string {
   return `${stateKey}.${escapedIdent(member)}`;
+}
+
+// The inverse of menuActionName: the menu a disclosure's cycle action toggles
+// and the member it opens, in words, or undefined for an action no menu
+// derivation names. The member is the last segment, and escaped it holds no dot.
+export function menuOfAction(
+  action: string,
+): { readonly menu: string; readonly member: string } | undefined {
+  const dot = action.lastIndexOf(".");
+  if (dot === -1) return undefined;
+  const menu = menuOfKey(action.slice(0, dot));
+  const member = unescapedIdent(action.slice(dot + 1));
+  return menu === undefined || member === undefined
+    ? undefined
+    : { menu: menu.menu, member };
 }
 
 // [LAW:single-enforcer] THE page-cursor key a menu's picker body paginates by —

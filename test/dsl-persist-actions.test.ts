@@ -647,7 +647,7 @@ describe("persist action click → the config file", () => {
     try {
       // The disclosure toggle is the menu's OWN SessionState write — open it.
       const toggleUrl = ownUrls(render()).find(
-        (u) => effectsOf(u)[0]!.verb === "set-state",
+        (u) => effectsOf(u)[0]!.verb === "ring-state",
       )!;
       await click(toggleUrl);
 
@@ -705,12 +705,66 @@ describe("persist action click → the config file", () => {
     const { render, click } = buildPersistRuntime(SRC2);
     const urls = ownUrls(render());
     const effect = effectsOf(urls[1]!)[0]!;
-    expect(effect.verb).toBe("set-config");
+    expect(effect.verb).toBe("ring-config");
     await click(urls[1]!);
     // Unset counts as the first member ("truecolor"); the click writes the
     // successor ("256") — same "unknown current counts as first" rule the
     // renderer's cycleIndex uses.
     expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
+  });
+
+  // The link names the step and never the member it lands on, so clicks that
+  // land before the bar redraws add up. The file is what the next click reads.
+  const SRC3 = `{
+    globals: {},
+    actions: {
+      cycleColorDepth: { persist: 'colorCompatibility', cycle: ['truecolor', '256', 'ansi'] },
+    },
+    segments: { bar: { template: '{{ action "cycleColorDepth" "cd" }}', bg: 'surface', fg: 'foreground' } },
+    root: 'bar',
+  }`;
+  const colorDepthInFile = (): unknown => globalsInFile().colorCompatibility;
+  const stepFiveTimes = async (
+    click: (url: string) => Promise<void>,
+    url: string,
+  ): Promise<unknown[]> => {
+    const landed: unknown[] = [];
+    for (let n = 0; n < 5; n++) {
+      await click(url);
+      landed.push(colorDepthInFile());
+    }
+    return landed;
+  };
+
+  test("a persist-cycle link clicked five times with no redraw steps five times through its members", async () => {
+    const { render, click } = buildPersistRuntime(SRC3);
+    const url = ownUrls(render())[0]!;
+    expect(await stepFiveTimes(click, url)).toEqual([
+      "256",
+      "ansi",
+      "truecolor",
+      "256",
+      "ansi",
+    ]);
+  });
+
+  test("a persist-cycle link over a key the session holds a pick for starts from the pick", async () => {
+    const src = SRC3.replace(
+      "persist: 'colorCompatibility', cycle: ['truecolor', '256', 'ansi']",
+      "persist: 'palette', cycle: ['dracula', 'nord', 'gruvbox']",
+    );
+    const { render, click, sessionState } = buildPersistRuntime(src);
+    sessionState.set(S1, "theme", "nord");
+    const url = ownUrls(render())[0]!;
+    // The bar wears the pick, so the first step moves on from it; the file now
+    // holds what the click chose, and the pick stops shadowing it.
+    const landed: unknown[] = [];
+    for (let n = 0; n < 5; n++) {
+      await click(url);
+      landed.push(globalsInFile().palette);
+    }
+    expect(landed).toEqual(["gruvbox", "dracula", "nord", "gruvbox", "dracula"]);
+    expect(sessionState.get(S1, "theme")).toBeNull();
   });
 
   test("clicking a persist-bounded action steps and persists via stepConfig", async () => {

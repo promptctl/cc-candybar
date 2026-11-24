@@ -51,7 +51,7 @@ import {
   DOOR_CLOSE_GLYPH,
   DOOR_GLYPH,
 } from "../src/config/disclosure";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, landingsOf, landsAt } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";
@@ -107,7 +107,7 @@ function menuBar(
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
-      effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+      effectsOf(u).some((e) => landsAt(rig.config, e, key, value)),
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     await rig.click(url);
@@ -584,10 +584,12 @@ describe("the menu in a config that declares no variables", () => {
         const effects = effectsOf(url);
         // The walk explores the menu, so it never takes the click that closes it.
         if (effects.some((e) => e.args[1] === SETTINGS_ANCHOR && e.args[2] === DISCLOSURE_CLOSED)) continue;
-        const opens = effects.filter(
-          (e) => keys.has(String(e.args[1])) && e.args[2] !== DISCLOSURE_CLOSED,
+        const opens = effects.flatMap((e) =>
+          landingsOf(config, e).filter(
+            (l) => keys.has(l.key) && l.member !== DISCLOSURE_CLOSED,
+          ),
         );
-        const id = opens.map((e) => `${e.args[1]}=${e.args[2]}`).join("&");
+        const id = opens.map((l) => `${l.key}=${l.member}`).join("&");
         if (opens.length === 0 || opened.has(id)) continue;
         opened.add(id);
         await click(url);

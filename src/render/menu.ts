@@ -2,9 +2,11 @@
 // `{{ action }}`/`{{ picker }}`. A menu is a self-contained disclosure: an inline
 // TRIGGER that toggles open/closed, and (when open) its body — a picker grid —
 // that DROPS onto the line(s) below the enclosing row. The body is the one picker
-// renderer (`renderPicker`); the trigger is a coupled set-state the menu composes
-// directly (like the picker's closeOnPick) — it toggles the open-state AND resets
-// the page cursor in one atomic batch, gated by the synthesized cycle action.
+// renderer (`renderPicker`); the trigger is a step through the synthesized
+// cycle action plus a page-cursor reset the menu composes directly (like the
+// picker's closeOnPick). The link names the step, never the state it lands on,
+// so it is the same on every draw and a second click closes what the first
+// opened; the step and the reset land together or not at all.
 //
 // [LAW:one-source-of-truth] The trigger's TEXT is authored, never emitted here.
 // This module used to append ▸/▾ from the glyph constants, while the codebase's
@@ -41,6 +43,8 @@
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import {
+  FIRST_PAGE,
+  menuActionName,
   menuMember,
   menuPageKey,
   menuStateKey,
@@ -54,6 +58,7 @@ import {
   linkFragment,
   clickSession,
   readVar,
+  realize,
   renderBinding,
   renderLook,
   type ActionRuntime,
@@ -117,19 +122,25 @@ function renderMenu(
   const store = renderBinding(action, "menu").store;
   const open = readVar(store, stateKey) === member;
 
-  // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click is ONE
-  // atomic set-state that keeps the two split keys coherent: it toggles the open-
-  // state (the binary cycle — successor is closed when open, the member when
-  // closed) AND resets the page cursor to page 0, in one batch. So a reopened menu
-  // is never stranded on a stale page left by ←/→ before the last close. This
-  // mirrors the picker's closeOnPick page-reset fold: the picker builds its set-
-  // state targets directly so it can couple two writes; the
-  // menu — the one part that knows BOTH the open-state key and the page key
-  // [LAW:decomposition] — does the same. The synthesized cycle action stays the
-  // GATE source (deriveActionValidators); both keys are independently gated, so the
-  // coupled batch passes the same wire gate every click does [LAW:single-enforcer].
+  // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click is two
+  // writes that land as one: a step of the binary [closed, member] cycle, which
+  // the click resolves from where the key stands when it lands (so N clicks
+  // before a redraw open, then close, then open), AND a reset of the page cursor
+  // to its first page. So a reopened menu is never stranded on a stale page left
+  // by ←/→ before the last close. The step is the synthesized cycle action's own
+  // realization, the one every cycle uses; the menu — the one part that knows
+  // BOTH the open-state key and the page key [LAW:decomposition] — adds the
+  // reset beside it, and the click lands adjacent state writes whole
+  // (groupStateWrites, src/click/wire.ts), both keys gated as every click's are
+  // [LAW:single-enforcer].
   const sessionId = clickSession(action, "menu");
-  const successor = open ? DISCLOSURE_CLOSED : member;
+  const toggle = realize(
+    action.compiled.get(menuActionName(stateKey, member))!,
+    "",
+    undefined,
+    renderBinding(action, "menu"),
+    sessionId,
+  ).effects;
   // [LAW:one-source-of-truth] The trigger's text is AUTHORED, resolved through
   // the one display rule a cycle `{{ action }}` uses — a menu's disclosure is a
   // two-member cycle, so binding `"▸" "▾"` gives the per-state form and binding
@@ -139,10 +150,8 @@ function renderMenu(
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open ? 1 : 0),
     actionTarget([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId, stateKey, successor, pageKey, "0"],
-      },
+      ...toggle,
+      { verb: VERB_SET_STATE, args: [sessionId, pageKey, FIRST_PAGE] },
     ]),
     false,
   );
@@ -162,7 +171,8 @@ function renderMenu(
   // key (its synthesized state var is named by it, the disclosure-var
   // convention), and CLOSING — the ✕ affordance or a closeOnPick pick — writes
   // the disclosure back to the closed sentinel and resets the page, the same
-  // coupled pair the toggle glyph above writes. What the ▾ promised, ✕ delivers.
+  // coupled pair the trigger's close step lands. The ✕ names the closed state
+  // itself, since it only ever closes.
   // [LAW:one-source-of-truth] The body's items and its ✕ sit on the band's
   // plane: the band THIS segment opens, the same record the walk draws the
   // trigger from.
@@ -182,7 +192,7 @@ function renderMenu(
         kind: "own",
         writes: [
           [stateKey, DISCLOSURE_CLOSED],
-          [pageKey, "0"],
+          [pageKey, FIRST_PAGE],
         ],
         onPick: options.closeOnPick,
       },

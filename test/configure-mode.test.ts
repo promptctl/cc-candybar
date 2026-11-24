@@ -23,7 +23,7 @@ import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
+import { clickUrl, effectsOf, landsAt, menuTriggerOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import {
@@ -151,7 +151,10 @@ function configureBar(src: string, preset?: string) {
       linkUrls(out).filter((u) =>
         effectsOf(u).some((e) => {
           const at = e.verb === VERB_APPLY_LAYOUT_OP ? 2 : 1;
-          return e.args[at] === key && e.args[at + 1] === value;
+          return (
+            (e.args[at] === key && e.args[at + 1] === value) ||
+            landsAt(current, e, key, value)
+          );
         }),
       ),
     );
@@ -257,15 +260,13 @@ describe("configure mode: one placement's settings at a time", () => {
       ).length;
     await enter();
     const closed = themeOptions();
-    // The control's name opens its list: the one link that writes a menu key
-    // and the list's first page together.
-    const opener = linkUrls(rt.render()).find((u) => {
-      const keys = effectsOf(u).flatMap((e) => e.args.slice(1));
-      return (
-        keys.some((k) => k.startsWith(`${EDIT_NS}${MENU_PAGE_NS}`)) &&
-        keys.some((k) => /\.setting\.\w+\.theme$/.test(k))
-      );
-    });
+    // The control's name opens its list: the one menu trigger whose member
+    // is the theme setting's own.
+    const opener = linkUrls(rt.render()).find((u) =>
+      /\.setting\.\w+\.theme$/.test(
+        menuTriggerOf(rt.config, effectsOf(u))?.member ?? "",
+      ),
+    );
     await rt.click(opener!);
     expect(themeOptions()).toBeGreaterThan(closed);
     rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
@@ -687,7 +688,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     for (const leaves of [
       (e: ReturnType<typeof effectsOf>[number]) => e.verb === VERB_SAVE,
       (e: ReturnType<typeof effectsOf>[number]) =>
-        e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
+        landsAt(rt.config, e, EDIT_MODE_KEY, DISCLOSURE_CLOSED),
     ]) {
       await rt.enter();
       rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, memberOf("vcs2"));
