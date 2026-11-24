@@ -43507,11 +43507,12 @@ var MODE_GESTURE = {
   hover: HOVER,
   alt: "alt+left"
 };
-function modeInForce(stored, surface) {
-  const mode = CLICK_MODES.find((m) => m === stored) ?? DEFAULT_CLICK_MODE;
-  return surface.split(" ").includes(MODE_GESTURE[mode]) ? DEFAULT_CLICK_MODE : mode;
-}
-var modeIsOpen = (stored) => CLICK_MODES.some((m) => m === stored && m !== DEFAULT_CLICK_MODE);
+var clickModeOf = (stored) => CLICK_MODES.find((m) => m === stored) ?? DEFAULT_CLICK_MODE;
+var modeInForce = (stored, surface) => {
+  const mode = clickModeOf(stored);
+  return surface.includes(MODE_GESTURE[mode]) ? DEFAULT_CLICK_MODE : mode;
+};
+var modeIsOpen = (mode) => mode !== DEFAULT_CLICK_MODE;
 
 // src/config/session-key.ts
 function sessionKeyKind(key) {
@@ -57817,9 +57818,12 @@ var CLICK_MODE_GLYPHS = {
   alt: "\u2325"
 };
 var SURFACE_HAS = (gesture) => `(has ${templateLiteral(gesture)} (splitList " " .${SURFACE_VAR}))`;
-var CLICK_MODE_WHEN = `{{ not (and ${SURFACE_HAS(HOVER)} ${SURFACE_HAS(MODE_GESTURE.alt)}) }}`;
+var MODE_GESTURES = CLICK_MODES.filter((m) => m !== DEFAULT_CLICK_MODE).map(
+  (m) => MODE_GESTURE[m]
+);
+var CLICK_MODE_WHEN = `{{ not (and ${MODE_GESTURES.map(SURFACE_HAS).join(" ")}) }}`;
 var worksInEveryMode = (action2) => ({
-  on: { [HOVER]: action2, [MODE_GESTURE.alt]: action2 }
+  on: Object.fromEntries(MODE_GESTURES.map((gesture) => [gesture, action2]))
 });
 var POLLED = "polled";
 var AT_MOST = "\u2264";
@@ -58885,6 +58889,10 @@ function resolveActionLayer(action2) {
 function runDeclaration(a) {
   return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
 }
+var actionMembers = (a) => [
+  ..."do" in a ? a.do : [],
+  ...Object.values(a.on ?? {})
+];
 function* actionTemplates(a) {
   const found2 = [];
   mapActionTemplates(a, (source, field) => {
@@ -60818,7 +60826,7 @@ function valueReads({ names, helpers, actions }) {
     seen.add(name);
     return [
       ...[...actionTemplates(decl)].map(([, source]) => source),
-      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []
+      ...actionMembers(decl).flatMap((m) => actionTexts(m, seen))
     ];
   };
   const texts = perTemplate((template) => {
@@ -61206,10 +61214,7 @@ function withDroppedPlacements(config, owning, inserted) {
     // (candybar-templates-zh8b.53s).
     ...Object.values(seg2.partials ?? {})
   ]) : [];
-  const doMembers = anyTombstone ? Object.values(config.actions).flatMap((a) => [
-    ..."do" in a ? a.do : [],
-    ...Object.values(a.on ?? {})
-  ]) : [];
+  const doMembers = anyTombstone ? Object.values(config.actions).flatMap(actionMembers) : [];
   const missing = (names2, declared) => [...new Set(names2)].flatMap((name) => {
     const cause = name in declared ? void 0 : tombstoned(name);
     return cause === void 0 ? [] : [[name, cause]];
@@ -61466,19 +61471,22 @@ function selfDepends(v, named2) {
 function mapActionNames(a, f) {
   const seg2 = "segments.";
   const out = { ...a };
-  if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
-  if (a.on !== void 0)
+  if ("do" in out)
+    out.do = out.do.map((m) => f(m, "do"));
+  if (out.on !== void 0)
     out.on = Object.fromEntries(
-      Object.entries(a.on).map(([gesture, target]) => [
+      Object.entries(out.on).map(([gesture, target]) => [
         gesture,
         f(target, "on")
       ])
     );
-  for (const field of ["removeSegment", "insertSegment", "anchor"])
-    if (field in a)
-      out[field] = f(a[field], field);
-  if ("persist" in a && a.persist.startsWith(seg2))
-    out.persist = seg2 + f(a.persist.slice(seg2.length), "persist");
+  if ("removeSegment" in out)
+    out.removeSegment = f(out.removeSegment, "removeSegment");
+  if ("insertSegment" in out)
+    out.insertSegment = f(out.insertSegment, "insertSegment");
+  if ("anchor" in out) out.anchor = f(out.anchor, "anchor");
+  if ("persist" in out && out.persist.startsWith(seg2))
+    out.persist = seg2 + f(out.persist.slice(seg2.length), "persist");
   return out;
 }
 var SEGMENT_TEMPLATE_FIELDS = [
@@ -71101,9 +71109,8 @@ function unusedDeclarations(raw, config, inserted) {
   const clicked = new Set(bound);
   for (const name of bound) {
     const action2 = config.actions[name];
-    if (action2 !== void 0 && "do" in action2) {
-      for (const member of action2.do) clicked.add(member);
-    }
+    if (action2 !== void 0)
+      for (const member of actionMembers(action2)) clicked.add(member);
   }
   const writtenKeys = /* @__PURE__ */ new Set();
   const placed2 = new Set(inserted);
@@ -73225,15 +73232,14 @@ function projectGitInfo(info, pullRequest, pending2) {
 
 // src/render/pointer-facts.ts
 init_globals();
-var surfaceOf = (pointer) => pointer === null ? PLAIN_CLICK : pointer.gestures.join(" ");
-function hoverOf(pointer, held) {
-  if (modeInForce(held.mode ?? void 0, surfaceOf(pointer)) !== "hover")
-    return pointer?.hover ?? "";
-  return held.hover === null || held.hover === NO_HOVER ? "" : held.hover;
+var surfaceOf = (pointer) => pointer === null ? [PLAIN_CLICK] : pointer.gestures;
+function hoverOf(pointer, mode, held) {
+  if (mode !== "hover") return pointer?.hover ?? "";
+  return held === null || held === NO_HOVER ? "" : held;
 }
-var pointerFacts = (pointer, held) => ({
-  surface: surfaceOf(pointer),
-  hover: hoverOf(pointer, held)
+var pointerFacts = (pointer, mode, held) => ({
+  surface: surfaceOf(pointer).join(" "),
+  hover: hoverOf(pointer, mode, held)
 });
 
 // src/render/click-mode-frame.ts
@@ -73644,15 +73650,15 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
       }))
     ]
   );
-  const held = {
-    mode: sessionState.get(sessionId2, CLICK_MODE_KEY),
-    hover: sessionState.get(sessionId2, HOVER_KEY)
-  };
+  const mode = modeInForce(
+    sessionState.get(sessionId2, CLICK_MODE_KEY),
+    surfaceOf(pointer)
+  );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing: drawing2,
     feeds,
-    ...pointerFacts(pointer, held),
+    ...pointerFacts(pointer, mode, sessionState.get(sessionId2, HOVER_KEY)),
     ...instantFacts(document.builtins, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
@@ -73701,10 +73707,7 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     rules
   } = width === payload.term.cols ? draw2() : partsOf(state.compiled, view.store).withTerminalWidth(width, draw2);
   const copies = diagnosticCopies(diagnostics);
-  const frame2 = inClickMode(
-    drawnFrame,
-    modeInForce(held.mode ?? void 0, surfaceOf(pointer))
-  );
+  const frame2 = inClickMode(drawnFrame, mode);
   noteFacts(facts, {
     menuIdle: idleSince === null ? "-" : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
@@ -73816,7 +73819,7 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
           tick: readings.tick,
           // [LAW:no-ambient-temporal-coupling] A click mode the user left on
           // is open state as a menu is: the same idle period ends it.
-          shown: frame2.rows.some((row) => row.kind === "menu") || modeIsOpen(held.mode ?? void 0),
+          shown: frame2.rows.some((row) => row.kind === "menu") || modeIsOpen(mode),
           timeoutS: effective.menuTimeout
         }
       }
@@ -77343,7 +77346,7 @@ function closeIdleMenus(sid, context, idle, ctx, effects) {
       (root) => !hasWork || !nest.inside(root).some(({ key }) => key === EDIT_MODE_KEY)
     );
     const modeOpen = modeIsOpen(
-      c.sessionState.get(sid, CLICK_MODE_KEY) ?? void 0
+      clickModeOf(c.sessionState.get(sid, CLICK_MODE_KEY))
     );
     c.menu.choose(
       sid,
@@ -79731,9 +79734,14 @@ var daemonClock = () => reportingClock(systemTimers);
 function daemonWorld() {
   return worldOver(daemonClock());
 }
+var machineHost = () => ({
+  env: process.env,
+  home: os_default.homedir(),
+  tmp: os_default.tmpdir()
+});
 function worldOver(clock) {
   return {
-    host: { env: process.env, home: os_default.homedir(), tmp: os_default.tmpdir() },
+    host: machineHost(),
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock
   };
@@ -83587,21 +83595,18 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     });
   }
   if (req.kind === "pointer") {
-    const refused2 = (error) => ({
+    const refused2 = (error) => stay({
       ok: false,
       error,
       code: "BAD_REQUEST",
       daemonV: PROTOCOL_VERSION
     });
     const session = parseSessionId(req.sessionId);
+    if (!session.ok) return refused2(`pointer's sessionId ${session.problem}`);
     const owner = parseOwner(req.owner);
-    const refusal = !session.ok ? `pointer's sessionId ${session.problem}` : owner.kind !== "ok" ? `pointer's ${owner.reason}` : null;
-    if (refusal !== null || !session.ok || owner.kind !== "ok")
-      return stay(refused2(refusal ?? "pointer is malformed"));
+    if (owner.kind !== "ok") return refused2(`pointer's ${owner.reason}`);
     const admitted = frameFeeds.pointerOf(session.id, owner.value);
-    return stay(
-      admitted.kind === "ok" ? { ok: true, output: "" } : refused2(admitted.reason)
-    );
+    return admitted.kind === "ok" ? stay({ ok: true, output: "" }) : refused2(admitted.reason);
   }
   if (req.kind === "stats") {
     const mailbox = parts.renderer.stats();
@@ -88239,7 +88244,7 @@ function missingFields(reference, value, at = "") {
 init_globals();
 if (false) {
   throw new Error(
-    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
+    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
 var PACKAGE_VERSION = "1.237.0";
@@ -89588,6 +89593,12 @@ function hitMapOf(frame2) {
 
 // src/daemon/frame-feed.ts
 var MAX_REQUESTS = 256;
+function ownerOf(watched) {
+  let found2 = null;
+  for (const [sub2, { owner }] of watched.followers)
+    if (owner !== null) found2 = { lane: sub2.lane, owner };
+  return found2;
+}
 var failedFeed = (refusal) => {
   const encoded = { json: JSON.stringify(refusal) };
   return { resp: encoded, statusline: encoded };
@@ -89686,7 +89697,6 @@ var FrameFeeds = class {
     if (watched === void 0) {
       watched = {
         followers: /* @__PURE__ */ new Map(),
-        owner: null,
         last: null,
         frameDemand: 0,
         pushed: 0
@@ -89696,9 +89706,12 @@ var FrameFeeds = class {
     }
     if (watched.followers.has(sub2))
       return () => this.unsubscribe(sessionId2, sub2);
-    const follower = { confirmed: null, writes: /* @__PURE__ */ new Set() };
+    const follower = {
+      confirmed: null,
+      writes: /* @__PURE__ */ new Set(),
+      owner: sub2.owner === void 0 ? null : { ...sub2.owner }
+    };
     watched.followers.set(sub2, follower);
-    if (sub2.owner !== void 0) watched.owner = { sub: sub2, ...sub2.owner };
     this.handover(sessionId2, watched, sub2, follower);
     this.deps.log(
       "info",
@@ -89726,7 +89739,8 @@ var FrameFeeds = class {
   // pointer: only the session's live owner may change what is held, and the
   // renderer is handed the change like any change of who watches.
   pointerOf(sessionId2, owner) {
-    const held = this.watched.get(sessionId2)?.owner ?? null;
+    const watched = this.watched.get(sessionId2);
+    const held = watched === void 0 ? null : ownerOf(watched)?.owner ?? null;
     if (held === null)
       return {
         kind: "refused",
@@ -89764,18 +89778,18 @@ var FrameFeeds = class {
   }
   seen(sessionId2, watched) {
     const lanes = {};
-    for (const sub2 of watched.followers.keys()) {
+    const owner = ownerOf(watched)?.owner ?? null;
+    for (const [sub2, follower] of watched.followers) {
       const seen = lanes[sub2.lane];
       lanes[sub2.lane] = {
+        ...seen,
         subscribers: (seen?.subscribers ?? 0) + 1,
-        drawing: (seen?.drawing ?? false) || sub2.drawing()
+        drawing: (seen?.drawing ?? false) || sub2.drawing(),
+        // [LAW:one-source-of-truth] The owner's facts ride on its own lane: the
+        // renderer reads the pointer where it reads who watches.
+        ...owner !== null && follower.owner === owner && { pointer: owner.pointer }
       };
     }
-    if (watched.owner !== null && lanes[watched.owner.sub.lane] !== void 0)
-      lanes[watched.owner.sub.lane] = {
-        ...lanes[watched.owner.sub.lane],
-        pointer: watched.owner.pointer
-      };
     return {
       lanes: Object.fromEntries(
         LANE_NAMES.flatMap((lane) => {
@@ -89932,7 +89946,6 @@ var FrameFeeds = class {
     const follower = watched?.followers.get(sub2);
     if (watched === void 0 || follower === void 0) return;
     watched.followers.delete(sub2);
-    if (watched.owner?.sub === sub2) watched.owner = null;
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId2);
       this.deps.log(
@@ -92292,6 +92305,8 @@ function recordingOutputProblem(output) {
 function knownPick(key, value) {
   const kind = sessionKeyKind(key).kind;
   if (kind === "plain") return false;
+  if (kind === "pointer")
+    return CLICK_MODES.some((mode) => mode === value) || value === NO_HOVER;
   if (kind !== "setting") {
     return value === DISCLOSURE_CLOSED || value === DISCLOSURE_OPEN || TABS.some(({ member }) => member === value) || SUBMENU_NAMES.some((member) => member === value);
   }

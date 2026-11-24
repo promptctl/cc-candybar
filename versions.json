@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "fecf78573e7a1a45407726874bb48cd3cdf83443",
-      "timestamp": "2026-11-24T14:45:11.879Z",
-      "commits": [
-        {
-          "sha": "fecf78573e7a1a45407726874bb48cd3cdf83443",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:44:06-07:00",
-          "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4) (#949)\n\n* fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n\n* fix(test): the host-bundle tests import the shared helpers from scripts/lib (candybar-later-fixes-nwu9.1d4)\n\n* fix(tools): scripts/lib is a zone of its own, and the tools lint holds every root outside Jest (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 1 on PR 949:\n\n- scripts/lib imports only the app and itself. Each import refusal names\n  why by the zone it reaches, and the lint config refuses to load if a\n  zone has no reason.\n- The tools lint runs over the roots the zone table names as outside\n  Jest. It refuses jest and @jest/* imports and every Jest global. The\n  suite's effect rules also cover scripts/lib.\n- Typecheck covers every TS file under scripts/.\n- The lint-rule tests share one harness.\n- The process tier runs pnpm bar, bar:web and bench --list from a plain\n  shell.\n- The Status hook fixture is one source: the tick every case extends,\n  and the bar's full tick built on it.\n- drive-bar reads session state at the daemon's own path.\n- The pane feed cases wait for the frame that shows what they assert.\n\n* fix(tools): a path no zone names is refused, and the shared daemon start reports every failure (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 2 on PR 949:\n\n- The zone table places every root. audits/, which runs under Jest, sits\n  with the suite. A path no row names is in no zone and nothing may\n  import it, so a tool can no longer reach the suite through an unlisted\n  root.\n- The package root comes from scripts/lib/repo.cjs's own location, not\n  the working directory.\n- The shell a tool takes is a closed type. The worker env is merged\n  where an in-worker daemon starts.\n- A cleanup after a failure reports its own error beside the failure\n  (failAfter), never in its place.\n- The readiness probe returns a tagged outcome. The bar uses the wire's\n  reply budget.\n- The spawner headers name the callers they serve: the tests and the\n  bar tools.\n\n* fix(tools): the bar sends to the socket its daemon's readiness was proven on (candybar-later-fixes-nwu9.1d4)\n\n* test(tools): bar:web's interrupt case asserts the server stopped, not pnpm's exit status (candybar-later-fixes-nwu9.1d4)"
-        }
-      ]
-    },
-    {
       "version": "pr-950",
       "ref": "refs/pull/950/merge",
-      "sha": "ac9214d7b7895b4055714931f629c8e98617f154",
-      "timestamp": "2026-11-24T14:21:41.236Z",
+      "sha": "c328118fe9a77643c4185baeafacacfe612036a8",
+      "timestamp": "2026-11-24T14:51:09.010Z",
       "commits": [
         {
-          "sha": "ac9214d7b7895b4055714931f629c8e98617f154",
+          "sha": "c328118fe9a77643c4185baeafacacfe612036a8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T07:20:15-07:00",
-          "message": "Merge 955bebc91f23ffeb74c1a13ff12e9820dc5d3079 into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+          "timestamp": "2026-11-24T14:50:07Z",
+          "message": "Merge 6ec3f64d9894d0cdf856e2d8acd9bf57994c4cdc into fecf78573e7a1a45407726874bb48cd3cdf83443\n"
+        },
+        {
+          "sha": "6ec3f64d9894d0cdf856e2d8acd9bf57994c4cdc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:49:53-07:00",
+          "message": "fix(bar-pane): review pass 1 — an action's gestures are walked everywhere, the pane survives one missed press, and the pointer's owner is derived from its followers\n\nA gesture's target is an action reference every walker follows (unused, value reads, plugin names) through one list. The pane counts tmux's silence from the first miss of a run, exits on Ctrl-C, reads `mouse` from the list-panes call it already makes, sends one coalesced pointer report, and cuts its hit map to the lines it paints. The click mode is parsed once and derived once per draw. Recording export admits the pointer keys' modes. When the newest pane leaves, the one before it owns the pointer again.\n"
         },
         {
           "sha": "955bebc91f23ffeb74c1a13ff12e9820dc5d3079",
@@ -49,6 +41,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T06:46:14-07:00",
           "message": "feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "fecf78573e7a1a45407726874bb48cd3cdf83443",
+      "timestamp": "2026-11-24T14:45:11.879Z",
+      "commits": [
+        {
+          "sha": "fecf78573e7a1a45407726874bb48cd3cdf83443",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:44:06-07:00",
+          "message": "fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4) (#949)\n\n* fix(tools): the dev tools run outside Jest, and nothing outside test/ imports the suite (candybar-later-fixes-nwu9.1d4)\n\n`pnpm bar`, `pnpm bar:web` and `pnpm bench` crashed from a plain shell:\nthey imported the Jest suite's helpers, which read the worker's\nCLAUDE_CONFIG_DIR at import and register cleanups on the Jest file.\n\nWhat a tool and a test share now lives in scripts/lib (the daemon\nspawner, wire, requests, the bar driver and the draw fixtures) and\ntakes what the suite binds as arguments: the session environment and\nthe admission a daemon start passes through. The tests pass their\nenvironment and the daemon pool; a tool passes the shell's and admits\nat once, so a bar run beside the suite takes none of its slots.\n\nThe import-zone table gains test/ and the tools (scripts/, site/,\nproto-looks/): src and the tools may not import test/, by the zone rule\nsrc is already checked by, now also run over the tools with Jest's\nglobals refused. `pnpm bar` is tested as a child run with a shell's env.\n\nAlong the way: three TTL cases in var-sources slept one TTL and assumed\nthe tick had run; they now poll for the change the tick makes.\n\n* fix(test): the host-bundle tests import the shared helpers from scripts/lib (candybar-later-fixes-nwu9.1d4)\n\n* fix(tools): scripts/lib is a zone of its own, and the tools lint holds every root outside Jest (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 1 on PR 949:\n\n- scripts/lib imports only the app and itself. Each import refusal names\n  why by the zone it reaches, and the lint config refuses to load if a\n  zone has no reason.\n- The tools lint runs over the roots the zone table names as outside\n  Jest. It refuses jest and @jest/* imports and every Jest global. The\n  suite's effect rules also cover scripts/lib.\n- Typecheck covers every TS file under scripts/.\n- The lint-rule tests share one harness.\n- The process tier runs pnpm bar, bar:web and bench --list from a plain\n  shell.\n- The Status hook fixture is one source: the tick every case extends,\n  and the bar's full tick built on it.\n- drive-bar reads session state at the daemon's own path.\n- The pane feed cases wait for the frame that shows what they assert.\n\n* fix(tools): a path no zone names is refused, and the shared daemon start reports every failure (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 2 on PR 949:\n\n- The zone table places every root. audits/, which runs under Jest, sits\n  with the suite. A path no row names is in no zone and nothing may\n  import it, so a tool can no longer reach the suite through an unlisted\n  root.\n- The package root comes from scripts/lib/repo.cjs's own location, not\n  the working directory.\n- The shell a tool takes is a closed type. The worker env is merged\n  where an in-worker daemon starts.\n- A cleanup after a failure reports its own error beside the failure\n  (failAfter), never in its place.\n- The readiness probe returns a tagged outcome. The bar uses the wire's\n  reply budget.\n- The spawner headers name the callers they serve: the tests and the\n  bar tools.\n\n* fix(tools): the bar sends to the socket its daemon's readiness was proven on (candybar-later-fixes-nwu9.1d4)\n\n* test(tools): bar:web's interrupt case asserts the server stopped, not pnpm's exit status (candybar-later-fixes-nwu9.1d4)"
         }
       ]
     }
