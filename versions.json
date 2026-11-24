@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "870a2fd08214c3d683fe9b3db477f34796e27f84",
+      "timestamp": "2026-11-24T22:45:52.390Z",
+      "commits": [
+        {
+          "sha": "870a2fd08214c3d683fe9b3db477f34796e27f84",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T15:44:37-07:00",
+          "message": "fix(stored-state): a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz) (#956)\n\n* fix(state): a write over a state file that did not read sets it aside, and an unread answers book asks again (candybar-law-review-ibyq.6iz)\n\n* fix(stored-state): a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz)\n\nOne holder now holds every per-session file: the session book, and a renderer profile's picks and history. It reads the file once, by the rule every state file keeps. A file that does not read is renamed aside beside itself before anything is written, and the store starts empty. A file that can be neither read nor renamed is never saved to, and stands on every bar as saving nothing.\n\nA load's set-aside and what it dropped (a refused session, a retired pick or setting, an empty session) are a daemon event about the file, grouped by what and why.\n\nRecency is the last request or write. A request moves its session in the renderer's stores, and the host hears that as a `heard` write; the wire version goes to 18. A move of place alone reaches the file within one order period and at a close, so the write rate does not grow with the tick.\n\n* fix(stored-state): one set-aside of an unread file for every store, said where it went, and no false ⚠ after an edit (candybar-law-review-ibyq.6iz)\n\nLaw review pass 1 of #956.\n\n- One executor sets an unread state file aside, for the answers book's\n  transaction and a held store's load alike. It moves the file the bytes\n  sit in, a link's target, so a symlinked answers book keeps its unread\n  bytes and stays a link.\n- One report type and one daemon translator: every store's load is\n  logged (no file, N sessions and M dropped, set aside, refused), and a\n  set-aside or a drop is a ⚠ event, the answers book's included.\n- A renderer hands the host only what a load keeps, so edit mode's keys\n  and a draft's steps never reach the file and a routine restart shows\n  no ⚠.\n- The holder keeps one fact for \"the file lags the map\", cleared only\n  once a save returns. A put of what a session holds is a hearing, and\n  every read before the load throws.\n- One move-to-newest for every recency-ordered map. The settings\n  history's hearing moves its one entry in place.\n\n* fix(stored-state): one landing rule for every per-session file, replay what was taken before the load, and a landing carries its own reports (candybar-law-review-ibyq.6iz)\n\nLaw review pass 2. A per-session file writes where its link points, the\nsame rule its set-aside uses. A legacy name is retired unless it is the file\nbeing set aside. A rollback that cannot put a set-aside back names the copy.\nThe config landing returns its store reports, and the daemon restates the\nbar only when a report gave it something to show.\n\n* fix(stored-state): the log names every dropped session, a closed file arms no order write, and a hearing moves only the history's order (candybar-law-review-ibyq.6iz)\n\nLaw review pass 3's minor items. The bar's event about a load's drops\nexpires, so the log line names every session. An order write is armed only\nwhile the file is open. A hearing reorders the settings history through\nreplace, so no session's readers hear of it."
+        }
+      ]
+    },
+    {
       "version": "pr-957",
       "ref": "refs/pull/957/merge",
       "sha": "13f868ad884230f53bb2667dbc6664f6719aa1f5",
@@ -20,71 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T15:29:01-07:00",
           "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-956",
-      "ref": "refs/pull/956/merge",
-      "sha": "0a8351607cf1439cadca9d01b766523ec40bc7cb",
-      "timestamp": "2026-11-24T22:25:42.737Z",
-      "commits": [
-        {
-          "sha": "0a8351607cf1439cadca9d01b766523ec40bc7cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:24:38Z",
-          "message": "Merge f186e155502d845fe73dda5b4894e8fb64bc57bf into 74ff60b9ef4ea73da1ff662ab9c57dca723ae730\n"
-        },
-        {
-          "sha": "f186e155502d845fe73dda5b4894e8fb64bc57bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:24:21-07:00",
-          "message": "fix(stored-state): the log names every dropped session, a closed file arms no order write, and a hearing moves only the history's order (candybar-law-review-ibyq.6iz)\n\nLaw review pass 3's minor items. The bar's event about a load's drops\nexpires, so the log line names every session. An order write is armed only\nwhile the file is open. A hearing reorders the settings history through\nreplace, so no session's readers hear of it.\n"
-        },
-        {
-          "sha": "91a1d121be442e6a6cd9f39ded588c1c405966ca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:07:42-07:00",
-          "message": "fix(stored-state): one landing rule for every per-session file, replay what was taken before the load, and a landing carries its own reports (candybar-law-review-ibyq.6iz)\n\nLaw review pass 2. A per-session file writes where its link points, the\nsame rule its set-aside uses. A legacy name is retired unless it is the file\nbeing set aside. A rollback that cannot put a set-aside back names the copy.\nThe config landing returns its store reports, and the daemon restates the\nbar only when a report gave it something to show.\n"
-        },
-        {
-          "sha": "98355392c90974fbca59c05b9b222fcdc3ee3549",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T14:40:04-07:00",
-          "message": "fix(stored-state): one set-aside of an unread file for every store, said where it went, and no false ⚠ after an edit (candybar-law-review-ibyq.6iz)\n\nLaw review pass 1 of #956.\n\n- One executor sets an unread state file aside, for the answers book's\n  transaction and a held store's load alike. It moves the file the bytes\n  sit in, a link's target, so a symlinked answers book keeps its unread\n  bytes and stays a link.\n- One report type and one daemon translator: every store's load is\n  logged (no file, N sessions and M dropped, set aside, refused), and a\n  set-aside or a drop is a ⚠ event, the answers book's included.\n- A renderer hands the host only what a load keeps, so edit mode's keys\n  and a draft's steps never reach the file and a routine restart shows\n  no ⚠.\n- The holder keeps one fact for \"the file lags the map\", cleared only\n  once a save returns. A put of what a session holds is a hearing, and\n  every read before the load throws.\n- One move-to-newest for every recency-ordered map. The settings\n  history's hearing moves its one entry in place.\n"
-        },
-        {
-          "sha": "188be37bc0a075fd05f1416184f4c98ceca28b48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T14:06:14-07:00",
-          "message": "fix(stored-state): a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz)\n\nOne holder now holds every per-session file: the session book, and a renderer profile's picks and history. It reads the file once, by the rule every state file keeps. A file that does not read is renamed aside beside itself before anything is written, and the store starts empty. A file that can be neither read nor renamed is never saved to, and stands on every bar as saving nothing.\n\nA load's set-aside and what it dropped (a refused session, a retired pick or setting, an empty session) are a daemon event about the file, grouped by what and why.\n\nRecency is the last request or write. A request moves its session in the renderer's stores, and the host hears that as a `heard` write; the wire version goes to 18. A move of place alone reaches the file within one order period and at a close, so the write rate does not grow with the tick.\n"
-        },
-        {
-          "sha": "97a9d7f56f005bba7aaf2e5e5f3463e7c6d705a1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T13:41:31-07:00",
-          "message": "fix(state): a write over a state file that did not read sets it aside, and an unread answers book asks again (candybar-law-review-ibyq.6iz)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "74ff60b9ef4ea73da1ff662ab9c57dca723ae730",
-      "timestamp": "2026-11-24T21:33:37.880Z",
-      "commits": [
-        {
-          "sha": "74ff60b9ef4ea73da1ff662ab9c57dca723ae730",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T14:32:27-07:00",
-          "message": "fix(links): a carousel, swatches row or picker link carries its step, so N clicks land N moves (candybar-host-renderer-x96a.7qi) (#955)\n\n* fix(links): a stepping link carries its step and lands where the key stands when the click arrives (candybar-host-renderer-x96a.7qi)\n\nA carousel's or swatches row's ◀ ▶, the swatches `?` and a picker's page\narrows wrote the option or page the draw had computed. A terminal keeps the\nlink it found when the mouse last moved, so every click after the first wrote\nthe same neighbour and the control moved once however many times it was\nclicked.\n\nThe link now names the action and the step (ring-state, ring-config,\nturn-page). The handler resolves the ring from the clicking session's config\nand the value the bar wears when the click arrives, so N clicks move N steps\nand `?` is one link on every draw that lands an option other than the one\nheld. A picker's page layout rides in the link as runs of pages, since only\nthe draw knows where the width broke them; a swatches step turns the page\nholding its landing in the same handler, because a persist write lands a turn\nlater. Swatches no longer reads the clock, so the extra clock-function channel\nis removed.\n\n* fix(links): a ring step starts from the layer's file for persist, from the rule's name for a rule-chosen key, and refuses a stale page layout (candybar-host-renderer-x96a.7qi)\n\nLaw review pass 1 on #955.\n\n* fix(links): one owner for each ring input — a read-back refusal every centred control shares, a loud refusal for a link missing its centre or a layout that places no page, a whole-millisecond random seed (candybar-host-renderer-x96a.7qi)\n\n* fix(links): a swatches row over a key no variable reads back draws as it did, instead of throwing in the render (candybar-host-renderer-x96a.7qi)\n\n* test(links): the ambient-chrome filters and the durable-links check know the ring and page-arrow verbs (candybar-host-renderer-x96a.7qi)"
         }
       ]
     }

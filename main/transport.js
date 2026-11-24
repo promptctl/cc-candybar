@@ -29296,6 +29296,54 @@ function formatIssues(file, issues) {
   return lines2.join("\n");
 }
 
+// src/daemon/foundations/stored-file.ts
+init_globals();
+var unreadText = (reason, where) => `could not be read: ${reason} \u2014 ${where}`;
+var readOrEmpty = (result, empty2) => result.kind === "ok" ? result.value : empty2;
+var kept = (value, dropped = []) => ({ kind: "ok", value: { value, dropped } });
+function reportText({ store, file, found: found2 }) {
+  switch (found2.kind) {
+    case "absent":
+      return null;
+    case "set-aside":
+    case "refused":
+      return unreadReport(store, found2);
+    case "read":
+      return found2.dropped.length === 0 ? null : `${store} (${file}): the load dropped what this build does not read: ${droppedText(found2.dropped, SHOWN_SESSIONS)}`;
+  }
+}
+function reportLine(report2) {
+  const { store, file, found: found2 } = report2;
+  switch (found2.kind) {
+    case "absent":
+      return `${store}: no file at ${file}, holding nothing`;
+    case "read":
+      return `${store}: read ${file}, sessions=${found2.sessions} dropped=${found2.dropped.length}${found2.dropped.length === 0 ? "" : `: ${droppedText(found2.dropped, Infinity)}`}`;
+    case "set-aside":
+    case "refused":
+      return unreadReport(store, found2);
+  }
+}
+function unreadReport(store, found2) {
+  const where = found2.kind === "set-aside" ? `it is kept as ${found2.to}, and the store started again from empty` : `it stays where it is, since setting it aside failed (${found2.error}), and nothing is saved to it until the daemon starts again`;
+  return `${store} ${unreadText(found2.reason, where)}`;
+}
+var SHOWN_SESSIONS = 3;
+function droppedText(dropped, shown) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const { session, part, why } of dropped) {
+    const what = part === null ? `a session (${why})` : `${part} (${why})`;
+    const sessions = groups.get(what);
+    if (sessions === void 0) groups.set(what, [session]);
+    else sessions.push(session);
+  }
+  return [...groups].map(([what, sessions]) => {
+    const named2 = sessions.slice(0, shown).map((s) => JSON.stringify(s));
+    const more = sessions.length - named2.length;
+    return `${what} in ${named2.join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
+  }).join("; ");
+}
+
 // src/config/loader/repo-gate.ts
 var REPO_ANSWERS = ["approved", "declined"];
 function answerDir(d) {
@@ -29313,10 +29361,10 @@ var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
 function ruling(answers, d) {
   const key = answerDir(d);
   if (key === null) return { standing: "unread", under: d.dir };
-  if (answers.kind === "failed") return { standing: "unread", under: key };
-  const repo2 = answerOf(answers.value, key);
+  const book = readOrEmpty(answers, {});
+  const repo2 = answerOf(book, key);
   if (repo2 !== null) return { standing: repo2, under: key };
-  const legacy = answerOf(answers.value, d.dir);
+  const legacy = answerOf(book, d.dir);
   return legacy === null ? { standing: "awaiting", under: key } : { standing: legacy, under: d.dir };
 }
 var NO_PROJECT_ACCESS = {
@@ -29348,7 +29396,7 @@ function withAnswer(book, dir, answer2, superseded) {
 function repoUnreadNotice(gate2) {
   return gate2.unread === null ? null : advisory(
     ["repository-answers"],
-    `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`
+    `Repository config answers ${unreadText(gate2.unread, "no repository's config runs until it is answered again, and the next answer sets the unread book aside beside itself")}`
   );
 }
 
@@ -38158,11 +38206,11 @@ var Animation = {
     return Animation.of({
       at: (t2) => animation.at(beat2.lastChange(t2)),
       nextChange(t2) {
-        const moved2 = animation.nextChange(beat2.lastChange(t2));
-        if (moved2 === Number.POSITIVE_INFINITY)
-          return moved2;
+        const moved = animation.nextChange(beat2.lastChange(t2));
+        if (moved === Number.POSITIVE_INFINITY)
+          return moved;
         const end = beat2.nextChange(t2);
-        return moved2 <= end ? end : beat2.lastChange(moved2) === moved2 ? moved2 : beat2.nextChange(moved2);
+        return moved <= end ? end : beat2.lastChange(moved) === moved ? moved : beat2.nextChange(moved);
       },
       // The value held now began at this hold's start at the latest: an early
       // answer where the animation had not moved by it, which the contract allows.
@@ -38323,8 +38371,8 @@ var ColorRamp = class _ColorRamp {
     const last2 = this.stops[this.stops.length - 1].at;
     const span = last2 - first2;
     const inside = first2 <= value && value <= last2;
-    const moved2 = inside ? value - this.scroll * span : value;
-    const read3 = this.unmoved(inside && moved2 < first2 ? moved2 + span : moved2);
+    const moved = inside ? value - this.scroll * span : value;
+    const read3 = this.unmoved(inside && moved < first2 ? moved + span : moved);
     return this.hue === 0 ? read3 : Oklch.fromRgba(read3).applyKey({ ...IDENTITY, hueShift: 360 * this.hue }).toRgba();
   }
   /** The colour at `value` with the ramp unmoved: the stops and the ease alone. */
@@ -38838,10 +38886,10 @@ var RichText = class _RichText {
         throw new Error("Style argument must not be provided when appending RichText");
       }
       const offset = this._text.get().length;
-      const moved2 = content._spans.get().map((span) => span.move(offset));
+      const moved = content._spans.get().map((span) => span.move(offset));
       this._text.set(this._text.get() + content._text.get());
       this._addSpan(offset, this._text.get().length, content._format.get().style);
-      for (const span of moved2)
+      for (const span of moved)
         this._spans.push(span);
       return this;
     }
@@ -39750,8 +39798,8 @@ var JoinedCell = class _JoinedCell {
     const reaches = (side) => moves[side]?.color !== void 0 && this.parts[side].has("fg") || moves[side]?.bgcolor !== void 0 && this.parts[side].has("bg");
     if (!reaches("left") && !reaches("right"))
       return void 0;
-    const moved2 = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
-    const edges = { left: moved2(this.edges.left, moves.left), right: moved2(this.edges.right, moves.right) };
+    const moved = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
+    const edges = { left: moved(this.edges.left, moves.left), right: moved(this.edges.right, moves.right) };
     const next2 = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
     const restamp2 = (level) => ({ ...level, owner: level.owner === this ? next2 : level.owner, inner: level.inner && restamp2(level.inner) });
     return { colors: next2.style, style: style.withAnchor(style.anchor && restamp2(style.anchor)) };
@@ -39970,11 +40018,11 @@ var Recolored = class {
     }
   }
   /** `segment`'s cells drawn in the looks the effect painted them. */
-  *_repainted(segment, look, glyphs, moved2, depth) {
+  *_repainted(segment, look, glyphs, moved, depth) {
     const { style: base, wire, slots, pair, attributes } = look;
     const runs = [];
     for (const [k, { glyph }] of glyphs.entries()) {
-      const now2 = moved2[k];
+      const now2 = moved[k];
       const colors = onScreen(now2, pair.reverse);
       const last2 = runs[runs.length - 1];
       const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
@@ -40020,7 +40068,7 @@ var Recolored = class {
       terminals.add(own2);
       return own2;
     };
-    const moved2 = (from, to) => {
+    const moved = (from, to) => {
       const specs = movedSpecs(from, to, depth, theme24);
       return specs.fg === void 0 && specs.bg === void 0 ? void 0 : { color: edgeOf(specs.fg, true), bgcolor: edgeOf(specs.bg, false) };
     };
@@ -40028,14 +40076,14 @@ var Recolored = class {
       const wire2 = edge.drawnColors(depth);
       const slots2 = { fg: (wire2.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire2.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
       const terminal = { fg: wire2.color?.isDefault ?? true, bg: wire2.bgcolor?.isDefault ?? true };
-      return moved2(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
+      return moved(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
     };
     const moveOf = (side) => {
       const read3 = joined.reads[side];
       if (read3 === null)
         return void 0;
       const cell3 = beside2(cells, side, read3.owner);
-      return cell3 === void 0 ? unseen(read3.edge) : moved2(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
+      return cell3 === void 0 ? unseen(read3.edge) : moved(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
     };
     const rederived = joined.rederived({ left: moveOf("left"), right: moveOf("right") }, look.style, depth);
     if (rederived === void 0)
@@ -40067,8 +40115,8 @@ var Recolored = class {
    * in, the rest as `wire` wrote them.
    */
   respec(wire, from, to, depth) {
-    const moved2 = movedSpecs(from, to, depth, this.theme);
-    return { color: moved2.fg ?? wire.color, bgcolor: moved2.bg ?? wire.bgcolor };
+    const moved = movedSpecs(from, to, depth, this.theme);
+    return { color: moved.fg ?? wire.color, bgcolor: moved.bg ?? wire.bgcolor };
   }
 };
 var Effected = class _Effected {
@@ -40114,8 +40162,8 @@ var Effected = class _Effected {
    */
   static shows(pair, to, depth, theme24) {
     const from = onScreen(pair, pair.reverse);
-    const moved2 = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
-    return onScreen({ fg: moved2.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved2.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
+    const moved = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
+    return onScreen({ fg: moved.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
   }
 };
 function cellSeed(key, row, col) {
@@ -40166,12 +40214,12 @@ function edgesBeside(walked, drawings) {
       const drawing2 = drawings[i2];
       if (look === void 0 || drawing2 === void 0 || !("painted" in drawing2))
         return;
-      const moved2 = drawing2.painted;
+      const moved = drawing2.painted;
       glyphs.forEach(({ cell: cell3 }, k) => {
         if (cell3 === void 0)
           return;
         const row = byRow.get(cell3.row) ?? [];
-        row.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved2[k] });
+        row.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved[k] });
         byRow.set(cell3.row, row);
       });
     });
@@ -40650,8 +40698,8 @@ function atShares(loop, share) {
       const field = loop.field(t2, drawn);
       return (look, cell3) => {
         const w = Math.round(clamp013(field(cell3)) * LEVELS) / LEVELS;
-        const moved2 = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
-        return { ...look, fg: moved2(look.fg, cell3.terminal.fg), bg: moved2(look.bg, cell3.terminal.bg) };
+        const moved = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
+        return { ...look, fg: moved(look.fg, cell3.terminal.fg), bg: moved(look.bg, cell3.terminal.bg) };
       };
     });
   };
@@ -41152,7 +41200,7 @@ function rewritten(text5, glyphs, shown) {
     from.push(from[i2] + glyph.length);
     to.push(to[i2] + shown[i2].length);
   });
-  const moved2 = (offset) => {
+  const moved = (offset) => {
     let i2 = 0;
     while (i2 + 1 < from.length && from[i2 + 1] <= offset)
       i2++;
@@ -41160,7 +41208,7 @@ function rewritten(text5, glyphs, shown) {
   };
   const result = text5.blankCopy(shown.join(""));
   for (const span of text5.spans)
-    result.stylize(span.style, moved2(span.start), moved2(span.end));
+    result.stylize(span.style, moved(span.start), moved(span.end));
   return result;
 }
 var BREAKS = pattern(/[\n\t]/);
@@ -41253,8 +41301,8 @@ function backspace(timing) {
   return transition(timing.seconds, ({ cells }) => {
     const { length, place } = text(cells);
     return Animation.continuous((t2) => {
-      const kept = length - arrived(length, ease(phase(t2)));
-      return (cell3) => (place.get(cell3.index) ?? -1) < kept ? cell3.glyph : blank(cell3.glyph);
+      const kept2 = length - arrived(length, ease(phase(t2)));
+      return (cell3) => (place.get(cell3.index) ?? -1) < kept2 ? cell3.glyph : blank(cell3.glyph);
     });
   });
 }
@@ -41851,13 +41899,13 @@ function windowAt(palette, hue, shade, drawnAt) {
       new Set(LADDER.map(drawn)).size
     );
     const [first2, ...rest2] = shade.tones;
-    const kept = [first2];
+    const kept2 = [first2];
     for (const tone of rest2) {
-      if (kept.length < size && kept.every((held) => drawn(held) !== drawn(tone)))
-        kept.push(tone);
+      if (kept2.length < size && kept2.every((held) => drawn(held) !== drawn(tone)))
+        kept2.push(tone);
     }
     return inWalkOrder(
-      Array.from({ length: size - kept.length }).reduce((window2) => {
+      Array.from({ length: size - kept2.length }).reduce((window2) => {
         const wider = widen(
           palette,
           hue,
@@ -41866,7 +41914,7 @@ function windowAt(palette, hue, shade, drawnAt) {
           drawnAt
         );
         return wider === void 0 ? window2 : [...window2, wider];
-      }, kept)
+      }, kept2)
     );
   });
 }
@@ -43876,8 +43924,8 @@ var COPIED_LENGTH = 60;
 var ELISION = "...";
 function saidCopy(text5) {
   const chars = [...text5];
-  const kept = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
-  return chars.length <= COPIED_LENGTH ? text5 : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
+  const kept2 = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
+  return chars.length <= COPIED_LENGTH ? text5 : `${chars.slice(0, kept2).join("")}${ELISION}${chars.slice(-kept2).join("")}`;
 }
 var said = (words2, quoted2 = "") => ({ words: words2, quoted: quoted2 });
 var SAYS = {
@@ -44342,7 +44390,7 @@ function together(parts) {
         ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
       )
     ),
-    (frames) => (colors, cell3) => frames.reduce((moved2, part) => part(moved2, cell3), colors)
+    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
   );
 }
 var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
@@ -44400,9 +44448,9 @@ var NO_MOTION = {
   }
 };
 var SessionEffects = class {
-  constructor(key, kept = NO_MOTION) {
+  constructor(key, kept2 = NO_MOTION) {
     this.key = key;
-    this.kept = kept;
+    this.kept = kept2;
   }
   key;
   kept;
@@ -44448,16 +44496,16 @@ var SessionEffects = class {
   motion(name, clock, given2, flash = null) {
     const at = animationAt(clock);
     const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
-    const { kept } = this;
-    const inForce = kept.inForce?.name === name ? kept.inForce : { name, since: at };
+    const { kept: kept2 } = this;
+    const inForce = kept2.inForce?.name === name ? kept2.inForce : { name, since: at };
     const bar = {
       scope: BAR_SCOPE,
       name,
       t: at - inForce.since
     };
-    const knownPlacements = kept.placements;
+    const knownPlacements = kept2.placements;
     const placements = /* @__PURE__ */ new Map();
-    const known = kept.made;
+    const known = kept2.made;
     const made = /* @__PURE__ */ new Map();
     const own2 = [];
     const { last: last2 } = given2;
@@ -65860,9 +65908,9 @@ var VariableStore = class {
   derive(name, derivation, deriver) {
     this.refuseDisposed(`Derived value "${name}"`);
     if (derivation === "projection") return new Projected(deriver);
-    const kept = new Kept(`Derived value "${name}"`, deriver);
-    this.kept.push(kept);
-    return kept;
+    const kept2 = new Kept(`Derived value "${name}"`, deriver);
+    this.kept.push(kept2);
+    return kept2;
   }
   kept = [];
   read(name) {
@@ -65997,7 +66045,7 @@ var VariableStore = class {
           released++;
         }
       }
-      for (const kept of this.kept) kept.release();
+      for (const kept2 of this.kept) kept2.release();
     });
     return released + this.kept.length;
   }
@@ -73878,6 +73926,12 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
   const standing2 = [
     ...daemon2.fileEvents.map(alone),
     ...daemon2.launcher === null ? [] : [alone(daemon2.launcher)],
+    ...daemon2.unsaved.map(
+      (warning) => ({
+        warning,
+        about: aboutSubject(warning.kind, warning.file)
+      })
+    ),
     ...daemonWarnings,
     ...configWatch === null ? [] : [alone({ kind: "config-watch", message: configWatch })],
     // [LAW:one-source-of-truth] A load's warnings arrive about what their
@@ -74664,8 +74718,8 @@ var Feeds = class {
   }
 };
 function noteSent(rate, tick) {
-  const kept = rate.filter((sent) => sent > tick - RATE_WINDOW_S);
-  rate.splice(0, rate.length, ...kept, tick);
+  const kept2 = rate.filter((sent) => sent > tick - RATE_WINDOW_S);
+  rate.splice(0, rate.length, ...kept2, tick);
 }
 var lanesOf = (viewers) => Object.entries(viewers.lanes).map(([lane, seen]) => `${lane}:${seen.subscribers}`).join(",") || "-";
 
@@ -74783,8 +74837,8 @@ function rebuilds(text5, changes, at, written2) {
 }
 function diffMembers(at, beforeText, was, afterText, will) {
   const prior = new Map(was.entries.map((e) => [e.key, e.value]));
-  const kept = new Set(will.entries.map((e) => e.key));
-  const gone = was.entries.filter((e) => !kept.has(e.key)).map(
+  const kept2 = new Set(will.entries.map((e) => e.key));
+  const gone = was.entries.filter((e) => !kept2.has(e.key)).map(
     (e) => ({
       op: "remove",
       at: [...at, e.key],
@@ -75193,6 +75247,135 @@ init_globals();
 
 // src/renderer/session-state.ts
 init_globals();
+
+// src/utils/recency.ts
+init_globals();
+function newestOf(map) {
+  let newest;
+  for (const key of map.keys()) newest = key;
+  return newest;
+}
+function putNewest(map, key, value) {
+  const dropped = map.delete(key);
+  if (value === null) return dropped;
+  map.set(key, value);
+  return true;
+}
+function toNewest(map, key) {
+  const value = map.get(key);
+  if (value === void 0 || newestOf(map) === key) return false;
+  return putNewest(map, key, value);
+}
+
+// src/renderer/stored-moves.ts
+init_globals();
+var StoredMoves = class {
+  moved = /* @__PURE__ */ new Map();
+  put(session) {
+    putNewest(this.moved, session, "put");
+  }
+  // A hearing after a put in the same turn is carried by the put, which
+  // moves the entry to the newest end as the hearing did.
+  heard(session) {
+    putNewest(this.moved, session, this.moved.get(session) ?? "heard");
+  }
+  drain(write) {
+    const writes = [...this.moved].map(
+      ([session, moved]) => write(session, moved)
+    );
+    this.moved.clear();
+    return writes;
+  }
+};
+
+// src/renderer-interface/stored-state.ts
+init_globals();
+
+// src/renderer-interface/history-storage.ts
+init_globals();
+function isChange(v) {
+  if (v === null || typeof v !== "object") return false;
+  const o = v;
+  const state = (x) => x === null || typeof x === "string";
+  return (o.kind === "session" && typeof o.key === "string" || o.kind === "layer" && layerRoleOf(o.role) !== null && typeof o.digest === "string") && state(o.before) && state(o.after);
+}
+function isSteps(v) {
+  return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
+}
+function parseSessionHistory(v) {
+  if (!isPlainObject(v)) return { kind: "failed", reason: "is not an object" };
+  if (!isSteps(v.past))
+    return {
+      kind: "failed",
+      reason: "has a 'past' that is not a list of steps"
+    };
+  if (!isSteps(v.future))
+    return {
+      kind: "failed",
+      reason: "has a 'future' that is not a list of steps"
+    };
+  return { kind: "ok", value: { past: v.past, future: v.future } };
+}
+var holdsNothing = ({ past, future }) => past.length + future.length === 0;
+function withoutRetiredChanges(history) {
+  const retired2 = /* @__PURE__ */ new Set();
+  const keep = (change) => {
+    if (change.kind === "layer" || isSettingKey(change.key)) return true;
+    retired2.add(change.key);
+    return false;
+  };
+  const steps2 = (list3) => list3.map((step4) => step4.filter(keep)).filter((step4) => step4.length > 0);
+  const stripped = { past: steps2(history.past), future: steps2(history.future) };
+  const why = "its changes are to a key that is not a setting in this build";
+  if (holdsNothing(stripped))
+    return {
+      kind: "failed",
+      reason: retired2.size > 0 ? `holds only changes to ${quoted(retired2)}, not a setting in this build` : "holds nothing to undo or redo"
+    };
+  return kept(
+    stripped,
+    [...retired2].map((key) => ({ part: key, why }))
+  );
+}
+var quoted = (keys2) => [...keys2].map((k) => `"${k}"`).join(", ");
+
+// src/renderer-interface/stored-state.ts
+function parseSessionPicks(value) {
+  if (!isPlainObject(value))
+    return { kind: "failed", reason: "is not an object" };
+  const keys2 = Object.keys(value);
+  if (keys2.length === 0) return { kind: "failed", reason: "holds no picks" };
+  const bad = keys2.find((key) => typeof value[key] !== "string");
+  return bad === void 0 ? { kind: "ok", value } : {
+    kind: "failed",
+    reason: `has a ${JSON.stringify(bad)} that is not a string`
+  };
+}
+function retiredBecause(key, value) {
+  if (isEditModeKey(key)) return "no edit outlives the renderer";
+  if (isMenuStateKey(key) && menuOfKey(key) === void 0)
+    return "no menu is keyed that way in this build";
+  if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
+    return "not a record of a failed click this build reads";
+  return void 0;
+}
+function withoutRetiredKeys(picks) {
+  const judged = Object.entries(picks).map(
+    ([key, value]) => [key, value, retiredBecause(key, value)]
+  );
+  const dropped = judged.flatMap(
+    ([key, , why]) => why === void 0 ? [] : [{ part: key, why }]
+  );
+  const held = judged.flatMap(
+    ([key, value, why]) => why === void 0 ? [[key, value]] : []
+  );
+  return held.length === 0 ? {
+    kind: "failed",
+    reason: `holds only picks this build reads nothing of: ${dropped.map(({ part, why }) => `${part} (${why})`).join(", ")}`
+  } : kept(Object.fromEntries(held), dropped);
+}
+
+// src/renderer/session-state.ts
 function recordingView(store, records, onChange) {
   const recorded2 = (sessionId2, keys2, write) => {
     const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
@@ -75228,14 +75411,12 @@ var SessionState = class {
   }
   maxSessions;
   // [LAW:types-are-the-program] Insertion order is recency order, the order
-  // of writes: the store cannot hold more than maxSessions, so the bound is
-  // structural, not dependent on an external prune caller. A read moves
-  // nothing, so the host's copy, which hears only writes, keeps the same order.
+  // each session was last written or heard by a request: the store cannot
+  // hold more than maxSessions, so the bound is structural, not dependent on
+  // an external prune caller, and drops the session idle longest. A read
+  // moves nothing, so the host's copy, told of every move, keeps the order.
   sessions;
-  // [LAW:one-source-of-truth] The sessions whose state moved since the host
-  // was last told, in the order they last moved: what the turn's stored
-  // writes carry (`drain`).
-  moved = /* @__PURE__ */ new Set();
+  moved = new StoredMoves();
   // [LAW:single-enforcer] The store's revision: counts every change any
   // writer makes, so it never repeats while the store lives.
   head = 0;
@@ -75313,40 +75494,48 @@ var SessionState = class {
       this.atom.reportChanged();
     });
   }
+  // A request from the session: it moves to the newest end, so the bound
+  // drops the session idle longest. What it holds is unchanged, so no reader
+  // is told, and the host hears only its place.
+  heard(sessionId2) {
+    if (toNewest(this.sessions, sessionId2)) this.moved.heard(sessionId2);
+  }
   // What the host has not yet been told: each session that moved, as it now
-  // stands, null for one dropped, in the order they last moved, so the host's
-  // copy keeps this store's recency order.
+  // stands (null for one dropped) or only its place, in the order they last
+  // moved.
   drain() {
-    const writes = [...this.moved].map(
-      (key) => ({
+    return this.moved.drain(
+      (key, moved) => moved === "heard" ? { kind: "heard", store: "session-state", key } : {
+        kind: "put",
         store: "session-state",
         key,
         value: this.valuesOf(key)
-      })
+      }
     );
-    this.moved.clear();
-    return writes;
   }
+  // [LAW:single-enforcer] What the host keeps of a session is what a load of
+  // its file keeps, so the file never holds a pick only this renderer reads
+  // (edit mode's own), and a load that drops one is reading an older build's.
   valuesOf(sessionId2) {
     const session = this.sessions.get(sessionId2);
-    return session === void 0 ? null : Object.fromEntries(session.values);
+    if (session === void 0) return null;
+    const outlives2 = withoutRetiredKeys(Object.fromEntries(session.values));
+    return outlives2.kind === "ok" ? outlives2.value.value : null;
   }
   // Move-to-end: re-inserting at the tail makes this the most recently
   // written, here and in what the host is told.
   changed(sessionId2, session) {
     session.revision = ++this.head;
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, session);
+    putNewest(this.sessions, sessionId2, session);
     this.told(sessionId2);
   }
   dropped(sessionId2) {
     this.head++;
-    this.sessions.delete(sessionId2);
+    putNewest(this.sessions, sessionId2, null);
     this.told(sessionId2);
   }
   told(sessionId2) {
-    this.moved.delete(sessionId2);
-    this.moved.add(sessionId2);
+    this.moved.put(sessionId2);
   }
   evictOldest() {
     let overflow = this.sessions.size - this.maxSessions;
@@ -75357,33 +75546,6 @@ var SessionState = class {
     }
   }
 };
-
-// src/renderer-interface/history-storage.ts
-init_globals();
-function isChange(v) {
-  if (v === null || typeof v !== "object") return false;
-  const o = v;
-  const state = (x) => x === null || typeof x === "string";
-  return (o.kind === "session" && typeof o.key === "string" || o.kind === "layer" && layerRoleOf(o.role) !== null && typeof o.digest === "string") && state(o.before) && state(o.after);
-}
-function isSteps(v) {
-  return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
-}
-function parseSessionHistory(v) {
-  if (!isPlainObject(v)) return { kind: "failed", reason: "is not an object" };
-  if (!isSteps(v.past))
-    return {
-      kind: "failed",
-      reason: "has a 'past' that is not a list of steps"
-    };
-  if (!isSteps(v.future))
-    return {
-      kind: "failed",
-      reason: "has a 'future' that is not a list of steps"
-    };
-  return { kind: "ok", value: { past: v.past, future: v.future } };
-}
-var holdsNothing = ({ past, future }) => past.length + future.length === 0;
 
 // src/renderer/settings-history.ts
 var MAX_STEPS = 50;
@@ -75418,21 +75580,37 @@ var SettingsHistory = class {
   set state(next2) {
     runInAction(() => this.held.replace(next2));
   }
-  // [LAW:one-source-of-truth] The sessions whose history moved since the
-  // host was last told, in the order they last moved (`drain`).
-  moved = /* @__PURE__ */ new Set();
+  moved = new StoredMoves();
+  // A request from the session: it moves to the newest end, so the bounds
+  // drop the session idle longest. [LAW:carrying-cost] It runs on every
+  // request, so the order alone changes: a replace keeps each entry's
+  // observable, so no session's readers hear of it, only the order's.
+  heard(sessionId2) {
+    const order2 = new Map(this.held);
+    if (!toNewest(order2, sessionId2)) return;
+    runInAction(() => this.held.replace(order2));
+    this.moved.heard(sessionId2);
+  }
   // What the host has not yet been told: each session whose history moved, as
-  // it now stands, null for one gone, in the order they last moved.
+  // it now stands (null for one gone) or only its place, in the order they
+  // last moved.
   drain() {
-    const writes = [...this.moved].map(
-      (key) => ({
+    return this.moved.drain(
+      (key, moved) => moved === "heard" ? { kind: "heard", store: "settings-history", key } : {
+        kind: "put",
         store: "settings-history",
         key,
-        value: this.state.get(key) ?? null
-      })
+        value: this.outliving(key)
+      }
     );
-    this.moved.clear();
-    return writes;
+  }
+  // [LAW:single-enforcer] What the host keeps of a session's history is what
+  // a load of its file keeps, so the file never holds a draft's step.
+  outliving(sessionId2) {
+    const history = this.state.get(sessionId2);
+    if (history === void 0) return null;
+    const outlives2 = withoutRetiredChanges(history);
+    return outlives2.kind === "ok" ? outlives2.value.value : null;
   }
   depth(sessionId2) {
     const { past, future } = this.history(sessionId2);
@@ -75507,9 +75685,9 @@ var SettingsHistory = class {
       },
       commit: () => {
         step4();
-        const moved2 = new Map(working);
+        const moved = new Map(working);
         working.clear();
-        for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
+        for (const [sessionId2, history] of moved) this.put(sessionId2, history);
         return held.flush();
       }
     };
@@ -75538,9 +75716,9 @@ var SettingsHistory = class {
       throw new BadVerbArgs("redo: nothing to redo");
     }
     const all2 = [...past, step4];
-    const kept = capped(all2);
+    const kept2 = capped(all2);
     this.apply(click2, sessionId2, step4, "after", "redo", {
-      past: kept,
+      past: kept2,
       future: future.slice(0, -1)
     });
     return step4;
@@ -75592,10 +75770,8 @@ var SettingsHistory = class {
   // session that changed least recently.
   put(sessionId2, history) {
     const next2 = new Map(this.state);
-    next2.delete(sessionId2);
-    if (!holdsNothing(history)) next2.set(sessionId2, history);
-    this.moved.delete(sessionId2);
-    this.moved.add(sessionId2);
+    putNewest(next2, sessionId2, holdsNothing(history) ? null : history);
+    this.moved.put(sessionId2);
     this.adopt(next2);
   }
   // [LAW:single-enforcer] The one enforcer of the bounds, over what the
@@ -75605,10 +75781,7 @@ var SettingsHistory = class {
     const before = new Map(next2);
     this.bound(next2);
     for (const [sessionId2, history] of before)
-      if (next2.get(sessionId2) !== history) {
-        this.moved.delete(sessionId2);
-        this.moved.add(sessionId2);
-      }
+      if (next2.get(sessionId2) !== history) this.moved.put(sessionId2);
     this.state = next2;
   }
   bound(next2) {
@@ -77713,12 +77886,12 @@ function journaled(verb, sid, context, ctx, effects, handler) {
         saved.commit();
         end();
       } else {
-        const { moved: moved2, clicked } = edit.commit();
+        const { moved, clicked } = edit.commit();
         const mode = clicked.get(EDIT_MODE_KEY);
         if (mode !== void 0 && mode !== EDIT_MODE_ARRANGE) {
           edit.leave(clicked);
           end();
-        } else if (moved2) {
+        } else if (moved) {
           ctx.edits.changed(sid);
           ctx.editViewChanged(sid);
         }
@@ -78157,7 +78330,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
 }
 
 // src/renderer/main.ts
-function mainRenderer(parts, drains) {
+function mainRenderer(parts, stores) {
   const { time, turnLog, feeds, menuIdle } = parts;
   const deliveries = /* @__PURE__ */ new Map();
   const prepare = (delivery) => {
@@ -78309,6 +78482,7 @@ function mainRenderer(parts, drains) {
         const origin = context.requested;
         contextFacts(context, record2);
         noteFacts(record2, { encoding: context.encoding });
+        for (const store of Object.values(stores)) store.heard(session);
         runInAction(() => {
           parts.worldStates.open(context, worldState);
           const editMoved = parts.edits.moved(session, origin);
@@ -78522,7 +78696,7 @@ function mainRenderer(parts, drains) {
     observed2 = next2;
     subscriptions = next2.plan;
   };
-  const storeOrder = Object.keys(drains);
+  const storeOrder = Object.keys(stores);
   const ending = (event, run2) => {
     let outcome;
     try {
@@ -78547,7 +78721,7 @@ function mainRenderer(parts, drains) {
       }
     };
     for (const store of storeOrder)
-      collect(store, () => stored.push(...drains[store]()));
+      collect(store, () => stored.push(...stores[store].drain()));
     collect("subscriptions", () => declare(event.kind === "config"));
     collect("wake", () => {
       wake = earliestOf([
@@ -78756,10 +78930,7 @@ function build2(inputs, turnLog) {
       configWrites,
       sessionStats: () => store.stats()
     },
-    {
-      "session-state": () => store.drain(),
-      "settings-history": () => settingsHistory.drain()
-    }
+    { "session-state": store, "settings-history": settingsHistory }
   );
 }
 function debugOf(cache2, what) {
@@ -80379,7 +80550,7 @@ init_globals();
 
 // src/daemon/session-book.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/render-origin.ts
 init_globals();
@@ -80403,6 +80574,553 @@ function originOfRecord(value) {
   return { projectDir, cwd: cwd2, target: recordedTarget(source, configFile) };
 }
 
+// src/daemon/held-file.ts
+init_globals();
+
+// src/daemon/state-file.ts
+init_globals();
+var import_node_path11 = __toESM(require_path_browserify(), 1);
+
+// src/utils/regular-text.ts
+init_globals();
+
+// site/shims/fs-promises.ts
+init_globals();
+var p = fs.promises;
+var fs_promises_default = p;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/utils/regular-text.ts
+var READ_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK;
+function regular(stats) {
+  if (!stats.isFile()) throw new Error("not a file");
+  return stats;
+}
+function withRegularTextFile(path31, use) {
+  const fd = openSync(path31, READ_FLAGS);
+  try {
+    const stat3 = () => fstatSync(fd, { bigint: true });
+    const observed2 = regular(stat3());
+    return use({ observed: observed2, stat: stat3, text: () => readFileSync(fd, "utf8") });
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (error) {
+      debug(`close ${path31}: ${String(error)}`);
+    }
+  }
+}
+function readRegularTextSync(path31) {
+  return withRegularTextFile(path31, (file) => file.text());
+}
+function readTextIfPresent(path31, read3 = readRegularTextSync) {
+  try {
+    return read3(path31);
+  } catch (error) {
+    const native2 = types.isNativeError(error);
+    if (native2 && "code" in error && error.code === "ENOENT") return null;
+    const detail = native2 ? error.message : String(error);
+    throw new Error(`${path31}: ${detail}`, { cause: error });
+  }
+}
+
+// src/daemon/state-file.ts
+function writeBase(observed2, empty2) {
+  const { result } = observed2;
+  return {
+    current: readOrEmpty(result, empty2),
+    setAside: result.kind === "ok" ? null : result
+  };
+}
+var textOf2 = (value) => `${JSON.stringify(value, null, 2)}
+`;
+function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
+  const [file, previous2] = locations2;
+  const candidates = previous2 === void 0 ? [file] : [file, previous2];
+  const observe2 = () => {
+    const paths2 = [];
+    for (const candidate of candidates) {
+      paths2.push(candidate);
+      let text5;
+      try {
+        text5 = readText(candidate);
+      } catch (e) {
+        const result = {
+          kind: "failed",
+          reason: asError(e).message,
+          file: candidate
+        };
+        return { result, paths: paths2, source: candidate, text: null };
+      }
+      if (text5 === null) continue;
+      return {
+        result: documentAt(candidate, text5, parse3),
+        paths: paths2,
+        source: candidate,
+        text: text5
+      };
+    }
+    return { result: ok(empty2), paths: paths2, source: null, text: null };
+  };
+  const plan = (next2) => {
+    const observed2 = observe2();
+    const { current, setAside: setAside2 } = writeBase(observed2, empty2);
+    const { source } = observed2;
+    const text5 = observed2.result.kind === "ok" ? observed2.text : null;
+    const value = next2(current);
+    const promote = source !== null && source !== file;
+    const rewrite = promote || setAside2 !== null || value !== current ? { file, was: source === file ? text5 : null, will: textOf2(value) } : null;
+    try {
+      const old = previousName(file, previous2, source);
+      const retire = old === null || old === setAside2?.file ? null : { from: old, to: `${old}.migrated-${randomUUID()}` };
+      return ok({ setAside: setAside2, rewrite, retire, value });
+    } catch (e) {
+      return {
+        kind: "failed",
+        reason: `cannot inspect the former state file ${previous2}: ${asError(e).message}`
+      };
+    }
+  };
+  return {
+    observe: () => {
+      const { text: _bytes, ...observed2 } = observe2();
+      return observed2;
+    },
+    read: () => observe2().result,
+    plan
+  };
+}
+function previousName(file, previous2, source) {
+  if (previous2 === void 0) return null;
+  if (source === previous2) return previous2;
+  const old = fs_default.lstatSync(previous2, { throwIfNoEntry: false });
+  if (!old?.isFile() && !old?.isSymbolicLink()) return null;
+  const entry = (at) => {
+    try {
+      return import_node_path11.default.join(
+        fs_default.realpathSync.native(import_node_path11.default.dirname(at)),
+        import_node_path11.default.basename(at)
+      );
+    } catch (cause) {
+      if (cause.code === "ENOENT") return null;
+      throw cause;
+    }
+  };
+  const oldEntry = entry(previous2);
+  return linkChain(file).some((hop) => entry(hop) === oldEntry) ? null : previous2;
+}
+function documentAt(file, text5, parse3) {
+  let doc;
+  try {
+    doc = JSON.parse(text5);
+  } catch (e) {
+    return {
+      kind: "failed",
+      reason: `${file} is not JSON: ${e.message}`,
+      file
+    };
+  }
+  const parsed2 = parse3(doc);
+  return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}`, file };
+}
+
+// src/daemon/session-state-file.ts
+init_globals();
+var import_node_path12 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/file-rewrites.ts
+init_globals();
+var writeConfigFile = (file, text5, mode) => text5 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text5, mode);
+function setAside(file) {
+  const from = resolvedTarget(file);
+  const to = `${from}.unread-${randomUUID()}`;
+  fs_default.renameSync(from, to);
+  return { from, to };
+}
+function writeRevisions({ setAside: unread2, rewrites, retire }, write = writeConfigFile) {
+  const written2 = [];
+  let aside = null;
+  try {
+    if (unread2 !== null)
+      aside = {
+        file: unread2.file,
+        reason: unread2.reason,
+        ...setAside(unread2.file)
+      };
+    for (const rewrite of rewrites) {
+      const removedMode = rewrite.will === null && rewrite.was !== null ? filePermissions(rewrite.file) : void 0;
+      write(rewrite.file, rewrite.will);
+      written2.push({ ...rewrite, removedMode });
+    }
+    const files = [
+      ...aside === null ? [] : [aside.to],
+      ...written2.map(({ file }) => file)
+    ];
+    if (retire !== null) {
+      fs_default.renameSync(retire.from, retire.to);
+      files.push(retire.from, retire.to);
+    }
+    return { kind: "ok", files, setAside: aside };
+  } catch (cause) {
+    const error = asError(cause);
+    const failed3 = [];
+    for (const { file, was, will, removedMode } of written2.reverse()) {
+      if (will === null && removedMode === void 0) continue;
+      try {
+        write(file, was, removedMode);
+      } catch (rollback) {
+        failed3.push({ file, error: asError(rollback) });
+      }
+    }
+    if (aside !== null)
+      try {
+        fs_default.renameSync(aside.to, aside.from);
+      } catch (rollback) {
+        const { message } = asError(rollback);
+        failed3.push({
+          file: aside.from,
+          error: new Error(`${message} \u2014 its bytes are kept at ${aside.to}`)
+        });
+      }
+    const [first2, ...remaining] = failed3;
+    return first2 === void 0 ? { kind: "failed", error } : { kind: "incomplete", error, unrestored: [first2, ...remaining] };
+  }
+}
+
+// src/daemon/session-state-file.ts
+var nothingLoaded = () => ({
+  sessions: /* @__PURE__ */ new Map(),
+  dropped: []
+});
+var ephemeralSessionFile = () => ({
+  file: "(kept nowhere)",
+  observe: () => ({ result: ok(nothingLoaded()), paths: [], source: null }),
+  setAside: () => {
+    throw new Error("a file kept nowhere always reads");
+  },
+  save: () => {
+  },
+  flush: async () => {
+  }
+});
+var SESSION_STATE_FILE = {
+  name: "session-state",
+  record: (kv) => kv,
+  parse: (value) => {
+    const picks = parseSessionPicks(value);
+    return picks.kind === "ok" ? withoutRetiredKeys(picks.value) : picks;
+  }
+};
+var sessionsOf = (kind) => (doc) => {
+  if (!isPlainObject(doc))
+    return { kind: "failed", reason: "is not an object keyed by session" };
+  const sessions = /* @__PURE__ */ new Map();
+  const dropped = [];
+  const keyed = sessionKeyed(
+    doc,
+    (key, problem) => dropped.push({ session: key, part: null, why: `session id ${problem}` })
+  );
+  for (const [id2, value] of keyed) {
+    const entry = kind.parse(value);
+    if (entry.kind === "failed")
+      dropped.push({
+        session: id2,
+        part: null,
+        why: `its value ${entry.reason}`
+      });
+    else {
+      sessions.set(id2, entry.value.value);
+      for (const part of entry.value.dropped)
+        dropped.push({ session: id2, ...part });
+    }
+  }
+  return ok({ sessions, dropped });
+};
+function sessionFileOnDisk(kind, filePath2) {
+  const file = stateFile([filePath2], nothingLoaded(), sessionsOf(kind));
+  return {
+    file: filePath2,
+    observe: file.observe,
+    setAside
+  };
+}
+var LANDED = { ok: true };
+var SessionFile = class {
+  constructor(kind, filePath2, clock, debounceMs = 500, logger = quietLogger) {
+    this.kind = kind;
+    this.filePath = filePath2;
+    this.clock = clock;
+    this.debounceMs = debounceMs;
+    this.logger = logger;
+    this.disk = sessionFileOnDisk(kind, filePath2);
+    this.file = filePath2;
+  }
+  kind;
+  filePath;
+  clock;
+  debounceMs;
+  logger;
+  file;
+  disk;
+  // What clears the debounce timer while one is armed.
+  clearTimer = null;
+  // [LAW:one-source-of-truth] State not yet written: cleared only once its
+  // write lands, so a disk that refuses leaves it for the next write.
+  pending = null;
+  // [LAW:no-ambient-temporal-coupling] Every write joins the end of this
+  // chain, so writes land in the order they began and none overtakes
+  // another: older state still on its way never lands over newer.
+  written = Promise.resolve();
+  // The write queued behind the one in flight and not yet begun.
+  waiting = null;
+  observe() {
+    return this.disk.observe();
+  }
+  setAside(file) {
+    return this.disk.setAside(file);
+  }
+  save(snapshot) {
+    this.pending = new Map(snapshot);
+    this.schedule();
+  }
+  // One debounce window at a time: the saves inside it coalesce into the
+  // write it ends with.
+  schedule() {
+    if (this.clearTimer !== null) return;
+    this.clearTimer = this.clock.after(
+      `${this.kind.name} write`,
+      this.debounceMs,
+      async () => {
+        this.clearTimer = null;
+        await this.write();
+      },
+      { unref: true }
+    );
+  }
+  // Joins a write of what is pending to the chain. At most one write waits
+  // behind the one in flight, since it writes whatever is pending when it
+  // begins: a stalled disk queues one write, not one per window.
+  write() {
+    if (this.waiting === null) {
+      const waiting = this.written.then(() => {
+        this.waiting = null;
+        return this.land();
+      });
+      this.waiting = waiting;
+      this.written = waiting.then(
+        () => {
+        },
+        () => {
+        }
+      );
+    }
+    return this.waiting;
+  }
+  // [LAW:effects-at-boundaries] The file's record of the sessions, in the
+  // order the owner holds them.
+  body(snapshot) {
+    return JSON.stringify(
+      Object.fromEntries(
+        [...snapshot].map(([id2, value]) => [id2, this.kind.record(value)])
+      )
+    );
+  }
+  // [LAW:effects-at-boundaries] The debounced write takes its disk writes off
+  // the daemon's one thread: the bytes are written through the thread pool,
+  // and so is the rename that publishes them. A rename is a journaled
+  // metadata op, and on a busy disk it waits on the journal like any write:
+  // run synchronously here it held every bar and click for 180 ms on a CI
+  // runner, past every client's reply budget. Only the walk of the path's
+  // links, a read of metadata the journal does not hold up, runs here.
+  // [LAW:no-silent-failure] A write that fails says so and is a value; the
+  // next write still runs.
+  async land() {
+    const snapshot = this.pending;
+    if (snapshot === null) return LANDED;
+    const started2 = this.clock.monotonic();
+    let body;
+    let heldMs;
+    try {
+      body = this.body(snapshot);
+      heldMs = elapsedMs(this.clock, started2);
+      const file = resolvedTarget(this.filePath);
+      await fs_default.promises.mkdir(import_node_path12.default.dirname(file), { recursive: true });
+      await publishByRenameAsync(file, body, 384);
+    } catch (e) {
+      const error = asError(e);
+      this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
+      return { ok: false, error };
+    }
+    if (this.pending === snapshot) this.pending = null;
+    this.saved(body, snapshot, started2, heldMs);
+    return LANDED;
+  }
+  // For shutdown and for callers that read the file back: what is pending
+  // lands now, behind any write already on its way. [LAW:no-silent-failure]
+  // A write that fails rejects, so a shutdown that lost state says so.
+  async flush() {
+    this.clearTimer?.();
+    this.clearTimer = null;
+    const landed = await this.write();
+    if (!landed.ok) throw landed.error;
+  }
+  // [LAW:nothing-unseen] Every write that writes says what it wrote, how long
+  // it took, and how much of that it held the daemon's one thread.
+  saved(body, snapshot, started2, heldMs) {
+    this.logger(
+      "info",
+      `${this.kind.name} saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${snapshot.size} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
+    );
+  }
+};
+var sessionStateFile = (filePath2, clock, debounceMs, logger) => new SessionFile(SESSION_STATE_FILE, filePath2, clock, debounceMs, logger);
+
+// src/daemon/held-file.ts
+var ORDER_PERIOD_MS = 5 * 60 * 1e3;
+var HeldFile = class {
+  constructor(store, storage, clock, bound = Infinity, same2 = Object.is) {
+    this.store = store;
+    this.storage = storage;
+    this.clock = clock;
+    this.bound = bound;
+    this.same = same2;
+  }
+  store;
+  storage;
+  clock;
+  bound;
+  same;
+  held = /* @__PURE__ */ new Map();
+  phase = "unread";
+  // [LAW:no-ambient-temporal-coupling] What is taken before the load, replayed
+  // over the file's sessions as it loads: a put, a drop, a hearing and the
+  // bound each run one way, whenever they come.
+  early = [];
+  // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
+  // as it stands: set by every change, cleared only once a save returns, so
+  // one that throws (history's) is still owed to the next change and to the
+  // close. Whether a write handed over lands is the storage's.
+  behind = false;
+  clearOrderTimer = null;
+  // [LAW:single-enforcer] Read once. A file that did not read is set aside by
+  // the rule every state file keeps, before anything is written. What was
+  // taken before the load is newer than anything the file holds, so it is
+  // taken over the file's sessions, and saved, so a save made before the load
+  // never lands without them. Returns what the store found, and the
+  // sessions the bound dropped.
+  load() {
+    if (this.phase !== "unread")
+      throw new Error(`${this.store} is loaded twice`);
+    const observed2 = this.storage.observe();
+    const { current, setAside: setAside2 } = writeBase(observed2, nothingLoaded());
+    let found2;
+    if (setAside2 !== null)
+      try {
+        found2 = {
+          kind: "set-aside",
+          reason: setAside2.reason,
+          to: this.storage.setAside(setAside2.file).to
+        };
+      } catch (e) {
+        found2 = {
+          kind: "refused",
+          reason: setAside2.reason,
+          error: asError(e).message
+        };
+      }
+    else
+      found2 = observed2.source === null ? { kind: "absent" } : {
+        kind: "read",
+        sessions: current.sessions.size,
+        dropped: current.dropped
+      };
+    this.held = new Map(current.sessions);
+    this.phase = found2.kind === "refused" ? "refused" : "open";
+    const early = this.early;
+    this.early = [];
+    return {
+      report: { store: this.store, file: this.storage.file, found: found2 },
+      evicted: this.take(early)
+    };
+  }
+  // A turn's changes, in the order it made them, then one save: one write
+  // per store per turn, or, when only the order moved, one within the
+  // period. Returns the sessions the bound dropped.
+  take(changes) {
+    if (this.phase === "unread") {
+      this.early.push(...changes);
+      return [];
+    }
+    let content = false;
+    for (const change of changes)
+      if (change.kind === "heard" || this.holds(change.key, change.value)) {
+        if (toNewest(this.held, change.key)) this.behind = true;
+      } else if (putNewest(this.held, change.key, change.value)) {
+        content = true;
+        this.behind = true;
+      }
+    const evicted2 = this.evict();
+    if (content || evicted2.length > 0) this.save();
+    else if (this.behind) this.orderDue();
+    return evicted2;
+  }
+  get(key) {
+    return this.entries().get(key);
+  }
+  // The sessions as they stand, oldest first.
+  entries() {
+    if (this.phase === "unread")
+      throw new Error(`${this.store} is read before its load`);
+    return this.held;
+  }
+  // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
+  // is still owed is handed over now, what is pending lands, and what is
+  // taken after it stays in memory.
+  // A save that throws (history's is synchronous) rejects the close.
+  async close() {
+    try {
+      if (this.behind) this.save();
+    } finally {
+      this.phase = "closed";
+    }
+    await this.storage.flush();
+  }
+  holds(key, value) {
+    const held = this.held.get(key);
+    return value !== null && held !== void 0 && this.same(held, value);
+  }
+  save() {
+    this.clearOrderTimer?.();
+    this.clearOrderTimer = null;
+    if (this.phase !== "open") return;
+    this.storage.save(this.held);
+    this.behind = false;
+  }
+  // [LAW:no-ambient-temporal-coupling] Only an open file is owed an order
+  // write: a closed or refused one saves nothing, so it arms no timer.
+  orderDue() {
+    if (this.phase !== "open" || this.clearOrderTimer !== null) return;
+    this.clearOrderTimer = this.clock.after(
+      `${this.store} order write`,
+      ORDER_PERIOD_MS,
+      () => {
+        this.clearOrderTimer = null;
+        this.save();
+      },
+      { unref: true }
+    );
+  }
+  evict() {
+    const evicted2 = [];
+    for (const oldest of this.held.keys()) {
+      if (this.held.size <= this.bound) break;
+      this.held.delete(oldest);
+      evicted2.push(oldest);
+    }
+    return evicted2;
+  }
+};
+
 // src/daemon/session-book.ts
 var MAX_SESSIONS4 = 256;
 var SESSION_BOOK_FILE = {
@@ -80412,65 +81130,58 @@ var SESSION_BOOK_FILE = {
     ...originRecord(origin),
     ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
   }),
-  // [LAW:parse-dont-validate] Every path a click acts on is absolute, as the
-  // request it came from was.
   parse: (value) => {
-    const origin = originOfRecord(value);
-    if (origin === null)
-      return { kind: "failed", reason: "is not the origin of a render" };
-    const { claudeConfigDir: claudeConfigDir2 } = value;
-    if (!(0, import_node_path11.isAbsolute)(origin.projectDir) || !(0, import_node_path11.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path11.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path11.isAbsolute)(claudeConfigDir2)))
-      return { kind: "failed", reason: "holds a path that is not absolute" };
-    return {
-      kind: "ok",
-      value: {
-        origin,
-        ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
-      }
-    };
+    const durable = durableOfRecord(value);
+    return durable.kind === "ok" ? kept(durable.value) : durable;
   }
 };
+function durableOfRecord(value) {
+  const origin = originOfRecord(value);
+  if (origin === null)
+    return { kind: "failed", reason: "is not the origin of a render" };
+  const { claudeConfigDir: claudeConfigDir2 } = value;
+  if (!(0, import_node_path13.isAbsolute)(origin.projectDir) || !(0, import_node_path13.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path13.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path13.isAbsolute)(claudeConfigDir2)))
+    return { kind: "failed", reason: "holds a path that is not absolute" };
+  return {
+    kind: "ok",
+    value: {
+      origin,
+      ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+    }
+  };
+}
 var sameDurable = (a, b) => a.origin.projectDir === b.origin.projectDir && a.origin.cwd === b.origin.cwd && a.origin.target.path === b.origin.target.path && a.origin.target.source === b.origin.target.source && a.claudeConfigDir === b.claudeConfigDir;
 var SessionBook = class {
-  constructor(storage) {
-    this.storage = storage;
-  }
-  storage;
   // [LAW:types-are-the-program] Insertion order is the order each session
   // was last heard in, which the bound drops the oldest of.
-  book = /* @__PURE__ */ new Map();
+  book;
   // The environment of each session heard since the daemon started.
   environments = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] The file is saved to only while open,
-  // and the close flushes what the open phase saved: before the load, a save
-  // would land over the book the daemon before it flushed, unread; after the
-  // close, over the file a next daemon has taken up. What is heard outside
-  // it stays in memory.
-  phase = "unread";
+  constructor(storage, clock) {
+    this.book = new HeldFile(
+      "Session book",
+      storage,
+      clock,
+      MAX_SESSIONS4,
+      sameDurable
+    );
+  }
   // Read once the daemon serves. A session heard before it is newer than
   // anything the file holds of it, so it stays, and the file's come first.
   load() {
-    const heard = this.book;
-    this.book = new Map(
-      [...this.storage.load()].filter(([session]) => !heard.has(session))
-    );
-    for (const [session, durable] of heard) this.book.set(session, durable);
-    this.bound();
-    this.phase = "open";
-    this.storage.save(this.book);
+    const { report: report2, evicted: evicted2 } = this.book.load();
+    this.forget(evicted2);
+    return report2;
   }
   // The session's newest request: what it says the session is, saved when
-  // it moved.
+  // it moved, and otherwise only its place, which the file takes within the
+  // order period.
   heard(req, environment) {
     const session = req.hookData.session_id;
     this.environments.set(session, environment);
-    const durable = durableOf(req);
-    const held = this.book.get(session);
-    this.book.delete(session);
-    this.book.set(session, durable);
-    this.bound();
-    if (held !== void 0 && sameDurable(held, durable)) return;
-    if (this.phase === "open") this.storage.save(this.book);
+    this.forget(
+      this.book.take([{ kind: "put", key: session, value: durableOf(req) }])
+    );
   }
   // [LAW:one-source-of-truth] The session as a click finds it: live from the
   // request heard since the daemon started, else what the book kept of it,
@@ -80498,21 +81209,16 @@ var SessionBook = class {
     return held && "key" in held && held.key === key ? held : null;
   }
   close() {
-    this.phase = "closed";
-    return this.storage.flush();
+    return this.book.close();
   }
-  bound() {
-    for (const oldest of this.book.keys()) {
-      if (this.book.size <= MAX_SESSIONS4) break;
-      this.book.delete(oldest);
-      this.environments.delete(oldest);
-    }
+  forget(evicted2) {
+    for (const session of evicted2) this.environments.delete(session);
   }
 };
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 
 // src/proc/launcher.ts
 init_globals();
@@ -80535,10 +81241,10 @@ function whyFailed(r) {
 }
 var SAID_LINE_CHARS = 200;
 var clipped = (line) => {
-  const kept = [];
+  const kept2 = [];
   for (const ch of line) {
-    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
-    kept.push(ch);
+    if (kept2.length === SAID_LINE_CHARS) return `${kept2.join("")}\u2026`;
+    kept2.push(ch);
   }
   return line;
 };
@@ -80632,7 +81338,7 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path12.default.resolve(run2.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path14.default.resolve(run2.cwd, program) : program,
       args: [...args],
       // [LAW:single-enforcer] The program's own variables over its
       // session's environment, laid here for every click's run.
@@ -80696,47 +81402,47 @@ var Runs = class {
 // src/daemon/paths.ts
 init_globals();
 init_os();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 function xdgEnv(env2, name) {
   const v = env2[name];
   return v && v.length > 0 ? v : void 0;
 }
 function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path13.default.join(host.home, ".local", "state");
-  return import_node_path13.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path15.default.join(host.home, ".local", "state");
+  return import_node_path15.default.join(base, "cc-candybar");
 }
 function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path13.default.join(host.home, ".cache");
-  return import_node_path13.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path15.default.join(host.home, ".cache");
+  return import_node_path15.default.join(base, "cc-candybar");
 }
 function socketPath(host) {
   return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
-  return import_node_path13.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+  return import_node_path15.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 function sessionStatePath(host) {
-  return import_node_path13.default.join(stateDir(host), "session-state.json");
+  return import_node_path15.default.join(stateDir(host), "session-state.json");
 }
 function settingsHistoryPath(host) {
-  return import_node_path13.default.join(stateDir(host), "settings-history.json");
+  return import_node_path15.default.join(stateDir(host), "settings-history.json");
 }
 function daemonRegistryDir(host) {
   const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os_default.userInfo().uid;
-  return import_node_path13.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+  return import_node_path15.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 var SPAWN_BACKOFF_FILE = "spawn.backoff";
 function spawnBackoffPath(host) {
-  return import_node_path13.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+  return import_node_path15.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 function watchProbeDir(host) {
-  return import_node_path13.default.join(stateDir(host), "watch-probe");
+  return import_node_path15.default.join(stateDir(host), "watch-probe");
 }
 function logPath(host) {
-  return import_node_path13.default.join(stateDir(host), "daemon.log");
+  return import_node_path15.default.join(stateDir(host), "daemon.log");
 }
 function daemonPaths(host) {
   return {
@@ -80746,7 +81452,7 @@ function daemonPaths(host) {
     log: logPath(host),
     sessionState: sessionStatePath(host),
     settingsHistory: settingsHistoryPath(host),
-    sessionBook: import_node_path13.default.join(stateDir(host), "session-book.json"),
+    sessionBook: import_node_path15.default.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host)
   };
@@ -80757,20 +81463,20 @@ function profilePaths(paths2, name) {
       sessionState: paths2.sessionState,
       settingsHistory: paths2.settingsHistory
     };
-  const state = import_node_path13.default.join(paths2.state, "renderers", name, "state");
+  const state = import_node_path15.default.join(paths2.state, "renderers", name, "state");
   return {
-    sessionState: import_node_path13.default.join(state, import_node_path13.default.basename(paths2.sessionState)),
-    settingsHistory: import_node_path13.default.join(state, import_node_path13.default.basename(paths2.settingsHistory))
+    sessionState: import_node_path15.default.join(state, import_node_path15.default.basename(paths2.sessionState)),
+    settingsHistory: import_node_path15.default.join(state, import_node_path15.default.basename(paths2.settingsHistory))
   };
 }
 function locations(host) {
   const { env: env2 } = host;
   const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path13.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path15.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
   return {
     home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path13.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path13.default.join(host.home, ".local", "share"),
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path15.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path15.default.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
@@ -80853,14 +81559,6 @@ init_globals();
 
 // src/daemon/source-files.ts
 init_globals();
-
-// site/shims/fs-promises.ts
-init_globals();
-var p = fs.promises;
-var fs_promises_default = p;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/daemon/source-files.ts
 var SourceFiles = class {
   constructor(readUtf8 = (file, signal) => readFile(file, { encoding: "utf8", signal })) {
     this.readUtf8 = readUtf8;
@@ -80912,7 +81610,7 @@ var SourceFiles = class {
 
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/utils/folder-identity.ts
 init_globals();
@@ -81031,7 +81729,7 @@ function folded(window2, next2) {
   return window2;
 }
 var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path14.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path16.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -81040,7 +81738,7 @@ var heldBy2 = (state, handle) => state.kind === "listening" && state.handle === 
 var UNSEEN = /* @__PURE__ */ Symbol("unseen");
 var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var isBelow = (at, root) => at.startsWith(root + import_node_path14.default.sep);
+var isBelow = (at, root) => at.startsWith(root + import_node_path16.default.sep);
 function dirsBelow(at, held, trusted, unlisted) {
   const heldIn = (dir) => [...held].filter((p2) => p2 === dir || isBelow(p2, dir));
   let entries2;
@@ -81053,7 +81751,7 @@ function dirsBelow(at, held, trusted, unlisted) {
     return [...held].filter((p2) => isBelow(p2, at));
   }
   return entries2.filter((e) => e.isDirectory()).flatMap((e) => {
-    const below2 = import_node_path14.default.join(at, e.name);
+    const below2 = import_node_path16.default.join(at, e.name);
     return trusted && held.has(below2) ? heldIn(below2) : [below2, ...dirsBelow(below2, held, false, unlisted)];
   });
 }
@@ -81374,7 +82072,7 @@ var WatcherRegistry = class {
     const { state } = dir;
     if (!heldBy2(state, handle)) return;
     this.tell(dir, namedOf(dir.path, changed));
-    if (changed === import_node_path14.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
+    if (changed === import_node_path16.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
       this.judged(dir, "moved");
     for (const slot of [...dir.listeners].map((l) => l.slot))
       this.reconciled(slot, "heard", dir.path);
@@ -81558,7 +82256,7 @@ var WatcherRegistry = class {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/file-events-warnings.ts
 init_globals();
@@ -81758,7 +82456,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path15.default.join(inst.folder, PROBE_FILE),
+        import_node_path17.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -83029,7 +83727,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // src/client-hints.ts
 init_globals();
@@ -83316,19 +84014,19 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path16.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path18.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
   }
   const projectDir = req.hookData?.workspace?.project_dir;
-  if (typeof projectDir === "string" && !(0, import_node_path16.isAbsolute)(projectDir)) {
+  if (typeof projectDir === "string" && !(0, import_node_path18.isAbsolute)(projectDir)) {
     wireProblems.push(
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
     );
   }
   const currentDir = req.hookData?.workspace?.current_dir;
-  if (typeof currentDir === "string" && !(0, import_node_path16.isAbsolute)(currentDir)) {
+  if (typeof currentDir === "string" && !(0, import_node_path18.isAbsolute)(currentDir)) {
     wireProblems.push(
       `field 'workspace.current_dir' is not an absolute path: ${JSON.stringify(currentDir)}`
     );
@@ -83363,7 +84061,7 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
     env2 = presented;
   }
   const keyed = env2.kind === "reported" && env2.key !== void 0 ? env2.env : void 0;
-  const clientHome = keyed ? keyed.HOME ? (0, import_node_path16.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
+  const clientHome = keyed ? keyed.HOME ? (0, import_node_path18.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
   const rawHints = keyed ? {
     ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
     ...req.termCols !== void 0 && { termCols: req.termCols },
@@ -83832,7 +84530,7 @@ function isDebugWhat(v) {
 
 // src/daemon/foundations/recording-command.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 function recordingCommandOf(value) {
   if (!isPlainObject(value) || typeof value.renderer !== "string")
     throw new BadVerbArgs("recording needs a renderer name");
@@ -83843,7 +84541,7 @@ function recordingCommandOf(value) {
     throw new BadVerbArgs(String(error));
   }
   if (value.action === "stop") return { action: "stop", renderer: name };
-  if (value.action === "start" && typeof value.file === "string" && (0, import_node_path17.isAbsolute)(value.file) && !value.file.includes("\0"))
+  if (value.action === "start" && typeof value.file === "string" && (0, import_node_path19.isAbsolute)(value.file) && !value.file.includes("\0"))
     return { action: "start", renderer: name, file: value.file };
   throw new BadVerbArgs(
     "recording needs stop, or start with an absolute output file"
@@ -84572,7 +85270,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -84667,8 +85365,8 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: [{ path: import_node_path18.default.join(commonDir, "refs", "heads"), recursive: true }],
-    polled: [import_node_path18.default.join(gitDir, "HEAD"), import_node_path18.default.join(gitDir, "index")]
+    dirs: [{ path: import_node_path20.default.join(commonDir, "refs", "heads"), recursive: true }],
+    polled: [import_node_path20.default.join(gitDir, "HEAD"), import_node_path20.default.join(gitDir, "index")]
   });
 }
 function branchOf(outcome) {
@@ -85118,7 +85816,7 @@ var GitDataProvider = class {
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/cache/pricing.ts
 init_globals();
@@ -85146,18 +85844,18 @@ init_url();
 
 // src/utils/cache.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 var CacheManager = class {
   // [LAW:one-source-of-truth] Every method takes the cache's root directory
   // (the host's `cacheDir`), so the layout under it is derived here alone.
   static usageDir(root) {
-    return import_node_path19.default.join(root, "usage");
+    return import_node_path21.default.join(root, "usage");
   }
   static locksDir(root) {
-    return import_node_path19.default.join(root, "locks");
+    return import_node_path21.default.join(root, "locks");
   }
   static isLocked(root, name) {
-    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
     if (!fs_default.existsSync(lockFile)) {
       return false;
     }
@@ -85190,7 +85888,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
     const startTime = clock.monotonic();
     const lockContent = String(process.pid);
     while (clock.monotonic() - startTime < timeout) {
@@ -85212,7 +85910,7 @@ var CacheManager = class {
     return false;
   }
   static async releaseLock(root, name) {
-    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
     try {
       await fs_default.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -85241,7 +85939,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
     await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path19.default.join(this.usageDir(root), `${cacheType}.json`);
+    const cachePath = import_node_path21.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
     for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
@@ -85296,7 +85994,7 @@ var CacheManager = class {
     }
     try {
       await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path19.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cachePath = import_node_path21.default.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry = {
         data,
@@ -85695,7 +86393,7 @@ var PricingService = class {
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -85769,19 +86467,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path20.join)(homeDir, ".config", "claude"), (0, import_node_path20.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path22.join)(homeDir, ".config", "claude"), (0, import_node_path22.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path20.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path22.join)(claudePath, "projects");
     const entries2 = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries2 ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path20.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path22.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -85797,14 +86495,14 @@ async function unlessGone(read3) {
 async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path20.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path22.join)(projectPath, sessionId2, "subagents");
   try {
     const files = await readdir2(subagentsDir);
     const agentFileNames = files.filter(
       (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
     );
     for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path20.join)(subagentsDir, fileName2);
+      const filePath2 = (0, import_node_path22.join)(subagentsDir, fileName2);
       if (verified?.has(filePath2)) {
         paths2.push(filePath2);
         continue;
@@ -86478,7 +87176,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path21.join)(dir, "projects") + import_node_path21.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path23.join)(dir, "projects") + import_node_path23.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -86499,7 +87197,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const agents = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path21.dirname)(transcriptPath),
+      (0, import_node_path23.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
@@ -86548,7 +87246,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path21.join)(dir, file);
+          const filePath2 = (0, import_node_path23.join)(dir, file);
           const st = await unlessGone(stat2(filePath2, { bigint: true }));
           if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
@@ -86642,61 +87340,24 @@ var SessionUsageStore = class {
 
 // src/daemon/cache/git-service.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
-
-// src/utils/regular-text.ts
-init_globals();
-var READ_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK;
-function regular(stats) {
-  if (!stats.isFile()) throw new Error("not a file");
-  return stats;
-}
-function withRegularTextFile(path31, use) {
-  const fd = openSync(path31, READ_FLAGS);
-  try {
-    const stat3 = () => fstatSync(fd, { bigint: true });
-    const observed2 = regular(stat3());
-    return use({ observed: observed2, stat: stat3, text: () => readFileSync(fd, "utf8") });
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (error) {
-      debug(`close ${path31}: ${String(error)}`);
-    }
-  }
-}
-function readRegularTextSync(path31) {
-  return withRegularTextFile(path31, (file) => file.text());
-}
-function readTextIfPresent(path31, read3 = readRegularTextSync) {
-  try {
-    return read3(path31);
-  } catch (error) {
-    const native2 = types.isNativeError(error);
-    if (native2 && "code" in error && error.code === "ENOENT") return null;
-    const detail = native2 ? error.message : String(error);
-    throw new Error(`${path31}: ${detail}`, { cause: error });
-  }
-}
-
-// src/utils/git-root.ts
+var import_node_path24 = __toESM(require_path_browserify(), 1);
 function checkoutAt(start, files) {
-  let dir = import_node_path22.default.resolve(start);
+  let dir = import_node_path24.default.resolve(start);
   for (; ; ) {
     const found2 = gitEntryAt(dir, files);
     if (found2.kind === "ok") return ok({ root: dir, entry: found2.value });
     if (found2.kind === "failed") return found2;
-    const parent = import_node_path22.default.dirname(dir);
+    const parent = import_node_path24.default.dirname(dir);
     if (parent === dir) return ABSENT2;
     dir = parent;
   }
 }
 function gitEntryAt(dir, files = checkoutFiles) {
-  return files.stat(import_node_path22.default.join(dir, ".git"));
+  return files.stat(import_node_path24.default.join(dir, ".git"));
 }
 function gitRootOf(start, files = checkoutFiles) {
   const found2 = checkoutAt(start, files);
@@ -86708,7 +87369,7 @@ function checkoutOf(cwd2, files = checkoutFiles) {
     case "ok":
       return ok({ root: root.value, git: true });
     case "absent":
-      return ok({ root: import_node_path22.default.resolve(cwd2), git: false });
+      return ok({ root: import_node_path24.default.resolve(cwd2), git: false });
     case "failed":
       return root;
   }
@@ -86732,29 +87393,29 @@ var checkoutFiles = {
   text: (file) => probe(file, () => readRegularTextSync(file))
 };
 function gitDirNamed(root, files = checkoutFiles) {
-  const text5 = files.text(import_node_path22.default.join(root, ".git"));
+  const text5 = files.text(import_node_path24.default.join(root, ".git"));
   if (text5.kind !== "ok") return text5;
   const named2 = text5.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named2 === void 0 ? failed(`${import_node_path22.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path22.default.resolve(root, named2));
+  return named2 === void 0 ? failed(`${import_node_path24.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path24.default.resolve(root, named2));
 }
 function sharedExcludeOf(root) {
-  const dotGit = import_node_path22.default.join(root, ".git");
+  const dotGit = import_node_path24.default.join(root, ".git");
   const entry = gitEntryAt(root);
   if (entry.kind !== "ok") return entry;
   if (entry.value.isDirectory())
-    return ok(import_node_path22.default.join(dotGit, "info", "exclude"));
+    return ok(import_node_path24.default.join(dotGit, "info", "exclude"));
   const gitDir = gitDirNamed(root);
   if (gitDir.kind !== "ok") return gitDir;
   const common = commonDirOf(gitDir.value);
   if (common.kind === "failed") return common;
   const shared = common.kind === "ok" ? common.value : gitDir.value;
-  return ok(import_node_path22.default.join(shared, "info", "exclude"));
+  return ok(import_node_path24.default.join(shared, "info", "exclude"));
 }
 function commonDirOf(gitDir, files = checkoutFiles) {
-  const text5 = files.text(import_node_path22.default.join(gitDir, "commondir"));
+  const text5 = files.text(import_node_path24.default.join(gitDir, "commondir"));
   if (text5.kind !== "ok") return text5;
   const common = text5.value.trim();
-  return common === "" ? failed(`${import_node_path22.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path22.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path24.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path24.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -86776,11 +87437,11 @@ function worktreeLink(dir, files = checkoutFiles) {
   const link = worktreeLinkAt(found2.value, files);
   return link.kind === "linked" ? {
     kind: "linked",
-    main: import_node_path22.default.join(link.main, import_node_path22.default.relative(found2.value.root, dir))
+    main: import_node_path24.default.join(link.main, import_node_path24.default.relative(found2.value.root, dir))
   } : link;
 }
 function worktreeLinkAt({ root, entry }, files) {
-  const dotGit = import_node_path22.default.join(root, ".git");
+  const dotGit = import_node_path24.default.join(root, ".git");
   if (entry.isDirectory()) return UNLINKED;
   const direct = files.lstat(dotGit);
   if (direct.kind !== "ok") return unverified(dotGit, direct);
@@ -86792,22 +87453,22 @@ function worktreeLinkAt({ root, entry }, files) {
   const common = commonDirOf(gitDir.value, files);
   if (common.kind === "absent") return UNLINKED;
   if (common.kind === "failed")
-    return unverified(import_node_path22.default.join(gitDir.value, "commondir"), common);
+    return unverified(import_node_path24.default.join(gitDir.value, "commondir"), common);
   const realCommon = files.realpath(common.value);
   if (realCommon.kind !== "ok") return unverified(common.value, realCommon);
-  if (import_node_path22.default.dirname(gitDir.value) !== import_node_path22.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path24.default.dirname(gitDir.value) !== import_node_path24.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path22.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path24.default.join(gitDir.value, "gitdir");
   const back2 = files.text(backFile);
   if (back2.kind !== "ok") return unverified(backFile, back2);
-  const pointer = import_node_path22.default.resolve(gitDir.value, back2.value.trim());
-  if (import_node_path22.default.basename(pointer) !== ".git") {
+  const pointer = import_node_path24.default.resolve(gitDir.value, back2.value.trim());
+  if (import_node_path24.default.basename(pointer) !== ".git") {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const parent = import_node_path22.default.dirname(pointer);
+  const parent = import_node_path24.default.dirname(pointer);
   const pointerDir = files.realpath(parent);
   if (pointerDir.kind !== "ok") return unverified(parent, pointerDir);
   if (pointerDir.value !== root) {
@@ -86815,23 +87476,23 @@ function worktreeLinkAt({ root, entry }, files) {
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path22.default.basename(realCommon.value) === ".git" ? import_node_path22.default.dirname(realCommon.value) : realCommon.value;
+  const main = import_node_path24.default.basename(realCommon.value) === ".git" ? import_node_path24.default.dirname(realCommon.value) : realCommon.value;
   return { kind: "linked", main };
 }
 function checkoutLocation(dir, files = checkoutFiles) {
   const real = files.realpath(dir);
   if (real.kind === "failed") return real;
-  const at = real.kind === "ok" ? real.value : import_node_path22.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path24.default.resolve(dir);
   const found2 = checkoutAt(at, files);
   if (found2.kind !== "ok") return found2;
   const { root } = found2.value;
-  const sub2 = import_node_path22.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path22.default.sep).join("/")}`;
+  const sub2 = import_node_path24.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path24.default.sep).join("/")}`;
   const link = worktreeLinkAt(found2.value, files);
   if (link.kind === "unreadable") return failed(link.reason, "read");
   return link.kind === "linked" ? ok({
     main: link.main,
-    worktree: import_node_path22.default.basename(root),
+    worktree: import_node_path24.default.basename(root),
     subpath,
     noRepo: false
   }) : ok({ main: root, worktree: "", subpath, noRepo: false });
@@ -87006,17 +87667,17 @@ var GitService = class {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path23.default.join(workingDir, ".git"));
+    return orElse(gitDirNamed(workingDir), import_node_path25.default.join(workingDir, ".git"));
   }
   getOngoingOperation(workingDir) {
     try {
       const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "CHERRY_PICK_HEAD")))
+      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "CHERRY_PICK_HEAD")))
         return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path23.default.join(gitDir, "rebase-apply")))
+      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path25.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
       return ABSENT2;
     } catch (e) {
@@ -87143,7 +87804,7 @@ var GitService = class {
   // unrepresentable. Sync, because reading one small file is not worth a
   // microtask: its former `Promise.all` partner is the only spawn left.
   getStashCount(workingDir) {
-    const reflog = import_node_path23.default.join(
+    const reflog = import_node_path25.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
@@ -87210,7 +87871,7 @@ var GitService = class {
   // yields no stamp and therefore no memo, so an unreadable config re-reads rather
   // than freezing an answer.
   async getRemotesAsync(workingDir) {
-    const configPath = import_node_path23.default.join(
+    const configPath = import_node_path25.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
@@ -87259,7 +87920,7 @@ var GitService = class {
   // remotes read stays failed at the call site instead of borrowing this rule.
   repoNameFrom(remotes, workingDir) {
     const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path23.default.basename(workingDir);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path25.default.basename(workingDir);
   }
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote; a
@@ -88072,7 +88733,7 @@ var RefreshFaults = class {
 
 // src/daemon/cache/managed-storage.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path26 = __toESM(require_path_browserify(), 1);
 
 // src/var-system/parse.ts
 init_globals();
@@ -88100,7 +88761,7 @@ var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS2;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS2;
 var MAX_ENTRIES3 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path24.default.join(f.folder, fileName(f.sessionId));
+var fileOf = (f) => import_node_path26.default.join(f.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 function madeOnce(folder) {
   try {
@@ -88390,12 +89051,12 @@ var ManagedStorage = class {
   settle(folder) {
     const was = this.told.get(folder) ?? NO_FAULTS;
     const now2 = faultsOf(this.folders.get(folder));
-    let moved2 = false;
+    let moved = false;
     for (const source of SOURCES) {
       const before = was[source];
       const after = now2[source];
       if (sameFault(before, after)) continue;
-      moved2 = true;
+      moved = true;
       if (after === null) {
         this.logger(
           "info",
@@ -88412,7 +89073,7 @@ var ManagedStorage = class {
     if (SOURCES.every((source) => now2[source] === null))
       this.told.delete(folder);
     else this.told.set(folder, now2);
-    return moved2;
+    return moved;
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name or an error is judged
@@ -88427,7 +89088,7 @@ var ManagedStorage = class {
     const { folder } = watching.key;
     if (this.folders.get(folder) !== watching) return;
     const inFolder = (f) => f.folder === folder;
-    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path24.default.join(folder, import_node_path24.default.basename(folder)))) {
+    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path26.default.join(folder, import_node_path26.default.basename(folder)))) {
       const paths2 = new Set(invalidation.paths);
       this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
       return;
@@ -88520,7 +89181,7 @@ var ManagedStorage = class {
       for (const entry of entries2) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
-        const file = import_node_path24.default.join(key.folder, entry.name);
+        const file = import_node_path26.default.join(key.folder, entry.name);
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held = this.sessions.isHeld(
@@ -88912,7 +89573,7 @@ var RuntimeStats = class {
 
 // src/daemon/limits.ts
 init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path27 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -89072,7 +89733,7 @@ function gapOf(reading, before) {
 }
 function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path25.default.join(dir, `${prefix}${identity2}${suffix}`);
+  return import_node_path27.default.join(dir, `${prefix}${identity2}${suffix}`);
 }
 function breachArtifactOf(base) {
   for (const kind of Object.keys(BREACH_ARTIFACTS)) {
@@ -89324,12 +89985,12 @@ function breachArtifacts(dir) {
     if (e.code === "ENOENT") return [];
     throw e;
   }
-  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path25.default.join(dir, f));
+  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path27.default.join(dir, f));
 }
 function postMortemsOf(files) {
   const byIdentity = /* @__PURE__ */ new Map();
   for (const file of files) {
-    const base = import_node_path25.default.basename(file);
+    const base = import_node_path27.default.basename(file);
     const kind = breachArtifactOf(base);
     if (kind === null) continue;
     const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -89543,7 +90204,7 @@ function failedStamp(prior, reason, daemon2) {
 
 // src/daemon/foundations/judge-run.ts
 init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path28 = __toESM(require_path_browserify(), 1);
 var MIN_SHELL_TTL_MS = 500;
 function judgeRun(run2) {
   const parser = parserOf(run2.identity.parse);
@@ -89568,7 +90229,7 @@ function refusalOf2({ identity: { read: read3, refresh } }) {
   return (read3.kind === "file" ? absolute("file.path", read3.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (read3.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
 }
 function absolute(where, path31) {
-  return (0, import_node_path26.isAbsolute)(path31) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path31)}`;
+  return (0, import_node_path28.isAbsolute)(path31) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path31)}`;
 }
 function capturing(pattern2) {
   let regex;
@@ -89863,9 +90524,9 @@ var Collector = class {
   watch(session, stamped, reader) {
     const stop2 = reaction(
       () => reader.inputs.get(),
-      (moved2) => runInAction(() => {
-        if (moved2 === stamped.from) return;
-        if (this.stamp({ session, stamped }, moved2))
+      (moved) => runInAction(() => {
+        if (moved === stamped.from) return;
+        if (this.stamp({ session, stamped }, moved))
           this.deps.clock.detach(
             `world state delivery ${session}`,
             () => this.deps.deliver({
@@ -89941,9 +90602,9 @@ var Collector = class {
   // one it replaces: the document itself when nothing it holds moved, and a
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
-  stamp({ session, stamped }, moved2) {
+  stamp({ session, stamped }, moved) {
     const prior = stamped.document;
-    const { owners, daemon: daemon2 } = moved2;
+    const { owners, daemon: daemon2 } = moved;
     const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2) : this.assembled(
       prior,
       owners.value,
@@ -89957,7 +90618,7 @@ var Collector = class {
         `world state sid=${JSON.stringify(session)}: ${failure2}`
       );
     stamped.document = next2;
-    stamped.from = moved2;
+    stamped.from = moved;
     return next2 !== prior;
   }
   assembled(prior, readings, daemon2, at) {
@@ -90727,11 +91388,11 @@ function restorePlan(session, prior, answers) {
   const own2 = ownOf(answers.slice(0, -1));
   const wrote = answers.at(-1) ?? "";
   const commands = [];
-  const kept = [];
+  const kept2 = [];
   if (sameFormats(own2.formats, prior.wrote))
     commands.push(...arrayWrite(session, prior.formats));
   else {
-    kept.push("status-format");
+    kept2.push("status-format");
     for (const [i2, value] of Object.entries(own2.formats ?? {}))
       if (Number(i2) >= prior.base && value === prior.wrote[Number(i2)])
         commands.push(["set-option", "-u", "-t", session, formatOption(+i2)]);
@@ -90741,7 +91402,7 @@ function restorePlan(session, prior, answers) {
       commands.push(
         prior.status === null ? ["set-option", "-u", "-t", session, "status"] : ["set-option", "-t", session, "status", tmuxArg(prior.status)]
       );
-    else kept.push("status");
+    else kept2.push("status");
   }
   commands.push(
     ...INDICES.map((i2) => [
@@ -90755,7 +91416,7 @@ function restorePlan(session, prior, answers) {
     ["set-option", "-q", "-u", "-t", session, PRIOR_OPTION],
     ["set-option", "-q", "-u", "-t", session, WROTE_OPTION]
   );
-  return { commands, kept };
+  return { commands, kept: kept2 };
 }
 var BOUND = /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
 var ROOT_KEYS = [["list-keys", "-T", "root"]];
@@ -91655,42 +92316,9 @@ function inspectionPayloadProblem(reply) {
 // src/daemon/effect-interpreter.ts
 init_globals();
 
-// src/daemon/file-rewrites.ts
-init_globals();
-var writeConfigFile = (file, text5, mode) => text5 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text5, mode);
-function writeRevisions(rewrites, retire, write = writeConfigFile) {
-  const written2 = [];
-  try {
-    for (const rewrite of rewrites) {
-      const removedMode = rewrite.will === null && rewrite.was !== null ? filePermissions(rewrite.file) : void 0;
-      write(rewrite.file, rewrite.will);
-      written2.push({ ...rewrite, removedMode });
-    }
-    const files = written2.map(({ file }) => file);
-    if (retire !== null) {
-      fs_default.renameSync(retire.from, retire.to);
-      files.push(retire.from, retire.to);
-    }
-    return { kind: "ok", files };
-  } catch (cause) {
-    const error = asError(cause);
-    const failed3 = [];
-    for (const { file, was, will, removedMode } of written2.reverse()) {
-      if (will === null && removedMode === void 0) continue;
-      try {
-        write(file, was, removedMode);
-      } catch (rollback) {
-        failed3.push({ file, error: asError(rollback) });
-      }
-    }
-    const [first2, ...remaining] = failed3;
-    return first2 === void 0 ? { kind: "failed", error } : { kind: "incomplete", error, unrestored: [first2, ...remaining] };
-  }
-}
-
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
+var import_node_path29 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -91702,109 +92330,21 @@ function presence(path31) {
   }
 }
 
-// src/daemon/state-file.ts
-init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
-var textOf2 = (value) => `${JSON.stringify(value, null, 2)}
-`;
-function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
-  const [file, previous2] = locations2;
-  const candidates = previous2 === void 0 ? [file] : [file, previous2];
-  const observe2 = () => {
-    const paths2 = [];
-    for (const candidate of candidates) {
-      paths2.push(candidate);
-      let text5;
-      try {
-        text5 = readText(candidate);
-      } catch (e) {
-        const result = {
-          kind: "failed",
-          reason: asError(e).message
-        };
-        return { result, paths: paths2, source: candidate, text: null };
-      }
-      if (text5 === null) continue;
-      return {
-        result: documentAt(candidate, text5, parse3),
-        paths: paths2,
-        source: candidate,
-        text: text5
-      };
-    }
-    return { result: ok(empty2), paths: paths2, source: null, text: null };
-  };
-  const plan = (next2) => {
-    const { result: current, source, text: text5 } = observe2();
-    if (current.kind === "failed") return current;
-    const value = next2(current.value);
-    const promote = source !== null && source !== file;
-    const rewrite = promote || value !== current.value ? { file, was: source === file ? text5 : null, will: textOf2(value) } : null;
-    try {
-      const old = previousName(file, previous2, source);
-      const retire = old === null ? null : { from: old, to: `${old}.migrated-${randomUUID()}` };
-      return ok({ rewrite, retire, value });
-    } catch (e) {
-      return {
-        kind: "failed",
-        reason: `cannot inspect the former state file ${previous2}: ${asError(e).message}`
-      };
-    }
-  };
-  return {
-    observe: observe2,
-    read: () => observe2().result,
-    plan
-  };
-}
-function previousName(file, previous2, source) {
-  if (previous2 === void 0) return null;
-  if (source === previous2) return previous2;
-  const old = fs_default.lstatSync(previous2, { throwIfNoEntry: false });
-  if (!old?.isFile() && !old?.isSymbolicLink()) return null;
-  const entry = (at) => {
-    try {
-      return import_node_path27.default.join(
-        fs_default.realpathSync.native(import_node_path27.default.dirname(at)),
-        import_node_path27.default.basename(at)
-      );
-    } catch (cause) {
-      if (cause.code === "ENOENT") return null;
-      throw cause;
-    }
-  };
-  const oldEntry = entry(previous2);
-  return linkChain(file).some((hop) => entry(hop) === oldEntry) ? null : previous2;
-}
-function documentAt(file, text5, parse3) {
-  let doc;
-  try {
-    doc = JSON.parse(text5);
-  } catch (e) {
-    return {
-      kind: "failed",
-      reason: `${file} is not JSON: ${e.message}`
-    };
-  }
-  const parsed2 = parse3(doc);
-  return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
-}
-
 // src/daemon/config-discovery/repo-configs.ts
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path28.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path29.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path28.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path29.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 function storedDirectory(written2) {
-  const dir = import_node_path28.default.sep === "\\" ? written2.replaceAll("/", import_node_path28.default.sep) : written2;
-  if (!import_node_path28.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path28.default.sep).includes("..")) {
+  const dir = import_node_path29.default.sep === "\\" ? written2.replaceAll("/", import_node_path29.default.sep) : written2;
+  if (!import_node_path29.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path29.default.sep).includes("..")) {
     return null;
   }
-  return import_node_path28.default.format(import_node_path28.default.parse(import_node_path28.default.normalize(dir)));
+  return import_node_path29.default.format(import_node_path29.default.parse(import_node_path29.default.normalize(dir)));
 }
 function parseRepoConfigBook(doc) {
   if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
@@ -91839,7 +92379,7 @@ function parseRepoConfigBook(doc) {
   return ok(Object.fromEntries(book));
 }
 var repoConfigs = (dir, readText) => stateFile(
-  [repoConfigsPath(dir), import_node_path28.default.join(dir, REPO_CONFIGS_FILE)],
+  [repoConfigsPath(dir), import_node_path29.default.join(dir, REPO_CONFIGS_FILE)],
   {},
   parseRepoConfigBook,
   readText
@@ -91881,11 +92421,11 @@ function answeredBook(stateDir2, answers, readText) {
 }
 
 // src/daemon/effect-interpreter.ts
-var import_node_path30 = __toESM(require_path_browserify(), 1);
+var import_node_path31 = __toESM(require_path_browserify(), 1);
 
 // src/utils/directory-entry.ts
 init_globals();
-var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_node_path30 = __toESM(require_path_browserify(), 1);
 
 // src/utils/once-per-path.ts
 init_globals();
@@ -91905,10 +92445,10 @@ function directoryEntries(realpath2 = canonicalDirectory) {
   const directory = oncePerPath((at) => {
     const actual = realpath2(at);
     if (typeof actual === "string") return actual;
-    const parent = import_node_path29.default.dirname(at);
-    return at === parent ? at : import_node_path29.default.join(directory(parent), import_node_path29.default.basename(at));
+    const parent = import_node_path30.default.dirname(at);
+    return at === parent ? at : import_node_path30.default.join(directory(parent), import_node_path30.default.basename(at));
   });
-  return (file) => import_node_path29.default.join(directory(import_node_path29.default.dirname(file)), import_node_path29.default.basename(file));
+  return (file) => import_node_path30.default.join(directory(import_node_path30.default.dirname(file)), import_node_path30.default.basename(file));
 }
 
 // src/daemon/effect-interpreter.ts
@@ -91943,6 +92483,7 @@ function performChanges(changes, book, files, write) {
   const rewrites = /* @__PURE__ */ new Map();
   const local = /* @__PURE__ */ new Set();
   let retire = null;
+  let setAside2 = null;
   let answered = [];
   for (const { origin, dir } of book?.answers ?? []) {
     const asked = files.repoDir(origin);
@@ -91999,6 +92540,7 @@ function performChanges(changes, book, files, write) {
         };
       const { rewrite } = planned.value;
       retire = planned.value.retire;
+      setAside2 = planned.value.setAside;
       answered = planned.value.said;
       if (rewrite !== null) {
         const file = resolvedTarget(rewrite.file);
@@ -92011,7 +92553,10 @@ function performChanges(changes, book, files, write) {
       reason: `config read failed: ${asError(e).message}`
     };
   }
-  const landed = writeRevisions(rewrites.values(), retire, write);
+  const landed = writeRevisions(
+    { setAside: setAside2, rewrites: rewrites.values(), retire },
+    write
+  );
   if (landed.kind === "failed") {
     return {
       kind: "failed",
@@ -92031,10 +92576,19 @@ function performChanges(changes, book, files, write) {
     };
   }
   for (const line of answered) book?.said(line);
-  return landed;
+  const reports = [landed.setAside].flatMap(
+    (aside) => aside === null ? [] : [
+      {
+        store: "Repository config answers",
+        file: aside.file,
+        found: { kind: "set-aside", reason: aside.reason, to: aside.to }
+      }
+    ]
+  );
+  return { kind: "ok", files: landed.files, reports };
 }
 function excludeRewrite(file, rewrites, readText, entryOf4) {
-  const checkout = gitRootOf(import_node_path30.default.dirname(file));
+  const checkout = gitRootOf(import_node_path31.default.dirname(file));
   if (checkout.kind !== "ok") return checkout;
   const root = checkout.value;
   const at = sharedExcludeOf(root);
@@ -92043,7 +92597,7 @@ function excludeRewrite(file, rewrites, readText, entryOf4) {
   const prior = rewrites.get(entryOf4(exclude));
   const was = prior === void 0 ? readText(exclude) : prior.was;
   const text5 = prior === void 0 ? was ?? "" : prior.will ?? "";
-  const entry = `/${import_node_path30.default.relative(root, file).split(import_node_path30.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
+  const entry = `/${import_node_path31.default.relative(root, file).split(import_node_path31.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
   if (text5.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT2;
   const lead = text5 === "" || text5.endsWith("\n") ? "" : "\n";
   return ok({
@@ -92373,6 +92927,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       (effect) => effect.kind === "approve-repo"
     );
     const landed = landConfig(changes, answers);
+    if (landed.kind === "ok")
+      recordTaken("landed config report", () => world.reported(landed.reports));
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
@@ -92398,12 +92954,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         waited.push(config.settled);
       }
     }
-    const moved3 = "files" in landed && landed.files.length > 0 ? recordTaken(
+    const moved2 = "files" in landed && landed.files.length > 0 ? recordTaken(
       "landed config discovery",
       () => world.configs.landed(landed.files)
     ) ?? [] : [];
     const reloaded = [];
-    for (const origin of moved3)
+    for (const origin of moved2)
       reloaded.push((await configInSlot(origin, "config-landed")).settled);
     const owed = [];
     const acts = [];
@@ -92463,7 +93019,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (world.closing())
         return { kind: "closing", reason: "the daemon is closing" };
       if (changes.length + answers.length === 0)
-        return { kind: "ok", files: [] };
+        return { kind: "ok", files: [], reports: [] };
       return performChanges(
         changes,
         {
@@ -92525,8 +93081,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     if (!adoptDemand) return { kind: "following", named: [] };
     const named2 = [];
-    const moved3 = origins !== subscriptions.configs;
-    if (moved3) {
+    const moved2 = origins !== subscriptions.configs;
+    if (moved2) {
       const next2 = /* @__PURE__ */ new Map();
       for (const origin of subscriptions.configs) {
         const key = originKey(origin);
@@ -92547,7 +93103,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       }
     }
     try {
-      if (moved3 || requested !== null && followFailure !== null) {
+      if (moved2 || requested !== null && followFailure !== null) {
         if (subscriptions.configs.length > 0 || followedOrigins.length > 0 || followFailure !== null)
           follow(subscriptions.configs);
         followFailure = null;
@@ -92783,7 +93339,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     return turn.reply;
   };
-  const moved2 = (origins2) => {
+  const moved = (origins2) => {
     for (const origin of origins2)
       unawaited(
         "config",
@@ -92836,7 +93392,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     deliver: deliver2,
     start: recorded2("first"),
     command,
-    moved: moved2,
+    moved,
     stats,
     closeWake: () => wake.close()
   };
@@ -92849,70 +93405,23 @@ var stampedOf = (clock) => (made) => ({
 
 // src/daemon/held-stores.ts
 init_globals();
-
-// src/renderer-interface/stored-state.ts
-init_globals();
-function parseSessionPicks(value) {
-  if (!isPlainObject(value))
-    return { kind: "failed", reason: "is not an object" };
-  const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
-  return bad === void 0 ? { kind: "ok", value } : {
-    kind: "failed",
-    reason: `has a ${JSON.stringify(bad)} that is not a string`
-  };
-}
-function retiredBecause(key, value) {
-  if (isEditModeKey(key)) return "no edit outlives the renderer";
-  if (isMenuStateKey(key) && menuOfKey(key) === void 0)
-    return "no menu is keyed that way now";
-  if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
-    return "not a record of a failed click";
-  return void 0;
-}
-function withoutRetiredKeys(sessions, log) {
-  return new Map(
-    [...sessions].flatMap(([session, picks]) => {
-      const judged = Object.entries(picks).map(
-        ([key, value]) => [key, value, retiredBecause(key, value)]
-      );
-      const dropped = judged.filter(([, , why]) => why !== void 0);
-      if (dropped.length === 0) return [[session, picks]];
-      log(
-        "info",
-        `session-state load: dropped ${dropped.map(([key, , why]) => `${key} (${why})`).join(", ")} (session=${session})`
-      );
-      const kept = judged.flatMap(
-        ([key, value, why]) => why === void 0 ? [[key, value]] : []
-      );
-      return kept.length === 0 ? [] : [[session, Object.fromEntries(kept)]];
-    })
-  );
-}
-
-// src/daemon/held-stores.ts
-var EPHEMERAL_HISTORY_STORAGE = {
-  load: () => /* @__PURE__ */ new Map(),
-  save: () => {
-  }
-};
 var HeldStores = class {
-  constructor(storage, log) {
+  constructor(storage, clock) {
     this.storage = storage;
-    this.log = log;
+    this.sessions = new HeldFile("Session picks", storage.session, clock);
+    this.history = new HeldFile("Settings history", storage.history, clock);
   }
   storage;
-  log;
-  // [LAW:types-are-the-program] Insertion order is each store's recency
-  // order, as the renderer's own: a write moves its entry to the end.
-  sessions = /* @__PURE__ */ new Map();
-  history = /* @__PURE__ */ new Map();
-  closed = false;
+  // [LAW:one-source-of-truth] Each store's order is its renderer's, which
+  // bounds it: the renderer's writes and hearings move these, and nothing
+  // here evicts.
+  sessions;
+  history;
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a
   // daemon that won the socket reads what the one before it flushed in its
   // close.
   load() {
-    this.sessions = withoutRetiredKeys(this.storage.session.load(), this.log);
-    this.history = new Map(this.storage.history.load());
+    return [this.sessions.load().report, this.history.load().report];
   }
   // What a renderer built now is built from.
   // [LAW:locality-or-seam] The boot crosses to the renderer as JSON, so each
@@ -92924,49 +93433,49 @@ var HeldStores = class {
   // prototype.
   current() {
     return {
-      sessions: Object.fromEntries(this.sessions),
-      history: Object.fromEntries(this.history)
+      sessions: Object.fromEntries(this.sessions.entries()),
+      history: Object.fromEntries(this.history.entries())
     };
   }
-  // A turn's stored writes, in the order it made them.
-  // [LAW:no-silent-failure] Every write is held, and what its file refused
-  // throws once all are, so the host's taking says it on every bar. The
-  // renderer holds the refused write too, and the store's next write saves
-  // the copy held here whole.
+  // A turn's stored writes, in the order it made them, each store's saved
+  // once. [LAW:no-silent-failure] A save that throws (the history's, written
+  // at once) throws once every store has taken its share, so the host's
+  // taking says it on every bar; a write behind says its failure where it
+  // lands. The renderer holds the refused write too, and the store's next
+  // write saves the copy held here whole.
   take(writes) {
-    const steps2 = [];
-    let sessions = false;
-    let history = false;
+    const sessions = [];
+    const history = [];
     for (const write of writes)
       switch (write.store) {
         case "session-state":
-          moved(this.sessions, write.key, write.value);
-          sessions = true;
+          sessions.push(write);
           break;
         case "settings-history":
-          moved(this.history, write.key, write.value);
-          history = true;
+          history.push(write);
           break;
+        default:
+          write;
       }
-    if (sessions && !this.closed)
-      steps2.push(() => this.storage.session.save(this.sessions));
-    if (history && !this.closed)
-      steps2.push(() => this.storage.history.save(this.history));
-    runEach(steps2);
+    runEach([
+      () => this.sessions.take(sessions),
+      () => this.history.take(history)
+    ]);
   }
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
   // lands, and what is written after it (a render that was awaiting, a run
   // settling) stays in memory, so it never lands over the files a next
   // daemon has taken up.
-  close() {
-    this.closed = true;
-    return this.storage.session.flush();
+  async close() {
+    const closed = await Promise.allSettled([
+      this.sessions.close(),
+      this.history.close()
+    ]);
+    throwAll(
+      closed.flatMap((c) => c.status === "rejected" ? [c.reason] : [])
+    );
   }
 };
-function moved(store, key, value) {
-  store.delete(key);
-  if (value !== null) store.set(key, value);
-}
 
 // src/daemon/renderer-recording.ts
 init_globals();
@@ -92977,7 +93486,7 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 17;
+var RENDERER_WIRE_VERSION = 18;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -93538,27 +94047,27 @@ init_globals();
 
 // src/daemon/config-discovery/discover.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/config-search.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
+var import_node_path34 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 function installedPluginDirs(locs) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path31.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path32.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return installed.filter((r, i2) => installed.lastIndexOf(r) === i2);
 }
 function userPluginRoot(locs) {
-  return import_node_path31.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path32.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path31.default.join(".cc-candybar", "plugins");
-var repoPluginDir = (project) => import_node_path31.default.join(project, REPO_PLUGIN_DIR);
+var REPO_PLUGIN_DIR = import_node_path32.default.join(".cc-candybar", "plugins");
+var repoPluginDir = (project) => import_node_path32.default.join(project, REPO_PLUGIN_DIR);
 function listedRepoRoot(approved, entries2) {
   if (entries2 === null) return null;
   if ("error" in entries2)
@@ -93582,7 +94091,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path31.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path32.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -93590,7 +94099,7 @@ function isDirectoryLink(root, e) {
 
 // src/daemon/config-discovery/discovery-files.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 function textFrom(read3) {
   return (file) => {
     try {
@@ -93619,7 +94128,7 @@ var diskFiles = {
   checkout: checkoutOf
 };
 function readNamedText(files, directory, name) {
-  const entry = import_node_path32.default.join(directory, import_node_path32.default.basename(name));
+  const entry = import_node_path33.default.join(directory, import_node_path33.default.basename(name));
   const resolved = files.realpath(entry);
   const physical = typeof resolved === "string" ? resolved : entry;
   const read3 = files.text(physical);
@@ -93653,7 +94162,7 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
         unchecked.push(observed2);
         continue;
       }
-      const dir = files.realpath(import_node_path33.default.dirname(candidate.file));
+      const dir = files.realpath(import_node_path34.default.dirname(candidate.file));
       if (typeof dir !== "string") {
         unchecked.push({ path: candidate.file, error: dir.error });
         continue;
@@ -93788,7 +94297,7 @@ function readDefinition(file, scope, files = diskFiles) {
       path: file,
       definition: { kind: "unreadable", error: badPath }
     };
-  const dir = files.realpath(import_node_path34.default.dirname(file));
+  const dir = files.realpath(import_node_path35.default.dirname(file));
   if (typeof dir !== "string")
     return {
       scope,
@@ -93799,7 +94308,7 @@ function readDefinition(file, scope, files = diskFiles) {
   return {
     scope,
     path: file,
-    definition: read3.kind === "text" ? { ...read3, dir, storage: import_node_path34.default.join(dir, STORAGE_FOLDER) } : read3
+    definition: read3.kind === "text" ? { ...read3, dir, storage: import_node_path35.default.join(dir, STORAGE_FOLDER) } : read3
   };
 }
 function sessionPlugins(roots, checkout, files = discoveryFiles()) {
@@ -93819,10 +94328,10 @@ function sessionPlugins(roots, checkout, files = discoveryFiles()) {
     for (const name of listed.folders) {
       const key = `${scope}\0${name}`;
       byNs.delete(key);
-      byNs.set(key, { scope, path: import_node_path34.default.join(root, name, DEFINITION_FILE) });
+      byNs.set(key, { scope, path: import_node_path35.default.join(root, name, DEFINITION_FILE) });
     }
     for (const name of listed.files)
-      strays.push({ path: import_node_path34.default.join(root, name), scope });
+      strays.push({ path: import_node_path35.default.join(root, name), scope });
   }
   if (checkout.kind === "failed")
     notices.push(
@@ -94171,16 +94680,16 @@ var ConfigDiscovery = class {
   // publishes: a failure is a value the batch carries, so neither a reporter
   // nor a publish that throws can cut the batch short or lose it.
   refreshed(keys2, why, recover, writer) {
-    const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why, recover);
+    const { moved, failed: failed3 } = this.rediscovered(keys2, why, recover);
     for (const { key, thrown: thrown2 } of failed3)
       this.deps.clock.failed(`config discovery ${key}`, thrown2);
-    return this.publish(moved2, writer);
+    return this.publish(moved, writer);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
-  publish(moved2, writer) {
+  publish(moved, writer) {
     const byRenderer = /* @__PURE__ */ new Map();
-    for (const { origin, renderers } of moved2)
+    for (const { origin, renderers } of moved)
       for (const renderer of renderers) {
         const origins = byRenderer.get(renderer) ?? [];
         origins.push(origin);
@@ -94196,7 +94705,7 @@ var ConfigDiscovery = class {
   rediscovered(keys2, why, recover) {
     if (keys2.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
-    const moved2 = [];
+    const moved = [];
     const observed2 = [];
     const failed3 = [];
     for (const key of keys2) {
@@ -94217,14 +94726,14 @@ var ConfigDiscovery = class {
       };
       this.followed.set(key, now2);
       observed2.push(now2);
-      if (now2.digest !== was.digest) moved2.push(now2);
+      if (now2.digest !== was.digest) moved.push(now2);
     }
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length} failed=${failed3.length}`
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved.length} failed=${failed3.length}`
     );
-    this.reloaded(recover === "observed" ? observed2 : moved2);
-    return { moved: moved2, failed: failed3 };
+    this.reloaded(recover === "observed" ? observed2 : moved);
+    return { moved, failed: failed3 };
   }
   reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;
@@ -94437,7 +94946,7 @@ function createDaemon(inputs) {
     clock
   });
   const daemonFaults = observable.box(
-    { fileEvents: [], launcher: null, held: [] },
+    { fileEvents: [], launcher: null, unsaved: [], held: [] },
     { deep: false, equals: compareStructural }
   );
   const restateOnceBuilt = () => {
@@ -94450,6 +94959,26 @@ function createDaemon(inputs) {
     (text5, more, at) => joinedEvent(null, `${text5}${recurrence(more)}`, at),
     restateOnceBuilt
   );
+  const storeLoads = new RecurringEvents(
+    clock,
+    "store-load",
+    ({ file }) => file,
+    ({ text: text5 }, more, at) => joinedEvent(null, `${text5}${recurrence(more)}`, at),
+    restateOnceBuilt
+  );
+  const unsaved = /* @__PURE__ */ new Map();
+  const storeReported = (reports) => {
+    for (const report2 of reports) {
+      const { file, found: found2 } = report2;
+      const text5 = reportText(report2);
+      log(text5 === null ? "info" : "warn", reportLine(report2));
+      if (text5 === null) continue;
+      if (found2.kind === "refused") {
+        unsaved.set(file, { kind: "store-unsaved", file, message: text5 });
+        restateOnceBuilt();
+      } else storeLoads.occur({ file, text: text5 });
+    }
+  };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
   const taskThrows = new RecurringEvents(
@@ -94472,11 +95001,13 @@ function createDaemon(inputs) {
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
+        unsaved: [...unsaved.values()],
         held: [
           ...launchPipes.held(),
           ...heldBy3("renderer-ended", rendererEnded),
           ...heldBy3("act-failed", actFailed),
-          ...taskThrows.held()
+          ...taskThrows.held(),
+          ...storeLoads.held()
         ]
       })
     );
@@ -94519,6 +95050,10 @@ function createDaemon(inputs) {
           if (taskThrows.answer(shownEvent.about, shownEvent.event))
             changed = true;
           break;
+        case "store-load":
+          if (storeLoads.answer(shownEvent.about, shownEvent.event))
+            changed = true;
+          break;
         default:
           shownEvent;
       }
@@ -94541,7 +95076,7 @@ function createDaemon(inputs) {
   });
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
-  const sessionBook = new SessionBook(inputs.sessionBook(log));
+  const sessionBook = new SessionBook(inputs.sessionBook(log), clock);
   const primaryPrepared = prepareRenderer(
     inputs.rendererName,
     bundle.path,
@@ -94754,7 +95289,7 @@ function createDaemon(inputs) {
     declaredBarPanes.declare(lanes);
   };
   function prepareRenderer(name, reported, entry) {
-    const stores = new HeldStores(inputs.profile(name, log), log);
+    const stores = new HeldStores(inputs.profile(name, log), clock);
     const boot = () => ({
       stored: stores.current(),
       locations: locs,
@@ -94852,6 +95387,7 @@ function createDaemon(inputs) {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
+        reported: storeReported,
         unheard: (text5, fromEnvironment) => {
           const prior = actFailed.event();
           actFailed.hold(
@@ -94906,7 +95442,7 @@ function createDaemon(inputs) {
       target = connectRenderer(
         prepareRenderer(name, binding, canonicalEntry(name, binding))
       );
-      target.stores.load();
+      storeReported(target.stores.load());
       target.link.serve();
       renderers.set(name, target);
       if (phase.kind === "armed") target.link.arm();
@@ -95045,8 +95581,7 @@ function createDaemon(inputs) {
     const starting = { kind: "starting" };
     phase = starting;
     try {
-      primary.stores.load();
-      sessionBook.load();
+      storeReported([...primary.stores.load(), sessionBook.load()]);
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
@@ -95149,7 +95684,8 @@ function createDaemon(inputs) {
             launchPipes,
             rendererEnded,
             actFailed,
-            taskThrows
+            taskThrows,
+            storeLoads
           ])
             slot.dispose();
         }
@@ -95170,7 +95706,7 @@ function createDaemon(inputs) {
 
 // src/daemon/log.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
+var import_node_path36 = __toESM(require_path_browserify(), 1);
 var MAX_BYTES3 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
@@ -95322,7 +95858,7 @@ var DaemonLog = class {
       return { held: this.sink, size: st.size };
     }
     this.closeSink();
-    await fs_default.promises.mkdir(import_node_path35.default.dirname(this.filePath), { recursive: true });
+    await fs_default.promises.mkdir(import_node_path36.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
       (resolve2, reject2) => fs_default.open(
         this.filePath,
@@ -95439,7 +95975,7 @@ var DaemonLog = class {
     if (first2.length === 0 && this.waiting.length === 0) return;
     const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
     try {
-      fs_default.mkdirSync(import_node_path35.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path36.default.dirname(this.filePath), { recursive: true });
       fs_default.appendFileSync(this.filePath, lines2);
       if (stillOut !== null && out !== null && idOf3(fs_default.fstatSync(stillOut.fd)) === idOf3(fs_default.statSync(this.filePath))) {
         out.state = {
@@ -95490,191 +96026,6 @@ async function openRecordingFile(file) {
     }
   };
 }
-
-// src/daemon/session-state-file.ts
-init_globals();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
-var ephemeralSessionFile = () => ({
-  load: () => /* @__PURE__ */ new Map(),
-  save: () => {
-  },
-  flush: async () => {
-  }
-});
-var SESSION_STATE_FILE = {
-  name: "session-state",
-  record: (kv) => kv,
-  parse: parseSessionPicks
-};
-function loadSessionFile(kind, filePath2, logger) {
-  const loaded = /* @__PURE__ */ new Map();
-  let text5;
-  try {
-    text5 = fs_default.readFileSync(filePath2, "utf8");
-  } catch (e) {
-    const code2 = e.code;
-    if (code2 === "ENOENT")
-      logger("info", `${kind.name} load: no file, starting empty`);
-    else logger("warn", `${kind.name} read failed (${code2}); starting empty`);
-    return loaded;
-  }
-  let parsed2;
-  try {
-    parsed2 = JSON.parse(text5);
-  } catch {
-    logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
-    return loaded;
-  }
-  if (!isPlainObject(parsed2)) {
-    logger("warn", `${kind.name} load: unexpected shape, starting empty`);
-    return loaded;
-  }
-  let dropped = 0;
-  const keyed = sessionKeyed(parsed2, (key, problem) => {
-    dropped += 1;
-    logger(
-      "warn",
-      `${kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
-    );
-  });
-  for (const [id2, value] of keyed) {
-    const entry = kind.parse(value);
-    if (entry.kind === "ok") loaded.set(id2, entry.value);
-    else {
-      dropped += 1;
-      logger(
-        "warn",
-        `${kind.name} load: dropped session ${JSON.stringify(id2)}: its value ${entry.reason}`
-      );
-    }
-  }
-  logger(
-    "info",
-    `${kind.name} loaded sessions=${loaded.size} dropped=${dropped}`
-  );
-  return loaded;
-}
-var LANDED = { ok: true };
-var SessionFile = class {
-  constructor(kind, filePath2, clock, debounceMs = 500, logger = quietLogger) {
-    this.kind = kind;
-    this.filePath = filePath2;
-    this.clock = clock;
-    this.debounceMs = debounceMs;
-    this.logger = logger;
-  }
-  kind;
-  filePath;
-  clock;
-  debounceMs;
-  logger;
-  // What clears the debounce timer while one is armed.
-  clearTimer = null;
-  // [LAW:one-source-of-truth] State not yet written: cleared only once its
-  // write lands, so a disk that refuses leaves it for the next write.
-  pending = null;
-  // [LAW:no-ambient-temporal-coupling] Every write joins the end of this
-  // chain, so writes land in the order they began and none overtakes
-  // another: older state still on its way never lands over newer.
-  written = Promise.resolve();
-  // The write queued behind the one in flight and not yet begun.
-  waiting = null;
-  load() {
-    return loadSessionFile(this.kind, this.filePath, this.logger);
-  }
-  save(snapshot) {
-    this.pending = new Map(snapshot);
-    this.schedule();
-  }
-  // One debounce window at a time: the saves inside it coalesce into the
-  // write it ends with.
-  schedule() {
-    if (this.clearTimer !== null) return;
-    this.clearTimer = this.clock.after(
-      `${this.kind.name} write`,
-      this.debounceMs,
-      async () => {
-        this.clearTimer = null;
-        await this.write();
-      },
-      { unref: true }
-    );
-  }
-  // Joins a write of what is pending to the chain. At most one write waits
-  // behind the one in flight, since it writes whatever is pending when it
-  // begins: a stalled disk queues one write, not one per window.
-  write() {
-    if (this.waiting === null) {
-      const waiting = this.written.then(() => {
-        this.waiting = null;
-        return this.land();
-      });
-      this.waiting = waiting;
-      this.written = waiting.then(
-        () => {
-        },
-        () => {
-        }
-      );
-    }
-    return this.waiting;
-  }
-  // [LAW:effects-at-boundaries] The file's record of the sessions, in the
-  // order the owner holds them.
-  body(snapshot) {
-    return JSON.stringify(
-      Object.fromEntries(
-        [...snapshot].map(([id2, value]) => [id2, this.kind.record(value)])
-      )
-    );
-  }
-  // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
-  // off the daemon's one thread: the bytes are written through the thread
-  // pool, and so is the rename that publishes them. A rename is a journaled
-  // metadata op, and on a busy disk it waits on the journal like any write:
-  // run synchronously here it held every bar and click for 180 ms on a CI
-  // runner, past every client's reply budget.
-  // [LAW:no-silent-failure] A write that fails says so and is a value; the
-  // next write still runs.
-  async land() {
-    const snapshot = this.pending;
-    if (snapshot === null) return LANDED;
-    const started2 = this.clock.monotonic();
-    let body;
-    let heldMs;
-    try {
-      body = this.body(snapshot);
-      heldMs = elapsedMs(this.clock, started2);
-      await fs_default.promises.mkdir(import_node_path36.default.dirname(this.filePath), { recursive: true });
-      await publishByRenameAsync(this.filePath, body, 384);
-    } catch (e) {
-      const error = asError(e);
-      this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
-      return { ok: false, error };
-    }
-    if (this.pending === snapshot) this.pending = null;
-    this.saved(body, snapshot, started2, heldMs);
-    return LANDED;
-  }
-  // For shutdown and for callers that read the file back: what is pending
-  // lands now, behind any write already on its way. [LAW:no-silent-failure]
-  // A write that fails rejects, so a shutdown that lost state says so.
-  async flush() {
-    this.clearTimer?.();
-    this.clearTimer = null;
-    const landed = await this.write();
-    if (!landed.ok) throw landed.error;
-  }
-  // [LAW:nothing-unseen] Every write that writes says what it wrote, how long
-  // it took, and how much of that it held the daemon's one thread.
-  saved(body, snapshot, started2, heldMs) {
-    this.logger(
-      "info",
-      `${this.kind.name} saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${snapshot.size} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
-    );
-  }
-};
-var sessionStateFile = (filePath2, clock, debounceMs, logger) => new SessionFile(SESSION_STATE_FILE, filePath2, clock, debounceMs, logger);
 
 // src/claude-input/edge.ts
 init_globals();
@@ -95750,56 +96101,26 @@ init_globals();
 // src/daemon/history-file.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
-function withoutRetiredKeys2(history) {
-  const retired2 = /* @__PURE__ */ new Set();
-  const keep = (change) => {
-    if (change.kind === "layer" || isSettingKey(change.key)) return true;
-    retired2.add(change.key);
-    return false;
-  };
-  const steps2 = (list3) => list3.map((step4) => step4.filter(keep)).filter((step4) => step4.length > 0);
-  return {
-    history: { past: steps2(history.past), future: steps2(history.future) },
-    retired: retired2
-  };
-}
-var quoted = (keys2) => [...keys2].map((k) => `"${k}"`).join(", ");
 var HISTORY_FILE = {
-  name: "settings-history",
   parse: (value) => {
     const parsed2 = parseSessionHistory(value);
-    if (parsed2.kind === "failed") return parsed2;
-    const stripped = withoutRetiredKeys2(parsed2.value);
-    if (!holdsNothing(stripped.history)) return { kind: "ok", value: stripped };
-    return {
-      kind: "failed",
-      reason: stripped.retired.size > 0 ? `holds only changes to ${quoted(stripped.retired)}, no longer a setting` : "holds nothing to undo or redo"
-    };
+    return parsed2.kind === "failed" ? parsed2 : withoutRetiredChanges(parsed2.value);
   }
 };
 function fileHistoryStorage(file, logger) {
   return {
-    load: () => {
-      const loaded = loadSessionFile(HISTORY_FILE, file, logger);
-      for (const [id2, { retired: retired2 }] of loaded)
-        if (retired2.size > 0)
-          logger(
-            "warn",
-            `settings-history load: session ${JSON.stringify(id2)} dropped the changes to ${quoted(retired2)}, no longer a setting`
-          );
-      return new Map(
-        [...loaded].map(([id2, { history }]) => [id2, history])
-      );
-    },
+    ...sessionFileOnDisk(HISTORY_FILE, file),
     save: (state) => {
       try {
         fs_default.mkdirSync(import_node_path37.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 384);
       } catch (e) {
-        const message = `settings-history write failed \u2014 the change landed and undoes until the daemon restarts, not after: ${e.message}`;
+        const message = `settings-history write failed \u2014 what this daemon holds undoes until it restarts, and the file keeps what it last saved: ${e.message}`;
         logger("error", message);
         throw new Error(message);
       }
+    },
+    flush: async () => {
     }
   };
 }
@@ -96279,7 +96600,7 @@ var pageDaemon = createDaemon({
   profile: (name, log) => ({
     ...adapters.profile(name, log),
     session: ephemeralSessionFile(),
-    history: EPHEMERAL_HISTORY_STORAGE
+    history: ephemeralSessionFile()
   }),
   // Its sessions are the page's own, for as long as it is open.
   sessionBook: () => ephemeralSessionFile(),
