@@ -1,3 +1,9 @@
+## [1.238.1](https://github.com/promptctl/cc-candybar/compare/v1.238.0...v1.238.1) (2026-11-24)
+
+### Bug Fixes
+
+* **diagnostics:** a diagnostic's identity says which rule built it, and two load warnings are not one message (candybar-law-review-ibyq.aa1) ([#953](https://github.com/promptctl/cc-candybar/issues/953)) ([0c0d303](https://github.com/promptctl/cc-candybar/commit/0c0d303b41c1e63858bbaf9c6e95d702a27ab63a))
+
 ## [1.238.0](https://github.com/promptctl/cc-candybar/compare/v1.237.1...v1.238.0) (2026-11-24)
 
 ### Features
