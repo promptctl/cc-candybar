@@ -43815,7 +43815,7 @@ var centreOf = (options, current) => Math.max(options.indexOf(current), 0);
 function ringAround(options, current) {
   const count = options.length;
   const centre = centreOf(options, current);
-  return (offset) => ((centre + offset) % count + count) % count;
+  return (offset) => ((centre + offset % count) % count + count) % count;
 }
 function randomOther(seed, count, centre) {
   let h = Math.imul(seed ^ seed >>> 16, 73244475);
