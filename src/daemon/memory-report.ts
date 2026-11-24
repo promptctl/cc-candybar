@@ -20,7 +20,7 @@ import {
   type LaunchResult,
   type Launcher,
 } from "../proc/launcher.js";
-import type { MemoryCharge, MemorySizes } from "./foundations/memory-limit";
+import type { MemoryCharge, OwnUsage } from "./foundations/memory-limit";
 
 // [LAW:parse-dont-validate] A probe either produced text or could not, and the
 // reason travels with the failure — it is what the post-mortem reads when no
@@ -102,17 +102,20 @@ export function platformProbes(
   return [];
 }
 
-// A process as a reading finds it: its pid, and its RSS read at that moment
-// (the charge itself where the platform charges RSS, and the stand-in where
-// its probe fails).
+// A process as a reading finds it: its pid, and what it last said of its own
+// memory, whose RSS is the charge itself where the platform charges RSS, and
+// the stand-in where its probe fails.
 export interface ReadProcess {
   readonly pid: number;
-  readonly sizes: Pick<MemorySizes, "rss">;
+  readonly usage: OwnUsage;
 }
 
 // Reads each process's charge, handing each process back beside its own, in
 // the order given.
-// [LAW:no-ambient-temporal-coupling] All of them at one moment, by one read.
+// [LAW:no-ambient-temporal-coupling] On macOS, footprint's measure of all of
+// them at one moment, by one call. A charge read off an RSS (Linux's, or a
+// stand-in) is as old as its process's own last read of itself (OwnUsage): a
+// renderer's is its latest ping's.
 export type ChargeProbe = <P extends ReadProcess>(
   processes: readonly P[],
 ) => Promise<ReadonlyArray<Charged<P>>>;
@@ -140,7 +143,14 @@ export function chargeProbe(
     : async (processes) =>
         processes.map((process) => ({
           process,
-          charge: { kind: "charged", measure: "rss", bytes: process.sizes.rss },
+          charge:
+            process.usage.kind === "read"
+              ? {
+                  kind: "charged",
+                  measure: "rss",
+                  bytes: process.usage.sizes.rss,
+                }
+              : { kind: "unread", unread: process.usage.why },
         }));
 }
 
@@ -157,39 +167,68 @@ export function footprintCharge(
       "-f",
       "bytes",
     ]);
-    const charged = result.ok ? physFootprintsOf(result.stdout) : new Map();
+    const printed: Footprints = result.ok
+      ? physFootprintsOf(result.stdout)
+      : { byPid: new Map<number, number>(), unnamed: [] };
+    const unnamed = printed.unnamed.map(
+      (header) => `; its section ${JSON.stringify(header)} names no pid`,
+    );
     // [LAW:no-silent-failure] A process the call printed no footprint for
     // (one that ended between the read and the call), or every process when
     // the call failed, stands in on its own RSS, saying why.
     return processes.map((process) => {
-      const bytes = charged.get(process.pid);
+      const bytes = printed.byPid.get(process.pid);
+      const unread = result.ok
+        ? `footprint printed no phys_footprint for pid ${process.pid}${unnamed.join("")}`
+        : `footprint ${failureText(result)}`;
       const charge: MemoryCharge =
         bytes !== undefined
           ? { kind: "charged", measure: "phys_footprint", bytes }
-          : {
-              kind: "stand-in",
-              bytes: process.sizes.rss,
-              unread: result.ok
-                ? `footprint printed no phys_footprint for pid ${process.pid}`
-                : `footprint ${failureText(result)}`,
-            };
+          : process.usage.kind === "read"
+            ? { kind: "stand-in", bytes: process.usage.sizes.rss, unread }
+            : { kind: "unread", unread: `${unread}, and ${process.usage.why}` };
       return { process, charge };
     });
   };
 }
 
-// Each process's `phys_footprint:`, by the pid of the header above it
-// (`phys_footprint_peak:` is another line).
-export function physFootprintsOf(text: string): ReadonlyMap<number, number> {
-  const each = new Map<number, number>();
+// What footprint printed: each process's footprint by the pid its section's
+// header names, and the header of each section that printed a footprint under
+// a header naming no pid.
+export interface Footprints {
+  readonly byPid: ReadonlyMap<number, number>;
+  readonly unnamed: readonly string[];
+}
+
+// Each process's `phys_footprint:` (`phys_footprint_peak:` is another line),
+// read in its own section: a header between two rules of `=`, then the
+// section's lines. [LAW:no-silent-failure] A section whose header names no
+// pid is credited to no process, and said.
+export function physFootprintsOf(text: string): Footprints {
+  const byPid = new Map<number, number>();
+  const unnamed: string[] = [];
+  let header: string | null = null;
   let pid: number | null = null;
+  let opened = false;
   for (const line of text.split("\n")) {
-    const header = /^\S.*\[(\d+)\]:/.exec(line);
-    if (header !== null) pid = Number(header[1]);
+    if (/^=+$/.test(line)) {
+      // The rule above a header opens a section; the rule below it closes
+      // the header.
+      if (!opened) [header, pid] = [null, null];
+      opened = !opened;
+      continue;
+    }
+    if (opened) {
+      const named = /^\S.*\[(\d+)\]:/.exec(line);
+      [header, pid] = [line, named === null ? null : Number(named[1])];
+      continue;
+    }
     const footprint = /^\s*phys_footprint:\s+(\d+) B\s*$/.exec(line);
-    if (footprint !== null && pid !== null) each.set(pid, Number(footprint[1]));
+    if (footprint === null) continue;
+    if (pid !== null) byPid.set(pid, Number(footprint[1]));
+    else unnamed.push(header ?? "");
   }
-  return each;
+  return { byPid, unnamed };
 }
 
 function commandProbe(

@@ -8,9 +8,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { textOf, parseFrame, type Frame } from "../../../src/render/frame";
+import { textOf, type Frame } from "../../../src/render/frame";
 import {
-  classifyInbound,
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
 } from "../../../src/daemon/foundations/protocol";
@@ -31,19 +30,19 @@ import {
   realLimitsDeps,
 } from "../../../src/daemon/limits";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
+import { BYTES_PER_MB as MB } from "../../../src/daemon/foundations/memory-limit";
 import { systemLauncher } from "../../../src/proc/system-launcher";
 import { hostOf } from "../../../scripts/lib/host";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { until } from "../../../scripts/lib/until";
 import { hookData } from "../../helpers/daemon-e2e";
 import { heldClock } from "../../helpers/held-clock";
-import { buildDaemon, statsOf } from "../../helpers/in-worker-daemon";
+import { buildDaemon, frameOf, statsOf } from "../../helpers/in-worker-daemon";
 
 jest.setTimeout(60_000);
 
 const BUNDLE = path.resolve("dist/index.mjs");
 const WORKTREE = rendererNameOf("worktree");
-const MB = 1024 * 1024;
 
 // A value's shape: its keys all the way down, and each leaf's type.
 const shapeOf = (value: unknown): unknown =>
@@ -64,9 +63,15 @@ test("a renderer past its memory limit is ended alone and started again, and eve
   const config = path.join(root, "config.json5");
   fs.writeFileSync(
     config,
-    JSON.stringify({ segments: { mark: { template: "drawn" } }, root: { h: ["mark"] } }),
+    JSON.stringify({
+      segments: { mark: { template: "drawn" } },
+      root: { h: ["mark"] },
+    }),
   );
-  const host = hostOf({ ...process.env, XDG_STATE_HOME: path.join(root, "state") });
+  const host = hostOf({
+    ...process.env,
+    XDG_STATE_HOME: path.join(root, "state"),
+  });
   const paths = daemonPaths(host);
   const limit = memoryLimitBytes(process.env);
   // The backstop's own clock, so a reading comes when the case asks.
@@ -84,7 +89,12 @@ test("a renderer past its memory limit is ended alone and started again, and eve
     host,
     paths,
     memoryLimitBytes: limit,
-    bundle: { digest: null, path: BUNDLE, node: [process.execPath], targets: [BUNDLE] },
+    bundle: {
+      digest: null,
+      path: BUNDLE,
+      node: [process.execPath],
+      targets: [BUNDLE],
+    },
     renderer: processPort({ launcher, cwd: root, heapCapMb: 256 }),
     limits: ({ startedAtMs, exit, launcher: owned, log }) =>
       realLimitsDeps(
@@ -124,20 +134,8 @@ test("a renderer past its memory limit is ended alone and started again, and eve
     ),
     ...(named && { client: { kind: "node", bundle: BUNDLE, source: null } }),
   });
-  const draw = async (session: string, named: boolean): Promise<Frame> => {
-    const handled = await daemon.handle(
-      classifyInbound(request(session, named)),
-      () => false,
-      daemon.stats.accept(),
-      () => false,
-    );
-    if (handled.kind !== "reply") throw new Error("expected a reply");
-    handled.settled(true);
-    const { resp } = handled;
-    if (!resp.ok || !("frame" in resp))
-      throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
-    return parseFrame(resp.frame);
-  };
+  const draw = (session: string, named: boolean): Promise<Frame> =>
+    frameOf(daemon, request(session, named));
   // The pid each renderer's panel reads, once a ping has read it.
   const readPid = (panel: RendererPanel): number | null =>
     panel.process.kind === "process" &&
@@ -183,7 +181,8 @@ test("a renderer past its memory limit is ended alone and started again, and eve
             memory: {
               kind: "measured",
               charge: { bytes: 64 * MB },
-              nearLimit: false,
+              // What its own ping said of it.
+              usage: { kind: "read" },
             },
             limit,
           },
@@ -234,7 +233,8 @@ test("a renderer past its memory limit is ended alone and started again, and eve
         warned = textOf(await draw("worktree-session", true));
         return /⚠/.test(warned);
       },
-      () => `a worktree bar warning that its renderer was ended, last ${warned}`,
+      () =>
+        `a worktree bar warning that its renderer was ended, last ${warned}`,
       10_000,
     );
     expect(warned).toContain("drawn");
@@ -245,7 +245,9 @@ test("a renderer past its memory limit is ended alone and started again, and eve
     expect(postMortems.value[0]).toMatchObject({
       process: { kind: "renderer", name: WORKTREE },
       artifacts: {
-        memoryReport: expect.stringContaining(`-renderer-worktree-${breached}.txt`),
+        memoryReport: expect.stringContaining(
+          `-renderer-worktree-${breached}.txt`,
+        ),
         heapSnapshot: expect.stringContaining(
           `-renderer-worktree-${breached}.heapsnapshot`,
         ),
@@ -280,6 +282,7 @@ test("a renderer past its memory limit is ended alone and started again, and eve
   expect(seen.size).toBe(2);
   await until(
     () => [...seen].every((pid) => !alive(pid)),
-    () => `the renderers ended with the daemon: ${[...seen].filter(alive).join(", ")}`,
+    () =>
+      `the renderers ended with the daemon: ${[...seen].filter(alive).join(", ")}`,
   );
 });

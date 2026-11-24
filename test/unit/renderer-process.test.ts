@@ -184,7 +184,7 @@ async function readRenderer(
   child.say({ kind: "ping", n: ping.n, usage: { rss: 5, heapTotal: 3 } });
   await settled();
   const state = link.process();
-  if (state.kind !== "running")
+  if (state.kind !== "spawned" || state.process.usage.kind !== "read")
     throw new Error(`the renderer is ${state.kind}, not read`);
   return state.process;
 }
@@ -464,10 +464,36 @@ describe("a renderer process's start", () => {
     await refused;
     expect(logs.join("\n")).not.toContain("foreign diagnostic");
   });
-  test("a booting renderer is its process, unread until a ping answers", () => {
+  test("a booting renderer is its process from its spawn, unread until a ping answers", () => {
     const { link } = rig();
     link.arm();
-    expect(link.process()).toEqual({ kind: "unread", pid: 9001 });
+    expect(link.process()).toMatchObject({
+      kind: "spawned",
+      process: {
+        name: MAIN_RENDERER,
+        generation: 1,
+        pid: 9001,
+        usage: { kind: "unread", why: "no ping has answered yet" },
+      },
+    });
+  });
+
+  test("a renderer that breaches while it starts is ended, its heap refused for its phase", async () => {
+    const { link, logs } = rig();
+    link.arm();
+    const state = link.process();
+    if (state.kind !== "spawned") throw new Error(`it is ${state.kind}`);
+    await expect(state.process.heapSnapshot("/d/heap")).rejects.toThrow(
+      "renderer main[1] is starting, so its heap was not written",
+    );
+    state.process.end(
+      "passed its memory limit: phys_footprint 900 MB > limit 800 MB",
+    );
+    expect(link.process()).toEqual({
+      kind: "not-running",
+      why: "it is ending: passed its memory limit: phys_footprint 900 MB > limit 800 MB",
+    });
+    expect(logs).not.toContainEqual(expect.stringContaining("was not ended"));
   });
 
   test("a renderer ended for its memory says why, and starts again after its backoff", async () => {
@@ -632,8 +658,11 @@ describe("a renderer process's end", () => {
     });
     await settled();
     expect(link.process()).toMatchObject({
-      kind: "running",
-      process: { pid: 9001, usage: { rss: 5, heapTotal: 3 } },
+      kind: "spawned",
+      process: {
+        pid: 9001,
+        usage: { kind: "read", sizes: { rss: 5, heapTotal: 3 } },
+      },
     });
     clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
     await settled();
@@ -660,7 +689,10 @@ test("a failed restoration ends that generation and starts its successor after b
   children[1]!.say(startedLine(9002));
   await settled();
   expect(attempt).toBe(2);
-  expect(link.process()).toEqual({ kind: "unread", pid: 9002 });
+  expect(link.process()).toMatchObject({
+    kind: "spawned",
+    process: { generation: 2, pid: 9002 },
+  });
 });
 
 describe("ids a renderer mints", () => {

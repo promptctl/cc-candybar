@@ -21,7 +21,6 @@ import {
   rendererStatsOf,
   type StatsSnapshot,
 } from "../../../src/daemon/foundations/stats-snapshot.js";
-import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name.js";
 import { composeBar } from "../../../src/render/frame.js";
 import type { RepoShape } from "../fixtures.js";
 import { sleep } from "../measure.js";
@@ -72,13 +71,17 @@ function warmVouched(
     );
   }
   const moved: string[] = [];
-  const cacheBefore = rendererStatsOf(before, MAIN_RENDERER).renderCache;
-  const cacheAfter = rendererStatsOf(after, MAIN_RENDERER).renderCache;
-  for (const key of ["size", "views", "compiles"] as const) {
-    if (cacheAfter[key] !== cacheBefore[key]) {
-      moved.push(
-        `renderCache.${key} ${cacheBefore[key]} -> ${cacheAfter[key]}`,
-      );
+  // Every renderer's cache, so a run that drew from a worktree is vouched for
+  // as one that drew from main is.
+  for (const { name } of after.renderers) {
+    const cacheBefore = rendererStatsOf(before, name).renderCache;
+    const cacheAfter = rendererStatsOf(after, name).renderCache;
+    for (const key of ["size", "views", "compiles"] as const) {
+      if (cacheAfter[key] !== cacheBefore[key]) {
+        moved.push(
+          `renderer ${name} renderCache.${key} ${cacheBefore[key]} -> ${cacheAfter[key]}`,
+        );
+      }
     }
   }
   for (const key of ["errored", "timedOut"] as const) {

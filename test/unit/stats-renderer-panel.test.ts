@@ -5,6 +5,7 @@
 
 import { rendererNameOf } from "../../src/daemon/foundations/renderer-name";
 import type { ProcessMemory } from "../../src/daemon/foundations/memory-limit";
+import type { RendererProcessState } from "../../src/daemon/renderer-process";
 import { RENDERER_STATS_REFERENCE } from "../../src/daemon/foundations/stats-snapshot";
 import { RENDERER_STATS_WAIT_MS, rendererPanel } from "../../src/daemon/reply";
 import { heldClock } from "../helpers/held-clock";
@@ -16,7 +17,19 @@ const memory: ProcessMemory = {
   memory: { kind: "unmeasured" },
   limit: 512 * 1024 * 1024,
 };
-const limits = { memoryOf: () => memory };
+const limits = { renderer: () => memory };
+// A renderer spawned and not yet read.
+const spawned: RendererProcessState = {
+  kind: "spawned",
+  process: {
+    name,
+    generation: 1,
+    pid: 4343,
+    usage: { kind: "unread", why: "no ping has answered yet" },
+    heapSnapshot: () => Promise.reject(new Error("not live")),
+    end: () => {},
+  },
+};
 
 describe("a renderer's stats panel", () => {
   test("one not running is not asked, and its panel says why", async () => {
@@ -52,7 +65,7 @@ describe("a renderer's stats panel", () => {
       {
         name,
         ask: () => new Promise(() => {}),
-        process: { kind: "unread", pid: 4343 },
+        process: spawned,
         mailbox,
       },
       limits,
@@ -77,7 +90,7 @@ describe("a renderer's stats panel", () => {
       {
         name,
         ask: async () => stats,
-        process: { kind: "unread", pid: 4343 },
+        process: spawned,
         mailbox,
       },
       limits,

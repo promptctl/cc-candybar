@@ -248,7 +248,8 @@ export async function startWorld(
         `the daemon did not answer stats: ${describeFailure(outcome)}`,
       );
     }
-    return outcome.value;
+    if (outcome.value.kind !== "ours") throw new Error(outcome.value.skew);
+    return outcome.value.snapshot;
   };
 
   let bootMs: number;

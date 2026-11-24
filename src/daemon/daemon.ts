@@ -152,7 +152,7 @@ export interface DaemonAdapters {
     readonly exit: (code: number) => void;
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
-  }) => LimitsDeps;
+  }) => Omit<LimitsDeps, "limitBytes">;
   // A worktree bundle's executable entry at the host's filesystem boundary.
   readonly rendererEntryOf?: (reported: string) => string;
   // How the binary watch reads the bundle's mtime.
@@ -461,6 +461,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         ([session]) => nameOf(session as SessionId) === name,
       ),
     );
+  // [LAW:one-source-of-truth] Every renderer and where its memory is, as the
+  // backstop and the stats reply both read them.
+  const rendererStates = () =>
+    [...renderers.values()].map(({ renderer, link }) => ({
+      renderer,
+      process: link.process(),
+    }));
   // [LAW:effects-at-boundaries] Only the daemon that won the socket arms its limits.
   const limits = makeLimits({
     ...inputs.limits({
@@ -470,15 +477,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       log,
     }),
     limitBytes: memoryLimitBytes,
-    // Every renderer running in a process of its own, each judged on its own
-    // charge beside the host's. Read only once armed, by when the links below
-    // exist.
+    // Every renderer in a process of its own from its spawn, each judged on
+    // its own charge beside the host's. Read only once armed, by when the
+    // links below exist.
     renderers: () =>
       serving()
-        ? [...renderers.values()].flatMap(({ link }) => {
-            const state = link.process();
-            return state.kind === "running" ? [state.process] : [];
-          })
+        ? rendererStates().flatMap(({ process }) =>
+            process.kind === "spawned" ? [process.process] : [],
+          )
         : [],
   });
   const renderSightings = new RenderSightings();
@@ -989,11 +995,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     limits,
     collector,
     renderer: primary.renderer,
-    renderers: () =>
-      [...renderers.values()].map(({ renderer, link }) => ({
-        renderer,
-        process: link.process(),
-      })),
+    renderers: rendererStates,
     // [LAW:single-enforcer] Only a render request binds or starts a bundle.
     rendererForClick: (name) => renderers.get(name)?.renderer,
     rendererFor,

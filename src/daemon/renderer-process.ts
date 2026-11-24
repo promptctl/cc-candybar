@@ -29,7 +29,7 @@ import {
   type TimedRenderer,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
-import type { MemorySizes } from "./foundations/memory-limit.js";
+import type { OwnUsage } from "./foundations/memory-limit.js";
 import {
   lineSplitter,
   rendererDiagnosticsFrom,
@@ -70,25 +70,27 @@ export interface RendererLink {
 }
 
 // [LAW:types-are-the-program] Where a renderer's memory is: in the host's
-// process, charged as the host's; in no process, and why; in a process no
-// ping has read yet; or in a running process, read by its latest ping.
+// process, charged as the host's; in no process, and why; or in a process
+// spawned for it, which the backstop charges from its spawn.
 export type RendererProcessState =
   | { readonly kind: "in-host" }
   | { readonly kind: "not-running"; readonly why: string }
-  | { readonly kind: "unread"; readonly pid: number }
-  | { readonly kind: "running"; readonly process: RendererProcess };
+  | { readonly kind: "spawned"; readonly process: RendererProcess };
 
 export interface RendererProcess {
   readonly name: RendererName;
+  // Which of the renderer's spawns this is: a pid the OS hands a later spawn
+  // names another process.
+  readonly generation: number;
   readonly pid: number;
-  readonly usage: MemorySizes;
-  // A breach's heap snapshot of this process, never of a renderer started
-  // since: one that has ended writes none and says so.
+  readonly usage: OwnUsage;
+  // A breach's heap snapshot of this process once it is live, never of a
+  // renderer started since: one starting or ended writes none and says so.
   heapSnapshot(file: string): Promise<void>;
   // A breach's end of this process, said as any end is and followed by a
-  // fresh start. [LAW:no-ambient-temporal-coupling] Only while it is the live
-  // renderer: one the close is draining finishes its close steps, and one
-  // being replaced is already ending.
+  // fresh start. [LAW:no-ambient-temporal-coupling] Only while it is the
+  // starting or live renderer: one the close is draining finishes its close
+  // steps, and one being replaced is already ending.
   end(why: string): void;
 }
 
@@ -207,7 +209,7 @@ interface Link {
   // Boot data is held only until the recording's construction result arrives.
   recordingBoot?: RendererBoot;
   readonly recording?: RendererRecording;
-  usage: MemorySizes | null;
+  usage: OwnUsage;
   // When the ping owed an answer went out.
   pingSentAt: number | null;
 }
@@ -349,7 +351,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       compatible: false,
       endReason: null,
       receipts: new Map(),
-      usage: null,
+      usage: { kind: "unread", why: "no ping has answered yet" },
       pingSentAt: null,
       lines: rendererOverLines({
         send: (line) => write(channel, line),
@@ -661,8 +663,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   const ping = (link: Link): void => {
     link.pingSentAt = clock.monotonic();
     link.lines.ping().then(
-      (usage) => {
-        link.usage = usage;
+      (sizes) => {
+        link.usage = { kind: "read", sizes };
         link.pingSentAt = null;
       },
       (thrown: unknown) => {
@@ -801,25 +803,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
               }),
       };
     });
-  // [LAW:types-are-the-program] A spawned renderer as the host can charge
-  // it: its pid from its spawn, its memory from its first ping's answer. Only
-  // a live one is running, the one state whose end and heap the host can
-  // take: an end the phase has moved past by the time it is asked for is
-  // said by the end itself.
-  const spawnedState = (
-    link: Link,
-    at: "starting" | "live",
-  ): RendererProcessState => {
+  // [LAW:types-are-the-program] A spawned renderer as the host charges it:
+  // its pid from its spawn, its sizes from its pings. An end the phase has
+  // moved past by the time it is asked for is said by the end itself.
+  const spawnedState = (link: Link): RendererProcessState => {
     const pid = link.channel.pid;
-    const usage = link.usage;
     if (pid === null) return { kind: "not-running", why: "it has no pid" };
-    if (at === "starting" || usage === null) return { kind: "unread", pid };
     return {
-      kind: "running",
+      kind: "spawned",
       process: {
         name,
+        generation: link.generation,
         pid,
-        usage,
+        usage: link.usage,
         heapSnapshot: (file) =>
           phase.kind === "live" && phase.link === link
             ? streamedToFile(file, (write) => link.lines.heapSnapshot(write))
@@ -902,7 +898,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           };
         case "starting":
         case "live":
-          return spawnedState(phase.link, phase.kind);
+          return spawnedState(phase.link);
       }
     },
   };

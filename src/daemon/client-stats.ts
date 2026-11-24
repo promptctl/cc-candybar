@@ -7,6 +7,7 @@ import {
 } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
 import { RuntimeStats } from "./stats";
+import { isPlainObject } from "../config/loader/validate-core.js";
 import {
   missingFields,
   type Durations,
@@ -14,9 +15,11 @@ import {
   type StatsSnapshot,
 } from "./foundations/stats-snapshot";
 import {
+  approachingLimit,
   chargeWords,
   mb,
   type ProcessMemory,
+  usageWords,
 } from "./foundations/memory-limit";
 export { missingFields } from "./foundations/stats-snapshot";
 import { fileEventsLine } from "./cache/file-events";
@@ -44,7 +47,7 @@ export async function daemonStatsPlan(
 // said before anything is checked; a skewed daemon's JSON is still delivered,
 // beside the skew on stderr and a failing code.
 export function statsPlan(
-  outcome: RoundTripOutcome<StatsSnapshot>,
+  outcome: RoundTripOutcome<StatsReply>,
   wantJson: boolean,
 ): CliPlan {
   if (outcome.kind !== "ok") {
@@ -54,49 +57,70 @@ export function statsPlan(
       code: 1,
     };
   }
-  const json = wantJson ? JSON.stringify(outcome.value, null, 2) + "\n" : null;
-  const skew = shapeSkew(outcome.value);
-  if (skew !== null) {
-    return { stdout: json ?? "", stderr: `daemon-stats: ${skew}\n`, code: 1 };
+  const reply = outcome.value;
+  const said = reply.kind === "ours" ? reply.snapshot : reply.said;
+  const json = wantJson ? JSON.stringify(said, null, 2) + "\n" : null;
+  if (reply.kind === "another-build") {
+    return {
+      stdout: json ?? "",
+      stderr: `daemon-stats: ${reply.skew}\n`,
+      code: 1,
+    };
   }
-  return { stdout: json ?? formatStats(outcome.value), stderr: "", code: 0 };
+  return { stdout: json ?? formatStats(reply.snapshot), stderr: "", code: 0 };
 }
 
 export function fetchStats(
   world: ClientWorld,
-): Promise<RoundTripOutcome<StatsSnapshot>> {
-  // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
-  // an unchecked cast from socket JSON; the presence check is the explicit
-  // narrowing at the wire edge (an ok response without `stats` classifies as
-  // permanent/malformed_response in the transport).
+): Promise<RoundTripOutcome<StatsReply>> {
+  // An ok response without `stats` classifies as permanent/malformed_response
+  // in the transport; one with it is read once, here.
   return requestOutcome(
     world,
     () => ({ kind: "stats" }),
     BUDGETS,
-    (resp) => ("stats" in resp ? resp.stats : undefined),
+    (resp) => ("stats" in resp ? statsReplyOf(resp.stats) : undefined),
   );
 }
 
-// [LAW:no-silent-failure] The snapshot is typed as THIS build's, and a
-// daemon of another build answers with another shape: a field this build
-// added is absent, and reading it as ours would throw on the first such field
-// — `pnpm build` then `daemon-stats` inside the minute before the binary
-// watch restarts the daemon. The invariant is the SHAPE (every field this
-// client reads is there), not the build's identity: a worktree's client
-// reading the main checkout's daemon is a different digest and the same
-// shape, and it is refused by nothing. The fields are checked against this
-// build's own reference snapshot, never a second spelling of the type.
-export function shapeSkew(s: StatsSnapshot): string | null {
-  const missing = missingFields(RuntimeStats.referenceSnapshot(), s);
-  if (missing.length === 0) return null;
-  return `the daemon (${theirLabel(s)}) reports no ${missing.join(", ")}; ${anotherBuild}`;
+// [LAW:parse-dont-validate] A daemon's stats, read where they arrive: this
+// build's snapshot, or another build's, which answers with another shape (a
+// field this build added is absent) and is said, never read as ours —
+// `pnpm build` then `daemon-stats` inside the minute before the binary watch
+// restarts the daemon. The invariant is the SHAPE (every field this client
+// reads is there), not the build's identity: a worktree's client reading the
+// main checkout's daemon is a different digest and the same shape, and it is
+// refused by nothing. The fields are checked against this build's own
+// reference snapshot, never a second spelling of the type.
+export type StatsReply =
+  | { readonly kind: "ours"; readonly snapshot: StatsSnapshot }
+  | {
+      readonly kind: "another-build";
+      readonly said: unknown;
+      readonly skew: string;
+    };
+
+export function statsReplyOf(said: unknown): StatsReply {
+  const missing = missingFields(RuntimeStats.referenceSnapshot(), said);
+  return missing.length === 0
+    ? // [LAW:parse-dont-validate] The walk over the reference is the parse:
+      // every field this build reads is present and usable.
+      { kind: "ours", snapshot: said as StatsSnapshot }
+    : {
+        kind: "another-build",
+        said,
+        skew: `the daemon (${theirLabel(said)}) reports no ${missing.join(", ")}; ${anotherBuild}`,
+      };
 }
 
-// [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot is
-// an unchecked cast from socket JSON, and an older daemon's carries no digest
-// field.
-const theirLabel = (s: StatsSnapshot): string =>
-  buildLabel(s.version, s.sourceDigest ?? null);
+// Another build's own words for which build it is, as far as it says them.
+function theirLabel(said: unknown): string {
+  const word = (key: string): string | null => {
+    const value = isPlainObject(said) ? said[key] : undefined;
+    return typeof value === "string" ? value : null;
+  };
+  return buildLabel(word("version") ?? "no version", word("sourceDigest"));
+}
 
 const myLabel = buildLabel(PACKAGE_VERSION, bakedDigest());
 const anotherBuild = `it is another build than this client (${myLabel}), and restarts only when its own bundle changes`;
@@ -274,11 +298,14 @@ export function formatStats(s: StatsSnapshot): string {
 }
 
 // [LAW:one-source-of-truth] A process's memory in one sentence: its charge
-// against the limit, the sizes beside it, and whether it is near the limit.
+// against the limit, what it said of itself beside it, and whether the charge
+// is near the limit.
 function memoryWords({ memory, limit }: ProcessMemory): string {
   if (memory.kind === "unmeasured") return `unmeasured (limit ${mb(limit)} MB)`;
-  const { charge, sizes, nearLimit } = memory;
-  return `${chargeWords(charge)} of limit ${mb(limit)} MB (rss ${mb(sizes.rss)} MB, v8 heap ${mb(sizes.heapTotal)} MB)${nearLimit ? ", approaching its limit" : ""}`;
+  const { charge, usage } = memory;
+  const near =
+    charge.kind !== "unread" && approachingLimit(charge.bytes, limit);
+  return `${chargeWords(charge)} of limit ${mb(limit)} MB (${usageWords(usage)})${near ? ", approaching its limit" : ""}`;
 }
 
 function rendererPanelLines({

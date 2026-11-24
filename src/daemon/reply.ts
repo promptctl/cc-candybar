@@ -717,7 +717,7 @@ export async function rendererPanel(
     readonly process: RendererProcessState;
     readonly mailbox: MailboxStats;
   },
-  limits: Pick<DaemonParts["limits"], "memoryOf">,
+  limits: Pick<DaemonParts["limits"], "renderer">,
   clock: Pick<DaemonParts["clock"], "after">,
 ): Promise<RendererPanel> {
   return {
@@ -766,16 +766,14 @@ async function askedWithin(
 // read against the limit as the backstop last read it.
 function memoryPanelOf(
   state: RendererProcessState,
-  limits: Pick<DaemonParts["limits"], "memoryOf">,
+  limits: Pick<DaemonParts["limits"], "renderer">,
 ): RendererMemoryPanel {
   switch (state.kind) {
     case "in-host":
     case "not-running":
       return state;
-    case "unread":
-      return { kind: "process", memory: limits.memoryOf(state.pid) };
-    case "running":
-      return { kind: "process", memory: limits.memoryOf(state.process.pid) };
+    case "spawned":
+      return { kind: "process", memory: limits.renderer(state.process) };
   }
 }
 

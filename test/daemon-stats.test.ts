@@ -9,8 +9,6 @@ import {
   rendererNameOf,
 } from "../src/daemon/foundations/renderer-name";
 
-const MB = 1024 * 1024;
-
 // No durations recorded: every reading zero, never NaN.
 const NO_DURATIONS: Durations = {
   count: 0,
@@ -25,7 +23,7 @@ const NO_DURATIONS: Durations = {
 import {
   formatStats,
   missingFields,
-  shapeSkew,
+  statsReplyOf,
   statsPlan,
 } from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
@@ -33,6 +31,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { BYTES_PER_MB as MB } from "../src/daemon/foundations/memory-limit";
 
 const S1 = sessionIdOf("s1");
 
@@ -322,24 +321,39 @@ describe("RuntimeStats.snapshot", () => {
   });
 });
 
-describe("shapeSkew", () => {
-  test("a snapshot from this build is none", () => {
-    expect(shapeSkew(RuntimeStats.referenceSnapshot())).toBeNull();
-  });
-
-  test("a snapshot of another digest with every field is none: shape, not identity", () => {
+describe("a stats reply", () => {
+  test("a snapshot from this build is ours", () => {
     const snap = RuntimeStats.referenceSnapshot();
-    expect(shapeSkew({ ...snap, sourceDigest: "abcdef0123456789" })).toBeNull();
-    expect(shapeSkew({ ...snap, version: "0.0.1" })).toBeNull();
+    expect(statsReplyOf(snap)).toEqual({ kind: "ours", snapshot: snap });
   });
 
-  test("a snapshot lacking fields this build reads names them and both builds", () => {
+  test("a snapshot of another digest with every field is ours: shape, not identity", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    for (const other of [
+      { ...snap, sourceDigest: "abcdef0123456789" },
+      { ...snap, version: "0.0.1" },
+    ])
+      expect(statsReplyOf(other)).toEqual({ kind: "ours", snapshot: other });
+  });
+
+  test("a snapshot lacking fields this build reads is another build's, naming them and both builds", () => {
     const snap = RuntimeStats.referenceSnapshot();
     const { renderers: _r, sourceDigest: _d, ...older } = snap;
-    const skew = shapeSkew(older as typeof snap);
-    expect(skew).toContain("reports no sourceDigest, renderers");
-    expect(skew).toContain(`the daemon (${pkg.version} [no digest])`);
-    expect(skew).toContain(`this client (${pkg.version} [`);
+    const reply = statsReplyOf(older);
+    if (reply.kind !== "another-build") throw new Error("read as ours");
+    expect(reply.said).toBe(older);
+    expect(reply.skew).toContain("reports no sourceDigest, renderers");
+    expect(reply.skew).toContain(`the daemon (${pkg.version} [no digest])`);
+    expect(reply.skew).toContain(`this client (${pkg.version} [`);
+  });
+
+  test("a reply that is no snapshot at all is another build's, its build unsaid", () => {
+    const reply = statsReplyOf(7);
+    expect(reply).toMatchObject({ kind: "another-build", said: 7 });
+    if (reply.kind !== "another-build") throw new Error("read as ours");
+    expect(reply.skew).toMatch(
+      /^the daemon \(no version \[no digest\]\) reports no <snapshot>;/,
+    );
   });
 
   test("missingFields names a nested field by its path, and an atom in place of an object", () => {
@@ -478,8 +492,7 @@ describe("formatStats", () => {
             measure: "phys_footprint",
             bytes: 40 * MB,
           },
-          sizes: { rss: 50 * MB, heapTotal: 30 * MB },
-          nearLimit: false,
+          usage: { kind: "read", sizes: { rss: 50 * MB, heapTotal: 30 * MB } },
         },
         limit: 512 * MB,
       },
@@ -497,8 +510,10 @@ describe("formatStats", () => {
                   measure: "phys_footprint",
                   bytes: 420 * MB,
                 },
-                sizes: { rss: 450 * MB, heapTotal: 200 * MB },
-                nearLimit: true,
+                usage: {
+                  kind: "read",
+                  sizes: { rss: 450 * MB, heapTotal: 200 * MB },
+                },
               },
               limit: 512 * MB,
             },
@@ -635,6 +650,37 @@ describe("formatStats", () => {
     expect(out).toContain(`  ${"click.pbcopy refused".padEnd(width)} 3\n`);
   });
 
+  test("a renderer nothing could charge says so, and is never called near its limit", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const why =
+      "footprint printed no phys_footprint for pid 4343, and no ping has answered yet";
+    const out = formatStats({
+      ...snap,
+      renderers: [
+        {
+          name: MAIN_RENDERER,
+          process: {
+            kind: "process",
+            memory: {
+              pid: 4343,
+              memory: {
+                kind: "measured",
+                charge: { kind: "unread", unread: why },
+                usage: { kind: "unread", why: "no ping has answered yet" },
+              },
+              limit: 512 * MB,
+            },
+          },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "ok", value: RENDERER_STATS_REFERENCE },
+        },
+      ],
+    });
+    expect(out).toContain(
+      `  memory        unread (${why}) of limit 512 MB (no sizes: no ping has answered yet)\n`,
+    );
+  });
+
   test("hit rate is n/a when no observations", () => {
     const out = formatStats({
       pid: 1,
@@ -719,20 +765,26 @@ describe("statsPlan — the text/exit-code contract", () => {
   const snap = RuntimeStats.referenceSnapshot();
 
   it("JSON mode carries the whole snapshot on stdout and exits 0", () => {
-    const plan = statsPlan({ kind: "ok", value: snap }, true);
+    const plan = statsPlan(
+      { kind: "ok", value: { kind: "ours", snapshot: snap } },
+      true,
+    );
     expect(plan.code).toBe(0);
     expect(plan.stderr).toBe("");
     expect(JSON.parse(plan.stdout)).toEqual(JSON.parse(JSON.stringify(snap)));
   });
 
   it("text mode carries the formatted report", () => {
-    const plan = statsPlan({ kind: "ok", value: snap }, false);
+    const plan = statsPlan(
+      { kind: "ok", value: { kind: "ours", snapshot: snap } },
+      false,
+    );
     expect(plan).toEqual({ stdout: formatStats(snap), stderr: "", code: 0 });
   });
 
   it("a skewed daemon's JSON is still delivered, beside the skew and a failing code", () => {
     const { clients: _clients, ...older } = snap;
-    const plan = statsPlan({ kind: "ok", value: older as typeof snap }, true);
+    const plan = statsPlan({ kind: "ok", value: statsReplyOf(older) }, true);
     expect(plan.code).toBe(1);
     expect(plan.stderr).toMatch(/^daemon-stats: .*reports no clients/);
     expect(JSON.parse(plan.stdout)).not.toHaveProperty("clients");
