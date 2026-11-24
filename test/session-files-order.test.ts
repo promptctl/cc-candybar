@@ -22,10 +22,11 @@ import {
 } from "../src/daemon/session-state-file";
 import { fileHistoryStorage } from "../src/daemon/history-file";
 import {
-  EPHEMERAL_HISTORY_STORAGE,
   HeldStores,
   type ProfileStorage,
+  type StoreLoad,
 } from "../src/daemon/held-stores";
+import { loadText } from "../src/daemon/held-file";
 import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
@@ -53,12 +54,10 @@ const NEWEST = sessionIdOf("6a1f9a52-3c1e-4d7b-9e0a-2f4b8c6d1eff");
 
 let dir: string;
 let file: string;
-let logged: string[];
-const log = (_level: string, line: string): void => void logged.push(line);
+const log = (): void => {};
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-session-files-order-"));
   file = path.join(dir, "store.json");
-  logged = [];
 });
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -69,25 +68,28 @@ afterEach(() => {
 const writtenByHand = (record: Readonly<Record<string, unknown>>): void =>
   fs.writeFileSync(file, JSON.stringify(record));
 
-const droppedKey = (store: string, key: string) =>
-  expect(logged).toContainEqual(
-    expect.stringContaining(
-      `${store} load: dropped session key ${JSON.stringify(key)}: session id is ${JSON.stringify(key)}, an array index, which is never a session id`,
-    ),
+// What the bar says of the file's load.
+const saidOf = (loads: readonly StoreLoad[]): string[] =>
+  loads.flatMap(({ file: at, report }) =>
+    at === file ? [loadText(at, report) ?? ""] : [],
   );
 
+const droppedKey = (loads: readonly StoreLoad[], key: string) =>
+  expect(saidOf(loads)).toEqual([
+    `${file}: the load dropped what this build does not read: a session (session id is ${JSON.stringify(key)}, an array index, which is never a session id) in ${JSON.stringify(key)}`,
+  ]);
+
 // The host's held stores over the file, loaded as the daemon serves.
-const heldOver = (storage: Partial<ProfileStorage>): HeldStores => {
+const heldOver = (storage: Partial<ProfileStorage>) => {
   const stores = new HeldStores(
     {
       session: ephemeralSessionFile(),
-      history: EPHEMERAL_HISTORY_STORAGE,
+      history: ephemeralSessionFile(),
       ...storage,
     },
-    () => {},
+    systemTimekeeper,
   );
-  stores.load();
-  return stores;
+  return { stores, loads: stores.load() };
 };
 
 describe("the session book's file", () => {
@@ -116,12 +118,12 @@ describe("the session book's file", () => {
     if (!checked.ok) throw new Error(checked.problems.join("; "));
     return checked.req;
   };
-  const bookOver = (): SessionBook => {
+  const bookOver = () => {
     const book = new SessionBook(
       new SessionFile(SESSION_BOOK_FILE, file, systemTimekeeper, 0, log),
+      systemTimekeeper,
     );
-    book.load();
-    return book;
+    return { book, loads: [book.load()] };
   };
   const known = (book: SessionBook, id: SessionId): boolean =>
     book.contextOf(id, null) !== null;
@@ -129,11 +131,11 @@ describe("the session book's file", () => {
   test("read back full, the book drops the session heard longest ago", async () => {
     // The book holds 256 sessions.
     const ids = idsOf(256);
-    const first = bookOver();
+    const { book: first } = bookOver();
     for (const id of ids) first.heard(request(id), TEST_ENVIRONMENT);
     await first.close();
 
-    const second = bookOver();
+    const { book: second } = bookOver();
     second.heard(request(NEWEST), TEST_ENVIRONMENT);
     expect(known(second, ids[0]!)).toBe(false);
     for (const id of ids.slice(1)) expect(known(second, id)).toBe(true);
@@ -149,9 +151,9 @@ describe("the session book's file", () => {
         origin: { projectDir: "/7", cwd: "/7", target: { source: "search" } },
       }),
     });
-    const book = bookOver();
+    const { book, loads } = bookOver();
     expect(known(book, sessionIdOf("a"))).toBe(true);
-    droppedKey("session-book", "7");
+    droppedKey(loads, "7");
     await book.close();
   });
 });
@@ -160,7 +162,7 @@ describe("the session state's file", () => {
   // A daemon over the file whose renderer holds `maxSessions`, each write
   // taken as a turn's are.
   const daemonOver = (maxSessions: number) => {
-    const stores = heldOver({
+    const { stores, loads } = heldOver({
       session: new SessionFile(
         SESSION_STATE_FILE,
         file,
@@ -174,7 +176,7 @@ describe("the session state's file", () => {
       state.set(id, "theme", theme);
       stores.take(state.drain());
     };
-    return { state, write, stores };
+    return { state, write, stores, loads };
   };
 
   test("read back full, the state drops the session written longest ago", async () => {
@@ -196,9 +198,9 @@ describe("the session state's file", () => {
 
   test("a key that is an array index is dropped by name", () => {
     writtenByHand({ a: { theme: "nord" }, "7": { theme: "dracula" } });
-    const { state } = daemonOver(6);
+    const { state, loads } = daemonOver(6);
     expect(state.get(sessionIdOf("a"), "theme")).toBe("nord");
-    droppedKey("session-state", "7");
+    droppedKey(loads, "7");
   });
 });
 
@@ -206,7 +208,9 @@ describe("the settings history's file", () => {
   // A daemon over the file: a renderer's history built from what it holds,
   // each pick taken as a turn's are.
   const daemonOver = () => {
-    const stores = heldOver({ history: fileHistoryStorage(file, log) });
+    const { stores, loads } = heldOver({
+      history: fileHistoryStorage(file, log),
+    });
     const history = new SettingsHistory(
       new SessionState(),
       log,
@@ -218,7 +222,7 @@ describe("the settings history's file", () => {
       journal.commit();
       stores.take(history.drain());
     };
-    return { history, pick, stores };
+    return { history, pick, stores, loads };
   };
 
   test("read back full, the history drops the session changed longest ago", async () => {
@@ -255,14 +259,11 @@ describe("the settings history's file", () => {
         ]),
       ),
     });
-    const { history } = daemonOver();
+    const { history, loads } = daemonOver();
     expect(history.depth(real).undo).toBe(1);
-    expect(logged).toContainEqual(
-      `settings-history load: dropped session "retired-0": its value holds only changes to "look", no longer a setting`,
-    );
-    expect(logged).toContainEqual(
-      "settings-history loaded sessions=1 dropped=32",
-    );
+    expect(saidOf(loads)).toEqual([
+      `${file}: the load dropped what this build does not read: a session (its value holds only changes to "look", not a setting in this build) in "retired-0", "retired-1", "retired-2" and 29 more`,
+    ]);
   });
 
   test("a key that is an array index is dropped by name", () => {
@@ -271,8 +272,8 @@ describe("the settings history's file", () => {
       future: [],
     };
     writtenByHand({ a: step, "7": step });
-    const { history } = daemonOver();
+    const { history, loads } = daemonOver();
     expect(history.depth(sessionIdOf("a")).undo).toBe(1);
-    droppedKey("settings-history", "7");
+    droppedKey(loads, "7");
   });
 });

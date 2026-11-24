@@ -76,9 +76,15 @@ describe("SessionState", () => {
     state.clear(B, "theme");
     state.set(A_2, "style", "surface");
     expect(state.drain()).toEqual([
-      { store: "session-state", key: C, value: { theme: "forest" } },
-      { store: "session-state", key: B, value: null },
       {
+        kind: "put",
+        store: "session-state",
+        key: C,
+        value: { theme: "forest" },
+      },
+      { kind: "put", store: "session-state", key: B, value: null },
+      {
+        kind: "put",
         store: "session-state",
         key: A_2,
         value: { theme: "ocean", style: "surface" },

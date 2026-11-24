@@ -34,7 +34,8 @@ export type DaemonEventKind =
   | "renderer-ended"
   | "act-failed"
   | "launch-pipes"
-  | "task-threw";
+  | "task-threw"
+  | "store-load";
 
 // [LAW:types-are-the-program] An event of the daemon's own, as its facts
 // carry it and a frame that showed it names it back to its owner: the kind

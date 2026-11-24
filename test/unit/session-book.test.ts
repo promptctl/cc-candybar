@@ -8,10 +8,13 @@ import {
   type SessionId,
 } from "../../src/daemon/foundations/session-id";
 import { NOT_HEARD } from "../../src/daemon/foundations/session-env";
+import { ORDER_PERIOD_MS } from "../../src/daemon/held-file";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
 import { TEST_ENV, TEST_ENVIRONMENT } from "../helpers/session-environment";
 import { SESSION_BOOK_FILE, SessionBook } from "../../src/daemon/session-book";
 import type { SessionFileStorage } from "../../src/daemon/session-state-file";
+import { heldClock } from "../helpers/held-clock";
+import { heldStorage } from "../helpers/held-storage";
 import type {
   CheckedRenderRequest,
   DurableContext,
@@ -56,20 +59,18 @@ const durable = (dir: string): DurableContext => ({
 });
 
 // A book's file in memory: what it holds when the book loads, and every save.
-function storage(held: ReadonlyMap<SessionId, DurableContext> = new Map()) {
-  const saves: Array<ReadonlyMap<SessionId, DurableContext>> = [];
-  let flushes = 0;
-  const storage: SessionFileStorage<DurableContext> = {
-    load: () => held,
-    save: (snapshot) => void saves.push(snapshot),
-    flush: async () => void (flushes += 1),
-  };
-  return { storage, saves, flushes: () => flushes };
-}
+const storage = (held: ReadonlyMap<SessionId, DurableContext> = new Map()) =>
+  heldStorage<DurableContext>({ kind: "ok", sessions: held });
+
+// An order alone waits for a period no case here reaches but the one that
+// moves this clock.
+const CLOCK = heldClock(new Date(1_000_000));
+const bookOver = (kept: SessionFileStorage<DurableContext>): SessionBook =>
+  new SessionBook(kept, CLOCK);
 
 // A book over `kept`, loaded as the daemon serves.
 function loaded(kept: SessionFileStorage<DurableContext>): SessionBook {
-  const book = new SessionBook(kept);
+  const book = bookOver(kept);
   book.load();
   return book;
 }
@@ -106,7 +107,10 @@ describe("the book's file", () => {
       claudeConfigDir: "/u/.claude-x",
     },
   ])("%j reads back as it was kept", (value) => {
-    expect(roundTrip(value)).toEqual({ kind: "ok", value });
+    expect(roundTrip(value)).toEqual({
+      kind: "ok",
+      value: { value, dropped: [] },
+    });
   });
 
   test("a newer build's source beside a file leaves the file, its source unknown", () => {
@@ -120,11 +124,14 @@ describe("the book's file", () => {
     ).toEqual({
       kind: "ok",
       value: {
-        origin: {
-          projectDir: "/p",
-          cwd: "/p",
-          target: { source: "unknown", path: "/x.json5" },
+        value: {
+          origin: {
+            projectDir: "/p",
+            cwd: "/p",
+            target: { source: "unknown", path: "/x.json5" },
+          },
         },
+        dropped: [],
       },
     });
   });
@@ -184,9 +191,7 @@ describe("the book's file", () => {
 
 describe("the book", () => {
   test("a click finds a session heard since the start live, and one read back with no live part", () => {
-    const book = new SessionBook(
-      storage(new Map([[S2, durable("/q")]])).storage,
-    );
+    const book = bookOver(storage(new Map([[S2, durable("/q")]])).storage);
     book.load();
     const req = request("s1");
     book.heard(req, TEST_ENVIRONMENT);
@@ -248,7 +253,7 @@ describe("the book", () => {
   });
 
   test("a session heard before the load keeps what it said over what the file holds", () => {
-    const book = new SessionBook(
+    const book = bookOver(
       storage(
         new Map([
           [S1, durable("/old")],
@@ -267,14 +272,14 @@ describe("the book", () => {
     const book = loaded(kept);
     book.heard(request("s1", "/p", { termCols: 80 }), TEST_ENVIRONMENT);
     book.heard(request("s1", "/p", { termCols: 120 }), TEST_ENVIRONMENT);
-    expect(saves).toHaveLength(2);
+    expect(saves).toHaveLength(1);
     book.heard(request("s1", "/q"), TEST_ENVIRONMENT);
     expect([...saves.at(-1)!]).toEqual([[S1, durable("/q")]]);
   });
 
   test("the load saves the merged book, so a save made before it never lands alone", () => {
     const { storage: kept, saves } = storage(new Map([[S2, durable("/q")]]));
-    const book = new SessionBook(kept);
+    const book = bookOver(kept);
     book.heard(request("s1", "/p"), TEST_ENVIRONMENT);
     book.load();
     expect([...saves.at(-1)!]).toEqual([
@@ -291,7 +296,7 @@ describe("the book", () => {
       request("s1", "/p", { claudeConfigDir: "/u/.claude-x" }),
       TEST_ENVIRONMENT,
     );
-    expect(saves).toHaveLength(3);
+    expect(saves).toHaveLength(2);
     expect([...saves.at(-1)!]).toEqual([
       [S1, { ...durable("/p"), claudeConfigDir: "/u/.claude-x" }],
     ]);
@@ -338,19 +343,19 @@ describe("the book", () => {
     );
   });
 
-  test("a close flushes the file, and nothing heard after it is saved", () => {
+  test("a close flushes the file, and nothing heard after it is saved", async () => {
     const { storage: kept, saves, flushes } = storage();
     const book = loaded(kept);
     book.heard(request("s1"), TEST_ENVIRONMENT);
-    book.close();
+    await book.close();
     expect(flushes()).toBe(1);
     book.heard(request("s2"), TEST_ENVIRONMENT);
-    expect(saves).toHaveLength(2);
+    expect(saves).toHaveLength(1);
   });
 
   test("nothing heard before the load is saved until the load has read the file", () => {
     const { storage: kept, saves } = storage();
-    const book = new SessionBook(kept);
+    const book = bookOver(kept);
     book.heard(request("s1"), TEST_ENVIRONMENT);
     expect(saves).toHaveLength(0);
   });
@@ -367,4 +372,40 @@ describe("the book", () => {
     );
     expect(book.contextOf(sessionIdOf("s1"), null)).toBeNull();
   });
+
+  // A restart keeps the sessions in use: a session heard since the last save
+  // with nothing durable moved holds its place by the order the book last
+  // wrote, at a close or within the order period, so a new session at the
+  // bound drops the one idle longest.
+  test.each([
+    ["after a clean close", "close"],
+    [
+      "after a kill inside the order period, by the order the period wrote",
+      "kill",
+    ],
+  ] as const)(
+    "a restart at the bound keeps a session heard since the last save, %s",
+    async (_name, end) => {
+      const kept = storage();
+      const book = loaded(kept.storage);
+      for (let i = 0; i < 256; i += 1)
+        book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
+      const writes = kept.saves.length;
+      book.heard(request("s0", "/p0"), TEST_ENVIRONMENT);
+      expect(kept.saves).toHaveLength(writes);
+      if (end === "close") await book.close();
+      else {
+        CLOCK.advance(ORDER_PERIOD_MS);
+        // A hearing after the period's write is what a kill loses.
+        book.heard(request("s1", "/p1"), TEST_ENVIRONMENT);
+      }
+      expect(kept.saves).toHaveLength(writes + 1);
+      const restarted = loaded(storage(kept.saves.at(-1)!).storage);
+      restarted.heard(request("new", "/new"), TEST_ENVIRONMENT);
+      expect(restarted.contextOf(sessionIdOf("s0"), null)?.durable).toEqual(
+        durable("/p0"),
+      );
+      expect(restarted.contextOf(sessionIdOf("s1"), null)).toBeNull();
+    },
+  );
 });

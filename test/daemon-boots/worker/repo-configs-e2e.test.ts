@@ -218,6 +218,43 @@ describe("a repository's config waits for the user's one answer", () => {
     ).toBeUndefined();
   });
 
+  // [LAW:no-silent-failure] An answers book that does not read takes the
+  // next answer: the answer sets the book aside beside itself, so nothing is
+  // written over its bytes and nobody has to act for answers to hold again.
+  test("an answers book that does not read is set aside by the next answer, which holds", async () => {
+    const book = repoConfigsPath(stateDir(hostOf(isolated.env)));
+    fs.mkdirSync(path.dirname(book), { recursive: true });
+    fs.writeFileSync(book, "{ not json");
+    start();
+    const bar = await draw("repo-unread");
+    const pages = await readDiagnostics(daemon, "repo-unread", project, bar);
+    expect(
+      pages.find((p) =>
+        p.text.includes("Repository config answers could not be read"),
+      )?.text,
+    ).toContain("the next answer sets the unread book aside beside itself");
+    const asked = await questionOf(daemon, "repo-unread", project, bar);
+    await click(
+      daemon,
+      answerUrl(asked!.rendered, "approved"),
+      ANSWER_REPLY_MS,
+    );
+    await renderUntil(
+      daemon,
+      "repo-unread",
+      project,
+      (r) => textOf(r).includes("REPOSEGran"),
+      "the approved repository's config",
+    );
+    const [aside] = fs
+      .readdirSync(path.dirname(book))
+      .filter((f) => f.startsWith(`${path.basename(book)}.unread-`));
+    expect(fs.readFileSync(path.join(path.dirname(book), aside!), "utf8")).toBe(
+      "{ not json",
+    );
+    expect(JSON.parse(fs.readFileSync(book, "utf8"))).toBeTruthy();
+  });
+
   test("decline: the user's config draws, nothing runs, and nothing asks again", async () => {
     start();
     const asked = await questionOf(

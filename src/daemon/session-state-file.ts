@@ -4,27 +4,55 @@ import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { asError, publishByRenameAsync } from "../utils/atomic-write";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
-import type { Asked } from "../utils/outcome";
+import { ok, type Asked } from "../utils/outcome";
 import { isPlainObject } from "../config/loader/validate-core";
 import {
   parseSessionPicks,
+  withoutRetiredKeys,
   type SessionPicks,
 } from "../renderer-interface/stored-state";
+import { stateFile, type StateObservation } from "./state-file";
+import type { FileRetirement } from "./file-rewrites";
+import type { DroppedPart, Kept } from "./foundations/stored-file";
 export type { SessionPicks } from "../renderer-interface/stored-state";
 
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
 // log lines say, each session's value as the file keeps it, and as a load
-// parses it back, or why not, read after "its value".
+// parses it back, or why not, read after "its value". A value the parse
+// keeps can still give up parts this build reads nothing of, each named in
+// what the load dropped.
 export interface SessionFileKind<V> {
   readonly name: string;
   readonly record: (value: V) => unknown;
-  readonly parse: (value: unknown) => Asked<V>;
+  readonly parse: (value: unknown) => Asked<Kept<V>>;
 }
 
+export interface Dropped extends DroppedPart {
+  readonly session: string;
+}
+
+// What a per-session file's load holds: its sessions, oldest first, and what
+// it dropped of what the file held.
+export interface Loaded<V> {
+  readonly sessions: ReadonlyMap<SessionId, V>;
+  readonly dropped: readonly Dropped[];
+}
+
+export const nothingLoaded = <V>(): Loaded<V> => ({
+  sessions: new Map(),
+  dropped: [],
+});
+
 // [LAW:locality-or-seam] Where one per-session file's sessions are kept: its
-// file, or nowhere. Its owner holds them, and persistence is the storage's.
+// file, or nowhere. Its holder (src/daemon/held-file.ts) decides what a read
+// means; persistence is the storage's.
 export interface SessionFileStorage<V> {
-  load(): ReadonlyMap<SessionId, V>;
+  // Where it is kept, as the bar names it.
+  readonly file: string;
+  // The file's read, by the rule every state file keeps (state-file.ts).
+  observe(): StateObservation<Loaded<V>>;
+  // Renames a file that did not read out of the way of every write.
+  setAside(aside: FileRetirement): void;
   // The sessions as they stand, oldest first. The storage keeps its own copy
   // until the write behind lands, so the owner may go on changing its map;
   // the file keeps their order.
@@ -32,85 +60,72 @@ export interface SessionFileStorage<V> {
   flush(): Promise<void>;
 }
 
-// [LAW:dataflow-not-control-flow] Kept nowhere: it loads nothing and writes
-// nothing, so a daemon that keeps no files (the page) runs the same path.
+// [LAW:dataflow-not-control-flow] Kept nowhere: it reads as absent and
+// writes nothing, so a daemon that keeps no files (the page) runs the same
+// path.
 export const ephemeralSessionFile = <V>(): SessionFileStorage<V> => ({
-  load: () => new Map(),
+  file: "(kept nowhere)",
+  observe: () => ({ result: ok(nothingLoaded<V>()), paths: [], source: null }),
+  setAside: () => {},
   save: () => {},
   flush: async () => {},
 });
 
-// The session picks' file uses the same value shape as a renderer profile.
+// The session picks' file uses the same value shape as a renderer profile,
+// less the picks nothing reads now.
 export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
   name: "session-state",
   record: (kv) => kv,
-  parse: parseSessionPicks,
+  parse: (value) => {
+    const picks = parseSessionPicks(value);
+    return picks.kind === "ok" ? withoutRetiredKeys(picks.value) : picks;
+  },
 };
 
-// [LAW:single-enforcer] The load of every per-session file, keyed by session
+// [LAW:single-enforcer] The parse of every per-session file, keyed by session
 // id: each key crosses the session-id checkpoint and each value the kind's
-// parse, and an entry either refuses is named and dropped alone.
-// [LAW:no-silent-failure] Corrupt/missing file → empty state is the
-// *defined* recovery, not a hidden fallback to different data: an empty
-// store re-rolls random picks exactly as a first-ever boot would. Only the
-// read and the JSON parse are caught: a throw past them is a bug, and stays one.
-// [LAW:nothing-unseen] Every load says what it found: no file, a file it
-// could not use, or how many sessions it loaded and dropped.
-export function loadSessionFile<V>(
-  kind: Pick<SessionFileKind<V>, "name" | "parse">,
-  filePath: string,
-  logger: DaemonLogger,
-): Map<SessionId, V> {
-  const loaded = new Map<SessionId, V>();
-  let text: string;
-  try {
-    text = fs.readFileSync(filePath, "utf8");
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === "ENOENT")
-      logger("info", `${kind.name} load: no file, starting empty`);
-    else logger("warn", `${kind.name} read failed (${code}); starting empty`);
-    return loaded;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
-    return loaded;
-  }
-  if (!isPlainObject(parsed)) {
-    logger("warn", `${kind.name} load: unexpected shape, starting empty`);
-    return loaded;
-  }
-  // [LAW:no-silent-failure] A key the session id checkpoint refuses, or a
-  // value its kind refuses, is reported and dropped, and the sessions beside
-  // it load whole: the store never hydrates from a half-written or
-  // hand-edited entry.
-  let dropped = 0;
-  const keyed = sessionKeyed(parsed, (key, problem) => {
-    dropped += 1;
-    logger(
-      "warn",
-      `${kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
+// parse, and an entry either refuses is named and dropped alone, so the
+// store never hydrates from a half-written or hand-edited entry. What did
+// not read as a whole is state-file's to classify.
+export const sessionsOf =
+  <V>(kind: Pick<SessionFileKind<V>, "parse">) =>
+  (doc: unknown): Asked<Loaded<V>> => {
+    if (!isPlainObject(doc))
+      return { kind: "failed", reason: "is not an object keyed by session" };
+    const sessions = new Map<SessionId, V>();
+    const dropped: Dropped[] = [];
+    const keyed = sessionKeyed(doc, (key, problem) =>
+      dropped.push({ session: key, part: null, why: `session id ${problem}` }),
     );
-  });
-  for (const [id, value] of keyed) {
-    const entry = kind.parse(value);
-    if (entry.kind === "ok") loaded.set(id, entry.value);
-    else {
-      dropped += 1;
-      logger(
-        "warn",
-        `${kind.name} load: dropped session ${JSON.stringify(id)}: its value ${entry.reason}`,
-      );
+    for (const [id, value] of keyed) {
+      const entry = kind.parse(value);
+      if (entry.kind === "failed")
+        dropped.push({
+          session: id,
+          part: null,
+          why: `its value ${entry.reason}`,
+        });
+      else {
+        sessions.set(id, entry.value.value);
+        for (const part of entry.value.dropped)
+          dropped.push({ session: id, ...part });
+      }
     }
-  }
-  logger(
-    "info",
-    `${kind.name} loaded sessions=${loaded.size} dropped=${dropped}`,
-  );
-  return loaded;
+    return ok({ sessions, dropped });
+  };
+
+// [LAW:effects-at-boundaries] A per-session file as the disk holds it: read
+// through the one rule, a file that did not read renamed aside.
+export function sessionFileOnDisk<V>(
+  kind: Pick<SessionFileKind<V>, "parse">,
+  filePath: string,
+): Pick<SessionFileStorage<V>, "file" | "observe" | "setAside"> {
+  const file = stateFile([filePath], nothingLoaded<V>(), sessionsOf(kind));
+  return {
+    file: filePath,
+    observe: file.observe,
+    setAside: ({ from, to }) => fs.renameSync(from, to),
+  };
 }
 
 // What one write came to, its error kept whole. Nothing pending is landed:
@@ -124,6 +139,8 @@ const LANDED: Landed = { ok: true };
 // file. Its owner calls save() on every change; this coalesces the bursty
 // 22-session × 1 Hz write load into at most one disk write per window.
 export class SessionFile<V> implements SessionFileStorage<V> {
+  readonly file: string;
+  private readonly disk: Pick<SessionFileStorage<V>, "observe" | "setAside">;
   // What clears the debounce timer while one is armed.
   private clearTimer: (() => void) | null = null;
   // [LAW:one-source-of-truth] State not yet written: cleared only once its
@@ -146,10 +163,17 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
     // daemon.log: the daemon passes its log, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
-  ) {}
+  ) {
+    this.disk = sessionFileOnDisk(kind, filePath);
+    this.file = filePath;
+  }
 
-  load(): ReadonlyMap<SessionId, V> {
-    return loadSessionFile(this.kind, this.filePath, this.logger);
+  observe(): StateObservation<Loaded<V>> {
+    return this.disk.observe();
+  }
+
+  setAside(aside: FileRetirement): void {
+    this.disk.setAside(aside);
   }
 
   save(snapshot: ReadonlyMap<SessionId, V>): void {

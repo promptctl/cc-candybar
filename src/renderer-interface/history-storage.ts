@@ -79,16 +79,3 @@ export const holdsNothing = ({ past, future }: SessionHistory): boolean =>
   past.length + future.length === 0;
 
 export type HistoryState = Readonly<Record<SessionId, SessionHistory>>;
-
-// What a storage loads: each session's history, keyed by a session id the
-// storage has already checked.
-export type LoadedHistory = ReadonlyMap<SessionId, SessionHistory>;
-
-// [LAW:locality-or-seam] Persistence is the storage's property: the host
-// binds a file, or keeps nothing.
-export interface HistoryStorage {
-  load(): LoadedHistory;
-  // The histories as they stand, oldest first, written before it returns, in
-  // that order.
-  save(state: ReadonlyMap<SessionId, SessionHistory>): void;
-}

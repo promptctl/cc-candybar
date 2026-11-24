@@ -41,6 +41,7 @@ import { fileHistoryStorage } from "../../src/daemon/history-file";
 import { HeldStores } from "../../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { recordRender } from "./click";
+import { heldClock } from "./held-clock";
 
 export interface DurableConfig {
   /** The machine the fixture's files are under: its XDG pair names them. */
@@ -105,7 +106,8 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
         session: ephemeralSessionFile(),
         history: fileHistoryStorage(settingsHistoryPath(host), () => {}),
       },
-      () => {},
+      // An order alone waits for a period no case here reaches.
+      heldClock(new Date()),
     );
     stores.load();
     return stores;

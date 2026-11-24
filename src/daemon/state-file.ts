@@ -55,16 +55,23 @@ export interface Planned<T> {
 export function writeBase<T>(
   observed: StateObservation<T>,
   empty: T,
-): { readonly current: T; readonly setAside: FileRetirement | null } {
-  return observed.result.kind === "ok"
-    ? { current: observed.result.value, setAside: null }
+): { readonly current: T; readonly setAside: SetAside | null } {
+  const { result } = observed;
+  return result.kind === "ok"
+    ? { current: result.value, setAside: null }
     : {
         current: empty,
         setAside: {
-          from: observed.result.file,
-          to: `${observed.result.file}.unread-${randomUUID()}`,
+          from: result.file,
+          to: `${result.file}.unread-${randomUUID()}`,
+          reason: result.reason,
         },
       };
+}
+
+// A file that did not read, the name it is kept under, and why it did not.
+export interface SetAside extends FileRetirement {
+  readonly reason: string;
 }
 
 // [LAW:one-source-of-truth] How every state file spells what it holds.

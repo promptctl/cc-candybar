@@ -14,7 +14,7 @@ import type { WorktreeLink } from "../../utils/git-root.js";
 import type { RepoQuestion } from "../config-snapshot.js";
 import type { Asked } from "../../utils/outcome.js";
 import { advisory, type Advisory } from "./diagnostics.js";
-import { unreadText } from "../../daemon/foundations/unread-file.js";
+import { unreadText } from "../../daemon/foundations/stored-file.js";
 
 export type RepoAnswer = "approved" | "declined";
 export const REPO_ANSWERS: readonly RepoAnswer[] = ["approved", "declined"];

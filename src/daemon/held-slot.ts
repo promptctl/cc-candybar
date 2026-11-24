@@ -112,7 +112,7 @@ export class HeldSlot {
 }
 
 // The kinds of daemon event that recur, each held per subject.
-type RecurringKind = "launch-pipes" | "task-threw";
+type RecurringKind = "launch-pipes" | "task-threw" | "store-load";
 
 interface Subject<R> {
   readonly slot: HeldSlot;

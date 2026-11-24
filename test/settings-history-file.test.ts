@@ -23,7 +23,7 @@ test("a lone step over the byte bound leaves no history behind, and the host is 
   big.sessionState.set(SID, "theme", "x".repeat(9 * 1024 * 1024));
   big.commit();
   expect(history.drain()).toEqual([
-    { store: "settings-history", key: SID, value: null },
+    { kind: "put", store: "settings-history", key: SID, value: null },
   ]);
 });
 
@@ -64,17 +64,18 @@ test("retired setting keys and the obsolete savepoint leave committed history", 
       other: { past: [[file]], future: [] },
     }),
   );
-  const logs: string[] = [];
-  const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
-  expect(Object.fromEntries(storage.load())).toEqual({
+  const { result } = fileHistoryStorage(historyFile, () => {}).observe();
+  if (result.kind === "failed") throw new Error(result.reason);
+  expect(Object.fromEntries(result.value.sessions)).toEqual({
     [SID]: {
       past: [[change("style")], [file]],
       future: [],
     },
     other: { past: [[file]], future: [] },
   });
-  expect(logs).toEqual([
-    "settings-history loaded sessions=2 dropped=0",
-    `settings-history load: session "${SID}" dropped the changes to "look", "progression", no longer a setting`,
+  const why = "its changes are to a key that is not a setting in this build";
+  expect(result.value.dropped).toEqual([
+    { session: SID, part: "look", why },
+    { session: SID, part: "progression", why },
   ]);
 });

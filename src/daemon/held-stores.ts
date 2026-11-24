@@ -3,51 +3,51 @@
 // every renderer it builds, and moved only by the stored writes the renderer's
 // turns return, each written behind to its file.
 
-import type { SessionId } from "./foundations/session-id.js";
 import type { SessionFileStorage, SessionPicks } from "./session-state-file.js";
+import type { SessionHistory } from "../renderer-interface/history-storage.js";
+import { runEach, throwAll } from "../utils/run-each.js";
 import type {
-  HistoryStorage,
-  SessionHistory,
-} from "../renderer-interface/history-storage.js";
-import { runEach } from "../utils/run-each.js";
-import {
-  withoutRetiredKeys,
-  type StoredState,
-  type StoreWrite,
+  StoredState,
+  StoreWrite,
 } from "../renderer-interface/stored-state.js";
-import type { DaemonLogger } from "../utils/logger.js";
+import type { Timekeeper } from "../time.js";
+import { HeldFile, type HeldChange, type LoadReport } from "./held-file.js";
 
 // Where a profile's stores are kept: its files, or nowhere.
 export interface ProfileStorage {
   readonly session: SessionFileStorage<SessionPicks>;
-  readonly history: HistoryStorage;
+  readonly history: SessionFileStorage<SessionHistory>;
 }
 
-// [LAW:dataflow-not-control-flow] A history kept nowhere, as a session file
-// kept nowhere (`ephemeralSessionFile`).
-export const EPHEMERAL_HISTORY_STORAGE: HistoryStorage = {
-  load: () => new Map(),
-  save: () => {},
-};
+// What one of the profile's files said as it loaded.
+export interface StoreLoad {
+  readonly file: string;
+  readonly report: LoadReport;
+}
 
 export class HeldStores {
-  // [LAW:types-are-the-program] Insertion order is each store's recency
-  // order, as the renderer's own: a write moves its entry to the end.
-  private sessions = new Map<SessionId, SessionPicks>();
-  private history = new Map<SessionId, SessionHistory>();
-  private closed = false;
+  // [LAW:one-source-of-truth] Each store's order is its renderer's, which
+  // bounds it: the renderer's writes and hearings move these, and nothing
+  // here evicts.
+  private readonly sessions: HeldFile<SessionPicks>;
+  private readonly history: HeldFile<SessionHistory>;
 
   constructor(
     private readonly storage: ProfileStorage,
-    private readonly log: DaemonLogger,
-  ) {}
+    clock: Pick<Timekeeper, "after">,
+  ) {
+    this.sessions = new HeldFile("session-state", storage.session, clock);
+    this.history = new HeldFile("settings-history", storage.history, clock);
+  }
 
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a
   // daemon that won the socket reads what the one before it flushed in its
   // close.
-  load(): void {
-    this.sessions = withoutRetiredKeys(this.storage.session.load(), this.log);
-    this.history = new Map(this.storage.history.load());
+  load(): readonly StoreLoad[] {
+    return [
+      { file: this.storage.session.file, report: this.sessions.load().report },
+      { file: this.storage.history.file, report: this.history.load().report },
+    ];
   }
 
   // What a renderer built now is built from.
@@ -60,51 +60,46 @@ export class HeldStores {
   // prototype.
   current(): StoredState {
     return {
-      sessions: Object.fromEntries(this.sessions),
-      history: Object.fromEntries(this.history),
+      sessions: Object.fromEntries(this.sessions.entries()),
+      history: Object.fromEntries(this.history.entries()),
     };
   }
 
-  // A turn's stored writes, in the order it made them.
-  // [LAW:no-silent-failure] Every write is held, and what its file refused
-  // throws once all are, so the host's taking says it on every bar. The
+  // A turn's stored writes, in the order it made them, each store's saved
+  // once. [LAW:no-silent-failure] What a file refused throws once every store
+  // has taken its share, so the host's taking says it on every bar. The
   // renderer holds the refused write too, and the store's next write saves
   // the copy held here whole.
   take(writes: readonly StoreWrite[]): void {
-    // [LAW:single-enforcer] Each step its own error boundary (`runEach`).
-    const steps: Array<() => void> = [];
-    let sessions = false;
-    let history = false;
+    const sessions: Array<HeldChange<SessionPicks>> = [];
+    const history: Array<HeldChange<SessionHistory>> = [];
     for (const write of writes)
       switch (write.store) {
         case "session-state":
-          moved(this.sessions, write.key, write.value);
-          sessions = true;
+          sessions.push(write);
           break;
         case "settings-history":
-          moved(this.history, write.key, write.value);
-          history = true;
+          history.push(write);
           break;
       }
-    if (sessions && !this.closed)
-      steps.push(() => this.storage.session.save(this.sessions));
-    if (history && !this.closed)
-      steps.push(() => this.storage.history.save(this.history));
-    runEach(steps);
+    // [LAW:single-enforcer] Each store its own error boundary (`runEach`).
+    runEach([
+      () => this.sessions.take(sessions),
+      () => this.history.take(history),
+    ]);
   }
 
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
   // lands, and what is written after it (a render that was awaiting, a run
   // settling) stays in memory, so it never lands over the files a next
   // daemon has taken up.
-  close(): Promise<void> {
-    this.closed = true;
-    return this.storage.session.flush();
+  async close(): Promise<void> {
+    const closed = await Promise.allSettled([
+      this.sessions.close(),
+      this.history.close(),
+    ]);
+    throwAll(
+      closed.flatMap((c) => (c.status === "rejected" ? [c.reason] : [])),
+    );
   }
-}
-
-// A store's entry as a write leaves it: moved to the end, or gone.
-function moved<V>(store: Map<SessionId, V>, key: SessionId, value: V | null) {
-  store.delete(key);
-  if (value !== null) store.set(key, value);
 }

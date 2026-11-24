@@ -228,7 +228,12 @@ require("node:module").syncBuiltinESMExports();`,
         output: expect.objectContaining({
           kind: "answered",
           stored: [
-            { store: "settings-history", key: oversizedSession, value: null },
+            {
+              kind: "put",
+              store: "settings-history",
+              key: oversizedSession,
+              value: null,
+            },
           ],
         }),
       }),

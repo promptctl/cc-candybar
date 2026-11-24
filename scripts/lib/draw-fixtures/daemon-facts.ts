@@ -14,6 +14,7 @@ export const daemonFactsOf = (
 ): DaemonFacts => ({
   fileEvents,
   launcher: null,
+  unsaved: [],
   held: [],
 });
 

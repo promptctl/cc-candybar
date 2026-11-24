@@ -111,6 +111,7 @@ const offeredEffect: Effect = {
   text: "an unrelated effect",
 };
 const offeredWrite: StoreWrite = {
+  kind: "put",
   store: "session-state",
   key: commandSession,
   value: { menu: "closed" },
@@ -726,6 +727,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
   const recorded: string[] = [];
   const performed: string[] = [];
   const write: StoreWrite = {
+    kind: "put",
     store: "session-state",
     key: sessionIdOf("kept"),
     value: { "open-menu": "before failing" },
