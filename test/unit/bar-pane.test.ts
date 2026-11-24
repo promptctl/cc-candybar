@@ -159,7 +159,11 @@ describe("bar-pane single flight", () => {
   const never = (e: unknown): never => {
     throw e;
   };
-  const settled = () => new Promise<void>((resolve) => setImmediate(resolve));
+  // The flight is promises only, so every run it owes finishes within these
+  // microtask turns: no clock is needed to wait for it.
+  const settled = async () => {
+    for (let turn = 0; turn < 10; turn++) await Promise.resolve();
+  };
 
   // A report made while the pane follows no session has nothing to send and
   // returns at once: the run must still end, or no later report is sent.
