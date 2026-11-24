@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1c82bac9e5fbe33376414fbe0f00a8254dcbf5c5",
-      "timestamp": "2026-11-24T01:37:50.814Z",
+      "sha": "4c0197b0fdcaae7d8fed955746d9c7f65ca0a2d7",
+      "timestamp": "2026-11-24T01:41:26.173Z",
       "commits": [
         {
-          "sha": "1c82bac9e5fbe33376414fbe0f00a8254dcbf5c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:36:43-07:00",
-          "message": "test(site): the site test waits for the branch to reach the page (#944)\n\ntest(site): the site test waits for the branch to reach the page, as it already waits for the seek (brandon-unfiled-3248.frhb)\n\nThe first redraw drew before the daemon's branch read landed, so on a loaded\nrunner the page still showed the pending 'polled' segment. That failed the\nmain run of the trusted-publishing merge twice and held its Release job back."
+          "sha": "4c0197b0fdcaae7d8fed955746d9c7f65ca0a2d7",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T01:39:57Z",
+          "message": "chore(release): set `package.json` to 1.236.13\n\n## [1.236.13](https://github.com/promptctl/cc-candybar/compare/v1.236.12...v1.236.13) (2026-11-24)\n\n### Bug Fixes\n\n* **release:** Publish job uses npm trusted publishing, no stored token ([#943](https://github.com/promptctl/cc-candybar/issues/943)) ([5ed9505](https://github.com/promptctl/cc-candybar/commit/5ed95054ad70e3716ce635aee35e03ee0896831f))\n"
         }
       ]
     }
