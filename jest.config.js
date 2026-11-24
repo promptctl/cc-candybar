@@ -75,7 +75,7 @@ export default {
       "ts-jest",
       {
         useESM: true,
-        // [LAW:single-enforcer] Types are checked once, by `tsc --noEmit`
+        // [LAW:single-enforcer] Types are checked once, by `pnpm typecheck`
         // (CI's static checks, and publish). The transform only
         // transpiles: with a type-check it re-reads the module graph in every
         // worker on a cold cache, which is seconds per test file on CI. The

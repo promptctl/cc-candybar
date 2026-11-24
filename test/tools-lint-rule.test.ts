@@ -2,14 +2,23 @@
 // the tests (scripts/lib/) and the site's page code (site/) run outside Jest,
 // so they import nothing from the test suite or Jest, and read none of Jest's
 // globals. The rule is eslint.tools.config.mjs, so the cases run that config
-// over source text placed under each root the zone table names.
+// over source text placed under each root the zone table names. Their
+// TypeScript's globals are the type-check's (app-type-environment.test.ts).
 
 import path from "node:path";
 
-import { JEST_PACKAGES, ZONES } from "./helpers/import-zones";
-import { lintCases, type LintCase } from "./helpers/lint-cases";
+import {
+  JEST_GLOBALS,
+  JEST_PACKAGES,
+  NOT_JEST_PACKAGES,
+} from "./helpers/jest-names";
+import {
+  lintCases,
+  outsideJestRoots,
+  type LintCase,
+} from "./helpers/lint-cases";
 
-const ROOTS = ZONES.OUTSIDE_JEST_ROOTS;
+const ROOTS = outsideJestRoots();
 
 const imp = (from: string) => `import { x } from "${from}";\nexport { x };\n`;
 const at = (root: string, ext = "ts") => `${root}probe.${ext}`;
@@ -56,15 +65,6 @@ const REFUSED: Record<string, LintCase> = {
     file: at("scripts/"),
     code: imp("../docs/design/probes/p6"),
   },
-  "Jest's expect": { file: at("scripts/lib/"), code: "expect(1).toBe(1);\n" },
-  "a focused Jest case": {
-    file: at("scripts/"),
-    code: "fit('x', () => {});\n",
-  },
-  "the suite's fixture hook": {
-    file: at("scripts/lib/"),
-    code: "releaseTestFixture(async () => {});\n",
-  },
   ...Object.fromEntries(
     JEST_PACKAGES.flatMap((pkg) => [
       [`an import of ${pkg}`, { file: at("scripts/"), code: imp(pkg) }],
@@ -84,7 +84,39 @@ const REFUSED: Record<string, LintCase> = {
   },
 };
 
+// Each of Jest's globals, read by each root's JavaScript.
+const GLOBALS: Record<string, LintCase> = Object.fromEntries(
+  JEST_GLOBALS.flatMap((name) =>
+    ROOTS.map((root) => [
+      `${name} from ${root}`,
+      { file: at(root, "mjs"), code: `export const x = ${name};\n` },
+    ]),
+  ),
+);
+
+// [LAW:single-enforcer] What a `createRequire` loader loads no lint can place.
+const LOADER: Record<string, LintCase> = {
+  "a tool's import of the loaders' module": {
+    file: at("scripts/", "mjs"),
+    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
+  },
+};
+
 const ALLOWED: Record<string, LintCase> = {
+  ...Object.fromEntries(
+    NOT_JEST_PACKAGES.map((pkg) => [
+      `an import of ${pkg}`,
+      { file: at("scripts/"), code: imp(pkg) },
+    ]),
+  ),
+  "a loader at its owner": {
+    file: "scripts/test-report.mjs",
+    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
+  },
+  "Node's own globals in a tool's JavaScript": {
+    file: at("scripts/lib/", "cjs"),
+    code: "module.exports = { dir: __dirname, env: process.env, at: performance.now() };\n",
+  },
   "a tool's import of src": { file: at("scripts/"), code: imp("../src/host") },
   "scripts/lib's import of the renderer": {
     file: at("scripts/lib/"),
@@ -111,7 +143,7 @@ describe("the tools lint", () => {
 
   beforeAll(() => {
     const messages = lintCases(
-      { ...REFUSED, ...ALLOWED },
+      { ...REFUSED, ...GLOBALS, ...LOADER, ...ALLOWED },
       {
         overrideConfigFile: "eslint.tools.config.mjs",
       },
@@ -138,6 +170,17 @@ describe("the tools lint", () => {
   test.each(Object.keys(REFUSED))("%s fails lint", (name) => {
     expect(found[name]).toEqual([
       expect.stringContaining("[LAW:one-way-deps]"),
+    ]);
+  });
+
+  test.each(Object.keys(GLOBALS))("Jest's %s fails lint", (name) => {
+    const global = name.split(" ")[0];
+    expect(found[name]).toEqual([`no-undef: '${global}' is not defined.`]);
+  });
+
+  test.each(Object.keys(LOADER))("%s fails lint", (name) => {
+    expect(found[name]).toEqual([
+      expect.stringContaining("[LAW:single-enforcer]"),
     ]);
   });
 

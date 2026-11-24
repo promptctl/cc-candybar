@@ -1,8 +1,11 @@
 // [LAW:one-source-of-truth] Source text linted as files of the repo by the
-// repo's own ESLint, for the tests of the rules it configures. Its configs are
-// ESM, so ESLint runs in a node of its own, once per call.
+// repo's own ESLint, for the tests of the rules it configures, and the zone
+// table those rules read. Its configs are ESM, so each runs in a node of its
+// own, once per call.
 
 import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { REPO } from "../../scripts/lib/repo.cjs";
 
@@ -49,18 +52,39 @@ export function lintCases<K extends string>(
   options: object,
   { cwd = REPO, root = REPO }: { cwd?: string; root?: string } = {},
 ): Record<K, Message[]> {
+  return nodeJson(
+    SCRIPT,
+    [root, JSON.stringify({ cwd, ...options }), JSON.stringify(cases)],
+    cwd,
+  ) as Record<K, Message[]>;
+}
+
+// The roots the zone table (scripts/import-zones.mjs) says run outside Jest
+// beside the app, so a root added there is a case in the tests that read it.
+export function outsideJestRoots(): readonly string[] {
+  const url = pathToFileURL(path.join(REPO, "scripts", "import-zones.mjs"));
+  const roots = nodeJson(
+    `const { OUTSIDE_JEST_ROOTS } = await import(${JSON.stringify(url.href)});
+console.log(JSON.stringify(OUTSIDE_JEST_ROOTS ?? null));`,
+    [],
+    REPO,
+  );
+  if (!Array.isArray(roots) || !roots.every((r) => typeof r === "string"))
+    throw new Error(
+      `scripts/import-zones.mjs exports no OUTSIDE_JEST_ROOTS list of paths: ${JSON.stringify(roots)}`,
+    );
+  return roots;
+}
+
+// The JSON a module script prints, run in a node of its own; one that has not
+// answered within the time a file's lint takes is a failure, not a hang.
+const NODE_WAIT_MS = 60_000;
+function nodeJson(script: string, args: readonly string[], cwd: string): unknown {
   return JSON.parse(
     execFileSync(
       process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        SCRIPT,
-        root,
-        JSON.stringify({ cwd, ...options }),
-        JSON.stringify(cases),
-      ],
-      { cwd, encoding: "utf8" },
+      ["--input-type=module", "-e", script, ...args],
+      { cwd, encoding: "utf8", timeout: NODE_WAIT_MS },
     ),
   );
 }

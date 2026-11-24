@@ -10,7 +10,7 @@ import { isBuiltin } from "node:module";
 // site/ and proto-looks/) imports nothing from it. What a tool and a test
 // share lives in scripts/lib/, which imports only the app and itself, so it
 // never loads a tool's entry. The tests may import the tools they test.
-// Packages have rows too (PACKAGE_ROWS): Jest's are the test zone's.
+// Jest's packages are the test zone's too (packageZoneOf).
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -83,7 +83,12 @@ export const OUTSIDE_JEST_ROOTS = Object.entries(ZONE_ROWS)
   .filter(([, zone]) => zone === "tools" || zone === "lib")
   .map(([row]) => row);
 
-export const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
+// The extensions of code: every glob the zone rule runs over, and every key it
+// strips, spell them from here.
+export const CODE_EXTENSIONS = ["ts", "mts", "cts", "js", "mjs", "cjs"];
+export const CODE_GLOB = `**/*.{${CODE_EXTENSIONS.join(",")}}`;
+const CODE_EXTENSION = new RegExp(`\\.(?:${CODE_EXTENSIONS.join("|")})$`);
+export const withoutExtension = (p) => p.replace(CODE_EXTENSION, "");
 const ZONE_KEYS = Object.entries(ZONE_ROWS)
   .map(([row, zone]) => ({
     row: row.endsWith("/") ? row : withoutExtension(row),
@@ -102,55 +107,27 @@ export const TEST_ROOTS = Object.entries(ZONE_ROWS)
   .filter(([, zone]) => zone === "test")
   .map(([row]) => row);
 
-// [LAW:one-way-deps] The packages a zone owns, as ZONE_ROWS owns paths. Jest's
-// are the test zone's: its runner, its scoped and `jest-` parts, its assertion
-// library (published as `expect`), its TypeScript transform and its types. A
-// row ending in `/` or `-` names every package that begins with it.
-export const PACKAGE_ROWS = {
-  jest: "test",
-  "jest-": "test",
-  "@jest/": "test",
-  expect: "test",
-  "ts-jest": "test",
-  "@types/jest": "test",
-};
-// The zone of a package no row names: every zone may import it.
-export const ANY_PACKAGE = "package";
-// A bare specifier's package: its scope and name, without the path inside it.
-const packageNameOf = (id) =>
-  id.split("/").slice(0, id.startsWith("@") ? 2 : 1).join("/");
+// [LAW:one-way-deps] The zone that owns a package, or none: Jest's are the
+// test zone's. Jest's are every package named for it, a `jest` word in its
+// scope or name (jest, jest-mock, @jest/globals, ts-jest, babel-jest,
+// @types/jest), and its assertion library, published as `expect`. No zone
+// owns any other package, and every zone may import it.
 export const packageZoneOf = (id) => {
-  const name = packageNameOf(id);
-  const row = Object.keys(PACKAGE_ROWS).find((row) =>
-    /[/-]$/.test(row) ? name.startsWith(row) : name === row,
-  );
-  return row === undefined ? ANY_PACKAGE : PACKAGE_ROWS[row];
+  const name = id.split("/").slice(0, id.startsWith("@") ? 2 : 1).join("/");
+  return name === "expect" || name.split(/[@/-]/).includes("jest")
+    ? "test"
+    : null;
 };
 
-export const mayImport = (from, to) =>
-  to === ANY_PACKAGE || ZONE_IMPORTS[from].includes(to);
+export const mayImport = (from, to) => ZONE_IMPORTS[from].includes(to);
 
-// What Jest's environment installs as globals, the suite's own fixture hook
-// (test/helpers/quarantine-environment.cjs) among them: the test zone's to
-// read, and refused everywhere else.
-export const JEST_GLOBALS = [
-  "afterAll",
-  "afterEach",
-  "beforeAll",
-  "beforeEach",
-  "describe",
-  "expect",
-  "fdescribe",
-  "fit",
-  "it",
-  "jest",
-  "releaseTestFixture",
-  "test",
-  "xdescribe",
-  "xit",
-  "xtest",
-];
-
+// [LAW:no-silent-failure] Every zone a row or a package names is one the
+// table says the imports of, or the table refuses to load.
+const unknown = [...Object.values(ZONE_ROWS), packageZoneOf("jest")].filter(
+  (zone) => !(zone in ZONE_IMPORTS),
+);
+if (unknown.length > 0)
+  throw new Error(`scripts/import-zones.mjs: no zone ${[...new Set(unknown)].join(", ")}`);
 
 // [LAW:effects-at-boundaries] Shared rendering code uses Node for paths, URLs,
 // hashes and value inspection. Only the process entry also owns its pipes,

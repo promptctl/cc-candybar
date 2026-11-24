@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { REPO } from "../scripts/lib/repo.cjs";
-import { JEST_PACKAGES } from "./helpers/import-zones";
+import { JEST_PACKAGES, NOT_JEST_PACKAGES } from "./helpers/jest-names";
 import { lintCases, UNTYPED } from "./helpers/lint-cases";
 
 const IN_RENDERER = "src/renderer/probe.ts";
@@ -120,7 +120,8 @@ const REFUSED = {
     file: IN_RENDERER,
     code: `export const x = require("../../test/helpers/x");\n`,
   },
-  // Jest's packages are the test zone's, from any file of the app.
+  // Jest's packages are the test zone's, from any file of the app, its
+  // JavaScript included.
   ...Object.fromEntries(
     JEST_PACKAGES.flatMap((pkg) => [
       [`restTo ${pkg}`, { file: IN_REST, code: imp(pkg) }],
@@ -128,19 +129,60 @@ const REFUSED = {
         `sharedRequireOf ${pkg}`,
         { file: IN_SHARED, code: `export const x = require("${pkg}");\n` },
       ],
-      [
-        `javascriptTo ${pkg}`,
-        { file: "src/daemon/probe.mjs", code: `import "${pkg}";\n` },
-      ],
     ]),
   ),
+  javascriptToJest: { file: "src/daemon/probe.js", code: `import "jest";\n` },
+  moduleJavascriptToJest: {
+    file: "src/daemon/probe.mjs",
+    code: `import "@jest/globals";\n`,
+  },
+  moduleRequireOfJest: {
+    file: "src/daemon/probe.cjs",
+    code: `module.exports = module.require("jest-mock");\n`,
+  },
+  referenceToJestTypes: {
+    file: IN_REST,
+    code: `/// <reference types="jest" />\nexport const x = 1;\n`,
+  },
+  referenceToTestPath: {
+    file: IN_REST,
+    code: `/// <reference path="../../test/helpers/x.ts" />\nexport const x = 1;\n`,
+  },
   restToLib: { file: IN_REST, code: imp("../../scripts/lib/x") },
   restToTools: { file: IN_REST, code: imp("../../scripts/drive-bar") },
   // A path no row of the table names is in no zone.
   restToUnlisted: { file: IN_REST, code: imp("../../docs/design/probes/p6") },
 };
 
+// [LAW:single-enforcer] What a `createRequire` loader loads no lint can place,
+// so its module is its owners' alone.
+const OWNED = {
+  loaderOutsideItsOwners: {
+    file: IN_REST,
+    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
+  },
+  loaderRequiredOutsideItsOwners: {
+    file: "src/daemon/probe.cjs",
+    code: `module.exports = require("module").createRequire(".");\n`,
+  },
+};
+
 const ALLOWED = {
+  ...Object.fromEntries(
+    NOT_JEST_PACKAGES.map((pkg) => [
+      `restTo ${pkg}`,
+      { file: IN_REST, code: imp(pkg) },
+    ]),
+  ),
+  loaderAtItsOwner: {
+    file: "src/install/index.ts",
+    code: `import { createRequire } from "node:module";\nexport const r = createRequire(".");\n`,
+  },
+  // A method that is no loader shares the name.
+  methodNamedRequire: {
+    file: IN_REST,
+    code: `export const x = { require: (s: string) => s }.require("../renderer/x");\n`,
+  },
   rendererToRenderer: { file: IN_RENDERER, code: imp("./draw-bar") },
   rendererToShared: {
     file: IN_RENDERER,
@@ -179,7 +221,10 @@ describe("the zones import rule", () => {
     const lintFrom = (cwd: string, root = REPO) =>
       Object.fromEntries(
         Object.entries(
-          lintCases({ ...REFUSED, ...ALLOWED }, UNTYPED, { cwd, root }),
+          lintCases({ ...REFUSED, ...OWNED, ...ALLOWED }, UNTYPED, {
+            cwd,
+            root,
+          }),
         ).map(([name, messages]) => [
           name,
           messages
@@ -214,6 +259,15 @@ describe("the zones import rule", () => {
     (name, at) => {
       expect(found[at][name]).toEqual([
         expect.stringContaining("[LAW:one-way-deps]"),
+      ]);
+    },
+  );
+
+  test.each(each(OWNED))(
+    "a loader outside its owners (%s) fails lint from %s",
+    (name, at) => {
+      expect(found[at][name]).toEqual([
+        expect.stringContaining("[LAW:single-enforcer]"),
       ]);
     },
   );

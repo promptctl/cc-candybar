@@ -3,9 +3,10 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
+import globals from "globals";
 import fs from "node:fs";
 import path from "node:path";
-import { JEST_GLOBALS, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
+import { CODE_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -345,6 +346,19 @@ const importDirection = {
       };
     }
     const rendering = fromZone === "renderer" || fromZone === "start" || fromZone === "renderer-process";
+    // Where an edge's source leads: a package, whose zone is the one that
+    // owns it or none; a path in the repo, whose zone is its row's; or a path
+    // outside the repo, which is in no zone.
+    const targetOf = (source) => {
+      if (!source.startsWith(".") && !path.isAbsolute(source))
+        return { kind: "package", name: source, zone: packageZoneOf(source) };
+      const key = moduleKey(path.resolve(dir, source));
+      return {
+        kind: "path",
+        name: key,
+        zone: outside(key) ? "outside the repo" : zoneOf(key),
+      };
+    };
     const check = (node, source) => {
       if (source === null) {
         context.report({
@@ -353,36 +367,34 @@ const importDirection = {
         });
         return;
       }
-      if (!source.startsWith(".") && !path.isAbsolute(source)) {
-        // [LAW:one-way-deps] A package's zone is its row's, judged as a
-        // path's is: Jest's are the test zone's.
-        const toZone = packageZoneOf(source);
-        if (!mayImport(fromZone, toZone)) {
-          context.report({
-            node,
-            message: `${fromZone} ${from} imports ${toZone} ${source}. ${REFUSAL[toZone]} [LAW:one-way-deps]`,
-          });
-        }
-        if (rendering && !typeOnly(node) && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
-          context.report({
-            node,
-            message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
-          });
-        }
-        return;
-      }
-      const to = moduleKey(path.resolve(dir, source));
-      const toZone = outside(to) ? "outside the repo" : zoneOf(to);
-      if (!mayImport(fromZone, toZone)) {
+      const to = targetOf(source);
+      // [LAW:one-way-deps] One judgment of every edge, a package's as a
+      // path's: Jest's packages are the test zone's.
+      if (to.zone !== null && !mayImport(fromZone, to.zone)) {
         context.report({
           node,
-          message: `${fromZone} ${from} imports ${toZone} ${to}. ${REFUSAL[toZone]} [LAW:one-way-deps]`,
+          message: `${fromZone} ${from} imports ${to.zone} ${to.name}. ${REFUSAL[to.zone]} [LAW:one-way-deps]`,
+        });
+      }
+      // [LAW:single-enforcer] A loader the reader cannot follow is its
+      // owners' alone, where a review reads each module it loads.
+      if (LOADER_MODULES.includes(source) && !LOADER_OWNERS.includes(from)) {
+        context.report({
+          node,
+          message: `${from} imports ${source}, whose loaders (\`createRequire\`) load what no lint can place. Only ${LOADER_OWNERS.join(", ")} may. [LAW:single-enforcer]`,
+        });
+      }
+      if (!rendering || typeOnly(node)) return;
+      if (to.kind === "package" && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
+        context.report({
+          node,
+          message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
         });
       }
       // [LAW:effects-at-boundaries] The renderer reads no clock and sets no
       // timer: its time is the readings each input carries, and what it holds
       // for later waits for a `due`. It may name the clock's types.
-      if (rendering && to === CLOCK_KEY && !typeOnly(node)) {
+      if (to.kind === "path" && to.name === CLOCK_KEY) {
         context.report({
           node,
           message: `${from} imports the clock. The renderer's time is its turn's (src/renderer/turn-time.ts). [LAW:effects-at-boundaries]`,
@@ -398,12 +410,31 @@ const importDirection = {
           ? node.quasis[0].value.cooked
           : null;
     // The spellings of an edge it reads: `import`, `export … from`,
-    // `import()`, the type `import("…").T`, `import x = require("…")` and a
-    // call of `require` itself. A load made through another function
-    // (`createRequire`, `module.require`) is not seen.
+    // `import()`, the type `import("…").T`, `import x = require("…")`, a call
+    // of `require` or `module.require`, and a triple-slash reference to types
+    // or a path. What a `createRequire`
+    // loader loads it cannot read, so that loader is owned.
     const fromSource = (node) =>
       node.source && check(node, sourceOf(node.source));
+    const fromCall = (node) =>
+      check(node, node.arguments[0] ? sourceOf(node.arguments[0]) : null);
     return {
+      Program: () => {
+        for (const comment of context.sourceCode.getAllComments()) {
+          const reference = /^\/\s*<reference\s+(types|path)\s*=\s*["']([^"']+)["']/.exec(
+            comment.value,
+          );
+          if (comment.type !== "Line" || reference === null) continue;
+          const [, kind, source] = reference;
+          // A path reference is relative whether or not it says so.
+          check(
+            comment,
+            kind === "path" && !source.startsWith(".") && !path.isAbsolute(source)
+              ? `./${source}`
+              : source,
+          );
+        }
+      },
       ImportDeclaration: fromSource,
       ExportNamedDeclaration: fromSource,
       ExportAllDeclaration: fromSource,
@@ -411,12 +442,27 @@ const importDirection = {
       TSImportType: (node) => check(node, sourceOf(node.source)),
       TSExternalModuleReference: (node) =>
         check(node, sourceOf(node.expression)),
-      "CallExpression[callee.type='Identifier'][callee.name='require']": (
-        node,
-      ) => check(node, node.arguments[0] ? sourceOf(node.arguments[0]) : null),
+      "CallExpression[callee.type='Identifier'][callee.name='require']": fromCall,
+      "CallExpression[callee.object.name='module'][callee.property.name='require']": fromCall,
     };
   },
 };
+
+// [LAW:single-enforcer] The module whose loaders take a computed path, and
+// the files that may import it, each for what it does with it:
+//   scripts/import-zones       asks whether a specifier names a builtin
+//   scripts/lib/daemon/process resolves tsx's path, which it runs
+//   scripts/pr-title           resolves a preset from commit-analyzer's install
+//   scripts/test-report        requires its own scripts/lib, by `require`
+//   src/install/index          resolves an installed package's files
+const LOADER_MODULES = ["module", "node:module"];
+const LOADER_OWNERS = [
+  "scripts/import-zones",
+  "scripts/lib/daemon/process",
+  "scripts/pr-title",
+  "scripts/test-report",
+  "src/install/index",
+];
 
 // The one import-direction rule: src's config runs it, and so does the tools'
 // (eslint.tools.config.mjs). [LAW:single-enforcer]
@@ -579,12 +625,26 @@ export default [
     },
   },
   // [LAW:one-way-deps] Jest's globals are the test zone's: an editor linting a
-  // test with this config knows them, and in the app each is undefined.
+  // test with this config knows them, and the suite's own fixture hook
+  // (test/helpers/quarantine-environment.cjs). Everywhere else each is
+  // undefined.
   {
-    files: TEST_ROOTS.map((root) => `${root}**/*.{ts,mts}`),
+    files: TEST_ROOTS.map((root) => `${root}${CODE_GLOB}`),
     languageOptions: {
-      globals: Object.fromEntries(JEST_GLOBALS.map((name) => [name, "readonly"])),
+      globals: { ...globals.jest, releaseTestFixture: "readonly" },
     },
+  },
+  // [LAW:one-way-deps] The app's environment is closed: a name it reads is
+  // one Node, the browser page or the bundle provides, `typeof` included, so
+  // nothing reaches for a global only a test's environment installs.
+  {
+    files: ["src/**/*.{ts,mts}"],
+    rules: { "no-undef": ["error", { typeof: true }] },
+  },
+  {
+    files: ["src/**/*.{js,mjs,cjs}"],
+    languageOptions: { ecmaVersion: "latest", sourceType: "module", globals: globals.node },
+    rules: { "no-undef": ["error", { typeof: true }] },
   },
   prettierConfig,
   ...ownedImportBlocks(),
@@ -608,7 +668,7 @@ export default [
     },
   },
   {
-    files: ["src/**/*.{ts,mts,js,mjs,cjs}"],
+    files: [`src/${CODE_GLOB}`],
     plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },
@@ -736,6 +796,7 @@ export default [
       "dist/",
       "**/*.d.ts",
       "**/*.js",
+      "!src/**/*.js",
       "!eslint.config.mjs",
     ],
   },

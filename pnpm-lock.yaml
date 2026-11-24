@@ -5,9 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  hdr-histogram-js@3.0.1:
-    hash: fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490
-    path: patches/hdr-histogram-js@3.0.1.patch
+  hdr-histogram-js@3.0.1: fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490
 
 importers:
 
@@ -70,6 +68,9 @@ importers:
       events:
         specifier: 3.3.0
         version: 3.3.0
+      globals:
+        specifier: ^14.0.0
+        version: 14.0.0
       hdr-histogram-js:
         specifier: 3.0.1
         version: 3.0.1(patch_hash=fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490)

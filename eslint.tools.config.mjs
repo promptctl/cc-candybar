@@ -4,25 +4,31 @@
 // checked by, so none reaches into the test suite or Jest's packages, and none
 // reads a global only Jest provides. [LAW:one-way-deps] [LAW:single-enforcer]
 import tsparser from "@typescript-eslint/parser";
+import globals from "globals";
 
 import { zonesPlugin } from "./eslint.config.mjs";
-import { JEST_GLOBALS, OUTSIDE_JEST_ROOTS } from "./scripts/import-zones.mjs";
-
-const OUTSIDE_JEST = "this code runs outside Jest. [LAW:one-way-deps]";
-
-const REFUSED_GLOBALS = JEST_GLOBALS.map((name) => ({ name, message: `${name} is Jest's, and ${OUTSIDE_JEST}` }));
+import { CODE_GLOB, OUTSIDE_JEST_ROOTS } from "./scripts/import-zones.mjs";
 
 export default [
   // Run over the repo, it lints those roots and nothing else.
   { ignores: ["*", ...OUTSIDE_JEST_ROOTS.map((root) => `!${root}`)] },
   {
-    files: OUTSIDE_JEST_ROOTS.map((root) => `${root}**/*.{ts,mts,js,mjs,cjs}`),
+    files: OUTSIDE_JEST_ROOTS.map((root) => `${root}${CODE_GLOB}`),
     languageOptions: { parser: tsparser, ecmaVersion: "latest", sourceType: "module" },
     plugins: { zones: zonesPlugin },
-    rules: {
-      "zones/import-direction": "error",
-      // The tools' JavaScript has no type-check to find these undefined.
-      "no-restricted-globals": ["error", ...REFUSED_GLOBALS],
-    },
+    rules: { "zones/import-direction": "error" },
+  },
+  // [LAW:one-way-deps] A tool's environment is closed: its TypeScript is
+  // type-checked with Node's types alone, and its JavaScript reads only what
+  // Node provides (and the browser, for the page `pnpm bar:web` serves), so a
+  // name only Jest installs is undefined, `typeof` included.
+  {
+    files: OUTSIDE_JEST_ROOTS.map((root) => `${root}**/*.{js,mjs,cjs}`),
+    languageOptions: { globals: globals.node },
+    rules: { "no-undef": ["error", { typeof: true }] },
+  },
+  {
+    files: ["scripts/bar-web/**/*.js"],
+    languageOptions: { globals: globals.browser },
   },
 ];
