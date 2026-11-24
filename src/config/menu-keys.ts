@@ -140,9 +140,10 @@ export function menuActionName(stateKey: string, member: string): string {
   return `${stateKey}.${escapedIdent(member)}`;
 }
 
-// The inverse of menuActionName: the menu a disclosure's cycle action toggles
-// and the member it opens, in words, or undefined for an action no menu
-// derivation names. The member is the last segment, and escaped it holds no dot.
+// [LAW:one-source-of-truth] The inverse of menuActionName, kept beside it so
+// the grammar has one home: the menu a disclosure's cycle action toggles and
+// the member it opens, in words, or undefined for an action no menu derivation
+// names. The member is the last segment, and escaped it holds no dot.
 export function menuOfAction(
   action: string,
 ): { readonly menu: string; readonly member: string } | undefined {

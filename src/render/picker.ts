@@ -46,6 +46,7 @@ import {
   type CompiledActionDecl,
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
+import { PAGE_HOLDING_CURRENT } from "../config/menu-keys.js";
 import { closeOn } from "./band-style.js";
 import { optionPaint, type ItemPaint } from "./option-paint.js";
 import { sanitizeText } from "./diagnostic-text.js";
@@ -618,7 +619,7 @@ export function pickerFuncs(
               ? { kind: "led" }
               : {
                   kind: "own",
-                  writes: [[page.key, "-1"]],
+                  writes: [[page.key, PAGE_HOLDING_CURRENT]],
                   onPick: closeOnPick === true,
                 },
             paged === true,

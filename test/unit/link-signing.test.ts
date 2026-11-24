@@ -287,9 +287,15 @@ describe("a draw's frames", () => {
       kind: "link",
       click: {
         steps: [
-          { kind: "session", verb: VERB_SET_STATE, args: ["one", "closed"] },
+          {
+            kind: "state-writes",
+            writes: [{ verb: VERB_SET_STATE, args: ["one", "closed"] }],
+          },
           { kind: "invalid" },
-          { kind: "session", verb: VERB_SET_STATE, args: ["two", "closed"] },
+          {
+            kind: "state-writes",
+            writes: [{ verb: VERB_SET_STATE, args: ["two", "closed"] }],
+          },
         ],
       },
     });

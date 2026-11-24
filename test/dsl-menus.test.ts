@@ -62,6 +62,8 @@ import {
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import {
   menuActionName,
+  menuOfAction,
+  menuOfKey,
   menuPageKey,
   menuStateKey,
   sharedMenuStateKey,
@@ -202,6 +204,17 @@ const TKEY = menuKeyOf("themepicker", "applyTheme");
 const PKEY = menuPageKey(TKEY);
 
 describe("menu synthesis (derived identity, reserved namespace)", () => {
+  test("a disclosure's cycle action names its menu and member back, whatever characters the member holds", () => {
+    const stateKey = sharedMenuStateKey("settings");
+    for (const member of ["applyTheme", "apply.theme", "apply theme", "a/b"]) {
+      expect(menuOfAction(menuActionName(stateKey, member))).toEqual({
+        menu: menuOfKey(stateKey)!.menu,
+        member,
+      });
+    }
+    expect(menuOfAction("plain")).toBeUndefined();
+  });
+
   test("synthesizes state var + cycle action + page cursor keyed by (segment, apply); both gates derive", () => {
     const config = parseAndValidate("<test>", MENU_SRC, ALLOWED);
     expect(config.variables[TKEY]).toEqual({

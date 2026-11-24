@@ -119,8 +119,8 @@ function renderMenu(
   // closed here — exactly the binary [closed, member] cycle the synthesized action
   // gates. This ONE read drives both the glyph and the body, so what the glyph
   // promises and what drops below cannot disagree.
-  const store = renderBinding(action, "menu").store;
-  const open = readVar(store, stateKey) === member;
+  const binding = renderBinding(action, "menu");
+  const open = readVar(binding.store, stateKey) === member;
 
   // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click is two
   // writes that land as one: a step of the binary [closed, member] cycle, which
@@ -128,17 +128,17 @@ function renderMenu(
   // before a redraw open, then close, then open), AND a reset of the page cursor
   // to its first page. So a reopened menu is never stranded on a stale page left
   // by ←/→ before the last close. The step is the synthesized cycle action's own
-  // realization, the one every cycle uses; the menu — the one part that knows
-  // BOTH the open-state key and the page key [LAW:decomposition] — adds the
-  // reset beside it, and the click lands adjacent state writes whole
-  // (groupStateWrites, src/click/wire.ts), both keys gated as every click's are
-  // [LAW:single-enforcer].
+  // realization, the one every cycle uses; the reset is the menu's to add beside
+  // it, as the picker's closeOnPick adds its own, because the cycle action
+  // carries only the open-state key. The click lands adjacent state writes
+  // whole (joinStateWrite, src/click/wire.ts), both keys gated as every
+  // click's are [LAW:single-enforcer].
   const sessionId = clickSession(action, "menu");
   const toggle = realize(
     action.compiled.get(menuActionName(stateKey, member))!,
     "",
     undefined,
-    renderBinding(action, "menu"),
+    binding,
     sessionId,
   ).effects;
   // [LAW:one-source-of-truth] The trigger's text is AUTHORED, resolved through

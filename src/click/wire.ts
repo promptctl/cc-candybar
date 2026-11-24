@@ -478,23 +478,20 @@ export function parseEffects(rawValue: string): ParsedEffect[] {
   return new URLSearchParams(rawValue).getAll("e").map(splitVerb);
 }
 
-// [LAW:single-enforcer] One click's consecutive writes of one kind are one
-// write. A run of ADJACENT effects of a batched verb for one session becomes a
-// single effect whose tail carries every member's arguments: set-state's pairs,
-// which its handler validates whole before writing any of them, so a `do`
-// action's session members, or a picker option and its close writes, land
-// together or not at all; and reset-config's keys, which its handler clears in
+// [LAW:single-enforcer] One click's consecutive resets are one write. A run of
+// ADJACENT reset-config effects for one session and layer becomes a single
+// effect whose tail carries every member's keys, which its handler clears in
 // one file write and one reload, so `⟲ reset all` is one write however many
 // settings it names. Only adjacency merges: effects still run in the order the
-// click lists them, so an effect between two writes keeps its place, and a
-// different verb or a different head starts a new run rather than borrowing
-// the previous one's. The head is what a run's members share: a session
-// write's session, and a config write's session and the layer it writes, so
-// two layers are never one write. The tail stays encoded, so its segments
-// split at `/`, and joining encoded runs is the codec's own join.
+// click lists them, so an effect between two resets keeps its place, and a
+// different head starts a new run rather than borrowing the previous one's.
+// The head is what a run's members share: the session and the layer it
+// writes, so two layers are never one write. The tail stays encoded, so its
+// segments split at `/`, and joining encoded runs is the codec's own join.
+// A click's writes to the session's state are joined at admission instead
+// (admitClick), where each is a typed step.
 // [LAW:dataflow-not-control-flow] Each batched verb's head width, as data.
 const BATCHED_VERBS: ReadonlyMap<string, number> = new Map([
-  [VERB_SET_STATE, 1],
   [VERB_RESET_CONFIG, 2],
 ]);
 
@@ -621,7 +618,7 @@ export type GlobalStep =
 
 // A write to the session's state a click makes: as pairs (set-state), or as a
 // step through a ring that the click resolves to pairs (ring-state).
-export interface StateWrite {
+export interface StateWriteEffect {
   readonly verb: typeof VERB_SET_STATE | typeof VERB_RING_STATE;
   readonly args: readonly string[];
 }
@@ -632,17 +629,20 @@ export type ClickStep =
       readonly kind: "session";
       readonly verb: Exclude<
         SessionVerb,
-        typeof VERB_REPO_CONFIG | typeof VERB_RUN
+        | typeof VERB_REPO_CONFIG
+        | typeof VERB_RUN
+        | typeof VERB_SET_STATE
+        | typeof VERB_RING_STATE
       >;
       readonly args: readonly string[];
     }
-  // [LAW:single-enforcer] Adjacent writes to the session's state (a set-state
-  // and a ring-state, or two ring-states): one step, so the renderer resolves
-  // each to its pairs and lands them whole or not at all.
+  // [LAW:single-enforcer] A click's adjacent writes to the session's state,
+  // whatever produced them (a set-state, a ring-state): one step, so the
+  // renderer resolves each ring step to its pairs and lands the run whole or
+  // not at all.
   | {
       readonly kind: "state-writes";
-      readonly verb: typeof VERB_SET_STATE;
-      readonly writes: readonly StateWrite[];
+      readonly writes: readonly StateWriteEffect[];
     }
   | {
       readonly kind: "repo-answer";
@@ -775,6 +775,10 @@ export function admitClick(
           });
           break;
         }
+        case VERB_SET_STATE:
+        case VERB_RING_STATE:
+          joinStateWrite(scoped.steps, { verb: name, args });
+          break;
         default:
           scoped.steps.push({ kind: "session", verb: name, args });
       }
@@ -786,48 +790,23 @@ export function admitClick(
   const click: AdmittedClick =
     scoped === undefined
       ? { scope: "global", verb, steps: global }
-      : {
-          scope: "session",
-          verb,
-          session: scoped.id,
-          steps: groupStateWrites(scoped.steps),
-        };
+      : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
   return { click, runEvidence };
 }
 
-const isStateWrite = (
-  step: ClickStep,
-): step is Extract<ClickStep, { kind: "session" }> & StateWrite =>
-  step.kind === "session" &&
-  (step.verb === VERB_SET_STATE || step.verb === VERB_RING_STATE);
-
-// [LAW:single-enforcer] A run of adjacent state writes is one step. A set-state
-// run is already one effect (batchAdjacentWrites); a ring-state is resolved by
-// the click that lands it, so a run holding one cannot merge as text, and this
-// is the one place it becomes a single write: a `do` that steps a cycle and
-// resets its page cursor lands both or neither. A lone write stays a plain step.
-function groupStateWrites(steps: readonly ClickStep[]): ClickStep[] {
-  const out: ClickStep[] = [];
-  let run: StateWrite[] = [];
-  const flush = (): void => {
-    if (run.length === 0) return;
-    out.push(
-      run.length === 1
-        ? { kind: "session", verb: run[0]!.verb, args: run[0]!.args }
-        : { kind: "state-writes", verb: VERB_SET_STATE, writes: run },
-    );
-    run = [];
-  };
-  for (const step of steps) {
-    if (isStateWrite(step)) {
-      run.push({ verb: step.verb, args: step.args });
-    } else {
-      flush();
-      out.push(step);
-    }
-  }
-  flush();
-  return out;
+// [LAW:single-enforcer] A click's adjacent state writes are one step: the
+// renderer validates the run whole before it writes any of it, so a `do` that
+// steps a cycle and resets its page cursor, or a picker option and its close
+// writes, land together or not at all. Only adjacency joins: a step between
+// two writes keeps its place, and the next write opens a new run.
+function joinStateWrite(steps: ClickStep[], write: StateWriteEffect): void {
+  const last = steps.at(-1);
+  if (last?.kind === "state-writes")
+    steps[steps.length - 1] = {
+      kind: "state-writes",
+      writes: [...last.writes, write],
+    };
+  else steps.push({ kind: "state-writes", writes: [write] });
 }
 
 // [LAW:parse-dont-validate] An outer signature is also given to authored URLs.
