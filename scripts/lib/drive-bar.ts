@@ -141,7 +141,7 @@ export type StartBarDaemon = (isolated: IsolatedDaemonEnv) => Promise<BarDaemon>
 const outsideThePool: AcquireSlot = async () => ({ release: () => {} });
 
 /** A real daemon that dies with this process: the one a hand-run tool draws on. */
-export const realBarDaemon: StartBarDaemon = async ({ env, sockPath }) => {
+export const realBarDaemon: StartBarDaemon = async ({ env }) => {
   const daemon = await startDaemonWithEnv(
     {
       ...env,
@@ -151,7 +151,7 @@ export const realBarDaemon: StartBarDaemon = async ({ env, sockPath }) => {
     outsideThePool,
   );
   return {
-    target: sockPath,
+    target: daemon.sockPath,
     stop: async () => {
       await daemon.stop();
     },

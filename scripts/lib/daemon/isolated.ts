@@ -118,6 +118,8 @@ export function prepareIsolatedDaemonEnv(
 
 export interface RunningDaemon {
   child: ChildProcess;
+  // The socket its readiness was proven on, so a caller sends where it serves.
+  sockPath: string;
   signalDaemon(signal: NodeJS.Signals): void;
   stop(signal?: NodeJS.Signals): Promise<ExitResult>;
 }
@@ -181,7 +183,7 @@ export async function startDaemonWithEnv(
     );
   }
 
-  return { child, signalDaemon, stop };
+  return { child, sockPath, signalDaemon, stop };
 }
 
 // [LAW:one-source-of-truth] ONE readiness budget for every call site of this
