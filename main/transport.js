@@ -79401,9 +79401,14 @@ var daemonClock = () => reportingClock(systemTimers);
 function daemonWorld() {
   return worldOver(daemonClock());
 }
+var machineHost = () => ({
+  env: process.env,
+  home: os_default.homedir(),
+  tmp: os_default.tmpdir()
+});
 function worldOver(clock) {
   return {
-    host: { env: process.env, home: os_default.homedir(), tmp: os_default.tmpdir() },
+    host: machineHost(),
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock
   };
@@ -87853,7 +87858,7 @@ function missingFields(reference, value, at = "") {
 init_globals();
 if (false) {
   throw new Error(
-    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
+    "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
 var PACKAGE_VERSION = "1.237.0";
