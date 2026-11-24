@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-957",
+      "ref": "refs/pull/957/merge",
+      "sha": "13f868ad884230f53bb2667dbc6664f6719aa1f5",
+      "timestamp": "2026-11-24T22:30:27.794Z",
+      "commits": [
+        {
+          "sha": "13f868ad884230f53bb2667dbc6664f6719aa1f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T15:29:21-07:00",
+          "message": "Merge 1f4658a5ac7c46960d8a308d0ad54b1867f8e7b3 into 74ff60b9ef4ea73da1ff662ab9c57dca723ae730\n"
+        },
+        {
+          "sha": "1f4658a5ac7c46960d8a308d0ad54b1867f8e7b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T15:29:01-07:00",
+          "message": "fix(links): a cycle link names its step, so clicks that land before the bar redraws add up (candybar-host-renderer-x96a.5f9)\n\nA set or persist cycle and a {{ menu }} trigger now carry the action and the\nstep, never the member they land on, so the link is the same on every draw and\nN clicks land N steps. The click reads where the key stands when it arrives.\n\n- a persist ring starts from what the bar wears while the session holds a pick\n  of the key, and ring-config releases that pick so it stops shadowing the file\n- a click's adjacent state writes (a trigger's step and its page reset) are one\n  write: every pair validates before any lands\n- a menu step reads in words by the member it opens, so two menus on one\n  shared key never read alike\n"
+        }
+      ]
+    },
+    {
       "version": "pr-956",
       "ref": "refs/pull/956/merge",
       "sha": "0a8351607cf1439cadca9d01b766523ec40bc7cb",
