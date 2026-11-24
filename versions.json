@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-958",
+      "ref": "refs/pull/958/merge",
+      "sha": "c3f267045b9da5fea7aeceeab48846352cf686e6",
+      "timestamp": "2026-11-24T23:05:41.504Z",
+      "commits": [
+        {
+          "sha": "c3f267045b9da5fea7aeceeab48846352cf686e6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:04:17-07:00",
+          "message": "Merge 629e75676a0f418aca76c5f3fa1221c521693f8d into 870a2fd08214c3d683fe9b3db477f34796e27f84\n"
+        },
+        {
+          "sha": "629e75676a0f418aca76c5f3fa1221c521693f8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:03:40-07:00",
+          "message": "test(controls): a carousel, picker, swatches row and swatch over a key a per-draw rule chooses mark and step from what the bar wears (candybar-host-renderer-x96a.7o3)\n\nA theme, style or effect rule that reads `now` is evaluated in each draw.\nEvery control that centres on the key already reads the name that draw's\nrule settled on; no test drew one under such a rule, only under a rule\nsettled once and kept. One rig is drawn at alternating instants, so a\nreader that kept the first draw's answer or fell to the floor fails it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-957",
       "ref": "refs/pull/957/merge",
       "sha": "3dade34e9f491d8e869430d2f399e61681bc5a6b",
