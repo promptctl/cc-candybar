@@ -74,20 +74,25 @@ export type LoadSubject =
       cause: string,
     ];
 
-// An advisory a load earned: its words, and what it is about. The bar's viewer
-// names it by that, so one stays the same message while its words change, and
-// two about other things are two messages.
+// An advisory a load earned: its words, and what it is about. The subject
+// stays typed until the bar lists the advisory, which names it by `loadAbout`,
+// so one stays the same message while its words change, and two about other
+// things are two messages.
 export interface Advisory {
-  readonly about: About<"load">;
+  readonly subject: LoadSubject;
   readonly message: string;
 }
 
-// [LAW:single-enforcer] The one constructor of an advisory: the subject is a
-// LoadSubject, so a producer cannot spell its own identity.
 export const advisory = (subject: LoadSubject, message: string): Advisory => ({
-  about: aboutSubject("load", JSON.stringify(subject)),
+  subject,
   message,
 });
+
+// [LAW:single-enforcer] The one derivation of what a load's advisory is about:
+// its subject, whatever its words. The tuple's JSON is a key no two subjects
+// share, since each leads with its producer's tag.
+export const loadAbout = (subject: LoadSubject): About<"load"> =>
+  aboutSubject("load", JSON.stringify(subject));
 
 export class ConfigError extends Error {
   readonly file: string;

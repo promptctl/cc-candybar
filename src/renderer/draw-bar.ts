@@ -86,6 +86,7 @@ import {
   aboutText,
   type About,
 } from "../config/about.js";
+import { loadAbout } from "../config/loader/diagnostics.js";
 import {
   collectDiagnostics,
   diagnosticCopies,
@@ -566,9 +567,9 @@ export function drawRender(
     // producer knew, so fixing one leaves another's identity put whatever
     // its words (a line number) become.
     ...entry.lastWarnings.map(
-      ({ about, message }): Standing => ({
+      ({ subject, message }): Standing => ({
         warning: { kind: "load", message },
-        about,
+        about: loadAbout(subject),
       }),
     ),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar

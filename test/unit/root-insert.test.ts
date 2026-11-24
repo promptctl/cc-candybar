@@ -183,6 +183,22 @@ describe("placeInserts", () => {
     expect(names("treePreset")).toEqual(["b"]);
   });
 
+  test("one cell whose id two trees hold under different segments is one advisory naming both", () => {
+    const held: DslConfig = {
+      ...config,
+      root: { rows: { status: h(seg("a"), seg("b", "x")) } },
+      presets: { treePreset: { root: h(seg("c", "x")) } },
+    };
+    const { notices } = placeInserts(
+      held,
+      cells({ seg: "y", id: "x", anchor: "a", relation: "after" }),
+      { root: true, presets: new Set(["treePreset"]) },
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.message).toContain('is already segment "b" — give the cell its own id (in the root)');
+    expect(notices[0]!.message).toContain('is already segment "c" — give the cell its own id (in preset "treePreset")');
+  });
+
   test("a missed anchor warns for the root only when a config file writes it", () => {
     const missing = cells({ seg: "x", anchor: "nope", relation: "after" });
     expect(placeInserts(config, missing, none).notices).toEqual([]);

@@ -778,7 +778,9 @@ export function validateRenderable(
             ...acc,
             refused: [
               ...acc.refused,
-              insertNotice(cell, { kind: "refused", why }, []),
+              insertNotice(cell, [
+                { cause: { kind: "refused", why }, tree: null },
+              ]),
             ],
           };
         }
