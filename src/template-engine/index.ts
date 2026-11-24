@@ -1,7 +1,7 @@
 export {
   bindClock,
+  CLOCK_FUNCTIONS,
   createCcCandybarEngine,
-  engineClockFunctions,
 } from "./engine.js";
 export { buildScope, placementScope } from "./scope.js";
 export { ccCandybarFuncs } from "./funcs.js";

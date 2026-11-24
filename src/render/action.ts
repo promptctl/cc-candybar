@@ -55,6 +55,8 @@ import {
   VERB_BACK,
   VERB_REWIND,
   VERB_RESET_CONFIG,
+  VERB_RING_CONFIG,
+  VERB_RING_STATE,
   VERB_SAVE,
   VERB_SAVE_PRESET,
   VERB_SAVE_THEME_DEFAULT,
@@ -66,6 +68,7 @@ import {
   VERB_UNDO,
   VERB_SLASH,
 } from "../click/wire.js";
+import { spellStep, type OptionStep } from "./option-ring.js";
 import { HOVER, type GestureName } from "../click/gesture.js";
 import { HOVER_REGION } from "../config/click-mode.js";
 import {
@@ -1119,6 +1122,60 @@ export function realize(
         active: false,
       };
     }
+  }
+}
+
+// [LAW:one-source-of-truth] A step through an option action's ring, as the
+// link carries it: the action's name and the step, never the option the step
+// lands on. Where it lands is read when the click arrives, from the value the
+// key holds then (ring-state / ring-config, src/renderer/verbs/index.ts), so a
+// terminal that keeps the link it found when the mouse last moved still lands
+// one step per click. `turn` is the page cursor to turn to the page holding the
+// option landed on (`pageKey, pageLayout`), or nothing.
+//
+// A `do` steps through its head's ring, and its other members ride behind as
+// they always have. [LAW:single-enforcer] The loader already lets only the
+// first member take the template's value, so no other member writes the option
+// the step lands on.
+export function realizeRing(
+  c: CompiledActionDecl,
+  name: string,
+  step: OptionStep,
+  turn: readonly string[],
+  store: VariableStore,
+  sessionId: SessionId,
+  helper: string,
+): readonly DrawnEffect[] {
+  switch (c.kind) {
+    case "set-option":
+      return [
+        {
+          verb: VERB_RING_STATE,
+          args: [sessionId, name, spellStep(step), ...turn],
+        },
+      ];
+    case "persist-option":
+      return [
+        configWriteEffect(
+          VERB_RING_CONFIG,
+          sessionId,
+          c.layer,
+          name,
+          spellStep(step),
+          ...turn,
+        ),
+      ];
+    case "do":
+      return [
+        ...realizeRing(c.head, name, step, turn, store, sessionId, helper),
+        ...c.rest.flatMap(
+          (member) => realize(member, "", undefined, store, sessionId).effects,
+        ),
+      ];
+    default:
+      throw new Error(
+        `${helper} steps through "${name}", which is a ${c.kind} action with no ring of options to step through`,
+      );
   }
 }
 

@@ -541,7 +541,7 @@ export type GlobalsOf<Rows> = {
   readonly [K in keyof Rows]?: ValueOf<Rows[K]>;
 };
 
-type FieldsOfKind<Kind extends FieldRow["kind"]> = {
+export type FieldsOfKind<Kind extends FieldRow["kind"]> = {
   [K in GlobalField]: GlobalFieldRows[K] extends { readonly kind: Kind }
     ? K
     : never;

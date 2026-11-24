@@ -665,6 +665,8 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 |---|---|
 | `dispatch` | every rendered click: the wrapper around the list below |
 | `set-state`, `step-state` | toggles, steppers, pickers, menus, carousels, disclosures, `✕`, the diagnostics indicator and viewer |
+| `ring-state`, `ring-config` | a carousel's or swatches row's ◀ ▶, a swatches row's `?` (a step through an option action's ring, landed when the click arrives) |
+| `turn-page` | a picker's page arrows `←` `→` |
 | `set-config`, `step-config` | `persist` actions (author configs) |
 | `reset-config` | every `↺`, `⟲ reset all`, `↺ reset layout` |
 | `save` | `💾 save`, `✓ save` |

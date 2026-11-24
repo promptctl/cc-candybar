@@ -36,7 +36,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf, CLICK_VERBS } from "./helpers/click";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { clickVerb, recordRender, testVerbContext } from "./helpers/click";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
@@ -191,10 +192,20 @@ const exposeGc = (): (() => void) => {
   return vm.runInNewContext("gc") as () => void;
 };
 
-// Where a frame's carousel's ▶ steps to. Over its two options that is the one
-// the key does not hold, so it shows which variable the ring read back.
-const nextOf = (bytes: Frame): string | undefined =>
-  effectsOf(linksOf(bytes).find((l) => l.text === "▶")!.url)[0]!.args[2];
+// Where `state`'s carousel's ▶ lands, clicked as the daemon lands it for a
+// session whose key is unset. Over two options that is the one the ring is not
+// centred on, so it shows which variable the ring read back.
+const nextOf = (
+  state: ReturnType<RenderCache["getOrCreate"]>["state"],
+): string | undefined => {
+  const url = linksOf(render(state)).find((l) => l.text === "▶")!.url;
+  const session = sessionIdOf(effectsOf(url)[0]!.args[0]!);
+  const sessionState = new SessionState();
+  recordRender(sessionState, session, dir);
+  const { verb, value } = linkClick(url);
+  clickVerb(verb, value, testVerbContext(sessionState, undefined, state.config));
+  return sessionState.get(session, "k") ?? undefined;
+};
 
 // One action over session key `k`, and a carousel centred on what reads it
 // back; `reader` names the state variable over `k`, `value` its default.
@@ -231,7 +242,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const made = lines.filter((l) => l.startsWith("render-cache entry "));
     expect(made).toHaveLength(3);
     expect(made[2]).toMatch(/ entries=3 compiles=1 accounted=\d+\/\d+MB$/);
-    for (const s of states) expect(nextOf(render(s))).toBe("beta");
+    for (const s of states) expect(nextOf(s)).toBe("beta");
   });
 
   // An edit to a config many directories render from reloads every one of
@@ -257,7 +268,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
     );
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
     expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
-    for (const s of states) expect(nextOf(render(s))).toBe("alpha");
+    for (const s of states) expect(nextOf(s)).toBe("alpha");
   });
 
   // [LAW:types-are-the-program] The one per-entry fact a compile reads is
@@ -272,8 +283,8 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const b = cache.getOrCreate(originAt(dir, dir, two)).state;
     expect(a.compiled).not.toBe(b.compiled);
     expect(cache.stats.compiles).toBe(2);
-    expect(nextOf(render(a))).toBe("beta");
-    expect(nextOf(render(b))).toBe("alpha");
+    expect(nextOf(a)).toBe("beta");
+    expect(nextOf(b)).toBe("alpha");
   });
 });
 
@@ -352,7 +363,7 @@ describe("the cache is bounded by bytes", () => {
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const state = cache.getOrCreate(originAt(dir, dir, cfg)).state;
     expect(cache.stats.size).toBe(1);
-    expect(nextOf(render(state))).toBe("beta");
+    expect(nextOf(state)).toBe("beta");
   });
 
   // [LAW:single-enforcer] The budget is held after every change to what the
@@ -381,9 +392,7 @@ describe("the cache is bounded by bytes", () => {
     expect(
       lines.filter((l) => l.startsWith("config disposed reason=evict")),
     ).toHaveLength(1);
-    expect(nextOf(render(cache.getOrCreate(originAt(b, b, cfgB)).state))).toBe(
-      "alpha",
-    );
+    expect(nextOf(cache.getOrCreate(originAt(b, b, cfgB)).state)).toBe("alpha");
   });
 
   test("a compile leaves with the last state carrying it, held or not", () => {
@@ -400,7 +409,7 @@ describe("the cache is bounded by bytes", () => {
       cache.getOrCreate(originAt(dir, dir, three));
       // `two`'s state is retired but a render draws with it: its compile stays.
       expect(cache.stats).toMatchObject({ size: 1, compiles: 2, retired: 1 });
-      expect(nextOf(render(held.state))).toBe("alpha");
+      expect(nextOf(held.state)).toBe("alpha");
     }
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1, retired: 0 });
   });

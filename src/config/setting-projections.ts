@@ -20,6 +20,7 @@ import {
   VALUED_FIELDS,
   type Control,
   type ControlledField,
+  type FieldsOfKind,
   type GlobalField,
   type SettingName,
   settingNameOf,
@@ -79,8 +80,22 @@ const CONFIG_ONLY_PROJECTIONS: readonly ConfigProjection[] =
 
 // [LAW:no-silent-failure] The keys an authored `set` is refused on: a session
 // write there would render nothing, since no rung reads it.
+export type ConfigOnlyField = FieldsOfKind<"config">;
+
 export const CONFIG_ONLY_KEYS: ReadonlySet<string> = new Set(
   CONFIG_ONLY_PROJECTIONS.map((p) => p.configKey),
+);
+
+// [LAW:parse-dont-validate] A persist key as a config-only field, or nothing:
+// the proof that the key is one travels in the type.
+export function configOnlyField(key: string): ConfigOnlyField | undefined {
+  return CONFIG_ONLY_KEYS.has(key) ? (key as ConfigOnlyField) : undefined;
+}
+
+// The setting a persist key writes, when the key is a controlled setting's
+// field.
+export const CONFIG_KEY_TO_SETTING: ReadonlyMap<string, SettingName> = new Map(
+  SETTING_PROJECTIONS.map((p) => [p.configKey, p.sessionKey]),
 );
 
 // [LAW:one-source-of-truth] The current value of a setting is the one the bar

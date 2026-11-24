@@ -37,7 +37,8 @@ import {
   type ActiveSegmentRef,
 } from "./active-segment.js";
 import { closeOn } from "./band-style.js";
-import { CAROUSEL_NEXT, CAROUSEL_PREV, ringAround } from "./carousel.js";
+import { CAROUSEL_NEXT, CAROUSEL_PREV } from "./carousel.js";
+import { STEP_RANDOM, stepOffset } from "./option-ring.js";
 import { swatchPaint } from "./option-paint.js";
 import {
   renderPicker,
@@ -78,23 +79,6 @@ export function requireSwatchable(
   return apply as typeof apply & {
     readonly paletteOf: NonNullable<OptionAction["paletteOf"]>;
   };
-}
-
-// [LAW:dataflow-not-control-flow] A random option other than the one at
-// `centre`, as a pure function of a seed: the integer hash of the seed (two
-// rounds of a multiply–xorshift mix) picks one of the `count - 1` others. The
-// render passes its own instant, so every render offers a fresh pick and a
-// render at a given instant offers the same one. With one option there is no
-// other, and the pick is that option. Exported for unit testing.
-export function randomOther(
-  seed: number,
-  count: number,
-  centre: number,
-): number {
-  let h = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  h ^= h >>> 16;
-  return (centre + 1 + ((h >>> 0) % Math.max(count - 1, 1))) % count;
 }
 
 /** The palette `option` — by default the one in force — would put in force. */
@@ -138,13 +122,9 @@ export function swatchFuncs(runtime: ActionRuntime): FuncMap {
   };
 }
 
-// [LAW:one-source-of-truth] Apart from `swatch` because its `?` reads the
-// draw's clock: a clock factory's functions are what makes a template read
-// the instant (engineClockFunctions), and `swatch` reads none.
 export function swatchesFuncs(
   runtime: ActionRuntime,
   activeSegment: ActiveSegmentRef,
-  clock: () => Date,
 ): FuncMap {
   return {
     swatches: {
@@ -169,21 +149,13 @@ export function swatchesFuncs(
         // [LAW:dataflow-not-control-flow] An empty domain has nothing to step
         // to, so it leads with nothing, as its grid has no cells. Otherwise ◀ ▶
         // step through the ring a carousel over the same key turns, and ? to
-        // another option at random.
-        const steps = (): readonly PickerStep[] => {
-          const at = ringAround(
-            options,
-            readVar(renderBinding(runtime, "swatches").store, apply.stateVar),
-          );
-          return [
-            { glyph: CAROUSEL_PREV, option: options[at(-1)]! },
-            {
-              glyph: SWATCHES_RANDOM,
-              option: options[randomOther(clock().getTime(), count, at(0))]!,
-            },
-            { glyph: CAROUSEL_NEXT, option: options[at(1)]! },
-          ];
-        };
+        // another option at random. Each carries its step, so the row is the
+        // same on every draw and the click picks the instant it lands at.
+        const steps: readonly PickerStep[] = [
+          { glyph: CAROUSEL_PREV, step: stepOffset(-1) },
+          { glyph: SWATCHES_RANDOM, step: STEP_RANDOM },
+          { glyph: CAROUSEL_NEXT, step: stepOffset(1) },
+        ];
         const [line] = renderPicker(
           applyName,
           apply,
@@ -199,7 +171,7 @@ export function swatchesFuncs(
             active.bg,
           ),
           closeOn(active.palette, active.bg, drawnAt),
-          count === 0 ? [] : steps(),
+          count === 0 ? [] : steps,
         );
         return line!;
       },

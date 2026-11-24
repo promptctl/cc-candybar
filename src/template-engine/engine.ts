@@ -202,21 +202,11 @@ function clockFuncs(factories: readonly ClockFactory[]): FuncMap {
 // [LAW:one-source-of-truth] The clock functions: the names the engine's own
 // clock factories return, recorded by invoking them, never a written list. A
 // template calling one is a projection, and a cache key calling one is refused
-// at load (src/config/loader/projections.ts). A compile's engine adds the
-// render's own clock factories (the swatch row's `?`) to its instance; only a
-// segment's templates can call those.
+// at load (src/config/loader/projections.ts).
 export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set([
   ...DATE_CLOCK_FUNCTIONS,
   ...Object.keys(clockFuncs(CLOCK_FACTORIES)),
 ]);
-
-// The clock functions of an engine built with `extra` clock factories beside
-// its own — a compile's, whose segment templates can call the swatch row's.
-export function engineClockFunctions(
-  extra: readonly ClockFactory[],
-): ReadonlySet<string> {
-  return new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
-}
 
 // [LAW:one-source-of-truth] The functions that read the drawn depth: rich-js's one DrawnAt-reading
 // binding, registered from this table over richTextFuncs' own.
@@ -226,9 +216,8 @@ const DEPTH_BINDINGS = { readableOn: readableOnFunc } as const;
 // richTextFuncs() provides the theme-independent vocabulary: painting, color
 // math, attributes, links. It needs no configuration, so it is unconditional.
 // [LAW:one-way-deps] `extraFuncs` is an INJECTED FuncMap (e.g. the action +
-// picker feature funcs, built in render/action.ts + render/picker.ts), and
-// `clockFuncs` the injected clock factories (the swatch row's). The generic
-// engine never imports a specific feature — the caller hands it the capability
+// picker feature funcs, built in render/action.ts + render/picker.ts). The
+// generic engine never imports a specific feature — the caller hands it the capability
 // as data, so the dependency runs caller → engine, never engine → feature.
 // `drawnAt` is the depth `readableOn` floors text at: the registry's, derived
 // from its view's colour setting (SourceRegistry.drawnAt). Required, so no engine floors at a
@@ -238,7 +227,6 @@ export function createCcCandybarEngine(opts: {
   readonly region?: RegionalSettings;
   readonly drawnAt: () => ColorDepth;
   readonly extraFuncs?: FuncMap;
-  readonly clockFuncs?: readonly ClockFactory[];
 }): Engine<RichText> {
   const { drawnAt, extraFuncs, region = systemRegion() } = opts;
   const depth = (): DrawnAt => ({ depth: drawnAt() });
@@ -277,7 +265,7 @@ export function createCcCandybarEngine(opts: {
       ),
       // [LAW:single-enforcer] Every function that reads the time, built over
       // the one Clock.
-      ...clockFuncs([...CLOCK_FACTORIES, ...(opts.clockFuncs ?? [])]),
+      ...clockFuncs(CLOCK_FACTORIES),
       // Domain-specific overrides last (wins on collision with sprig aliases).
       // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
       // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`

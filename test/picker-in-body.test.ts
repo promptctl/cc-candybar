@@ -68,9 +68,17 @@ describe("{{ carousel }} names what it sets", () => {
     expect(textOf(out)).toContain("◀ zoom ▶");
     const writes = (text: string) =>
       effectsOf(linksOf(out).find((l) => l.text === text)!.url);
-    expect(writes("◀")[0]!.args.slice(1)).toEqual(["zoom", "low"]);
-    expect(writes("▶")[0]!.args.slice(1)).toEqual(["zoom", "high"]);
-    expect(writes("zoom").some((e) => e.args[1] === "zoom")).toBe(false);
+    // An arrow carries its step through the action's ring, never the option
+    // it lands on: the click reads where the key stands when it arrives.
+    expect(writes("◀")[0]).toMatchObject({
+      verb: "ring-state",
+      args: [expect.any(String), "pick", "-1"],
+    });
+    expect(writes("▶")[0]).toMatchObject({
+      verb: "ring-state",
+      args: [expect.any(String), "pick", "1"],
+    });
+    expect(writes("zoom").some((e) => e.verb === "ring-state")).toBe(false);
   });
 
   test("an open action naming nothing declared is refused: at load when spelled, at render when computed", () => {
@@ -102,10 +110,12 @@ describe("{{ carousel }} names what it sets", () => {
     }
   });
 
-  test("an unset key steps from the first option", () => {
-    const out = renderOf('{{ carousel "pick" "hello" "zoom" }}', "");
-    const next = linksOf(out).find((l) => l.text === "▶")!;
-    expect(effectsOf(next.url)[0]!.args.slice(1)).toEqual(["zoom", "mid"]);
+  test("an arrow's link is the same whatever the key holds", () => {
+    const urlOf = (current: string): string =>
+      linksOf(renderOf('{{ carousel "pick" "hello" "zoom" }}', current)).find(
+        (l) => l.text === "▶",
+      )!.url;
+    expect(new Set(["", "low", "mid", "high"].map(urlOf)).size).toBe(1);
   });
 
   test("a label computed at render is drawn like a spelled one", () => {

@@ -44,6 +44,7 @@ import {
   SETTINGS,
   SETTING_PROJECTIONS,
   perSetting,
+  type ConfigOnlyField,
   type SettingName,
   type SettingProjection,
 } from "../config/setting-projections.js";
@@ -74,7 +75,10 @@ export interface SettingDraft extends SettingProjection {
 // A theme or style chosen by RULE has no name until a render evaluates it, so
 // it is `null`: it equals only the same rule, and saving a picked name
 // replaces the rule with it.
-function spelled(e: EffectiveGlobals, name: SettingName): string | null {
+function spelled(
+  e: EffectiveGlobals,
+  name: SettingName | ConfigOnlyField,
+): string | null {
   const value: string | number | boolean | Selection<unknown> = e[name];
   switch (typeof value) {
     case "boolean":
@@ -185,6 +189,17 @@ export function sessionSettingValue(
   name: SettingName,
 ): string | null {
   return spelled(sessionGlobals(config, sessionPick), name);
+}
+
+// [LAW:one-source-of-truth] The value the session renders a config-only field
+// as: no session picks it, so it is the layers' resolution alone. The field is
+// one a `persist` reads back through its own `.effective` (CONFIG_ONLY_KEYS).
+export function sessionConfigOnlyValue(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  field: ConfigOnlyField,
+): string | null {
+  return spelled(sessionGlobals(config, sessionPick), field);
 }
 
 // Every setting the session renders differently from the config file. The

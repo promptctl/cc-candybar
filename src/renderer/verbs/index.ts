@@ -40,7 +40,19 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeyShown, configKeySeed } from "./key-seeds";
+import { stateKeyShown, configKeyShown, configKeySeed } from "./key-seeds";
+import {
+  landing,
+  pageCount,
+  pageHolding,
+  pageShown,
+  parsePageMap,
+  parseStep,
+  type OptionStep,
+  type PageMap,
+} from "../../render/option-ring";
+import { resolveOptionDomain } from "../../config/option-domain";
+import { configOptionDomains } from "../../config/edit-chrome";
 import {
   disclosureNest,
   NO_NEST,
@@ -121,10 +133,13 @@ import {
   VERB_SAVE_PRESET,
   VERB_SAVE_THEME_DEFAULT,
   VERB_DELETE_PRESET,
+  VERB_RING_CONFIG,
+  VERB_RING_STATE,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
+  VERB_TURN_PAGE,
   VERB_UNDO,
   VERB_SLASH,
   VERB_COPY_DIAGNOSTIC,
@@ -148,7 +163,11 @@ import type {
   DeclaredSources,
   SessionContext,
 } from "../../renderer-interface/request-context";
-import { runDeclaration, type SlashAction } from "../../config/action";
+import {
+  runDeclaration,
+  type ActionDecl,
+  type SlashAction,
+} from "../../config/action";
 import type { ClickArrival } from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
@@ -767,6 +786,186 @@ const stepConfig: VerbHandler = (args, ctx) => {
   );
 };
 
+// [LAW:one-source-of-truth] The option ring an action's link names, read the
+// way the draw reads it: the options are the head's own domain, resolved over
+// this session's config as the compile resolved them, and the value the ring
+// starts from is the one the bar wears (the fold behind its `.effective`), not
+// what a layer's file happens to declare. A `do` is its head's ring.
+interface OptionRing {
+  readonly key: string;
+  readonly options: readonly string[];
+  readonly shown: string | null;
+}
+
+function headOf(config: DslConfig, name: string): ActionDecl | undefined {
+  const named = config.actions[name];
+  return named !== undefined && "do" in named
+    ? config.actions[named.do[0]]
+    : named;
+}
+
+// The ring of a `set` or `persist` action over a list of options, or nothing
+// for any other action (a structural insert has a list but holds no value).
+function ringHeld(
+  ctx: ClickContext,
+  config: DslConfig,
+  head: ActionDecl,
+): OptionRing | undefined {
+  if (!("from" in head)) return undefined;
+  const pick = (k: string) => ctx.sessionState.get(ctx.session, k);
+  const options = resolveOptionDomain(
+    head.from,
+    configOptionDomains(config),
+  ).members;
+  if ("set" in head)
+    return {
+      key: head.set,
+      options,
+      shown: stateKeyShown(config, pick, head.set),
+    };
+  if ("persist" in head)
+    return {
+      key: head.persist,
+      options,
+      shown: configKeyShown(config, pick, head.persist),
+    };
+  return undefined;
+}
+
+function ringOf(
+  verb: string,
+  ctx: ClickContext,
+  name: string,
+  twin: "set" | "persist",
+): OptionRing {
+  const config = sessionConfig(ctx);
+  const head = headOf(config, name);
+  const ring =
+    head === undefined || !(twin in head)
+      ? undefined
+      : ringHeld(ctx, config, head);
+  if (ring === undefined) {
+    throw new BadVerbArgs(
+      `${verb}: "${name}" is not a ${twin} action over a list of options`,
+    );
+  }
+  if (ring.options.length === 0)
+    throw new BadVerbArgs(`${verb}: "${name}" has no options to step through`);
+  return ring;
+}
+
+// [LAW:parse-dont-validate] The step a link carried, or a refusal naming it.
+function stepOf(verb: string, raw: string): OptionStep {
+  const parsed = parseStep(raw);
+  if (!parsed.ok) throw new BadVerbArgs(`${verb}: ${parsed.problem}`);
+  return parsed.step;
+}
+
+function pageMapOfLink(verb: string, raw: string): PageMap {
+  const parsed = parsePageMap(raw);
+  if (!parsed.ok) throw new BadVerbArgs(`${verb}: ${parsed.problem}`);
+  return parsed.map;
+}
+
+// The page cursor a ring step also turns, as the link carried it, or nothing:
+// `pageKey, pageLayout`.
+interface PageTurn {
+  readonly key: string;
+  readonly map: PageMap;
+}
+
+function turnOf(verb: string, raw: readonly string[]): PageTurn | undefined {
+  if (raw.length === 0) return undefined;
+  const [key, layout, ...extra] = raw;
+  if (!key || layout === undefined || extra.length > 0)
+    throw new BadVerbArgs(
+      `${verb}: a page turn is <pageKey>/<pageLayout>, got ${raw.length} segment(s)`,
+    );
+  return { key, map: pageMapOfLink(verb, layout) };
+}
+
+// [LAW:no-ambient-temporal-coupling] The page the landed option stands on is
+// derived here, from the landing, and written with it: a persist write lands
+// a turn later, so a second effect that read the key would turn the row to the
+// page of the value from before the click.
+const turnWrites = (
+  turn: PageTurn | undefined,
+  options: readonly string[],
+  landed: string,
+): string[] =>
+  turn === undefined
+    ? []
+    : [turn.key, String(pageHolding(turn.map, options.indexOf(landed)))];
+
+// [LAW:one-source-of-truth] A step through an option ring, resolved against the
+// value the key holds NOW. The link carries only the intent (the action, the
+// step), so the same link fires every draw and N clicks without a redraw land
+// N steps. The write is the session write every set action makes: the same
+// gate, the same batch (setState), the page turn riding in it.
+const ringState: VerbHandler = (args, ctx) => {
+  const [name = "", stepRaw = "", ...turnRaw] = args;
+  const ring = ringOf("ring-state", ctx, name, "set");
+  const turn = turnOf("ring-state", turnRaw);
+  const next = landing(
+    ring.options,
+    ring.shown ?? "",
+    stepOf("ring-state", stepRaw),
+    ctx.now(),
+  );
+  setState([ring.key, next, ...turnWrites(turn, ring.options, next)], ctx);
+};
+
+// `persist`'s twin of ringState: the option lands in the layer's file through
+// setConfig, and the page turn, which is session state, with it.
+const ringConfig: VerbHandler = (args, ctx) => {
+  const {
+    role,
+    args: [name = "", stepRaw = "", ...turnRaw],
+  } = configArgs("ring-config", args);
+  const ring = ringOf("ring-config", ctx, name, "persist");
+  const turn = turnOf("ring-config", turnRaw);
+  const next = landing(
+    ring.options,
+    ring.shown ?? "",
+    stepOf("ring-config", stepRaw),
+    ctx.now(),
+  );
+  setConfig([role, ring.key, next], ctx);
+  if (turn !== undefined) setState(turnWrites(turn, ring.options, next), ctx);
+};
+
+// [LAW:one-source-of-truth] A page arrow: the page the cursor shows now, turned
+// by the arrow's direction and stopped at the first and last page the drawn
+// layout holds, as the draw's boundary arrows stop. The cursor folds as the
+// draw folds it (pageShown): a cursor below zero is the page holding the
+// option in force, which this reads from the session, not from the link.
+const turnPage: VerbHandler = (args, ctx) => {
+  const [name = "", pageKey = "", byRaw = "", layout = ""] = args;
+  if (!pageKey) throw new BadVerbArgs("turn-page: <pageKey> is required");
+  if (!STEP_INT_RE.test(byRaw))
+    throw new BadVerbArgs(`turn-page: by must be an integer, got "${byRaw}"`);
+  const map = pageMapOfLink("turn-page", layout);
+  const config = sessionConfig(ctx);
+  const head = headOf(config, name);
+  if (head === undefined)
+    throw new BadVerbArgs(`turn-page: no action "${name}" to page through`);
+  const pick = (k: string) => ctx.sessionState.get(ctx.session, k);
+  // A structural insert holds no value in force, as its draw has none.
+  const ring = ringHeld(ctx, config, head);
+  const pages = pageCount(map);
+  const holding = pageHolding(
+    map,
+    ring?.shown == null ? -1 : ring.options.indexOf(ring.shown),
+  );
+  const at = pageShown(
+    stateKeyShown(config, pick, pageKey) ?? "",
+    holding,
+    pages,
+  );
+  const next = Math.max(0, Math.min(at + Number(byRaw), pages - 1));
+  setState([pageKey, String(next)], ctx);
+};
+
 // Save (brandon-save-undo-bwi.hpi): every unsaved setting lands in the config
 // file as ONE write. The drafts are derived at click time by the SAME function
 // the render counts them with, over the config this session renders with, so
@@ -1188,6 +1387,9 @@ const SESSION_HANDLERS: Record<
 > = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
+  [VERB_RING_STATE]: ringState,
+  [VERB_RING_CONFIG]: ringConfig,
+  [VERB_TURN_PAGE]: turnPage,
   [VERB_SET_CONFIG]: setConfig,
   [VERB_STEP_CONFIG]: stepConfig,
   [VERB_RESET_CONFIG]: resetConfig,

@@ -17,7 +17,6 @@ import { createHash } from "node:crypto";
 import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
-import type { ClockFactory } from "../template-engine/clock.js";
 import {
   type ValidatedConfig,
   type ResolvedVariableDecl,
@@ -83,8 +82,8 @@ import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   bindClock,
+  CLOCK_FUNCTIONS,
   createCcCandybarEngine,
-  engineClockFunctions,
   SHOWN,
 } from "../template-engine/index.js";
 import {
@@ -711,16 +710,12 @@ export function compileDslConfig({
   const styleNames = Object.keys(config.styles);
   const presetOptions = presetNames(config.presets);
   const perConfigDomains = configOptionDomains(config);
-  // The swatch row's `?` picks from the draw's one instant, so a draw at a
-  // given instant offers one pick, as it shows one clock.
-  const renderClocks: readonly ClockFactory[] = [
-    (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now),
-  ];
   const engine = createCcCandybarEngine({
     region,
     extraFuncs: {
       ...actionFuncs(actionRuntime),
       ...swatchFuncs(actionRuntime),
+      ...swatchesFuncs(actionRuntime, activeSegment),
       ...pickerFuncs(actionRuntime, activeSegment),
       ...carouselFuncs(actionRuntime),
       ...themePreviewFuncs(actionRuntime, activeSegment),
@@ -752,7 +747,6 @@ export function compileDslConfig({
         arity: { kind: "exact" },
       },
     },
-    clockFuncs: renderClocks,
     drawnAt,
   });
   // [LAW:single-enforcer] THE one parse path for this config: every template —
@@ -998,7 +992,7 @@ export function compileDslConfig({
       actions: config.actions,
     }),
     projections: new Map(projections),
-    clock: engineClockFunctions(renderClocks),
+    clock: CLOCK_FUNCTIONS,
   };
   const gateReadsInstant = templateInstants(basis);
   const gates = [...roots.values()].flatMap(layoutGates(compiled));

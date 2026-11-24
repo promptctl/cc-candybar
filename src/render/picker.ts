@@ -25,7 +25,14 @@
 
 import { RichText, Style, type ColorRgba } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { VERB_SET_STATE } from "../click/wire.js";
+import { VERB_SET_STATE, VERB_TURN_PAGE } from "../click/wire.js";
+import {
+  pageHolding,
+  pageMapOf,
+  pageShown,
+  spellPageMap,
+  type OptionStep,
+} from "./option-ring.js";
 import {
   actionTarget,
   type DrawnAction,
@@ -36,6 +43,7 @@ import {
   linkFragment,
   linkOver,
   realize,
+  realizeRing,
   clickSession,
   readVar,
   renderBinding,
@@ -200,14 +208,15 @@ export type PickerClose =
   | { readonly kind: "led" };
 
 // [LAW:types-are-the-program] A cell laid before the page — a `{{ swatches }}`
-// row's ◀ ? ▶ — that applies `option` and turns the picker to the page holding
-// it, so the row follows the value it moved. The page is the one this render
-// lays out, written as itself: no sentinel a page cursor's other readers (a
-// standalone picker's `when`, which reads below zero as closed) could take
-// for something else.
+// row's ◀ ? ▶ — that steps through the options and turns the picker to the
+// page holding the one it lands on, so the row follows the value it moved. The
+// click resolves both, from the value the key holds when it lands, with the
+// page layout this render drew (a PageMap): the page is written as itself, no
+// sentinel a page cursor's other readers (a standalone picker's `when`, which
+// reads below zero as closed) could take for something else.
 export interface PickerStep {
   readonly glyph: string;
-  readonly option: string;
+  readonly step: OptionStep;
 }
 
 // [LAW:no-defensive-null-guards] The loader proves both picker arg names resolve
@@ -390,27 +399,29 @@ export function renderPicker(
   // option in force (PAGE_HOLDING_CURRENT): a list opens where its value is.
   // (A standalone picker's `when` hides it at page < 0, so it never draws
   // one — which is why a step writes the page it lands on, never that.)
-  const rawPage = parseInt(readVar(store, page.stateVar), 10);
-  const pageHolding = (index: number): number =>
-    Math.max(
-      0,
-      pages.findIndex((sections) =>
-        sections.some((section) => section.indices.includes(index)),
-      ),
-    );
-  const holding = pageHolding(
-    current === undefined ? -1 : apply.options.indexOf(current),
+  // [LAW:one-source-of-truth] The layout the draw shows is the layout its
+  // links carry, so a page arrow and a swatches step turn by the pages drawn.
+  const pageMap = pageMapOf(pages, apply.options.length);
+  const spelledPageMap = spellPageMap(pageMap);
+  const pageIdx = pageShown(
+    readVar(store, page.stateVar),
+    pageHolding(
+      pageMap,
+      current === undefined ? -1 : apply.options.indexOf(current),
+    ),
+    pages.length,
   );
-  const pageIdx = !Number.isInteger(rawPage)
-    ? 0
-    : rawPage < 0
-      ? holding
-      : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
 
-  const pageTarget = (value: number): DrawnAction =>
+  // [LAW:one-source-of-truth] An arrow carries its direction, never the page
+  // this draw would turn to: the click turns from the page the cursor shows
+  // when it lands (turn-page, src/renderer/verbs/index.ts).
+  const pageTurn = (by: number): DrawnAction =>
     actionTarget([
-      { verb: VERB_SET_STATE, args: [sessionId, page.key, String(value)] },
+      {
+        verb: VERB_TURN_PAGE,
+        args: [sessionId, applyName, page.key, String(by), spelledPageMap],
+      },
     ]);
   // [LAW:dataflow-not-control-flow] The close writes arrive as data (see
   // CloseWrites); ✕ performs exactly them, and a closeOnPick option click folds
@@ -453,33 +464,33 @@ export function renderPicker(
             closeStyle,
           ),
         ];
-  // A step applies its option and turns to the page holding it — one click,
+  // A step lands on an option and turns to the page holding it — one click,
   // one batch of session writes.
   nav.push(
-    ...steps.map(({ glyph, option }) =>
+    ...steps.map(({ glyph, step }) =>
       linkFragment(
         glyph,
-        actionTarget([
-          ...realize(declared, option, option, store, sessionId).effects,
-          {
-            verb: VERB_SET_STATE,
-            args: [
-              sessionId,
-              page.key,
-              String(pageHolding(apply.options.indexOf(option))),
-            ],
-          },
-        ]),
+        actionTarget(
+          realizeRing(
+            declared,
+            applyName,
+            step,
+            [page.key, spelledPageMap],
+            store,
+            sessionId,
+            "swatches",
+          ),
+        ),
         false,
       ),
     ),
   );
   if (pageIdx > 0) {
-    nav.push(linkFragment(PICKER_PREV, pageTarget(pageIdx - 1), false));
+    nav.push(linkFragment(PICKER_PREV, pageTurn(-1), false));
   }
   const next =
     pageIdx < pages.length - 1
-      ? [linkFragment(PICKER_NEXT, pageTarget(pageIdx + 1), false)]
+      ? [linkFragment(PICKER_NEXT, pageTurn(1), false)]
       : [];
 
   if (catalogue === undefined) {

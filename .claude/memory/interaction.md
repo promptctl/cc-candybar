@@ -22,7 +22,9 @@ An option from a colour-valued domain shows its name plus a swatch of what picki
 
 The add-segment library shows each segment's description rather than a rendered sample. Rendering a segment needs a placement's scope (settings, drafts, gates), and the library doesn't have one.
 
-A carousel names what it sets, never the value, because the value belongs to the list its label opens. It keeps no position of its own: its arrows step from the applied value. If no variable reads its key back, that's a render error, since the ring could never see its own writes.
+A carousel names what it sets, never the value, because the value belongs to the list its label opens. It keeps no position of its own, and if no variable reads its key back that's a render error, since the ring could never be centred.
+
+A stepping link carries its step and never the option it lands on. That covers a carousel's or swatches row's ◀ ▶, the swatches `?`, and a picker's page arrows. A terminal keeps the link it found when the mouse last moved, so a link that wrote the draw's neighbour would repeat that write on every click after the first. The click reads where the key stands and lands the step. The ring is the declared action's own option domain, resolved over the clicking session's config, never the key's gate list: the gate merges every action writing the key, and a baseline key such as the theme carries no list at all. The ring starts from the value the bar wears (the fold behind `.effective`), not what one layer's file declares. A swatches step also turns the page holding where it landed, so that page is derived in the handler that resolves the landing: a persist write lands a turn later, and a second effect reading the key would turn to the old value's page. The drawn page layout rides in the link as runs of pages, since only the draw knows where the width broke the pages. A `do` whose other members write the drawn option cannot be stepped, since they would write another option than the one the step reaches.
 
 ## Disclosures
 

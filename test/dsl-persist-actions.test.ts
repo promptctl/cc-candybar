@@ -41,6 +41,8 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { linksOf } from "../src/click/read";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf, CLICK_VERBS } from "./helpers/click";
@@ -481,6 +483,36 @@ describe("persist action click → the config file", () => {
     expect(durable.history().past).toEqual([
       durable.fileStep(original, written),
     ]);
+  });
+
+  // [LAW:one-source-of-truth] A persist carousel's arrows carry their step, and
+  // the click lands it from what the bar wears: the file's palette, here, with
+  // no session pick over it.
+  test("a persist carousel's ▶ and ◀ step the palette the bar wears into the file", async () => {
+    const themes = listResolvablePaletteNames();
+    const SRC_CAROUSEL = `{
+      globals: { palette: 'nord' },
+      actions: {
+        applyTheme: { persist: 'palette', from: 'themes' },
+        list: { set: 'listing', to: 'yes' },
+      },
+      segments: { bar: { template: '{{ carousel "applyTheme" "list" "theme" }}', bg: 'surface', fg: 'foreground' } },
+      root: 'bar',
+    }`;
+    const at = themes.indexOf("nord");
+    for (const [glyph, by] of [["▶", 1], ["◀", -1]] as const) {
+      const { render, click } = buildPersistRuntime(
+        SRC_CAROUSEL,
+        S1,
+        DEFAULT_DSL_CONFIG,
+      );
+      const arrow = linksOf(render()).find((l) => l.text === glyph)!;
+      expect(effectsOf(arrow.url)[0]!.verb).toBe("ring-config");
+      await click(arrow.url);
+      expect(globalsInFile()).toEqual({
+        palette: themes[(at + by + themes.length) % themes.length],
+      });
+    }
   });
 
   test("clicking reset deletes the persisted key from the file", async () => {

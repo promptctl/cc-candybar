@@ -25,7 +25,13 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
-import { effectsOf } from "./helpers/click";
+import {
+  clickVerb,
+  effectsOf,
+  linkClick,
+  recordRender,
+  testVerbContext,
+} from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -65,17 +71,13 @@ function pickerBar(source: string, sessionId = S1) {
   const { config, sessionState } = rig;
   const render = (width: number, wrap = true): Frame =>
     rig.draw({ opts: { width, wrap } }).frame;
-  const gate = stateGate(config);
+  // Through the real verb handlers, so a step that resolves where it lands
+  // when the click arrives (ring-state, turn-page) is the one the daemon runs.
+  recordRender(sessionState, sessionId);
+  const ctx = testVerbContext(sessionState, undefined, config);
   const click = (url: string): void => {
-    for (const { verb, args } of effectsOf(url)) {
-      if (verb !== "set-state") continue;
-      const [sid, ...pairs] = args;
-      for (let i = 0; i < pairs.length; i += 2) {
-        const result = gate.validate(pairs[i]!, pairs[i + 1]!);
-        if (!result.ok) throw new Error(`click rejected: ${result.reason}`);
-        sessionState.set(sessionIdOf(sid!), pairs[i]!, result.value);
-      }
-    }
+    const { verb, value } = linkClick(url);
+    clickVerb(verb, value, ctx);
   };
   return { ...rig, render, click };
 }
@@ -179,7 +181,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     // The → click advances the page cursor by one.
     const nextUrl = linkUrls(open).find((u) =>
       effectsOf(u).some(
-        (e) => e.args.includes("theme-page") && e.args.includes("1"),
+        (e) => e.verb === "turn-page" && e.args[2] === "theme-page" && e.args[3] === "1",
       ),
     );
     expect(nextUrl).toBeDefined();

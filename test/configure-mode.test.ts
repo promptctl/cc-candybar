@@ -17,6 +17,7 @@
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
+import { linksOf } from "../src/click/read";
 import { arrange, configurePlacement } from "./helpers/configure";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
@@ -157,6 +158,22 @@ function configureBar(src: string, preset?: string) {
     expect(hits.size).toBe(1);
     return [...hits][0]!;
   };
+  // The ▶ of the word picker over a placement's setting: its arrows carry a
+  // step and never the word they land on, which the click reads from the draft
+  // when it arrives.
+  const stepUrl = (out: Frame, id: string, setting: string): string => {
+    const hits = linksOf(out).filter(
+      (l) =>
+        l.text === "▶" &&
+        effectsOf(l.url).some(
+          (e) =>
+            e.verb === "ring-state" &&
+            e.args[1]!.endsWith(`.setting.${id}.${setting}`),
+        ),
+    );
+    expect(hits).toHaveLength(1);
+    return hits[0]!.url;
+  };
   const enter = async () => {
     sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
     await click(urlWriting(render(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
@@ -168,6 +185,7 @@ function configureBar(src: string, preset?: string) {
     staleSettings,
     click,
     urlWriting,
+    stepUrl,
     enter,
     ctx,
   };
@@ -292,9 +310,8 @@ describe("configure mode: one placement's settings at a time", () => {
     const again = textOf(rt.render());
     expect(again).toContain("◀ form ▶");
     // Its arrows step this placement's own value, not the one it replaced.
-    expect(
-      rt.urlWriting(rt.render(), draftKey("vcs", "form"), "long"),
-    ).toBeDefined();
+    await rt.click(rt.stepUrl(rt.render(), "vcs", "form"));
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs", "form"))).toBe("long");
     expect(again.match(/☐ detail|☑ detail/g)).toHaveLength(1);
   });
 
@@ -306,9 +323,8 @@ describe("configure mode: one placement's settings at a time", () => {
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
     );
-    await rt.click(
-      rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"),
-    );
+    await rt.click(rt.stepUrl(rt.render(), "vcs2", "form"));
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "form"))).toBe("short");
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "depth"), "1"));
     const text = textOf(rt.render());
     expect(text).toContain("D-short-3");
@@ -435,12 +451,8 @@ describe("configure mode's drafts are saved into the placement", () => {
       rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
     );
     // Writing a value back to what the file already says is no draft.
-    await rt.click(
-      rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"),
-    );
-    await rt.click(
-      rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "long"),
-    );
+    await rt.click(rt.stepUrl(rt.render(), "vcs2", "form"));
+    await rt.click(rt.stepUrl(rt.render(), "vcs2", "form"));
     configurePlacement(rt.ctx, SID, "default", "vcs");
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs", "depth"), "1"));
     expect(drafts()).toEqual([

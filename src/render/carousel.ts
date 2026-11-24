@@ -12,9 +12,11 @@
 // [LAW:one-source-of-truth] The carousel owns no position. Its ring is centred
 // on the action's current value, read through the action's own `stateVar` (for
 // the settings menu's controls, the `.effective` projection the bar rendered
-// with), so the arrows and the bar cannot disagree, and there is no cursor key
-// to gate, reset, or leave stale. Each click writes through `realize` — the
-// same fold `{{ action }}` and the picker's option cells use.
+// with), so the label and the bar cannot disagree, and there is no cursor key
+// to gate, reset, or leave stale. An arrow carries its step, a link that means
+// the same on every draw; the click resolves it from the value the key holds
+// when it lands (realizeRing, render/action.ts), so N clicks that arrive before
+// the bar has redrawn land N steps.
 //
 // [LAW:one-way-deps] Lives in render/ beside the picker, injected into the
 // engine by registerDslConfig as data; the generic engine never imports it.
@@ -28,31 +30,17 @@ import {
   clickSession,
   readVar,
   realize,
+  realizeRing,
   renderBinding,
   renderLook,
   type ActionRuntime,
 } from "./action.js";
 import { labelPaint } from "./option-paint.js";
+import { ringAround, stepOffset } from "./option-ring.js";
 import { assemble, requireOptionKind, type OptionAction } from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
 export const CAROUSEL_NEXT = "▶";
-
-// [LAW:one-source-of-truth] A ring over a domain, centred on the value a key
-// holds: the index `offset` steps from the centre, wrapping. The centre is
-// THE "unknown current counts as the first member" rule every enumerated
-// control folds over (render/action.ts cycleIndex), so a value outside the
-// domain rotates exactly as a cycle over it would. The carousel and a
-// `{{ swatches }}` row's ◀ ▶ step through this one ring. Over a domain that
-// is not empty.
-export function ringAround(
-  options: readonly string[],
-  current: string,
-): (offset: number) => number {
-  const count = options.length;
-  const centre = Math.max(options.indexOf(current), 0);
-  return (offset) => (((centre + offset) % count) + count) % count;
-}
 
 export function renderCarousel(
   applyName: string,
@@ -83,11 +71,19 @@ export function renderCarousel(
   // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
   // or show, so the ring is empty, as a grid over it has no cells.
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
-  const ring = (offset: number): string => options[indexAt(offset)]!;
-  const step = (offset: number): DrawnAction =>
+  const shown =
+    options[ringAround(options, readVar(store, apply.stateVar))(0)]!;
+  const step = (by: number): DrawnAction =>
     actionTarget(
-      realize(declared, ring(offset), ring(offset), store, sessionId).effects,
+      realizeRing(
+        declared,
+        applyName,
+        stepOffset(by),
+        [],
+        store,
+        sessionId,
+        "carousel",
+      ),
     );
 
   return assemble([
@@ -99,13 +95,13 @@ export function renderCarousel(
       labelPaint(
         renderLook(runtime, "{{ carousel }}"),
         apply.paletteOf,
-        ring(0),
+        shown,
         label,
       ),
       actionTarget(
         realize(
           runtime.compiled.get(openName)!,
-          ring(0),
+          shown,
           undefined,
           store,
           sessionId,
