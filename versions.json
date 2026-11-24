@@ -4,15 +4,22 @@
     {
       "version": "pr-946",
       "ref": "refs/pull/946/merge",
-      "sha": "ebb4bfac74b27b5fa07a5f1e35fc82a0cd581a9f",
-      "timestamp": "2026-11-24T10:27:01.024Z",
+      "sha": "dc60ff488ff52e35db0efd4d82927ffafb397cf3",
+      "timestamp": "2026-11-24T10:28:23.522Z",
       "commits": [
         {
-          "sha": "ebb4bfac74b27b5fa07a5f1e35fc82a0cd581a9f",
+          "sha": "dc60ff488ff52e35db0efd4d82927ffafb397cf3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T03:25:47-07:00",
-          "message": "Merge 2dfef894e46c88af33d6e160efd945b0ce081277 into 0a4c9e344d200164eb36b2069e8585ab5bfb1beb\n"
+          "timestamp": "2026-11-24T10:26:50Z",
+          "message": "Merge 5c8903055527f80a62235a6fa05c5ec19a4f2f38 into 0a4c9e344d200164eb36b2069e8585ab5bfb1beb\n"
+        },
+        {
+          "sha": "5c8903055527f80a62235a6fa05c5ec19a4f2f38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T03:26:35-07:00",
+          "message": "docs(design): R-19 rules only what is a choice; Claude Code running the statusline is how a statusline works\n"
         },
         {
           "sha": "2dfef894e46c88af33d6e160efd945b0ce081277",
