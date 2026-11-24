@@ -11,6 +11,7 @@ import { textOf, type Frame } from "../../../src/render/frame";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
+import { rendererStatsOf } from "../../../src/daemon/foundations/stats-snapshot";
 import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
 import { click, findUrl, frameRequest, hookData, observePane, renderBody, renderRequest, urlWriting, urlsOfAnsi } from "../../helpers/daemon-e2e";
 import { saidOf, sendClick } from "../../../scripts/lib/daemon/requests";
@@ -43,6 +44,7 @@ import {
 } from "../../../src/daemon/config-discovery/repo-configs";
 import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
+import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
 
 const BUNDLE = path.resolve("dist/index.mjs");
 const builtDaemon = (env: NodeJS.ProcessEnv) => ({
@@ -710,8 +712,9 @@ test("a delivered pane frame settles in the subprocess that drew it", async () =
           });
           if (!response.ok || !("stats" in response))
             throw new Error(`no daemon stats: ${JSON.stringify(response)}`);
-          pending = response.stats.rendererTurns.presents;
-          return response.stats.frameFeeds.drawn > 0 && pending === 0;
+          const main = rendererStatsOf(response.stats, MAIN_RENDERER);
+          pending = main.rendererTurns.presents;
+          return main.framesDrawn > 0 && pending === 0;
         },
         () => `the delivered pane frame settled (${pending} pending)`,
         2_000,

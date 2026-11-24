@@ -115,16 +115,18 @@ export const COMPILE_BYTES = 10 * 1024 * 1024;
 // with headroom for a user config's further placements.
 export const VIEW_BYTES = 2.5 * 1024 * 1024;
 
-// The render cache's share of the daemon's memory limit: what is left under
-// the line the restart forecast calls near the limit once the rest of the daemon is
+// The render cache's share of the memory limit: what is left under the line
+// a reading calls near the limit once the rest of the process holding it is
 // reserved — so a share full at its charges, which a test holds real heap
-// under and so are the most the cache can cost, never puts the daemon past
-// that line, whatever the limit. The limit is over the host and its renderer
-// process together, so the reserve is the ~60 MB one process serving one
-// session was charged, and a second runtime with its own copy of the loaded
-// bundle (a bare node is charged ~12 MB). The charges' own headroom over what
-// entries hold is the heap's growth room, so reserving more would starve the
-// cache at a lowered limit for nothing. At the default limit the share is
+// under and so are the most the cache can cost, never puts that process past
+// that line, whatever the limit. The limit judges each process alone, and the
+// cache lives in its renderer's: a process of its own, or the host's for an
+// in-process renderer. The reserve is the ~60 MB one process doing the host's
+// work and a renderer's was charged serving one session, and a second
+// runtime's copy of the loaded bundle (a bare node is charged ~12 MB), so it
+// holds under either. The charges' own headroom over what entries hold is the
+// heap's growth room, so reserving more would starve the cache at a lowered
+// limit for nothing. At the default limit the share is
 // 672 MB: ~120 sessions on one compile, each an entry and a view, against a
 // working set of ~20 directories in the production daemon.
 // Measured, a full share costs less than its charges: serving 100 sessions,

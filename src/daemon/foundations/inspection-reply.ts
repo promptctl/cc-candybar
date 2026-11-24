@@ -1,6 +1,7 @@
 import { isPlainObject } from "../../config/loader/validate-core.js";
 import type { CommandReply } from "../../renderer-interface/interface.js";
-import { missingFields, RENDERER_STATS_REFERENCE } from "./stats-snapshot.js";
+import { read } from "../../utils/wire-shape.js";
+import { RENDERER_STATS_SHAPE } from "./stats-shape.js";
 
 function variableRow(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
@@ -44,10 +45,10 @@ export function inspectionPayloadProblem(reply: {
   readonly stats?: unknown;
 }): string | null {
   if (reply.kind === "stats") {
-    const missing = missingFields(RENDERER_STATS_REFERENCE, reply.stats);
-    return missing.length === 0
+    const stats = read(RENDERER_STATS_SHAPE, reply.stats);
+    return stats.kind === "read"
       ? null
-      : `invalid stats snapshot: ${missing.join(", ")}`;
+      : `invalid stats snapshot: ${stats.at.map((at) => at || "<stats>").join(", ")}`;
   }
   if (reply.kind !== "debug") return null;
   const { snapshot } = reply;

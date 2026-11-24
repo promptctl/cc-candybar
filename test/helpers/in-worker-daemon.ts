@@ -32,10 +32,14 @@ import {
 } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
 import {
+  classifyInbound,
   PROTOCOL_VERSION,
   sendOne,
+  type ReaderRenderRequest,
   type Request,
+  type Response,
 } from "../../src/daemon/foundations/protocol";
+import { parseFrame, type Frame } from "../../src/render/frame";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { daemonClock } from "../../src/host";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
@@ -134,6 +138,35 @@ export function prepareDaemon(
     if (overrides.daemonLog === undefined) daemonLog.dispose();
     throw e;
   }
+}
+
+// A request handled as the connection hands it on, its reply settled as
+// delivered: what a client of this daemon reads.
+export async function replyOf(
+  daemon: ServedDaemon,
+  req: Parameters<ServedDaemon["reply"]>[0],
+): Promise<Response> {
+  const handled = await daemon.handle(
+    classifyInbound(req),
+    () => false,
+    daemon.stats.accept(),
+    () => false,
+  );
+  if (handled.kind !== "reply") throw new Error("expected a reply");
+  handled.settled(true);
+  if (!handled.resp.ok) throw new Error(handled.resp.error);
+  return handled.resp;
+}
+
+// A render's frame.
+export async function frameOf(
+  daemon: ServedDaemon,
+  req: ReaderRenderRequest,
+): Promise<Frame> {
+  const resp = await replyOf(daemon, req);
+  if (!("frame" in resp))
+    throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+  return parseFrame(resp.frame);
 }
 
 // The daemon's counts from its request handling, past the connection: the 200 ms

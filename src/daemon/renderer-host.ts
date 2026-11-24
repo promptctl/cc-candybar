@@ -170,8 +170,13 @@ export interface RendererHost {
     make: () => Made<StartRequest>,
     about: TurnRecord,
   ): Promise<TurnOutcome>;
-  // An inspection or teardown event, answered by its own reply.
-  command<C extends Command>(event: C): Promise<ReplyTo<C["kind"]>>;
+  // An inspection or teardown event, answered by its own reply. One whose
+  // asker stopped waiting (`until` aborted) before its slot is not made, and
+  // rejects with the signal's reason.
+  command<C extends Command>(
+    event: C,
+    until?: AbortSignal,
+  ): Promise<ReplyTo<C["kind"]>>;
   // What discovery found at each of `origins` moved: each gets its `config`
   // turn, made from what discovery holds as its slot comes up.
   moved(origins: readonly RenderOrigin[]): void;
@@ -1083,8 +1088,21 @@ export function rendererHost(
   // part of its turn before its caller can use the result.
   const command = async <C extends Command>(
     event: C,
+    until?: AbortSignal,
   ): Promise<ReplyTo<C["kind"]>> => {
-    const { turn } = await taken(() => ({ kind: "event", event }));
+    // [LAW:no-ambient-temporal-coupling] An ask ends with its wait: one no one
+    // waits for any more takes no turn of the renderer's.
+    let made = true;
+    const { turn } = await taken(() => {
+      if (until?.aborted !== true) return { kind: "event", event };
+      made = false;
+      return {
+        kind: "abandoned",
+        message: "its asker stopped waiting",
+        detail: `${commandLabel(event)} was not made: its asker stopped waiting`,
+      };
+    });
+    if (!made) throw until?.reason;
     if (turn.kind === "threw") {
       const label = commandLabel(event);
       const fields = finalizationFields(turn) ?? [];

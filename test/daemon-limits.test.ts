@@ -13,14 +13,33 @@ import {
   postMortemsOf,
   realLimitsDeps,
 } from "../src/daemon/limits";
-import type {
-  MemoryCharge,
-  MemorySizes,
+import {
+  BYTES_PER_MB as MB,
+  type MemoryCharge,
+  type OwnUsage,
 } from "../src/daemon/foundations/memory-limit";
+import type { ReadProcess } from "../src/daemon/memory-report";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+  type RendererName,
+} from "../src/daemon/foundations/renderer-name";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
+import type { Monotonic } from "../src/time";
+
+// A renderer process, as the backstop is handed it.
+interface RendererFake {
+  name: RendererName;
+  // Its spawn; absent, its first.
+  generation?: number;
+  pid: number;
+  usage: OwnUsage;
+  // What the platform charges it; absent, its RSS as Linux charges it.
+  charge?: MemoryCharge;
+}
 
 interface Recorder {
   shutdownCalls: number[];
@@ -35,17 +54,34 @@ interface Recorder {
   removed: string[];
   logs: Array<{ level: string; msg: string }>;
   fakeRss: number;
-  // What the platform charges; absent, RSS is the charge (Linux).
+  // What the platform charges the host; absent, RSS is the charge (Linux).
   fakeCharge?: MemoryCharge;
   fakeHeapTotal: number;
   fakeNow: number;
+  // The reading's monotonic clock, which a test moves to age a reading.
+  fakeMono: number;
   startedAtMs: number;
   pid: number;
   snapshotDir: string;
   existingFiles: string[];
-  // The renderer's own process, when the daemon runs one.
-  renderer: { pid: number; usage: MemorySizes | null } | null;
+  renderers: RendererFake[];
+  // Each renderer the backstop ended, and why.
+  ended: Array<{ name: RendererName; why: string }>;
   chargedPids: number[][];
+  capturedPids: number[];
+}
+
+function chargeOf(rec: Recorder, { pid, usage }: ReadProcess): MemoryCharge {
+  const charge =
+    pid === rec.pid
+      ? rec.fakeCharge
+      : rec.renderers.find((renderer) => renderer.pid === pid)!.charge;
+  return (
+    charge ??
+    (usage.kind === "read"
+      ? { kind: "charged", measure: "rss", bytes: usage.sizes.rss }
+      : { kind: "unread", unread: usage.why })
+  );
 }
 
 function makeDeps(
@@ -55,6 +91,7 @@ function makeDeps(
   return {
     clock: {
       now: () => rec.fakeNow,
+      monotonic: () => rec.fakeMono as Monotonic,
       after: systemTimekeeper.after,
       detach: systemTimekeeper.detach,
     },
@@ -62,25 +99,28 @@ function makeDeps(
     snapshotDir: rec.snapshotDir,
     log: (level, msg) => rec.logs.push({ level, msg }),
     memoryBytes: () => ({ rss: rec.fakeRss, heapTotal: rec.fakeHeapTotal }),
-    memoryCharge: async (pids, rss) => {
-      rec.chargedPids.push([...pids]);
-      return rec.fakeCharge ?? { kind: "charged", measure: "rss", bytes: rss };
+    memoryCharge: async (processes) => {
+      rec.chargedPids.push(processes.map(({ pid }) => pid));
+      return (process) => chargeOf(rec, process);
     },
-    renderer: () =>
-      rec.renderer === null
-        ? null
-        : {
-            ...rec.renderer,
-            heapSnapshot: async (file) => {
-              rec.order.push("write-renderer-heap");
-              rec.snapshotsWritten.push(file);
-              rec.existingFiles.push(file);
-            },
-          },
-    captureMemoryReport: async () => {
+    renderers: () =>
+      rec.renderers.map(({ name, generation = 1, pid, usage }) => ({
+        name,
+        generation,
+        pid,
+        usage,
+        heapSnapshot: async (file) => {
+          rec.order.push("write-renderer-heap");
+          rec.snapshotsWritten.push(file);
+          rec.existingFiles.push(file);
+        },
+        end: (why) => rec.ended.push({ name, why }),
+      })),
+    captureMemoryReport: async (pid) => {
       rec.order.push("capture");
+      rec.capturedPids.push(pid);
       if (rec.captureThrows) throw new Error("footprint exploded");
-      return "# memory report from: footprint -p 4242\n118 MB tag 16";
+      return `# memory report from: footprint -p ${pid}\n118 MB tag 16`;
     },
     writeMemoryReport: (file, text) => {
       rec.order.push("write-report");
@@ -107,7 +147,7 @@ function makeDeps(
     startedAtMs: rec.startedAtMs,
     // The fixture's own limit: these tests judge readings against a limit they
     // state, not whatever the shipped default is.
-    limitBytes: FIXTURE_LIMIT_MB * 1024 * 1024,
+    limitBytes: FIXTURE_LIMIT_MB * MB,
     ...overrides,
   };
 }
@@ -124,17 +164,31 @@ function newRec(): Recorder {
     order: [],
     captureThrows: false,
     reportWriteThrows: false,
-    fakeRss: 50 * 1024 * 1024,
-    fakeHeapTotal: 20 * 1024 * 1024,
+    fakeRss: 50 * MB,
+    fakeHeapTotal: 20 * MB,
     fakeNow: Date.parse("2026-04-01T00:00:00Z"),
+    fakeMono: 0,
     startedAtMs: Date.parse("2026-04-01T00:00:00Z"),
     pid: 4242,
     snapshotDir: "/fake-snapshot-dir",
     existingFiles: [],
-    renderer: null,
+    renderers: [],
+    ended: [],
     chargedPids: [],
+    capturedPids: [],
   };
 }
+
+const WORKTREE = rendererNameOf("worktree");
+const rendererAt = (
+  name: RendererName,
+  pid: number,
+  rss: number,
+): RendererFake => ({
+  name,
+  pid,
+  usage: { kind: "read", sizes: { rss, heapTotal: 60 * MB } },
+});
 
 describe("limits.check", () => {
   test("under limit: no shutdown, no snapshot", async () => {
@@ -147,49 +201,87 @@ describe("limits.check", () => {
 
   test("over limit: writes snapshot then shuts down", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
-    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }));
+    rec.fakeRss = 250 * MB;
+    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * MB }));
     expect(await limits.check()).toBe(true);
     expect(rec.snapshotsWritten).toHaveLength(1);
     expect(rec.shutdownCalls).toEqual([0]);
   });
 
-  test("a renderer in its own process counts in the charge, judged with the host's as one", async () => {
+  test("each process is judged on its own charge, read in one call: none over alone is no breach", async () => {
     const rec = newRec();
-    rec.fakeRss = 150 * 1024 * 1024;
-    rec.renderer = {
-      pid: 4343,
-      usage: { rss: 100 * 1024 * 1024, heapTotal: 60 * 1024 * 1024 },
-    };
-    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }));
-    // Neither process is over the limit alone; the two together are.
-    expect(await limits.check()).toBe(true);
-    expect(rec.chargedPids).toEqual([[4242, 4343]]);
-    expect(rec.shutdownCalls).toEqual([0]);
+    rec.fakeRss = 150 * MB;
+    rec.renderers = [
+      rendererAt(MAIN_RENDERER, 4343, 150 * MB),
+      rendererAt(WORKTREE, 4444, 150 * MB),
+    ];
+    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * MB }));
+    expect(await limits.check()).toBe(false);
+    expect(rec.chargedPids).toEqual([[4242, 4343, 4444]]);
+    expect(rec.shutdownCalls).toEqual([]);
+    expect(rec.ended).toEqual([]);
   });
 
-  test("a breach writes the renderer's heap before the host's, both under its identity", async () => {
+  test("a renderer over the limit is recorded under its own identity and ended alone, and the host serves on", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
-    rec.renderer = { pid: 4343, usage: null };
-    await makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 })).check();
+    rec.renderers = [
+      rendererAt(MAIN_RENDERER, 4343, 50 * MB),
+      rendererAt(WORKTREE, 4444, 250 * MB),
+    ];
+    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * MB }));
+    expect(await limits.check()).toBe(false);
     expect(rec.order).toEqual([
       "capture",
       "write-report",
       "write-renderer-heap",
-      "write-log",
-      "write-heap",
+    ]);
+    expect(rec.capturedPids).toEqual([4444]);
+    expect(rec.reportsWritten.map(({ file }) => file)).toEqual([
+      "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-renderer-worktree-4444.txt",
     ]);
     expect(rec.snapshotsWritten).toEqual([
-      "/fake-snapshot-dir/renderer-heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
-      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
+      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-renderer-worktree-4444.heapsnapshot",
     ]);
+    expect(rec.ended).toEqual([
+      {
+        name: WORKTREE,
+        why: "passed its memory limit: rss 250 MB > limit 200 MB",
+      },
+    ]);
+    expect(rec.shutdownCalls).toEqual([]);
+    expect(rec.logs).toContainEqual({
+      level: "warn",
+      msg: "renderer worktree passed its memory limit: rss 250 MB > limit 200 MB (rss 250 MB, v8 heap 60 MB); recording its memory, then ending it",
+    });
+    // The backstop stays armed: the next reading judges again.
+    rec.renderers = [rendererAt(MAIN_RENDERER, 4343, 250 * MB)];
+    expect(await limits.check()).toBe(false);
+    expect(rec.ended.map(({ name }) => name)).toEqual([
+      WORKTREE,
+      MAIN_RENDERER,
+    ]);
+  });
+
+  test("the host over the limit ends the daemon, recording only its own memory", async () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * MB;
+    rec.renderers = [rendererAt(MAIN_RENDERER, 4343, 250 * MB)];
+    expect(
+      await makeLimits(makeDeps(rec, { limitBytes: 200 * MB })).check(),
+    ).toBe(true);
+    expect(rec.capturedPids).toEqual([4242]);
+    expect(rec.snapshotsWritten).toEqual([
+      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-host-4242.heapsnapshot",
+    ]);
+    expect(rec.shutdownCalls).toEqual([0]);
+    // The daemon's end ends every renderer with it.
+    expect(rec.ended).toEqual([]);
   });
 
   test("only triggers once even if RSS stays high", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
-    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }));
+    rec.fakeRss = 250 * MB;
+    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * MB }));
     await limits.check();
     await limits.check();
     await limits.check();
@@ -199,20 +291,23 @@ describe("limits.check", () => {
 
   test("callers overlapping one slow reading share it, so a breach is recorded once", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
-    let answer: (c: MemoryCharge) => void = () => {};
+    rec.fakeRss = 250 * MB;
+    let answer: () => void = () => {};
     let probes = 0;
+    const charged = makeDeps(rec).memoryCharge;
     const limits = makeLimits(
       makeDeps(rec, {
-        limitBytes: 200 * 1024 * 1024,
-        memoryCharge: () => {
+        limitBytes: 200 * MB,
+        memoryCharge: (processes) => {
           probes++;
-          return new Promise((resolve) => (answer = resolve));
+          return new Promise(
+            (resolve) => (answer = () => resolve(charged(processes))),
+          );
         },
       }),
     );
     const both = Promise.all([limits.check(), limits.check()]);
-    answer({ kind: "charged", measure: "phys_footprint", bytes: rec.fakeRss });
+    answer();
     expect(await both).toEqual([true, true]);
     expect(probes).toBe(1);
     expect(rec.shutdownCalls).toEqual([0]);
@@ -222,11 +317,11 @@ describe("limits.check", () => {
 
   test("the attribution completes before the snapshot starts", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
+    rec.fakeRss = 250 * MB;
     let answer!: (report: string) => void;
     const limits = makeLimits(
       makeDeps(rec, {
-        limitBytes: 200 * 1024 * 1024,
+        limitBytes: 200 * MB,
         captureMemoryReport: () => new Promise((resolve) => (answer = resolve)),
       }),
     );
@@ -242,11 +337,11 @@ describe("limits.check", () => {
 
   test("a close during the attribution writes no snapshot and does not shut down", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
+    rec.fakeRss = 250 * MB;
     let answer!: (report: string) => void;
     const limits = makeLimits(
       makeDeps(rec, {
-        limitBytes: 200 * 1024 * 1024,
+        limitBytes: 200 * MB,
         captureMemoryReport: () => new Promise((resolve) => (answer = resolve)),
       }),
     );
@@ -258,22 +353,26 @@ describe("limits.check", () => {
     expect(rec.snapshotsWritten).toEqual([]);
     expect(rec.shutdownCalls).toEqual([]);
     expect(rec.logs.map((l) => l.msg)).toContain(
-      "daemon closed during the breach: no snapshot, no exit",
+      "daemon closed during the host's breach: no snapshot, no end",
     );
   });
 
-  test("a close during the renderer's heap snapshot writes no host snapshot and does not shut down", async () => {
+  test("a close during a renderer's heap snapshot does not end it", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
+    rec.renderers = [rendererAt(WORKTREE, 4444, 250 * MB)];
     let written!: () => void;
-    const limits = makeLimits({
-      ...makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }),
-      renderer: () => ({
-        pid: 4343,
-        usage: null,
-        heapSnapshot: () => new Promise<void>((resolve) => (written = resolve)),
+    const listed = makeDeps(rec).renderers;
+    const limits = makeLimits(
+      makeDeps(rec, {
+        limitBytes: 200 * MB,
+        renderers: () =>
+          listed().map((renderer) => ({
+            ...renderer,
+            heapSnapshot: () =>
+              new Promise<void>((resolve) => (written = resolve)),
+          })),
       }),
-    });
+    );
     const checking = limits.check();
     await until(
       () => written !== undefined,
@@ -282,21 +381,56 @@ describe("limits.check", () => {
     limits.disarm();
     written();
     expect(await checking).toBe(false);
-    expect(rec.snapshotsWritten).toEqual([]);
-    expect(rec.shutdownCalls).toEqual([]);
+    expect(rec.ended).toEqual([]);
+    expect(rec.logs.map((l) => l.msg)).toContain(
+      "daemon closed during the renderer worktree's breach: no snapshot, no end",
+    );
+  });
+
+  test("a close during one renderer's breach starts no other's", async () => {
+    const rec = newRec();
+    rec.renderers = [
+      rendererAt(WORKTREE, 4444, 250 * MB),
+      rendererAt(MAIN_RENDERER, 4343, 250 * MB),
+    ];
+    let written!: () => void;
+    const listed = makeDeps(rec).renderers;
+    const limits = makeLimits(
+      makeDeps(rec, {
+        limitBytes: 200 * MB,
+        renderers: () =>
+          listed().map((renderer) => ({
+            ...renderer,
+            heapSnapshot: () =>
+              new Promise<void>((resolve) => (written = resolve)),
+          })),
+      }),
+    );
+    const checking = limits.check();
+    await until(
+      () => written !== undefined,
+      "the first renderer's snapshot to start",
+    );
+    limits.disarm();
+    written();
+    expect(await checking).toBe(false);
+    expect(rec.capturedPids).toEqual([4444]);
+    expect(rec.logs.map((l) => l.msg)).not.toContainEqual(
+      expect.stringContaining("renderer main passed"),
+    );
   });
 
   test("snapshot filename is written under the injected dir, not the real daemonDir", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
-    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }));
+    rec.fakeRss = 250 * MB;
+    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * MB }));
     await limits.check();
     expect(rec.snapshotsWritten[0]).toMatch(
       /^\/fake-snapshot-dir\/heap-.*\.heapsnapshot$/,
     );
     // No ambient logging: every line landed in the injected sink.
     expect(rec.logs.map((l) => l.msg)).toContain(
-      "heap snapshot written: /fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
+      "heap snapshot written: /fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-host-4242.heapsnapshot",
     );
   });
 
@@ -304,14 +438,14 @@ describe("limits.check", () => {
     // Two daemons hit the wall at the SAME instant (identical fakeNow); only
     // the pid distinguishes their snapshots, so neither clobbers the other.
     const a = newRec();
-    a.fakeRss = 250 * 1024 * 1024;
+    a.fakeRss = 250 * MB;
     a.pid = 111;
-    await makeLimits(makeDeps(a, { limitBytes: 200 * 1024 * 1024 })).check();
+    await makeLimits(makeDeps(a, { limitBytes: 200 * MB })).check();
 
     const b = newRec();
-    b.fakeRss = 250 * 1024 * 1024;
+    b.fakeRss = 250 * MB;
     b.pid = 222;
-    await makeLimits(makeDeps(b, { limitBytes: 200 * 1024 * 1024 })).check();
+    await makeLimits(makeDeps(b, { limitBytes: 200 * MB })).check();
 
     expect(a.snapshotsWritten[0]).toContain("-111.heapsnapshot");
     expect(b.snapshotsWritten[0]).toContain("-222.heapsnapshot");
@@ -325,8 +459,8 @@ describe("limits.check", () => {
 // the death path also records what the platform can attribute.
 describe("the breach records where the memory actually was", () => {
   async function breach(rec: Recorder): Promise<void> {
-    rec.fakeRss = 250 * 1024 * 1024;
-    await makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 })).check();
+    rec.fakeRss = 250 * MB;
+    await makeLimits(makeDeps(rec, { limitBytes: 200 * MB })).check();
   }
 
   test("the captured attribution is written beside the snapshot, same identity", async () => {
@@ -334,14 +468,14 @@ describe("the breach records where the memory actually was", () => {
     await breach(rec);
     expect(rec.reportsWritten).toHaveLength(1);
     expect(rec.reportsWritten[0]!.file).toBe(
-      "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-4242.txt",
+      "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-host-4242.txt",
     );
     // The captured text reaches the file verbatim — the capture and the write
     // are separate deps precisely so this is observable.
     expect(rec.reportsWritten[0]!.text).toContain("118 MB tag 16");
     // Same stamp and pid as the snapshot: one breach, one identity, two files.
     expect(rec.snapshotsWritten[0]).toBe(
-      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
+      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-host-4242.heapsnapshot",
     );
   });
 
@@ -387,7 +521,7 @@ describe("the breach records where the memory actually was", () => {
 
   test("the breach log names the heap share of the charge that tripped it", async () => {
     const rec = newRec();
-    rec.fakeHeapTotal = 30 * 1024 * 1024;
+    rec.fakeHeapTotal = 30 * MB;
     await breach(rec);
     const warn = rec.logs.find((l) => l.level === "warn")!.msg;
     expect(warn).toContain("rss 250 MB > limit 200 MB");
@@ -398,13 +532,13 @@ describe("the breach records where the memory actually was", () => {
 describe("heap snapshot rotation", () => {
   test("keeps only the 3 newest snapshots", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
+    rec.fakeRss = 250 * MB;
     rec.existingFiles = [
       "/d/heap-2026-01-01T00-00-00-000Z-1.heapsnapshot",
       "/d/heap-2026-02-01T00-00-00-000Z-1.heapsnapshot",
       "/d/heap-2026-03-01T00-00-00-000Z-1.heapsnapshot",
     ];
-    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }));
+    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * MB }));
     await limits.check();
     // After write+rotate: 4 existed (3 plus new one), keep=3, oldest removed.
     expect(rec.removed).toHaveLength(1);
@@ -416,13 +550,13 @@ describe("heap snapshot rotation", () => {
   // is the shared `<stamp>-<pid>` tail, and both of an evicted breach's files go.
   test("rotation counts breaches, not files, and evicts a breach whole", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
+    rec.fakeRss = 250 * MB;
     rec.existingFiles = [
       "/d/heap-2026-01-01T00-00-00-000Z-9.heapsnapshot",
       "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
     ];
     await makeLimits(
-      makeDeps(rec, { limitBytes: 200 * 1024 * 1024, snapshotsKeep: 1 }),
+      makeDeps(rec, { limitBytes: 200 * MB, snapshotsKeep: 1 }),
     ).check();
     // The new breach is kept whole; the older breach's BOTH files are gone.
     expect([...rec.removed].sort()).toEqual([
@@ -430,14 +564,14 @@ describe("heap snapshot rotation", () => {
       "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
     ]);
     expect(rec.existingFiles.sort()).toEqual([
-      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
-      "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-4242.txt",
+      "/fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-host-4242.heapsnapshot",
+      "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-host-4242.txt",
     ]);
   });
 
   test("a file that will not go is logged, and every other eviction still happens", async () => {
     const rec = newRec();
-    rec.fakeRss = 250 * 1024 * 1024;
+    rec.fakeRss = 250 * MB;
     const stuck = "/d/heap-2026-01-01T00-00-00-000Z-9.heapsnapshot";
     rec.existingFiles = [
       stuck,
@@ -447,7 +581,7 @@ describe("heap snapshot rotation", () => {
     const remove = makeDeps(rec).removeFile;
     await makeLimits(
       makeDeps(rec, {
-        limitBytes: 200 * 1024 * 1024,
+        limitBytes: 200 * MB,
         snapshotsKeep: 1,
         removeFile: (file: string) => {
           if (file === stuck) throw new Error("EBUSY");
@@ -466,83 +600,139 @@ describe("heap snapshot rotation", () => {
   });
 });
 
-describe("describeNextRestart", () => {
-  test("null before any reading, and when far from the limit", async () => {
+const MAIN_FIRST = { name: MAIN_RENDERER, generation: 1, pid: 4343 };
+
+describe("a process's memory", () => {
+  test("unmeasured before any reading, and for a process no reading has charged", async () => {
     const rec = newRec();
-    rec.fakeRss = FIXTURE_LIMIT_MB * 0.8 * 1024 * 1024;
-    const limits = makeLimits(
-      makeDeps(rec, {
-        memoryCharge: async () => ({
-          kind: "charged",
-          measure: "phys_footprint",
-          bytes: 50 * 1024 * 1024,
-        }),
-      }),
-    );
-    expect(limits.describeNextRestart()).toBeNull();
+    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * MB }));
+    // Before any reading: none, never a number passed off as one.
+    expect(limits.host()).toEqual({
+      pid: rec.pid,
+      memory: { kind: "unmeasured" },
+      limit: 200 * MB,
+      nearAt: 150 * MB,
+    });
     await limits.check();
-    // RSS is past three quarters; the charge is not, and the charge decides.
-    expect(limits.describeNextRestart()).toBeNull();
+    // It says how long before it is asked the check read it.
+    rec.fakeMono += 4_000;
+    expect(limits.host()).toEqual({
+      pid: rec.pid,
+      memory: {
+        kind: "measured",
+        ageMs: 4_000,
+        charge: { kind: "charged", measure: "rss", bytes: rec.fakeRss },
+        usage: {
+          kind: "read",
+          sizes: { rss: rec.fakeRss, heapTotal: rec.fakeHeapTotal },
+        },
+      },
+      limit: 200 * MB,
+      nearAt: 150 * MB,
+    });
+    // A renderer started since the last reading.
+    expect(limits.renderer(MAIN_FIRST).memory).toEqual({ kind: "unmeasured" });
   });
 
-  // brandon-daemon-limits-inw: the warning is the one place a human is told
-  // growth is coming, so it says whether the growth is V8-side (a cache to fix)
-  // or not (something the heap snapshot could never have shown them).
-  test("flags the charge approaching the limit, naming its measure and the heap share", async () => {
+  test("each process's reading is its own", async () => {
     const rec = newRec();
-    rec.fakeHeapTotal = 11 * 1024 * 1024;
     rec.fakeCharge = {
       kind: "charged",
       measure: "phys_footprint",
-      bytes: 400 * 1024 * 1024,
+      bytes: 50 * MB,
     };
+    rec.renderers = [
+      {
+        ...rendererAt(MAIN_RENDERER, 4343, 450 * MB),
+        charge: { kind: "charged", measure: "phys_footprint", bytes: 400 * MB },
+      },
+    ];
     const limits = makeLimits(makeDeps(rec));
     await limits.check();
-    expect(limits.describeNextRestart()).toBe(
-      "phys_footprint 400 MB approaching limit 512 MB (v8 heap 11 MB)",
-    );
+    expect(limits.host().memory).toMatchObject({
+      charge: { bytes: 50 * MB },
+    });
+    expect(limits.renderer(MAIN_FIRST).memory).toEqual({
+      kind: "measured",
+      ageMs: 0,
+      charge: { kind: "charged", measure: "phys_footprint", bytes: 400 * MB },
+      usage: { kind: "read", sizes: { rss: 450 * MB, heapTotal: 60 * MB } },
+    });
   });
 
-  // brandon-unfiled-3248.ptv0: RSS standing in forecasts as the limit judges
-  // it, less the gap the last charged reading measured.
-  test("forecasts by RSS standing in less its gap", async () => {
-    const MB = 1024 * 1024;
+  test("a later spawn the OS hands an earlier one's pid is a process of its own: no reading of the earlier is its, nor its gap", async () => {
     const rec = newRec();
-    rec.fakeHeapTotal = 11 * MB;
+    rec.renderers = [
+      {
+        ...rendererAt(MAIN_RENDERER, 4343, 450 * MB),
+        charge: { kind: "charged", measure: "phys_footprint", bytes: 300 * MB },
+      },
+    ];
     const limits = makeLimits(makeDeps(rec));
-    rec.fakeRss = 350 * MB;
-    rec.fakeCharge = {
-      kind: "charged",
-      measure: "phys_footprint",
-      bytes: 200 * MB,
-    };
     await limits.check();
-    rec.fakeRss = 500 * MB;
-    rec.fakeCharge = {
-      kind: "stand-in",
-      bytes: 500 * MB,
-      unread: "footprint timeout",
-    };
+    const second = { ...MAIN_FIRST, generation: 2 };
+    expect(limits.renderer(second).memory).toEqual({ kind: "unmeasured" });
+    rec.renderers = [
+      {
+        ...rendererAt(MAIN_RENDERER, 4343, 600 * MB),
+        generation: 2,
+        charge: {
+          kind: "stand-in",
+          rss: 600 * MB,
+          unread: "footprint timeout",
+        },
+      },
+    ];
     await limits.check();
-    expect(limits.describeNextRestart()).toBeNull();
-    rec.fakeRss = 600 * MB;
-    rec.fakeCharge = {
-      kind: "stand-in",
-      bytes: 600 * MB,
-      unread: "footprint timeout",
+    // Judged on its own RSS whole: the 150 MB gap was the first spawn's.
+    expect(limits.renderer(second).memory).toMatchObject({
+      charge: { kind: "stand-in", rss: 600 * MB, gap: 0 },
+    });
+    expect(rec.ended).toEqual([
+      {
+        name: MAIN_RENDERER,
+        why: "passed its memory limit: rss 600 MB (standing in: footprint timeout) > limit 512 MB",
+      },
+    ]);
+  });
+
+  test("a renderer no ping has read is charged from its spawn, and one nothing could charge is said, never judged", async () => {
+    const rec = newRec();
+    const unread: OwnUsage = {
+      kind: "unread",
+      why: "no ping has answered yet",
     };
-    await limits.check();
-    expect(limits.describeNextRestart()).toBe(
-      "rss 600 MB less its last 150 MB gap (standing in: footprint timeout) approaching limit 512 MB (v8 heap 11 MB)",
-    );
+    rec.renderers = [
+      {
+        name: MAIN_RENDERER,
+        pid: 4343,
+        usage: unread,
+        charge: { kind: "charged", measure: "phys_footprint", bytes: 700 * MB },
+      },
+      { name: WORKTREE, pid: 4444, usage: unread },
+    ];
+    expect(await makeLimits(makeDeps(rec)).check()).toBe(false);
+    expect(rec.chargedPids).toEqual([[rec.pid, 4343, 4444]]);
+    expect(rec.ended).toEqual([
+      {
+        name: MAIN_RENDERER,
+        why: "passed its memory limit: phys_footprint 700 MB > limit 512 MB",
+      },
+    ]);
+    expect(rec.logs).toContainEqual({
+      level: "info",
+      msg: 'memory limit=512MB host.pid=4242 host.measure=rss host.charge=50MB host.rss=50MB host.heap=20MB renderer.main.pid=4343 renderer.main.measure=phys_footprint renderer.main.charge=700MB renderer.worktree.pid=4444 renderer.worktree.measure=unread renderer.worktree.gap=0MB renderer.worktree.unread="no ping has answered yet"',
+    });
+    expect(rec.logs).toContainEqual({
+      level: "warn",
+      msg: "renderer main passed its memory limit: phys_footprint 700 MB > limit 512 MB (no sizes: no ping has answered yet); recording its memory, then ending it",
+    });
   });
 });
 
 // brandon-unfiled-3248.2j3m: macOS RSS counts pages malloc freed and marked
 // reusable, so the verdict is the platform's charge, never RSS beside it.
 describe("the charge is the verdict", () => {
-  const MB = 1024 * 1024;
-
   test("RSS over the limit with the charge under it is no breach, and the reading is logged", async () => {
     const rec = newRec();
     rec.fakeRss = 600 * MB;
@@ -552,12 +742,13 @@ describe("the charge is the verdict", () => {
       measure: "phys_footprint",
       bytes: 300 * MB,
     };
+    rec.renderers = [rendererAt(MAIN_RENDERER, 4343, 100 * MB)];
     expect(await makeLimits(makeDeps(rec)).check()).toBe(false);
     expect(rec.shutdownCalls).toEqual([]);
     expect(rec.logs).toEqual([
       {
         level: "info",
-        msg: "memory measure=phys_footprint charge=300MB rss=600MB heap=150MB limit=512MB host=4242:rss600MB/heap150MB",
+        msg: "memory limit=512MB host.pid=4242 host.measure=phys_footprint host.charge=300MB host.rss=600MB host.heap=150MB renderer.main.pid=4343 renderer.main.measure=rss renderer.main.charge=100MB renderer.main.rss=100MB renderer.main.heap=60MB",
       },
     ]);
   });
@@ -575,7 +766,7 @@ describe("the charge is the verdict", () => {
     expect(rec.shutdownCalls).toEqual([0]);
     expect(rec.logs).toContainEqual({
       level: "warn",
-      msg: "phys_footprint 539 MB > limit 512 MB (rss 500 MB, v8 heap 150 MB); recording memory then shutting down",
+      msg: "host passed its memory limit: phys_footprint 539 MB > limit 512 MB (rss 500 MB, v8 heap 150 MB); recording its memory, then ending it",
     });
   });
 
@@ -586,7 +777,7 @@ describe("the charge is the verdict", () => {
     rec.fakeRss = rss;
     rec.fakeCharge =
       footprint === null
-        ? { kind: "stand-in", bytes: rss, unread: "footprint timeout" }
+        ? { kind: "stand-in", rss, unread: "footprint timeout" }
         : { kind: "charged", measure: "phys_footprint", bytes: footprint };
   };
 
@@ -602,9 +793,72 @@ describe("the charge is the verdict", () => {
     expect(await limits.check()).toBe(false);
     expect(rec.shutdownCalls).toEqual([]);
     expect(rec.logs.slice(1).map((l) => l.msg)).toEqual([
-      'memory measure=rss-stand-in charge=450MB rss=600MB heap=150MB limit=512MB unread="footprint timeout" gap=150MB host=4242:rss600MB/heap150MB',
-      'memory measure=rss-stand-in charge=470MB rss=620MB heap=150MB limit=512MB unread="footprint timeout" gap=150MB host=4242:rss620MB/heap150MB',
+      'memory limit=512MB host.pid=4242 host.measure=rss-stand-in host.charge=450MB host.rss=600MB host.heap=150MB host.gap=150MB host.unread="footprint timeout"',
+      'memory limit=512MB host.pid=4242 host.measure=rss-stand-in host.charge=470MB host.rss=620MB host.heap=150MB host.gap=150MB host.unread="footprint timeout"',
     ]);
+  });
+
+  test("a process's stand-in is judged less its own gap, never another's", async () => {
+    const rec = newRec();
+    read(rec, 450 * MB, 300 * MB);
+    const limits = makeLimits(makeDeps(rec));
+    await limits.check();
+    // The renderer's first reading stands in whole: no charged reading of its
+    // own measured a gap, and the host's is the host's.
+    rec.renderers = [
+      {
+        ...rendererAt(MAIN_RENDERER, 4343, 600 * MB),
+        charge: {
+          kind: "stand-in",
+          rss: 600 * MB,
+          unread: "footprint timeout",
+        },
+      },
+    ];
+    expect(await limits.check()).toBe(false);
+    expect(rec.ended).toEqual([
+      {
+        name: MAIN_RENDERER,
+        why: "passed its memory limit: rss 600 MB (standing in: footprint timeout) > limit 512 MB",
+      },
+    ]);
+  });
+
+  test("a reading that measured no gap carries the one before it", async () => {
+    const rec = newRec();
+    const limits = makeLimits(makeDeps(rec));
+    const renderer = (usage: OwnUsage, charge: MemoryCharge): void => {
+      rec.renderers = [
+        { ...rendererAt(MAIN_RENDERER, 4343, 0), usage, charge },
+      ];
+    };
+    const rss = (n: number): OwnUsage => ({
+      kind: "read",
+      sizes: { rss: n, heapTotal: 60 * MB },
+    });
+    const footprint = (bytes: number): MemoryCharge => ({
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes,
+    });
+    renderer(rss(450 * MB), footprint(300 * MB));
+    await limits.check();
+    // Charged, beside no RSS of its own: no gap measured.
+    renderer(
+      { kind: "unread", why: "its ping went unanswered" },
+      footprint(310 * MB),
+    );
+    await limits.check();
+    renderer(rss(600 * MB), {
+      kind: "stand-in",
+      rss: 600 * MB,
+      unread: "footprint timeout",
+    });
+    await limits.check();
+    expect(limits.renderer(MAIN_FIRST).memory).toMatchObject({
+      charge: { kind: "stand-in", rss: 600 * MB, gap: 150 * MB },
+    });
+    expect(rec.ended).toEqual([]);
   });
 
   test("a runaway is judged at once, though its footprint went unread", async () => {
@@ -618,7 +872,7 @@ describe("the charge is the verdict", () => {
     expect(rec.shutdownCalls).toEqual([0]);
     expect(rec.logs).toContainEqual({
       level: "warn",
-      msg: "rss 2000 MB less its last 150 MB gap (standing in: footprint timeout) > limit 512 MB (rss 2000 MB, v8 heap 150 MB); recording memory then shutting down",
+      msg: "host passed its memory limit: rss 2000 MB less its last 150 MB gap (standing in: footprint timeout) > limit 512 MB (rss 2000 MB, v8 heap 150 MB); recording its memory, then ending it",
     });
   });
 
@@ -628,8 +882,8 @@ describe("the charge is the verdict", () => {
     read(rec, 600 * MB, null);
     expect(await makeLimits(makeDeps(rec)).check()).toBe(true);
     expect(rec.logs.slice(0, 2).map((l) => l.msg)).toEqual([
-      'memory measure=rss-stand-in charge=600MB rss=600MB heap=150MB limit=512MB unread="footprint timeout" gap=0MB host=4242:rss600MB/heap150MB',
-      "rss 600 MB (standing in: footprint timeout) > limit 512 MB (rss 600 MB, v8 heap 150 MB); recording memory then shutting down",
+      'memory limit=512MB host.pid=4242 host.measure=rss-stand-in host.charge=600MB host.rss=600MB host.heap=150MB host.gap=0MB host.unread="footprint timeout"',
+      "host passed its memory limit: rss 600 MB (standing in: footprint timeout) > limit 512 MB (rss 600 MB, v8 heap 150 MB); recording its memory, then ending it",
     ]);
   });
 
@@ -650,13 +904,12 @@ describe("the charge is the verdict", () => {
     try {
       const rec = newRec();
       const answers: Array<() => void> = [];
+      const charged = makeDeps(rec).memoryCharge;
       const limits = makeLimits(
         makeDeps(rec, {
-          memoryCharge: (_pids, rss) =>
+          memoryCharge: (processes) =>
             new Promise((resolve) =>
-              answers.push(() =>
-                resolve({ kind: "charged", measure: "rss", bytes: rss }),
-              ),
+              answers.push(() => resolve(charged(processes))),
             ),
         }),
       );
@@ -730,7 +983,7 @@ describe("memoryLimitMb / heapCapMb (the memory-budget grammar)", () => {
 // brandon-doctor-v62x.5mq: the post-mortems the doctor reads are the breaches
 // rotation keeps — one grouping.
 describe("post-mortems", () => {
-  test("group by breach, newest first, each artifact under its kind, the memory report first; a file no breach wrote is none", async () => {
+  test("group by breach, newest first, each artifact under its kind, the memory report first; a file no breach wrote is none, and one whose identity has no stamp is the oldest", async () => {
     expect(
       postMortemsOf([
         "/s/heap-2026-04-01T00-00-00-000Z-9.heapsnapshot",
@@ -739,16 +992,20 @@ describe("post-mortems", () => {
         "/s/memory-2026-04-01T00-00-00-000Z-9.txt",
         "/s/heap-2026-04-02T00-00-00-000Z-9.heapsnapshot",
         "/s/heap-2026-04-03T00-00-00-000Z-9.heapsnapshot",
+        "/s/heap-not-a-breach.heapsnapshot",
+        "/s/not-a-breach.heapsnapshot",
       ]),
     ).toEqual([
       {
         identity: "2026-04-03T00-00-00-000Z-9",
+        process: { kind: "host" },
         artifacts: {
           heapSnapshot: "/s/heap-2026-04-03T00-00-00-000Z-9.heapsnapshot",
         },
       },
       {
         identity: "2026-04-02T00-00-00-000Z-9",
+        process: { kind: "host" },
         artifacts: {
           memoryReport: "/s/memory-2026-04-02T00-00-00-000Z-9.txt",
           heapSnapshot: "/s/heap-2026-04-02T00-00-00-000Z-9.heapsnapshot",
@@ -756,10 +1013,16 @@ describe("post-mortems", () => {
       },
       {
         identity: "2026-04-01T00-00-00-000Z-9",
+        process: { kind: "host" },
         artifacts: {
           memoryReport: "/s/memory-2026-04-01T00-00-00-000Z-9.txt",
           heapSnapshot: "/s/heap-2026-04-01T00-00-00-000Z-9.heapsnapshot",
         },
+      },
+      {
+        identity: "not-a-breach",
+        process: { kind: "unnamed" },
+        artifacts: { heapSnapshot: "/s/heap-not-a-breach.heapsnapshot" },
       },
     ]);
     // Listed heap-first, read memory-first.
@@ -773,29 +1036,102 @@ describe("post-mortems", () => {
     ).toEqual(["memoryReport", "heapSnapshot"]);
   });
 
-  test("serving() reports one memory reading against the budget", async () => {
-    const rec = newRec();
-    const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }));
-    // Before any reading: none, never a number passed off as one.
-    expect(limits.serving().memory).toEqual({ kind: "unmeasured" });
-    await limits.check();
-    expect(limits.serving()).toEqual({
-      pid: rec.pid,
-      memory: {
-        kind: "measured",
-        charge: { kind: "charged", measure: "rss", bytes: rec.fakeRss },
-        rss: rec.fakeRss,
-        heapTotal: rec.fakeHeapTotal,
-        processes: [
-          {
-            role: "host",
-            pid: rec.pid,
-            sizes: { rss: rec.fakeRss, heapTotal: rec.fakeHeapTotal },
-          },
-        ],
+  test("a renderer's breach is listed as that renderer's", () => {
+    expect(
+      postMortemsOf([
+        "/s/memory-2026-04-02T00-00-00-000Z-renderer-worktree-9.txt",
+        "/s/heap-2026-04-02T00-00-00-000Z-renderer-worktree-9.heapsnapshot",
+        "/s/heap-2026-04-01T00-00-00-000Z-8.heapsnapshot",
+      ]),
+    ).toEqual([
+      {
+        identity: "2026-04-02T00-00-00-000Z-renderer-worktree-9",
+        process: { kind: "renderer", name: WORKTREE },
+        artifacts: {
+          memoryReport:
+            "/s/memory-2026-04-02T00-00-00-000Z-renderer-worktree-9.txt",
+          heapSnapshot:
+            "/s/heap-2026-04-02T00-00-00-000Z-renderer-worktree-9.heapsnapshot",
+        },
       },
-      limit: 200 * 1024 * 1024,
-    });
+      {
+        identity: "2026-04-01T00-00-00-000Z-8",
+        process: { kind: "host" },
+        artifacts: {
+          heapSnapshot: "/s/heap-2026-04-01T00-00-00-000Z-8.heapsnapshot",
+        },
+      },
+    ]);
+  });
+
+  test("rotation keeps the host's newest breaches apart from every renderer's together, so a renderer's never evict the host's and a new name adds no room", async () => {
+    const rec = newRec();
+    rec.existingFiles = [
+      "/d/memory-2026-01-01T00-00-00-000Z-host-1.txt",
+      "/d/memory-2026-01-02T00-00-00-000Z-renderer-main-9.txt",
+      "/d/memory-2026-01-03T00-00-00-000Z-renderer-worktree-8.txt",
+      "/d/heap-2026-01-03T00-00-00-000Z-renderer-worktree-8.heapsnapshot",
+    ];
+    rec.renderers = [rendererAt(WORKTREE, 4444, 250 * MB)];
+    await makeLimits(
+      makeDeps(rec, { limitBytes: 200 * MB, snapshotsKeep: 1 }),
+    ).check();
+    expect([...rec.removed].sort()).toEqual([
+      "/d/heap-2026-01-03T00-00-00-000Z-renderer-worktree-8.heapsnapshot",
+      "/d/memory-2026-01-02T00-00-00-000Z-renderer-main-9.txt",
+      "/d/memory-2026-01-03T00-00-00-000Z-renderer-worktree-8.txt",
+    ]);
+  });
+
+  test("a host breach an earlier build wrote, its renderer's heap beside it, is listed and rotated whole", async () => {
+    const earlier = [
+      "/d/memory-2026-01-01T00-00-00-000Z-7.txt",
+      "/d/heap-2026-01-01T00-00-00-000Z-7.heapsnapshot",
+      "/d/renderer-heap-2026-01-01T00-00-00-000Z-7.heapsnapshot",
+    ];
+    expect(postMortemsOf(earlier)).toEqual([
+      {
+        identity: "2026-01-01T00-00-00-000Z-7",
+        process: { kind: "host" },
+        artifacts: {
+          memoryReport: earlier[0],
+          heapSnapshot: earlier[1],
+          rendererHeapSnapshot: earlier[2],
+        },
+      },
+    ]);
+    const rec = newRec();
+    rec.fakeRss = 250 * MB;
+    rec.existingFiles = [...earlier];
+    await makeLimits(
+      makeDeps(rec, { limitBytes: 200 * MB, snapshotsKeep: 1 }),
+    ).check();
+    expect([...rec.removed].sort()).toEqual([...earlier].sort());
+  });
+
+  test("a breach's files whose identity names no process are rotated with the renderers', never kept for good", async () => {
+    const rec = newRec();
+    rec.renderers = [rendererAt(WORKTREE, 4444, 250 * MB)];
+    rec.existingFiles = [
+      // `a-` is no renderer's name.
+      "/d/memory-2026-01-01T00-00-00-000Z-renderer-a--7.txt",
+      "/d/memory-2026-01-01T00-00-00-000Z-gremlin-7.txt",
+      "/d/heap-hand-copied.heapsnapshot",
+      "/d/memory-2026-01-02T00-00-00-000Z-host-6.txt",
+    ];
+    await makeLimits(
+      makeDeps(rec, { limitBytes: 200 * MB, snapshotsKeep: 1 }),
+    ).check();
+    expect([...rec.removed].sort()).toEqual([
+      "/d/heap-hand-copied.heapsnapshot",
+      "/d/memory-2026-01-01T00-00-00-000Z-gremlin-7.txt",
+      "/d/memory-2026-01-01T00-00-00-000Z-renderer-a--7.txt",
+    ]);
+    expect(rec.logs).not.toContainEqual(
+      expect.objectContaining({
+        msg: expect.stringContaining("rotation failed"),
+      }),
+    );
   });
 
   test("the breaches a state directory keeps are listed by breach; one that cannot be listed is a failure naming why, never no breaches", () => {
@@ -814,6 +1150,7 @@ describe("post-mortems", () => {
         value: [
           {
             identity: "2026-03-01T00-00-00-000Z-7",
+            process: { kind: "host" },
             artifacts: { memoryReport: report },
           },
         ],
@@ -858,22 +1195,29 @@ describe("post-mortems", () => {
 // [LAW:no-ambient-temporal-coupling] A reading out when the daemon closes lands
 // on a daemon that is gone.
 describe("a breach landing after disarm", () => {
-  test("writes nothing and asks for no exit", async () => {
+  test("writes nothing, asks for no exit and ends no renderer", async () => {
     const rec = newRec();
-    let answer!: (charge: MemoryCharge) => void;
+    rec.fakeRss = 10_000;
+    rec.renderers = [rendererAt(MAIN_RENDERER, 4343, 10_000)];
+    let answer!: () => void;
+    const charged = makeDeps(rec).memoryCharge;
     const limits = makeLimits(
       makeDeps(rec, {
         limitBytes: 100,
-        memoryCharge: () => new Promise((resolve) => (answer = resolve)),
+        memoryCharge: (processes) =>
+          new Promise(
+            (resolve) => (answer = () => resolve(charged(processes))),
+          ),
       }),
     );
     limits.arm();
     limits.disarm();
-    answer({ kind: "charged", measure: "rss", bytes: 10_000 });
+    answer();
     await limits.check();
 
     expect(rec.reportsWritten).toEqual([]);
     expect(rec.snapshotsWritten).toEqual([]);
     expect(rec.shutdownCalls).toEqual([]);
+    expect(rec.ended).toEqual([]);
   });
 });

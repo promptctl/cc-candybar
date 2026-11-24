@@ -47,6 +47,8 @@ import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
 import { fakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
 import { until } from "../../../scripts/lib/until";
+import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
+import { rendererPanelOf } from "../../../src/daemon/foundations/stats-snapshot";
 
 jest.setTimeout(30_000);
 
@@ -494,7 +496,14 @@ describe("a connection to a daemon built in this worker", () => {
       stats.send({ v: PROTOCOL_VERSION, kind: "stats" });
       expect(await answered(stats)).toMatchObject({
         ok: true,
-        stats: { renderCache: { held: 0 } },
+        stats: {
+          renderers: [
+            {
+              name: MAIN_RENDERER,
+              stats: { kind: "ok", value: { renderCache: { held: 0 } } },
+            },
+          ],
+        },
       });
     } finally {
       release();
@@ -622,7 +631,9 @@ describe("a connection to a daemon built in this worker", () => {
           request: expect.any(Number),
         });
         expect(drawn(await answered(fresh))).toContain("a drawn mark 11");
-        expect((await queuedDraw).mailbox.queued).toBeGreaterThan(0);
+        expect(
+          rendererPanelOf(await queuedDraw, MAIN_RENDERER).mailbox.queued,
+        ).toBeGreaterThan(0);
         await clock.settle(0);
         await showing(pane, "a drawn mark 97");
         expect(contexts).toEqual(["draw-a", "draw-b", "draw-a"]);

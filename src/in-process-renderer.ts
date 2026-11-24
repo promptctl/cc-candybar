@@ -122,6 +122,7 @@ function localLink(
     // Only a renderer already built by serve can take the close's steps.
     beginClose: () => (built === null ? "closed" : "closing"),
     close: async () => {},
-    process: () => null,
+    // Its memory is the host process's, and charged as the host's.
+    process: () => ({ kind: "in-host" }),
   };
 }

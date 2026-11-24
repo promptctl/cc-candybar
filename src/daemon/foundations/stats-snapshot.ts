@@ -6,62 +6,12 @@ import type { TranscriptReads } from "../../utils/transcript-fs";
 import type { SourceRecord, SourceScope } from "../../utils/refresh-ledger";
 
 import type { RenderSighting } from "./sightings";
-import type { ServingDaemon } from "./memory-limit";
+import type { ProcessMemory } from "./memory-limit";
+import type { RendererName } from "./renderer-name";
+import type { Asked } from "../../utils/outcome";
 
 import type { KeyedSourceStats } from "../../utils/keyed-source";
-import { isPlainObject } from "../../config/loader/validate-core.js";
-import type {
-  MenuIdleStats,
-  RenderCacheStats,
-  RendererStats,
-} from "../../renderer-interface/renderer-stats.js";
-
-// [LAW:one-source-of-truth] The renderer portion of the public stats
-// reference also describes what the host must receive before using it.
-export const RENDERER_STATS_REFERENCE: RendererStats = {
-  renderCache: {
-    size: 0,
-    held: 0,
-    retired: 0,
-    compiles: 0,
-    views: 0,
-    pinned: 0,
-    retiredViews: 0,
-    passages: 0,
-    accountedBytes: 0,
-    budgetBytes: 0,
-  },
-  effectCache: { sessions: 0, effects: 0 },
-  menuIdle: { sessions: 0, armed: 0 },
-  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
-  sessionState: { sessions: 0, observers: 0, revision: 0 },
-  framesDrawn: 0,
-};
-
-// Paths whose fields are missing or unusable, in reference order. A
-// reference array describes a list, and a tagged union's reference arm
-// says nothing about fields of its other arms.
-export function missingFields(
-  reference: unknown,
-  value: unknown,
-  at = "",
-): string[] {
-  const label = at || "<snapshot>";
-  if (typeof reference === "number") {
-    return typeof value === "number" && Number.isFinite(value) ? [] : [label];
-  }
-  if (Array.isArray(reference)) return Array.isArray(value) ? [] : [label];
-  if (!isPlainObject(reference)) return [];
-  if (!isPlainObject(value)) return [label];
-  if ("kind" in reference) return [];
-  const missing: string[] = [];
-  for (const key of Object.keys(reference)) {
-    const path = at === "" ? key : `${at}.${key}`;
-    if (!(key in value)) missing.push(path);
-    else missing.push(...missingFields(reference[key], value[key], path));
-  }
-  return missing;
-}
+import type { RendererStats } from "../../renderer-interface/renderer-stats.js";
 
 // The keyed sources whose entries a view holds, so a period visits only
 // those held: a repo's, a pane's, the host's name and user, a directory
@@ -80,8 +30,9 @@ export interface SourceSnapshots {
   // Every source declared, from the one ledger: its scope, its refreshes by
   // the trigger that asked, its failures and its last refresh's length.
   readonly records: readonly SourceRecord[];
-  // How many homes of each scope are kept now.
-  readonly homes: Readonly<Record<SourceScope, number>>;
+  // How many homes of each scope the host keeps now. A renderer keeps the
+  // directory and view homes, which its panel's render cache counts.
+  readonly homes: Readonly<Record<HostScope, number>>;
   // How many entries of each keyed source a view holds now.
   readonly held: Readonly<Record<HeldSource, number>>;
   // Every plugin's managed storage: the folders watched now, watch faults by
@@ -105,6 +56,30 @@ export interface Durations {
   maxMs: number;
   meanMs: number;
   stddevMs: number;
+}
+
+// The scopes whose homes the host keeps.
+export type HostScope = Exclude<SourceScope, "directory" | "view">;
+
+// [LAW:types-are-the-program] Where a renderer's memory is, as its panel says
+// it: in the host's process, charged as the host's; in no process, and why;
+// or in a process of its own, read against the limit on its own.
+export type RendererMemoryPanel =
+  | { readonly kind: "in-host" }
+  | { readonly kind: "not-running"; readonly why: string }
+  | { readonly kind: "process"; readonly memory: ProcessMemory };
+
+// [LAW:one-type-per-behavior] One renderer as the stats reply shows it, the
+// same for every renderer whatever its name: its memory, its mailbox, and
+// what it answered of itself or why it gave no answer.
+export interface RendererPanel {
+  readonly name: RendererName;
+  readonly process: RendererMemoryPanel;
+  // The renderer's mailbox (src/daemon/renderer-host.ts): the input in its
+  // turn and for how long, and how many wait behind it. A holder held long is
+  // a turn the renderer has not answered.
+  readonly mailbox: MailboxStats;
+  readonly stats: Asked<RendererStats>;
 }
 
 export interface StatsSnapshot {
@@ -164,30 +139,16 @@ export interface StatsSnapshot {
   // the longest of them — what bounds a fold's memory beyond its window
   // (brandon-unfiled-3248.bfnj).
   transcriptReads: TranscriptReads;
-  // Config states: entries the map serves, those a render is drawing with
-  // now, and those retired (evicted or reloaded over) whose teardown waits
-  // on one. `retired` climbing while `size` holds is a render that never
-  // returned. `compiles` below `size` is entries sharing one; `accountedBytes`
-  // is what the entries are charged against `budgetBytes`.
-  renderCache: RenderCacheStats;
   // Sessions the host's collector reads, and those whose retire is on its way
   // to the renderer: `sessions` climbing with no requests is a session the
   // sweep never retires.
   collector: CollectorStats;
-  effectCache: RendererStats["effectCache"];
-  // The renderer's own portions below are described at `RendererStats`.
-  menuIdle: MenuIdleStats;
-  // The renderer's mailbox (src/daemon/renderer-host.ts): the input in its
-  // turn and for how long, and how many wait behind it. A holder held long is
-  // a turn the renderer has not answered.
-  mailbox: MailboxStats;
-  rendererTurns: RendererStats["rendererTurns"];
   // `run` acts (src/daemon/runs.ts): programs started, those that failed
   // (a non-zero exit or no start), timed out, and runs in flight now.
   runs: RunStats;
-  sessionState: RendererStats["sessionState"];
-  // Subscribed sessions, their subscribers, and the frames drawn for them and
-  // pushed (a drawn frame identical to the last is not pushed).
+  // Subscribed sessions, their subscribers, and the frames pushed for them (a
+  // drawn frame identical to the last is not pushed). The frames drawn are
+  // each renderer's, on its panel.
   frameFeeds: FeedStats;
   // Watch slots: open now, opened with every target watched, closed, opened
   // with a target the OS refused, and errors watches reported after opening.
@@ -220,15 +181,15 @@ export interface StatsSnapshot {
     // How long each category's launches ran, keyed as `byCategory` is.
     durations: Record<string, Durations>;
   };
-  nextRestartReason: string | null;
   // Each session's latest client, as this daemon process saw its last render
   // request (src/daemon/render-sightings.ts), and the bundle this daemon
   // runs.
   clients: readonly RenderSighting[];
   bundle: string;
-  // This daemon's memory against its budget (src/daemon/limits.ts
-  // `serving`).
-  daemon: ServingDaemon;
+  // The host process's memory against the limit (src/daemon/limits.ts).
+  host: ProcessMemory;
+  // Every renderer the host holds, one panel each.
+  renderers: readonly RendererPanel[];
 }
 
 export interface CollectorStats {
@@ -250,7 +211,6 @@ export interface RunStats {
 export interface FeedStats {
   readonly feeds: number;
   readonly subscribers: number;
-  readonly drawn: number;
   readonly pushed: number;
   // Subscriptions refused or ended because their lane was off.
   readonly refused: number;
@@ -332,3 +292,29 @@ export type Delivery =
       readonly reason: string;
       readonly missedSince: number | null;
     };
+
+// [LAW:no-silent-failure] The named renderer's panel, for a reader that needs
+// it: a renderer the stats hold no panel of throws, naming those they hold.
+export function rendererPanelOf(
+  snapshot: Pick<StatsSnapshot, "renderers">,
+  name: RendererName,
+): RendererPanel {
+  const panel = snapshot.renderers.find((each) => each.name === name);
+  if (panel === undefined)
+    throw new Error(
+      `stats hold no renderer ${name}, only ${snapshot.renderers.map((each) => each.name).join(", ") || "none"}`,
+    );
+  return panel;
+}
+
+// [LAW:no-silent-failure] What the named renderer answered of itself: one that
+// gave no answer throws, naming why, rather than reading as zeroes.
+export function rendererStatsOf(
+  snapshot: Pick<StatsSnapshot, "renderers">,
+  name: RendererName,
+): RendererStats {
+  const panel = rendererPanelOf(snapshot, name);
+  if (panel.stats.kind === "failed")
+    throw new Error(`renderer ${name} gave no stats: ${panel.stats.reason}`);
+  return panel.stats.value;
+}

@@ -17,7 +17,10 @@ import { linksOf } from "../../../src/click/read.js";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
 import { tryClickViaDaemon } from "../../../src/daemon/client.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
-import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot.js";
+import {
+  rendererStatsOf,
+  type StatsSnapshot,
+} from "../../../src/daemon/foundations/stats-snapshot.js";
 import { composeBar } from "../../../src/render/frame.js";
 import type { RepoShape } from "../fixtures.js";
 import { sleep } from "../measure.js";
@@ -68,11 +71,17 @@ function warmVouched(
     );
   }
   const moved: string[] = [];
-  for (const key of ["size", "views", "compiles"] as const) {
-    if (after.renderCache[key] !== before.renderCache[key]) {
-      moved.push(
-        `renderCache.${key} ${before.renderCache[key]} -> ${after.renderCache[key]}`,
-      );
+  // Every renderer's cache, so a run that drew from a worktree is vouched for
+  // as one that drew from main is.
+  for (const { name } of after.renderers) {
+    const cacheBefore = rendererStatsOf(before, name).renderCache;
+    const cacheAfter = rendererStatsOf(after, name).renderCache;
+    for (const key of ["size", "views", "compiles"] as const) {
+      if (cacheAfter[key] !== cacheBefore[key]) {
+        moved.push(
+          `renderer ${name} renderCache.${key} ${cacheBefore[key]} -> ${cacheAfter[key]}`,
+        );
+      }
     }
   }
   for (const key of ["errored", "timedOut"] as const) {

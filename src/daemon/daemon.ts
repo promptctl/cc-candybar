@@ -152,7 +152,7 @@ export interface DaemonAdapters {
     readonly exit: (code: number) => void;
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
-  }) => LimitsDeps;
+  }) => Omit<LimitsDeps, "limitBytes">;
   // A worktree bundle's executable entry at the host's filesystem boundary.
   readonly rendererEntryOf?: (reported: string) => string;
   // How the binary watch reads the bundle's mtime.
@@ -461,6 +461,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         ([session]) => nameOf(session as SessionId) === name,
       ),
     );
+  // [LAW:one-source-of-truth] Every renderer and where its memory is, as the
+  // backstop and the stats reply both read them.
+  const rendererStates = () =>
+    [...renderers.values()].map(({ renderer, link }) => ({
+      renderer,
+      process: link.process(),
+    }));
   // [LAW:effects-at-boundaries] Only the daemon that won the socket arms its limits.
   const limits = makeLimits({
     ...inputs.limits({
@@ -470,10 +477,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       log,
     }),
     limitBytes: memoryLimitBytes,
-    // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
-    // renderer's process counts in it while one runs. Read only once armed,
-    // by when the link below exists.
-    renderer: () => (serving() ? primary.link.process() : null),
+    // Every renderer in a process of its own from its spawn, each judged on
+    // its own charge beside the host's. Read only once armed, by when the
+    // links below exist.
+    renderers: () =>
+      serving()
+        ? rendererStates().flatMap(({ process }) =>
+            process.kind === "spawned" ? [process.process] : [],
+          )
+        : [],
   });
   const renderSightings = new RenderSightings();
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
@@ -983,6 +995,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     limits,
     collector,
     renderer: primary.renderer,
+    renderers: rendererStates,
     // [LAW:single-enforcer] Only a render request binds or starts a bundle.
     rendererForClick: (name) => renderers.get(name)?.renderer,
     rendererFor,
@@ -1102,6 +1115,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // the journal and view pushes. Booting or down links have neither to close.
     await runTeardown(
       [
+        // [LAW:no-ambient-temporal-coupling] Before any renderer's close
+        // begins: a reading in flight across the close judges no renderer
+        // taking the close's steps.
+        ["limits disarm", () => limits.disarm()],
         ...attached.map(
           ({ renderer }): TeardownStep => [
             `${renderer.name} wakes close`,
@@ -1143,7 +1160,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ],
       ["frameFeeds close", () => frameFeeds.close()],
       ["binaryWatch close", () => binaryWatch.close()],
-      ["limits disarm", () => limits.disarm()],
       // Before the sources and the storage its states hold.
       ["collector close", () => collector.close()],
       // Before the views close: a `config` made after it finds its origin
