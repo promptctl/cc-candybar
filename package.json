@@ -15,7 +15,7 @@
     "build": "tsdown",
     "build:rust": "cd rust-client && cargo build --release",
     "dev": "tsdown --watch",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test",
     "start": "node dist/index.mjs",
     "lint": "eslint src/ && eslint -c eslint.tools.config.mjs . && eslint -c eslint.tests.config.mjs test/ scripts/lib/",
     "lint:fix": "eslint src/ --fix",

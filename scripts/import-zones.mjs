@@ -1,3 +1,5 @@
+import { isBuiltin } from "node:module";
+
 // [LAW:one-way-deps] ESLint and the production bundle use this ownership table.
 // Application modules no narrower row names belong to the host. More specific
 // entries win. A path no row names is in no zone, so nothing may import it:
@@ -8,6 +10,7 @@
 // site/ and proto-looks/) imports nothing from it. What a tool and a test
 // share lives in scripts/lib/, which imports only the app and itself, so it
 // never loads a tool's entry. The tests may import the tools they test.
+// Packages have rows too (PACKAGE_ROWS): Jest's are the test zone's.
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -74,24 +77,11 @@ export const ZONE_IMPORTS = {
 // The zone of a path no row names: no zone imports it.
 export const NO_ZONE = "unlisted";
 
-// The directories of the tools and of what they share with the tests.
-// eslint.tools.config.mjs holds their imports to the zone rule, as src's
-// config holds src's.
-export const TOOL_ROOTS = Object.entries(ZONE_ROWS)
+// The directories of code that runs outside Jest beside the app: the tools,
+// and what they share with the tests. eslint.tools.config.mjs lints them.
+export const OUTSIDE_JEST_ROOTS = Object.entries(ZONE_ROWS)
   .filter(([, zone]) => zone === "tools" || zone === "lib")
   .map(([row]) => row);
-
-// The top-level directories of code that runs outside Jest, src among them:
-// every directory a row outside the test zone lies in. eslint.tools.config.mjs
-// refuses Jest's globals across them, so a new root refuses them the moment a
-// row places it outside the suite.
-export const OUTSIDE_JEST_ROOTS = [
-  ...new Set(
-    Object.entries(ZONE_ROWS)
-      .filter(([row, zone]) => zone !== "test" && row.includes("/"))
-      .map(([row]) => row.slice(0, row.indexOf("/") + 1)),
-  ),
-];
 
 export const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
 const ZONE_KEYS = Object.entries(ZONE_ROWS)
@@ -107,12 +97,59 @@ export const zoneOf = (file) => {
   )?.zone ?? NO_ZONE;
 };
 
-export const mayImport = (from, to) => ZONE_IMPORTS[from].includes(to);
+// The directories the test zone owns, which run under Jest.
+export const TEST_ROOTS = Object.entries(ZONE_ROWS)
+  .filter(([, zone]) => zone === "test")
+  .map(([row]) => row);
 
-// Jest's packages are the test zone's, as test/ is: the runner, its scoped
-// parts, its `jest-*` parts, and its assertion library, published as `expect`.
-export const isJestPackage = (id) => /^(?:jest|expect)(?:\/|$)|^jest-|^@jest\//.test(id);
-import { isBuiltin } from "node:module";
+// [LAW:one-way-deps] The packages a zone owns, as ZONE_ROWS owns paths. Jest's
+// are the test zone's: its runner, its scoped and `jest-` parts, its assertion
+// library (published as `expect`), its TypeScript transform and its types. A
+// row ending in `/` or `-` names every package that begins with it.
+export const PACKAGE_ROWS = {
+  jest: "test",
+  "jest-": "test",
+  "@jest/": "test",
+  expect: "test",
+  "ts-jest": "test",
+  "@types/jest": "test",
+};
+// The zone of a package no row names: every zone may import it.
+export const ANY_PACKAGE = "package";
+// A bare specifier's package: its scope and name, without the path inside it.
+const packageNameOf = (id) =>
+  id.split("/").slice(0, id.startsWith("@") ? 2 : 1).join("/");
+export const packageZoneOf = (id) => {
+  const name = packageNameOf(id);
+  const row = Object.keys(PACKAGE_ROWS).find((row) =>
+    /[/-]$/.test(row) ? name.startsWith(row) : name === row,
+  );
+  return row === undefined ? ANY_PACKAGE : PACKAGE_ROWS[row];
+};
+
+export const mayImport = (from, to) =>
+  to === ANY_PACKAGE || ZONE_IMPORTS[from].includes(to);
+
+// What Jest's environment installs as globals, the suite's own fixture hook
+// (test/helpers/quarantine-environment.cjs) among them: the test zone's to
+// read, and refused everywhere else.
+export const JEST_GLOBALS = [
+  "afterAll",
+  "afterEach",
+  "beforeAll",
+  "beforeEach",
+  "describe",
+  "expect",
+  "fdescribe",
+  "fit",
+  "it",
+  "jest",
+  "releaseTestFixture",
+  "test",
+  "xdescribe",
+  "xit",
+  "xtest",
+];
 
 
 // [LAW:effects-at-boundaries] Shared rendering code uses Node for paths, URLs,

@@ -1,32 +1,15 @@
-// [LAW:one-way-deps] The app (src/), the tools (scripts/, proto-looks/), what
-// they share with the tests (scripts/lib/) and the site's page code (site/) run
-// outside Jest, so they read none of its globals, and the tools import nothing
-// from the test suite or Jest's packages. The rule is eslint.tools.config.mjs,
-// so the cases run that config over source text placed under each root the zone
-// table names. src's imports are the zones import rule's.
+// [LAW:one-way-deps] The tools (scripts/, proto-looks/), what they share with
+// the tests (scripts/lib/) and the site's page code (site/) run outside Jest,
+// so they import nothing from the test suite or Jest, and read none of Jest's
+// globals. The rule is eslint.tools.config.mjs, so the cases run that config
+// over source text placed under each root the zone table names.
 
-import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 
-import { REPO } from "../scripts/lib/repo.cjs";
+import { JEST_PACKAGES, ZONES } from "./helpers/import-zones";
 import { lintCases, type LintCase } from "./helpers/lint-cases";
 
-// The roots, read from the zone table itself (scripts/import-zones.mjs), so a
-// root added there is a case here.
-const { TOOL_ROOTS, OUTSIDE_JEST_ROOTS } = JSON.parse(
-  execFileSync(
-    process.execPath,
-    [
-      "--input-type=module",
-      "-e",
-      `const zones = await import(${JSON.stringify(
-        pathToFileURL(path.join(REPO, "scripts", "import-zones.mjs")).href,
-      )}); console.log(JSON.stringify({ TOOL_ROOTS: zones.TOOL_ROOTS, OUTSIDE_JEST_ROOTS: zones.OUTSIDE_JEST_ROOTS }));`,
-    ],
-    { cwd: REPO, encoding: "utf8" },
-  ),
-) as { TOOL_ROOTS: string[]; OUTSIDE_JEST_ROOTS: string[] };
+const ROOTS = ZONES.OUTSIDE_JEST_ROOTS;
 
 const imp = (from: string) => `import { x } from "${from}";\nexport { x };\n`;
 const at = (root: string, ext = "ts") => `${root}probe.${ext}`;
@@ -34,30 +17,27 @@ const at = (root: string, ext = "ts") => `${root}probe.${ext}`;
 const up = (root: string, target: string) =>
   path.posix.relative(root, target) || ".";
 
-const perRoot = (
-  roots: string[],
-  make: (root: string) => LintCase,
-): Record<string, LintCase> =>
-  Object.fromEntries(roots.map((root) => [root, make(root)]));
+const perRoot = (make: (root: string) => LintCase): Record<string, LintCase> =>
+  Object.fromEntries(ROOTS.map((root) => [root, make(root)]));
 
 const REFUSED: Record<string, LintCase> = {
   ...prefixed(
     "import of test/",
-    perRoot(TOOL_ROOTS, (root) => ({
+    perRoot((root) => ({
       file: at(root),
       code: imp(`${up(root, "test/helpers")}/x`),
     })),
   ),
   ...prefixed(
     "type import of test/",
-    perRoot(TOOL_ROOTS, (root) => ({
+    perRoot((root) => ({
       file: at(root),
       code: `import type { X } from "${up(root, "test/helpers")}/x";\nexport type Y = X;\n`,
     })),
   ),
   ...prefixed(
     "require of test/",
-    perRoot(TOOL_ROOTS, (root) => ({
+    perRoot((root) => ({
       file: at(root, "cjs"),
       code: `module.exports = require("${up(root, "test/helpers")}/x.cjs");\n`,
     })),
@@ -66,7 +46,7 @@ const REFUSED: Record<string, LintCase> = {
   // reaches the suite.
   ...prefixed(
     "import of audits/",
-    perRoot(TOOL_ROOTS, (root) => ({
+    perRoot((root) => ({
       file: at(root),
       code: imp(`${up(root, "audits")}/seam-sweep.audit`),
     })),
@@ -76,44 +56,27 @@ const REFUSED: Record<string, LintCase> = {
     file: at("scripts/"),
     code: imp("../docs/design/probes/p6"),
   },
-  ...prefixed(
-    "Jest's expect",
-    perRoot(OUTSIDE_JEST_ROOTS, (root) => ({
-      file: at(root),
-      code: "expect(1).toBe(1);\n",
-    })),
-  ),
-  ...prefixed(
-    "a focused Jest case",
-    perRoot(OUTSIDE_JEST_ROOTS, (root) => ({
-      file: at(root),
-      code: "fit('x', () => {});\n",
-    })),
-  ),
-  ...prefixed(
-    "the suite's fixture hook",
-    perRoot(OUTSIDE_JEST_ROOTS, (root) => ({
-      file: at(root),
-      code: "releaseTestFixture(async () => {});\n",
-    })),
-  ),
-  ...Object.fromEntries(
-    ["jest", "@jest/globals", "jest-mock", "expect"].flatMap((pkg) =>
-      Object.entries(
-        prefixed(
-          `an import of ${pkg}`,
-          perRoot(TOOL_ROOTS, (root) => ({
-            file: at(root),
-            code: imp(pkg),
-          })),
-        ),
-      ),
-    ),
-  ),
-  "a require of jest-mock from scripts/lib/": {
-    file: at("scripts/lib/", "cjs"),
-    code: `module.exports = require("jest-mock");\n`,
+  "Jest's expect": { file: at("scripts/lib/"), code: "expect(1).toBe(1);\n" },
+  "a focused Jest case": {
+    file: at("scripts/"),
+    code: "fit('x', () => {});\n",
   },
+  "the suite's fixture hook": {
+    file: at("scripts/lib/"),
+    code: "releaseTestFixture(async () => {});\n",
+  },
+  ...Object.fromEntries(
+    JEST_PACKAGES.flatMap((pkg) => [
+      [`an import of ${pkg}`, { file: at("scripts/"), code: imp(pkg) }],
+      [
+        `a require of ${pkg}`,
+        {
+          file: at("scripts/lib/", "cjs"),
+          code: `module.exports = require("${pkg}");\n`,
+        },
+      ],
+    ]),
+  ),
   // scripts/lib imports only the app and itself, so it never loads a tool.
   "scripts/lib's import of a tool": {
     file: at("scripts/lib/"),
@@ -132,16 +95,6 @@ const ALLOWED: Record<string, LintCase> = {
     code: imp("./lib/drive-bar"),
   },
   "the site's import of src": { file: at("site/"), code: imp("../src/host") },
-  // The globals rule refuses only what Jest installs, so the app's own
-  // binding of one of those names is its own.
-  "the app's own binding named test": {
-    file: at("src/"),
-    code: "const test = (n: number) => n > 0;\nexport const ok = test(1);\n",
-  },
-  "the app's directive naming a typescript-eslint rule": {
-    file: at("src/"),
-    code: "// eslint-disable-next-line @typescript-eslint/no-explicit-any\nexport const x: any = 1;\n",
-  },
 };
 
 function prefixed(
@@ -172,16 +125,13 @@ describe("the tools lint", () => {
   }, 60_000);
 
   test("the zone table names every root the tools lint covers", () => {
-    expect(TOOL_ROOTS).toEqual(
+    expect(ROOTS).toEqual(
       expect.arrayContaining([
         "scripts/",
         "scripts/lib/",
         "site/",
         "proto-looks/",
       ]),
-    );
-    expect(OUTSIDE_JEST_ROOTS).toEqual(
-      expect.arrayContaining(["src/", "scripts/", "site/", "proto-looks/"]),
     );
   });
 

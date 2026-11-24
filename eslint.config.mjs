@@ -5,7 +5,7 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import fs from "node:fs";
 import path from "node:path";
-import { isJestPackage, mayImport, mayLoadRendererModule, NO_ZONE, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
+import { JEST_GLOBALS, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -354,10 +354,13 @@ const importDirection = {
         return;
       }
       if (!source.startsWith(".") && !path.isAbsolute(source)) {
-        if (isJestPackage(source) && !mayImport(fromZone, "test")) {
+        // [LAW:one-way-deps] A package's zone is its row's, judged as a
+        // path's is: Jest's are the test zone's.
+        const toZone = packageZoneOf(source);
+        if (!mayImport(fromZone, toZone)) {
           context.report({
             node,
-            message: `${fromZone} ${from} imports Jest's ${source}. ${REFUSAL.test} [LAW:one-way-deps]`,
+            message: `${fromZone} ${from} imports ${toZone} ${source}. ${REFUSAL[toZone]} [LAW:one-way-deps]`,
           });
         }
         if (rendering && !typeOnly(node) && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
@@ -394,8 +397,10 @@ const importDirection = {
         : node.type === "TemplateLiteral" && node.expressions.length === 0
           ? node.quasis[0].value.cooked
           : null;
-    // Every spelling of an edge: `import`, `export … from`, `import()`, the
-    // type `import("…").T`, `import x = require("…")` and `require("…")`.
+    // The spellings of an edge it reads: `import`, `export … from`,
+    // `import()`, the type `import("…").T`, `import x = require("…")` and a
+    // call of `require` itself. A load made through another function
+    // (`createRequire`, `module.require`) is not seen.
     const fromSource = (node) =>
       node.source && check(node, sourceOf(node.source));
     return {
@@ -540,14 +545,6 @@ export default [
         clearTimeout: "readonly",
         setInterval: "readonly",
         clearInterval: "readonly",
-        jest: "readonly",
-        describe: "readonly",
-        it: "readonly",
-        expect: "readonly",
-        beforeEach: "readonly",
-        afterEach: "readonly",
-        beforeAll: "readonly",
-        afterAll: "readonly",
         require: "readonly",
       },
     },
@@ -581,6 +578,14 @@ export default [
       "@typescript-eslint/no-explicit-any": "warn",
     },
   },
+  // [LAW:one-way-deps] Jest's globals are the test zone's: an editor linting a
+  // test with this config knows them, and in the app each is undefined.
+  {
+    files: TEST_ROOTS.map((root) => `${root}**/*.{ts,mts}`),
+    languageOptions: {
+      globals: Object.fromEntries(JEST_GLOBALS.map((name) => [name, "readonly"])),
+    },
+  },
   prettierConfig,
   ...ownedImportBlocks(),
   // [LAW:no-silent-failure] A promise nobody awaits is a task: the clock's
@@ -603,7 +608,7 @@ export default [
     },
   },
   {
-    files: ["src/**/*.{ts,mts}"],
+    files: ["src/**/*.{ts,mts,js,mjs,cjs}"],
     plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },

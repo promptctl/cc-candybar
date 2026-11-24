@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { REPO } from "../scripts/lib/repo.cjs";
+import { JEST_PACKAGES } from "./helpers/import-zones";
 import { lintCases, UNTYPED } from "./helpers/lint-cases";
 
 const IN_RENDERER = "src/renderer/probe.ts";
@@ -119,17 +120,20 @@ const REFUSED = {
     file: IN_RENDERER,
     code: `export const x = require("../../test/helpers/x");\n`,
   },
-  // Jest's packages are the test zone's, in every spelling of an edge.
-  restToJestGlobals: { file: IN_REST, code: imp("@jest/globals") },
-  sharedToJestMock: {
-    file: IN_SHARED,
-    code: `export const x = require("jest-mock");\n`,
-  },
-  rendererToExpect: {
-    file: IN_RENDERER,
-    code: `export const m = import("expect");\n`,
-  },
-  entryToJest: { file: "src/index.ts", code: typeImp("jest") },
+  // Jest's packages are the test zone's, from any file of the app.
+  ...Object.fromEntries(
+    JEST_PACKAGES.flatMap((pkg) => [
+      [`restTo ${pkg}`, { file: IN_REST, code: imp(pkg) }],
+      [
+        `sharedRequireOf ${pkg}`,
+        { file: IN_SHARED, code: `export const x = require("${pkg}");\n` },
+      ],
+      [
+        `javascriptTo ${pkg}`,
+        { file: "src/daemon/probe.mjs", code: `import "${pkg}";\n` },
+      ],
+    ]),
+  ),
   restToLib: { file: IN_REST, code: imp("../../scripts/lib/x") },
   restToTools: { file: IN_REST, code: imp("../../scripts/drive-bar") },
   // A path no row of the table names is in no zone.

@@ -22,8 +22,10 @@
 
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+
+    "types": ["node"]
   },
-  "include": ["src/**/*", "test/**/*", "audits/**/*", "site/**/*.ts", "scripts/**/*.ts", "scripts/**/*.mts", "scripts/lib/**/*", "proto-looks/**/*.ts"],
+  "include": ["src/**/*", "site/**/*.ts", "scripts/**/*.ts", "scripts/**/*.mts", "scripts/lib/**/*", "proto-looks/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
