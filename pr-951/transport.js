@@ -43389,10 +43389,10 @@ function confirms(key, disarm, fires) {
   const gates = [...new Set(fires.map((f) => f.when))].filter(
     (g) => g !== "true"
   );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const nameOf3 = (held) => gates.length === 0 ? key : `${key}.${held}`;
   const actions = {};
   for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
+    actions[nameOf3(held)] = {
       do: [
         disarm,
         ...fires.filter(
@@ -43400,7 +43400,7 @@ function confirms(key, disarm, fires) {
         ).map((f) => f.action)
       ]
     };
-  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
+  const link = (i2, held) => i2 === gates.length ? `"${nameOf3(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
   return { link: link(0, 0), actions };
 }
 function confirmStep(key, labels, fires) {
@@ -65007,9 +65007,9 @@ var SURFACES = ["request", "feed"];
 var MAX_SESSIONS = 256;
 var latestOf = ({ request: request2, feed: feed2 }) => request2 !== void 0 && (feed2 === void 0 || request2.id > feed2.id) ? request2 : feed2;
 var PresentedFrames = class {
-  constructor(evicted = () => {
+  constructor(evicted2 = () => {
   }, maxSessions = MAX_SESSIONS) {
-    this.evicted = evicted;
+    this.evicted = evicted2;
     this.maxSessions = maxSessions;
   }
   evicted;
@@ -70387,18 +70387,36 @@ function laterIdentity(a, b) {
   return a > b;
 }
 var NEAR_LIMIT = 0.75;
-function approachingLimit(bytes, limit) {
-  return bytes > limit * NEAR_LIMIT;
-}
 function chargeWords(charge) {
-  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+  switch (charge.kind) {
+    case "charged":
+      return `${charge.measure} ${mb(charge.bytes)} MB`;
+    case "stand-in":
+      return `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+    case "unread":
+      return `unread (${charge.unread})`;
+  }
+}
+function breachWords(charge, limit) {
+  return `passed its memory limit: ${chargeWords(charge)} > limit ${mb(limit)} MB`;
+}
+function usageWords(usage) {
+  return usage.kind === "read" ? `rss ${mb(usage.sizes.rss)} MB, v8 heap ${mb(usage.sizes.heapTotal)} MB` : `no sizes: ${usage.why}`;
 }
 function measureOf(charge) {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+  switch (charge.kind) {
+    case "charged":
+      return charge.measure;
+    case "stand-in":
+      return "rss-stand-in";
+    case "unread":
+      return "unread";
+  }
 }
 var BREACH_ARTIFACTS = {
   memoryReport: { prefix: "memory-", suffix: ".txt" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" },
+  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" }
 };
 
 // src/daemon/foundations/gates.ts
@@ -71889,10 +71907,10 @@ var RenderCache = class {
         return state === void 0 ? [] : [state];
       })
     );
-    for (const [key, evicted] of this.entries) {
+    for (const [key, evicted2] of this.entries) {
       if (fits2()) return;
-      if (evicted === served || pinned.has(evicted.state)) continue;
-      this.drop(key, evicted, "evict");
+      if (evicted2 === served || pinned.has(evicted2.state)) continue;
+      this.drop(key, evicted2, "evict");
     }
     if (!fits2())
       this.log(
@@ -79424,11 +79442,15 @@ init_globals();
 init_globals();
 var MAIN_RENDERER = "main";
 function rendererNameOf(raw) {
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
+  const name = parsedRendererName(raw);
+  if (name === null)
     throw new Error(
       `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
     );
-  return raw;
+  return name;
+}
+function parsedRendererName(raw) {
+  return /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw) ? raw : null;
 }
 
 // src/click/link-signer.ts
@@ -83225,7 +83247,18 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   if (req.kind === "stats") {
     const held = parts.renderers().map((runtime) => ({ ...runtime, mailbox: runtime.renderer.stats() }));
     const renderers = await Promise.all(
-      held.map((runtime) => rendererPanel(runtime, limits))
+      held.map(
+        ({ renderer: renderer2, process: process2, mailbox }) => rendererPanel(
+          {
+            name: renderer2.name,
+            ask: () => renderer2.command({ kind: "stats" }).then(({ stats: stats2 }) => stats2),
+            process: process2,
+            mailbox
+          },
+          limits,
+          clock
+        )
+      )
     );
     return stay({
       ok: true,
@@ -83406,36 +83439,53 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   const unanswered = req;
   throw new Error(`no reply for request ${inspect(unanswered)}`);
 }
+var RENDERER_STATS_WAIT_MS = REQUEST_TIMEOUT_MS / 2;
 async function rendererPanel({
-  renderer,
+  name,
+  ask: ask2,
   process: state,
   mailbox
-}, limits) {
-  let answered;
-  try {
-    answered = {
-      kind: "ok",
-      value: (await renderer.command({ kind: "stats" })).stats
-    };
-  } catch (thrown2) {
-    answered = { kind: "failed", reason: failureOf(thrown2).detail };
-  }
+}, limits, clock) {
   return {
-    name: renderer.name,
+    name,
     process: memoryPanelOf(state, limits),
     mailbox,
-    stats: answered
+    stats: state.kind === "not-running" ? {
+      kind: "failed",
+      reason: `not asked: it is not running: ${state.why}`
+    } : await askedWithin(name, ask2, clock)
   };
+}
+async function askedWithin(name, ask2, clock) {
+  const waited = new AbortController();
+  try {
+    return await Promise.race([
+      ask2().then((value) => ({ kind: "ok", value })),
+      sleep(
+        clock,
+        `renderer ${name} stats wait`,
+        RENDERER_STATS_WAIT_MS,
+        waited.signal
+      ).then(
+        () => ({
+          kind: "failed",
+          reason: `no answer within ${RENDERER_STATS_WAIT_MS} ms`
+        })
+      )
+    ]);
+  } catch (thrown2) {
+    return { kind: "failed", reason: failureOf(thrown2).detail };
+  } finally {
+    waited.abort();
+  }
 }
 function memoryPanelOf(state, limits) {
   switch (state.kind) {
     case "in-host":
     case "not-running":
       return state;
-    case "unread":
-      return { kind: "process", memory: limits.memoryOf(state.pid) };
-    case "running":
-      return { kind: "process", memory: limits.memoryOf(state.process.pid) };
+    case "spawned":
+      return { kind: "process", memory: limits.renderer(state.process) };
   }
 }
 function sourceSnapshots(parts) {
@@ -87842,6 +87892,52 @@ function createPayloadProviders(opts) {
 // src/daemon/stats.ts
 init_globals();
 
+// src/daemon/foundations/stats-snapshot.ts
+init_globals();
+var RENDERER_STATS_REFERENCE = {
+  renderCache: {
+    size: 0,
+    held: 0,
+    retired: 0,
+    compiles: 0,
+    views: 0,
+    pinned: 0,
+    retiredViews: 0,
+    passages: 0,
+    accountedBytes: 0,
+    budgetBytes: 0
+  },
+  effectCache: { sessions: 0, effects: 0 },
+  menuIdle: { sessions: 0, armed: 0 },
+  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
+  sessionState: { sessions: 0, observers: 0, revision: 0 },
+  framesDrawn: 0
+};
+function missingFields(reference, value, at = "") {
+  const label2 = at || "<snapshot>";
+  if (typeof reference === "number") {
+    return typeof value === "number" && Number.isFinite(value) ? [] : [label2];
+  }
+  if (Array.isArray(reference)) {
+    if (!Array.isArray(value)) return [label2];
+    const [element] = reference;
+    return value.flatMap(
+      (item, i2) => missingFields(element, item, `${at}[${i2}]`)
+    );
+  }
+  if (!isPlainObject(reference)) return [];
+  if (!isPlainObject(value)) return [label2];
+  if ("kind" in reference && "kind" in value && reference.kind !== value.kind)
+    return [];
+  const missing = [];
+  for (const key of Object.keys(reference)) {
+    const path31 = at === "" ? key : `${at}.${key}`;
+    if (!(key in value)) missing.push(path31);
+    else missing.push(...missingFields(reference[key], value[key], path31));
+  }
+  return missing;
+}
+
 // src/version.ts
 init_globals();
 if (false) {
@@ -88078,7 +88174,19 @@ var RuntimeStats = class _RuntimeStats {
       bundle: "/",
       sourceDigest: null,
       host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },
-      renderers: []
+      // [LAW:one-source-of-truth] One panel, which every panel is read as:
+      // the arms a reader descends into, so a field of theirs is checked.
+      renderers: [
+        {
+          name: MAIN_RENDERER,
+          process: {
+            kind: "process",
+            memory: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 }
+          },
+          mailbox: { holder: null, heldMs: 0, queued: 0 },
+          stats: { kind: "ok", value: RENDERER_STATS_REFERENCE }
+        }
+      ]
     });
   }
   snapshot(extras) {
@@ -88195,7 +88303,11 @@ function chargeProbe(launcher, platform3) {
     })
   ) : async (processes) => processes.map((process2) => ({
     process: process2,
-    charge: { kind: "charged", measure: "rss", bytes: process2.sizes.rss }
+    charge: process2.usage.kind === "read" ? {
+      kind: "charged",
+      measure: "rss",
+      bytes: process2.usage.sizes.rss
+    } : { kind: "unread", unread: process2.usage.why }
   }));
 }
 function footprintCharge(run2) {
@@ -88206,28 +88318,41 @@ function footprintCharge(run2) {
       "-f",
       "bytes"
     ]);
-    const charged = result.ok ? physFootprintsOf(result.stdout) : /* @__PURE__ */ new Map();
+    const printed = result.ok ? physFootprintsOf(result.stdout) : { byPid: /* @__PURE__ */ new Map(), unnamed: [] };
+    const unnamed = printed.unnamed.map(
+      (header) => `; its section ${JSON.stringify(header)} names no pid`
+    );
     return processes.map((process2) => {
-      const bytes = charged.get(process2.pid);
-      const charge = bytes !== void 0 ? { kind: "charged", measure: "phys_footprint", bytes } : {
-        kind: "stand-in",
-        bytes: process2.sizes.rss,
-        unread: result.ok ? `footprint printed no phys_footprint for pid ${process2.pid}` : `footprint ${failureText(result)}`
-      };
+      const bytes = printed.byPid.get(process2.pid);
+      const unread2 = result.ok ? `footprint printed no phys_footprint for pid ${process2.pid}${unnamed.join("")}` : `footprint ${failureText(result)}`;
+      const charge = bytes !== void 0 ? { kind: "charged", measure: "phys_footprint", bytes } : process2.usage.kind === "read" ? { kind: "stand-in", bytes: process2.usage.sizes.rss, unread: unread2 } : { kind: "unread", unread: `${unread2}, and ${process2.usage.why}` };
       return { process: process2, charge };
     });
   };
 }
 function physFootprintsOf(text4) {
-  const each = /* @__PURE__ */ new Map();
+  const byPid = /* @__PURE__ */ new Map();
+  const unnamed = [];
+  let header = null;
   let pid2 = null;
+  let opened = false;
   for (const line of text4.split("\n")) {
-    const header = /^\S.*\[(\d+)\]:/.exec(line);
-    if (header !== null) pid2 = Number(header[1]);
+    if (/^=+$/.test(line)) {
+      if (!opened) [header, pid2] = [null, null];
+      opened = !opened;
+      continue;
+    }
+    if (opened) {
+      const named2 = /^\S.*\[(\d+)\]:/.exec(line);
+      [header, pid2] = [line, named2 === null ? null : Number(named2[1])];
+      continue;
+    }
     const footprint = /^\s*phys_footprint:\s+(\d+) B\s*$/.exec(line);
-    if (footprint !== null && pid2 !== null) each.set(pid2, Number(footprint[1]));
+    if (footprint === null) continue;
+    if (pid2 !== null) byPid.set(pid2, Number(footprint[1]));
+    else unnamed.push(header ?? "");
   }
-  return each;
+  return { byPid, unnamed };
 }
 function commandProbe(launcher, bin, args) {
   return {
@@ -88284,8 +88409,14 @@ var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
 var HEAP_SNAPSHOT_KEEP = 3;
 function readCharge(probed, previous2) {
   if (probed.kind === "charged") return probed;
-  const gap = previous2.kind === "unmeasured" ? 0 : previous2.charge.kind === "charged" ? previous2.sizes.rss - previous2.charge.bytes : previous2.charge.gap;
-  return { ...probed, bytes: probed.bytes - gap, gap };
+  const gap = gapOf(previous2);
+  return probed.kind === "unread" ? { ...probed, gap } : { ...probed, bytes: probed.bytes - gap, gap };
+}
+function gapOf(previous2) {
+  if (previous2.kind === "unmeasured") return 0;
+  const { charge, usage } = previous2;
+  if (charge.kind !== "charged") return charge.gap;
+  return usage.kind === "read" ? usage.sizes.rss - charge.bytes : 0;
 }
 function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -88299,7 +88430,7 @@ function breachArtifactOf(base) {
   return null;
 }
 function makeLimits(deps) {
-  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
+  const limit = deps.limitBytes;
   const keep = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
   let latest = /* @__PURE__ */ new Map();
@@ -88314,11 +88445,15 @@ function makeLimits(deps) {
   }
   async function measure3() {
     if (triggered) return true;
-    const own2 = deps.memoryBytes();
     const host = {
       process: { kind: "host" },
+      key: HOST_KEY,
       pid: deps.pid,
-      sizes: own2,
+      usage: { kind: "read", sizes: deps.memoryBytes() },
+      // [LAW:nothing-unseen] A host breach writes the host's heap alone: what
+      // the renderers made the host hold is in it, and each renderer is
+      // judged on its own charge, so no renderer's heap shows the host's
+      // growth.
       writeHeap: async (file) => {
         deps.writeLogNow();
         deps.log(
@@ -88331,8 +88466,9 @@ function makeLimits(deps) {
     const renderers = deps.renderers().map(
       (renderer) => ({
         process: { kind: "renderer", name: renderer.name },
+        key: rendererKey(renderer),
         pid: renderer.pid,
-        sizes: renderer.usage,
+        usage: renderer.usage,
         writeHeap: async (file) => {
           await renderer.heapSnapshot(file);
           deps.log(
@@ -88345,40 +88481,39 @@ function makeLimits(deps) {
     );
     const read2 = (await deps.memoryCharge([host, ...renderers])).map(
       ({ process: process2, charge }) => {
-        const held = readCharge(
-          charge,
-          latest.get(process2.pid) ?? { kind: "unmeasured" }
-        );
         const reading = {
           kind: "measured",
-          charge: held,
-          sizes: process2.sizes,
-          nearLimit: approachingLimit(held.bytes, limit)
+          charge: readCharge(
+            charge,
+            latest.get(process2.key) ?? { kind: "unmeasured" }
+          ),
+          usage: process2.usage
         };
         return { process: process2, reading };
       }
     );
     latest = new Map(
-      read2.map(({ process: process2, reading }) => [process2.pid, reading])
+      read2.map(({ process: process2, reading }) => [process2.key, reading])
     );
     deps.log("info", eventLine("memory", readingFields(read2, limit)));
     if (disarmed) return false;
     for (const { process: process2, reading } of read2) {
-      if (reading.charge.bytes <= limit) continue;
+      const { charge } = reading;
+      if (charge.kind === "unread" || charge.bytes <= limit) continue;
       if (process2.process.kind === "host") {
         triggered = true;
-        return breach(process2, reading);
+        return breach(process2, charge, reading.usage);
       }
-      await breach(process2, reading);
+      await breach(process2, charge, reading.usage);
     }
     return false;
   }
-  async function breach(judged, { charge, sizes }) {
+  async function breach(judged, charge, usage) {
     const who = processWords(judged.process);
-    const why = `passed its memory limit: ${chargeWords(charge)} > limit ${mb(limit)} MB`;
+    const why = breachWords(charge, limit);
     deps.log(
       "warn",
-      `${who} ${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(sizes.rss)} MB, v8 heap ${mb(sizes.heapTotal)} MB); recording its memory, then ending it`
+      `${who} ${why} (${usageWords(usage)}); recording its memory, then ending it`
     );
     const identity2 = identityOf2(judged.process, deps.clock.now(), judged.pid);
     await attempt3(deps.log, `${who} memory report`, async () => {
@@ -88406,7 +88541,8 @@ function makeLimits(deps) {
     );
     if (closedDuring()) return false;
     await attempt3(deps.log, "artifact rotation", async () => {
-      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
+      for (const { artifacts } of evicted(
+        postMortemsOf(deps.listArtifacts()),
         keep
       )) {
         for (const file of Object.values(artifacts)) {
@@ -88421,8 +88557,8 @@ function makeLimits(deps) {
     judged.end(why);
     return true;
   }
-  function memoryOf(pid2) {
-    return { pid: pid2, memory: latest.get(pid2) ?? { kind: "unmeasured" }, limit };
+  function memoryOf(key, pid2) {
+    return { pid: pid2, memory: latest.get(key) ?? { kind: "unmeasured" }, limit };
   }
   function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
     const tick = async () => {
@@ -88442,40 +88578,70 @@ function makeLimits(deps) {
     disarmed = true;
     clearTimer?.();
   }
-  return { check, host: () => memoryOf(deps.pid), memoryOf, arm: arm2, disarm };
+  return {
+    check,
+    host: () => memoryOf(HOST_KEY, deps.pid),
+    renderer: (process2) => memoryOf(rendererKey(process2), process2.pid),
+    arm: arm2,
+    disarm
+  };
+}
+var HOST_KEY = "host";
+var rendererKey = ({
+  name,
+  generation
+}) => `renderer ${name}[${generation}]`;
+function nameOf(process2) {
+  return process2.kind === "host" ? ["host"] : ["renderer", process2.name];
 }
 function processWords(process2) {
-  return process2.kind === "host" ? "host" : `renderer ${process2.name}`;
+  return nameOf(process2).join(" ");
 }
 function readingFields(read2, limit) {
   return [
     ["limit", `${mb(limit)}MB`],
-    ...read2.flatMap(({ process: process2, reading: { charge, sizes } }) => {
-      const at = process2.process.kind === "host" ? "host" : `renderer.${process2.process.name}`;
+    ...read2.flatMap(({ process: process2, reading: { charge, usage } }) => {
+      const at = nameOf(process2.process).join(".");
       return [
         [`${at}.pid`, String(process2.pid)],
         [`${at}.measure`, measureOf(charge)],
-        [`${at}.charge`, `${mb(charge.bytes)}MB`],
-        [`${at}.rss`, `${mb(sizes.rss)}MB`],
-        [`${at}.heap`, `${mb(sizes.heapTotal)}MB`],
-        ...charge.kind === "stand-in" ? [
+        ...charge.kind === "unread" ? [] : [[`${at}.charge`, `${mb(charge.bytes)}MB`]],
+        ...usage.kind === "read" ? [
+          [`${at}.rss`, `${mb(usage.sizes.rss)}MB`],
+          [`${at}.heap`, `${mb(usage.sizes.heapTotal)}MB`]
+        ] : [],
+        ...charge.kind === "charged" ? [] : [
           [`${at}.gap`, `${mb(charge.gap)}MB`],
           [`${at}.unread`, charge.unread]
-        ] : []
+        ]
       ];
     })
   ];
 }
 function identityOf2(process2, at, pid2) {
   const stamp2 = new Date(at).toISOString().replace(/[:.]/g, "-");
-  return process2.kind === "host" ? `${stamp2}-${pid2}` : `${stamp2}-renderer-${process2.name}-${pid2}`;
+  return [stamp2, ...nameOf(process2), String(pid2)].join("-");
 }
-var IDENTITY2 = /^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z-(?:renderer-([a-z0-9-]+)-)?\d+$/;
+var STAMP = /^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z-/;
 function breachedOf(identity2) {
-  const match = IDENTITY2.exec(identity2);
-  if (match === null) return null;
-  const name = match[1];
-  return name === void 0 ? { kind: "host" } : { kind: "renderer", name: rendererNameOf(name) };
+  const stamp2 = STAMP.exec(identity2);
+  if (stamp2 === null) return null;
+  const words2 = identity2.slice(stamp2[0].length).split("-");
+  const pid2 = words2.pop();
+  if (pid2 === void 0 || !/^\d+$/.test(pid2)) return null;
+  if (words2.length === 0 || words2.join("-") === "host") return { kind: "host" };
+  const [kind, ...name] = words2;
+  const renderer = kind === "renderer" ? parsedRendererName(name.join("-")) : null;
+  return renderer === null ? null : { kind: "renderer", name: renderer };
+}
+function evicted(postMortems, keep) {
+  const seen = /* @__PURE__ */ new Map();
+  return postMortems.filter(({ process: process2 }) => {
+    const name = processWords(process2);
+    const newer = seen.get(name) ?? 0;
+    seen.set(name, newer + 1);
+    return newer >= keep;
+  });
 }
 async function attempt3(log, what, body) {
   try {
@@ -90063,7 +90229,7 @@ async function paneOff(tmux3, edge) {
 
 // src/daemon/acts.ts
 var outlives = (act) => act.kind === "run";
-function nameOf(act) {
+function nameOf2(act) {
   switch (act.kind) {
     case "copy":
     case "open":
@@ -90150,9 +90316,9 @@ var Acts = class {
     const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} \u2014 ${nameOf(act)}: ${said3}`
+      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} \u2014 ${nameOf2(act)}: ${said3}`
     );
-    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf(act)}: ${outcome.reason}` };
+    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act)}: ${outcome.reason}` };
   }
   async performed(act) {
     try {
@@ -90365,47 +90531,6 @@ init_globals();
 
 // src/daemon/foundations/inspection-reply.ts
 init_globals();
-
-// src/daemon/foundations/stats-snapshot.ts
-init_globals();
-var RENDERER_STATS_REFERENCE = {
-  renderCache: {
-    size: 0,
-    held: 0,
-    retired: 0,
-    compiles: 0,
-    views: 0,
-    pinned: 0,
-    retiredViews: 0,
-    passages: 0,
-    accountedBytes: 0,
-    budgetBytes: 0
-  },
-  effectCache: { sessions: 0, effects: 0 },
-  menuIdle: { sessions: 0, armed: 0 },
-  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
-  sessionState: { sessions: 0, observers: 0, revision: 0 },
-  framesDrawn: 0
-};
-function missingFields(reference, value, at = "") {
-  const label2 = at || "<snapshot>";
-  if (typeof reference === "number") {
-    return typeof value === "number" && Number.isFinite(value) ? [] : [label2];
-  }
-  if (Array.isArray(reference)) return Array.isArray(value) ? [] : [label2];
-  if (!isPlainObject(reference)) return [];
-  if (!isPlainObject(value)) return [label2];
-  if ("kind" in reference) return [];
-  const missing = [];
-  for (const key of Object.keys(reference)) {
-    const path31 = at === "" ? key : `${at}.${key}`;
-    if (!(key in value)) missing.push(path31);
-    else missing.push(...missingFields(reference[key], value[key], path31));
-  }
-  return missing;
-}
-
-// src/daemon/foundations/inspection-reply.ts
 function variableRow(value) {
   if (!isPlainObject(value)) return false;
   const { name, source, type: type3, ageMs, lastError } = value;
@@ -93312,12 +93437,16 @@ function createDaemon(inputs) {
   );
   const renderers = /* @__PURE__ */ new Map();
   const routes = /* @__PURE__ */ new Map();
-  const nameOf2 = (session) => routes.get(session)?.name ?? inputs.rendererName;
+  const nameOf3 = (session) => routes.get(session)?.name ?? inputs.rendererName;
   const viewersOf = (name, viewers) => Object.fromEntries(
     Object.entries(viewers).filter(
-      ([session]) => nameOf2(session) === name
+      ([session]) => nameOf3(session) === name
     )
   );
+  const rendererStates = () => [...renderers.values()].map(({ renderer, link }) => ({
+    renderer,
+    process: link.process()
+  }));
   const limits = makeLimits({
     ...inputs.limits({
       startedAtMs: stats.startedAt.getTime(),
@@ -93326,13 +93455,12 @@ function createDaemon(inputs) {
       log
     }),
     limitBytes: memoryLimitBytes2,
-    // Every renderer running in a process of its own, each judged on its own
-    // charge beside the host's. Read only once armed, by when the links below
-    // exist.
-    renderers: () => serving() ? [...renderers.values()].flatMap(({ link }) => {
-      const state = link.process();
-      return state.kind === "running" ? [state.process] : [];
-    }) : []
+    // Every renderer in a process of its own from its spawn, each judged on
+    // its own charge beside the host's. Read only once armed, by when the
+    // links below exist.
+    renderers: () => serving() ? rendererStates().flatMap(
+      ({ process: process2 }) => process2.kind === "spawned" ? [process2.process] : []
+    ) : []
   });
   const renderSightings = new RenderSightings();
   const refreshLedger = new RefreshLedger(log);
@@ -93473,7 +93601,7 @@ function createDaemon(inputs) {
     deliver: (event) => {
       const session = event.kind === "retire" ? event.session : event.worldState.session;
       const route = routes.get(session);
-      const renderer = (renderers.get(nameOf2(session)) ?? primary).renderer;
+      const renderer = (renderers.get(nameOf3(session)) ?? primary).renderer;
       return renderer.deliver(() => ({ kind: "event", event }), []).finally(() => {
         if (event.kind === "retire" && routes.get(session) === route)
           routes.delete(session);
@@ -93500,13 +93628,13 @@ function createDaemon(inputs) {
     for (const [name, subscription2] of declared) {
       for (const folder of subscription2.managedFolders) folders.add(folder);
       for (const [id2, values2] of Object.entries(subscription2.sources)) {
-        if (nameOf2(id2) !== name) continue;
+        if (nameOf3(id2) !== name) continue;
         sources[id2] = values2.filter(
           (source) => source.kind !== "plugin" || subscription2.managedFolders.has(source.folder)
         );
       }
       for (const [id2, values2] of Object.entries(subscription2.lanes))
-        if (nameOf2(id2) === name) lanes[id2] = values2;
+        if (nameOf3(id2) === name) lanes[id2] = values2;
     }
     managedStorage.follow(folders);
     collector.subscribed({ sources });
@@ -93553,7 +93681,7 @@ function createDaemon(inputs) {
               kind: "start",
               viewers: viewersOf(name, viewers),
               sessions: collector.liveSessions().filter(
-                ({ worldState }) => nameOf2(worldState.session) === name
+                ({ worldState }) => nameOf3(worldState.session) === name
               )
             }
           };
@@ -93593,7 +93721,7 @@ function createDaemon(inputs) {
         },
         frames: (frames, settled3) => {
           const routed = frames.filter((frame2) => {
-            if (nameOf2(frame2.session) === name) return true;
+            if (nameOf3(frame2.session) === name) return true;
             settled3(frame2, false);
             return false;
           });
@@ -93733,10 +93861,7 @@ function createDaemon(inputs) {
     limits,
     collector,
     renderer: primary.renderer,
-    renderers: () => [...renderers.values()].map(({ renderer, link }) => ({
-      renderer,
-      process: link.process()
-    })),
+    renderers: rendererStates,
     // [LAW:single-enforcer] Only a render request binds or starts a bundle.
     rendererForClick: (name) => renderers.get(name)?.renderer,
     rendererFor
