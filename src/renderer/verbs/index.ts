@@ -1541,7 +1541,8 @@ const SESSION_HANDLERS: Record<
 };
 
 // A failure as the bar reports it: under its step's verb. A run of state writes
-// has no one verb, and each write it holds names its own in the refusal.
+// has no one verb: its refusal is the message of the handler that refused it,
+// a ring step's own, or the one batch's (set-state, which every pair lands by).
 const reported = (
   step: Exclude<ClickStep, { kind: "invalid" }>,
   message: string,
