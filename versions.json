@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-946",
+      "ref": "refs/pull/946/merge",
+      "sha": "ebb4bfac74b27b5fa07a5f1e35fc82a0cd581a9f",
+      "timestamp": "2026-11-24T10:27:01.024Z",
+      "commits": [
+        {
+          "sha": "ebb4bfac74b27b5fa07a5f1e35fc82a0cd581a9f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T03:25:47-07:00",
+          "message": "Merge 2dfef894e46c88af33d6e160efd945b0ce081277 into 0a4c9e344d200164eb36b2069e8585ab5bfb1beb\n"
+        },
+        {
+          "sha": "2dfef894e46c88af33d6e160efd945b0ce081277",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T03:25:31-07:00",
+          "message": "docs(design): Claude Code starts the bar, and the host's lifetime plan names no launchd\n\ngoals.md R-19 records the requirement: Claude Code's statusline command starts\nthe host, and the install leaves nothing that starts candybar on its own. The\nspec's ADR-3 takes the alternative it already named, the client starting the\nhost from the bundle the install recorded, and A-4, its probe readings, the\nlaunchd precedent and the launchd roadmap step are removed.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0a4c9e344d200164eb36b2069e8585ab5bfb1beb",
