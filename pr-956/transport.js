@@ -29309,7 +29309,7 @@ function reportText({ store, file, found: found2 }) {
     case "refused":
       return unreadReport(store, found2);
     case "read":
-      return found2.dropped.length === 0 ? null : `${store} (${file}): the load dropped what this build does not read: ${droppedText(found2.dropped)}`;
+      return found2.dropped.length === 0 ? null : `${store} (${file}): the load dropped what this build does not read: ${droppedText(found2.dropped, SHOWN_SESSIONS)}`;
   }
 }
 function reportLine(report2) {
@@ -29318,7 +29318,7 @@ function reportLine(report2) {
     case "absent":
       return `${store}: no file at ${file}, holding nothing`;
     case "read":
-      return `${store}: read ${file}, sessions=${found2.sessions} dropped=${found2.dropped.length}`;
+      return `${store}: read ${file}, sessions=${found2.sessions} dropped=${found2.dropped.length}${found2.dropped.length === 0 ? "" : `: ${droppedText(found2.dropped, Infinity)}`}`;
     case "set-aside":
     case "refused":
       return unreadReport(store, found2);
@@ -29329,7 +29329,7 @@ function unreadReport(store, found2) {
   return `${store} ${unreadText(found2.reason, where)}`;
 }
 var SHOWN_SESSIONS = 3;
-function droppedText(dropped) {
+function droppedText(dropped, shown) {
   const groups = /* @__PURE__ */ new Map();
   for (const { session, part, why } of dropped) {
     const what = part === null ? `a session (${why})` : `${part} (${why})`;
@@ -29338,9 +29338,9 @@ function droppedText(dropped) {
     else sessions.push(session);
   }
   return [...groups].map(([what, sessions]) => {
-    const shown = sessions.slice(0, SHOWN_SESSIONS).map((s) => JSON.stringify(s));
-    const more = sessions.length - shown.length;
-    return `${what} in ${shown.join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
+    const named2 = sessions.slice(0, shown).map((s) => JSON.stringify(s));
+    const more = sessions.length - named2.length;
+    return `${what} in ${named2.join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
   }).join("; ");
 }
 
@@ -75583,11 +75583,13 @@ var SettingsHistory = class {
   moved = new StoredMoves();
   // A request from the session: it moves to the newest end, so the bounds
   // drop the session idle longest. [LAW:carrying-cost] It runs on every
-  // request, so it moves the one entry in place: only that session's readers
-  // hear of it, and they find what they read before.
+  // request, so the order alone changes: a replace keeps each entry's
+  // observable, so no session's readers hear of it, only the order's.
   heard(sessionId2) {
-    if (runInAction(() => toNewest(this.held, sessionId2)))
-      this.moved.heard(sessionId2);
+    const order2 = new Map(this.held);
+    if (!toNewest(order2, sessionId2)) return;
+    runInAction(() => this.held.replace(order2));
+    this.moved.heard(sessionId2);
   }
   // What the host has not yet been told: each session whose history moved, as
   // it now stands (null for one gone) or only its place, in the order they
@@ -81094,8 +81096,10 @@ var HeldFile = class {
     this.storage.save(this.held);
     this.behind = false;
   }
+  // [LAW:no-ambient-temporal-coupling] Only an open file is owed an order
+  // write: a closed or refused one saves nothing, so it arms no timer.
   orderDue() {
-    if (this.clearOrderTimer !== null) return;
+    if (this.phase !== "open" || this.clearOrderTimer !== null) return;
     this.clearOrderTimer = this.clock.after(
       `${this.store} order write`,
       ORDER_PERIOD_MS,

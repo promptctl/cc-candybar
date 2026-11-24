@@ -4,15 +4,22 @@
     {
       "version": "pr-956",
       "ref": "refs/pull/956/merge",
-      "sha": "a7a4ca8e6065e6b3d4cd033e01e0929f9e81561d",
-      "timestamp": "2026-11-24T22:09:11.319Z",
+      "sha": "0a8351607cf1439cadca9d01b766523ec40bc7cb",
+      "timestamp": "2026-11-24T22:25:42.737Z",
       "commits": [
         {
-          "sha": "a7a4ca8e6065e6b3d4cd033e01e0929f9e81561d",
+          "sha": "0a8351607cf1439cadca9d01b766523ec40bc7cb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:08:13Z",
-          "message": "Merge 91a1d121be442e6a6cd9f39ded588c1c405966ca into 74ff60b9ef4ea73da1ff662ab9c57dca723ae730\n"
+          "timestamp": "2026-11-24T22:24:38Z",
+          "message": "Merge f186e155502d845fe73dda5b4894e8fb64bc57bf into 74ff60b9ef4ea73da1ff662ab9c57dca723ae730\n"
+        },
+        {
+          "sha": "f186e155502d845fe73dda5b4894e8fb64bc57bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T15:24:21-07:00",
+          "message": "fix(stored-state): the log names every dropped session, a closed file arms no order write, and a hearing moves only the history's order (candybar-law-review-ibyq.6iz)\n\nLaw review pass 3's minor items. The bar's event about a load's drops\nexpires, so the log line names every session. An order write is armed only\nwhile the file is open. A hearing reorders the settings history through\nreplace, so no session's readers hear of it.\n"
         },
         {
           "sha": "91a1d121be442e6a6cd9f39ded588c1c405966ca",
