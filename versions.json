@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-952",
+      "ref": "refs/pull/952/merge",
+      "sha": "9c2cdd91a98b5f0127fe8187488004653cdd2152",
+      "timestamp": "2026-11-24T16:46:56.392Z",
+      "commits": [
+        {
+          "sha": "9c2cdd91a98b5f0127fe8187488004653cdd2152",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T16:45:40Z",
+          "message": "Merge cab151d77c322d97b23ed848e42e8bb69ac0e1f4 into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+        },
+        {
+          "sha": "cab151d77c322d97b23ed848e42e8bb69ac0e1f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T09:45:25-07:00",
+          "message": "fix(lint): what a loader loads is judged as an import is, and every file of a root outside Jest is type-checked (candybar-later-fixes-nwu9.1d4)\n\nThe zone rule's edge reader follows each loader Node hands code (require,\nmodule.require, process.getBuiltinModule, and the loader createRequire\nmakes, under any name it is bound to) and judges each call's source; any\nother use of a loader is refused, and a relative source on a base no lint\ncan read is refused. The owner list for node:module is gone.\n\ntsconfig.json includes each root whole, so no extension is spelled there,\nand the type-environment test places a probe of each TypeScript extension\nin every root by the project's own include and checks it in a program over\nthe project's every file.\n\nThe lockfile is pnpm 10's, as CI installs it.\n"
+        },
+        {
+          "sha": "a651fd515c8a70f3e858a80e3c7da84413d8c743",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T09:30:27-07:00",
+          "message": "fix(lint): code outside Jest runs in a closed environment, and the zone rule reads every edge a Jest package arrives by (candybar-later-fixes-nwu9.1d4)\n\nReview pass 2 of #952: the refusal leaned on hand-kept lists of Jest's\nnames, which missed real ones (`fail`, `pending`, `babel-jest`) and which\nthe tests were generated from.\n\n- Globals: the app's and the tools' environments are closed. TypeScript is\n  type-checked with Node's types alone; src's and the tools' JavaScript read\n  only Node's globals (and the browser's, for the bar-web page) under\n  `no-undef` with `typeof`. The deny list and its copy of Jest's globals are\n  gone; the test roots declare `globals`' Jest set and the fixture hook.\n- Packages: Jest's are every package named for it, a `jest` word in its\n  scope or name, and `expect`. One zone table judges paths and packages\n  through one `mayImport`, and a row or package naming no zone fails the\n  table's load.\n- Edges: the zone rule reads `module.require` and triple-slash references,\n  and src's `.js` is linted. `node:module`, whose `createRequire` loads what\n  no lint can place, is imported only by its named owners.\n- One extension set spells every glob and every stripped key.\n- Tests take Jest's names from a list written out by hand, so a name the\n  rules miss fails a case; a type-check of a probe under each tsconfig\n  proves the app project refuses Jest's globals and the test project knows\n  them.\n"
+        },
+        {
+          "sha": "80f548966b6e0a029ed599775c327d147c0ecca6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T09:10:11-07:00",
+          "message": "fix(types): the app's type environment holds none of Jest's, and src's own lint refuses Jest's globals and packages (candybar-later-fixes-nwu9.1d4)\n\nReview pass 1 of #952: the cause was one TypeScript project holding src and\nthe tests, and src's lint config declaring Jest's globals legal.\n\n- tsconfig.json is the app's project with Node's types alone; test/tsconfig.json\n  extends it with Jest's for test/ and audits/. A Jest global in app code,\n  `globalThis.jest` included, is a type error. `typecheck` checks both.\n- src's lint no longer declares Jest's globals; the test roots' block does,\n  for an editor linting a test. src refuses each as undefined.\n- Packages have zone rows: Jest's (jest, jest-*, @jest/*, expect, ts-jest,\n  @types/jest) are the test zone's, judged by the one mayImport and REFUSAL\n  as a path is, in src's .js files too. The tools config's own package\n  pattern, which missed require, is gone.\n- Jest's globals are listed once, in the zone table, and the tools config,\n  the test roots' globals and the tests all read that list.\n- The second lint of src through the tools config is reverted.\n"
+        },
+        {
+          "sha": "65eaefe9acc06b9869460f76e4214e1564bc4ef2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T08:46:53-07:00",
+          "message": "fix(lint): code outside Jest, src included, imports none of Jest's packages and reads none of its globals (candybar-later-fixes-nwu9.1d4)\n\nsrc could import @jest/globals, jest-mock or expect, or call a Jest global,\nand pass both lint and typecheck: the Jest refusal covered only the tool roots,\nand test/ shares src's tsconfig, so Jest's global types reach src.\n\n- Jest's packages are the test zone's in the zone map, so the one zone rule\n  refuses them in every spelling of an edge (import, require, import(), type\n  import) from every zone but test: src through its config, the tools through\n  theirs. The separate no-restricted-imports pattern, which missed require,\n  is gone.\n- The roots the Jest-globals refusal covers are derived from the zone map:\n  every top-level directory a row outside the test zone lies in, src among them.\n- The lint-rule tests prove both for every root outside Jest.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-950",
       "ref": "refs/pull/950/merge",
       "sha": "43d0bc1e3b26b060d443054f906f8e5bb572c604",
@@ -90,35 +133,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T06:46:14-07:00",
           "message": "feat(bar-pane): an action answers more gestures, and the pane presses through a hit map of signed links\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-952",
-      "ref": "refs/pull/952/merge",
-      "sha": "5a3b4ef0c52b9044698531bd5d823e901e9f9a91",
-      "timestamp": "2026-11-24T16:11:19.264Z",
-      "commits": [
-        {
-          "sha": "5a3b4ef0c52b9044698531bd5d823e901e9f9a91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:10:24Z",
-          "message": "Merge 80f548966b6e0a029ed599775c327d147c0ecca6 into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
-        },
-        {
-          "sha": "80f548966b6e0a029ed599775c327d147c0ecca6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T09:10:11-07:00",
-          "message": "fix(types): the app's type environment holds none of Jest's, and src's own lint refuses Jest's globals and packages (candybar-later-fixes-nwu9.1d4)\n\nReview pass 1 of #952: the cause was one TypeScript project holding src and\nthe tests, and src's lint config declaring Jest's globals legal.\n\n- tsconfig.json is the app's project with Node's types alone; test/tsconfig.json\n  extends it with Jest's for test/ and audits/. A Jest global in app code,\n  `globalThis.jest` included, is a type error. `typecheck` checks both.\n- src's lint no longer declares Jest's globals; the test roots' block does,\n  for an editor linting a test. src refuses each as undefined.\n- Packages have zone rows: Jest's (jest, jest-*, @jest/*, expect, ts-jest,\n  @types/jest) are the test zone's, judged by the one mayImport and REFUSAL\n  as a path is, in src's .js files too. The tools config's own package\n  pattern, which missed require, is gone.\n- Jest's globals are listed once, in the zone table, and the tools config,\n  the test roots' globals and the tests all read that list.\n- The second lint of src through the tools config is reverted.\n"
-        },
-        {
-          "sha": "65eaefe9acc06b9869460f76e4214e1564bc4ef2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T08:46:53-07:00",
-          "message": "fix(lint): code outside Jest, src included, imports none of Jest's packages and reads none of its globals (candybar-later-fixes-nwu9.1d4)\n\nsrc could import @jest/globals, jest-mock or expect, or call a Jest global,\nand pass both lint and typecheck: the Jest refusal covered only the tool roots,\nand test/ shares src's tsconfig, so Jest's global types reach src.\n\n- Jest's packages are the test zone's in the zone map, so the one zone rule\n  refuses them in every spelling of an edge (import, require, import(), type\n  import) from every zone but test: src through its config, the tools through\n  theirs. The separate no-restricted-imports pattern, which missed require,\n  is gone.\n- The roots the Jest-globals refusal covers are derived from the zone map:\n  every top-level directory a row outside the test zone lies in, src among them.\n- The lint-rule tests prove both for every root outside Jest.\n"
         }
       ]
     },
