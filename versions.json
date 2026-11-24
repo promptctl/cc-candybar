@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "51471537b0aa6387c1e7d52963f056669843eeb8",
-      "timestamp": "2026-11-24T19:27:20.739Z",
-      "commits": [
-        {
-          "sha": "51471537b0aa6387c1e7d52963f056669843eeb8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-24T19:25:38Z",
-          "message": "chore(release): set `package.json` to 1.238.0\n\n## [1.238.0](https://github.com/promptctl/cc-candybar/compare/v1.237.1...v1.238.0) (2026-11-24)\n\n### Features\n\n* **bar-pane:** pane gestures and hover, and a click mode for the statusline ([#950](https://github.com/promptctl/cc-candybar/issues/950)) ([93e21b1](https://github.com/promptctl/cc-candybar/commit/93e21b1fbfc4aa90f16e25593aba94dbdeafa602))\n* **host:** each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer ([#951](https://github.com/promptctl/cc-candybar/issues/951)) ([8833392](https://github.com/promptctl/cc-candybar/commit/883339212b09112b044d4287f5e9b331d9697e1c))\n\n### Bug Fixes\n\n* **lint:** code outside Jest, src included, imports none of Jest's packages and reads none of its globals (candybar-later-fixes-nwu9.1d4) ([#952](https://github.com/promptctl/cc-candybar/issues/952)) ([6c7c981](https://github.com/promptctl/cc-candybar/commit/6c7c981b224e645054c0e73a3bc2c8cd0e347174))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-953",
       "ref": "refs/pull/953/merge",
-      "sha": "a8759befeb5c008eeb88ad3faac45064e1073d47",
-      "timestamp": "2026-11-24T19:19:47.787Z",
+      "sha": "4c2e1ce6b9ce8249423d1883d4242712a8b37961",
+      "timestamp": "2026-11-24T19:28:31.439Z",
       "commits": [
         {
-          "sha": "a8759befeb5c008eeb88ad3faac45064e1073d47",
+          "sha": "4c2e1ce6b9ce8249423d1883d4242712a8b37961",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T19:18:43Z",
-          "message": "Merge f937c01f181b2c720b40a6b66d02aaf849dfc958 into 883339212b09112b044d4287f5e9b331d9697e1c\n"
+          "timestamp": "2026-11-24T19:26:47Z",
+          "message": "Merge 3c6176975c002137dd33b5a20a79a9e061c57f27 into 51471537b0aa6387c1e7d52963f056669843eeb8\n"
+        },
+        {
+          "sha": "3c6176975c002137dd33b5a20a79a9e061c57f27",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T12:26:30-07:00",
+          "message": "refactor(diagnostics): placeInserts' per-cell kinds map is typed, so its non-empty miss lists stay non-empty (candybar-law-review-ibyq.aa1)\n"
         },
         {
           "sha": "f937c01f181b2c720b40a6b66d02aaf849dfc958",
@@ -56,6 +48,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T11:28:16-07:00",
           "message": "fix(diagnostics): a message's about carries the rule that names it, so two load warnings are two messages\n\nabout was a bare string built four ways, and every load warning was about the bare kind, so two shared an identity and only list position told them apart: fixing the first left a viewer open on the second closed.\n\nabout is now a kind, a kind's subject, or the message's own text, built by its constructor, and the identity hashes each by rule. A load warning is about its text; the fault note reads its kind and subject from the same value.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "51471537b0aa6387c1e7d52963f056669843eeb8",
+      "timestamp": "2026-11-24T19:27:20.739Z",
+      "commits": [
+        {
+          "sha": "51471537b0aa6387c1e7d52963f056669843eeb8",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-24T19:25:38Z",
+          "message": "chore(release): set `package.json` to 1.238.0\n\n## [1.238.0](https://github.com/promptctl/cc-candybar/compare/v1.237.1...v1.238.0) (2026-11-24)\n\n### Features\n\n* **bar-pane:** pane gestures and hover, and a click mode for the statusline ([#950](https://github.com/promptctl/cc-candybar/issues/950)) ([93e21b1](https://github.com/promptctl/cc-candybar/commit/93e21b1fbfc4aa90f16e25593aba94dbdeafa602))\n* **host:** each renderer process has its own memory backstop, and daemon-stats shows one panel per renderer ([#951](https://github.com/promptctl/cc-candybar/issues/951)) ([8833392](https://github.com/promptctl/cc-candybar/commit/883339212b09112b044d4287f5e9b331d9697e1c))\n\n### Bug Fixes\n\n* **lint:** code outside Jest, src included, imports none of Jest's packages and reads none of its globals (candybar-later-fixes-nwu9.1d4) ([#952](https://github.com/promptctl/cc-candybar/issues/952)) ([6c7c981](https://github.com/promptctl/cc-candybar/commit/6c7c981b224e645054c0e73a3bc2c8cd0e347174))\n"
         }
       ]
     }
