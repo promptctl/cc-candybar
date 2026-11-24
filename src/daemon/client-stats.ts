@@ -101,7 +101,7 @@ export type StatsReply =
     };
 
 export function statsReplyOf(said: unknown): StatsReply {
-  const missing = missingFields(RuntimeStats.referenceSnapshot(), said);
+  const missing = missingFields(RuntimeStats.referenceSnapshots(), said);
   return missing.length === 0
     ? // [LAW:parse-dont-validate] The walk over the reference is the parse:
       // every field this build reads is present and usable.

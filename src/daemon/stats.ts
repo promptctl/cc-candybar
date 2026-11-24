@@ -10,6 +10,7 @@ import {
 } from "./foundations/durations.js";
 import {
   RENDERER_STATS_REFERENCE,
+  type Delivery,
   type Durations,
   type RunStats,
   type FeedStats,
@@ -20,6 +21,8 @@ import {
 } from "./foundations/stats-snapshot.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { RenderSighting } from "./foundations/sightings";
+import type { SessionId } from "./foundations/session-id";
+import type { ProcessMemory } from "./foundations/memory-limit";
 import type { LaunchCategory } from "../proc/launcher";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
@@ -222,6 +225,84 @@ export class RuntimeStats {
   // from whichever daemon is running, and an older build's lacks fields this
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
+  // [LAW:parse-dont-validate] Every arm a reader descends into, across a set
+  // of references, so a field of each arm is checked: the base, and the base
+  // with each other arm of each union in its place. Each list holds an
+  // element, so its elements are checked too.
+  static referenceSnapshots(): readonly StatsSnapshot[] {
+    const base = RuntimeStats.referenceSnapshot();
+    const panel = base.renderers[0]!;
+    const sizes = { rss: 0, heapTotal: 0 };
+    // Each arm of a process's reading, read at the host and at a panel alike.
+    const measured: ReadonlyArray<ProcessMemory["memory"]> = [
+      {
+        kind: "measured",
+        charge: { kind: "charged", measure: "rss", bytes: 0 },
+        usage: { kind: "read", sizes },
+      },
+      {
+        kind: "measured",
+        charge: { kind: "stand-in", bytes: 0, gap: 0, unread: "" },
+        usage: { kind: "unread", why: "" },
+      },
+      {
+        kind: "measured",
+        charge: { kind: "unread", gap: 0, unread: "" },
+        usage: { kind: "read", sizes },
+      },
+    ];
+    const withDelivery = (delivery: Delivery): StatsSnapshot["fileEvents"] => ({
+      ...base.fileEvents,
+      delivery,
+    });
+    return [
+      base,
+      ...measured.map(
+        (memory): StatsSnapshot => ({
+          ...base,
+          host: { pid: 0, memory, limit: 0 },
+          renderers: [
+            {
+              ...panel,
+              process: {
+                kind: "process",
+                memory: { pid: 0, memory, limit: 0 },
+              },
+            },
+          ],
+        }),
+      ),
+      {
+        ...base,
+        renderers: [
+          { ...panel, process: { kind: "in-host" } },
+          {
+            ...panel,
+            process: { kind: "not-running", why: "" },
+            stats: { kind: "failed", reason: "" },
+          },
+        ],
+        fileEvents: withDelivery({ kind: "stalled", missedSince: 0 }),
+        sources: {
+          ...base.sources,
+          records: base.sources.records.map((record) => ({
+            ...record,
+            lastMs: 0,
+          })),
+        },
+      },
+      {
+        ...base,
+        fileEvents: withDelivery({
+          kind: "unmeasured",
+          since: 0,
+          reason: "",
+          missedSince: 0,
+        }),
+      },
+    ];
+  }
+
   static referenceSnapshot(): StatsSnapshot {
     return new RuntimeStats({
       now: () => 0,
@@ -237,7 +318,16 @@ export class RuntimeStats {
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       sources: {
-        records: [],
+        records: [
+          {
+            name: "",
+            scope: "daemon",
+            refreshes: {},
+            failures: 0,
+            abandoned: 0,
+            lastMs: null,
+          },
+        ],
         homes: {
           daemon: 0,
           configDir: 0,
@@ -285,7 +375,20 @@ export class RuntimeStats {
       watchersActive: 0,
       dirWatchesActive: 0,
       polledPaths: 0,
-      clients: [],
+      clients: [
+        {
+          client: null,
+          sessionId: "" as SessionId,
+          termCols: 0,
+          rateLimits: "carried",
+          claudeConfigDir: "",
+          projectDir: "",
+          transcript: { path: "", answered: false },
+          frame: "still",
+          role: "statusline",
+          ago: 0,
+        },
+      ],
       bundle: "/",
       sourceDigest: null,
       host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },

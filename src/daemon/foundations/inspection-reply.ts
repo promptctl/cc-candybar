@@ -44,7 +44,7 @@ export function inspectionPayloadProblem(reply: {
   readonly stats?: unknown;
 }): string | null {
   if (reply.kind === "stats") {
-    const missing = missingFields(RENDERER_STATS_REFERENCE, reply.stats);
+    const missing = missingFields([RENDERER_STATS_REFERENCE], reply.stats);
     return missing.length === 0
       ? null
       : `invalid stats snapshot: ${missing.join(", ")}`;

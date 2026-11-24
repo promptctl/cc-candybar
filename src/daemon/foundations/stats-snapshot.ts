@@ -36,38 +36,69 @@ export const RENDERER_STATS_REFERENCE: RendererStats = {
   framesDrawn: 0,
 };
 
-// Paths whose fields are missing or unusable, in reference order. A
-// reference array's one element describes every element of the list, and a
-// tagged union's reference arm describes the values of that arm and says
-// nothing about fields of its other arms.
+// Paths whose fields are missing or unusable, in reference order, read
+// against every reference at once. A list's elements are read against every
+// reference element. A tagged object is read against the references of its
+// own arm; one of an arm no reference holds says nothing of its fields. A
+// field the references spell more than one way (a number or null) is read
+// against those of the value's own sort.
 export function missingFields(
-  reference: unknown,
+  references: readonly unknown[],
   value: unknown,
   at = "",
 ): string[] {
   const label = at || "<snapshot>";
-  if (typeof reference === "number") {
-    return typeof value === "number" && Number.isFinite(value) ? [] : [label];
+  const sort = sortOf(value);
+  const same = references.filter((reference) => sortOf(reference) === sort);
+  if (same.length === 0)
+    return references.some((reference) => sortOf(reference) !== "atom")
+      ? [label]
+      : [];
+  switch (sort) {
+    case "number":
+      return Number.isFinite(value) ? [] : [label];
+    case "atom":
+      return [];
+    case "list": {
+      const elements = same.flatMap((reference) => reference as unknown[]);
+      return (value as unknown[]).flatMap((item, i) =>
+        missingFields(elements, item, `${at}[${i}]`),
+      );
+    }
+    case "object": {
+      const object = value as Readonly<Record<string, unknown>>;
+      const objects = same as ReadonlyArray<Readonly<Record<string, unknown>>>;
+      const arm = objects.some((reference) => "kind" in reference)
+        ? objects.filter((reference) => reference.kind === object.kind)
+        : objects;
+      const keys = [
+        ...new Set(arm.flatMap((reference) => Object.keys(reference))),
+      ];
+      return keys.flatMap((key) => {
+        const path = at === "" ? key : `${at}.${key}`;
+        return key in object
+          ? missingFields(
+              arm.flatMap((reference) =>
+                key in reference ? [reference[key]] : [],
+              ),
+              object[key],
+              path,
+            )
+          : [path];
+      });
+    }
   }
-  if (Array.isArray(reference)) {
-    if (!Array.isArray(value)) return [label];
-    const [element] = reference as unknown[];
-    return value.flatMap((item, i) =>
-      missingFields(element, item, `${at}[${i}]`),
-    );
-  }
-  if (!isPlainObject(reference)) return [];
-  if (!isPlainObject(value)) return [label];
-  if ("kind" in reference && "kind" in value && reference.kind !== value.kind)
-    return [];
-  const missing: string[] = [];
-  for (const key of Object.keys(reference)) {
-    const path = at === "" ? key : `${at}.${key}`;
-    if (!(key in value)) missing.push(path);
-    else missing.push(...missingFields(reference[key], value[key], path));
-  }
-  return missing;
 }
+
+type Sort = "number" | "list" | "object" | "atom";
+const sortOf = (value: unknown): Sort =>
+  typeof value === "number"
+    ? "number"
+    : Array.isArray(value)
+      ? "list"
+      : isPlainObject(value)
+        ? "object"
+        : "atom";
 
 // The keyed sources whose entries a view holds, so a period visits only
 // those held: a repo's, a pane's, the host's name and user, a directory

@@ -168,6 +168,17 @@ const settled = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
 
+// A process the host stopped: its stdin closed at once, and its signal after
+// the grace.
+async function stopped(clock: HeldClock, child: Child): Promise<void> {
+  await settled();
+  expect(child.stdinEnded).toBe(true);
+  expect(child.opts.signal?.aborted).toBe(false);
+  clock.advance(CLOSE_GRACE_MS);
+  await settled();
+  expect(child.opts.signal?.aborted).toBe(true);
+}
+
 // A live renderer its boot's ping has read, as the backstop is handed it.
 async function readRenderer(
   link: RendererLink,
@@ -306,7 +317,7 @@ describe("a renderer process's start", () => {
       // A later acknowledgment cannot rescue the rejected process during teardown.
       child.say(startedLine(9001));
       await refused;
-      expect(child.opts.signal?.aborted).toBe(true);
+      await stopped(clock, child);
       expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
       const mismatch = `renderer wire version mismatch (renderer sent ${sent}, expected version ${RENDERER_WIRE_VERSION})`;
       expect(logs).toContainEqual(expect.stringContaining(mismatch));
@@ -367,6 +378,20 @@ describe("a renderer process's start", () => {
       expect.stringMatching(
         /^renderer main\[1\] refused its boot: .*the session state cannot be read; it restarts/,
       ),
+    ]);
+  });
+
+  test("a boot that is refused by a renderer that does not exit is signalled after the grace", async () => {
+    const { link, children, clock, ends } = rig();
+    link.arm();
+    children[0]!.say({
+      kind: "refused",
+      wireVersion: RENDERER_WIRE_VERSION,
+      failure: failureOf(new Error("the session state cannot be read")),
+    });
+    await stopped(clock, children[0]!);
+    expect(ends.map((e) => e.text)).toEqual([
+      expect.stringContaining("refused its boot:"),
     ]);
   });
 
@@ -434,13 +459,13 @@ describe("a renderer process's start", () => {
   ])(
     "a malformed required boot field refuses the worker immediately",
     async (raw, why) => {
-      const { link, children } = rig();
+      const { link, children, clock } = rig();
       link.arm();
       const child = children[0]!;
       const refused = expect(link.renderer.answer(pin)).rejects.toThrow(why);
       child.opts.heard.stdout(`${JSON.stringify(raw)}\n`);
       await refused;
-      expect(child.opts.signal?.aborted).toBe(true);
+      await stopped(clock, child);
       expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
     },
   );
@@ -514,8 +539,7 @@ describe("a renderer process's start", () => {
     expect(logs).toContainEqual(
       "renderer main[1] was not ended for passed its memory limit again: it is already ending: passed its memory limit: phys_footprint 900 MB > limit 800 MB",
     );
-    await settled();
-    expect(children[0]!.opts.signal?.aborted).toBe(true);
+    await stopped(clock, children[0]!);
     expect(ends.map((e) => e.text)).toEqual([
       expect.stringContaining(
         "passed its memory limit: phys_footprint 900 MB > limit 800 MB",
@@ -526,27 +550,41 @@ describe("a renderer process's start", () => {
     expect(children).toHaveLength(2);
   });
 
-  test("a renderer read before its close writes no heap and is not ended by it", async () => {
-    const { link, children, logs } = rig();
+  test("a renderer ended for its memory waits its backoff, however long it served", async () => {
+    const { link, children, clock } = rig();
+    const read = await readRenderer(link, children);
+    clock.advance(YOUNG_MS);
+    read.end("passed its memory limit: phys_footprint 900 MB > limit 800 MB");
+    await stopped(clock, children[0]!);
+    clock.advance(BACKOFF_FIRST_MS - 1);
+    expect(children).toHaveLength(1);
+    clock.advance(1);
+    expect(children).toHaveLength(2);
+  });
+
+  test("a renderer read before its close writes no heap, and its end is the close's", async () => {
+    const { link, children, clock, logs, ends } = rig();
     const read = await readRenderer(link, children);
     link.beginClose();
     await expect(read.heapSnapshot("/s/heap")).rejects.toThrow(
       "renderer main[1] is closing, so its heap was not written",
     );
     read.end("passed its memory limit");
-    expect(children[0]!.opts.signal?.aborted).toBe(false);
-    expect(logs).toContainEqual(
-      "renderer main[1] was not ended for passed its memory limit: it is closing",
-    );
-    children[0]!.exit(EXITED);
+    await stopped(clock, children[0]!);
     await link.close();
+    expect(logs).toContainEqual(
+      "renderer main[1] passed its memory limit in the daemon's close",
+    );
+    // An end in the close starts nothing.
+    expect(ends).toEqual([]);
+    expect(children).toHaveLength(1);
   });
 
   test("a boot ended for hanging counts as young, so the next waits its backoff", async () => {
     const { link, children, clock } = rig();
     link.arm();
     clock.advance(HUNG_AFTER_MS + PING_PERIOD_MS);
-    await settled();
+    await stopped(clock, children[0]!);
     expect(children).toHaveLength(1);
     clock.advance(BACKOFF_FIRST_MS - 1);
     expect(children).toHaveLength(1);
@@ -561,12 +599,11 @@ describe("a renderer process's start", () => {
       RendererDown,
     );
     clock.advance(HUNG_AFTER_MS + PING_PERIOD_MS);
-    await settled();
     await waiting;
+    await stopped(clock, children[0]!);
     expect(ends.map((e) => e.text)).toEqual([
       `renderer main[1] stopped answering for ${HUNG_AFTER_MS / 1000} s; it restarts, and unsaved state (open menus, armed confirms) is lost`,
     ]);
-    expect(children[0]!.opts.signal?.aborted).toBe(true);
   });
 });
 
@@ -665,7 +702,7 @@ describe("a renderer process's end", () => {
       },
     });
     clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
-    await settled();
+    await stopped(clock, children[0]!);
     expect(ends.map((e) => e.text)).toEqual([
       expect.stringMatching(/^renderer main\[1\] stopped answering/),
     ]);
@@ -679,8 +716,7 @@ test("a failed restoration ends that generation and starts its successor after b
   });
   link.arm();
   children[0]!.say(startedLine(9001));
-  await settled();
-  expect(children[0]!.opts.signal?.aborted).toBe(true);
+  await stopped(clock, children[0]!);
   expect(logs).toContainEqual(expect.stringContaining("start failed:"));
   expect(ends[0]?.text).toContain(
     "failed to start: unavailable config snapshot",
@@ -1096,8 +1132,7 @@ describe("a renderer process's close", () => {
     await settled();
     link.beginClose();
     clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
-    await settled();
-    expect(child.opts.signal?.aborted).toBe(true);
+    await stopped(clock, child);
     expect(logs).toContainEqual(
       expect.stringMatching(
         /^renderer main\[1\] stopped answering .* in the daemon's close$/,

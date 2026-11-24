@@ -357,50 +357,82 @@ describe("a stats reply", () => {
   });
 
   test("missingFields names a nested field by its path, and an atom in place of an object", () => {
+    const refs = RuntimeStats.referenceSnapshots();
     const snap = RuntimeStats.referenceSnapshot();
     const { retiring: _r, ...collector } = snap.collector;
-    expect(missingFields(snap, { ...snap, collector })).toEqual([
+    expect(missingFields(refs, { ...snap, collector })).toEqual([
       "collector.retiring",
     ]);
-    expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
+    expect(missingFields(refs, { ...snap, watchers: 3 })).toEqual(["watchers"]);
     // A list the reader maps, carried as anything else, is as absent to it.
-    expect(missingFields(snap, { ...snap, clients: null })).toEqual([
+    expect(missingFields(refs, { ...snap, clients: null })).toEqual([
       "clients",
     ]);
-    expect(missingFields(snap, snap)).toEqual([]);
-    // A union's arms differ: the reference's `unmeasured` arm is no spec of
-    // a `measured` one, so a tagged union is judged present, not below its
-    // tag.
-    const measured = {
-      ...snap,
-      host: {
-        ...snap.host,
-        memory: { kind: "measured", rss: 1 },
-      },
-    };
-    expect(missingFields(snap, measured)).toEqual([]);
+    for (const each of refs) expect(missingFields(refs, each)).toEqual([]);
     expect(
-      missingFields(snap, {
-        ...snap,
-        host: { ...snap.host, memory: 3 },
-      }),
+      missingFields(refs, { ...snap, host: { ...snap.host, memory: 3 } }),
     ).toEqual(["host.memory"]);
-    // Every renderer's panel is read as the reference's one is, down into
-    // the arm it answers with.
+  });
+
+  test("missingFields reads each arm of a union as its own, and each element of a list", () => {
+    const refs = RuntimeStats.referenceSnapshots();
+    const snap = RuntimeStats.referenceSnapshot();
+    const measured = (memory: object) => ({
+      ...snap,
+      host: { ...snap.host, memory: { kind: "measured", ...memory } },
+    });
+    const sizes = { rss: 1, heapTotal: 1 };
+    // The arm every running daemon reports, read below its tag.
+    expect(
+      missingFields(refs, measured({ usage: { kind: "read", sizes } })),
+    ).toEqual(["host.memory.charge"]);
+    expect(
+      missingFields(
+        refs,
+        measured({
+          charge: { kind: "stand-in", bytes: 1, unread: "x" },
+          usage: { kind: "read", sizes },
+        }),
+      ),
+    ).toEqual(["host.memory.charge.gap"]);
+    // An arm no reference holds is no field this build reads.
+    expect(
+      missingFields(refs, {
+        ...snap,
+        host: { ...snap.host, memory: { kind: "later" } },
+      }),
+    ).toEqual([]);
     const [panel] = snap.renderers;
     const { mailbox: _m, ...unboxed } = panel!;
     const { renderCache: _c, ...uncached } = RENDERER_STATS_REFERENCE;
     expect(
-      missingFields(snap, {
+      missingFields(refs, {
         ...snap,
         renderers: [
           panel,
           unboxed,
           { ...panel, stats: { kind: "ok", value: uncached } },
-          { ...panel, stats: { kind: "failed", reason: "down" } },
+          { ...panel, stats: { kind: "failed" } },
+          { ...panel, process: { kind: "not-running" } },
         ],
       }),
-    ).toEqual(["renderers[1].mailbox", "renderers[2].stats.value.renderCache"]);
+    ).toEqual([
+      "renderers[1].mailbox",
+      "renderers[2].stats.value.renderCache",
+      "renderers[3].stats.reason",
+      "renderers[4].process.why",
+    ]);
+    const [record] = snap.sources.records;
+    const { refreshes: _f, ...unrefreshed } = record!;
+    const [client] = snap.clients;
+    const { frame: _d, ...undrawn } = client!;
+    expect(
+      missingFields(refs, {
+        ...snap,
+        sources: { ...snap.sources, records: [record, unrefreshed] },
+        clients: [undrawn],
+      }),
+    ).toEqual(["sources.records[1].refreshes", "clients[0].frame"]);
   });
 });
 
