@@ -4,32 +4,39 @@
     {
       "version": "pr-956",
       "ref": "refs/pull/956/merge",
-      "sha": "931f2e4bf295094b9a75a3b4b0f8bf1cb8f6fdbc",
-      "timestamp": "2026-11-24T21:41:22.012Z",
+      "sha": "a7a4ca8e6065e6b3d4cd033e01e0929f9e81561d",
+      "timestamp": "2026-11-24T22:09:11.319Z",
       "commits": [
         {
-          "sha": "931f2e4bf295094b9a75a3b4b0f8bf1cb8f6fdbc",
+          "sha": "a7a4ca8e6065e6b3d4cd033e01e0929f9e81561d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T21:40:17Z",
-          "message": "Merge 8cf64c2750488f40a0b360fccc523829c9af56a9 into 74ff60b9ef4ea73da1ff662ab9c57dca723ae730\n"
+          "timestamp": "2026-11-24T22:08:13Z",
+          "message": "Merge 91a1d121be442e6a6cd9f39ded588c1c405966ca into 74ff60b9ef4ea73da1ff662ab9c57dca723ae730\n"
         },
         {
-          "sha": "8cf64c2750488f40a0b360fccc523829c9af56a9",
+          "sha": "91a1d121be442e6a6cd9f39ded588c1c405966ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T15:07:42-07:00",
+          "message": "fix(stored-state): one landing rule for every per-session file, replay what was taken before the load, and a landing carries its own reports (candybar-law-review-ibyq.6iz)\n\nLaw review pass 2. A per-session file writes where its link points, the\nsame rule its set-aside uses. A legacy name is retired unless it is the file\nbeing set aside. A rollback that cannot put a set-aside back names the copy.\nThe config landing returns its store reports, and the daemon restates the\nbar only when a report gave it something to show.\n"
+        },
+        {
+          "sha": "98355392c90974fbca59c05b9b222fcdc3ee3549",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T14:40:04-07:00",
           "message": "fix(stored-state): one set-aside of an unread file for every store, said where it went, and no false ⚠ after an edit (candybar-law-review-ibyq.6iz)\n\nLaw review pass 1 of #956.\n\n- One executor sets an unread state file aside, for the answers book's\n  transaction and a held store's load alike. It moves the file the bytes\n  sit in, a link's target, so a symlinked answers book keeps its unread\n  bytes and stays a link.\n- One report type and one daemon translator: every store's load is\n  logged (no file, N sessions and M dropped, set aside, refused), and a\n  set-aside or a drop is a ⚠ event, the answers book's included.\n- A renderer hands the host only what a load keeps, so edit mode's keys\n  and a draft's steps never reach the file and a routine restart shows\n  no ⚠.\n- The holder keeps one fact for \"the file lags the map\", cleared only\n  once a save returns. A put of what a session holds is a hearing, and\n  every read before the load throws.\n- One move-to-newest for every recency-ordered map. The settings\n  history's hearing moves its one entry in place.\n"
         },
         {
-          "sha": "b674410ad35f90a92a8300b9734cb1e9621ce398",
+          "sha": "188be37bc0a075fd05f1416184f4c98ceca28b48",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T14:06:14-07:00",
           "message": "fix(stored-state): a per-session file that cannot be read shows ⚠ and survives the next save, and a restart at the bound keeps the sessions in use (candybar-law-review-ibyq.6iz)\n\nOne holder now holds every per-session file: the session book, and a renderer profile's picks and history. It reads the file once, by the rule every state file keeps. A file that does not read is renamed aside beside itself before anything is written, and the store starts empty. A file that can be neither read nor renamed is never saved to, and stands on every bar as saving nothing.\n\nA load's set-aside and what it dropped (a refused session, a retired pick or setting, an empty session) are a daemon event about the file, grouped by what and why.\n\nRecency is the last request or write. A request moves its session in the renderer's stores, and the host hears that as a `heard` write; the wire version goes to 18. A move of place alone reaches the file within one order period and at a close, so the write rate does not grow with the tick.\n"
         },
         {
-          "sha": "4a477878190cd5c091883676ad04a02aeab13163",
+          "sha": "97a9d7f56f005bba7aaf2e5e5f3463e7c6d705a1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T13:41:31-07:00",

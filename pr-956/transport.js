@@ -29299,15 +29299,15 @@ function formatIssues(file, issues) {
 // src/daemon/foundations/stored-file.ts
 init_globals();
 var unreadText = (reason, where) => `could not be read: ${reason} \u2014 ${where}`;
+var readOrEmpty = (result, empty2) => result.kind === "ok" ? result.value : empty2;
 var kept = (value, dropped = []) => ({ kind: "ok", value: { value, dropped } });
 function reportText({ store, file, found: found2 }) {
   switch (found2.kind) {
     case "absent":
       return null;
     case "set-aside":
-      return `${store} ${unreadText(found2.reason, `it is kept as ${found2.to}, and the store started again from empty`)}`;
     case "refused":
-      return `${store} ${unreadText(found2.reason, `it stays where it is, since setting it aside failed (${found2.error}), and nothing is saved to it until the daemon starts again`)}`;
+      return unreadReport(store, found2);
     case "read":
       return found2.dropped.length === 0 ? null : `${store} (${file}): the load dropped what this build does not read: ${droppedText(found2.dropped)}`;
   }
@@ -29321,8 +29321,12 @@ function reportLine(report2) {
       return `${store}: read ${file}, sessions=${found2.sessions} dropped=${found2.dropped.length}`;
     case "set-aside":
     case "refused":
-      return reportText(report2);
+      return unreadReport(store, found2);
   }
+}
+function unreadReport(store, found2) {
+  const where = found2.kind === "set-aside" ? `it is kept as ${found2.to}, and the store started again from empty` : `it stays where it is, since setting it aside failed (${found2.error}), and nothing is saved to it until the daemon starts again`;
+  return `${store} ${unreadText(found2.reason, where)}`;
 }
 var SHOWN_SESSIONS = 3;
 function droppedText(dropped) {
@@ -29357,7 +29361,7 @@ var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
 function ruling(answers, d) {
   const key = answerDir(d);
   if (key === null) return { standing: "unread", under: d.dir };
-  const book = answers.kind === "ok" ? answers.value : {};
+  const book = readOrEmpty(answers, {});
   const repo2 = answerOf(book, key);
   if (repo2 !== null) return { standing: repo2, under: key };
   const legacy = answerOf(book, d.dir);
@@ -75251,12 +75255,16 @@ function newestOf(map) {
   for (const key of map.keys()) newest = key;
   return newest;
 }
+function putNewest(map, key, value) {
+  const dropped = map.delete(key);
+  if (value === null) return dropped;
+  map.set(key, value);
+  return true;
+}
 function toNewest(map, key) {
   const value = map.get(key);
   if (value === void 0 || newestOf(map) === key) return false;
-  map.delete(key);
-  map.set(key, value);
-  return true;
+  return putNewest(map, key, value);
 }
 
 // src/renderer/stored-moves.ts
@@ -75264,15 +75272,12 @@ init_globals();
 var StoredMoves = class {
   moved = /* @__PURE__ */ new Map();
   put(session) {
-    this.moved.delete(session);
-    this.moved.set(session, "put");
+    putNewest(this.moved, session, "put");
   }
   // A hearing after a put in the same turn is carried by the put, which
   // moves the entry to the newest end as the hearing did.
   heard(session) {
-    const was = this.moved.get(session);
-    this.moved.delete(session);
-    this.moved.set(session, was ?? "heard");
+    putNewest(this.moved, session, this.moved.get(session) ?? "heard");
   }
   drain(write) {
     const writes = [...this.moved].map(
@@ -75521,13 +75526,12 @@ var SessionState = class {
   // written, here and in what the host is told.
   changed(sessionId2, session) {
     session.revision = ++this.head;
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, session);
+    putNewest(this.sessions, sessionId2, session);
     this.told(sessionId2);
   }
   dropped(sessionId2) {
     this.head++;
-    this.sessions.delete(sessionId2);
+    putNewest(this.sessions, sessionId2, null);
     this.told(sessionId2);
   }
   told(sessionId2) {
@@ -75764,8 +75768,7 @@ var SettingsHistory = class {
   // session that changed least recently.
   put(sessionId2, history) {
     const next2 = new Map(this.state);
-    next2.delete(sessionId2);
-    if (!holdsNothing(history)) next2.set(sessionId2, history);
+    putNewest(next2, sessionId2, holdsNothing(history) ? null : history);
     this.moved.put(sessionId2);
     this.adopt(next2);
   }
@@ -80622,7 +80625,10 @@ function readTextIfPresent(path31, read3 = readRegularTextSync) {
 // src/daemon/state-file.ts
 function writeBase(observed2, empty2) {
   const { result } = observed2;
-  return result.kind === "ok" ? { current: result.value, setAside: null } : { current: empty2, setAside: result };
+  return {
+    current: readOrEmpty(result, empty2),
+    setAside: result.kind === "ok" ? null : result
+  };
 }
 var textOf2 = (value) => `${JSON.stringify(value, null, 2)}
 `;
@@ -80663,8 +80669,8 @@ function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
     const promote = source !== null && source !== file;
     const rewrite = promote || setAside2 !== null || value !== current ? { file, was: source === file ? text5 : null, will: textOf2(value) } : null;
     try {
-      const old = setAside2 === null ? previousName(file, previous2, source) : null;
-      const retire = old === null ? null : { from: old, to: `${old}.migrated-${randomUUID()}` };
+      const old = previousName(file, previous2, source);
+      const retire = old === null || old === setAside2?.file ? null : { from: old, to: `${old}.migrated-${randomUUID()}` };
       return ok({ setAside: setAside2, rewrite, retire, value });
     } catch (e) {
       return {
@@ -80733,7 +80739,12 @@ function writeRevisions({ setAside: unread2, rewrites, retire }, write = writeCo
   const written2 = [];
   let aside = null;
   try {
-    if (unread2 !== null) aside = setAside(unread2);
+    if (unread2 !== null)
+      aside = {
+        file: unread2.file,
+        reason: unread2.reason,
+        ...setAside(unread2.file)
+      };
     for (const rewrite of rewrites) {
       const removedMode = rewrite.will === null && rewrite.was !== null ? filePermissions(rewrite.file) : void 0;
       write(rewrite.file, rewrite.will);
@@ -80763,7 +80774,11 @@ function writeRevisions({ setAside: unread2, rewrites, retire }, write = writeCo
       try {
         fs_default.renameSync(aside.to, aside.from);
       } catch (rollback) {
-        failed3.push({ file: aside.from, error: asError(rollback) });
+        const { message } = asError(rollback);
+        failed3.push({
+          file: aside.from,
+          error: new Error(`${message} \u2014 its bytes are kept at ${aside.to}`)
+        });
       }
     const [first2, ...remaining] = failed3;
     return first2 === void 0 ? { kind: "failed", error } : { kind: "incomplete", error, unrestored: [first2, ...remaining] };
@@ -80824,7 +80839,7 @@ function sessionFileOnDisk(kind, filePath2) {
   return {
     file: filePath2,
     observe: file.observe,
-    setAside: () => setAside(filePath2)
+    setAside
   };
 }
 var LANDED = { ok: true };
@@ -80859,8 +80874,8 @@ var SessionFile = class {
   observe() {
     return this.disk.observe();
   }
-  setAside() {
-    return this.disk.setAside();
+  setAside(file) {
+    return this.disk.setAside(file);
   }
   save(snapshot) {
     this.pending = new Map(snapshot);
@@ -80908,12 +80923,13 @@ var SessionFile = class {
       )
     );
   }
-  // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
-  // off the daemon's one thread: the bytes are written through the thread
-  // pool, and so is the rename that publishes them. A rename is a journaled
+  // [LAW:effects-at-boundaries] The debounced write takes its disk writes off
+  // the daemon's one thread: the bytes are written through the thread pool,
+  // and so is the rename that publishes them. A rename is a journaled
   // metadata op, and on a busy disk it waits on the journal like any write:
   // run synchronously here it held every bar and click for 180 ms on a CI
-  // runner, past every client's reply budget.
+  // runner, past every client's reply budget. Only the walk of the path's
+  // links, a read of metadata the journal does not hold up, runs here.
   // [LAW:no-silent-failure] A write that fails says so and is a value; the
   // next write still runs.
   async land() {
@@ -80925,8 +80941,9 @@ var SessionFile = class {
     try {
       body = this.body(snapshot);
       heldMs = elapsedMs(this.clock, started2);
-      await fs_default.promises.mkdir(import_node_path12.default.dirname(this.filePath), { recursive: true });
-      await publishByRenameAsync(this.filePath, body, 384);
+      const file = resolvedTarget(this.filePath);
+      await fs_default.promises.mkdir(import_node_path12.default.dirname(file), { recursive: true });
+      await publishByRenameAsync(file, body, 384);
     } catch (e) {
       const error = asError(e);
       this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
@@ -80973,18 +80990,25 @@ var HeldFile = class {
   same;
   held = /* @__PURE__ */ new Map();
   phase = "unread";
-  // [LAW:one-source-of-truth] Whether the file lags the held map: set by
-  // every change, cleared only once a save returns, so a save that throws
-  // is still owed to the next change and to the close.
+  // [LAW:no-ambient-temporal-coupling] What is taken before the load, replayed
+  // over the file's sessions as it loads: a put, a drop, a hearing and the
+  // bound each run one way, whenever they come.
+  early = [];
+  // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
+  // as it stands: set by every change, cleared only once a save returns, so
+  // one that throws (history's) is still owed to the next change and to the
+  // close. Whether a write handed over lands is the storage's.
   behind = false;
   clearOrderTimer = null;
   // [LAW:single-enforcer] Read once. A file that did not read is set aside by
   // the rule every state file keeps, before anything is written. What was
-  // taken before the load is newer than anything the file holds of it, so
-  // it wins, and the file's sessions come first; it is saved, so a save made
-  // before the load never lands without the file's sessions. Returns what
-  // the store found, and the sessions the bound dropped.
+  // taken before the load is newer than anything the file holds, so it is
+  // taken over the file's sessions, and saved, so a save made before the load
+  // never lands without them. Returns what the store found, and the
+  // sessions the bound dropped.
   load() {
+    if (this.phase !== "unread")
+      throw new Error(`${this.store} is loaded twice`);
     const observed2 = this.storage.observe();
     const { current, setAside: setAside2 } = writeBase(observed2, nothingLoaded());
     let found2;
@@ -80993,7 +81017,7 @@ var HeldFile = class {
         found2 = {
           kind: "set-aside",
           reason: setAside2.reason,
-          to: this.storage.setAside().to
+          to: this.storage.setAside(setAside2.file).to
         };
       } catch (e) {
         found2 = {
@@ -81008,30 +81032,28 @@ var HeldFile = class {
         sessions: current.sessions.size,
         dropped: current.dropped
       };
-    const taken2 = this.held;
-    this.held = new Map(
-      [...current.sessions].filter(([session]) => !taken2.has(session))
-    );
-    for (const [session, value] of taken2) this.held.set(session, value);
-    const evicted2 = this.evict();
+    this.held = new Map(current.sessions);
     this.phase = found2.kind === "refused" ? "refused" : "open";
-    if (this.behind || evicted2.length > 0) this.save();
+    const early = this.early;
+    this.early = [];
     return {
       report: { store: this.store, file: this.storage.file, found: found2 },
-      evicted: evicted2
+      evicted: this.take(early)
     };
   }
   // A turn's changes, in the order it made them, then one save: one write
   // per store per turn, or, when only the order moved, one within the
   // period. Returns the sessions the bound dropped.
   take(changes) {
+    if (this.phase === "unread") {
+      this.early.push(...changes);
+      return [];
+    }
     let content = false;
     for (const change of changes)
       if (change.kind === "heard" || this.holds(change.key, change.value)) {
         if (toNewest(this.held, change.key)) this.behind = true;
-      } else {
-        this.held.delete(change.key);
-        if (change.value !== null) this.held.set(change.key, change.value);
+      } else if (putNewest(this.held, change.key, change.value)) {
         content = true;
         this.behind = true;
       }
@@ -81049,9 +81071,9 @@ var HeldFile = class {
       throw new Error(`${this.store} is read before its load`);
     return this.held;
   }
-  // [LAW:no-ambient-temporal-coupling] The daemon's close: what the file
-  // still lags is written now, what is pending lands, and what is taken
-  // after it stays in memory.
+  // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
+  // is still owed is handed over now, what is pending lands, and what is
+  // taken after it stays in memory.
   // A save that throws (history's is synchronous) rejects the close.
   async close() {
     try {
@@ -92528,7 +92550,7 @@ function performChanges(changes, book, files, write) {
     };
   }
   const landed = writeRevisions(
-    { setAside: setAside2?.file ?? null, rewrites: rewrites.values(), retire },
+    { setAside: setAside2, rewrites: rewrites.values(), retire },
     write
   );
   if (landed.kind === "failed") {
@@ -92550,17 +92572,16 @@ function performChanges(changes, book, files, write) {
     };
   }
   for (const line of answered) book?.said(line);
-  if (setAside2 !== null && landed.setAside !== null)
-    book?.reported({
-      store: "Repository config answers",
-      file: setAside2.file,
-      found: {
-        kind: "set-aside",
-        reason: setAside2.reason,
-        to: landed.setAside.to
+  const reports = [landed.setAside].flatMap(
+    (aside) => aside === null ? [] : [
+      {
+        store: "Repository config answers",
+        file: aside.file,
+        found: { kind: "set-aside", reason: aside.reason, to: aside.to }
       }
-    });
-  return { kind: "ok", files: landed.files };
+    ]
+  );
+  return { kind: "ok", files: landed.files, reports };
 }
 function excludeRewrite(file, rewrites, readText, entryOf4) {
   const checkout = gitRootOf(import_node_path31.default.dirname(file));
@@ -92902,6 +92923,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       (effect) => effect.kind === "approve-repo"
     );
     const landed = landConfig(changes, answers);
+    if (landed.kind === "ok")
+      recordTaken("landed config report", () => world.reported(landed.reports));
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
@@ -92992,17 +93015,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (world.closing())
         return { kind: "closing", reason: "the daemon is closing" };
       if (changes.length + answers.length === 0)
-        return { kind: "ok", files: [] };
+        return { kind: "ok", files: [], reports: [] };
       return performChanges(
         changes,
         {
           stateDir: world.stateDir,
           answers,
-          said: (line) => void recordTaken("trust book record", () => log("info", line)),
-          reported: (report2) => void recordTaken(
-            "trust book report",
-            () => world.reported([report2])
-          )
+          said: (line) => void recordTaken("trust book record", () => log("info", line))
         },
         world.configs,
         world.writeConfigFile
@@ -93415,10 +93434,11 @@ var HeldStores = class {
     };
   }
   // A turn's stored writes, in the order it made them, each store's saved
-  // once. [LAW:no-silent-failure] What a file refused throws once every store
-  // has taken its share, so the host's taking says it on every bar. The
-  // renderer holds the refused write too, and the store's next write saves
-  // the copy held here whole.
+  // once. [LAW:no-silent-failure] A save that throws (the history's, written
+  // at once) throws once every store has taken its share, so the host's
+  // taking says it on every bar; a write behind says its failure where it
+  // lands. The renderer holds the refused write too, and the store's next
+  // write saves the copy held here whole.
   take(writes) {
     const sessions = [];
     const history = [];
@@ -93430,6 +93450,8 @@ var HeldStores = class {
         case "settings-history":
           history.push(write);
           break;
+        default:
+          write;
       }
     runEach([
       () => this.sessions.take(sessions),
@@ -94947,11 +94969,11 @@ function createDaemon(inputs) {
       const text5 = reportText(report2);
       log(text5 === null ? "info" : "warn", reportLine(report2));
       if (text5 === null) continue;
-      if (found2.kind === "refused")
+      if (found2.kind === "refused") {
         unsaved.set(file, { kind: "store-unsaved", file, message: text5 });
-      else storeLoads.occur({ file, text: text5 });
+        restateOnceBuilt();
+      } else storeLoads.occur({ file, text: text5 });
     }
-    restateOnceBuilt();
   };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
@@ -96089,7 +96111,7 @@ function fileHistoryStorage(file, logger) {
         fs_default.mkdirSync(import_node_path37.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 384);
       } catch (e) {
-        const message = `settings-history write failed \u2014 the change landed and undoes until the daemon restarts, not after: ${e.message}`;
+        const message = `settings-history write failed \u2014 what this daemon holds undoes until it restarts, and the file keeps what it last saved: ${e.message}`;
         logger("error", message);
         throw new Error(message);
       }
