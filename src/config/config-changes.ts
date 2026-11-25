@@ -73,19 +73,16 @@ export type Applied =
 
 const ABSENT: Read = { kind: "absent" };
 
-// [LAW:types-are-the-program] An absent file holds none. One holding only
-// whitespace is empty: an object with no members, as every reader of a config
-// or a settings file reads it, with no text a span could point into. Text the
-// span editor refuses is unparsed: a change can only replace it whole.
+// [LAW:types-are-the-program] An absent file holds none. Text the span editor
+// refuses, one that holds no value among it, is unparsed: a change can only
+// replace it whole.
 type Parsed =
   | { readonly kind: "none" }
-  | { readonly kind: "empty" }
   | { readonly kind: "unparsed" }
   | { readonly kind: "document"; readonly root: Node };
 
 function parse(text: string | null): Parsed {
   if (text === null) return { kind: "none" };
-  if (/^\s*$/.test(text)) return { kind: "empty" };
   try {
     return { kind: "document", root: parseDocument(text) };
   } catch (e) {
@@ -100,14 +97,9 @@ function parse(text: string | null): Parsed {
 function readAt(text: string | null, parsed: Parsed, at: Address): Read {
   if (text === null) return ABSENT;
   if (at.length === 0) return { kind: "file", text };
-  switch (parsed.kind) {
-    case "empty":
-      return ABSENT;
-    case "document":
-      return readOf(text, nodeAt(parsed.root, at));
-    default:
-      return { kind: "file", text };
-  }
+  return parsed.kind === "document"
+    ? readOf(text, nodeAt(parsed.root, at))
+    : { kind: "file", text };
 }
 
 function readOf(text: string, node: Node | undefined): Read {
@@ -307,9 +299,6 @@ export function applyChanges(
 // when every one is. The document is the first ancestor of every setting.
 function movedAncestor(parsed: Parsed, at: Address): Address | null {
   if (at.length === 0) return null;
-  // An empty document is an object holding nothing, so only its own members
-  // have every ancestor.
-  if (parsed.kind === "empty") return at.length === 1 ? null : at.slice(0, 1);
   if (parsed.kind !== "document") return [];
   for (let depth = 0; depth < at.length; depth++) {
     const up = at.slice(0, depth);

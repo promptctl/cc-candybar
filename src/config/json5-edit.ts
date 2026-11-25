@@ -73,6 +73,10 @@ const IDENT_START = /[A-Za-z_$\p{L}]/u;
 const IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
 const WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
 const WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+// [LAW:one-source-of-truth] JSON5's line terminators, which end a `//`
+// comment: a scanner that ran a comment on past one would hide from the
+// editor a value the loader reads.
+const LINE_END = /[\n\r\u2028\u2029]/g;
 
 class Scanner {
   pos = 0;
@@ -86,21 +90,26 @@ class Scanner {
     throw new Json5EditError(message, this.pos);
   }
 
-  skipTrivia(): void {
+  // Past whitespace and comments. Returns where the last comment it passed
+  // ends, or where it started when it passed none.
+  skipTrivia(): number {
+    let commentEnd = this.pos;
     for (;;) {
       const c = this.peek();
-      if (c === "") return;
+      if (c === "") return commentEnd;
       if (WHITESPACE.test(c)) {
         this.pos++;
       } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
+        LINE_END.lastIndex = this.pos;
+        this.pos = LINE_END.exec(this.text)?.index ?? this.text.length;
+        commentEnd = this.pos;
       } else if (c === "/" && this.text[this.pos + 1] === "*") {
         const close = this.text.indexOf("*/", this.pos + 2);
         if (close === -1) this.fail("unterminated block comment");
         this.pos = close + 2;
+        commentEnd = this.pos;
       } else {
-        return;
+        return commentEnd;
       }
     }
   }
@@ -236,12 +245,40 @@ class Scanner {
   }
 }
 
+// [LAW:single-enforcer] The one rule for a text with nothing but whitespace
+// and comments in it: no document, to the editor and to the loader alike
+// (src/config/loader/diagnostics.ts), refused in these words. Read as an
+// empty object, it would be what an editor's in-place rewrite shows between
+// its truncate and its write, and a click landing there would replace the
+// file the editor is still writing.
+export const HOLDS_NO_VALUE =
+  "the file holds no value (a config that sets nothing is {})";
+
+export function holdsNoValue(text: string): boolean {
+  const s = new Scanner(text);
+  try {
+    s.skipTrivia();
+  } catch (e) {
+    // An unterminated comment is a syntax error of its own, which the parse
+    // names.
+    if (e instanceof Json5EditError) return false;
+    throw e;
+  }
+  return s.pos === text.length;
+}
+
+// The text of a document with no members, which an edit to a file that does
+// not exist starts from: the file it creates is the one an edit to `{}`
+// writes.
+export const EMPTY_DOCUMENT = "{}\n";
+
 /**
  * Parse a whole JSON5 document into a span-carrying node tree. Throws
- * Json5EditError on any syntax error or duplicate key — the documents the
- * editor refuses to splice.
+ * Json5EditError on any syntax error or duplicate key, and on a text that
+ * holds no value — the documents the editor refuses to splice.
  */
 export function parseDocument(text: string): Node {
+  if (holdsNoValue(text)) throw new Json5EditError(HOLDS_NO_VALUE, 0);
   const s = new Scanner(text);
   const root = s.value();
   s.skipTrivia();
@@ -514,10 +551,18 @@ function insertLineAfter(
   return splice(withComma, at, at, line);
 }
 
+/** Where the last comment in the whitespace and comments from `from` ends, or `from` when there is none. */
+function commentsEnd(text: string, from: number): number {
+  const s = new Scanner(text);
+  s.pos = from;
+  return s.skipTrivia();
+}
+
 /**
  * Add a member after the last existing one, matching the container's own
  * style: its indentation, one-member-per-line versus inline, and whether it
- * uses trailing commas. An empty container opens onto a new indented line.
+ * uses trailing commas. An empty container opens onto a new indented line,
+ * after any comment it holds.
  */
 function appendMember(
   text: string,
@@ -534,7 +579,7 @@ function appendMember(
     const eol = eolOf(text);
     return splice(
       text,
-      container.span.start + 1,
+      commentsEnd(text, container.span.start + 1),
       container.span.end - 1,
       `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`,
     );
@@ -562,8 +607,7 @@ function appendMember(
 /**
  * Set the value at an object path, creating every missing object along the
  * way. An existing value is replaced within its own span; a new entry is
- * appended to the deepest existing object. An empty document becomes a
- * one-entry object.
+ * appended to the deepest existing object.
  */
 export function setValue(
   text: string,
@@ -573,10 +617,6 @@ export function setValue(
 ): string {
   if (path.length === 0) {
     throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text)) {
-    const eol = eolOf(text);
-    return `{${eol}  ${reindent(entryText(path, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
   }
   return setBelow(text, parseDocument(text), path, valueText, dialect);
 }
@@ -597,9 +637,6 @@ export function insertValue(
   precedes: string | null,
 ): string {
   const parentPath = path.slice(0, -1);
-  // An empty document is an empty object, which a member of its own becomes.
-  if (/^\s*$/.test(text) && parentPath.length === 0)
-    return setValue(text, path, valueText, dialect);
   const leaf = path[path.length - 1];
   const parent = nodeAt(parseDocument(text), parentPath);
   if (leaf === undefined || parent?.kind !== "object")
@@ -689,7 +726,6 @@ export function deleteValue(
   if (path.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
-  if (/^\s*$/.test(text)) return text;
   const parentPath = path.slice(0, -1);
   const parent = nodeAt(parseDocument(text), parentPath);
   const entry =
