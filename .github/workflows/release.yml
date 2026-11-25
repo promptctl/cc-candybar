@@ -138,7 +138,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 1
-    needs: [checks, test-unit, test-worker, test-process]
+    needs: [checks, test-unit, test-worker, test-process, build-url-handler]
     # Runs after a red job too: a red run is the one whose records matter most.
     if: always()
     steps:
@@ -249,9 +249,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The URL handler app (url-handler/main.swift): a resident macOS agent that
-  # forwards a cc-candybar:// link to the daemon. Swift needs a macOS runner;
-  # one universal binary serves both darwin packages.
+  # The URL handler app (url-handler/): a resident macOS agent that forwards a
+  # cc-candybar:// link to the daemon and carries out what the click asked of
+  # the Mac. Swift needs a macOS runner; one universal binary serves both
+  # darwin packages, and its expectations run before it is built.
   build-url-handler:
     name: Build URL handler app (darwin universal)
     runs-on: macos-latest
@@ -259,6 +260,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check the handler's decisions
+        run: ./url-handler/check.sh
 
       - name: Build universal binary
         run: ./url-handler/build.sh build/cc-candybar-url-handler

@@ -71,11 +71,7 @@ type Event =
   | { readonly kind: "unparsed"; readonly answer: Reply }
   | { readonly kind: "deadline"; readonly answer: Reply }
   | { readonly kind: "replied"; readonly answer: Reply }
-  | {
-      readonly kind: "verdict";
-      readonly answer: Reply;
-      readonly awaited: boolean;
-    }
+  | { readonly kind: "verdict"; readonly answer: Reply }
   | { readonly kind: "failed"; readonly answer: Reply }
   | { readonly kind: "landed" }
   | { readonly kind: "refused"; readonly answer: Reply }
@@ -221,16 +217,14 @@ const STEP: {
         return [p, dropped(p, e.answer)];
     }
   },
-  // The app is told at once whether its link opened, when it reads that, and
-  // the click runs on, still unattended. A url frame read
+  // The app is told whether its link opened, or what its click came to, as the
+  // frame asked, and the click runs on, still unattended. A url frame read
   // after the backstop answered is told nothing more: TIMEOUT was the
   // socket's one answer.
   verdict: (p, e) =>
     p.kind !== "unattended" || p.told
       ? [p, dropped(p, e.answer)]
-      : e.awaited
-        ? [{ ...p, told: true }, write(e.answer)]
-        : [p, NONE],
+      : [{ ...p, told: true }, write(e.answer)],
   // [LAW:no-silent-failure] Answered with the failure whoever sent the
   // frame: a request's client, or a URL handler, which reads it as its
   // verdict. A url frame whose handler failed has no click to land, so it is
@@ -501,20 +495,19 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     });
   }
 
-  // A url frame's verdict, then its click, which is in flight until it lands.
-  // A version 1 writer has closed, and a write to its socket is only an error
-  // event.
-  function clicked(r: Extract<HandledRequest, { kind: "url" }>): void {
-    on({
-      kind: "verdict",
-      answer: replyOf(r.verdict),
-      awaited: r.awaitsVerdict,
-    });
+  // A url frame's verdict, told at once or once its click has landed, as the
+  // frame asked, and its click, which is in flight until it lands. A version 1
+  // writer has closed and is told nothing.
+  function clicked({ told }: Extract<HandledRequest, { kind: "url" }>): void {
+    if (told.when === "at-once")
+      on({ kind: "verdict", answer: replyOf(told.verdict) });
     // [LAW:no-silent-failure] A landing that throws reaches the clock, which
     // shows it on every bar; the connection hears it landed all the same.
     daemon.clock.detach("url click landing", async () => {
       try {
-        await r.land();
+        if (told.when === "landed")
+          on({ kind: "verdict", answer: await told.land() });
+        else await told.land();
       } finally {
         on({ kind: "landed" });
       }

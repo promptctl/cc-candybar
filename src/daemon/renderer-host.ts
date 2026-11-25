@@ -71,7 +71,13 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
-import { outlives, type HostAct } from "./acts.js";
+import {
+  actLine,
+  desktopActOf,
+  outlives,
+  type HostAct,
+  type HostOutcome,
+} from "./acts.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
@@ -89,7 +95,7 @@ import type { RendererName } from "./foundations/renderer-name.js";
 // it returned: its changes, and the acts over in the turn, in the order they
 // were returned.
 export type HostTurn = TakenTurn & {
-  readonly settled: readonly EffectOutcome[];
+  readonly settled: readonly HostOutcome[];
 };
 type SettlePresentation = (
   effect: Pick<Present, "id" | "session" | "displayedEvents">,
@@ -209,7 +215,7 @@ const THREW_AS = {
 interface Slotted {
   readonly received: boolean;
   readonly turn: TakenTurn;
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 }
 
 type ConfigDelivery =
@@ -223,7 +229,7 @@ type ConfigFollowing =
   | { readonly kind: "failed"; readonly failure: Failure };
 
 type ConfigTurn = {
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 } & (
   | { readonly kind: "received"; readonly failure: Failure | null }
   | { readonly kind: "unreceived"; readonly failure: Failure }
@@ -510,7 +516,7 @@ export function rendererHost(
     captures: readonly RunEvidence[],
     receipt: SettlePresentation,
   ): Promise<{
-    readonly settled: Promise<readonly EffectOutcome[]>;
+    readonly settled: Promise<readonly HostOutcome[]>;
     readonly configFailure: Failure | null;
   }> => {
     const changes = output.effects.filter(
@@ -534,7 +540,7 @@ export function rendererHost(
       receipt,
     );
     let configFailure: Failure | null = null;
-    const waited: Array<Promise<readonly EffectOutcome[]>> = [];
+    const waited: Array<Promise<readonly HostOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
     if (followed.kind === "failed") {
       if (
@@ -558,11 +564,11 @@ export function rendererHost(
             world.configs.landed(landed.files),
           ) ?? [])
         : [];
-    const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];
+    const reloaded: Array<Promise<readonly HostOutcome[]>> = [];
     for (const origin of moved)
       reloaded.push((await configInSlot(origin, "config-landed")).settled);
 
-    const owed: Array<Promise<EffectOutcome>> = [];
+    const owed: Array<Promise<HostOutcome>> = [];
     const acts: HostAct[] = [];
     for (const effect of output.effects) {
       if (effect.kind === "present") {
@@ -592,19 +598,33 @@ export function rendererHost(
       } else acts.push(effect);
     }
 
+    // [LAW:single-enforcer] Where an act runs is decided here, where the turn
+    // that asked it is landed: a copy or open that says its click's writer
+    // carries it out is left to that writer, as the outcome the click's answer
+    // is made of, and every other act is the world's.
+    // [LAW:nothing-unseen] A left act is said on its act line as any act is.
+    const performed = (act: HostAct): Promise<HostOutcome> => {
+      const left = desktopActOf(act);
+      if (left === null) return world.perform(act);
+      log(
+        "info",
+        actLine(act, "left", "left to the machine the click's writer runs on"),
+      );
+      return Promise.resolve({ kind: "left", act: left });
+    };
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
       const acted =
         configOutcome.kind === "ok"
           ? before
-              .then(() => world.perform(act))
+              .then(() => performed(act))
               .catch(
                 (error: unknown): EffectOutcome => ({
                   kind: "failed",
                   reason: failureOf(error).detail,
                 }),
               )
-          : Promise.resolve<EffectOutcome>(
+          : Promise.resolve<HostOutcome>(
               configOutcome.kind === "closing"
                 ? configOutcome
                 : {
@@ -911,8 +931,12 @@ export function rendererHost(
   // An act's, once it ended: its `effect-done` joins the mailbox.
   const settle = async (
     effect: HostAct,
-    outcome: EffectOutcome,
-  ): Promise<EffectOutcome> => {
+    ended: HostOutcome,
+  ): Promise<HostOutcome> => {
+    // The renderer is told `ok` of an act left to its click's writer: the
+    // daemon's part of it is done.
+    const outcome: EffectOutcome =
+      ended.kind === "left" ? { kind: "ok" } : ended;
     const failed =
       outcome.kind === "failed" || outcome.kind === "refused"
         ? outcome.reason
@@ -933,7 +957,7 @@ export function rendererHost(
       delivered.failure.kind === "down"
     )
       unheard(failed);
-    return outcome;
+    return ended;
   };
   // A change's or a refused present's, in the slot of the turn that
   // returned it: settled once that `effect-done` turn's own acts have.

@@ -394,6 +394,7 @@ export type Act = { readonly id: EffectId } & (
       readonly kind: "copy";
       readonly session: SessionId | null;
       readonly text: string;
+      readonly forWriter?: true;
     }
   | {
       // A file opened in the user's editor: which program opens it is the
@@ -401,6 +402,7 @@ export type Act = { readonly id: EffectId } & (
       readonly kind: "open";
       readonly session: SessionId | null;
       readonly target: string;
+      readonly forWriter?: true;
     }
   | {
       // [LAW:single-enforcer] Checked and typed in one step: the pane is read

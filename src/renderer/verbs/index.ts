@@ -172,7 +172,10 @@ import {
   type ActionDecl,
   type SlashAction,
 } from "../../config/action";
-import type { ClickArrival } from "../../renderer-interface/click-arrival";
+import {
+  actsOnDesktop,
+  type ClickArrival,
+} from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
 import { BadVerbArgs, failureOf } from "../../daemon/foundations/verb-error";
@@ -272,11 +275,20 @@ export { BadVerbArgs };
 
 // [LAW:single-enforcer] What a handler asks of the host: an act in its
 // click's turn, performed once the click's changes have landed.
+// [LAW:single-enforcer] The one place a click's arrival is carried onto the acts
+// it asks: a copy or open of a click whose writer carries them out says so, so
+// the host leaves it to that writer in whichever turn it lands the act, a
+// parked click's replay included. Where it runs is still the host's decision.
 function ask(
-  ctx: Pick<VerbContext, "acts" | "effects">,
+  ctx: Pick<VerbContext, "acts" | "arrival" | "effects">,
   act: ActRequest,
 ): void {
-  ctx.acts.ask(ctx.effects, act);
+  ctx.acts.ask(
+    ctx.effects,
+    (act.kind === "copy" || act.kind === "open") && actsOnDesktop(ctx.arrival)
+      ? { ...act, forWriter: true }
+      : act,
+  );
 }
 
 function globalAct(

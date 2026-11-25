@@ -5,6 +5,7 @@
 // the act's `effect-done`.
 
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
+import type { DesktopAct } from "./foundations/protocol.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -30,6 +31,32 @@ import type { Timekeeper } from "../time.js";
 // An act the landing performs with the config files, not here.
 export type HostAct = Exclude<Act, { kind: "approve-repo" | "run" }> | RunAct;
 type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
+
+// [LAW:types-are-the-program] How an act ended as the host holds it: what its
+// renderer is told, or that the act was left to the machine its click's writer
+// runs on, which is the act itself, to be handed to that writer. Its renderer
+// is told `ok`: the daemon's part is done.
+export interface Left {
+  readonly kind: "left";
+  readonly act: DesktopAct;
+}
+export type HostOutcome = EffectOutcome | Left;
+
+// The act a click's writer carries out, when the act says it does; every other
+// act is only ever performed here.
+export function desktopActOf(act: HostAct): DesktopAct | null {
+  switch (act.kind) {
+    case "copy":
+      return act.forWriter === true ? { kind: "copy", text: act.text } : null;
+    case "open":
+      return act.forWriter === true
+        ? { kind: "open", target: act.target }
+        : null;
+    case "type-slash":
+    case "run":
+      return null;
+  }
+}
 
 export interface ActPrograms {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
@@ -75,6 +102,15 @@ const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
   outcome,
   said: outcome.reason,
 });
+
+// [LAW:single-enforcer] An act's line, in the one format, whoever says it: what
+// it did or why it did not, or that it was left to its writer's machine.
+export const actLine = (
+  act: HostAct,
+  outcome: HostOutcome["kind"],
+  said: string,
+): string =>
+  `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome} — ${nameOf(act)}: ${said}`;
 
 export class Acts {
   // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
@@ -159,7 +195,7 @@ export class Acts {
       : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${nameOf(act)}: ${said}`,
+      actLine(act, outcome.kind, said),
     );
     return outcome.kind === "ok"
       ? outcome

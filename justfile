@@ -24,7 +24,7 @@ install-rust:
     @file bin/cc-candybar-native
     @echo "Native binary staged at bin/cc-candybar-native."
 
-# Build the URL handler app binary (url-handler/main.swift) and stage it at
+# Build the URL handler app binary (url-handler/) and stage it at
 # bin/cc-candybar-url-handler-native, where `cc-candybar install` run from this
 # checkout wraps it in the app bundle. CI builds the release copy into the
 # darwin npm packages instead (see .github/workflows/release.yml).
