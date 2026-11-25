@@ -186,6 +186,11 @@ export interface StatsSnapshot {
   // runs.
   clients: readonly RenderSighting[];
   bundle: string;
+  // [LAW:one-source-of-truth] The id of the key this daemon signs its links
+  // with, which every link it draws names (src/click/link-signer.ts), or why
+  // the key cannot be had. `cc-candybar ssh-config` names the forwarded socket
+  // by it, so the stanza and the daemon cannot disagree.
+  linkKeyId: Asked<string>;
   // The host process's memory against the limit (src/daemon/limits.ts).
   host: ProcessMemory;
   // Every renderer the host holds, one panel each.
