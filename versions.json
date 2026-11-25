@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-960",
+      "ref": "refs/pull/960/merge",
+      "sha": "c0ecad7ed15a9ef1b9348825102c574b998d0afb",
+      "timestamp": "2026-11-25T01:13:14.583Z",
+      "commits": [
+        {
+          "sha": "c0ecad7ed15a9ef1b9348825102c574b998d0afb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T18:12:04-07:00",
+          "message": "Merge 663357257804bfc321870197915edca8d2c5142a into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "663357257804bfc321870197915edca8d2c5142a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T18:11:22-07:00",
+          "message": "fix(transcript): a transcript line or sidechain the fold cannot read shows as ⚠ on the session's bar (candybar-later-fixes-nwu9.3fy)\n\nA line that is not JSON, or whose entry cannot be projected, used to be\ndropped with only a debug-log line, and so did a sidechain whose read\nfailed, whose first line was not JSON, or whose directory could not be\nlisted. Each left the session's usage and cost short with nothing on the\nbar to say so.\n\nThe fold now keeps what it dropped (how many lines, where the first\nstarts, why) beside its cursor, so the loss lasts exactly as long as the\nnumbers it is missing from and goes when a rewrite re-folds the file. The\nusage store reports each file's losses and each unread sidechain into the\nsession's facts diagnostics, and the bar draws one standing warning per\nfile, with the viewer naming the file and the reason.\n\nTests share one in-process main-renderer harness instead of two copies.\n"
+        },
+        {
+          "sha": "da67ca007ef461236ac486e3271cae226b32ead3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T17:55:41-07:00",
+          "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ae289b8811082ae57acad8a4bc94a2bb31007a8e",
