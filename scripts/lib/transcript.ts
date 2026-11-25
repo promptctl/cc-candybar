@@ -1,9 +1,9 @@
 // A Claude Code transcript, as Claude Code writes it.
 //
-// [LAW:one-source-of-truth] The load gate and the benchmark both need a
-// transcript that the daemon folds as it folds a real one (usage on the
-// assistant entry, a tool call and its result, a prompt). One generator, so a
-// change to what the fold reads is a change to one fixture, not two that drift.
+// [LAW:one-source-of-truth] A benchmark session's history and every turn
+// appended to it are a transcript the daemon folds as it folds a real one
+// (usage on the assistant entry, a tool call and its result, a prompt). One
+// generator, so a change to what the fold reads is a change to one fixture.
 
 import path from "node:path";
 

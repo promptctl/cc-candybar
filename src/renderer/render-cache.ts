@@ -130,11 +130,10 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // runtime's copy of the loaded bundle (a bare node is charged ~12 MB), so it
 // holds under either. The charges' own headroom over what entries hold is the
 // heap's growth room, so reserving more would starve the cache at a lowered
-// limit for nothing. At the default limit the share holds several times the
-// production daemon's working set of ~20 directories, each an entry and a view
-// on one compile. Measured, a full share costs less than its charges: serving
-// 100 sessions, the daemon is charged ~430 MB in all, less than the share
-// accounts for them.
+// limit for nothing. At the default limit the share holds a hundred sessions,
+// each an entry and a view on one compile: five times the ~20 directories a
+// production daemon renders from, so sessions spread over many worktrees still
+// hit.
 const RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 // Never less than a quarter of the limit, which a small limit has always had:
 // there the reserve would leave the cache too little to hold two sessions.
