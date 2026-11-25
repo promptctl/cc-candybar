@@ -71,12 +71,14 @@ func socketPath() -> String {
 }
 
 // Mirrored: src/daemon/paths.ts REMOTE_SOCKET_DIR_UNDER_HOME and
-// REMOTE_SOCKET_SUFFIX, and src/click/link-signer.ts LINK_KEY_ID_CHARS and
-// LINK_KEY_ID_ALPHABET.
+// REMOTE_SOCKET_SUFFIX, and src/click/link-signer.ts LINK_KEY_ID_CHARS,
+// LINK_KEY_ID_ALPHABET, LINK_MAC_MARK and LINK_PROOF_SEPARATOR.
 let REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote"
 let REMOTE_SOCKET_SUFFIX = ".sock"
 let LINK_KEY_ID_CHARS = 8
 let LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+let LINK_MAC_MARK: Character = "#"
+let LINK_PROOF_SEPARATOR: Character = "/"
 
 let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
@@ -177,9 +179,9 @@ func forward(_ url: String, to path: String) -> Forward {
 // comes from any web page, and the id becomes part of a path, so it is the
 // spelling the signer writes and nothing else.
 func signerId(of link: String) -> String? {
-  guard let mark = link.lastIndex(of: "#") else { return nil }
+  guard let mark = link.lastIndex(of: LINK_MAC_MARK) else { return nil }
   let proof = link[link.index(after: mark)...]
-  guard let slash = proof.firstIndex(of: "/") else { return nil }
+  guard let slash = proof.firstIndex(of: LINK_PROOF_SEPARATOR) else { return nil }
   let id = proof[..<slash]
   guard id.utf8.count == LINK_KEY_ID_CHARS, id.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) })
   else { return nil }

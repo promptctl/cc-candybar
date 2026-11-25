@@ -73,7 +73,11 @@ export interface LinkSigner {
 // mac's length is paid many times in a frame's bytes.
 const LINK_MAC_BYTES = 16;
 const LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
-const LINK_MAC_MARK = "#";
+// [LAW:one-source-of-truth] The two characters of a proof the URL handler reads
+// without opening the link: the mark before it, and the separator after the
+// signer's id. Pinned against the handler by scripts/check-protocol.mjs.
+export const LINK_MAC_MARK = "#";
+export const LINK_PROOF_SEPARATOR = "/";
 const SOURCE_VERSION = "v1";
 
 // [LAW:one-source-of-truth] Which daemon signed a link, spelled in the link
@@ -156,8 +160,13 @@ function signLinkWith(
   const issued =
     source === undefined
       ? signer
-      : `${signer}/${SOURCE_VERSION}/${source.renderer}/${encodeURIComponent(JSON.stringify(source.session))}`;
-  return `${issued}/${linkMac(key, issued)}`;
+      : [
+          signer,
+          SOURCE_VERSION,
+          source.renderer,
+          encodeURIComponent(JSON.stringify(source.session)),
+        ].join(LINK_PROOF_SEPARATOR);
+  return `${issued}${LINK_PROOF_SEPARATOR}${linkMac(key, issued)}`;
 }
 
 // [LAW:parse-dont-validate] Only an authenticated address can yield a
@@ -178,7 +187,9 @@ function openLinkWith(
   // then the issuing frame's fields when there are any, then the mac. A proof
   // that does not begin with an id is one drawn before links named their
   // signer (`#<mac>`, or `#v1/<renderer>/<session>/<mac>`), or a changed one.
-  const [signer, ...source] = signed.slice(mark + 1).split("/");
+  const [signer, ...source] = signed
+    .slice(mark + 1)
+    .split(LINK_PROOF_SEPARATOR);
   const mac = source.pop();
   if (signer === undefined || mac === undefined || !isLinkKeyId(signer))
     return {
@@ -189,7 +200,7 @@ function openLinkWith(
   if (signer !== own)
     return {
       kind: "failed",
-      reason: `the link names key ${signer}, not this daemon's (${own}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`,
+      reason: `the link names key ${signer}, not this daemon's (${own}): if a bar on another machine drew it, no ssh forward for that key is open here (\`cc-candybar ssh-config ALIAS\` run on that machine prints one); if this machine's bar drew it, its link key has been replaced since`,
     };
   // Compared as spelled, in constant time, once its spelling says it has the
   // length of one. The mac covers everything before it.

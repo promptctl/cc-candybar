@@ -240,6 +240,22 @@ const CHECKS = [
     ts: num(TS_LINK_SIGNER, /export const LINK_KEY_ID_CHARS = ([\d\s*]+);/),
     swift: num(SWIFT_HANDLER, /^let LINK_KEY_ID_CHARS = ([\d\s*]+)$/m),
   },
+  // Where a link's proof starts and where its signer's id ends: the one place
+  // the handler looks, so a signer that moved the id would route every ssh click
+  // to the wrong daemon with publish still passing.
+  {
+    label: "the mark a link's proof follows, as the URL handler finds it",
+    ts: lit(TS_LINK_SIGNER, /LINK_MAC_MARK = "([^"]+)"/),
+    swift: lit(SWIFT_HANDLER, /^let LINK_MAC_MARK: Character = "([^"]+)"$/m),
+  },
+  {
+    label: "the separator after a link's key id, as the URL handler finds it",
+    ts: lit(TS_LINK_SIGNER, /LINK_PROOF_SEPARATOR = "([^"]+)"/),
+    swift: lit(
+      SWIFT_HANDLER,
+      /^let LINK_PROOF_SEPARATOR: Character = "([^"]+)"$/m,
+    ),
+  },
   {
     label: "the alphabet a key id is spelled in, as the URL handler reads it",
     ts: lit(TS_LINK_SIGNER, /LINK_KEY_ID_ALPHABET =\s*"([^"]+)"/),

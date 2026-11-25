@@ -376,7 +376,18 @@ function infoPlist(): string {
 // install's: Launch Services never relaunches a running app, so without it a
 // reinstall would leave the old forwarder delivering until logout.
 function installUrlHandlerFrom(sourceDist: string, world: World): void {
-  installUrlHandler(resolveForwarder(sourceDist), world);
+  installUrlHandler(urlHandlerPreconditions(sourceDist, world.host), world);
+}
+
+// What the URL handler's install needs true before anything is staged,
+// replaced or quit: the forwarder to assemble, and the directory an ssh forward
+// from a remote machine lands its socket in (`cc-candybar ssh-config` on that
+// machine; ssh makes none). The app writes every link to a socket found there,
+// so the directory is held to the trust every socket directory is
+// [LAW:single-enforcer], and one it refuses leaves the handler the user had.
+function urlHandlerPreconditions(sourceDist: string, host: Host): string {
+  ensureOwnedPrivateDir(remoteSocketDir(host.home));
+  return resolveForwarder(sourceDist);
 }
 
 // The app assembled around a forwarder binary already resolved: install
@@ -384,13 +395,6 @@ function installUrlHandlerFrom(sourceDist: string, world: World): void {
 // package with no binary fails with nothing staged. [LAW:effects-at-boundaries]
 function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   const bundle = appBundlePath(host);
-
-  // The directory an ssh forward from a remote machine lands its socket in
-  // (`cc-candybar ssh-config` on that machine); ssh makes none. The app writes
-  // every link to a socket found there, so it is held to the trust every
-  // socket directory is. [LAW:single-enforcer] Checked before anything is
-  // replaced or quit: a directory it refuses leaves the handler the user had.
-  ensureOwnedPrivateDir(remoteSocketDir(host.home));
 
   // [LAW:effects-at-boundaries] The app is assembled and signed beside its
   // place, then renamed over the old one: a copy or a sign that fails leaves
@@ -460,7 +464,7 @@ export function runInstallUrlHandler(bundle: string, world: World): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
-  const forwarder = resolveForwarder(bundle);
+  const forwarder = urlHandlerPreconditions(bundle, world.host);
   runStageRuntime(bundle, supportDir(world.host));
   installUrlHandler(forwarder, world);
 }
@@ -594,7 +598,9 @@ export async function runInstall(
   // Preconditions before any side effect: the forwarder must exist before
   // the runtime is staged, so a failed install leaves nothing half done.
   const forwarder =
-    process.platform === "darwin" ? resolveForwarder(bundle) : null;
+    process.platform === "darwin"
+      ? urlHandlerPreconditions(bundle, world.host)
+      : null;
   const staged = runStageRuntime(bundle, supportDir(world.host));
 
   if (forwarder !== null) {
