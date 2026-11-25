@@ -11,7 +11,6 @@ import type { FileEventsWarning } from "../daemon/foundations/file-events-warnin
 import type { LifelineWarning } from "../proc/launcher";
 import type { DaemonEvent } from "../utils/event-hold";
 import type { StoreUnsavedWarning } from "../daemon/foundations/stored-file";
-import type { DroppedLines, UnreadFile } from "../utils/claude";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -54,33 +53,41 @@ export interface TmuxFacts {
   readonly session: string;
 }
 
-// A fault of the collector's own: one lane of the session whose refresh threw,
-// the stamp itself, which kept the readings of the document before it, or what
-// the session's usage could not read of its transcripts.
-export interface LaneDiagnostic {
-  readonly kind: "lane";
-  readonly lane: RefreshLane;
+// [LAW:types-are-the-program] What a fold could not read of one file: how
+// many lines it dropped, and which is the first of them and why (`reason`
+// says what that line is: "is not JSON (…)").
+export interface DroppedLines {
+  readonly lines: number;
+  readonly firstLine: number;
   readonly reason: string;
 }
-export interface StampDiagnostic {
-  readonly kind: "stamp";
-  readonly reason: string;
-}
-// [LAW:no-silent-failure] Lines of one transcript the session's usage folds
-// without, or a whole sidechain it leaves out (or the directory of them). It
-// stands for as long as the folds missing them are the session's, since its
-// usage and cost are short by them for that long.
+
+// [LAW:no-silent-failure] What a session's transcripts give its folds less
+// of: lines of one file the folds read without, or a sidechain whose first
+// line cannot say whose it is (`reason` says what that line is), which the
+// session's usage leaves out. Each stands as long as the folds missing it are
+// the session's, since the bar's figures for the session are short by it for
+// that long.
 export type TranscriptLoss =
-  | ({ readonly kind: "lines"; readonly path: string } & DroppedLines)
-  | ({ readonly kind: "file" } & UnreadFile);
-export interface TranscriptDiagnostic {
-  readonly kind: "transcript";
-  readonly loss: TranscriptLoss;
+  | ({ readonly kind: "dropped-lines"; readonly path: string } & DroppedLines)
+  | {
+      readonly kind: "unowned-sidechain";
+      readonly path: string;
+      readonly reason: string;
+    };
+
+// [LAW:one-source-of-truth] A loss in words, as the bar shows it and the
+// daemon's log records it.
+export function transcriptLossText(loss: TranscriptLoss): string {
+  switch (loss.kind) {
+    case "dropped-lines":
+      return loss.lines === 1
+        ? `${loss.path}: line ${loss.firstLine} ${loss.reason}, so the bar's figures for this session leave it out`
+        : `${loss.path}: ${loss.lines} lines could not be read, so the bar's figures for this session leave them out; the first, line ${loss.firstLine}, ${loss.reason}`;
+    case "unowned-sidechain":
+      return `${loss.path}: its first line ${loss.reason}, so whose sidechain it is cannot be told, and the session's usage leaves it out`;
+  }
 }
-export type FactsDiagnostic =
-  | LaneDiagnostic
-  | StampDiagnostic
-  | TranscriptDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
 // daemon itself: whether file events are heard, the launch lifeline's fault
@@ -133,7 +140,11 @@ export interface WorldState {
   // those alone, since an environment holds keys and tokens.
   readonly env: Readonly<Record<string, Fact<string>>>;
   readonly daemon: DaemonFacts;
-  readonly diagnostics: readonly FactsDiagnostic[];
+  // [LAW:types-are-the-program] Why the document is drawn from older facts:
+  // the stamp that threw, which kept the readings of the document before it;
+  // null while the stamp holds.
+  readonly stampFailure: string | null;
+  readonly transcriptLosses: readonly TranscriptLoss[];
 }
 
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
@@ -190,8 +201,7 @@ export interface TodayFacts {
 
 // The lanes a session's transcript read refreshes
 // (src/daemon/cache/transcript-lanes.ts). [LAW:one-source-of-truth] The list is
-// the one declaration: the type derives from it, and a facts document's
-// diagnostics walk it in this order.
+// the one declaration: the type derives from it.
 export const REFRESH_LANES = [
   "session",
   "context",
@@ -211,10 +221,3 @@ export const SHORT_DIGEST_LENGTH = 7;
 
 export const shortDigest = (digest: string): string =>
   digest.slice(0, SHORT_DIGEST_LENGTH);
-
-// Why the document is drawn from older facts, or null when its stamp held.
-export function stampFailureOf(
-  document: Pick<WorldState, "diagnostics">,
-): string | null {
-  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
-}

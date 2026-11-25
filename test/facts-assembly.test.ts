@@ -12,7 +12,6 @@ import {
   failedStamp,
   FACTS_VERSION,
 } from "../src/daemon/facts-assembly";
-import { stampFailureOf } from "../src/facts/world-state";
 import { readingsOf } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { oneDay } from "../src/daemon/foundations/today-facts";
@@ -320,9 +319,6 @@ describe("a session's facts document", () => {
       for (const key of BUILTIN_KEYS.filter((k) => k !== "cache")) {
         expect(second.builtins[key]).toBe(first.builtins[key]);
       }
-      expect(second.diagnostics).toEqual([
-        { kind: "lane", lane: "cache", reason: "refresh threw" },
-      ]);
 
       // The refresh running clean again is a change too: stamped when it came.
       r.held.faults.refreshed(SID, "cache", null);
@@ -339,10 +335,9 @@ describe("a session's facts document", () => {
         value: 1_700_003_600,
         at: at(120),
       });
-      expect(third.diagnostics).toEqual([]);
     });
 
-    test("what the session's transcripts could not give is a diagnostic of its document for as long as the usage store holds it", async () => {
+    test("what the session's transcripts gave its folds less of is on its document for as long as the usage store holds it", async () => {
       let losses: readonly TranscriptLoss[] = [];
       const r = await sampled(rig(undefined, () => losses));
       const first = assembleFacts(
@@ -352,14 +347,14 @@ describe("a session's facts document", () => {
         daemonFactsOf(),
         T0,
       );
-      expect(first.diagnostics).toEqual([]);
+      expect(first.transcriptLosses).toEqual([]);
 
       const loss: TranscriptLoss = {
-        kind: "lines",
+        kind: "dropped-lines",
         path: "/t/s.jsonl",
         lines: 2,
-        firstAt: 40,
-        reason: "Unexpected token",
+        firstLine: 4,
+        reason: "is not JSON (Unexpected token)",
       };
       losses = [loss];
       const second = assembleFacts(
@@ -370,7 +365,7 @@ describe("a session's facts document", () => {
         at(60),
       );
       expect(second.seq).toBe(2);
-      expect(second.diagnostics).toEqual([{ kind: "transcript", loss }]);
+      expect(second.transcriptLosses).toEqual([loss]);
       for (const key of BUILTIN_KEYS) {
         expect(second.builtins[key]).toBe(first.builtins[key]);
       }
@@ -416,7 +411,7 @@ describe("a session's facts document", () => {
   });
 
   describe("a stamp that threw", () => {
-    test("is the prior document with the failure among its diagnostics and the next seq; the same failure again is that document", async () => {
+    test("is the prior document with its stamp failure and the next seq; the same failure again is that document", async () => {
       const r = await sampled(rig());
       const first = assembleFacts(
         undefined,
@@ -428,12 +423,12 @@ describe("a session's facts document", () => {
       const failedOnce = failedStamp(first, "the read broke", daemonFactsOf());
       expect(failedOnce.seq).toBe(first.seq + 1);
       expect(failedOnce.builtins).toBe(first.builtins);
-      expect(stampFailureOf(failedOnce)).toBe("the read broke");
+      expect(failedOnce.stampFailure).toBe("the read broke");
       expect(failedStamp(failedOnce, "the read broke", daemonFactsOf())).toBe(
         failedOnce,
       );
       expect(
-        stampFailureOf(failedStamp(failedOnce, "another", daemonFactsOf())),
+        failedStamp(failedOnce, "another", daemonFactsOf()).stampFailure,
       ).toBe("another");
       // The daemon's facts are read apart from the owners that threw, so a
       // failure that persists still carries them as they stand.
@@ -445,7 +440,7 @@ describe("a session's facts document", () => {
       expect(moved.seq).toBe(failedOnce.seq + 1);
       expect(moved.daemon.fileEvents).toBe(FILE_EVENTS_STALLED);
       expect(moved.builtins).toBe(first.builtins);
-      expect(stampFailureOf(first)).toBeNull();
+      expect(first.stampFailure).toBeNull();
       // The next clean stamp is a document without it.
       const clean = assembleFacts(
         failedOnce,
@@ -455,7 +450,7 @@ describe("a session's facts document", () => {
         at(60),
       );
       expect(clean.seq).toBe(failedOnce.seq + 1);
-      expect(stampFailureOf(clean)).toBeNull();
+      expect(clean.stampFailure).toBeNull();
     });
   });
 });

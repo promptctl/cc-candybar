@@ -683,8 +683,9 @@ export interface Renderable {
   readonly dropped: readonly DroppedFileError[];
   // [LAW:one-source-of-truth] The merged config with every layer's insert
   // cells placed, before the load drops or synthesizes anything: the trees
-  // the files authored as they render, for a reader that asks what the
-  // authors placed (an insert entry places its segment as surely as a row).
+  // the files authored as they render (an insert entry places its segment as
+  // surely as a row). The synthesis passes' reads are proved against it, which
+  // is what lets a load skip proving them (the exception at those passes).
   readonly placed: DslConfig;
   // The advisories the chain earns as a whole: each insert cell a tree that
   // renders could not place.

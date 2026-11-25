@@ -46,14 +46,13 @@ import type { Instant } from "../../../src/utils/instant";
 import {
   ABSENT,
   isPending,
-  ok,
   pendingOf,
   type Outcome,
   type PayloadNode,
   type Pending,
   type Reading,
 } from "../../../src/utils/outcome";
-import { settledLane, type Current, type Lane } from "../../../src/utils/reading";
+import type { Current, Lane } from "../../../src/utils/reading";
 import { HostService } from "../../../src/daemon/cache/host-identity";
 import { assembleFacts } from "../../../src/daemon/facts-assembly";
 import { instantOf } from "../../../src/utils/instant";

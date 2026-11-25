@@ -20,7 +20,7 @@ import {
 
 // The shape of a facts document on the wire; a document of another version is
 // not this one.
-export const FACTS_VERSION = 5;
+export const FACTS_VERSION = 6;
 
 // A reading's value carried through `project`; every other arm as it stands.
 const over = <T, U>(
@@ -129,23 +129,33 @@ export function assembleFacts(
     ]),
   );
 
-  const diagnostics = readings.faults;
-  const parts = { builtins, sources, runs, env, daemon, diagnostics };
+  const transcriptLosses = readings.losses;
+  const parts = {
+    builtins,
+    sources,
+    runs,
+    env,
+    daemon,
+    stampFailure: null,
+    transcriptLosses,
+  };
   // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
   // and it returns the prior fact itself when not, so the document is
   // unmoved when every fact is the prior's own. The builtins, sources and runs are
   // compared by that identity, never walked again (a source's value can be
-  // large JSON); the daemon's facts and the diagnostics are small and not
-  // restamped here.
+  // large JSON); the daemon's facts and the transcript losses are small and
+  // not restamped here. A prior drawn from older facts is moved by this stamp
+  // holding.
   if (
     prior !== undefined &&
     sameFacts(builtins, prior.builtins) &&
     sameFacts(sources, prior.sources) &&
     sameFacts(runs, prior.runs) &&
     sameFacts(env, prior.env) &&
+    prior.stampFailure === null &&
     compareStructural(
-      { daemon, diagnostics },
-      { daemon: prior.daemon, diagnostics: prior.diagnostics },
+      { daemon, transcriptLosses },
+      { daemon: prior.daemon, transcriptLosses: prior.transcriptLosses },
     )
   ) {
     return prior;
@@ -164,22 +174,13 @@ export function assembleFacts(
 // the session's owners, so they are `daemon` as it stands whatever threw. A
 // failure for the reason already held, over the daemon's facts already held,
 // is that document, so a fault that persists mints nothing per landing; the
-// next stamp that succeeds carries no stamp diagnostic, and so moves too.
+// next stamp that succeeds carries no stamp failure, and so moves too.
 export function failedStamp(
   prior: WorldState,
   reason: string,
   daemon: DaemonFacts,
 ): WorldState {
-  const held = prior.diagnostics.find((d) => d.kind === "stamp");
-  if (held?.reason === reason && compareStructural(daemon, prior.daemon))
+  if (prior.stampFailure === reason && compareStructural(daemon, prior.daemon))
     return prior;
-  return {
-    ...prior,
-    daemon,
-    seq: prior.seq + 1,
-    diagnostics: [
-      ...prior.diagnostics.filter((d) => d.kind !== "stamp"),
-      { kind: "stamp", reason },
-    ],
-  };
+  return { ...prior, daemon, seq: prior.seq + 1, stampFailure: reason };
 }

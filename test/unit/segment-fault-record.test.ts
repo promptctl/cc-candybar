@@ -18,7 +18,7 @@ import {
   answered,
   contextOf,
   handIn,
-  indicatorOf,
+  indicatorLinkOf,
   presentOf,
   rendererOf,
   snapshotOf,
@@ -88,14 +88,14 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
 
   const delivered = await request();
   expect(noted(delivered, "faults")).toBe(noted(first, "faults"));
-  expect(indicatorOf(presentOf(delivered.effects).frame)).toBeUndefined();
+  expect(indicatorLinkOf(presentOf(delivered.effects).frame)).toBeUndefined();
   await settle(delivered, true);
 
   // Nothing moved: the record says so, and the bar's list, which follows
   // the frames, now counts the warning.
   const second = await request();
   expect(noted(second, "faults")).toBe("kept");
-  const indicator = indicatorOf(presentOf(second.effects).frame);
+  const indicator = indicatorLinkOf(presentOf(second.effects).frame);
   expect(indicator?.text).toBe("⚠ 1");
   await settle(second, true);
 

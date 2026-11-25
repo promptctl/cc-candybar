@@ -1133,28 +1133,34 @@ describe("post-mortems", () => {
     );
   });
 
-  test("the real lister: a directory not yet made holds none; one that is a file is said so", async () => {
+  test("the real lister: a breach's files by their full path, and no other file; a directory not yet made holds none; one that is a file is said so", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
     try {
-      expect(
+      const lister = (snapshotDir: string) =>
         realLimitsDeps(0, () => {}, {
           launcher: unscriptedLauncher,
           log: () => {},
           clock: systemTimekeeper,
-          snapshotDir: path.join(root, "absent"),
+          snapshotDir,
           writeLogNow: () => {},
-        }).listArtifacts(),
-      ).toEqual([]);
+        }).listArtifacts;
+      expect(lister(path.join(root, "absent"))()).toEqual([]);
+      // Rotation removes what the listing names, so each is a path that
+      // reaches the file whatever the daemon's working directory.
+      const state = path.join(root, "state");
+      fs.mkdirSync(state);
+      const report = path.join(state, "memory-2026-03-01T00-00-00-000Z-7.txt");
+      fs.writeFileSync(report, "");
+      fs.writeFileSync(path.join(state, "daemon.log"), "");
+      expect(postMortemsOf(lister(state)())).toEqual([
+        {
+          identity: "2026-03-01T00-00-00-000Z-7",
+          process: { kind: "host" },
+          artifacts: { memoryReport: report },
+        },
+      ]);
       fs.writeFileSync(path.join(root, "file"), "");
-      expect(() =>
-        realLimitsDeps(0, () => {}, {
-          launcher: unscriptedLauncher,
-          log: () => {},
-          clock: systemTimekeeper,
-          snapshotDir: path.join(root, "file"),
-          writeLogNow: () => {},
-        }).listArtifacts(),
-      ).toThrow(/ENOTDIR/);
+      expect(lister(path.join(root, "file"))).toThrow(/ENOTDIR/);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

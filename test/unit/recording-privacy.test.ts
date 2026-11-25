@@ -128,7 +128,7 @@ function facts(
         env,
       },
       today: ABSENT,
-      faults: [],
+      losses: [],
     },
     daemonFactsOf(),
     AT,

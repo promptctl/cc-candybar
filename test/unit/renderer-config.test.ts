@@ -10,7 +10,7 @@ import {
   bootOf,
   contextOf,
   handIn,
-  indicatorOf,
+  indicatorLinkOf,
   presentOf,
   rendererOf,
   snapshotOf,
@@ -220,7 +220,7 @@ test("a session's bar draws from the layer text its origin's snapshot carries", 
   // The context waited for its origin, and its output named it.
   expect(named.subscriptions.configs).toHaveLength(1);
   expect(bar).toContain(SAID);
-  expect(indicatorOf(frame)).toBeUndefined();
+  expect(indicatorLinkOf(frame)).toBeUndefined();
   // The one load is the view's opening, from the layer the snapshot carries.
   expect(configLoads(opened)).toEqual([
     expect.stringContaining(`cause=open state=built files=${USER_FILE} `),
@@ -487,7 +487,7 @@ test("a snapshot whose layer will not parse draws the bundled bar, with its erro
   const { bar, frame } = await drawn(`{ root: { h: ["said"] `);
   expect(bar).not.toContain(SAID);
   expect(bar).toContain(DOOR_GLYPH);
-  expect(indicatorOf(frame)?.text).toBe("⚠ 1");
+  expect(indicatorLinkOf(frame)?.text).toBe("⚠ 1");
 });
 
 test("a config turn with an equal snapshot loads nothing again", async () => {

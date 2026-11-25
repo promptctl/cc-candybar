@@ -3,13 +3,9 @@
 // snapshot, and read back from its answers. Every layer names a file that does
 // not exist, so a renderer that read one would fail at that call.
 
-import { TEST_ENV } from "./session-environment";
-import { linksOf } from "../../src/click/read";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
-import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
 import type { WorldState } from "../../src/facts/world-state";
 import type { Frame } from "../../src/render/frame";
 import type {
@@ -23,12 +19,14 @@ import type {
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import { mainRendererOf } from "../../src/renderer/main";
-import { instantOf, type Tick } from "../../src/utils/instant";
+import type { Tick } from "../../src/utils/instant";
+import { AT } from "./session-rig";
+import { heardRequest } from "./click";
+import { viewerLink } from "./diagnostics-viewer";
 import { ABSENT } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
-import { viewFacts } from "../../scripts/lib/draw-fixtures/view-facts";
 
-export const AT = instantOf(new Date(1_700_000_000_000));
+export { AT };
 export const READ = { at: AT, tick: 0 as Tick };
 export const PROJECT = "/nowhere/project";
 export const USER_FILE = "/nowhere/config/cc-candybar/config.json5";
@@ -52,25 +50,9 @@ export function rendererOf(boot = bootOf()): Renderer {
 }
 
 // A statusline request of `session` in the project, across the host's
-// checkpoint.
-export function contextOf(session: string): CheckedRenderRequest {
-  const checked = checkRenderRequest(
-    {
-      v: PROTOCOL_VERSION,
-      kind: "render",
-      hookData: viewFacts(PROJECT, session).hookData,
-      args: ["cc-candybar"],
-      cwd: PROJECT,
-      encoding: "frame",
-      env: TEST_ENV,
-    },
-    { firstSightOfUnknownHookField: () => false },
-    () => {},
-    "/nowhere/home",
-  );
-  if (!checked.ok) throw new Error(checked.problems.join("; "));
-  return checked.req;
-}
+// checkpoint, asking for a frame.
+export const contextOf = (session: string): CheckedRenderRequest =>
+  heardRequest(session, PROJECT, { encoding: "frame" });
 
 // What the host read for a session: nothing yet, of anything.
 export function worldStateOf(session: SessionId): WorldState {
@@ -98,7 +80,8 @@ export function worldStateOf(session: SessionId): WorldState {
     runs: {},
     env: {},
     daemon: daemonFactsOf(),
-    diagnostics: [],
+    stampFailure: null,
+    transcriptLosses: [],
   };
 }
 
@@ -129,12 +112,15 @@ export const answered = (output: RendererOutput) => {
   return output;
 };
 
+// A turn's one effect, its present.
 export const presentOf = (effects: readonly Effect[]): Present => {
-  const present = effects.find((e): e is Present => e.kind === "present");
-  if (present === undefined) throw new Error("no present among the effects");
+  if (effects.length !== 1)
+    throw new Error(`the turn had ${effects.length} effects, not one present`);
+  const [present] = effects;
+  if (present?.kind !== "present") throw new Error("the turn presented nothing");
   return present;
 };
 
-// The bar's indicator: the link wearing the error glyph.
-export const indicatorOf = (frame: Pick<Frame, "rows">) =>
-  linksOf(frame).find(({ text }) => text.startsWith("⚠ "));
+// The bar's indicator: the link that opens the diagnostics viewer.
+export const indicatorLinkOf = (frame: Pick<Frame, "rows">) =>
+  viewerLink(frame, "open");

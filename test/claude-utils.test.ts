@@ -26,6 +26,13 @@ describe("findAgentTranscripts", () => {
     return subagentsDir;
   }
 
+  // The listing, which these cases expect to succeed.
+  async function listed(sessionId: string, dir: string) {
+    const found = await findAgentTranscripts(sessionId, dir);
+    if (found.kind !== "ok") throw new Error(`listing failed: ${found.reason}`);
+    return found.value;
+  }
+
   function writeAgentFile(subagentsDir: string, name: string, sessionId: string): string {
     const filePath = join(subagentsDir, name);
     writeFileSync(filePath, JSON.stringify({ sessionId }) + "\n");
@@ -37,7 +44,7 @@ describe("findAgentTranscripts", () => {
     const subagentsDir = makeSubagentsDir(sessionId);
     const agentFile = writeAgentFile(subagentsDir, "agent-a1b2c3.jsonl", sessionId);
 
-    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await listed(sessionId, tempDir);
 
     expect(result).toHaveLength(1);
     expect(result[0]!.replace(/\\/g, "/")).toBe(agentFile.replace(/\\/g, "/"));
@@ -47,13 +54,13 @@ describe("findAgentTranscripts", () => {
     const sessionId = "abc123";
     mkdirSync(join(tempDir, sessionId)); // session dir exists, but no subagents/ inside
 
-    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await listed(sessionId, tempDir);
 
     expect(result).toEqual([]);
   });
 
   it("returns [] when session directory does not exist at all", async () => {
-    const { paths: result } = await findAgentTranscripts("no-such-session", tempDir);
+    const { paths: result } = await listed("no-such-session", tempDir);
 
     expect(result).toEqual([]);
   });
@@ -64,7 +71,7 @@ describe("findAgentTranscripts", () => {
     writeAgentFile(subagentsDir, "agent-aaa.jsonl", sessionId);
     writeAgentFile(subagentsDir, "agent-bbb.jsonl", sessionId);
 
-    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await listed(sessionId, tempDir);
 
     expect(result).toHaveLength(2);
   });
@@ -74,7 +81,7 @@ describe("findAgentTranscripts", () => {
     const subagentsDir = makeSubagentsDir(sessionId);
     writeAgentFile(subagentsDir, "agent-x1y2z3.jsonl", "other-session");
 
-    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await listed(sessionId, tempDir);
 
     expect(result).toEqual([]);
   });
@@ -86,7 +93,7 @@ describe("findAgentTranscripts", () => {
     writeFileSync(join(subagentsDir, "agent-ignored.txt"), JSON.stringify({ sessionId }) + "\n");
     writeFileSync(join(subagentsDir, "other.jsonl"), JSON.stringify({ sessionId }) + "\n");
 
-    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await listed(sessionId, tempDir);
 
     expect(result).toHaveLength(1);
     expect(result[0]).toContain("agent-valid.jsonl");
@@ -101,7 +108,7 @@ describe("findAgentTranscripts", () => {
     const agentFile = join(subagentsDir, "agent-long.jsonl");
     writeFileSync(agentFile, JSON.stringify({ sessionId, pad }) + "\n");
 
-    const { paths, longLines } = await findAgentTranscripts(sessionId, tempDir);
+    const { paths, longLines } = await listed(sessionId, tempDir);
 
     expect(paths).toEqual([agentFile]);
     const bytes = Buffer.byteLength(JSON.stringify({ sessionId, pad }) + "\n");
@@ -109,6 +116,62 @@ describe("findAgentTranscripts", () => {
     expect(longLineLog(longLines)).toEqual([
       `transcript long line path=${JSON.stringify(agentFile)} offset=0 bytes=${bytes}`,
     ]);
+  });
+
+  it("a sidechain whose first line cannot say whose it is is left out, and says why", async () => {
+    const sessionId = "abc123";
+    const subagentsDir = makeSubagentsDir(sessionId);
+    const blank = join(subagentsDir, "agent-blank.jsonl");
+    writeFileSync(blank, "\n" + JSON.stringify({ sessionId }) + "\n");
+    const nameless = join(subagentsDir, "agent-nameless.jsonl");
+    writeFileSync(nameless, JSON.stringify({ type: "summary" }) + "\n");
+    const array = join(subagentsDir, "agent-array.jsonl");
+    writeFileSync(array, "[]\n");
+    const broken = join(subagentsDir, "agent-broken.jsonl");
+    writeFileSync(broken, '{"sessionId":\n');
+    // No whole line yet: read again by the next fold, and no loss.
+    writeFileSync(join(subagentsDir, "agent-writing.jsonl"), '{"sessionId":"abc');
+
+    const { paths, unowned } = await listed(sessionId, tempDir);
+
+    expect(paths).toEqual([]);
+    const reasons = Object.fromEntries(
+      unowned.map((loss) => [loss.path, loss.kind === "unowned-sidechain" && loss.reason]),
+    );
+    expect(reasons).toEqual({
+      [blank]: "is blank",
+      [nameless]: "names no session",
+      [array]: "is not a JSON object",
+      [broken]: expect.stringMatching(/^is not JSON \(.+\)$/),
+    });
+  });
+
+  it("a sidechains directory that cannot be listed fails the listing, never no sidechains", async () => {
+    const sessionId = "abc123";
+    mkdirSync(join(tempDir, sessionId));
+    writeFileSync(join(tempDir, sessionId, "subagents"), "");
+
+    const found = await findAgentTranscripts(sessionId, tempDir);
+
+    expect(found).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(/ENOTDIR/),
+      failedAt: "read",
+    });
+  });
+
+  it("a new sidechain whose first line cannot be read fails the listing", async () => {
+    const sessionId = "abc123";
+    const subagentsDir = makeSubagentsDir(sessionId);
+    mkdirSync(join(subagentsDir, "agent-dir.jsonl"));
+
+    const found = await findAgentTranscripts(sessionId, tempDir);
+
+    expect(found).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(/not a regular file/),
+      failedAt: "read",
+    });
   });
 });
 

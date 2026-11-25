@@ -15,10 +15,7 @@ import { TEST_ENV } from "./helpers/session-environment";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { daemonFactsOf } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
-import {
-  sessionIdOf,
-  type SessionId,
-} from "../src/daemon/foundations/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -29,13 +26,11 @@ import {
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
-  Present,
   Event,
   Notification,
   Renderer,
   RendererOutput,
   RequestId,
-  Subscription,
   Subscriptions,
 } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
@@ -68,6 +63,7 @@ import {
   sessionRig,
   type SessionRig,
 } from "./helpers/session-rig";
+import { answered, handIn, presentOf, READ } from "./helpers/main-renderer";
 import { ok } from "../src/utils/outcome";
 import { locs } from "./helpers/host";
 import type { Locations } from "../src/config/loader/chain-places";
@@ -277,8 +273,6 @@ function drawingTmuxSession(
   return request;
 }
 
-// The readings every input here carries: the rig's instant, at the first tick.
-const READ = { at: AT, tick: 0 as Tick };
 
 // The session's context as the host delivers one ahead of a request: with the
 // world state its collector read at the request's keys.
@@ -345,9 +339,6 @@ const request = async (
   });
 };
 
-const handIn = (r: Renderer, event: Event) =>
-  r.answer({ kind: "event", ...READ, event });
-
 // The session's view as the cache holds it, released at once.
 function viewOf(rig: SessionRig) {
   const held = rig.cache.holdView(SESSION);
@@ -379,24 +370,13 @@ const done = (
     },
   });
 
-// A turn's output, as the turn that answered or the one that threw.
-const answered = (output: RendererOutput) => {
-  if (output.kind !== "answered")
-    throw new Error(`the turn threw: ${output.failure.detail}`);
-  return output;
-};
+// A turn's output, as the turn that threw.
 const threw = (output: RendererOutput) => {
   if (output.kind !== "threw") throw new Error("the turn answered");
   return output;
 };
 
-const presentOf = (effects: readonly Effect[]): Present => {
-  expect(effects).toHaveLength(1);
-  const [present] = effects;
-  if (present?.kind !== "present")
-    throw new Error("the turn presented nothing");
-  return present;
-};
+
 
 const followFeed = (r: Renderer) =>
   handIn(r, {

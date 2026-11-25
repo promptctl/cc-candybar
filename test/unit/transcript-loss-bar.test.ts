@@ -1,5 +1,5 @@
-// [LAW:verifiable-goals] What a session's transcripts could not give leaves
-// its usage and cost short, so the session's bar says so: a ⚠ whose viewer
+// [LAW:verifiable-goals] What a session's transcripts gave its folds less of
+// leaves the bar's figures for it short, so the session's bar says so: a ⚠ whose viewer
 // names the file and why, for as long as the session's world state carries
 // the loss, and gone once it does not. Driven through the main renderer as
 // its host drives it, over in-memory storage.
@@ -15,7 +15,7 @@ import {
   answered,
   contextOf,
   handIn,
-  indicatorOf,
+  indicatorLinkOf,
   presentOf,
   rendererOf,
   snapshotOf,
@@ -27,21 +27,21 @@ const CONFIG = `{
   root: { h: ["said"] },
 }`;
 
-test("a transcript's dropped lines and an unreadable sidechain are each a ⚠ on the session's bar, until its world state no longer carries them", async () => {
+test("a transcript's dropped lines and a sidechain whose owner cannot be told are each a ⚠ on the session's bar, until its world state no longer carries them", async () => {
   const r = rendererOf();
   const context = contextOf("s1");
   const session = context.hookData.session_id;
   const lines: TranscriptLoss = {
-    kind: "lines",
+    kind: "dropped-lines",
     path: "/t/s1.jsonl",
     lines: 2,
-    firstAt: 4096,
-    reason: "Unexpected token",
+    firstLine: 40,
+    reason: "is not JSON (Unexpected token)",
   };
-  const file: TranscriptLoss = {
-    kind: "file",
+  const sidechain: TranscriptLoss = {
+    kind: "unowned-sidechain",
     path: "/t/s1/subagents/agent-1.jsonl",
-    reason: "EACCES",
+    reason: "names no session",
   };
   const clean = worldStateOf(session);
   answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
@@ -51,10 +51,7 @@ test("a transcript's dropped lines and an unreadable sidechain are each a ⚠ on
       context,
       worldState: {
         ...clean,
-        diagnostics: [
-          { kind: "transcript", loss: lines },
-          { kind: "transcript", loss: file },
-        ],
+        transcriptLosses: [lines, sidechain],
       },
     }),
   );
@@ -71,7 +68,7 @@ test("a transcript's dropped lines and an unreadable sidechain are each a ⚠ on
       await handIn(r, { kind: "request", id: ++id as RequestId, context }),
     );
 
-  const indicator = indicatorOf(presentOf((await request()).effects).frame);
+  const indicator = indicatorLinkOf(presentOf((await request()).effects).frame);
   expect(indicator?.text).toBe("⚠ 2");
 
   const click = async (url: string) => {
@@ -92,12 +89,12 @@ test("a transcript's dropped lines and an unreadable sidechain are each a ⚠ on
   const viewed = await click(indicator!.url);
   expect(viewed.position).toBe("1/2");
   expect(viewed.text).toBe(
-    "⚠ /t/s1.jsonl: 2 lines could not be read, the first at byte 4096 (Unexpected token), so the session's usage and cost leave them out",
+    "⚠ /t/s1.jsonl: 2 lines could not be read, so the bar's figures for this session leave them out; the first, line 40, is not JSON (Unexpected token)",
   );
   const next = await click(viewerLink(viewed.rendered, "›")!.url);
   expect(next.position).toBe("2/2");
   expect(next.text).toBe(
-    "⚠ /t/s1/subagents/agent-1.jsonl could not be read (EACCES), so the session's usage and cost leave it out",
+    "⚠ /t/s1/subagents/agent-1.jsonl: its first line names no session, so whose sidechain it is cannot be told, and the session's usage leaves it out",
   );
 
   // A later world state that carries no loss leaves nothing to say.
@@ -108,6 +105,6 @@ test("a transcript's dropped lines and an unreadable sidechain are each a ⚠ on
     }),
   );
   const after = presentOf((await request()).effects).frame;
-  expect(indicatorOf(after)).toBeUndefined();
+  expect(indicatorLinkOf(after)).toBeUndefined();
   expect(textOf(after)).not.toContain("could not be read");
 });

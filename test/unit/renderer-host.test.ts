@@ -4,7 +4,6 @@
 import { rendererHost } from "../../src/daemon/renderer-host";
 import type { HostAct } from "../../src/daemon/acts";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
-import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { FOREGROUND_BURST } from "../../src/utils/keyed-serial-queue";
@@ -24,14 +23,13 @@ import {
 import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import type { Monotonic, TimerSource } from "../../src/time";
 import { handClock } from "../helpers/hand-clock";
-import { instantOf, type Tick } from "../../src/utils/instant";
+import type { Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
 import { hostHeld, NO_ACTS } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
-import { ABSENT } from "../../src/utils/outcome";
 import { digestOf } from "../../src/utils/plain";
 import { heardRequest } from "../helpers/click";
-import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
+import { worldStateOf } from "../helpers/main-renderer";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
@@ -690,32 +688,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
     ...config,
     checkout: { root: added.cwd, git: false },
   };
-  const absent = { ...ABSENT, at: instantOf(new Date(0)) };
-  const worldState = {
-    v: FACTS_VERSION,
-    session: context.hookData.session_id,
-    seq: 1,
-    builtins: {
-      session: absent,
-      today: absent,
-      speed: absent,
-      context: absent,
-      metrics: absent,
-      activity: absent,
-      cache: absent,
-      autocompact: absent,
-      git: absent,
-      pr: absent,
-      tmux: absent,
-      hostName: absent,
-      hostUser: absent,
-    },
-    sources: {},
-    runs: {},
-    env: {},
-    daemon: daemonFactsOf(),
-    diagnostics: [],
-  };
+  const worldState = worldStateOf(context.hookData.session_id);
   const previous = { ...NONE, sources: { kept: [] }, configs: [origin] };
   const selectedPlan = {
     ...previous,

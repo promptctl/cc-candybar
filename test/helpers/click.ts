@@ -53,7 +53,7 @@ import {
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
 import {
   PROTOCOL_VERSION,
-  type RenderRequest,
+  type ReaderRenderRequest,
 } from "../../src/daemon/foundations/protocol";
 import type { ConfigTarget } from "../../src/config-hint";
 import { admitClick, VERB_NAMES, type ClickAdmission, type RunEvidence } from "../../src/click/wire";
@@ -120,7 +120,7 @@ export function hearRender(
 export function heardRequest(
   sessionId: string,
   dir = "/tmp/proj",
-  hints: Partial<Omit<RenderRequest, "env">> = {},
+  hints: Partial<Omit<ReaderRenderRequest, "env">> = {},
 ): CheckedRenderRequest {
   const checked = checkRenderRequest(
     {

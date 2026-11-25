@@ -11,7 +11,6 @@
 
 import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { observable, runInAction } from "mobx";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import fs from "node:fs";
 import os from "node:os";
@@ -22,7 +21,6 @@ import {
   SESSION_SWEEP_MS,
   type HandedIn,
 } from "../src/daemon/collector";
-import { stampFailureOf } from "../src/facts/world-state";
 import { judgeRun, type Judged } from "../src/daemon/foundations/judge-run";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { parseClientHints } from "../src/daemon/foundations/protocol";
@@ -418,7 +416,7 @@ describe("a stamp that throws", () => {
     const failedDoc = (handedIn[0] as { worldState: WorldState }).worldState;
     expect(failedDoc.seq).toBe(first.seq + 1);
     expect(failedDoc.builtins).toBe(first.builtins);
-    expect(stampFailureOf(failedDoc)).toContain("host read exploded");
+    expect(failedDoc.stampFailure).toContain("host read exploded");
     expect(logged.join("\n")).toContain("host read exploded");
 
     runInAction(() => tick.set(1));
@@ -428,7 +426,7 @@ describe("a stamp that throws", () => {
     expect(handedIn).toHaveLength(2);
     const clean = (handedIn[1] as { worldState: WorldState }).worldState;
     expect(clean.seq).toBe(failedDoc.seq + 1);
-    expect(stampFailureOf(clean)).toBeNull();
+    expect(clean.stampFailure).toBeNull();
   });
 });
 
@@ -457,7 +455,7 @@ describe("owners that keep failing to read", () => {
     expect(handedIn).toHaveLength(2);
     const doc = (handedIn[1] as { worldState: WorldState }).worldState;
     expect(doc.daemon.fileEvents).toEqual(FILE_EVENTS_STALLED);
-    expect(stampFailureOf(doc)).toContain("host read exploded");
+    expect(doc.stampFailure).toContain("host read exploded");
   });
 });
 
