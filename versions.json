@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-963",
+      "ref": "refs/pull/963/merge",
+      "sha": "f4f73335187d92fc6512a2633d7fe0eeecec2761",
+      "timestamp": "2026-11-25T05:35:43.144Z",
+      "commits": [
+        {
+          "sha": "f4f73335187d92fc6512a2633d7fe0eeecec2761",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:34:30-07:00",
+          "message": "Merge ee63edd949442188e4ae33daa0203c445e560b0e into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "ee63edd949442188e4ae33daa0203c445e560b0e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:32:03-07:00",
+          "message": "fix(url-handler): route a click on a bar drawn over ssh to the daemon that drew it\n\nThe URL handler only spoke to the local daemon, which refuses a link the\nremote daemon signed. It now tries each ssh-forwarded socket in\n~/.cc-candybar/remote after its own daemon's until one opens the link, and\n`cc-candybar ssh-config` prints the forward the remote needs.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-962",
       "ref": "refs/pull/962/merge",
       "sha": "5656b5944617d00b4a7396518d4d223ddeca570a",
