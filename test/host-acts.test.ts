@@ -173,7 +173,7 @@ function hostOver(
                   capture,
                 })),
               },
-              arrival: { via: "link", delivery: { kind: "cli" } },
+              arrival: { via: "link", delivery: { kind: "cli" }, acts: { on: "daemon" } },
               context: null,
             },
           },
@@ -360,30 +360,4 @@ test("a session's failed act its renderer heard is its renderer's to show", asyn
   });
   await turn();
   expect(unheard).toEqual([]);
-});
-
-// [LAW:no-silent-failure] An act for the desktop the person sits at rides the
-// verdict of the click that asked it. One settled in a turn no click waits on
-// has no verdict to ride: it is said, and nothing runs on this machine.
-test("a desktop act in a turn no click waits on is said, and its renderer is told it went ok", async () => {
-  const act: Act = {
-    kind: "desktop",
-    id: ++ids as EffectId,
-    session: S,
-    act: { kind: "copy", text: "x" },
-  };
-  const { turn, did, unheard } = hostOver([act], {
-    perform: async (asked) =>
-      asked.kind === "desktop"
-        ? { kind: "handed", act: asked.act }
-        : { kind: "ok" },
-  });
-  const answered = await turn();
-  expect(answered.settled).toEqual([
-    { kind: "handed", act: { kind: "copy", text: "x" } },
-  ]);
-  expect(did).toEqual([`done ${act.id} ok`]);
-  expect(unheard).toEqual([
-    "a copy for the desktop the person sits at had no click waiting to carry it out",
-  ]);
 });

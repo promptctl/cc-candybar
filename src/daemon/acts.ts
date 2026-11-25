@@ -4,11 +4,8 @@
 // what it did, or why it did not, said once on its act line and handed back as
 // the act's `effect-done`.
 
-import type {
-  Act,
-  DesktopAct,
-  EffectOutcome,
-} from "../renderer-interface/interface.js";
+import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
+import type { DesktopActs } from "./desktop-acts.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -48,6 +45,8 @@ export interface ActDeps {
   // the session that drew this click. Both tmux operations share the selection.
   readonly programsFor: (session: SessionId | null) => ActPrograms;
   readonly run: (run: RunAct) => Promise<RunEnd>;
+  // The acts left to the desktop the person sits at, by the click that asked.
+  readonly desktop: DesktopActs;
   readonly barPane: { readonly edge: BarPaneEdge; readonly host: BarPaneHost };
   // Whether the daemon's close has begun: no act starts after it.
   readonly closing: () => boolean;
@@ -73,19 +72,9 @@ function nameOf(act: HostAct): string {
   }
 }
 
-// [LAW:types-are-the-program] How the host settles an act: as the renderer
-// hears it, or as left to the desktop the person sits at, which only the
-// click's own verdict can carry. The renderer hears it as done.
-export type HostOutcome =
-  | EffectOutcome
-  | { readonly kind: "handed"; readonly act: DesktopAct };
-
-// How an act ended: its outcome, and what its line says of it — what it did,
-// or why it did not.
-interface Done {
-  readonly outcome: HostOutcome;
-  readonly said: string;
-}
+// [LAW:types-are-the-program] How an act ended: its outcome, and what its
+// line says of it — what it did, or why it did not.
+type Done = RunEnd;
 const did = (said: string): Done => ({ outcome: { kind: "ok" }, said });
 const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
   outcome,
@@ -107,11 +96,16 @@ export class Acts {
     );
     this.performers = {
       // [LAW:effects-at-boundaries] Nothing happens on this machine: the act
-      // goes back to the click that asked it, as the outcome's data.
-      desktop: async (act) => ({
-        outcome: { kind: "handed", act: act.act },
-        said: "left to the URL handler on the desktop the person sits at",
-      }),
+      // goes to the verdict of the click that asked it, and the URL handler on
+      // the desktop the person sits at carries it out.
+      desktop: async (act) =>
+        deps.desktop.deposit(act.click, act.act)
+          ? did("left to the URL handler on the desktop the person sits at")
+          : not({
+              kind: "failed",
+              reason:
+                "the click that asked it was already answered, so nothing carried it out on the desktop the person sits at",
+            }),
       copy: (act) =>
         clickLaunch(
           deps.programsFor(act.session).launch,
@@ -175,19 +169,15 @@ export class Acts {
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
   // throw is classified once, here: a refusal the user can act on, the
   // daemon's close, or a failure.
-  async perform(act: HostAct): Promise<HostOutcome> {
+  async perform(act: HostAct): Promise<EffectOutcome> {
     const { outcome, said } = this.deps.closing()
       ? not({ kind: "closing", reason: "the daemon is closing" })
       : await this.performed(act);
     this.deps.log(
-      outcome.kind === "ok" ||
-        outcome.kind === "handed" ||
-        outcome.kind === "closing"
-        ? "info"
-        : "warn",
+      outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
       `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${nameOf(act)}: ${said}`,
     );
-    return outcome.kind === "ok" || outcome.kind === "handed"
+    return outcome.kind === "ok"
       ? outcome
       : { ...outcome, reason: `${nameOf(act)}: ${outcome.reason}` };
   }

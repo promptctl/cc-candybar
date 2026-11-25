@@ -67,7 +67,7 @@ export function defaultSocketPath(): string {
 // the machine the user sits at. A link names the key of the daemon that signed
 // it (link-signer.ts), and the URL handler app opens `<key id>.<host>.sock` in
 // this directory (under the home; the directory, the separator and the suffix
-// are mirrored in url-handler/main.swift) when a link of another machine's is
+// are mirrored in url-handler/wire.swift) when a link of another machine's is
 // clicked. An ssh `LocalForward` puts the socket there, named by the remote's
 // key so two remotes never share one, whatever they are called. The name also
 // carries the host the user's ssh config reaches that remote by: a click's open

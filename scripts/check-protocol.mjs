@@ -57,6 +57,7 @@ const markers = inFile(reads.markers);
 // --- the mirrored set -----------------------------------------------------
 
 const TS_PROTOCOL = "src/daemon/foundations/protocol.ts";
+const TS_SSH_CLI = "src/ssh-cli.ts";
 const TS_INTERFACE = "src/renderer-interface/interface.ts";
 const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
@@ -87,7 +88,7 @@ const TS_DEBUG_TYPES = "src/daemon/foundations/debug-types.ts";
 const RS_FOLLOW = "rust-client/src/follow.rs";
 // The URL handler app, the fourth runtime speaking the wire: one frame (the
 // header and the `url` kind, versioned by itself) and the socket path.
-const SWIFT_HANDLER = "url-handler/main.swift";
+const SWIFT_WIRE = "url-handler/wire.swift";
 
 // The names of the native client's own subcommands that Node does NOT also
 // name. Compared against the native list itself, so the row agrees exactly
@@ -183,27 +184,27 @@ const CHECKS = [
   {
     label: "FRAME_HEADER_BYTES, as the URL handler writes frames",
     ts: num(TS_PROTOCOL, /export const FRAME_HEADER_BYTES = ([\d\s*]+);/),
-    swift: num(SWIFT_HANDLER, /^let FRAME_HEADER_BYTES = ([\d\s*]+)$/m),
+    swift: num(SWIFT_WIRE, /^let FRAME_HEADER_BYTES = ([\d\s*]+)$/m),
   },
   {
     label: "frame-header byte order, as the URL handler writes it",
     ts: markers(TS_PROTOCOL, [/writeUInt32BE/], "u32 big-endian"),
-    swift: markers(SWIFT_HANDLER, [/UInt32\(body\.count\)\.bigEndian/], "u32 big-endian"),
+    swift: markers(SWIFT_WIRE, [/UInt32\(body\.count\)\.bigEndian/], "u32 big-endian"),
   },
   {
     label: "the URL handler's frame kind",
     ts: lit(TS_PROTOCOL, /export const URL_FRAME_KIND = "([a-z]+)";/),
-    swift: lit(SWIFT_HANDLER, /^let URL_FRAME_KIND = "([a-z]+)"$/m),
+    swift: lit(SWIFT_WIRE, /^let URL_FRAME_KIND = "([a-z]+)"$/m),
   },
   {
     label: "the URL handler's frame version",
     ts: num(TS_PROTOCOL, /export const URL_FRAME_VERSION = ([\d\s*]+);/),
-    swift: num(SWIFT_HANDLER, /^let URL_FRAME_VERSION = ([\d\s*]+)$/m),
+    swift: num(SWIFT_WIRE, /^let URL_FRAME_VERSION = ([\d\s*]+)$/m),
   },
   {
     label: "MAX_FRAME_BYTES, as the URL handler bounds the verdict it reads",
     ts: num(TS_PROTOCOL, /export const MAX_FRAME_BYTES = ([\d\s*]+);/),
-    swift: num(SWIFT_HANDLER, /^let MAX_FRAME_BYTES = ([\d\s*]+)$/m),
+    swift: num(SWIFT_WIRE, /^let MAX_FRAME_BYTES = ([\d\s*]+)$/m),
   },
   // A frame that asks for the click's acts, and the verdict that hands them
   // back: the value the frame names, the field the acts ride in, and which
@@ -211,12 +212,12 @@ const CHECKS = [
   {
     label: "what a frame names to ask for the click's acts",
     ts: lit(TS_PROTOCOL, /export const ACTS_ON_DESKTOP = "([a-z]+)";/),
-    swift: lit(SWIFT_HANDLER, /^let ACTS_ON_DESKTOP = "([a-z]+)"$/m),
+    swift: lit(SWIFT_WIRE, /^let ACTS_ON_DESKTOP = "([a-z]+)"$/m),
   },
   {
     label: "the verdict field that carries the acts handed to the URL handler",
     ts: lit(TS_PROTOCOL, /(desktopActs): readonly DesktopAct\[\]/),
-    swift: lit(SWIFT_HANDLER, /said\["(desktopActs)"\]/),
+    swift: lit(SWIFT_WIRE, /said\["(desktopActs)"\]/),
   },
   {
     label: "each kind of act a verdict hands the URL handler, with the field it carries",
@@ -226,7 +227,7 @@ const CHECKS = [
       /readonly kind: "(\w+)"; readonly (\w+): string/g,
     ),
     swift: memberSet(
-      SWIFT_HANDLER,
+      SWIFT_WIRE,
       /func desktopAct\([\s\S]+?\n\}\n/,
       /case "(\w+)":\s*guard let \w+ = said\["(\w+)"\]/g,
     ),
@@ -236,8 +237,8 @@ const CHECKS = [
     label: "the URL handler's frame fields",
     ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+)\??:/gm),
     swift: memberSet(
-      SWIFT_HANDLER,
-      /var object: \[String: Any\] = \[[^\n]+\]\n  if landed \{[^\n]+\}/,
+      SWIFT_WIRE,
+      /var object: \[String: Any\] = \[[^\n]+\]\n  if place == \.desktop \{[^\n]+\}/,
       /"(\w+)"(?=: |\] =)/g,
     ),
   },
@@ -252,7 +253,7 @@ const CHECKS = [
       "/tmp/cc-candybar-<uid>/socket",
     ),
     swift: markers(
-      SWIFT_HANDLER,
+      SWIFT_WIRE,
       [/"\/tmp\/cc-candybar-\\\(uid\)\/socket"/],
       "/tmp/cc-candybar-<uid>/socket",
     ),
@@ -264,18 +265,18 @@ const CHECKS = [
   {
     label: "the remote socket directory, as the URL handler opens it",
     ts: lit(TS_PATHS, /REMOTE_SOCKET_DIR_UNDER_HOME = "([^"]+)"/),
-    swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_DIR_UNDER_HOME = "([^"]+)"$/m),
+    swift: lit(SWIFT_WIRE, /^let REMOTE_SOCKET_DIR_UNDER_HOME = "([^"]+)"$/m),
   },
   {
     label: "a forwarded socket's suffix, as the URL handler opens it",
     ts: lit(TS_PATHS, /REMOTE_SOCKET_SUFFIX = "([^"]+)"/),
-    swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_SUFFIX = "([^"]+)"$/m),
+    swift: lit(SWIFT_WIRE, /^let REMOTE_SOCKET_SUFFIX = "([^"]+)"$/m),
   },
   {
     label: "what separates a forwarded socket's key id from the host name, as the URL handler reads it",
     ts: lit(TS_PATHS, /REMOTE_SOCKET_HOST_SEPARATOR = "([^"]+)"/),
     swift: lit(
-      SWIFT_HANDLER,
+      SWIFT_WIRE,
       /^let REMOTE_SOCKET_HOST_SEPARATOR: Character = "([^"]+)"$/m,
     ),
   },
@@ -287,7 +288,7 @@ const CHECKS = [
       "<key id><separator><host><suffix>",
     ),
     swift: markers(
-      SWIFT_HANDLER,
+      SWIFT_WIRE,
       [
         /let head = id \+ String\(REMOTE_SOCKET_HOST_SEPARATOR\)/,
         /name\.dropFirst\(head\.count\)\.dropLast\(REMOTE_SOCKET_SUFFIX\.count\)/,
@@ -296,9 +297,14 @@ const CHECKS = [
     ),
   },
   {
+    label: "the host a forward's file name may carry, as the URL handler reads it and `ssh-config` accepts it",
+    ts: lit(TS_SSH_CLI, /^const HOST_ALIAS = \/(\^[^/]+\$)\/;$/m),
+    swift: lit(SWIFT_WIRE, /^let HOST_ALIAS_PATTERN = "([^"]+)"$/m),
+  },
+  {
     label: "the length of the key id a link names its signer by, as the URL handler reads it",
     ts: num(TS_LINK_SIGNER, /export const LINK_KEY_ID_CHARS = ([\d\s*]+);/),
-    swift: num(SWIFT_HANDLER, /^let LINK_KEY_ID_CHARS = ([\d\s*]+)$/m),
+    swift: num(SWIFT_WIRE, /^let LINK_KEY_ID_CHARS = ([\d\s*]+)$/m),
   },
   // Where a link's proof starts and where its signer's id ends: the one place
   // the handler looks, so a signer that moved the id would route every ssh click
@@ -306,20 +312,20 @@ const CHECKS = [
   {
     label: "the mark a link's proof follows, as the URL handler finds it",
     ts: lit(TS_LINK_SIGNER, /LINK_MAC_MARK = "([^"]+)"/),
-    swift: lit(SWIFT_HANDLER, /^let LINK_MAC_MARK: Character = "([^"]+)"$/m),
+    swift: lit(SWIFT_WIRE, /^let LINK_MAC_MARK: Character = "([^"]+)"$/m),
   },
   {
     label: "the separator after a link's key id, as the URL handler finds it",
     ts: lit(TS_LINK_SIGNER, /LINK_PROOF_SEPARATOR = "([^"]+)"/),
     swift: lit(
-      SWIFT_HANDLER,
+      SWIFT_WIRE,
       /^let LINK_PROOF_SEPARATOR: Character = "([^"]+)"$/m,
     ),
   },
   {
     label: "the alphabet a key id is spelled in, as the URL handler reads it",
     ts: lit(TS_LINK_SIGNER, /LINK_KEY_ID_ALPHABET =\s*"([^"]+)"/),
-    swift: lit(SWIFT_HANDLER, /^let LINK_KEY_ID_ALPHABET = "([^"]+)"$/m),
+    swift: lit(SWIFT_WIRE, /^let LINK_KEY_ID_ALPHABET = "([^"]+)"$/m),
   },
   {
     label: "lane B's name, as the statusline push subscribes",

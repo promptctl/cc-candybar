@@ -38,9 +38,11 @@ import type {
   ConfigChange,
   Effect,
   EffectId,
+  EffectOutcome,
 } from "../../src/renderer-interface/interface";
 import { ActsOnTheirWay } from "../../src/renderer/acts";
-import { Acts, outlives, type ActPrograms, type ActDeps, type HostOutcome } from "../../src/daemon/acts";
+import { DesktopActs } from "../../src/daemon/desktop-acts";
+import { Acts, outlives, type ActPrograms, type ActDeps } from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { BarPaneEdge, BarPaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
@@ -303,7 +305,11 @@ export function testVerbContext(
     log: () => {},
     now: () => instantOf(new Date()),
     // A click from the handler this build would stage.
-    arrival: { via: "link", delivery: { kind: "forwarder", urlV: 2, actsOn: "daemon" } },
+    arrival: {
+      via: "link",
+      delivery: { kind: "forwarder", urlV: 2 },
+      acts: { on: "daemon" },
+    },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key, any session write once the session has
     // rendered — the write closes what it closes in that config) hands it in;
@@ -409,6 +415,7 @@ export function testActs(
     detach: systemTimekeeper.detach,
     programsFor: () => ({ launch, claudeInput }),
     run: missing("run"),
+    desktop: new DesktopActs(),
     barPane: {
       edge: new Proxy({} as BarPaneEdge, {
         get: (_, k) => missing(`lane ${String(k)}`),
@@ -457,12 +464,12 @@ export async function performActs(
   deps: TestActDeps = {},
   signer: Pick<LinkSigner, "verify"> = TEST_SIGNER,
   captures: readonly RunEvidence[] = [],
-): Promise<HostOutcome[]> {
+): Promise<EffectOutcome[]> {
   const acts = testActs(ctx.log, deps);
   const asked = actsOf(ctx);
   const rest = ctx.effects.filter((e) => !asked.includes(e as Act));
   ctx.effects.splice(0, ctx.effects.length, ...rest);
-  const outcomes: HostOutcome[] = [];
+  const outcomes: EffectOutcome[] = [];
   for (const act of asked) {
     if (act.kind === "approve-repo") continue;
     const read = act.kind === "run"
@@ -475,11 +482,7 @@ export async function performActs(
       continue;
     }
     const settled = acts.perform(read.value).then((outcome) => {
-      (ctx.acts as ActsOnTheirWay).done(
-        act.id,
-        act.session,
-        outcome.kind === "handed" ? { kind: "ok" } : outcome,
-      );
+      (ctx.acts as ActsOnTheirWay).done(act.id, act.session, outcome);
       return outcome;
     });
     if (!outlives(read.value)) outcomes.push(await settled);
@@ -494,7 +497,7 @@ export async function clickActing(
   ctx: VerbContext,
   deps: TestActDeps = {},
   signer: Pick<LinkSigner, "verify"> = TEST_SIGNER,
-): Promise<HostOutcome[]> {
+): Promise<EffectOutcome[]> {
   const { verb, value } = linkClick(url);
   const { runEvidence } = clickVerb(verb, value, ctx);
   return performActs(ctx, deps, signer, runEvidence);

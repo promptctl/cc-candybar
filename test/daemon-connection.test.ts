@@ -86,7 +86,7 @@ const urlAnswer = (
 ): HandledRequest => ({
   kind: "url",
   told,
-  land: () => landed.then(() => came),
+  land: () => landed.then(() => replyOf(came)),
 });
 
 // A memory stream runs on process ticks and microtasks, which all drain before

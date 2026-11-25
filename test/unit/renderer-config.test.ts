@@ -482,7 +482,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
       {
         kind: "click",
         click: admitted.click,
-        arrival: { via: "link", delivery: admitted.delivery },
+        arrival: { via: "link", delivery: admitted.delivery, acts: { on: "daemon" } },
         context: { session, durable: { origin }, live: null },
       },
       10,
@@ -626,7 +626,7 @@ test("a click on a session with no live context waits for the config of the orig
     await handIn(r, {
       kind: "click",
       click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER).click,
-      arrival: { via: "link", delivery: { kind: "cli" } },
+      arrival: { via: "link", delivery: { kind: "cli" }, acts: { on: "daemon" } },
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },
     }),

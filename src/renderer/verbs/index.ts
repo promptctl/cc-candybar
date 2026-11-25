@@ -286,22 +286,33 @@ function ask(
   ctx.acts.ask(ctx.effects, placed(actsOn(ctx.arrival), act));
 }
 
+// [LAW:types-are-the-program] Only a copy and an open have a desktop to go to;
+// the rest act on a pane or a program the bar ran, which are the daemon's
+// machine's.
 function placed(on: ActsOn, act: ActRequest): ActRequest {
-  if (on === "daemon") return act;
   switch (act.kind) {
     case "copy":
-      return {
-        kind: "desktop",
-        session: act.session,
-        act: { kind: "copy", text: act.text },
-      };
+      return on.on === "daemon"
+        ? act
+        : {
+            kind: "desktop",
+            session: act.session,
+            click: on.click,
+            act: { kind: "copy", text: act.text },
+          };
     case "open":
-      return {
-        kind: "desktop",
-        session: act.session,
-        act: { kind: "open", target: act.target },
-      };
-    default:
+      return on.on === "daemon"
+        ? act
+        : {
+            kind: "desktop",
+            session: act.session,
+            click: on.click,
+            act: { kind: "open", target: act.target },
+          };
+    case "desktop":
+    case "type-slash":
+    case "run":
+    case "approve-repo":
       return act;
   }
 }

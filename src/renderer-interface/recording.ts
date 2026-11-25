@@ -7,7 +7,7 @@ import type {
 } from "./interface.js";
 import type { RENDERER_WIRE_VERSION } from "./wire.js";
 
-export const RECORDING_VERSION = 1;
+export const RECORDING_VERSION = 2;
 
 // [LAW:effects-at-boundaries] A recording keeps the core's construction
 // result and completed turns. PIDs, transport timing and host receipt names

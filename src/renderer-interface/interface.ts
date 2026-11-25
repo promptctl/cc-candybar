@@ -21,7 +21,7 @@ import {
   rendererFailureOf,
   type Failure,
 } from "../daemon/foundations/verb-error";
-import type { ClickArrival } from "./click-arrival";
+import type { ClickArrival, DesktopClickId } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
@@ -400,10 +400,11 @@ export type Act = { readonly id: EffectId } & (
   | {
       // A copy or open for the desktop the person sits at, which is not the
       // daemon's machine when the link came down an ssh forward: the host
-      // performs nothing, and the click's verdict hands it to the URL handler
-      // there.
+      // performs nothing, and the verdict of the click that asked it hands it
+      // to the URL handler there.
       readonly kind: "desktop";
       readonly session: SessionId | null;
+      readonly click: DesktopClickId;
       readonly act: DesktopAct;
     }
   | {

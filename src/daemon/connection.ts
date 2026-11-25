@@ -16,7 +16,6 @@ import {
   classifyInbound,
   makeFrameReader,
   type Inbound,
-  type Response,
 } from "./foundations/protocol";
 import { replyOf, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
@@ -47,10 +46,11 @@ const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
 //   (`BACKSTOP_BOUNDS_READ`): its client waits for the answer, however long it
 //   takes.
 // - `unattended`: a url frame is read. The URL handler app waits for no
-//   outcome, reading the verdict on its link at most, so its hanging up is its
-//   design, not a peer leaving: the frame stays in flight until its click is
-//   handled, however long that takes. `told`: its writer was written its
-//   verdict, the socket's one answer.
+//   outcome of the click, reading at most a verdict (on its link, or once the
+//   click landed, for a writer that carries out the click's acts, which bounds
+//   its own wait), so its hanging up is its design, not a peer leaving: the
+//   frame stays in flight until its click is handled, however long that takes.
+//   `told`: its writer was written its verdict, the socket's one answer.
 // - `answered`: the socket's one answer is written: the reply (a refusal of
 //   a subscribe included), or the backstop's TIMEOUT.
 // - `streaming`: the session's subscription stands.
@@ -506,15 +506,14 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // frame (`told`): a writer that carries out the click's acts is told what the
   // click came to, once it landed.
   function clicked(r: Extract<HandledRequest, { kind: "url" }>): void {
-    const tell = (answer: Response): void =>
-      on({ kind: "verdict", answer: replyOf(answer) });
-    if (r.told.when === "at-once") tell(r.told.verdict);
+    if (r.told.when === "at-once")
+      on({ kind: "verdict", answer: replyOf(r.told.verdict) });
     // [LAW:no-silent-failure] A landing that throws reaches the clock, which
     // shows it on every bar; the connection hears it landed all the same.
     daemon.clock.detach("url click landing", async () => {
       try {
         const came = await r.land();
-        if (r.told.when === "landed") tell(came);
+        if (r.told.when === "landed") on({ kind: "verdict", answer: came });
       } finally {
         on({ kind: "landed" });
       }

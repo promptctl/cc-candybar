@@ -23,6 +23,7 @@ import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
 import type { Launcher } from "../proc/launcher";
+import type { DesktopActs } from "./desktop-acts.js";
 import type { Locate } from "./statusline-answer.js";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
@@ -44,6 +45,8 @@ export interface DaemonParts {
   readonly stats: RuntimeStats;
   // What every click is opened with before any renderer sees it.
   readonly linkSigner: LinkSigner;
+  // The copy and open acts each click leaves to the desktop the person sits at.
+  readonly desktopActs: DesktopActs;
   readonly publishFrame: PublishFrame;
   readonly renderSightings: RenderSightings;
   readonly watcherRegistry: WatcherRegistry;

@@ -13,6 +13,7 @@ import { attachCommandLine } from "../src/attach-launcher";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { ClaudeInputEdge } from "../src/claude-input/typing";
+import { DesktopActs } from "../src/daemon/desktop-acts";
 import { Acts, type HostAct } from "../src/daemon/acts";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import type { EffectId } from "../src/renderer-interface/interface";
@@ -157,6 +158,7 @@ describe("tmux pane effects", () => {
         },
       }),
       run: missing,
+      desktop: new DesktopActs(),
       barPane: { edge, host },
       closing,
       log: (level, msg) => void logs.push(`${level} ${msg}`),

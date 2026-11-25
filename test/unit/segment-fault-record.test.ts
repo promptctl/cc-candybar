@@ -219,7 +219,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
     await handIn(r, {
       kind: "click",
       click: admitClick(verb, value, TEST_SIGNER).click,
-      arrival: { via: "link", delivery: { kind: "cli" } },
+      arrival: { via: "link", delivery: { kind: "cli" }, acts: { on: "daemon" } },
       context: {
         session,
         durable: { origin: context.requested },

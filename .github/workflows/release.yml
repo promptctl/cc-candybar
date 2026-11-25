@@ -249,7 +249,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The URL handler app (url-handler/main.swift): a resident macOS agent that
+  # The URL handler app (url-handler/main.swift, wire.swift): a resident macOS agent that
   # forwards a cc-candybar:// link to the daemon. Swift needs a macOS runner;
   # one universal binary serves both darwin packages.
   build-url-handler:

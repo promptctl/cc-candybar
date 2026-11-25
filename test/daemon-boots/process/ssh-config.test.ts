@@ -4,9 +4,12 @@
 // daemon of its own, in an isolated environment.
 
 import { execFile } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { linkKeyId } from "../../../src/click/link-signer";
+import { sshConfigPlan } from "../../../src/ssh-cli";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import {
@@ -44,6 +47,35 @@ test("the stanza names the daemon's own socket and the id its key's links carry"
   } finally {
     await daemon.stop();
     isolated.removeTmpDirs();
+  }
+});
+
+// The Mac's editor reaches the remote's files by the name the person types
+// after `ssh`, which the remote's daemon cannot know: it travels in the
+// forward's file name, from the `Host` line alone, as the user's own ssh
+// reads the stanza.
+test("the user's ssh names the forward by the host the person typed", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-ssh-config-"));
+  try {
+    const config = path.join(dir, "config");
+    fs.writeFileSync(
+      config,
+      sshConfigPlan(["dev.example-1"], {
+        kind: "ok",
+        value: { keyId: "AbCd-_12", socket: "/tmp/cc-candybar-1000/socket" },
+      }).stdout,
+    );
+    const { stdout } = await exec("ssh", [
+      "-G",
+      "-F",
+      config,
+      "dev.example-1",
+    ]);
+    expect(stdout).toContain(
+      `localforward ${os.homedir()}/.cc-candybar/remote/AbCd-_12.dev.example-1.sock /tmp/cc-candybar-1000/socket\n`,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true });
   }
 });
 

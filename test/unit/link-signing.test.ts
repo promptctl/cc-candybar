@@ -56,7 +56,7 @@ describe("a link the bar draws", () => {
 
   // The URL handler app reads the signer from the link without opening it: the
   // proof's first field, up to the first `/` after the last `#`. Its copy of
-  // that rule (url-handler/main.swift) rests on this spelling.
+  // that rule (url-handler/wire.swift) rests on this spelling.
   test.each([
     ["an authored link", undefined],
     [

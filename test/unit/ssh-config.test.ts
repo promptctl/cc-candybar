@@ -1,10 +1,6 @@
 // `cc-candybar ssh-config`: the lines that carry a click from the machine the
 // terminal is on to the daemon that drew the bar.
 
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { sshConfigPlan } from "../../src/ssh-cli";
 
 const facts = {
@@ -21,27 +17,6 @@ describe("cc-candybar ssh-config", () => {
     expect(plan.stdout).toContain(
       "  LocalForward %d/.cc-candybar/remote/AbCd-_12.%n.sock /tmp/cc-candybar-1000/socket\n",
     );
-  });
-
-  // The Mac's editor reaches the remote's files by the name the person types
-  // after `ssh`, which the remote's daemon cannot know: it travels in the
-  // forward's file name, from the `Host` line alone.
-  it("names the forward, in the user's own ssh, by the host the person typed", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ssh-config-"));
-    try {
-      const config = path.join(dir, "config");
-      fs.writeFileSync(config, sshConfigPlan(["dev.example-1"], facts).stdout);
-      const resolved = execFileSync(
-        "ssh",
-        ["-G", "-F", config, "dev.example-1"],
-        { encoding: "utf8" },
-      );
-      expect(resolved).toContain(
-        `localforward ${os.homedir()}/.cc-candybar/remote/AbCd-_12.dev.example-1.sock /tmp/cc-candybar-1000/socket\n`,
-      );
-    } finally {
-      fs.rmSync(dir, { recursive: true });
-    }
   });
 
   it.each([

@@ -59,6 +59,7 @@ import type { BarPaneEdge } from "./lane-setup.js";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import { Acts } from "./acts.js";
+import { DesktopActs } from "./desktop-acts.js";
 import { DeclaredBarPanes } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
 import { authorizeRun } from "./foundations/run-authorization.js";
@@ -574,8 +575,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     claudeInput: inputs.claudeInput(edge),
   });
   const desktopPrograms = programs(launcher);
+  // [LAW:one-source-of-truth] The acts left to the desktop the person sits at,
+  // by the click that asked them (src/daemon/desktop-acts.ts).
+  const desktopActs = new DesktopActs();
   const acts = new Acts({
     detach: clock.detach,
+    desktop: desktopActs,
     programsFor: (session) => {
       // Fixed desktop tools also serve sessionless links, old clients and
       // links opened before a restarted host hears from the session again.
@@ -1023,6 +1028,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     sessionBook,
     stats,
     linkSigner,
+    desktopActs,
     publishFrame,
     renderSightings,
     watcherRegistry,

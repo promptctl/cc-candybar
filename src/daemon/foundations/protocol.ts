@@ -392,7 +392,7 @@ export interface ClickRequest {
 // and knows nothing a release changes, so a daemon upgrade must not refuse it,
 // and the daemon accepts every `urlV` it has shipped (URL_FRAME_VERSIONS).
 // Not a member of `Request`, which is what the `v` gate admits. Mirrored by
-// url-handler/main.swift, the one frame that app spells, and pinned by
+// url-handler/wire.swift, the one frame that app spells, and pinned by
 // scripts/check-protocol.mjs.
 export const URL_FRAME_KIND = "url";
 export const URL_FRAME_VERSION = 2;
@@ -533,7 +533,9 @@ export type Response =
   | { ok: true; output: string; hits?: HitMap }
   // The verdict of a url frame whose writer carries out the click's copy and
   // open itself (`ACTS_ON_DESKTOP`), in the order asked. An empty list is a
-  // click that asked none; its absence is a daemon that hands none back.
+  // click that asked none; its absence is a daemon that hands none back. A
+  // click that failed hands back the acts it asked before it did, as a click
+  // on a bar of the writer's own machine would have performed them.
   | { ok: true; output: string; desktopActs: readonly DesktopAct[] }
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
@@ -562,6 +564,7 @@ export type Response =
       error: string;
       code: Exclude<ErrorCode, "TIMEOUT">;
       daemonV?: number;
+      desktopActs?: readonly DesktopAct[];
     }
   | {
       ok: false;
