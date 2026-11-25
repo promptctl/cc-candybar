@@ -18,12 +18,7 @@ import {
   type Inbound,
   type Response,
 } from "./foundations/protocol";
-import {
-  replyOf,
-  withClientActs,
-  type HandledRequest,
-  type Reply,
-} from "./reply.js";
+import { replyOf, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import type { PaneOwner } from "./frame-feed.js";
 import { newestWins } from "../utils/newest-wins.js";
@@ -80,7 +75,6 @@ type Event =
   | {
       readonly kind: "verdict";
       readonly answer: Reply;
-      readonly awaited: boolean;
     }
   | { readonly kind: "failed"; readonly answer: Reply }
   | { readonly kind: "landed" }
@@ -234,9 +228,7 @@ const STEP: {
   verdict: (p, e) =>
     p.kind !== "unattended" || p.told
       ? [p, dropped(p, e.answer)]
-      : e.awaited
-        ? [{ ...p, told: true }, write(e.answer)]
-        : [p, NONE],
+      : [{ ...p, told: true }, write(e.answer)],
   // [LAW:no-silent-failure] Answered with the failure whoever sent the
   // frame: a request's client, or a URL handler, which reads it as its
   // verdict. A url frame whose handler failed has no click to land, so it is
@@ -508,25 +500,21 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   }
 
   // A url frame's verdict, then its click, which is in flight until it lands.
-  // A version 1 writer has closed, and a write to its socket is only an error
-  // event.
-  // [LAW:dataflow-not-control-flow] A writer that carries out the click's
-  // copy and open itself is told once the click has landed, because the acts
-  // are the click's output; any other is told at once.
+  // A version 1 writer has closed and is told nothing: a write to its socket
+  // is only an error event.
+  // [LAW:dataflow-not-control-flow] When the writer is told is a fact of the
+  // frame (`told`): a writer that carries out the click's acts is told what the
+  // click came to, once it landed.
   function clicked(r: Extract<HandledRequest, { kind: "url" }>): void {
     const tell = (answer: Response): void =>
-      on({
-        kind: "verdict",
-        answer: replyOf(answer),
-        awaited: r.awaitsVerdict,
-      });
-    if (!r.handsBack) tell(r.verdict);
+      on({ kind: "verdict", answer: replyOf(answer) });
+    if (r.told.when === "at-once") tell(r.told.verdict);
     // [LAW:no-silent-failure] A landing that throws reaches the clock, which
     // shows it on every bar; the connection hears it landed all the same.
     daemon.clock.detach("url click landing", async () => {
       try {
-        const handed = await r.land();
-        if (r.handsBack) tell(withClientActs(r.verdict, handed));
+        const came = await r.land();
+        if (r.told.when === "landed") tell(came);
       } finally {
         on({ kind: "landed" });
       }

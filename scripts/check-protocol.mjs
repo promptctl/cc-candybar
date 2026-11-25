@@ -57,6 +57,7 @@ const markers = inFile(reads.markers);
 // --- the mirrored set -----------------------------------------------------
 
 const TS_PROTOCOL = "src/daemon/foundations/protocol.ts";
+const TS_INTERFACE = "src/renderer-interface/interface.ts";
 const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
@@ -200,32 +201,45 @@ const CHECKS = [
     swift: num(SWIFT_HANDLER, /^let URL_FRAME_VERSION = ([\d\s*]+)$/m),
   },
   {
-    label: "the version of a frame the URL handler asks the click's acts of",
-    ts: num(TS_PROTOCOL, /export const URL_FRAME_HAND_BACK_VERSION = ([\d\s*]+);/),
-    swift: num(SWIFT_HANDLER, /^let URL_FRAME_HAND_BACK_VERSION = ([\d\s*]+)$/m),
+    label: "MAX_FRAME_BYTES, as the URL handler bounds the verdict it reads",
+    ts: num(TS_PROTOCOL, /export const MAX_FRAME_BYTES = ([\d\s*]+);/),
+    swift: num(SWIFT_HANDLER, /^let MAX_FRAME_BYTES = ([\d\s*]+)$/m),
   },
-  // The acts a verdict hands back, as the daemon writes them and the app reads
-  // them: the field they ride in, their kinds, and the field each kind carries.
+  // A frame that asks for the click's acts, and the verdict that hands them
+  // back: the value the frame names, the field the acts ride in, and which
+  // field each kind of act carries.
+  {
+    label: "what a frame names to ask for the click's acts",
+    ts: lit(TS_PROTOCOL, /export const ACTS_ON_DESKTOP = "([a-z]+)";/),
+    swift: lit(SWIFT_HANDLER, /^let ACTS_ON_DESKTOP = "([a-z]+)"$/m),
+  },
   {
     label: "the verdict field that carries the acts handed to the URL handler",
-    ts: lit(TS_PROTOCOL, /(clientActs)\?: readonly ClientAct\[\]/),
-    swift: lit(SWIFT_HANDLER, /said\["(clientActs)"\]/),
+    ts: lit(TS_PROTOCOL, /(desktopActs): readonly DesktopAct\[\]/),
+    swift: lit(SWIFT_HANDLER, /said\["(desktopActs)"\]/),
   },
   {
-    label: "the kinds of act a verdict hands the URL handler",
-    ts: memberSet(TS_PROTOCOL, /export type ClientAct =[\s\S]+?;\n/, /kind: "(\w+)"/g),
-    swift: memberSet(SWIFT_HANDLER, /func clientActs[\s\S]+?\n\}\n/, /case \("(\w+)",/g),
-  },
-  {
-    label: "the fields an act handed to the URL handler carries",
-    ts: memberSet(TS_PROTOCOL, /export type ClientAct =[\s\S]+?;\n/, /readonly (text|target): string/g),
-    swift: memberSet(SWIFT_HANDLER, /func clientActs[\s\S]+?\n\}\n/, /act\["(text|target)"\]/g),
+    label: "each kind of act a verdict hands the URL handler, with the field it carries",
+    ts: memberSet(
+      TS_INTERFACE,
+      /export type DesktopAct =[\s\S]+?;\n/,
+      /readonly kind: "(\w+)"; readonly (\w+): string/g,
+    ),
+    swift: memberSet(
+      SWIFT_HANDLER,
+      /func desktopAct\([\s\S]+?\n\}\n/,
+      /case "(\w+)":\s*guard let \w+ = said\["(\w+)"\]/g,
+    ),
   },
   // The frame's field names, as the daemon reads them and the app writes them.
   {
     label: "the URL handler's frame fields",
-    ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+):/gm),
-    swift: memberSet(SWIFT_HANDLER, /withJSONObject: \[[^\]]+\]/, /"(\w+)":/g),
+    ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+)\??:/gm),
+    swift: memberSet(
+      SWIFT_HANDLER,
+      /var object: \[String: Any\] = \[[^\n]+\]\n  if landed \{[^\n]+\}/,
+      /"(\w+)"(?=: |\] =)/g,
+    ),
   },
   // The default socket path: under /tmp, by uid, as src/daemon/paths.ts
   // derives it. The app starts with no shell's environment, so it has no
@@ -259,10 +273,26 @@ const CHECKS = [
   },
   {
     label: "what separates a forwarded socket's key id from the host name, as the URL handler reads it",
-    ts: lit(TS_PATHS, /REMOTE_SOCKET_ALIAS_SEPARATOR = "([^"]+)"/),
+    ts: lit(TS_PATHS, /REMOTE_SOCKET_HOST_SEPARATOR = "([^"]+)"/),
     swift: lit(
       SWIFT_HANDLER,
-      /^let REMOTE_SOCKET_ALIAS_SEPARATOR: Character = "([^"]+)"$/m,
+      /^let REMOTE_SOCKET_HOST_SEPARATOR: Character = "([^"]+)"$/m,
+    ),
+  },
+  {
+    label: "the order of a forwarded socket's name: key id, separator, host, suffix",
+    ts: markers(
+      TS_PATHS,
+      [/\$\{keyId\}\$\{REMOTE_SOCKET_HOST_SEPARATOR\}\$\{host\}\$\{REMOTE_SOCKET_SUFFIX\}/],
+      "<key id><separator><host><suffix>",
+    ),
+    swift: markers(
+      SWIFT_HANDLER,
+      [
+        /let head = id \+ String\(REMOTE_SOCKET_HOST_SEPARATOR\)/,
+        /name\.dropFirst\(head\.count\)\.dropLast\(REMOTE_SOCKET_SUFFIX\.count\)/,
+      ],
+      "<key id><separator><host><suffix>",
     ),
   },
   {

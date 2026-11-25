@@ -14,7 +14,10 @@ import {
   type StatuslineAnswer,
 } from "./statusline-answer.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
-import type { EffectOutcome } from "../renderer-interface/interface.js";
+import type {
+  DesktopAct,
+  EffectOutcome,
+} from "../renderer-interface/interface.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import {
   PROTOCOL_VERSION,
@@ -23,8 +26,7 @@ import {
   UNKNOWN_REQUEST_KIND,
   URL_FRAME_VERSIONS,
   awaitsVerdict,
-  handsActsBack,
-  type ClientAct,
+  ACTS_ON_DESKTOP,
   type Inbound,
   type OwnerFacts,
   type Request,
@@ -46,7 +48,6 @@ import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererHost } from "./renderer-host.js";
-import type { HandBack } from "./acts.js";
 import {
   badRequest,
   ClickAbandoned,
@@ -58,7 +59,10 @@ import {
 import { elapsedMs, spanMs } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import type { ClickArrival } from "../renderer-interface/click-arrival";
+import {
+  deliveredTo,
+  type ClickArrival,
+} from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
@@ -122,29 +126,33 @@ export type HandledRequest =
     }
   | {
       kind: "url";
-      // Whether the frame's writer reads `verdict`.
-      awaitsVerdict: boolean;
-      // Whether the frame's writer carries out the click's copy and open
-      // itself (`handsActsBack`): its verdict is written once the click has
-      // landed, with those acts in it (`withClientActs`), not before.
-      handsBack: boolean;
-      verdict: Response;
+      told: Told;
       // [LAW:no-ambient-temporal-coupling] The click, started by whoever
       // wrote the verdict once it is written, so no work of the click's
-      // stands before it. Settles once the click's event is written, with the
-      // acts handed back to the frame's writer, in the order asked.
-      land: () => Promise<readonly ClientAct[]>;
+      // stands before it. Settles once the click's event is written, with
+      // what the click came to: the verdict of a writer told `landed`.
+      land: () => Promise<Response>;
     };
 
-// A verdict as a frame's writer that carries out acts reads it: the acts the
-// click handed back ride on an ok verdict, and a refusal carries none.
-export function withClientActs(
+// [LAW:types-are-the-program] When a url frame's writer reads its verdict: never
+// (a version 1 writer hangs up at once, so its verdict goes to no one); at
+// once, before its click runs, whether its link opened; or once its click has
+// landed, for a writer that carries out the click's copy and open itself,
+// because those acts are what the click produced.
+export type Told =
+  | { readonly when: "never" }
+  | { readonly when: "at-once"; readonly verdict: Response }
+  | { readonly when: "landed" };
+
+// [LAW:dataflow-not-control-flow] A writer that carries out the click's acts
+// is told once they exist; every other, if it reads at all, at once.
+function toldTo(
+  frame: Record<string, unknown>,
   verdict: Response,
-  acts: readonly ClientAct[],
-): Response {
-  return verdict.ok && "output" in verdict
-    ? { ...verdict, clientActs: acts }
-    : verdict;
+  afterLanding: boolean,
+): Told {
+  if (!awaitsVerdict(frame.urlV)) return { when: "never" };
+  return afterLanding ? { when: "landed" } : { when: "at-once", verdict };
 }
 
 // The one way a reply is made.
@@ -218,15 +226,18 @@ export function refuseClosingInbound(
   inbound: Inbound,
   accepted: Acceptance,
 ): HandledRequest {
-  return inbound.kind === "url"
-    ? {
-        kind: "url",
-        awaitsVerdict: awaitsVerdict(inbound.frame.urlV),
-        handsBack: handsActsBack(inbound.frame.urlV),
-        verdict: closingResponse(parts, "click", accepted),
-        land: async () => [],
-      }
-    : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
+  if (inbound.kind !== "url")
+    return replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
+  const verdict = closingResponse(parts, "click", accepted);
+  return {
+    kind: "url",
+    told: toldTo(
+      inbound.frame,
+      verdict,
+      inbound.frame.actsOn === ACTS_ON_DESKTOP,
+    ),
+    land: async () => verdict,
+  };
 }
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
@@ -682,11 +693,14 @@ export async function replyTo(
   }
 
   if (req.kind === "click") {
-    return stay(
-      await clickEvent(parts, accepted, timedOut, clientLeft, (facts, click) =>
-        clickOutcome(parts, req, facts, click),
-      ),
+    const { outcome } = await clickEvent(
+      parts,
+      accepted,
+      timedOut,
+      clientLeft,
+      (facts, click) => clickOutcome(parts, req, facts, click),
     );
+    return stay(clickReply(outcome));
   }
 
   if (req.kind === "debug") {
@@ -861,8 +875,8 @@ async function clickEvent(
   accepted: Acceptance,
   timedOut: () => boolean,
   clientLeft: () => boolean,
-  run: (facts: RequestFacts, click: ClickInFlight) => Promise<RequestOutcome>,
-): Promise<Response> {
+  run: (facts: RequestFacts, click: ClickInFlight) => Promise<Clicked>,
+): Promise<Clicked> {
   const { clock } = parts;
   const t0 = clock.monotonic();
   const facts: RequestFacts = [
@@ -879,7 +893,9 @@ async function clickEvent(
   };
   // [LAW:single-enforcer] Whatever a click throws is its outcome, whichever
   // arm it took, so every click writes its event.
-  const outcome = await run(facts, click).catch(failureOf);
+  const clicked = await run(facts, click).catch((thrown: unknown) =>
+    noDesktop(failureOf(thrown)),
+  );
   // Whether the client was told TIMEOUT, and whether a client that waited
   // hung up, by the time the click was done.
   noteFacts(facts, {
@@ -889,11 +905,32 @@ async function clickEvent(
   const { level, line } = requestEvent(
     "click",
     facts,
-    outcome,
+    clicked.outcome,
     elapsedMs(clock, t0),
   );
   parts.log(level, line);
-  return clickReply(outcome);
+  return clicked;
+}
+
+// A click as it ended: its outcome, and the acts it left to the desktop the
+// person sits at, in the order asked.
+interface Clicked {
+  readonly outcome: RequestOutcome;
+  readonly desktop: readonly DesktopAct[];
+}
+const noDesktop = (outcome: RequestOutcome): Clicked => ({
+  outcome,
+  desktop: [],
+});
+
+// [LAW:single-enforcer] The verdict of a writer told once its click landed:
+// what the click came to, and, when it came to nothing wrong, the acts it left
+// for the writer to carry out. A failure carries none, since the writer is told
+// the click did not go.
+function landedReply({ outcome, desktop }: Clicked): Response {
+  return outcome.kind === "ok"
+    ? { ok: true, output: "", desktopActs: desktop }
+    : clickReply(outcome);
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] A click request run to its
@@ -907,11 +944,13 @@ async function clickOutcome(
   req: { readonly url: unknown },
   facts: RequestFacts,
   click: ClickInFlight,
-): Promise<RequestOutcome> {
+): Promise<Clicked> {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
-    return badRequest(`a click's url is a string, got ${typeof url}`);
+    return noDesktop(
+      badRequest(`a click's url is a string, got ${typeof url}`),
+    );
   return ranClick(
     parts,
     routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
@@ -938,7 +977,21 @@ function readUrlFrame(
       kind: "refused",
       problem: "the URL handler's frame carries no url string",
     };
-  return parseClick(url, { kind: "forwarder", urlV }, links);
+  const { actsOn } = frame;
+  if (actsOn !== undefined && actsOn !== ACTS_ON_DESKTOP)
+    return {
+      kind: "refused",
+      problem: `the URL handler's frame names ${inspect(actsOn)} for its acts, which this daemon does not know (${ACTS_ON_DESKTOP})`,
+    };
+  return parseClick(
+    url,
+    {
+      kind: "forwarder",
+      urlV,
+      actsOn: actsOn === ACTS_ON_DESKTOP ? "desktop" : "daemon",
+    },
+    links,
+  );
 }
 
 // [LAW:no-silent-failure] The URL handler's frame, answered with its verdict
@@ -954,35 +1007,28 @@ function urlClick(
   clientLeft: () => boolean,
 ): HandledRequest {
   const read = routeClick(parts, readUrlFrame(frame, parts.linkSigner));
-  const handsBack = handsActsBack(frame.urlV);
   return {
     kind: "url",
-    awaitsVerdict: awaitsVerdict(frame.urlV),
-    handsBack,
-    verdict:
+    told: toldTo(
+      frame,
       read.kind === "refused"
         ? clickReply(read.failure)
         : { ok: true, output: "" },
-    land: async () => {
-      const handed: ClientAct[] = [];
-      await clickEvent(
-        parts,
-        accepted,
-        timedOut,
-        clientLeft,
-        async (facts, click) => {
-          noteFacts(facts, { via: "forwarder", urlV: String(frame.urlV) });
-          return ranClick(
-            parts,
-            read,
-            facts,
-            click,
-            handsBack ? (act) => void handed.push(act) : undefined,
-          );
-        },
-      );
-      return handed;
-    },
+      read.kind === "link" && deliveredTo(read.delivery) === "desktop",
+    ),
+    land: async () =>
+      landedReply(
+        await clickEvent(
+          parts,
+          accepted,
+          timedOut,
+          clientLeft,
+          async (facts, click) => {
+            noteFacts(facts, { via: "forwarder", urlV: String(frame.urlV) });
+            return ranClick(parts, read, facts, click);
+          },
+        ),
+      ),
   };
 }
 
@@ -1028,12 +1074,11 @@ async function ranClick(
   read: RoutedClick,
   facts: RequestFacts,
   click: ClickInFlight,
-  handBack?: HandBack,
-): Promise<RequestOutcome> {
+): Promise<Clicked> {
   switch (read.kind) {
     case "refused":
       if (read.signed !== undefined) noteFacts(facts, read.signed);
-      return read.failure;
+      return noDesktop(read.failure);
     case "link":
       noteFacts(facts, { link: read.link });
       return handleClick(
@@ -1042,7 +1087,6 @@ async function ranClick(
         { via: "link", delivery: read.delivery },
         facts,
         click,
-        handBack,
       );
   }
 }
@@ -1065,8 +1109,7 @@ async function handleClick(
   arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
-  handBack: HandBack | undefined,
-): Promise<RequestOutcome> {
+): Promise<Clicked> {
   const { verb } = admitted;
   const session = admitted.session ?? null;
   noteFacts(facts, { verb, sid: session ?? "-", renderer: target.name });
@@ -1080,7 +1123,6 @@ async function handleClick(
       : {
           kind: "event",
           runEvidence,
-          handBack,
           event: {
             kind: "click",
             click: admitted,
@@ -1098,15 +1140,22 @@ async function handleClick(
   // [LAW:nothing-unseen] How long the click waited for the renderer's turn.
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
-  if (delivered.kind === "threw") return delivered.failure;
+  if (delivered.kind === "threw") return noDesktop(delivered.failure);
   // [LAW:no-silent-failure] A click whose changes did not land, or whose act
   // did not go, says so in its answer: by the first that did not. A skipped
   // act's cause is its changes' own outcome, which answers instead.
   const missed = delivered.settled.find(
     (outcome): outcome is Answering =>
-      outcome.kind !== "ok" && outcome.kind !== "skipped",
+      outcome.kind !== "ok" &&
+      outcome.kind !== "skipped" &&
+      outcome.kind !== "handed",
   );
-  return missed === undefined ? { kind: "ok" } : clickFailure(missed);
+  return {
+    outcome: missed === undefined ? { kind: "ok" } : clickFailure(missed),
+    desktop: delivered.settled.flatMap((outcome) =>
+      outcome.kind === "handed" ? [outcome.act] : [],
+    ),
+  };
 }
 
 type Answering = Exclude<EffectOutcome, { kind: "ok" | "skipped" }>;

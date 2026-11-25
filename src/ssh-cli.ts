@@ -48,7 +48,17 @@ export async function sshConfigFacts(
 }
 
 const USAGE = "Usage: cc-candybar ssh-config ALIAS\n";
-const ALIAS = /^[A-Za-z0-9._@-]+$/;
+
+// [LAW:parse-dont-validate] One word of ssh's config naming one host, as the
+// user types it after `ssh`: it names a stanza and rides in the forward's file
+// name and the URL the Mac's editor is opened with, so it is a host's own
+// spelling. No wildcard or negation (`*`, `?`, `!`), which would make a
+// pattern; no `@`, which ssh takes off before it matches a `Host`; no path
+// separator; and no leading `-` or `.`, which are an option and a path.
+type HostAlias = string & { readonly hostAlias: unique symbol };
+const HOST_ALIAS = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
+const hostAlias = (word: string): HostAlias | null =>
+  HOST_ALIAS.test(word) ? (word as HostAlias) : null;
 
 // `cc-candybar ssh-config ALIAS`: the lines that make a click on this
 // machine's bar, drawn in a terminal on another machine, reach this machine's
@@ -66,12 +76,9 @@ export function sshConfigPlan(
   args: readonly string[],
   asked: Asked<SshConfigFacts>,
 ): CliPlan {
-  const [alias, ...extra] = args;
-  // [LAW:parse-dont-validate] The alias is one word of ssh's config naming one
-  // host, and it becomes part of a file name and of the URL the Mac's editor is
-  // opened with, so it is the spelling a host name has: no wildcard or negation
-  // (`*`, `?`, `!`), which would make a pattern, and no path separator.
-  if (alias === undefined || extra.length > 0 || !ALIAS.test(alias)) {
+  const [word, ...extra] = args;
+  const alias = word === undefined ? null : hostAlias(word);
+  if (alias === null || extra.length > 0) {
     return { stdout: "", stderr: USAGE, code: 2 };
   }
   if (asked.kind === "failed") {
@@ -92,7 +99,10 @@ export function sshConfigPlan(
     "# it while an ssh connection to it is open.",
     `Host ${alias}`,
     "  StreamLocalBindUnlink yes",
-    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${remoteSocketName(facts.keyId, alias)} ${facts.socket}`,
+    // [LAW:one-source-of-truth] The name the person types is ssh's `%n`, so
+    // the host name rides in the forward's file name from the `Host` line
+    // alone, and a stanza renamed there names its forward by the new name.
+    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${remoteSocketName(facts.keyId, "%n")} ${facts.socket}`,
     "",
   ].join("\n");
   return { stdout: stanza, stderr: "", code: 0 };

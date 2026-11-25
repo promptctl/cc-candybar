@@ -121,7 +121,7 @@ test("the host signs the generated control and retains legacy authored click beh
     { text: CLOSE, link: signed },
     { text: "literal", link: TEST_SIGNER.signLink(copy) },
   ]);
-  const delivery = { kind: "forwarder", urlV: 2 } as const;
+  const delivery = { kind: "forwarder", urlV: 2, actsOn: "daemon" } as const;
   expect(parseClick(signed, delivery, TEST_SIGNER)).toMatchObject({
     kind: "link",
     click: {

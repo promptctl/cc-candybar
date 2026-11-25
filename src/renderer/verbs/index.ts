@@ -172,7 +172,11 @@ import {
   type ActionDecl,
   type SlashAction,
 } from "../../config/action";
-import type { ClickArrival } from "../../renderer-interface/click-arrival";
+import {
+  actsOn,
+  type ActsOn,
+  type ClickArrival,
+} from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
 import { BadVerbArgs, failureOf } from "../../daemon/foundations/verb-error";
@@ -271,12 +275,35 @@ export type VerbHandler = (args: readonly string[], ctx: ClickContext) => void;
 export { BadVerbArgs };
 
 // [LAW:single-enforcer] What a handler asks of the host: an act in its
-// click's turn, performed once the click's changes have landed.
+// click's turn, performed once the click's changes have landed. The one place
+// a copy or open is placed: wherever the click's arrival says the person sits
+// is where it acts, whichever verb asked it and whichever turn of the click
+// asks (a parked click asks in a later one).
 function ask(
-  ctx: Pick<VerbContext, "acts" | "effects">,
+  ctx: Pick<VerbContext, "acts" | "effects" | "arrival">,
   act: ActRequest,
 ): void {
-  ctx.acts.ask(ctx.effects, act);
+  ctx.acts.ask(ctx.effects, placed(actsOn(ctx.arrival), act));
+}
+
+function placed(on: ActsOn, act: ActRequest): ActRequest {
+  if (on === "daemon") return act;
+  switch (act.kind) {
+    case "copy":
+      return {
+        kind: "desktop",
+        session: act.session,
+        act: { kind: "copy", text: act.text },
+      };
+    case "open":
+      return {
+        kind: "desktop",
+        session: act.session,
+        act: { kind: "open", target: act.target },
+      };
+    default:
+      return act;
+  }
 }
 
 function globalAct(

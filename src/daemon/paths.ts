@@ -65,20 +65,20 @@ export function defaultSocketPath(): string {
 
 // [LAW:one-source-of-truth] Where a remote machine's daemon socket lands on
 // the machine the user sits at. A link names the key of the daemon that signed
-// it (link-signer.ts), and the URL handler app opens `<key id>.sock` in this
-// directory (under the home; the directory and the suffix are mirrored in
-// url-handler/main.swift) when a link of another machine's is clicked. An ssh
-// `LocalForward` puts the socket there, named by the remote's key so two
-// remotes never share one, whatever they are called. The name also carries the
-// `Host` the user's ssh config reaches that remote by, after a separator: a
-// click's open act is carried out on the Mac, whose editor reaches the remote's
-// files by that name and which no daemon on the remote could otherwise learn.
+// it (link-signer.ts), and the URL handler app opens `<key id>.<host>.sock` in
+// this directory (under the home; the directory, the separator and the suffix
+// are mirrored in url-handler/main.swift) when a link of another machine's is
+// clicked. An ssh `LocalForward` puts the socket there, named by the remote's
+// key so two remotes never share one, whatever they are called. The name also
+// carries the host the user's ssh config reaches that remote by: a click's open
+// act is carried out on the Mac, whose editor reaches the remote's files by
+// that name and which no daemon on the remote could otherwise learn.
 export const REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote";
 export const REMOTE_SOCKET_SUFFIX = ".sock";
-export const REMOTE_SOCKET_ALIAS_SEPARATOR = ".";
+export const REMOTE_SOCKET_HOST_SEPARATOR = ".";
 
-export function remoteSocketName(keyId: string, alias: string): string {
-  return `${keyId}${REMOTE_SOCKET_ALIAS_SEPARATOR}${alias}${REMOTE_SOCKET_SUFFIX}`;
+export function remoteSocketName(keyId: string, host: string): string {
+  return `${keyId}${REMOTE_SOCKET_HOST_SEPARATOR}${host}${REMOTE_SOCKET_SUFFIX}`;
 }
 
 export function remoteSocketDir(home: string): string {

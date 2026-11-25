@@ -384,12 +384,28 @@ export interface RunRefresh {
   readonly folder: string;
 }
 
+// What the URL handler is asked to do on the desktop the person sits at: the
+// text to copy, or a path on the daemon's machine to open there. The wire
+// spells it (src/daemon/foundations/protocol.ts), and the handler reads it.
+export type DesktopAct =
+  | { readonly kind: "copy"; readonly text: string }
+  | { readonly kind: "open"; readonly target: string };
+
 // [LAW:types-are-the-program] What a click asks done in the
 // world, each named by its operation and carrying exactly what that operation
 // needs: no free-form command, so the safety of a slash line or a run is the
 // type's. An act's session is the bar its failure shows on; a copy or an open
 // a click names no session for has none.
 export type Act = { readonly id: EffectId } & (
+  | {
+      // A copy or open for the desktop the person sits at, which is not the
+      // daemon's machine when the link came down an ssh forward: the host
+      // performs nothing, and the click's verdict hands it to the URL handler
+      // there.
+      readonly kind: "desktop";
+      readonly session: SessionId | null;
+      readonly act: DesktopAct;
+    }
   | {
       readonly kind: "copy";
       readonly session: SessionId | null;

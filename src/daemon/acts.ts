@@ -4,7 +4,11 @@
 // what it did, or why it did not, said once on its act line and handed back as
 // the act's `effect-done`.
 
-import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
+import type {
+  Act,
+  DesktopAct,
+  EffectOutcome,
+} from "../renderer-interface/interface.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -13,7 +17,6 @@ import {
   type TypeResult,
 } from "../claude-input/typing.js";
 import type { SessionId } from "./foundations/session-id.js";
-import type { ClientAct } from "./foundations/protocol.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
@@ -61,6 +64,8 @@ function nameOf(act: HostAct): string {
     case "copy":
     case "open":
       return act.kind;
+    case "desktop":
+      return `${act.act.kind} on the desktop`;
     case "type-slash":
       return act.line;
     case "run":
@@ -68,32 +73,24 @@ function nameOf(act: HostAct): string {
   }
 }
 
-// [LAW:types-are-the-program] How an act ended: its outcome, and what its
-// line says of it — what it did, or why it did not.
-type Done = RunEnd;
+// [LAW:types-are-the-program] How the host settles an act: as the renderer
+// hears it, or as left to the desktop the person sits at, which only the
+// click's own verdict can carry. The renderer hears it as done.
+export type HostOutcome =
+  | EffectOutcome
+  | { readonly kind: "handed"; readonly act: DesktopAct };
+
+// How an act ended: its outcome, and what its line says of it — what it did,
+// or why it did not.
+interface Done {
+  readonly outcome: HostOutcome;
+  readonly said: string;
+}
 const did = (said: string): Done => ({ outcome: { kind: "ok" }, said });
 const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
   outcome,
   said: outcome.reason,
 });
-
-// Where a click's acts for the person's own machine go: the click's verdict.
-export type HandBack = (act: ClientAct) => void;
-
-// Whether the act was one for the person's machine, and so handed back.
-function handedBack(act: HostAct, handBack: HandBack): boolean {
-  switch (act.kind) {
-    case "copy":
-      handBack({ kind: "copy", text: act.text });
-      return true;
-    case "open":
-      handBack({ kind: "open", target: act.target });
-      return true;
-    case "type-slash":
-    case "run":
-      return false;
-  }
-}
 
 export class Acts {
   // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
@@ -109,6 +106,12 @@ export class Acts {
       (pane) => `acts in ${pane}`,
     );
     this.performers = {
+      // [LAW:effects-at-boundaries] Nothing happens on this machine: the act
+      // goes back to the click that asked it, as the outcome's data.
+      desktop: async (act) => ({
+        outcome: { kind: "handed", act: act.act },
+        said: "left to the URL handler on the desktop the person sits at",
+      }),
       copy: (act) =>
         clickLaunch(
           deps.programsFor(act.session).launch,
@@ -171,20 +174,20 @@ export class Acts {
 
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
   // throw is classified once, here: a refusal the user can act on, the
-  // daemon's close, or a failure. A click that arrived through an ssh forward
-  // has a `handBack`: its copy and open are for the machine the person sits
-  // at, so they are handed to the URL handler there, never run on this one.
-  async perform(act: HostAct, handBack?: HandBack): Promise<EffectOutcome> {
+  // daemon's close, or a failure.
+  async perform(act: HostAct): Promise<HostOutcome> {
     const { outcome, said } = this.deps.closing()
       ? not({ kind: "closing", reason: "the daemon is closing" })
-      : handBack !== undefined && handedBack(act, handBack)
-        ? did("handed to the URL handler on the machine the click came from")
-        : await this.performed(act);
+      : await this.performed(act);
     this.deps.log(
-      outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
+      outcome.kind === "ok" ||
+        outcome.kind === "handed" ||
+        outcome.kind === "closing"
+        ? "info"
+        : "warn",
       `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${nameOf(act)}: ${said}`,
     );
-    return outcome.kind === "ok"
+    return outcome.kind === "ok" || outcome.kind === "handed"
       ? outcome
       : { ...outcome, reason: `${nameOf(act)}: ${outcome.reason}` };
   }

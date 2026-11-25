@@ -22,7 +22,6 @@ import {
   encodeFrame,
   encodeJsonFrame,
   sendOne,
-  type ClientAct,
   type Request,
   type Response,
 } from "../src/daemon/foundations/protocol";
@@ -30,6 +29,7 @@ import {
   replyOf,
   type HandledRequest,
   type Reply,
+  type Told,
 } from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -38,6 +38,7 @@ import { LANE_NAMES } from "../src/config/lanes";
 import { renderFailed } from "../src/daemon/foundations/render-answers";
 import { RuntimeStats } from "../src/daemon/stats";
 import { memoryConnection } from "./helpers/memory-connection";
+import type { DesktopAct } from "../src/renderer-interface/interface";
 import { openedOn, type Opened } from "./helpers/opened-connection";
 import { until } from "../scripts/lib/until";
 
@@ -69,22 +70,23 @@ const replyWith = (
   ),
 });
 
-// A url frame's answer: its verdict, and when its click lands. A frame whose
-// writer carries out acts (`handed`) has its verdict written once its click
-// has landed, with those acts in it.
+// A url frame's answer: when its writer is told, and what its click came to
+// once it lands. A writer told `landed` hears that, with the acts it carries
+// out in it.
+const FORGED: Response = {
+  ok: false,
+  error: "forged",
+  code: "BAD_REQUEST",
+  daemonV: 3,
+};
 const urlAnswer = (
   landed: Promise<void> = Promise.resolve(),
-  awaitsVerdict = false,
-  handed: readonly ClientAct[] | null = null,
+  told: Told = { when: "never" },
+  came: Response = { ok: true, output: "" },
 ): HandledRequest => ({
   kind: "url",
-  awaitsVerdict,
-  handsBack: handed !== null,
-  verdict:
-    handed === null
-      ? { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 }
-      : { ok: true, output: "" },
-  land: () => landed.then(() => handed ?? []),
+  told,
+  land: () => landed.then(() => came),
 });
 
 // A memory stream runs on process ticks and microtasks, which all drain before
@@ -321,7 +323,9 @@ describe("a connection over a stream", () => {
     const ids = requests.map((r) => r.accepted().id);
     expect(new Set(ids).size).toBe(2);
     expect(clients.map((c) => c.received)).toEqual(
-      ids.map((request) => [expect.objectContaining({ code: "TIMEOUT", request })]),
+      ids.map((request) => [
+        expect.objectContaining({ code: "TIMEOUT", request }),
+      ]),
     );
   });
 
@@ -373,16 +377,28 @@ describe("a connection over a stream", () => {
   test("a url frame whose writer carries out acts is told once its click has landed, with the acts", async () => {
     let land = () => {};
     const landed = new Promise<void>((done) => (land = done));
-    const handed: ClientAct[] = [
+    const handed: readonly DesktopAct[] = [
       { kind: "copy", text: "/work/repo" },
       { kind: "open", target: "/work/repo" },
     ];
     const daemon = standIn({
-      handle: async () => urlAnswer(landed, true, handed),
+      handle: async () =>
+        urlAnswer(
+          landed,
+          { when: "landed" },
+          { ok: true, output: "", desktopActs: handed },
+        ),
     });
     const { client, received } = open(daemon);
     client.allowHalfOpen = true;
-    client.write(encodeFrame({ kind: "url", urlV: 3, url: "cc-candybar://x" }));
+    client.write(
+      encodeFrame({
+        kind: "url",
+        urlV: 2,
+        url: "cc-candybar://x",
+        actsOn: "desktop",
+      }),
+    );
     await settled();
     const before = [...received];
     land();
@@ -391,7 +407,7 @@ describe("a connection over a stream", () => {
     await settled();
     expect({ before, received, inFlight: daemon.stats.inFlight }).toEqual({
       before: [],
-      received: [{ ok: true, output: "", clientActs: handed }],
+      received: [{ ok: true, output: "", desktopActs: handed }],
       inFlight: 0,
     });
   });
@@ -413,7 +429,7 @@ describe("a connection over a stream", () => {
     await settled();
     client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     await settled();
-    request.answer(urlAnswer(landed, true));
+    request.answer(urlAnswer(landed, { when: "at-once", verdict: FORGED }));
     await settled();
     land();
     await settled();
@@ -444,7 +460,7 @@ describe("a connection over a stream", () => {
     const threw: Array<{ task: string; thrown: unknown }> = [];
     const daemon = standIn({
       handle: async () => ({
-        ...urlAnswer(Promise.resolve(), true),
+        ...urlAnswer(Promise.resolve(), { when: "at-once", verdict: FORGED }),
         land: () => {
           throw new Error("the click broke as it began");
         },
@@ -499,7 +515,7 @@ describe("a connection over a stream", () => {
     const { client, received } = open(daemon);
     client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     await settled();
-    request.answer(urlAnswer(landed, true));
+    request.answer(urlAnswer(landed, { when: "at-once", verdict: FORGED }));
     await settled();
     expect(received).toEqual([
       { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
@@ -615,7 +631,11 @@ describe("a connection over a stream", () => {
     const { client, received, ended } = open(standIn({ handle }));
     client.write(Buffer.concat([encodeFrame(STATS), encodeFrame(STATS)]));
     await settled();
-    expect({ handled: handle.mock.calls.length, received, ended: ended() }).toEqual({
+    expect({
+      handled: handle.mock.calls.length,
+      received,
+      ended: ended(),
+    }).toEqual({
       handled: 1,
       received: [ANSWER],
       ended: true,
@@ -722,7 +742,11 @@ describe("a connection over a stream", () => {
     const { send, received, ended } = open(daemon);
     send(STATS);
     await settled();
-    expect({ received, ended: ended(), inFlight: daemon.stats.inFlight }).toEqual({
+    expect({
+      received,
+      ended: ended(),
+      inFlight: daemon.stats.inFlight,
+    }).toEqual({
       received: [
         expect.objectContaining({
           ok: false,
@@ -1047,13 +1071,20 @@ describe("a connection over a stream", () => {
       const confirmed = new Map<string, boolean>();
       const frame = (name: string): void => {
         const resp: Response = { ok: true, output: name.repeat(128 * 1024) };
-        subscriptions[0]!.frame(JSON.stringify(resp), (ok) => confirmed.set(name, ok));
+        subscriptions[0]!.frame(JSON.stringify(resp), (ok) =>
+          confirmed.set(name, ok),
+        );
       };
       ["a", "b", "c", "d"].forEach(frame);
       await settled();
       client.resume();
       await until(() => received.length >= 2, "the newest frame");
-      expect(Object.fromEntries(confirmed)).toEqual({ a: true, b: false, c: false, d: true });
+      expect(Object.fromEntries(confirmed)).toEqual({
+        a: true,
+        b: false,
+        c: false,
+        d: true,
+      });
 
       expect(received.map((r) => "output" in r && r.output[0])).toEqual([
         "a",

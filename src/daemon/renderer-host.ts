@@ -71,7 +71,7 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
-import { outlives, type HandBack, type HostAct } from "./acts.js";
+import { outlives, type HostAct, type HostOutcome } from "./acts.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
@@ -89,7 +89,7 @@ import type { RendererName } from "./foundations/renderer-name.js";
 // it returned: its changes, and the acts over in the turn, in the order they
 // were returned.
 export type HostTurn = TakenTurn & {
-  readonly settled: readonly EffectOutcome[];
+  readonly settled: readonly HostOutcome[];
 };
 type SettlePresentation = (
   effect: Pick<Present, "id" | "session" | "displayedEvents">,
@@ -128,9 +128,6 @@ interface MadeEvent<E = Event> {
   readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
-  // Host-only data: where the click's copy and open acts go when the person
-  // is on another machine than this daemon.
-  readonly handBack?: HandBack;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
 
@@ -143,10 +140,7 @@ export interface HostWorld {
     request: RequestedRun,
     captures: readonly RunEvidence[],
   ) => Asked<RunAct>;
-  readonly perform: (
-    act: HostAct,
-    handBack?: HandBack,
-  ) => Promise<EffectOutcome>;
+  readonly perform: (act: HostAct) => Promise<HostOutcome>;
   readonly stateDir: string;
   readonly configs: RendererConfigs;
   readonly writeConfigFile?: WriteConfigFile;
@@ -215,7 +209,7 @@ const THREW_AS = {
 interface Slotted {
   readonly received: boolean;
   readonly turn: TakenTurn;
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 }
 
 type ConfigDelivery =
@@ -229,7 +223,7 @@ type ConfigFollowing =
   | { readonly kind: "failed"; readonly failure: Failure };
 
 type ConfigTurn = {
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 } & (
   | { readonly kind: "received"; readonly failure: Failure | null }
   | { readonly kind: "unreceived"; readonly failure: Failure }
@@ -419,7 +413,6 @@ export function rendererHost(
     input: EventInput,
     queuedMs: number,
     captures: readonly RunEvidence[] = [],
-    handBack?: HandBack,
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -498,7 +491,6 @@ export function rendererHost(
       output,
       captures,
       receipt,
-      handBack,
     );
     return {
       received: true,
@@ -517,9 +509,8 @@ export function rendererHost(
     output: RendererOutput,
     captures: readonly RunEvidence[],
     receipt: SettlePresentation,
-    handBack: HandBack | undefined,
   ): Promise<{
-    readonly settled: Promise<readonly EffectOutcome[]>;
+    readonly settled: Promise<readonly HostOutcome[]>;
     readonly configFailure: Failure | null;
   }> => {
     const changes = output.effects.filter(
@@ -543,7 +534,7 @@ export function rendererHost(
       receipt,
     );
     let configFailure: Failure | null = null;
-    const waited: Array<Promise<readonly EffectOutcome[]>> = [];
+    const waited: Array<Promise<readonly HostOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
     if (followed.kind === "failed") {
       if (
@@ -567,11 +558,11 @@ export function rendererHost(
             world.configs.landed(landed.files),
           ) ?? [])
         : [];
-    const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];
+    const reloaded: Array<Promise<readonly HostOutcome[]>> = [];
     for (const origin of moved)
       reloaded.push((await configInSlot(origin, "config-landed")).settled);
 
-    const owed: Array<Promise<EffectOutcome>> = [];
+    const owed: Array<Promise<HostOutcome>> = [];
     const acts: HostAct[] = [];
     for (const effect of output.effects) {
       if (effect.kind === "present") {
@@ -606,14 +597,14 @@ export function rendererHost(
       const acted =
         configOutcome.kind === "ok"
           ? before
-              .then(() => world.perform(act, handBack))
+              .then(() => world.perform(act))
               .catch(
                 (error: unknown): EffectOutcome => ({
                   kind: "failed",
                   reason: failureOf(error).detail,
                 }),
               )
-          : Promise.resolve<EffectOutcome>(
+          : Promise.resolve<HostOutcome>(
               configOutcome.kind === "closing"
                 ? configOutcome
                 : {
@@ -856,7 +847,7 @@ export function rendererHost(
     record(input.event, [["why", why]], turn);
     // A `config` turn that threw failed whatever waited on it, as its own
     // turn would have: a waiting click's bad request is still the user's.
-    const threw: readonly EffectOutcome[] =
+    const threw: readonly HostOutcome[] =
       turn.kind === "threw"
         ? [
             {
@@ -917,11 +908,15 @@ export function rendererHost(
         ),
       );
     };
-  // An act's, once it ended: its `effect-done` joins the mailbox.
+  // An act's, once it ended: its `effect-done` joins the mailbox. The renderer
+  // hears an act left to the desktop as done; the act itself stays in the
+  // returned outcome for the click that asked it.
   const settle = async (
     effect: HostAct,
-    outcome: EffectOutcome,
-  ): Promise<EffectOutcome> => {
+    done: HostOutcome,
+  ): Promise<HostOutcome> => {
+    const outcome: EffectOutcome =
+      done.kind === "handed" ? { kind: "ok" } : done;
     const failed =
       outcome.kind === "failed" || outcome.kind === "refused"
         ? outcome.reason
@@ -942,7 +937,7 @@ export function rendererHost(
       delivered.failure.kind === "down"
     )
       unheard(failed);
-    return outcome;
+    return done;
   };
   // A change's or a refused present's, in the slot of the turn that
   // returned it: settled once that `effect-done` turn's own acts have.
@@ -1047,7 +1042,6 @@ export function rendererHost(
           stamped(made),
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : undefined,
-          made.event.kind === "click" ? made.handBack : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         return { event: made.event, slotted };
@@ -1071,19 +1065,31 @@ export function rendererHost(
     make: () => Made<BeforeDiscovery | Command>,
     at: Place = "last",
     click: SessionId | null = null,
+    claimed = false,
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
     const { event, slotted } = await throughSlot(make, at, click);
-    return {
-      event,
-      turn: { ...slotted.turn, settled: await slotted.settled },
-    };
+    const settled = await slotted.settled;
+    if (!claimed) stranded(settled);
+    return { event, turn: { ...slotted.turn, settled } };
+  };
+  // [LAW:no-silent-failure] An act left to the desktop is carried by the
+  // verdict of the click that asked it, which answers at a turn's end. One
+  // settled where no click waits (a click parked until its config came, then
+  // resumed by that config's turn) has no verdict to ride, so it is said on
+  // every bar rather than dropped, and never performed on this machine.
+  const stranded = (settled: readonly HostOutcome[]): void => {
+    for (const outcome of settled)
+      if (outcome.kind === "handed")
+        world.unheard(
+          `a ${outcome.act.kind} for the desktop the person sits at had no click waiting to carry it out`,
+        );
   };
   const answer = async (make: () => Made): Promise<HostTurn> =>
     (await taken(make)).turn;
   const answerClick = async (
     session: SessionId | null,
     make: () => Made,
-  ): Promise<HostTurn> => (await taken(make, "last", session)).turn;
+  ): Promise<HostTurn> => (await taken(make, "last", session, true)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
   const recorded =
@@ -1174,7 +1180,7 @@ export function rendererHost(
               },
         "scheduled",
       );
-      unawaited("due acts", () => settled);
+      unawaited("due acts", async () => stranded(await settled));
       record(event, [], turn);
       return turn;
     },

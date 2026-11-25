@@ -1,4 +1,7 @@
-import type { RequestId } from "../../renderer-interface/interface.js";
+import type {
+  DesktopAct,
+  RequestId,
+} from "../../renderer-interface/interface.js";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import type { RenderHookData } from "../../utils/claude";
@@ -393,19 +396,12 @@ export interface ClickRequest {
 // scripts/check-protocol.mjs.
 export const URL_FRAME_KIND = "url";
 export const URL_FRAME_VERSION = 2;
-// The version of a link the app routed through an ssh forward: the daemon on
-// the far end acts on the machine the person is not at, so the app is handed
-// the copy and open acts of the click to carry out itself (`ClientAct`).
-// Local links keep URL_FRAME_VERSION, so a daemon older than the app still
-// opens every link the app's own machine drew.
-export const URL_FRAME_HAND_BACK_VERSION = 3;
 // Every version a shipped forwarder has written: the ones before the current,
 // then the current itself, so a bump cannot refuse the frame it ships.
 const EARLIER_URL_FRAME_VERSIONS: readonly number[] = [1];
 export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
   ...EARLIER_URL_FRAME_VERSIONS,
   URL_FRAME_VERSION,
-  URL_FRAME_HAND_BACK_VERSION,
 ]);
 // [LAW:dataflow-not-control-flow] Whether the frame's writer reads the host's
 // verdict on its link before it hangs up: every version from 2 does, and one
@@ -414,24 +410,19 @@ export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
 export const awaitsVerdict = (urlV: unknown): boolean =>
   typeof urlV === "number" && urlV >= 2;
 
-// [LAW:dataflow-not-control-flow] Whether the frame's writer carries out the
-// click's copy and open acts itself: its verdict is then written once the click
-// has landed, and carries the acts the daemon did not perform.
-export const handsActsBack = (urlV: unknown): boolean =>
-  typeof urlV === "number" && urlV >= URL_FRAME_HAND_BACK_VERSION;
-
-// [LAW:types-are-the-program] What the URL handler is asked to do on the
-// machine the person sits at: the acts of a click that arrived through an ssh
-// forward, as the writer of a version-3 frame reads them in its verdict. An
-// open's target is a path on the machine the daemon is on.
-export type ClientAct =
-  | { readonly kind: "copy"; readonly text: string }
-  | { readonly kind: "open"; readonly target: string };
+// [LAW:types-are-the-program] Where a link's copy and open act, as its writer
+// says: `actsOn` is absent for a link of the writer's own machine, and
+// ACTS_ON_DESKTOP for one it routed through an ssh forward, whose copy and open
+// the writer carries out itself, so the daemon hands them back in its verdict
+// (`desktopActs`) instead of performing them. A daemon that does not know the
+// field ignores it, so every other link of a remote bar still opens.
+export const ACTS_ON_DESKTOP = "desktop";
 
 export interface UrlFrame {
   kind: typeof URL_FRAME_KIND;
   urlV: number;
   url: string;
+  actsOn?: typeof ACTS_ON_DESKTOP;
 }
 
 // [LAW:parse-dont-validate] What came in over the wire, classified once, by
@@ -539,13 +530,11 @@ export type Request =
 
 export type Response =
   // A frame pushed to the pane lane also carries where a pointer can act on it.
-  | {
-      ok: true;
-      output: string;
-      hits?: HitMap;
-      // A version-3 url frame's verdict: what the click asked of the writer.
-      clientActs?: readonly ClientAct[];
-    }
+  | { ok: true; output: string; hits?: HitMap }
+  // The verdict of a url frame whose writer carries out the click's copy and
+  // open itself (`ACTS_ON_DESKTOP`), in the order asked. An empty list is a
+  // click that asked none; its absence is a daemon that hands none back.
+  | { ok: true; output: string; desktopActs: readonly DesktopAct[] }
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }
