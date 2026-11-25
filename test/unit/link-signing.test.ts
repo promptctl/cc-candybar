@@ -26,7 +26,11 @@ import { actionTarget, type DrawnLink } from "../../src/render/drawn-link";
 import { rendererNameOf } from "../../src/daemon/foundations/renderer-name";
 import { TEST_LINK_KEY, TEST_SIGNER } from "../helpers/link-signer";
 
-const FORWARDED = { kind: "forwarder", urlV: 2 } as const;
+const FORWARDED = {
+  kind: "forwarder",
+  urlV: 2,
+  actsOn: "daemon",
+} as const;
 const CLI = { kind: "cli" } as const;
 const COPY = effectsUrl([{ verb: VERB_COPY, args: ["rm -rf ~"] }]);
 

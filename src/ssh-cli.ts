@@ -5,6 +5,7 @@ import {
 } from "./daemon/client-transport.js";
 import { fetchStats } from "./daemon/client-stats.js";
 import {
+  HOST_ALIAS_MAX_CHARS,
   hostAliasOf,
   REMOTE_SOCKET_DIR_UNDER_HOME,
   REMOTE_SOCKET_HOST_SEPARATOR,
@@ -78,7 +79,7 @@ export function sshConfigPlan(
   if (alias === null) {
     return {
       stdout: "",
-      stderr: `ssh-config: ${JSON.stringify(word)} is not an alias this command can write: spell it with letters, digits, _, . and -, starting with a letter, digit or _\n${USAGE}`,
+      stderr: `ssh-config: ${JSON.stringify(word)} is not an alias this command can write: spell it with letters, digits, _, . and -, starting with a letter, digit or _, in at most ${HOST_ALIAS_MAX_CHARS} characters\n${USAGE}`,
       code: 2,
     };
   }

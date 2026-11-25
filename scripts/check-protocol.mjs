@@ -218,9 +218,19 @@ const CHECKS = [
   // back: a drift in any of these makes a forwarded click run on the daemon's
   // machine or read as an older daemon, with every test passing.
   {
-    label: "where the URL handler's frame asks for acts",
+    label: "where the URL handler's frame asks for acts to go: the daemon",
+    ts: lit(TS_PROTOCOL, /export const ACTS_ON_DAEMON = "([^"]+)";/),
+    swift: lit(SWIFT_WIRE, /^let ACTS_ON_DAEMON = "([^"]+)"$/m),
+  },
+  {
+    label: "where the URL handler's frame asks for acts to go: the desktop",
     ts: lit(TS_PROTOCOL, /export const ACTS_ON_DESKTOP = "([^"]+)";/),
     swift: lit(SWIFT_WIRE, /^let ACTS_ON_DESKTOP = "([^"]+)"$/m),
+  },
+  {
+    label: "the code a refused link is answered with, as the URL handler reads it",
+    ts: lit(TS_PROTOCOL, /^ {2}\| "(BAD_REQUEST)"$/m),
+    swift: lit(SWIFT_WIRE, /^let ERROR_CODE_BAD_REQUEST = "([^"]+)"$/m),
   },
   {
     label: "the verdict's key for the acts a click asked",
@@ -262,6 +272,11 @@ const CHECKS = [
     label: "the separator before a forward's host alias, as the URL handler reads it",
     ts: lit(TS_PATHS, /REMOTE_SOCKET_HOST_SEPARATOR = "([^"]+)"/),
     swift: lit(SWIFT_WIRE, /^let REMOTE_SOCKET_HOST_SEPARATOR = "([^"]+)"$/m),
+  },
+  {
+    label: "the longest a host alias is, as the URL handler reads it",
+    ts: num(TS_PATHS, /export const HOST_ALIAS_MAX_CHARS = ([\d\s*]+);/),
+    swift: num(SWIFT_WIRE, /^let HOST_ALIAS_MAX_CHARS = ([\d\s*]+)$/m),
   },
   {
     label: "the spelling a host alias starts in, as the URL handler reads it",

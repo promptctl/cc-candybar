@@ -5,7 +5,7 @@
 // the act's `effect-done`.
 
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
-import type { DesktopAct } from "./foundations/protocol.js";
+import { ACTS_ON_DESKTOP, type DesktopAct } from "./foundations/protocol.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -33,23 +33,25 @@ export type HostAct = Exclude<Act, { kind: "approve-repo" | "run" }> | RunAct;
 type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 
 // [LAW:types-are-the-program] How an act ended as the host holds it: what its
-// renderer is told, or that the act was left to the machine its click's writer
-// runs on, which is the act itself, to be handed to that writer. Its renderer
-// is told `ok`: the daemon's part is done.
-export interface Left {
-  readonly kind: "left";
+// renderer is told, or that the act is the desktop's to carry out, which is the
+// act itself, to be handed to the URL handler that forwarded its click. Its
+// renderer is told `ok`: the daemon's part is done.
+export interface ForDesktop {
+  readonly kind: "desktop";
   readonly act: DesktopAct;
 }
-export type HostOutcome = EffectOutcome | Left;
+export type HostOutcome = EffectOutcome | ForDesktop;
 
-// The act a click's writer carries out, when the act says it does; every other
-// act is only ever performed here.
+// The act the desktop carries out, when the act says it does; every other act
+// is only ever performed here.
 export function desktopActOf(act: HostAct): DesktopAct | null {
   switch (act.kind) {
     case "copy":
-      return act.forWriter === true ? { kind: "copy", text: act.text } : null;
+      return act.actsOn === ACTS_ON_DESKTOP
+        ? { kind: "copy", text: act.text }
+        : null;
     case "open":
-      return act.forWriter === true
+      return act.actsOn === ACTS_ON_DESKTOP
         ? { kind: "open", target: act.target }
         : null;
     case "type-slash":
@@ -104,7 +106,7 @@ const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
 });
 
 // [LAW:single-enforcer] An act's line, in the one format, whoever says it: what
-// it did or why it did not, or that it was left to its writer's machine.
+// it did or why it did not, or that it was handed to the desktop.
 export const actLine = (
   act: HostAct,
   outcome: HostOutcome["kind"],

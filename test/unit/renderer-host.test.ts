@@ -109,6 +109,7 @@ const offeredEffect: Effect = {
   session: null,
   id: 1 as EffectId,
   text: "an unrelated effect",
+  actsOn: "daemon",
 };
 const offeredWrite: StoreWrite = {
   kind: "put",
@@ -552,12 +553,14 @@ test("a failed record and a rejected act leave the answer and both effect acknow
                       id: 1 as never,
                       session: null,
                       text: "first",
+                      actsOn: "daemon",
                     },
                     {
                       kind: "copy",
                       id: 2 as never,
                       session: null,
                       text: "second",
+                      actsOn: "daemon",
                     },
                   ]
                 : [],
@@ -767,6 +770,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
                     id: 1 as EffectId,
                     session: null,
                     text: "work completed",
+                    actsOn: "daemon",
                   },
                 ],
               };
@@ -978,7 +982,15 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
           ...answered(),
           effects:
             input.event.kind === "due"
-              ? [{ kind: "copy", id: 1 as never, session: null, text: "x" }]
+              ? [
+                  {
+                    kind: "copy",
+                    id: 1 as never,
+                    session: null,
+                    text: "x",
+                    actsOn: "daemon",
+                  },
+                ]
               : [],
           wake: (read.mono / 1000 + 1) as Tick,
         }),

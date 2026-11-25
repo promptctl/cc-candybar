@@ -598,19 +598,17 @@ export function rendererHost(
       } else acts.push(effect);
     }
 
-    // [LAW:single-enforcer] Where an act runs is decided here, where the turn
-    // that asked it is landed: a copy or open that says its click's writer
-    // carries it out is left to that writer, as the outcome the click's answer
-    // is made of, and every other act is the world's.
-    // [LAW:nothing-unseen] A left act is said on its act line as any act is.
+    // [LAW:single-enforcer] An act is carried out here, where the turn that
+    // asked it is landed: one that says the desktop carries it out is handed to
+    // the desktop, as the outcome its click's answer is made of, and every other
+    // act is the world's.
+    // [LAW:nothing-unseen] An act handed to the desktop is said on its act line
+    // as any act is.
     const performed = (act: HostAct): Promise<HostOutcome> => {
-      const left = desktopActOf(act);
-      if (left === null) return world.perform(act);
-      log(
-        "info",
-        actLine(act, "left", "left to the machine the click's writer runs on"),
-      );
-      return Promise.resolve({ kind: "left", act: left });
+      const desktop = desktopActOf(act);
+      if (desktop === null) return world.perform(act);
+      log("info", actLine(act, "desktop", "handed to the desktop"));
+      return Promise.resolve({ kind: "desktop", act: desktop });
     };
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
@@ -933,10 +931,10 @@ export function rendererHost(
     effect: HostAct,
     ended: HostOutcome,
   ): Promise<HostOutcome> => {
-    // The renderer is told `ok` of an act left to its click's writer: the
-    // daemon's part of it is done.
+    // The renderer is told `ok` of an act handed to the desktop: the daemon's
+    // part of it is done. What the desktop then does is its own to tell.
     const outcome: EffectOutcome =
-      ended.kind === "left" ? { kind: "ok" } : ended;
+      ended.kind === "desktop" ? { kind: "ok" } : ended;
     const failed =
       outcome.kind === "failed" || outcome.kind === "refused"
         ? outcome.reason

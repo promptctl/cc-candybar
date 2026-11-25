@@ -22,6 +22,7 @@ import {
   ENVIRONMENT_NEEDED,
   UNKNOWN_REQUEST_KIND,
   URL_FRAME_VERSIONS,
+  ACTS_ON_DAEMON,
   ACTS_ON_DESKTOP,
   awaitsVerdict,
   type DesktopAct,
@@ -46,6 +47,7 @@ import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererHost } from "./renderer-host.js";
+import type { HostOutcome } from "./acts.js";
 import {
   badRequest,
   ClickAbandoned,
@@ -58,7 +60,7 @@ import { elapsedMs, spanMs } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import {
-  actsOnDesktop,
+  deliveredActsOn,
   type ClickArrival,
 } from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
@@ -965,21 +967,19 @@ function readUrlFrame(
     };
   // [LAW:parse-dont-validate] Where the click's copy and open act, read once
   // here: a place this daemon does not know is refused, and so is a frame whose
-  // writer reads no verdict to carry the acts in.
-  const { actsOn } = frame;
-  if (actsOn === undefined)
-    return parseClick(url, { kind: "forwarder", urlV }, links);
-  if (actsOn !== ACTS_ON_DESKTOP)
+  // writer reads no verdict to carry acts on the desktop in.
+  const actsOn: unknown = frame.actsOn ?? ACTS_ON_DAEMON;
+  if (actsOn !== ACTS_ON_DAEMON && actsOn !== ACTS_ON_DESKTOP)
     return {
       kind: "refused",
-      problem: `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DESKTOP})`,
+      problem: `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DAEMON}, ${ACTS_ON_DESKTOP})`,
     };
-  if (!awaitsVerdict(urlV))
+  if (actsOn === ACTS_ON_DESKTOP && !awaitsVerdict(urlV))
     return {
       kind: "refused",
       problem: `a version ${urlV} frame reads no verdict, so the acts it asks on the desktop cannot reach it`,
     };
-  return parseClick(url, { kind: "desktop-forwarder", urlV }, links);
+  return parseClick(url, { kind: "forwarder", urlV, actsOn }, links);
 }
 
 // [LAW:no-silent-failure] The URL handler's frame, answered with its verdict
@@ -995,20 +995,20 @@ function urlClick(
   clientLeft: () => boolean,
 ): HandledRequest {
   const read = routeClick(parts, readUrlFrame(frame, parts.linkSigner));
-  const onDesktop =
-    read.kind === "link" &&
-    actsOnDesktop({ via: "link", delivery: read.delivery });
-  // [LAW:nothing-unseen] Zero acts left and no count are different facts: a
-  // click that asked its acts on the desktop says how many it left.
+  const actsOn =
+    read.kind === "link" ? deliveredActsOn(read.delivery) : ACTS_ON_DAEMON;
+  const onDesktop = actsOn === ACTS_ON_DESKTOP;
+  // [LAW:nothing-unseen] Where the click's acts went, and how many went to the
+  // desktop: zero acts and no count are different facts.
   const land = (): Promise<Clicked> =>
     clickEvent(parts, accepted, timedOut, clientLeft, async (facts, click) => {
       noteFacts(facts, {
-        via: onDesktop ? "desktop-forwarder" : "forwarder",
+        via: "forwarder",
         urlV: String(frame.urlV),
+        actsOn,
       });
       const clicked = await ranClick(parts, read, facts, click);
-      if (onDesktop)
-        noteFacts(facts, { desktop: String(clicked.desktop.length) });
+      noteFacts(facts, { desktop: String(clicked.desktop.length) });
       return clicked;
     });
   return {
@@ -1154,21 +1154,17 @@ async function handleClick(
   // [LAW:nothing-unseen] How long the click waited for the renderer's turn.
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
-  // [LAW:dataflow-not-control-flow] The acts the turn left to its writer's
-  // machine, in the order asked, leave with the click however it ended.
-  const desktop = delivered.settled.flatMap((outcome) =>
-    outcome.kind === "left" ? [outcome.act] : [],
-  );
+  // The acts the turn handed to the desktop, in the order asked, leave with
+  // the click however it ended; what is left of its outcomes answers it.
+  const { desktop, answered } = apartDesktop(delivered.settled);
   if (delivered.kind === "threw")
     return { outcome: delivered.failure, desktop };
   // [LAW:no-silent-failure] A click whose changes did not land, or whose act
   // did not go, says so in its answer: by the first that did not. A skipped
   // act's cause is its changes' own outcome, which answers instead.
-  const missed = delivered.settled.find(
+  const missed = answered.find(
     (outcome): outcome is Answering =>
-      outcome.kind !== "ok" &&
-      outcome.kind !== "skipped" &&
-      outcome.kind !== "left",
+      outcome.kind !== "ok" && outcome.kind !== "skipped",
   );
   return {
     outcome: missed === undefined ? { kind: "ok" } : clickFailure(missed),
@@ -1177,6 +1173,20 @@ async function handleClick(
 }
 
 type Answering = Exclude<EffectOutcome, { kind: "ok" | "skipped" }>;
+
+// A turn's outcomes told apart: the acts the desktop carries out, which are
+// part of no failure, and the rest, which answer the click.
+function apartDesktop(settled: readonly HostOutcome[]): {
+  readonly desktop: readonly DesktopAct[];
+  readonly answered: readonly EffectOutcome[];
+} {
+  const desktop: DesktopAct[] = [];
+  const answered: EffectOutcome[] = [];
+  for (const outcome of settled)
+    if (outcome.kind === "desktop") desktop.push(outcome.act);
+    else answered.push(outcome);
+  return { desktop, answered };
+}
 
 // [LAW:types-are-the-program] An effect's outcome as its click's: a refusal is
 // the user's to act on, a close is the daemon's, anything else failed.

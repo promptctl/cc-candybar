@@ -1,7 +1,7 @@
-// [LAW:verifiable-goals] A copy or open a click asks says whether its writer
-// carries it out, and that is decided by how the click arrived, in the one
-// place verbs ask acts: a click delivered by a forwarder that asked for its acts
-// on its machine says so on its copy and open, and no other arrival does.
+// [LAW:verifiable-goals] A copy or open a click asks says where it is carried
+// out, and that is decided by how the click arrived, in the one place verbs ask
+// acts: a click delivered by a forwarder that asked for its acts on the desktop
+// says so on its copy and open, and no other arrival does.
 
 import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE } from "../src/click/wire";
@@ -21,30 +21,30 @@ const asked = async (arrival: ClickArrival) => {
   await clickUrl(URL, ctx);
   return actsOf(ctx).map((act) => ({
     kind: act.kind,
-    forWriter: "forWriter" in act ? act.forWriter : undefined,
+    actsOn: "actsOn" in act ? act.actsOn : undefined,
   }));
 };
 
-test("a click delivered for its forwarder's machine asks its copy and open for that machine", async () => {
+test("a click delivered by a forwarder that asked for the desktop asks its copy and open for the desktop", async () => {
   expect(
     await asked({
       via: "link",
-      delivery: { kind: "desktop-forwarder", urlV: 2 },
+      delivery: { kind: "forwarder", urlV: 2, actsOn: "desktop" },
     }),
   ).toEqual([
-    { kind: "copy", forWriter: true },
-    { kind: "open", forWriter: true },
+    { kind: "copy", actsOn: "desktop" },
+    { kind: "open", actsOn: "desktop" },
   ]);
 });
 
 test.each<[string, ClickArrival]>([
-  ["a forwarder that did not ask", { via: "link", delivery: { kind: "forwarder", urlV: 2 } }],
+  ["a forwarder that asked for the daemon", { via: "link", delivery: { kind: "forwarder", urlV: 2, actsOn: "daemon" } }],
   ["the command line", { via: "link", delivery: { kind: "cli" } }],
   ["tmux's status line", { via: "tmux-status" }],
   ["a slash command", { via: "command" }],
 ])("a click arriving by %s asks its copy and open for the daemon's machine", async (_, arrival) => {
   expect(await asked(arrival)).toEqual([
-    { kind: "copy", forWriter: undefined },
-    { kind: "open", forWriter: undefined },
+    { kind: "copy", actsOn: "daemon" },
+    { kind: "open", actsOn: "daemon" },
   ]);
 });

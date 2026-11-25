@@ -499,15 +499,24 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // frame asked, and its click, which is in flight until it lands. A version 1
   // writer has closed and is told nothing.
   function clicked({ told }: Extract<HandledRequest, { kind: "url" }>): void {
-    if (told.when === "at-once")
-      on({ kind: "verdict", answer: replyOf(told.verdict) });
+    // [LAW:types-are-the-program] Each way of being told is handled here, and
+    // a new one does not compile until it is.
+    const landing = async (): Promise<void> => {
+      switch (told.when) {
+        case "never":
+          return told.land();
+        case "at-once":
+          on({ kind: "verdict", answer: replyOf(told.verdict) });
+          return told.land();
+        case "landed":
+          return on({ kind: "verdict", answer: await told.land() });
+      }
+    };
     // [LAW:no-silent-failure] A landing that throws reaches the clock, which
     // shows it on every bar; the connection hears it landed all the same.
     daemon.clock.detach("url click landing", async () => {
       try {
-        if (told.when === "landed")
-          on({ kind: "verdict", answer: await told.land() });
-        else await told.land();
+        await landing();
       } finally {
         on({ kind: "landed" });
       }

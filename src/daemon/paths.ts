@@ -80,15 +80,20 @@ export const REMOTE_SOCKET_HOST_SEPARATOR = ".";
 // [LAW:parse-dont-validate] A host alias: one word of ssh's config that names
 // one host, spelled so a file name and an editor's link can carry it, and
 // nothing wider. The only way to hold one is to parse it. Its first letter is
-// no `-` or `.`, so it can be no option and no hidden file. Mirrored by
-// url-handler/wire.swift.
+// no `-` or `.`, so it can be no option and no hidden file. Its length is
+// bounded because it is part of a unix socket's path, which the platform limits
+// to about a hundred bytes: ssh cannot bind a forward past that, and the link
+// would then go to the Mac's own daemon and be refused for a reason that names
+// no length. Mirrored by url-handler/wire.swift.
 export const HOST_ALIAS_FIRST =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
 export const HOST_ALIAS_REST = `${HOST_ALIAS_FIRST}.-`;
+export const HOST_ALIAS_MAX_CHARS = 32;
 export type HostAlias = string & { readonly __hostAlias: true };
 
 export function hostAliasOf(word: string): HostAlias | null {
   return word.length > 0 &&
+    word.length <= HOST_ALIAS_MAX_CHARS &&
     HOST_ALIAS_FIRST.includes(word[0]!) &&
     [...word.slice(1)].every((c) => HOST_ALIAS_REST.includes(c))
     ? (word as HostAlias)

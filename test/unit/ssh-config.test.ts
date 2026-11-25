@@ -1,6 +1,7 @@
 // `cc-candybar ssh-config`: the lines that carry a click from the machine the
 // terminal is on to the daemon that drew the bar.
 
+import { HOST_ALIAS_MAX_CHARS } from "../../src/daemon/paths";
 import { sshConfigPlan } from "../../src/ssh-cli";
 
 const facts = {
@@ -37,6 +38,7 @@ describe("cc-candybar ssh-config", () => {
     ["one that is an option", "-oProxyCommand=x"],
     ["one with a comment mark", "dev#"],
     ["one that is a path", "a/b"],
+    ["one too long for a socket's path", "a".repeat(HOST_ALIAS_MAX_CHARS + 1)],
   ])("refuses %s as the alias, naming the word and the spelling", (_, word) => {
     const plan = sshConfigPlan([word], facts);
     expect(plan.code).toBe(2);

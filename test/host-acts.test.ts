@@ -63,6 +63,7 @@ const copy = (session = S as typeof S | null): Act => ({
   id: ++ids as EffectId,
   session,
   text: "x",
+  actsOn: "daemon",
 });
 const run = (): Extract<Act, { kind: "run" }> => ({
   kind: "run",
@@ -362,46 +363,47 @@ test("a session's failed act its renderer heard is its renderer's to show", asyn
   expect(unheard).toEqual([]);
 });
 
-// [LAW:verifiable-goals] Where a copy or open runs: the act says whether its
-// click's writer carries it out, and the host leaves exactly those acts to the
-// writer, as outcomes the click's answer is made of.
-describe("an act that says its click's writer carries it out", () => {
-  const forWriter = (act: Act): Act =>
+// [LAW:verifiable-goals] Where a copy or open runs: the act says whether the
+// desktop carries it out, and the host hands exactly those acts to the desktop,
+// as outcomes the click's answer is made of.
+describe("an act that says the desktop carries it out", () => {
+  const forDesktop = (act: Act): Act =>
     act.kind === "copy" || act.kind === "open"
-      ? { ...act, forWriter: true }
+      ? { ...act, actsOn: "desktop" }
       : act;
 
-  test("is left, not performed, and its renderer is told it is done", async () => {
-    const copied = forWriter(copy());
-    const opened = forWriter({
+  test("is handed over, not performed, and its renderer is told it is done", async () => {
+    const copied = forDesktop(copy());
+    const opened = forDesktop({
       kind: "open",
       id: ++ids as EffectId,
       session: S,
       target: "/srv/x",
+      actsOn: "daemon",
     });
     const { turn, did } = hostOver([copied, opened]);
     const answered = await turn();
     expect(did).toEqual([`done ${copied.id} ok`, `done ${opened.id} ok`]);
     expect(answered.settled).toEqual([
-      { kind: "left", act: { kind: "copy", text: "x" } },
-      { kind: "left", act: { kind: "open", target: "/srv/x" } },
+      { kind: "desktop", act: { kind: "copy", text: "x" } },
+      { kind: "desktop", act: { kind: "open", target: "/srv/x" } },
     ]);
   });
 
-  test("is left in the order asked, between acts the daemon performs", async () => {
-    const [before, left, after] = [copy(), forWriter(copy()), copy()];
-    const { turn, did } = hostOver([before, left, after]);
+  test("is handed over in the order asked, between acts the daemon performs", async () => {
+    const [before, handed, after] = [copy(), forDesktop(copy()), copy()];
+    const { turn, did } = hostOver([before, handed, after]);
     const answered = await turn();
     expect(did.filter((d) => d.startsWith("perform"))).toEqual([
       `perform copy ${before.id} (file says dusk)`,
       `perform copy ${after.id} (file says dusk)`,
     ]);
-    expect(answered.settled.map((o) => o.kind)).toEqual(["ok", "left", "ok"]);
+    expect(answered.settled.map((o) => o.kind)).toEqual(["ok", "desktop", "ok"]);
   });
 
-  test("is not left once the daemon's close has begun", async () => {
-    const left = forWriter(copy());
-    const { turn } = hostOver([left], { closing: () => true });
+  test("is not handed over once the daemon's close has begun", async () => {
+    const handed = forDesktop(copy());
+    const { turn } = hostOver([handed], { closing: () => true });
     expect((await turn()).settled.map((o) => o.kind)).toEqual(["closing"]);
   });
 });

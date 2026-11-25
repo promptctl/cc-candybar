@@ -8,53 +8,62 @@
 // src/click/link-signer.ts, and pinned by scripts/check-protocol.mjs.
 // [LAW:parse-dont-validate] Everything the daemon or the file system hands this
 // app is read once, here, into a type that cannot hold what the app would have
-// to guard against: a host alias, a forward's name, a verdict and its acts.
+// to guard against: a host alias, a forward's name, a route, a verdict and its
+// acts.
 
 import Foundation
 
 // Mirrored: protocol.ts FRAME_HEADER_BYTES, MAX_FRAME_BYTES, URL_FRAME_KIND,
-// URL_FRAME_VERSION and ACTS_ON_DESKTOP.
+// URL_FRAME_VERSION, ACTS_ON_DAEMON and ACTS_ON_DESKTOP.
 let FRAME_HEADER_BYTES = 4
 let MAX_FRAME_BYTES = 16 * 1024 * 1024
 let URL_FRAME_KIND = "url"
 let URL_FRAME_VERSION = 2
+let ACTS_ON_DAEMON = "daemon"
 let ACTS_ON_DESKTOP = "desktop"
 
 // Mirrored: protocol.ts ClickVerdict and DesktopAct, the verdict's key for the
-// acts a click asked of this machine and the shape of each.
+// acts a click asked of this machine and the shape of each, and the code the
+// daemon refuses a link with.
 let DESKTOP_ACTS_KEY = "desktopActs"
 let ACT_KIND_KEY = "kind"
 let ACT_KIND_COPY = "copy"
 let ACT_KIND_OPEN = "open"
 let ACT_COPY_TEXT_KEY = "text"
 let ACT_OPEN_TARGET_KEY = "target"
+let ERROR_CODE_BAD_REQUEST = "BAD_REQUEST"
 
 // Mirrored: paths.ts REMOTE_SOCKET_DIR_UNDER_HOME, REMOTE_SOCKET_SUFFIX,
-// REMOTE_SOCKET_HOST_SEPARATOR, HOST_ALIAS_FIRST and HOST_ALIAS_REST, and
-// link-signer.ts LINK_KEY_ID_CHARS, LINK_KEY_ID_ALPHABET, LINK_MAC_MARK and
-// LINK_PROOF_SEPARATOR.
+// REMOTE_SOCKET_HOST_SEPARATOR, HOST_ALIAS_FIRST, HOST_ALIAS_REST and
+// HOST_ALIAS_MAX_CHARS, and link-signer.ts LINK_KEY_ID_CHARS,
+// LINK_KEY_ID_ALPHABET, LINK_MAC_MARK and LINK_PROOF_SEPARATOR.
 let REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote"
 let REMOTE_SOCKET_SUFFIX = ".sock"
 let REMOTE_SOCKET_HOST_SEPARATOR = "."
 let HOST_ALIAS_FIRST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"
 let HOST_ALIAS_REST = HOST_ALIAS_FIRST + ".-"
+let HOST_ALIAS_MAX_CHARS = 32
 let LINK_KEY_ID_CHARS = 8
 let LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 let LINK_MAC_MARK: Character = "#"
 let LINK_PROOF_SEPARATOR: Character = "/"
 
 // The editor's link to a path on a machine ssh reaches: VS Code's remote
-// authority names the host by the alias the user's ssh config knows it by.
+// authority names the host by the alias the user's ssh config knows it by. The
+// daemon opens a path on its own machine with `open -a "Visual Studio Code"`
+// (src/daemon/acts.ts), which cannot name another machine, so the two spell the
+// editor apart on purpose.
 let REMOTE_EDITOR_PREFIX = "vscode://vscode-remote/ssh-remote+"
 
-// One frame: the header, then the body. `desktop` is a frame that asks for the
-// click's copy and open acts to come back (see ACTS_ON_DESKTOP), which only a
-// frame sent down an ssh forward does: a link drawn on this Mac acts on this
-// Mac already.
-func frame(_ url: String, actsOn desktop: Bool) -> Data {
-  let said: [String: Any] = ["kind": URL_FRAME_KIND, "urlV": URL_FRAME_VERSION, "url": url]
-  let fields = desktop ? said.merging(["actsOn": ACTS_ON_DESKTOP]) { first, _ in first } : said
-  let body = try! JSONSerialization.data(withJSONObject: fields, options: [])
+// One frame: the header, then the body. `actsOn` says where the click's copy
+// and open acts go, which is the desktop for a frame sent down an ssh forward
+// (the daemon's machine is not the one the person sits at) and the daemon for a
+// link drawn on this Mac, which acts on this Mac already.
+func frame(_ url: String, actsOn: String) -> Data {
+  let said: [String: Any] = [
+    "kind": URL_FRAME_KIND, "urlV": URL_FRAME_VERSION, "url": url, "actsOn": actsOn,
+  ]
+  let body = try! JSONSerialization.data(withJSONObject: said, options: [])
   var header = UInt32(body.count).bigEndian
   var data = Data(bytes: &header, count: FRAME_HEADER_BYTES)
   data.append(body)
@@ -64,29 +73,34 @@ func frame(_ url: String, actsOn desktop: Bool) -> Data {
 // The length a frame header states.
 func frameLength(_ header: Data) -> Int { header.reduce(0) { ($0 << 8) | Int($1) } }
 
+// [LAW:one-source-of-truth] The one spelling of a key id: the signer's, which a
+// link names it by and a forward's file name carries.
+func isKeyId(_ word: some StringProtocol) -> Bool {
+  word.count == LINK_KEY_ID_CHARS && word.allSatisfy { LINK_KEY_ID_ALPHABET.contains($0) }
+}
+
 // The key id a link names its signer by, or nil for a link that names none (a
 // proof that does not begin with one, as links drawn before they named a
 // signer do not). The link comes from any web page and the id becomes part of
 // a path, so it is the spelling the signer writes and nothing else.
-// [LAW:one-source-of-truth] The one parser of the id.
 func keyId(of link: String) -> String? {
   guard let mark = link.lastIndex(of: LINK_MAC_MARK) else { return nil }
   let proof = link[link.index(after: mark)...]
   guard let slash = proof.firstIndex(of: LINK_PROOF_SEPARATOR) else { return nil }
   let id = proof[..<slash]
-  guard id.utf8.count == LINK_KEY_ID_CHARS, id.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) })
-  else { return nil }
-  return String(id)
+  return isKeyId(id) ? String(id) : nil
 }
 
 // A host alias: one word of ssh's config naming one host, in a spelling a file
-// name and an editor's link carry as they are. The first character is no `-`
-// or `.`, so it is no option and no hidden file.
+// name and an editor's link carry as they are, short enough to sit in a socket's
+// path. The first character is no `-` or `.`, so it is no option and no hidden
+// file.
 struct HostAlias: Equatable {
   let word: String
 
   init?(_ word: String) {
-    guard let first = word.first, HOST_ALIAS_FIRST.contains(first),
+    guard let first = word.first, word.count <= HOST_ALIAS_MAX_CHARS,
+      HOST_ALIAS_FIRST.contains(first),
       word.dropFirst().allSatisfy({ HOST_ALIAS_REST.contains($0) })
     else { return nil }
     self.word = word
@@ -111,8 +125,7 @@ struct ForwardName: Equatable {
     guard file.hasSuffix(REMOTE_SOCKET_SUFFIX) else { return nil }
     let stem = String(file.dropLast(REMOTE_SOCKET_SUFFIX.count))
     let id = String(stem.prefix(LINK_KEY_ID_CHARS))
-    guard id.count == LINK_KEY_ID_CHARS, id.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) })
-    else { return nil }
+    guard isKeyId(id) else { return nil }
     let rest = stem.dropFirst(LINK_KEY_ID_CHARS)
     if rest.isEmpty {
       host = .unnamed
@@ -137,6 +150,93 @@ struct ForwardEntry: Equatable {
 // ways, or an alias renamed) and the live connection made the latest file.
 func newestForward(naming id: String, among entries: [ForwardEntry]) -> ForwardEntry? {
   entries.filter { $0.name.keyId == id }.max { $0.modified < $1.modified }
+}
+
+struct ForwardError: Error, Equatable {
+  let why: String
+  init(_ why: String) { self.why = why }
+}
+
+// Where a link goes. A bar drawn by a daemon on another machine (the terminal
+// is an ssh session) is signed by that daemon, and the click opens here. Only
+// the daemon that signed a link opens it, and a link names its signer: the
+// first field of its proof, `#<key id>/…`. The user's ssh forwards that
+// daemon's socket to `<key id>.<alias>.sock` in REMOTE_SOCKET_DIR_UNDER_HOME
+// (`cc-candybar ssh-config` on that machine prints the lines), so the link goes
+// to the one daemon it names: no route and no key is learned, nothing is tried
+// in turn, and no daemon sees a link that is not its own. A link that names no
+// forward on this Mac, its own or one whose ssh connection is not set up, goes
+// to this Mac's daemon, which says which daemon signed it. A frame sent down a
+// forward asks for its copy and open acts to come back, because the daemon's
+// machine is not the person's.
+// [LAW:single-enforcer] One route decides the socket, where the acts go and
+// what is done with them, so none is derived twice.
+enum Route: Equatable {
+  case own(socket: String)
+  case forward(entry: ForwardEntry, socket: String)
+
+  var socket: String {
+    switch self {
+    case .own(let socket), .forward(_, let socket): return socket
+    }
+  }
+
+  var actsOn: String {
+    switch self {
+    case .own: return ACTS_ON_DAEMON
+    case .forward: return ACTS_ON_DESKTOP
+    }
+  }
+}
+
+// What listing the forwards' directory said.
+enum Directory {
+  case absent
+  case unreadable(String)
+  case files([String])
+}
+
+// What looking at one forward file said.
+enum Inspection {
+  case modified(Date)
+  // The file was there in the listing and is gone: an ssh connection that ended.
+  case vanished
+  case unreadable(String)
+}
+
+// [LAW:no-silent-failure] A directory that does not exist is a Mac with no
+// forwards, which sends the link to its own daemon; one that cannot be read, or
+// a file in it that cannot be inspected, is told, never read as "no forward",
+// because that would hand the link to a daemon that is not the one that drew
+// it. A file that vanished between the listing and the look is an ssh
+// connection that ended, and is no forward. The directory is listed only for a
+// link that names a signer.
+func routeOf(
+  _ link: String, own: String, directory dir: String,
+  listing: () -> Directory, inspect: (String) -> Inspection
+) -> Result<Route, ForwardError> {
+  guard let id = keyId(of: link) else { return .success(.own(socket: own)) }
+  let files: [String]
+  switch listing() {
+  case .absent: return .success(.own(socket: own))
+  case .unreadable(let why):
+    return .failure(ForwardError("cannot read the ssh forwards in \(dir): \(why)"))
+  case .files(let named): files = named
+  }
+  var entries: [ForwardEntry] = []
+  for file in files {
+    guard let name = ForwardName(file: file), name.keyId == id else { continue }
+    switch inspect(file) {
+    case .modified(let at): entries.append(ForwardEntry(file: file, name: name, modified: at))
+    case .vanished: continue
+    case .unreadable(let why):
+      return .failure(ForwardError("cannot inspect the ssh forward \(dir)/\(file): \(why)"))
+    }
+  }
+  guard let chosen = newestForward(naming: id, among: entries) else {
+    return .success(.own(socket: own))
+  }
+  return .success(.forward(entry: chosen, socket: dir + "/" + chosen.file))
 }
 
 // The editor's link to `path` on the machine `host` names, or nil for a path
@@ -179,20 +279,16 @@ func desktopAct(of raw: Any) -> DesktopAct {
   }
 }
 
-// What the daemon said of the link itself.
-enum Said: Equatable {
-  case accepted
+// What the daemon said of the link.
+enum Verdict: Equatable {
+  // The link was taken. `acts` is what its click asked of this Mac, in order;
+  // nil when the verdict has no acts key, which is what a daemon older than this
+  // app says to a frame that asked for them. [] is a click that asked for none.
+  case accepted(acts: [DesktopAct]?)
   // The link was refused: one the bar never drew, or one changed since.
   case refused(String)
   // The daemon could not take the click at all (it was closing).
   case failed(String)
-}
-
-struct Verdict: Equatable {
-  let said: Said
-  // nil: the verdict has no acts key, which is what a daemon older than this
-  // app says to a frame that asked for them. [] is a click that asked for none.
-  let acts: [DesktopAct]?
 }
 
 // The verdict, or nil when the bytes are not one this app reads. The failure's
@@ -203,16 +299,14 @@ func verdictOf(_ body: Data) -> Verdict? {
     let ok = said["ok"] as? Bool
   else { return nil }
   if !ok {
-    let why = said["error"] as? String ?? "the daemon gave no reason"
-    return Verdict(
-      said: said["code"] as? String == "BAD_REQUEST" ? .refused(why) : .failed(why), acts: nil)
+    guard let why = said["error"] as? String else { return nil }
+    return said["code"] as? String == ERROR_CODE_BAD_REQUEST ? .refused(why) : .failed(why)
   }
-  guard let raw = said[DESKTOP_ACTS_KEY] else { return Verdict(said: .accepted, acts: nil) }
+  guard let raw = said[DESKTOP_ACTS_KEY] else { return .accepted(acts: nil) }
   guard let list = raw as? [Any] else {
-    return Verdict(
-      said: .accepted, acts: [.malformed("\(DESKTOP_ACTS_KEY) is not a list")])
+    return .accepted(acts: [.malformed("\(DESKTOP_ACTS_KEY) is not a list")])
   }
-  return Verdict(said: .accepted, acts: list.map(desktopAct))
+  return .accepted(acts: list.map(desktopAct))
 }
 
 // What this app does once the daemon has accepted the click: each act in the
@@ -224,15 +318,17 @@ enum Step: Equatable {
 }
 
 // [LAW:no-silent-failure] A click that asked for acts and got none it can carry
-// out says so: a verdict with no acts key is a daemon older than this app, an
-// open whose forward names no host cannot reach the files, and an act this app
-// does not know or cannot read is told, never dropped.
-func steps(for verdict: Verdict, asked: Bool, host: ForwardHost) -> [Step] {
-  guard asked, verdict.said == .accepted else { return [] }
-  guard let acts = verdict.acts else {
+// out says so: a verdict with no acts key is a daemon older than this app (it
+// did the click on its own machine), an open whose forward names no host cannot
+// reach the files, and an act this app does not know or cannot read is told,
+// never dropped. A click sent to this Mac's own daemon asked for nothing: that
+// daemon acted here already.
+func steps(for acts: [DesktopAct]?, via route: Route) -> [Step] {
+  guard case .forward(let entry, _) = route else { return [] }
+  guard let acts = acts else {
     return [
       .tell(
-        "cc-candybar on the machine that drew this bar is older than this app, so the click did nothing here: update cc-candybar there and restart its daemon"
+        "cc-candybar on the machine that drew this bar is older than this app, so a copy or open this click asked for happened there, not here: update cc-candybar there and restart its daemon"
       )
     ]
   }
@@ -241,7 +337,7 @@ func steps(for verdict: Verdict, asked: Bool, host: ForwardHost) -> [Step] {
     case .copy(let text):
       return .copy(text)
     case .open(let target):
-      switch host {
+      switch entry.name.host {
       case .alias(let alias):
         return remoteEditorURL(host: alias, path: target).map(Step.open)
           ?? .tell("the daemon asked to open \(target), which is not an absolute path")

@@ -408,18 +408,21 @@ export const awaitsVerdict = (urlV: unknown): boolean =>
   typeof urlV === "number" && urlV >= 2;
 
 // [LAW:types-are-the-program] Where the frame's click copies and opens, which
-// the frame says of itself: absent, on the daemon's machine; `desktop`, on the
+// the frame says of itself: on the daemon's machine, or on the `desktop`, the
 // machine its writer runs on, which is not the daemon's when the link was drawn
-// over ssh. Optional, so an older daemon and a newer writer still serve every
-// other link: that daemon ignores the field, and the writer learns it from a
-// verdict with no `desktopActs`. Mirrored by url-handler/wire.swift.
+// over ssh. A writer says it on every frame; absent reads as the daemon's, for
+// a writer older than the field. An older daemon ignores the field, and the
+// writer learns that from a verdict with no `desktopActs`. Mirrored by
+// url-handler/wire.swift.
+export const ACTS_ON_DAEMON = "daemon";
 export const ACTS_ON_DESKTOP = "desktop";
+export type ActsOn = typeof ACTS_ON_DAEMON | typeof ACTS_ON_DESKTOP;
 
 export interface UrlFrame {
   kind: typeof URL_FRAME_KIND;
   urlV: number;
   url: string;
-  actsOn?: typeof ACTS_ON_DESKTOP;
+  actsOn?: ActsOn;
 }
 
 // What a click asks of the machine its writer runs on, in the order it asked:
@@ -433,7 +436,8 @@ export type DesktopAct =
 // when the click then failed, because a click that fails after asking one still
 // asked it. The click's own failure is held where any click's is (its bar, or
 // the daemon's warning), not said twice. A link refused is answered by the
-// ordinary refusal, at once, with no acts. No other response carries them.
+// ordinary refusal, at once, with no acts. No other response carries them: the
+// plain ok says so in its type.
 // Mirrored by url-handler/wire.swift.
 export interface ClickVerdict {
   ok: true;
@@ -546,7 +550,7 @@ export type Request =
 
 export type Response =
   // A frame pushed to the pane lane also carries where a pointer can act on it.
-  | { ok: true; output: string; hits?: HitMap }
+  | { ok: true; output: string; hits?: HitMap; desktopActs?: undefined }
   | ClickVerdict
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.

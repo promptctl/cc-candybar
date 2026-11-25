@@ -173,7 +173,7 @@ import {
   type SlashAction,
 } from "../../config/action";
 import {
-  actsOnDesktop,
+  actsOnOf,
   type ClickArrival,
 } from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
@@ -273,20 +273,23 @@ export type VerbHandler = (args: readonly string[], ctx: ClickContext) => void;
 
 export { BadVerbArgs };
 
+// An act as a handler asks it: where a copy or open is carried out is its
+// click's to say, not the handler's.
+type Asked<A> = A extends unknown ? Omit<A, "actsOn"> : never;
+
 // [LAW:single-enforcer] What a handler asks of the host: an act in its
-// click's turn, performed once the click's changes have landed.
-// [LAW:single-enforcer] The one place a click's arrival is carried onto the acts
-// it asks: a copy or open of a click whose writer carries them out says so, so
-// the host leaves it to that writer in whichever turn it lands the act, a
-// parked click's replay included. Where it runs is still the host's decision.
+// click's turn, performed once the click's changes have landed. The one place
+// a click's arrival is carried onto the acts it asks, so a copy or open says
+// where it is carried out in whichever turn the host lands it, a parked click's
+// replay included.
 function ask(
   ctx: Pick<VerbContext, "acts" | "arrival" | "effects">,
-  act: ActRequest,
+  act: Asked<ActRequest>,
 ): void {
   ctx.acts.ask(
     ctx.effects,
-    (act.kind === "copy" || act.kind === "open") && actsOnDesktop(ctx.arrival)
-      ? { ...act, forWriter: true }
+    act.kind === "copy" || act.kind === "open"
+      ? { ...act, actsOn: actsOnOf(ctx.arrival) }
       : act,
   );
 }

@@ -22,6 +22,7 @@ import {
   type Failure,
 } from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "./click-arrival";
+import type { ActsOn } from "../daemon/foundations/protocol";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
@@ -388,13 +389,16 @@ export interface RunRefresh {
 // world, each named by its operation and carrying exactly what that operation
 // needs: no free-form command, so the safety of a slash line or a run is the
 // type's. An act's session is the bar its failure shows on; a copy or an open
-// a click names no session for has none.
+// a click names no session for has none. A copy or an open says where it is
+// carried out, `actsOn`, from how its click arrived: a click delivered from
+// the desktop's URL handler has them carried out there, and the host hands them
+// to it instead of performing them.
 export type Act = { readonly id: EffectId } & (
   | {
       readonly kind: "copy";
       readonly session: SessionId | null;
       readonly text: string;
-      readonly forWriter?: true;
+      readonly actsOn: ActsOn;
     }
   | {
       // A file opened in the user's editor: which program opens it is the
@@ -402,7 +406,7 @@ export type Act = { readonly id: EffectId } & (
       readonly kind: "open";
       readonly session: SessionId | null;
       readonly target: string;
-      readonly forWriter?: true;
+      readonly actsOn: ActsOn;
     }
   | {
       // [LAW:single-enforcer] Checked and typed in one step: the pane is read

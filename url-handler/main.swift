@@ -12,8 +12,9 @@
 // src/click/link-signer.ts and pinned by scripts/check-protocol.mjs. The one
 // fact spelled here is the socket path, derived from the uid because Launch
 // Services starts the app with no shell's environment. A handler goes stale
-// through what it knows, and this one knows nothing a release changes: not a
-// bundle path, not a node binary, not a verb.
+// through what it knows, and this one knows no bundle path, no node binary and
+// no verb; the one thing it knows of the user's tools is the scheme of the
+// editor's link to a file on a machine ssh reaches.
 //
 // [LAW:carrying-cost] No retry. The socket is non-blocking: a connect either
 // completes at once (a unix socket with room in its backlog needs no round
@@ -22,7 +23,8 @@
 // lands only as the daemon reads it (WRITE_WAIT_MS), and one for the verdict,
 // which the daemon writes as soon as it has read the frame (VERDICT_WAIT_MS),
 // or, for a frame that asks for the click's acts, once the click has run
-// (LANDED_WAIT_MS). Launch Services delivers the next click on the main
+// (LANDED_WAIT_MS: a click that takes longer is told as unconfirmed, and its
+// copy is not made). Launch Services delivers the next click on the main
 // thread, so a click waits on its socket's own serial queue, in the order it
 // arrived, and only carrying out what it asked (the pasteboard, the editor)
 // runs on the main thread.
@@ -76,7 +78,7 @@ let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
 enum Forward {
   // The daemon took the link, and said what the click asked of this Mac.
-  case delivered(Verdict)
+  case delivered(acts: [DesktopAct]?)
   // The daemon refused the link, for the reason it gave.
   case refused(String)
   // The frame was written, and no verdict on it could be read.
@@ -88,9 +90,11 @@ func errnoText(_ what: String) -> String {
   "\(what): \(String(cString: strerror(errno))) (errno \(errno))"
 }
 
-// One frame to the daemon's socket, non-blocking throughout. `asking` is a
-// frame that asks for the click's acts to come back with the verdict.
-func forward(_ url: String, to path: String, asking: Bool) -> Forward {
+// One frame to the route's socket, non-blocking throughout, saying where the
+// click's acts go: a frame that says the desktop gets them back with the
+// verdict.
+func forward(_ url: String, via route: Route) -> Forward {
+  let path = route.socket
   let fd = socket(AF_UNIX, SOCK_STREAM, 0)
   if fd < 0 { return .failed(errnoText("socket")) }
   defer { close(fd) }
@@ -123,7 +127,7 @@ func forward(_ url: String, to path: String, asking: Bool) -> Forward {
   }
   if connected < 0 { return .failed(errnoText("connect \(path)")) }
 
-  let bytes = frame(url, actsOn: asking)
+  let bytes = frame(url, actsOn: route.actsOn)
   let written: String? = bytes.withUnsafeBytes { buffer in
     var sent = 0
     while sent < bytes.count {
@@ -145,28 +149,8 @@ func forward(_ url: String, to path: String, asking: Bool) -> Forward {
     return nil
   }
   if let why = written { return .failed(why) }
-  return verdict(fd, waiting: asking ? LANDED_WAIT_MS : VERDICT_WAIT_MS)
-}
-
-// A bar drawn by a daemon on another machine (the terminal is an ssh session)
-// is signed by that daemon, and the click opens here. Only the daemon that
-// signed a link opens it, and a link names its signer: the first field of its
-// proof, `#<key id>/…`. The user's ssh forwards that daemon's socket to
-// `<key id>.<alias>.sock` in REMOTE_SOCKET_DIR_UNDER_HOME (`cc-candybar
-// ssh-config` on that machine prints the lines), so the link goes to the one
-// daemon it names: no route and no key is learned, nothing is tried in turn,
-// and no daemon sees a link that is not its own. A link that names no forward
-// on this Mac, its own or one whose ssh connection is not set up, goes to this
-// Mac's daemon, which says which daemon signed it. [LAW:single-enforcer]
-enum Route {
-  case own(socket: String)
-  case forward(entry: ForwardEntry, socket: String)
-
-  var socket: String {
-    switch self {
-    case .own(let socket), .forward(_, let socket): return socket
-    }
-  }
+  return verdict(
+    fd, waiting: route.actsOn == ACTS_ON_DESKTOP ? LANDED_WAIT_MS : VERDICT_WAIT_MS)
 }
 
 func isNoSuchFile(_ error: NSError) -> Bool {
@@ -174,52 +158,44 @@ func isNoSuchFile(_ error: NSError) -> Bool {
     || (error.userInfo[NSUnderlyingErrorKey] as? NSError)?.code == Int(ENOENT)
 }
 
-// [LAW:no-silent-failure] A directory that does not exist is a Mac with no
-// forwards, which sends the link to its own daemon; one that cannot be read, or
-// a file in it that cannot be inspected, is told, never read as "no forward",
-// because that would hand the link to a daemon that is not the one that drew
-// it. A file that vanished between the listing and the look is an ssh
-// connection that ended, and is no forward.
-func route(of link: String) -> Result<Route, ForwardError> {
-  guard let id = keyId(of: link) else { return .success(.own(socket: socketPath())) }
-  // NSHomeDirectory, not $HOME: it is the account's home, which is what ssh's
-  // `%d` spells in the stanza.
-  let dir = NSHomeDirectory() + "/" + REMOTE_SOCKET_DIR_UNDER_HOME
-  let files: [String]
+func listing(of dir: String) -> Directory {
   do {
-    files = try FileManager.default.contentsOfDirectory(atPath: dir)
+    return .files(try FileManager.default.contentsOfDirectory(atPath: dir))
   } catch let error as NSError {
-    if isNoSuchFile(error) { return .success(.own(socket: socketPath())) }
-    return .failure(ForwardError("cannot read the ssh forwards in \(dir): \(error.localizedDescription)"))
+    return isNoSuchFile(error) ? .absent : .unreadable(error.localizedDescription)
   }
-  var entries: [ForwardEntry] = []
-  for file in files {
-    guard let name = ForwardName(file: file), name.keyId == id else { continue }
-    do {
-      let attributes = try FileManager.default.attributesOfItem(atPath: dir + "/" + file)
-      entries.append(
-        ForwardEntry(
-          file: file, name: name, modified: attributes[.modificationDate] as? Date ?? .distantPast))
-    } catch let error as NSError {
-      if isNoSuchFile(error) { continue }
-      return .failure(ForwardError("cannot inspect the ssh forward \(dir)/\(file): \(error.localizedDescription)"))
+}
+
+// [LAW:no-silent-failure] A modification time that cannot be read is told: the
+// newest forward is chosen by it.
+func inspection(of path: String) -> Inspection {
+  do {
+    let attributes = try FileManager.default.attributesOfItem(atPath: path)
+    guard let modified = attributes[.modificationDate] as? Date else {
+      return .unreadable("it has no modification time")
     }
+    return .modified(modified)
+  } catch let error as NSError {
+    return isNoSuchFile(error) ? .vanished : .unreadable(error.localizedDescription)
   }
-  guard let chosen = newestForward(naming: id, among: entries) else {
-    return .success(.own(socket: socketPath()))
-  }
-  return .success(.forward(entry: chosen, socket: dir + "/" + chosen.file))
+}
+
+// The listing and the looks, as the file system gives them; wire.swift decides.
+// NSHomeDirectory, not $HOME: it is the account's home, which is what ssh's `%d`
+// spells in the stanza.
+func route(of link: String) -> Result<Route, ForwardError> {
+  let dir = NSHomeDirectory() + "/" + REMOTE_SOCKET_DIR_UNDER_HOME
+  return routeOf(
+    link, own: socketPath(), directory: dir,
+    listing: { listing(of: dir) }, inspect: { inspection(of: dir + "/" + $0) })
 }
 
 // A forward file can outlive the ssh connection that made it (ssh killed), and
 // a daemon on the far end can be gone behind a live one, so a forward a link
 // names that does not take the link says whose it is and what to look at,
-// before the cause. Only a frame sent down a forward asks for the click's
-// acts: a link drawn on this Mac acts on this Mac already. [LAW:no-silent-failure]
+// before the cause. [LAW:no-silent-failure]
 func deliver(_ url: String, via route: Route) -> Forward {
-  var asking = false
-  if case .forward = route { asking = true }
-  let sent = forward(url, to: route.socket, asking: asking)
+  let sent = forward(url, via: route)
   guard case .forward(let entry, _) = route, case .failed(let why) = sent else { return sent }
   return .failed(
     "the ssh forward for key \(entry.name.keyId) did not take the link; is the ssh connection to the machine that drew it open? \(why)"
@@ -251,11 +227,6 @@ func readExactly(
   return .success(data)
 }
 
-struct ForwardError: Error {
-  let why: String
-  init(_ why: String) { self.why = why }
-}
-
 func monotonicMs() -> UInt64 { clock_gettime_nsec_np(CLOCK_MONOTONIC) / 1_000_000 }
 
 // The daemon's verdict on the link: one frame, read by wire.swift. The longest
@@ -279,8 +250,8 @@ func verdict(_ fd: Int32, waiting: Int32) -> Forward {
   guard let read = verdictOf(body) else {
     return .unconfirmed("the daemon's verdict is not one this app reads")
   }
-  switch read.said {
-  case .accepted: return .delivered(read)
+  switch read {
+  case .accepted(let acts): return .delivered(acts: acts)
   // A refusal of the link is a bad request; any other failure is the daemon's
   // own (it was closing), which lost the click.
   case .refused(let why): return .refused(why)
@@ -333,11 +304,12 @@ func notify(_ title: String, _ why: String, _ identifier: String) {
 
 // Carries out what the click asked of this Mac, on the main thread, which is
 // the one AppKit's pasteboard and workspace are used from. One notice per act
-// that could not be carried out, each under its own identifier so a click that
-// asked for two things that failed tells both. [LAW:no-silent-failure]
-func carryOut(_ steps: [Step]) {
+// that could not be carried out, each under its own identifier, the click's
+// among them, so neither a click that asked for two things that failed nor a
+// click that follows it replaces a notice not yet seen. [LAW:no-silent-failure]
+func carryOut(_ steps: [Step], click: UUID) {
   for (index, step) in steps.enumerated() {
-    let notice = "act-\(index)"
+    let notice = "act-\(click.uuidString)-\(index)"
     switch step {
     case .copy(let text):
       let pasteboard = NSPasteboard.general
@@ -349,7 +321,12 @@ func carryOut(_ steps: [Step]) {
         notify("Copy failed", "the pasteboard refused the text", notice)
       }
     case .open(let link):
-      guard let url = URL(string: link), NSWorkspace.shared.open(url) else {
+      guard let url = URL(string: link) else {
+        log.error("not a link: \(link, privacy: .private)")
+        notify("Open failed", "the editor's link is not a URL: \(link)", notice)
+        continue
+      }
+      guard NSWorkspace.shared.open(url) else {
         log.error("nothing opened \(link, privacy: .private)")
         notify("Open failed", "no application opened \(link): is VS Code installed?", notice)
         continue
@@ -370,15 +347,9 @@ func carryOut(_ steps: [Step]) {
 func conclude(_ link: String, via routed: Route, _ sent: Forward) {
   let socket = routed.socket
   switch sent {
-  case .delivered(let verdict):
+  case .delivered(let acts):
     log.notice("forwarded \(link, privacy: .private) to \(socket, privacy: .public)")
-    var asked = false
-    var host = ForwardHost.unnamed
-    if case .forward(let entry, _) = routed {
-      asked = true
-      host = entry.name.host
-    }
-    carryOut(steps(for: verdict, asked: asked, host: host))
+    carryOut(steps(for: acts, via: routed), click: UUID())
   case .refused(let why):
     log.error("refused \(link, privacy: .private) by \(socket, privacy: .public): \(why, privacy: .public)")
     notify("Click refused", why, refusedClickNotice)

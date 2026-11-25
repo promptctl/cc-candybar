@@ -304,7 +304,7 @@ export function testVerbContext(
     log: () => {},
     now: () => instantOf(new Date()),
     // A click from the handler this build would stage.
-    arrival: { via: "link", delivery: { kind: "forwarder", urlV: 2 } },
+    arrival: { via: "link", delivery: { kind: "forwarder", urlV: 2, actsOn: "daemon" } },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key, any session write once the session has
     // rendered — the write closes what it closes in that config) hands it in;
