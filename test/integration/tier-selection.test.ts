@@ -4,7 +4,7 @@ import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
 // [LAW:verifiable-goals] Each test file runs under exactly one tier's config.
-// The configs select and ignore by directory (test/helpers/tiers.cjs), and four
+// The configs select and ignore by directory (test/helpers/tiers.cjs), and three
 // hand-written selections agreeing is what keeps a file from running twice, or
 // under none, so this reads what each config lists with jest's own --listTests.
 
@@ -12,7 +12,7 @@ import { PROCESS_TIER_DIR, UNIT_DIR } from "../helpers/tiers.cjs";
 
 const ROOT = resolve(__dirname, "../..");
 const JEST = join(ROOT, "node_modules", "jest", "bin", "jest.js");
-const TIERS = ["unit", "worker", "process", "e2e"] as const;
+const TIERS = ["unit", "worker", "process"] as const;
 
 function testFilesUnder(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -57,20 +57,18 @@ test("every test file is selected by exactly one tier", async () => {
 }, 120_000);
 
 // A tier that is selected and never run proves nothing: each has a script, the
-// whole-suite script runs the three that need no sign-off, and CI runs and
-// reports each.
+// whole-suite script runs each, and CI runs and reports each.
 test("every tier is run by its script, by pnpm test and by CI", () => {
   const scripts = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { scripts: Record<string, string> })
     .scripts;
   const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
-  const recorded = ["unit", "worker", "process"];
 
   for (const tier of TIERS) {
     expect(scripts[`test:${tier}`]).toContain(`jest.${tier}.config.js`);
     expect(workflow).toContain(`pnpm test:${tier}`);
+    expect(scripts.test).toContain(`test:${tier}`);
   }
-  for (const tier of recorded) expect(scripts.test).toContain(`test:${tier}`);
-  expect(workflow).toContain(`--runs ${recorded.join(",")}`);
+  expect(workflow).toContain(`--runs ${TIERS.join(",")}`);
 });
 
 test("the unit and process tiers hold their directory and the worker tier holds neither", async () => {

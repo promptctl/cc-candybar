@@ -34,9 +34,9 @@ export function reportersFor(run) {
 
 // [LAW:single-enforcer] This file holds what every run shares and selects no
 // test, so a bare `jest`, `--watch` or `--coverage` finds nothing and says so
-// instead of running a file outside the checks of its own tier: the unit
-// refusal, the end-to-end cap and assertion limit. A run names its tier's
-// config, and that config says what it selects.
+// instead of running a file outside the checks of its own tier, such as the
+// unit refusal. A run names its tier's config, and that config says what it
+// selects.
 export const TEST_MATCH = ["**/*.test.ts"];
 
 export default {

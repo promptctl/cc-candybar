@@ -10,8 +10,8 @@
 # A listed case keeps running and keeps its record, and what fails it no longer
 # fails the run. That is whatever jest charges to the case while it runs: its
 # body, its beforeEach/afterEach, and the checks other gates throw from there
-# (the unit tier's refusal, the e2e assertion cap), so a listed case leaves those
-# too until its line goes. A beforeAll that throws is charged to every case under
+# (the unit tier's refusal), so a listed case leaves those too until its line
+# goes. A beforeAll that throws is charged to every case under
 # its describe, so it is let through for a listed case, and fails the run only if
 # an unlisted case shares the describe. It is not a failure outside every case,
 # such as an afterAll that throws, or an error thrown after the case ended, which
