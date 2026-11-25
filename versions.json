@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "6620855aeeb445669a8aa3031da664c8416df276",
-      "timestamp": "2026-11-25T00:23:52.715Z",
+      "sha": "ae289b8811082ae57acad8a4bc94a2bb31007a8e",
+      "timestamp": "2026-11-25T00:38:47.996Z",
       "commits": [
         {
-          "sha": "6620855aeeb445669a8aa3031da664c8416df276",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T17:22:34-07:00",
-          "message": "fix(render-cache): a compile is charged for what it holds on CI's runtime, so the cache's budget counts it in full (candybar-later-fixes-nwu9.asa) (#959)\n\n* fix(render-cache): a compile is charged for what it holds on the heaviest platform that runs it, so the cache's budget counts it in full (candybar-later-fixes-nwu9.asa)\n\nA compile of the bundled default measures 8.8 MB on macOS and 10.7 MB on\nCI's Linux runner, past its 10 MiB charge, so the cache undercounted and\nthe charge test failed main's Release run whenever a reading landed just\nover. About 1 MB is go-template-js holding string literals as ropes, filed\nupstream.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(render-cache): a compile's charge names the runtimes it was measured on, and the share's figures follow it (candybar-later-fixes-nwu9.asa)\n\n* test(render-cache): an entry is held to its charge alone, and the charges' comments keep their reasons, not figures derived from them (candybar-later-fixes-nwu9.asa)\n\n* refactor(render-cache): the cache's share is reckoned from the near line the memory reading uses (candybar-later-fixes-nwu9.asa)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+          "sha": "ae289b8811082ae57acad8a4bc94a2bb31007a8e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-25T00:37:11Z",
+          "message": "chore(release): set `package.json` to 1.238.3\n\n## [1.238.3](https://github.com/promptctl/cc-candybar/compare/v1.238.2...v1.238.3) (2026-11-25)\n\n### Bug Fixes\n\n* **render-cache:** a compile is charged for what it holds on CI's runtime, so the cache's budget counts it in full (candybar-later-fixes-nwu9.asa) ([#959](https://github.com/promptctl/cc-candybar/issues/959)) ([6620855](https://github.com/promptctl/cc-candybar/commit/6620855aeeb445669a8aa3031da664c8416df276))\n"
         }
       ]
     }
