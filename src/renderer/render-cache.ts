@@ -103,14 +103,18 @@ import type { RenderCacheStats } from "../renderer-interface/renderer-stats";
 // test/render-cache-sharing.test.ts, which fails when either is exceeded.
 // Measured 2026-10-20 over the bundled default: a rendered entry 1.8 MB (2.4
 // MB in a daemon serving a full user config from forty real worktree
-// directories). It was 9.3 MB an entry, every one compiling its own. A
-// compile is counted as an evicted builder leaves it — its own heap and the
-// part of that builder's config it still reaches — and is charged for the
-// heaviest platform that runs it: measured 2026-11-24, 8.8 MB on macOS and
-// 10.7 MB on CI's Linux runner. About 1 MB of that is the template parser
-// holding each interpreted string literal as a rope of its characters
-// (go-template-js template-unfiled-792a.yxt).
+// directories).
 export const ENTRY_BYTES = 3 * 1024 * 1024;
+// A compile, counted as an evicted builder leaves it: its own heap and the
+// part of that builder's config it still reaches. The runtime moves what it
+// holds — V8's version and the platform each by well over a megabyte — so it
+// is charged for the heaviest runtime measured. Measured 2026-11-24 over the
+// bundled default: 10.7 MB on CI's Node 22 on Linux x64; on macOS arm64,
+// 10.9 MB on Node 20, 9.4 MB on Node 22 and 8.9 MB on Node 26. Node 20 on
+// Linux x64, which the engines field admits and CI never runs, is unmeasured
+// and by those ratios lands at the charge. About 1 MB of a compile is
+// go-template-js holding each interpreted string literal as a rope of its
+// characters (template-unfiled-792a.yxt), which its fix gives back.
 export const COMPILE_BYTES = 12 * 1024 * 1024;
 // A session's view (SessionView): its store of the session's values over the
 // entry's, and the parts of every placement it has drawn, kept until it is
@@ -135,7 +139,7 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // 672 MB: ~120 sessions on one compile, each an entry and a view, against a
 // working set of ~20 directories in the production daemon.
 // Measured, a full share costs less than its charges: serving 100 sessions,
-// the daemon is charged ~430 MB in all with 560 MB of the share accounted.
+// the daemon is charged ~430 MB in all with 562 MB of the share accounted.
 const RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 // Never less than a quarter of the limit, which a small limit has always had:
 // there the reserve would leave the cache too little to hold two sessions.
@@ -151,7 +155,7 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 // The count ceiling beside the byte budget: every entry holds a
 // SourceRegistry (fs watchers, TTL timers), a resource the byte budget does
 // not see. At the default memory limit
-// the bytes bind just short of it (~230 entries with no view); it is what
+// the bytes bind just short of it (~220 entries with no view); it is what
 // bounds watchers above it, when CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
 const MAX_UNPINNED_FAILURES = 256;
