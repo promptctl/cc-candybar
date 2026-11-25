@@ -74493,6 +74493,7 @@ function followingOf(viewers) {
     if (seen.drawing) following.add(lane);
   return following;
 }
+var asksDesktop = (act) => act.kind === "copy" || act.kind === "open";
 
 // src/renderer/feeds.ts
 var FEED_PERIODS = {
@@ -77085,7 +77086,7 @@ var typeInPane = (edge) => async (tmux3, line) => {
 
 // src/renderer/verbs/index.ts
 function ask(ctx, act) {
-  if ((act.kind === "copy" || act.kind === "open") && answerSent(ctx.arrival))
+  if (asksDesktop(act) && answerSent(ctx.arrival))
     throw new ConfigPending(
       "this bar's configuration was not loaded when you clicked, so what to copy or open on your desktop could not be handed back: click again"
     );
@@ -91831,15 +91832,8 @@ async function paneOff(tmux3, edge) {
 
 // src/daemon/acts.ts
 function desktopActOf(act) {
-  switch (act.kind) {
-    case "copy":
-      return { kind: "copy", text: act.text };
-    case "open":
-      return { kind: "open", target: act.target };
-    case "type-slash":
-    case "run":
-      return null;
-  }
+  if (!asksDesktop(act)) return null;
+  return act.kind === "copy" ? { kind: "copy", text: act.text } : { kind: "open", target: act.target };
 }
 var outlives = (act) => act.kind === "run";
 function nameOf2(act) {

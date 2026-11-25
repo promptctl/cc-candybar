@@ -4,15 +4,22 @@
     {
       "version": "pr-966",
       "ref": "refs/pull/966/merge",
-      "sha": "233118777d2121120441e7b244ff620e968734c5",
-      "timestamp": "2026-11-25T09:45:12.279Z",
+      "sha": "a0d042f99b9d060f2a7fb4c1d277612d81106082",
+      "timestamp": "2026-11-25T09:52:49.534Z",
       "commits": [
         {
-          "sha": "233118777d2121120441e7b244ff620e968734c5",
+          "sha": "a0d042f99b9d060f2a7fb4c1d277612d81106082",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T09:43:57Z",
-          "message": "Merge a17c2bca72c56d8ee199649e62869d8755972fa6 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+          "timestamp": "2026-11-25T09:51:36Z",
+          "message": "Merge 586a95848b7d95f271f43252b811a416142222f7 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "586a95848b7d95f271f43252b811a416142222f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T02:51:20-07:00",
+          "message": "fix(acts): the acts that leave for a click's writer are named once (candybar-ssh-links-16rz.g1p)\n"
         },
         {
           "sha": "a17c2bca72c56d8ee199649e62869d8755972fa6",
