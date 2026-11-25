@@ -28286,16 +28286,16 @@ var BadVerbArgs = class extends Error {
     this.name = "BadVerbArgs";
   }
 };
-var DaemonClosing = class extends Error {
-  constructor(verb) {
-    super(`the daemon closed: ${verb} refused`);
-    this.name = "DaemonClosing";
-  }
-};
 var ConfigPending = class extends Error {
   constructor(message) {
     super(message);
     this.name = "ConfigPending";
+  }
+};
+var DaemonClosing = class extends Error {
+  constructor(verb) {
+    super(`the daemon closed: ${verb} refused`);
+    this.name = "DaemonClosing";
   }
 };
 var ClickAbandoned = class extends Error {
@@ -39292,13 +39292,13 @@ var RichText = class _RichText {
       const terminateLine = index < logicalLines.length - 1;
       const cuts = divideLine(plainOf(line), wrapAt, { fold: overflow === "fold" });
       const wrapped = Segment.divide(line, cuts);
-      const placed3 = this._justifyLines(wrapped.map((piece, at) => ({
+      const placed2 = this._justifyLines(wrapped.map((piece, at) => ({
         segments: [...this._fitLine(piece, edge, overflow, ellipsis)],
         free: (cell3) => free(at === 0 ? cell3 : cuts[at - 1] + cell3)
       })), maxWidth, base, justify);
-      for (let piece = 0; piece < placed3.length; piece += 1) {
-        yield* placed3[piece];
-        if (piece < placed3.length - 1 || terminateLine) {
+      for (let piece = 0; piece < placed2.length; piece += 1) {
+        yield* placed2[piece];
+        if (piece < placed2.length - 1 || terminateLine) {
           yield Segment.line();
         }
       }
@@ -40048,8 +40048,8 @@ var Recolored = class {
     }
     let offset = 0;
     for (const run2 of runs) {
-      const placed3 = base.shiftedBy(offset);
-      const shifted = sameAttributes(run2.attributes, attributes) ? placed3 : placed3.withAttributes(cellAttributes(run2.attributes));
+      const placed2 = base.shiftedBy(offset);
+      const shifted = sameAttributes(run2.attributes, attributes) ? placed2 : placed2.withAttributes(cellAttributes(run2.attributes));
       const style = writesAlike(run2.drawn, wire) ? shifted : shifted.add(Style.fromColor(run2.drawn.color, run2.drawn.bgcolor));
       yield new Segment(run2.text, style);
       offset += run2.cells;
@@ -40211,8 +40211,8 @@ function inked(text5) {
   return text5.trim() !== "";
 }
 function walk(looked) {
-  const placed3 = walkGlyphs(looked.map(({ segment }) => segment));
-  return looked.map((item, i2) => ({ ...item, glyphs: placed3[i2] }));
+  const placed2 = walkGlyphs(looked.map(({ segment }) => segment));
+  return looked.map((item, i2) => ({ ...item, glyphs: placed2[i2] }));
 }
 function edgesBeside(walked, drawings) {
   let rows;
@@ -41187,17 +41187,17 @@ var EFFECT_CATALOGUE = {
 init_globals();
 function placeGlyphs(segments, key) {
   let index = 0;
-  const placed3 = walkGlyphs(segments).map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => ({ glyph, cell: cell3 && { ...cell3, glyph, index: index++, seed: cellSeed(key, cell3.row, cell3.col) } })));
-  return { placed: placed3, cells: placed3.flatMap((glyphs) => glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3])) };
+  const placed2 = walkGlyphs(segments).map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => ({ glyph, cell: cell3 && { ...cell3, glyph, index: index++, seed: cellSeed(key, cell3.row, cell3.col) } })));
+  return { placed: placed2, cells: placed2.flatMap((glyphs) => glyphs.flatMap(({ cell: cell3 }) => cell3 === void 0 ? [] : [cell3])) };
 }
-function showGlyphs(placed3, frame2) {
-  const shown = placed3.map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => cell3 === void 0 ? glyph : shows(frame2, cell3)));
-  standsApart(placed3.flat(), shown.flat());
+function showGlyphs(placed2, frame2) {
+  const shown = placed2.map((glyphs) => glyphs.map(({ glyph, cell: cell3 }) => cell3 === void 0 ? glyph : shows(frame2, cell3)));
+  standsApart(placed2.flat(), shown.flat());
   return shown;
 }
 function reglyphText(text5, effect, options) {
-  const { placed: placed3, cells } = placeGlyphs([new Segment(text5.plain)], options.key);
-  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame2) => rewritten(text5, placed3[0], showGlyphs(placed3, frame2)[0]));
+  const { placed: placed2, cells } = placeGlyphs([new Segment(text5.plain)], options.key);
+  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame2) => rewritten(text5, placed2[0], showGlyphs(placed2, frame2)[0]));
 }
 function rewritten(text5, glyphs, shown) {
   if (shown.every((s, i2) => s === glyphs[i2].glyph))
@@ -41229,10 +41229,10 @@ function shows(frame2, cell3) {
   }
   return text5;
 }
-function standsApart(placed3, shown) {
-  const beside2 = (j) => placed3[j]?.cell === void 0 ? "" : shown[j];
+function standsApart(placed2, shown) {
+  const beside2 = (j) => placed2[j]?.cell === void 0 ? "" : shown[j];
   shown.forEach((text5, i2) => {
-    const { glyph, cell: cell3 } = placed3[i2];
+    const { glyph, cell: cell3 } = placed2[i2];
     if (cell3 === void 0 || text5 === glyph)
       return;
     const [before, after] = [beside2(i2 - 1), beside2(i2 + 1)];
@@ -49580,14 +49580,14 @@ function insertCells(root, cells) {
   return cells.reduce(
     (acc, cell3) => {
       const id2 = cell3.id ?? cell3.seg;
-      const placed3 = [...walkNodes(rootNode(acc.root))].flatMap(
+      const placed2 = [...walkNodes(rootNode(acc.root))].flatMap(
         (node2) => node2.kind === "segment" ? [node2] : []
       );
-      if (placed3.some(
+      if (placed2.some(
         (node2) => node2.name === cell3.seg && (cell3.id === void 0 || placementId(node2) === cell3.id)
       ))
         return acc;
-      const held = placed3.find((node2) => placementId(node2) === id2);
+      const held = placed2.find((node2) => placementId(node2) === id2);
       if (held !== void 0)
         return refuse(acc, cell3, { kind: "id-held", held: held.name });
       const node = {
@@ -49603,12 +49603,12 @@ function insertCells(root, cells) {
           besideRow(row, cell3.anchor, node, cell3.relation)
         ]
       );
-      return rows.some(([, , placed4]) => placed4 !== null) ? {
+      return rows.some(([, , placed3]) => placed3 !== null) ? {
         ...acc,
         root: {
           ...acc.root,
           rows: Object.fromEntries(
-            rows.map(([name, row, placed4]) => [name, placed4 ?? row])
+            rows.map(([name, row, placed3]) => [name, placed3 ?? row])
           )
         }
       } : refuse(acc, cell3, { kind: "no-anchor" });
@@ -49661,9 +49661,9 @@ function beside(node, anchor, cell3, relation) {
 function besideInBody(node, anchor, cell3, relation) {
   let found2 = false;
   const next2 = mapOpens(node, (body) => {
-    const placed3 = beside(body, anchor, cell3, relation);
-    found2 = placed3 !== null;
-    return placed3 ?? body;
+    const placed2 = beside(body, anchor, cell3, relation);
+    found2 = placed2 !== null;
+    return placed2 ?? body;
   });
   return found2 ? next2 : null;
 }
@@ -58303,8 +58303,8 @@ function prependAnchor(node) {
   };
 }
 function withAnchor(node) {
-  const placed3 = countAnchors(node) > 0 ? node : prependAnchor(node);
-  return placed3;
+  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
+  return placed2;
 }
 function countAnchors(node) {
   let n = 0;
@@ -60078,9 +60078,9 @@ function reportable(presence2) {
   return presence2.kind === "plugin" || presence2.kind === "missing";
 }
 function absentPlacement(config, cells, presence2) {
-  const placed3 = /* @__PURE__ */ new Map();
+  const placed2 = /* @__PURE__ */ new Map();
   const add2 = (id2, at) => {
-    placed3.set(id2, [...placed3.get(id2) ?? [], at]);
+    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
   };
   const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
   const fragments = [
@@ -60098,7 +60098,7 @@ function absentPlacement(config, cells, presence2) {
   const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
   for (let grew = true; grew; ) {
     grew = false;
-    for (const [id2, at] of placed3)
+    for (const [id2, at] of placed2)
       if (!absent.has(id2) && at.every(standsOnAbsent)) {
         absent.add(id2);
         grew = true;
@@ -60109,7 +60109,7 @@ function absentPlacement(config, cells, presence2) {
 function withoutUnplaced(config) {
   let removed = 0;
   const declared = presenceOf(config.segments, /* @__PURE__ */ new Map());
-  const placed3 = (name) => {
+  const placed2 = (name) => {
     const keep = declared(name).kind === "declared";
     if (!keep) removed += 1;
     return keep;
@@ -60118,7 +60118,7 @@ function withoutUnplaced(config) {
     ...node,
     children: node.children.flatMap((child) => nodes(child))
   });
-  const nodes = (node) => node.kind === "container" ? [container(node)] : placed3(node.name) ? [mapOpens(node, container)] : [];
+  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
   const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
   const root = (r) => ({
     ...r,
@@ -62137,12 +62137,12 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
         }
         continue;
       }
-      const placed3 = presence2(node.name);
-      if (reportable(placed3)) {
+      const placed2 = presence2(node.name);
+      if (reportable(placed2)) {
         reported2.add(node.name);
         ctx.unplaced.push({
           path: path31,
-          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed3),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
           line
         });
       }
@@ -62166,8 +62166,8 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
       if (node.kind !== "segment" || reported2.has(node.name)) continue;
-      const placed3 = presence2(node.name);
-      if (!reportable(placed3)) continue;
+      const placed2 = presence2(node.name);
+      if (!reportable(placed2)) continue;
       reported2.add(node.name);
       ctx.inherited.push({
         name: node.name,
@@ -62176,7 +62176,7 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
           `${key} inherits from a config layer below whose`,
           node.name,
           cfg.segments,
-          placed3
+          placed2
         ),
         line: findKeyLine(ctx.source, key.split("."))
       });
@@ -62220,9 +62220,9 @@ function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a
       line
     });
   };
-  const placed3 = new Set(placementIds(presetRoot(cfg, presetName).node));
+  const placed2 = new Set(placementIds(presetRoot(cfg, presetName).node));
   const checkRetired = (role, id2) => {
-    if (!RENAMED_SEGMENTS.has(id2) || placed3.has(id2) || Object.prototype.hasOwnProperty.call(cfg.segments, id2)) {
+    if (!RENAMED_SEGMENTS.has(id2) || placed2.has(id2) || Object.prototype.hasOwnProperty.call(cfg.segments, id2)) {
       return;
     }
     ctx.issues.push({
@@ -68226,8 +68226,8 @@ function libraryLayout(entries2, groups, paged) {
       (entry, i2) => entry.group === group.id ? [i2] : []
     )
   })).filter((section) => section.indices.length > 0);
-  const placed3 = sections.reduce((n, s) => n + s.indices.length, 0);
-  if (placed3 !== entries2.length) {
+  const placed2 = sections.reduce((n, s) => n + s.indices.length, 0);
+  if (placed2 !== entries2.length) {
     const known = new Set(groups.map((g) => g.id));
     const stray = entries2.flatMap(
       (entry, i2) => known.has(entry.group) ? [] : [`#${i2} (group "${entry.group}")`]
@@ -71477,18 +71477,18 @@ function unusedDeclarations(raw, config, inserted) {
       for (const member of actionMembers(action2)) clicked.add(member);
   }
   const writtenKeys = /* @__PURE__ */ new Set();
-  const placed3 = new Set(inserted);
+  const placed2 = new Set(inserted);
   for (const name of clicked) {
     const action2 = config.actions[name];
     if (action2 === void 0) continue;
     if ("set" in action2) writtenKeys.add(action2.set);
-    if ("insertSegment" in action2) placed3.add(action2.insertSegment);
+    if ("insertSegment" in action2) placed2.add(action2.insertSegment);
     if ("insertSegmentFrom" in action2 && Array.isArray(action2.insertSegmentFrom))
-      for (const seg2 of action2.insertSegmentFrom) placed3.add(seg2);
+      for (const seg2 of action2.insertSegmentFrom) placed2.add(seg2);
   }
   for (const preset of presetNames(config.presets)) {
     for (const node of walkNodes(presetRoot(config, preset).node)) {
-      if (node.kind === "segment") placed3.add(node.name);
+      if (node.kind === "segment") placed2.add(node.name);
     }
   }
   const variableUsed = (name, v) => read3.has(name) || v.kind === "state" && writtenKeys.has(v.key);
@@ -71514,7 +71514,7 @@ function unusedDeclarations(raw, config, inserted) {
     ...unusedOf(
       "segment",
       Object.keys(raw.segments ?? {}),
-      (name) => placed3.has(name)
+      (name) => placed2.has(name)
     )
   ];
 }
@@ -76920,7 +76920,7 @@ function writePreset(store, layer, from, globals, picks, placements) {
     (text5, [at, value]) => setValue(text5, at, value, JSON5_DIALECT),
     setValue(before ?? "", own2, "{}", JSON5_DIALECT)
   );
-  const placed3 = writtenOnly(
+  const placed2 = writtenOnly(
     into,
     () => withPlacements(
       after,
@@ -76930,7 +76930,7 @@ function writePreset(store, layer, from, globals, picks, placements) {
       ownRow
     )
   );
-  return { name, config: commit2(store, into, before, placed3, refuseHidden) };
+  return { name, config: commit2(store, into, before, placed2, refuseHidden) };
 }
 function writeThemeDefault(store, layer, theme24, look) {
   const into = seenBy(layer, (file) => store.read(file));
@@ -76986,7 +76986,7 @@ function applyLayoutOp(store, layer, key, op, suffix) {
     () => layoutPlacementOf(docOf(before ?? ""), under2, target.preset, subject)
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const { after, placed: placed3 } = spliceOp(
+  const { after, placed: placed2 } = spliceOp(
     authored,
     placement.path,
     op,
@@ -77004,26 +77004,21 @@ function applyLayoutOp(store, layer, key, op, suffix) {
     );
   }
   commit2(store, into, before, after, refuseHidden);
-  return placed3;
+  return placed2;
 }
 function spliceOp(text5, path31, op, suffix, rendered) {
   switch (op.op) {
     case "remove":
       return { after: removeSegmentRef(text5, path31, op.target), placed: null };
     case "insert": {
-      const placed3 = mintPlacement(op.segment, op.anchor, rendered(), suffix);
+      const placed2 = mintPlacement(op.segment, op.anchor, rendered(), suffix);
       return {
-        after: insertSegmentRef(text5, path31, placed3, op.anchor, op.relation),
-        placed: placed3
+        after: insertSegmentRef(text5, path31, placed2, op.anchor, op.relation),
+        placed: placed2
       };
     }
   }
 }
-
-// src/renderer-interface/click-arrival.ts
-init_globals();
-var ACTS_ON_DAEMON = { on: "daemon" };
-var actsOn = (arrival) => arrival.via === "link" ? arrival.acts : ACTS_ON_DAEMON;
 
 // src/claude-input/typing.ts
 init_globals();
@@ -77079,30 +77074,7 @@ var typeInPane = (edge) => async (tmux3, line) => {
 
 // src/renderer/verbs/index.ts
 function ask(ctx, act) {
-  ctx.acts.ask(ctx.effects, placed2(actsOn(ctx.arrival), act));
-}
-function placed2(on2, act) {
-  switch (act.kind) {
-    case "copy":
-      return on2.on === "daemon" ? act : {
-        kind: "desktop",
-        session: act.session,
-        click: on2.click,
-        act: { kind: "copy", text: act.text }
-      };
-    case "open":
-      return on2.on === "daemon" ? act : {
-        kind: "desktop",
-        session: act.session,
-        click: on2.click,
-        act: { kind: "open", target: act.target }
-      };
-    case "desktop":
-    case "type-slash":
-    case "run":
-    case "approve-repo":
-      return act;
-  }
+  ctx.acts.ask(ctx.effects, act);
 }
 function globalAct(step4, ctx, session) {
   ask(
@@ -77739,7 +77711,7 @@ var applyLayoutOp2 = (args, ctx) => {
     );
   }
   const into = heldLayer2(ctx, origin, role);
-  const placed3 = applyLayoutOp(
+  const placed2 = applyLayoutOp(
     editStore(ctx, sid),
     into,
     key,
@@ -77748,7 +77720,7 @@ var applyLayoutOp2 = (args, ctx) => {
   );
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed3)} (session=${sid})`
+    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} (session=${sid})`
   );
 };
 var undo = (_args, ctx) => {
@@ -78336,7 +78308,7 @@ function introspectSegments(state) {
   const { store, config, lastRenderBySegment } = state;
   const declaredNames = new Set(store.names());
   const segNames = orderedSegmentNames(config);
-  const placed3 = placementsBySegment(config);
+  const placed2 = placementsBySegment(config);
   const out = [];
   for (const name of segNames) {
     const seg2 = config.segments[name];
@@ -78352,7 +78324,7 @@ function introspectSegments(state) {
       ),
       // The render sink is keyed by placement id, so each placement reads
       // its own.
-      placements: (placed3.get(name) ?? []).map((id2) => ({
+      placements: (placed2.get(name) ?? []).map((id2) => ({
         id: id2,
         lastRender: lastRenderBySegment.get(id2) ?? null
       }))
@@ -78674,7 +78646,7 @@ function mainRenderer(parts, stores) {
         if (context !== null) {
           const { origin } = context.durable;
           if (!parts.renderCache.holdsConfig(origin)) {
-            if (event.arrival.via === "link" && event.arrival.acts.on === "desktop")
+            if (event.arrival.via === "link" && event.arrival.delivery.kind === "desktop-forwarder")
               throw new ConfigPending(
                 "this bar's configuration is not loaded yet, so the click cannot say what to copy or open on your desktop: click again once the bar has redrawn"
               );
@@ -84682,9 +84654,6 @@ function recordingCommandOf(value) {
 }
 
 // src/daemon/reply.ts
-function toldAtOnce(urlV, verdict) {
-  return awaitsVerdict(urlV) ? { when: "at-once", verdict } : { when: "never" };
-}
 function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
   const { sent, frame: frame2, unsent } = framedResponse(resp);
   return { resp: sent, frame: frame2, unsent, exitAfterFlush, settled: settled3 };
@@ -84729,6 +84698,7 @@ function refuseClosingInbound(parts, inbound, accepted) {
     land: async () => replyOf(verdict)
   };
 }
+var toldAtOnce = (urlV, verdict) => awaitsVerdict(urlV) ? { when: "at-once", verdict } : { when: "never" };
 var REPLY_EVENTS = {
   recording: "request",
   render: "render",
@@ -85050,10 +85020,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const { outcome } = await clickEvent(
       parts,
       accepted,
-      "daemon",
       timedOut,
       clientLeft,
-      (facts, click2, acts) => clickOutcome(parts, req, facts, click2, acts)
+      (facts, click2, desktop) => clickOutcome(parts, req, facts, click2, desktop)
     );
     return stay(clickReply(outcome));
   }
@@ -85169,7 +85138,7 @@ function sourceSnapshots(parts) {
     }
   };
 }
-async function clickEvent(parts, accepted, place, timedOut, clientLeft, run2) {
+async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
   const { clock } = parts;
   const t0 = clock.monotonic();
   const facts = [
@@ -85179,41 +85148,36 @@ async function clickEvent(parts, accepted, place, timedOut, clientLeft, run2) {
   const click2 = {
     gone: () => timedOut() || clientLeft()
   };
-  const held = place === "desktop" ? parts.desktopActs.begin() : null;
-  const acts = held === null ? ACTS_ON_DAEMON : { on: "desktop", click: held };
-  const outcome = await run2(facts, click2, acts).catch(failureOf);
-  const clicked = {
-    outcome,
-    desktop: held === null ? [] : parts.desktopActs.end(held)
-  };
+  const desktop = [];
+  const outcome = await run2(facts, click2, desktop).catch(failureOf);
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
   });
+  if (desktop.length > 0) noteFacts(facts, { desktop: String(desktop.length) });
   const { level, line } = requestEvent(
     "click",
     facts,
-    clicked.outcome,
+    outcome,
     elapsedMs(clock, t0)
   );
   parts.log(level, line);
-  return clicked;
+  return { outcome, desktop };
 }
 function landedReply(parts, { outcome, desktop }) {
-  const said3 = clickReply(outcome);
   return replyOf(
-    said3.ok ? { ok: true, output: "", desktopActs: desktop } : { ...said3, desktopActs: desktop },
+    { ...clickReply(outcome), desktopActs: desktop },
     null,
     (taken2) => {
       if (!taken2 && desktop.length > 0)
         parts.log(
           "warn",
-          `${desktop.length} copy or open act(s) for the desktop the person sits at were not carried out: the URL handler left before the verdict that carries them`
+          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: it left before the verdict that carries them`
         );
     }
   );
 }
-async function clickOutcome(parts, req, facts, click2, acts) {
+async function clickOutcome(parts, req, facts, click2, desktop) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
@@ -85223,38 +85187,38 @@ async function clickOutcome(parts, req, facts, click2, acts) {
     routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
     facts,
     click2,
-    acts
+    desktop
   );
 }
 function readUrlFrame(frame2, links) {
-  const refused2 = (problem) => ({
-    read: { kind: "refused", problem },
-    place: "daemon"
-  });
-  const { urlV, url, actsOn: actsOn2 } = frame2;
+  const { urlV, url, actsOn } = frame2;
   if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
-    return refused2(
-      `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-    );
+    return {
+      kind: "refused",
+      problem: `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+    };
   if (typeof url !== "string")
-    return refused2("the URL handler's frame carries no url string");
-  if (actsOn2 !== void 0 && actsOn2 !== ACTS_ON_DESKTOP)
-    return refused2(
-      `the URL handler's frame names ${inspect(actsOn2)} for its acts, which this daemon does not know (${ACTS_ON_DESKTOP})`
-    );
-  if (actsOn2 === ACTS_ON_DESKTOP && !awaitsVerdict(urlV))
-    return refused2(
-      `the URL handler's frame version ${urlV} reads no verdict, which carries the acts it asks for`
-    );
-  return {
-    read: parseClick(url, { kind: "forwarder", urlV }, links),
-    place: actsOn2 === ACTS_ON_DESKTOP ? "desktop" : "daemon"
-  };
+    return {
+      kind: "refused",
+      problem: "the URL handler's frame carries no url string"
+    };
+  if (actsOn === void 0)
+    return parseClick(url, { kind: "forwarder", urlV }, links);
+  if (actsOn !== ACTS_ON_DESKTOP)
+    return {
+      kind: "refused",
+      problem: `the URL handler's frame names ${inspect(actsOn)} for its acts, which this daemon does not know (${ACTS_ON_DESKTOP})`
+    };
+  if (!awaitsVerdict(urlV))
+    return {
+      kind: "refused",
+      problem: `the URL handler's frame version ${urlV} reads no verdict, which carries the acts it asks for`
+    };
+  return parseClick(url, { kind: "desktop-forwarder", urlV }, links);
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  const { read: parsed2, place } = readUrlFrame(frame2, parts.linkSigner);
-  const read3 = routeClick(parts, parsed2);
-  const told = read3.kind === "link" && place === "desktop" ? { when: "landed" } : toldAtOnce(
+  const read3 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
+  const told = read3.kind === "link" && read3.delivery.kind === "desktop-forwarder" ? { when: "landed" } : toldAtOnce(
     frame2.urlV,
     read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" }
   );
@@ -85266,12 +85230,11 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
       await clickEvent(
         parts,
         accepted,
-        place,
         timedOut,
         clientLeft,
-        async (facts, click2, acts) => {
+        async (facts, click2, desktop) => {
           noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
-          return ranClick(parts, read3, facts, click2, acts);
+          return ranClick(parts, read3, facts, click2, desktop);
         }
       )
     )
@@ -85297,27 +85260,28 @@ function routeClick(parts, read3) {
     signed: { link: read3.link, verb: read3.click.verb }
   } : { ...read3, target };
 }
-async function ranClick(parts, read3, facts, click2, acts) {
+async function ranClick(parts, read3, facts, click2, desktop) {
   switch (read3.kind) {
     case "refused":
       if (read3.signed !== void 0) noteFacts(facts, read3.signed);
       return read3.failure;
     case "link":
       noteFacts(facts, { link: read3.link });
-      return deliverClick(
+      return handleClick(
         parts,
         read3,
-        { via: "link", delivery: read3.delivery, acts },
+        { via: "link", delivery: read3.delivery },
         facts,
-        click2
+        click2,
+        desktop
       );
   }
 }
-async function deliverClick(parts, {
+async function handleClick(parts, {
   click: admitted,
   runEvidence,
   target
-}, arrival, facts, click2) {
+}, arrival, facts, click2, desktop) {
   const { verb } = admitted;
   const session = admitted.session ?? null;
   noteFacts(facts, { verb, sid: session ?? "-", renderer: target.name });
@@ -85327,6 +85291,9 @@ async function deliverClick(parts, {
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
       runEvidence,
+      // [LAW:single-enforcer] Where this click's copy and open act is
+      // read from its delivery, which the frame set once.
+      leaveToDesktop: arrival.delivery.kind === "desktop-forwarder" ? (act) => void desktop.push(act) : void 0,
       event: {
         kind: "click",
         click: admitted,
@@ -91834,14 +91801,23 @@ async function paneOff(tmux3, edge) {
 }
 
 // src/daemon/acts.ts
+function desktopActOf(act) {
+  switch (act.kind) {
+    case "copy":
+      return { kind: "copy", text: act.text };
+    case "open":
+      return { kind: "open", target: act.target };
+    case "type-slash":
+    case "run":
+      return null;
+  }
+}
 var outlives = (act) => act.kind === "run";
 function nameOf2(act) {
   switch (act.kind) {
     case "copy":
     case "open":
       return act.kind;
-    case "desktop":
-      return `${act.act.kind} on the desktop`;
     case "type-slash":
       return act.line;
     case "run":
@@ -91861,13 +91837,6 @@ var Acts = class {
       (pane) => `acts in ${pane}`
     );
     this.performers = {
-      // [LAW:effects-at-boundaries] Nothing happens on this machine: the act
-      // goes to the verdict of the click that asked it, and the URL handler on
-      // the desktop the person sits at carries it out.
-      desktop: async (act) => deps.desktop.deposit(act.click, act.act) ? did("left to the URL handler on the desktop the person sits at") : not({
-        kind: "failed",
-        reason: "the click that asked it was already answered, so nothing carried it out on the desktop the person sits at"
-      }),
       copy: (act) => clickLaunch(
         deps.programsFor(act.session).launch,
         {
@@ -91949,35 +91918,6 @@ var Acts = class {
           return not({ kind: "failed", reason: failure2.message });
       }
     }
-  }
-};
-
-// src/daemon/desktop-acts.ts
-init_globals();
-var DesktopActs = class {
-  held = /* @__PURE__ */ new Map();
-  issued = 0;
-  // A click starts holding its acts as it is handed to the renderer.
-  begin() {
-    const click2 = `desktop-click-${++this.issued}`;
-    this.held.set(click2, []);
-    return click2;
-  }
-  // Whether the click still held its place for the act: one that has already
-  // been answered has no verdict left to carry it.
-  deposit(click2, act) {
-    const acts = this.held.get(click2);
-    if (acts === void 0) return false;
-    acts.push(act);
-    return true;
-  }
-  // The click's acts in the order asked, once its landing is over.
-  end(click2) {
-    const acts = this.held.get(click2);
-    if (acts === void 0)
-      throw new Error(`${click2} ended twice, or never began`);
-    this.held.delete(click2);
-    return acts;
   }
 };
 
@@ -93059,7 +92999,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const problem = inspectionPayloadProblem(reply);
     if (problem !== null) throw new Error(`${label2} returned ${problem}`);
   };
-  const inSlot = async (input, queuedMs, captures = []) => {
+  const inSlot = async (input, queuedMs, captures = [], leaveToDesktop) => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
     const session = sessionOfEvent(input.event);
@@ -93129,7 +93069,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       input.event,
       output,
       captures,
-      receipt
+      receipt,
+      leaveToDesktop
     );
     return {
       received: true,
@@ -93139,7 +93080,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
-  const landInSlot = async (event, output, captures, receipt) => {
+  const landInSlot = async (event, output, captures, receipt, leaveToDesktop) => {
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
     );
@@ -93206,9 +93147,16 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           );
       } else acts.push(effect);
     }
+    const performed = (act) => {
+      const left = desktopActOf(act);
+      if (left === null || leaveToDesktop === void 0)
+        return world.perform(act);
+      leaveToDesktop(left);
+      return Promise.resolve({ kind: "ok" });
+    };
     let before = Promise.resolve();
     for (const act of acts) {
-      const acted = configOutcome.kind === "ok" ? before.then(() => world.perform(act)).catch(
+      const acted = configOutcome.kind === "ok" ? before.then(() => performed(act)).catch(
         (error) => ({
           kind: "failed",
           reason: failureOf(error).detail
@@ -93504,7 +93452,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          made.event.kind === "click" ? made.runEvidence : void 0
+          made.event.kind === "click" ? made.runEvidence : void 0,
+          made.event.kind === "click" ? made.leaveToDesktop : void 0
         );
         if (starting && slotted.turn.kind === "answered") restore = void 0;
         return { event: made.event, slotted };
@@ -93702,7 +93651,7 @@ init_globals();
 
 // src/renderer-interface/recording.ts
 init_globals();
-var RECORDING_VERSION = 2;
+var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
@@ -95362,10 +95311,8 @@ function createDaemon(inputs) {
     claudeInput: inputs.claudeInput(edge)
   });
   const desktopPrograms = programs2(launcher);
-  const desktopActs = new DesktopActs();
   const acts = new Acts({
     detach: clock.detach,
-    desktop: desktopActs,
     programsFor: (session) => {
       const context = session === null ? null : sessionBook.programContextOf(session);
       if (context === null) return desktopPrograms;
@@ -95718,7 +95665,6 @@ function createDaemon(inputs) {
     sessionBook,
     stats,
     linkSigner: linkSigner2,
-    desktopActs,
     publishFrame,
     renderSightings,
     watcherRegistry,
