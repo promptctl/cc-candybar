@@ -71,7 +71,8 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
-import { outlives, type HostAct } from "./acts.js";
+import { desktopActOf, outlives, type HostAct } from "./acts.js";
+import type { DesktopAct } from "./foundations/protocol.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
@@ -128,6 +129,11 @@ interface MadeEvent<E = Event> {
   readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
+  // [LAW:effects-at-boundaries] Host-only. Where a click's copy and open go in
+  // the turn it is answered in, when they act on the machine its writer runs
+  // on: left to the writer, whom the click's answer hands them to, and
+  // performed nowhere here.
+  readonly leaveToDesktop?: (act: DesktopAct) => void;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
 
@@ -413,6 +419,7 @@ export function rendererHost(
     input: EventInput,
     queuedMs: number,
     captures: readonly RunEvidence[] = [],
+    leaveToDesktop?: (act: DesktopAct) => void,
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -491,6 +498,7 @@ export function rendererHost(
       output,
       captures,
       receipt,
+      leaveToDesktop,
     );
     return {
       received: true,
@@ -509,6 +517,7 @@ export function rendererHost(
     output: RendererOutput,
     captures: readonly RunEvidence[],
     receipt: SettlePresentation,
+    leaveToDesktop: ((act: DesktopAct) => void) | undefined,
   ): Promise<{
     readonly settled: Promise<readonly EffectOutcome[]>;
     readonly configFailure: Failure | null;
@@ -592,12 +601,22 @@ export function rendererHost(
       } else acts.push(effect);
     }
 
+    // [LAW:single-enforcer] Where an act runs is decided here, where the turn
+    // that asked it is landed: a copy or open of a click whose writer carries
+    // them out is left to that writer, and every other act is the world's.
+    const performed = (act: HostAct): Promise<EffectOutcome> => {
+      const left = desktopActOf(act);
+      if (left === null || leaveToDesktop === undefined)
+        return world.perform(act);
+      leaveToDesktop(left);
+      return Promise.resolve({ kind: "ok" });
+    };
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
       const acted =
         configOutcome.kind === "ok"
           ? before
-              .then(() => world.perform(act))
+              .then(() => performed(act))
               .catch(
                 (error: unknown): EffectOutcome => ({
                   kind: "failed",
@@ -1038,6 +1057,7 @@ export function rendererHost(
           stamped(made),
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : undefined,
+          made.event.kind === "click" ? made.leaveToDesktop : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         return { event: made.event, slotted };

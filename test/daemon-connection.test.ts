@@ -29,6 +29,7 @@ import {
   replyOf,
   type HandledRequest,
   type Reply,
+  type Told,
 } from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -68,15 +69,24 @@ const replyWith = (
   ),
 });
 
-// A url frame's answer: its verdict, and when its click lands.
+const FORGED: Response = {
+  ok: false,
+  error: "forged",
+  code: "BAD_REQUEST",
+  daemonV: 3,
+};
+const AT_ONCE: Told = { when: "at-once", verdict: FORGED };
+
+// A url frame's answer: when its writer is told, and when its click lands,
+// with the reply a writer told once it landed is sent.
 const urlAnswer = (
   landed: Promise<void> = Promise.resolve(),
-  awaitsVerdict = false,
+  told: Told = { when: "never" },
+  reply: Reply = replyOf(FORGED),
 ): HandledRequest => ({
   kind: "url",
-  awaitsVerdict,
-  verdict: { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
-  land: () => landed,
+  told,
+  land: () => landed.then(() => reply),
 });
 
 // A memory stream runs on process ticks and microtasks, which all drain before
@@ -313,7 +323,9 @@ describe("a connection over a stream", () => {
     const ids = requests.map((r) => r.accepted().id);
     expect(new Set(ids).size).toBe(2);
     expect(clients.map((c) => c.received)).toEqual(
-      ids.map((request) => [expect.objectContaining({ code: "TIMEOUT", request })]),
+      ids.map((request) => [
+        expect.objectContaining({ code: "TIMEOUT", request }),
+      ]),
     );
   });
 
@@ -376,7 +388,7 @@ describe("a connection over a stream", () => {
     await settled();
     client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     await settled();
-    request.answer(urlAnswer(landed, true));
+    request.answer(urlAnswer(landed, AT_ONCE));
     await settled();
     land();
     await settled();
@@ -407,7 +419,7 @@ describe("a connection over a stream", () => {
     const threw: Array<{ task: string; thrown: unknown }> = [];
     const daemon = standIn({
       handle: async () => ({
-        ...urlAnswer(Promise.resolve(), true),
+        ...urlAnswer(Promise.resolve(), AT_ONCE),
         land: () => {
           throw new Error("the click broke as it began");
         },
@@ -462,7 +474,7 @@ describe("a connection over a stream", () => {
     const { client, received } = open(daemon);
     client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     await settled();
-    request.answer(urlAnswer(landed, true));
+    request.answer(urlAnswer(landed, AT_ONCE));
     await settled();
     expect(received).toEqual([
       { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
@@ -474,6 +486,70 @@ describe("a connection over a stream", () => {
     expect(received).toHaveLength(1);
     land();
     await settled();
+    expect(daemon.stats.inFlight).toBe(0);
+  });
+
+  // A writer that carries out its click's acts is told what the click came
+  // to, once it landed, and not before: the acts are the click's output.
+  test("a url frame whose writer is told once its click landed is sent nothing until it has, then the click's reply", async () => {
+    let land = () => {};
+    const landed = new Promise<void>((done) => (land = done));
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { client, received } = open(daemon);
+    client.write(
+      encodeFrame({
+        kind: "url",
+        urlV: 2,
+        url: "cc-candybar://x",
+        actsOn: "desktop",
+      }),
+    );
+    await settled();
+    const came = replyOf({
+      ok: true,
+      output: "",
+      desktopActs: [{ kind: "copy", text: "a" }],
+    });
+    request.answer(urlAnswer(landed, { when: "landed" }, came));
+    await settled();
+    expect(received).toEqual([]);
+    expect(daemon.stats.inFlight).toBe(1);
+    land();
+    await settled();
+    expect(received).toEqual([
+      { ok: true, output: "", desktopActs: [{ kind: "copy", text: "a" }] },
+    ]);
+    expect(daemon.stats.inFlight).toBe(0);
+  });
+
+  test("a url frame whose writer waits on the landing is told the failure when the landing throws", async () => {
+    const threw: Array<{ task: string; thrown: unknown }> = [];
+    const daemon = standIn({
+      handle: async () => ({
+        ...urlAnswer(Promise.resolve(), { when: "landed" }),
+        land: async () => {
+          throw new Error("the click broke as it landed");
+        },
+      }),
+      clock: clockOver(systemTimers, (task, thrown) =>
+        threw.push({ task, thrown }),
+      ),
+    });
+    const { client, received } = open(daemon);
+    client.write(
+      encodeFrame({
+        kind: "url",
+        urlV: 2,
+        url: "cc-candybar://x",
+        actsOn: "desktop",
+      }),
+    );
+    await settled();
+    expect(received).toEqual([
+      expect.objectContaining({ ok: false, code: "RENDER_FAILED" }),
+    ]);
+    expect(threw).toHaveLength(1);
     expect(daemon.stats.inFlight).toBe(0);
   });
 
@@ -578,7 +654,11 @@ describe("a connection over a stream", () => {
     const { client, received, ended } = open(standIn({ handle }));
     client.write(Buffer.concat([encodeFrame(STATS), encodeFrame(STATS)]));
     await settled();
-    expect({ handled: handle.mock.calls.length, received, ended: ended() }).toEqual({
+    expect({
+      handled: handle.mock.calls.length,
+      received,
+      ended: ended(),
+    }).toEqual({
       handled: 1,
       received: [ANSWER],
       ended: true,
@@ -685,7 +765,11 @@ describe("a connection over a stream", () => {
     const { send, received, ended } = open(daemon);
     send(STATS);
     await settled();
-    expect({ received, ended: ended(), inFlight: daemon.stats.inFlight }).toEqual({
+    expect({
+      received,
+      ended: ended(),
+      inFlight: daemon.stats.inFlight,
+    }).toEqual({
       received: [
         expect.objectContaining({
           ok: false,
@@ -1010,13 +1094,20 @@ describe("a connection over a stream", () => {
       const confirmed = new Map<string, boolean>();
       const frame = (name: string): void => {
         const resp: Response = { ok: true, output: name.repeat(128 * 1024) };
-        subscriptions[0]!.frame(JSON.stringify(resp), (ok) => confirmed.set(name, ok));
+        subscriptions[0]!.frame(JSON.stringify(resp), (ok) =>
+          confirmed.set(name, ok),
+        );
       };
       ["a", "b", "c", "d"].forEach(frame);
       await settled();
       client.resume();
       await until(() => received.length >= 2, "the newest frame");
-      expect(Object.fromEntries(confirmed)).toEqual({ a: true, b: false, c: false, d: true });
+      expect(Object.fromEntries(confirmed)).toEqual({
+        a: true,
+        b: false,
+        c: false,
+        d: true,
+      });
 
       expect(received.map((r) => "output" in r && r.output[0])).toEqual([
         "a",

@@ -726,7 +726,12 @@ describe("a statusline request", () => {
     t.rig.cache.configs.follow(origin);
     const config = t.rig.cache.configs.discovery.snapshotOf(origin);
     if (config === null) throw new Error("the host did not hold the config");
-    const latest = { ...config, notices: [advisory(["plugin-folder", "retained"], "found after the retained one")] };
+    const latest = {
+      ...config,
+      notices: [
+        advisory(["plugin-folder", "retained"], "found after the retained one"),
+      ],
+    };
     home.unreadable = true;
     threw(
       await handIn(t.r, {
@@ -1080,20 +1085,23 @@ describe("a draw", () => {
     ["click", false],
     ["hover", true],
     ["alt", true],
-  ])("a session in click mode %s draws a menu shown: %s", async (mode, shown) => {
-    const { r, parts, rig } = renderer();
-    await request({ r, rig });
-    rig.sessionState.set(SESSION, CLICK_MODE_KEY, mode);
-    using setup = setUpRender(parts, checked(), READ, []);
-    const { candidate } = drawRender(
-      parts,
-      setup,
-      ANSWERING,
-      UNFOLLOWED_FEEDS,
-      null,
-    );
-    expect(candidate.frame.menu.shown).toBe(shown);
-  });
+  ])(
+    "a session in click mode %s draws a menu shown: %s",
+    async (mode, shown) => {
+      const { r, parts, rig } = renderer();
+      await request({ r, rig });
+      rig.sessionState.set(SESSION, CLICK_MODE_KEY, mode);
+      using setup = setUpRender(parts, checked(), READ, []);
+      const { candidate } = drawRender(
+        parts,
+        setup,
+        ANSWERING,
+        UNFOLLOWED_FEEDS,
+        null,
+      );
+      expect(candidate.frame.menu.shown).toBe(shown);
+    },
+  );
 });
 
 describe("a feed's frame", () => {
@@ -2139,6 +2147,33 @@ describe("a click", () => {
     expect(seen).toEqual([heardContextOf(current)]);
   });
 
+  test("a click whose acts leave for its writer's machine is refused by name while its origin's config is not held, not parked to act after its answer", async () => {
+    const seen: Array<SessionContext | null> = [];
+    const t = renderer({
+      ...NO_VERBS,
+      click: (_click, facts) => void seen.push(facts.context),
+    });
+    const waiting = answered(await contextTurn(t, checked("%1")));
+    const asked = click("act");
+    if (asked.kind !== "click") throw new Error("not a click");
+    const refused = threw(
+      await handIn(t.r, {
+        ...asked,
+        arrival: {
+          via: "link",
+          delivery: { kind: "desktop-forwarder", urlV: 2 },
+        },
+      }),
+    );
+    expect(refused.failure).toMatchObject({
+      kind: "bad-request",
+      message: expect.stringContaining("click again"),
+    });
+    // Nothing waits: the config turn that follows runs no click.
+    answered(await configsNamed(t, waiting));
+    expect(seen).toEqual([]);
+  });
+
   test("a load that throws fails the request that needs it, and the next one loads the same delivery once it can", async () => {
     const home = unreadableHome();
     const t = renderer(undefined, undefined, home.locations);
@@ -2244,7 +2279,10 @@ describe("a click", () => {
     );
     const origin = context.requested;
     const config = t.rig.cache.snapshotFor(origin);
-    const moved = { ...config, notices: [advisory(["plugin-folder", "host"], "a notice the host found")] };
+    const moved = {
+      ...config,
+      notices: [advisory(["plugin-folder", "host"], "a notice the host found")],
+    };
 
     home.unreadable = true;
     threw(await handIn(t.r, { kind: "config", origin, config: moved }));
@@ -2280,7 +2318,10 @@ describe("a click", () => {
     t.rig.cache.refreshEditedView(SESSION);
     // The host found the file edited, and a notice beside it. The draft pins
     // the file's text and takes the rest of what the host found.
-    const NOTICE = advisory(["plugin-folder", "sibling"], "a shadowed sibling was found");
+    const NOTICE = advisory(
+      ["plugin-folder", "sibling"],
+      "a shadowed sibling was found",
+    );
     const edited = {
       ...config,
       notices: [NOTICE],

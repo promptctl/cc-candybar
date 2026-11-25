@@ -15,7 +15,7 @@ describe("cc-candybar ssh-config", () => {
     expect(plan.stdout).toContain("Host dev\n");
     expect(plan.stdout).toContain("  StreamLocalBindUnlink yes\n");
     expect(plan.stdout).toContain(
-      "  LocalForward %d/.cc-candybar/remote/AbCd-_12.sock /tmp/cc-candybar-1000/socket\n",
+      "  LocalForward %d/.cc-candybar/remote/AbCd-_12.%n.sock /tmp/cc-candybar-1000/socket\n",
     );
   });
 
@@ -26,6 +26,9 @@ describe("cc-candybar ssh-config", () => {
     ["one with a space", ["my box"]],
     ["a pattern", ["*"]],
     ["a negation", ["!dev"]],
+    ["a path", ["a/b"]],
+    ["one that leads with a dot", [".dev"]],
+    ["one with a non-ASCII letter", ["d\u00e9v"]],
   ])("refuses %s as the alias", (_, args) => {
     const plan = sshConfigPlan(args, facts);
     expect(plan.code).toBe(2);

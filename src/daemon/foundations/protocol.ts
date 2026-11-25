@@ -407,11 +407,26 @@ export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
 export const awaitsVerdict = (urlV: unknown): boolean =>
   typeof urlV === "number" && urlV >= 2;
 
+// [LAW:types-are-the-program] Where the click's copy and open act, which the
+// frame says of itself: absent, on the daemon's machine; `desktop`, on the
+// machine its writer runs on, which is not the daemon's when the link was drawn
+// over ssh. The writer then reads the verdict after the click lands, because
+// the acts are what the click came to. Optional, so an older daemon and a newer
+// writer still serve every other link. Mirrored by url-handler/wire.swift.
+export const ACTS_ON_DESKTOP = "desktop";
+
 export interface UrlFrame {
   kind: typeof URL_FRAME_KIND;
   urlV: number;
   url: string;
+  actsOn?: typeof ACTS_ON_DESKTOP;
 }
+
+// What a click asks of the machine its writer runs on, in the order it asked:
+// the text to copy, or a path on the daemon's machine to open.
+export type DesktopAct =
+  | { readonly kind: "copy"; readonly text: string }
+  | { readonly kind: "open"; readonly target: string };
 
 // [LAW:parse-dont-validate] What came in over the wire, classified once, by
 // the connection that read it: the URL handler's frame, or a request the `v`
@@ -518,7 +533,15 @@ export type Request =
 
 export type Response =
   // A frame pushed to the pane lane also carries where a pointer can act on it.
-  | { ok: true; output: string; hits?: HitMap }
+  // A click answered to a writer that carries out its acts also hands them back
+  // (`desktopActs`), on failure too: a click that fails after asking one still
+  // asked it.
+  | {
+      ok: true;
+      output: string;
+      hits?: HitMap;
+      desktopActs?: readonly DesktopAct[];
+    }
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }
@@ -546,6 +569,7 @@ export type Response =
       error: string;
       code: Exclude<ErrorCode, "TIMEOUT">;
       daemonV?: number;
+      desktopActs?: readonly DesktopAct[];
     }
   | {
       ok: false;

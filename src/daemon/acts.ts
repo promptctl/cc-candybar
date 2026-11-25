@@ -13,6 +13,7 @@ import {
   type TypeResult,
 } from "../claude-input/typing.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { DesktopAct } from "./foundations/protocol.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
@@ -48,6 +49,20 @@ export interface ActDeps {
   // Whether the daemon's close has begun: no act starts after it.
   readonly closing: () => boolean;
   readonly log: DaemonLogger;
+}
+
+// The acts a click may leave to the machine its writer runs on, as the wire
+// spells them; every other act is only ever performed here.
+export function desktopActOf(act: HostAct): DesktopAct | null {
+  switch (act.kind) {
+    case "copy":
+      return { kind: "copy", text: act.text };
+    case "open":
+      return { kind: "open", target: act.target };
+    case "type-slash":
+    case "run":
+      return null;
+  }
 }
 
 // Runs can continue after the click reply. Other acts report their outcome

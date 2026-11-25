@@ -48,7 +48,9 @@ export const framedResponse = (resp: Response): Framed<Response> =>
 // [LAW:single-enforcer] The one reply to a request that failed — a render's own
 // throw, a turn's failure, or any other handler's throw that reached the
 // connection — saying the failure's message.
-export const failedWith = (message: string): Refusal => ({
+export const failedWith = (
+  message: string,
+): Exclude<Refusal, { code: "TIMEOUT" }> => ({
   ok: false,
   error: message,
   code: "RENDER_FAILED",

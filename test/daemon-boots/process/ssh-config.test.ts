@@ -4,9 +4,12 @@
 // daemon of its own, in an isolated environment.
 
 import { execFile } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { linkKeyId } from "../../../src/click/link-signer";
+import { sshConfigPlan } from "../../../src/ssh-cli";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import {
@@ -39,7 +42,7 @@ test("the stanza names the daemon's own socket and the id its key's links carry"
     if (key.kind !== "ok") throw new Error(key.reason);
     expect(stdout).toContain("Host devbox\n");
     expect(stdout).toContain(
-      `  LocalForward %d/.cc-candybar/remote/${linkKeyId(key.value)}.sock ${isolated.sockPath}\n`,
+      `  LocalForward %d/.cc-candybar/remote/${linkKeyId(key.value)}.%n.sock ${isolated.sockPath}\n`,
     );
   } finally {
     await daemon.stop();
@@ -64,5 +67,28 @@ test("with no daemon to ask, it says so and prints no stanza", async () => {
     });
   } finally {
     isolated.removeTmpDirs();
+  }
+});
+
+// [LAW:verifiable-goals] What ssh itself makes of the stanza: the forward's
+// name carries the alias the `Host` line names (ssh's `%n`), which is what the
+// URL handler reads back to reach a remote file from an editor.
+test("ssh expands the stanza's forward to a name carrying the alias", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-ssh-stanza-"));
+  try {
+    const plan = sshConfigPlan(["devbox"], {
+      kind: "ok",
+      value: { keyId: "AbCd-_12", socket: "/tmp/cc-candybar-1000/socket" },
+    });
+    const config = path.join(dir, "config");
+    fs.writeFileSync(config, plan.stdout);
+    const { stdout } = await exec("ssh", ["-F", config, "-G", "devbox"], {
+      timeout: 10_000,
+    });
+    expect(stdout).toContain(
+      `localforward ${os.homedir()}/.cc-candybar/remote/AbCd-_12.devbox.sock /tmp/cc-candybar-1000/socket\n`,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

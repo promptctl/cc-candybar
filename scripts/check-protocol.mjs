@@ -85,8 +85,10 @@ const TS_ENTRY = "src/index.ts";
 const TS_DEBUG_TYPES = "src/daemon/foundations/debug-types.ts";
 const RS_FOLLOW = "rust-client/src/follow.rs";
 // The URL handler app, the fourth runtime speaking the wire: one frame (the
-// header and the `url` kind, versioned by itself) and the socket path.
-const SWIFT_HANDLER = "url-handler/main.swift";
+// header and the `url` kind, versioned by itself), the socket path, and the
+// forward's name. Its wire reads are the part that is compiled and tested on
+// its own (url-handler/check.sh); main.swift is only the I/O around them.
+const SWIFT_HANDLER = "url-handler/wire.swift";
 
 // The names of the native client's own subcommands that Node does NOT also
 // name. Compared against the native list itself, so the row agrees exactly
@@ -202,8 +204,14 @@ const CHECKS = [
   // The frame's field names, as the daemon reads them and the app writes them.
   {
     label: "the URL handler's frame fields",
-    ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+):/gm),
-    swift: memberSet(SWIFT_HANDLER, /withJSONObject: \[[^\]]+\]/, /"(\w+)":/g),
+    ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+)\??:/gm),
+    swift: memberSet(SWIFT_HANDLER, /let fields: \[String: Any\?\] = \[[^\]]+\]/, /"(\w+)":/g),
+  },
+  // Where a click's copy and open act, as the frame says it.
+  {
+    label: "the place the URL handler asks a click's acts to happen",
+    ts: lit(TS_PROTOCOL, /export const ACTS_ON_DESKTOP = "([^"]+)";/),
+    swift: lit(SWIFT_HANDLER, /^let ACTS_ON_DESKTOP = "([^"]+)"$/m),
   },
   // The default socket path: under /tmp, by uid, as src/daemon/paths.ts
   // derives it. The app starts with no shell's environment, so it has no
@@ -234,6 +242,23 @@ const CHECKS = [
     label: "a forwarded socket's suffix, as the URL handler opens it",
     ts: lit(TS_PATHS, /REMOTE_SOCKET_SUFFIX = "([^"]+)"/),
     swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_SUFFIX = "([^"]+)"$/m),
+  },
+  // The host a forward's name carries, which the handler reads back to point
+  // an editor at the machine that drew the bar: after the id, before the suffix.
+  {
+    label: "the separator between a forward's key id and its host, as the URL handler reads it",
+    ts: lit(TS_PATHS, /REMOTE_SOCKET_HOST_SEPARATOR = "([^"]+)"/),
+    swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_HOST_SEPARATOR = "([^"]+)"$/m),
+  },
+  {
+    label: "the alphabet a host alias begins with, as the URL handler reads it",
+    ts: lit(TS_PATHS, /HOST_ALIAS_FIRST =\s*"([^"]+)"/),
+    swift: lit(SWIFT_HANDLER, /^let HOST_ALIAS_FIRST = "([^"]+)"$/m),
+  },
+  {
+    label: "the alphabet the rest of a host alias is spelled in, as the URL handler reads it",
+    ts: lit(TS_PATHS, /HOST_ALIAS_REST =\s*"([^"]+)"/),
+    swift: lit(SWIFT_HANDLER, /^let HOST_ALIAS_REST = "([^"]+)"$/m),
   },
   {
     label: "the length of the key id a link names its signer by, as the URL handler reads it",

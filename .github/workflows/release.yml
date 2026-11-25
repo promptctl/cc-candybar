@@ -251,7 +251,9 @@ jobs:
 
   # The URL handler app (url-handler/main.swift): a resident macOS agent that
   # forwards a cc-candybar:// link to the daemon. Swift needs a macOS runner;
-  # one universal binary serves both darwin packages.
+  # one universal binary serves both darwin packages. What it decides from the
+  # wire (url-handler/wire.swift) is checked here first, since only a macOS
+  # runner can compile it.
   build-url-handler:
     name: Build URL handler app (darwin universal)
     runs-on: macos-latest
@@ -259,6 +261,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check the wire reads
+        run: ./url-handler/check.sh
 
       - name: Build universal binary
         run: ./url-handler/build.sh build/cc-candybar-url-handler

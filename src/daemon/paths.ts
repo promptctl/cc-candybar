@@ -65,13 +65,36 @@ export function defaultSocketPath(): string {
 
 // [LAW:one-source-of-truth] Where a remote machine's daemon socket lands on
 // the machine the user sits at. A link names the key of the daemon that signed
-// it (link-signer.ts), and the URL handler app opens `<key id>.sock` in this
-// directory (under the home; the directory and the suffix are mirrored in
-// url-handler/main.swift) when a link of another machine's is clicked. An ssh
-// `LocalForward` puts the socket there, named by the remote's key so two
-// remotes never share one, whatever they are called.
+// it (link-signer.ts), and the URL handler app opens `<key id>.<host>.sock` in
+// this directory (under the home; the directory, the suffix and the host's
+// spelling are mirrored in url-handler/wire.swift) when a link of another
+// machine's is clicked. An ssh `LocalForward` puts the socket there, named by
+// the remote's key so two remotes never share one, whatever they are called.
+// The name also carries the `Host` alias the user's ssh config reaches that
+// machine by, which only that config knows and which an open needs to name the
+// remote file to an editor: ssh's own token for it (`%n`) writes it into the
+// forward's name, and the app reads it back.
 export const REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote";
 export const REMOTE_SOCKET_SUFFIX = ".sock";
+export const REMOTE_SOCKET_HOST_SEPARATOR = ".";
+export const REMOTE_SOCKET_HOST_TOKEN = "%n";
+
+// [LAW:parse-dont-validate] The spelling of a host alias a forward's name can
+// carry and an editor's link can name: one word of ssh's config that is a
+// single path component, so it can neither end the name early nor leave the
+// directory. Mirrored by url-handler/wire.swift.
+export const HOST_ALIAS_FIRST =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
+export const HOST_ALIAS_REST =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-";
+export function isHostAlias(word: string): boolean {
+  const [first, ...rest] = word;
+  return (
+    first !== undefined &&
+    HOST_ALIAS_FIRST.includes(first) &&
+    rest.every((char) => HOST_ALIAS_REST.includes(char))
+  );
+}
 
 export function remoteSocketDir(home: string): string {
   return path.join(home, REMOTE_SOCKET_DIR_UNDER_HOME);

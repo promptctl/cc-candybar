@@ -6,7 +6,10 @@ import {
 import { fetchStats } from "./daemon/client-stats.js";
 import {
   REMOTE_SOCKET_DIR_UNDER_HOME,
+  REMOTE_SOCKET_HOST_SEPARATOR,
+  REMOTE_SOCKET_HOST_TOKEN,
   REMOTE_SOCKET_SUFFIX,
+  isHostAlias,
   socketPath,
 } from "./daemon/paths.js";
 import type { Asked } from "./utils/outcome.js";
@@ -67,8 +70,9 @@ export function sshConfigPlan(
 ): CliPlan {
   const [alias, ...extra] = args;
   // [LAW:parse-dont-validate] The alias is one word of ssh's config naming one
-  // host: no wildcard or negation (`*`, `?`, `!`), which would make a pattern.
-  if (alias === undefined || extra.length > 0 || !/^[^\s#*?!]+$/.test(alias)) {
+  // host, spelled so the forward's name can carry it to the app: no wildcard or
+  // negation (`*`, `?`, `!`), which would make a pattern, and no `/`.
+  if (alias === undefined || extra.length > 0 || !isHostAlias(alias)) {
     return { stdout: "", stderr: USAGE, code: 2 };
   }
   if (asked.kind === "failed") {
@@ -89,7 +93,9 @@ export function sshConfigPlan(
     "# it while an ssh connection to it is open.",
     `Host ${alias}`,
     "  StreamLocalBindUnlink yes",
-    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${facts.keyId}${REMOTE_SOCKET_SUFFIX} ${facts.socket}`,
+    // [LAW:one-source-of-truth] The alias is written once, on the `Host` line;
+    // ssh's `%n` puts it in the forward's name, where the app reads it back.
+    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${facts.keyId}${REMOTE_SOCKET_HOST_SEPARATOR}${REMOTE_SOCKET_HOST_TOKEN}${REMOTE_SOCKET_SUFFIX} ${facts.socket}`,
     "",
   ].join("\n");
   return { stdout: stanza, stderr: "", code: 0 };
