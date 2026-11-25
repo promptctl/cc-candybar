@@ -71558,7 +71558,8 @@ function renderCacheBudget(memoryLimitBytes2) {
   return Math.floor(
     Math.max(
       memoryLimitBytes2 / 4,
-      memoryLimitBytes2 * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES
+      // [LAW:single-enforcer] The near line is the one a reading is judged by.
+      nearAtOf(memoryLimitBytes2) - RENDER_CACHE_RESERVE_BYTES
     )
   );
 }
