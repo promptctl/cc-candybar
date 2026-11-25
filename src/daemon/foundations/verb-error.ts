@@ -16,7 +16,8 @@ export class BadVerbArgs extends Error {
 
 // A click that cannot wait for the configuration it needs: its answer is
 // written when its turn ends, so what it would ask after has no answer to
-// join. The person's to repeat once the bar has been drawn again.
+// join. The daemon's transient state, not a fault in the click: the person
+// repeats it once the bar has been drawn again.
 export class ConfigPending extends Error {
   constructor(message: string) {
     super(message);
@@ -68,7 +69,7 @@ const KINDS: ReadonlyArray<
   readonly [abstract new (...args: never[]) => Error, Failure["kind"]]
 > = [
   [BadVerbArgs, "bad-request"],
-  [ConfigPending, "bad-request"],
+  [ConfigPending, "threw"],
   [DaemonClosing, "closing"],
   [ClickAbandoned, "abandoned"],
   [RendererDown, "down"],

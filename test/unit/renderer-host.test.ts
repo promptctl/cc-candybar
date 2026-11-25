@@ -28,6 +28,7 @@ import { instantOf, type Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
 import { hostHeld, NO_ACTS } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
+import type { Delivery } from "../../src/renderer-interface/click-arrival";
 import { ABSENT } from "../../src/utils/outcome";
 import { digestOf } from "../../src/utils/plain";
 import { heardRequest } from "../helpers/click";
@@ -598,6 +599,87 @@ test("a failed record and a rejected act leave the answer and both effect acknow
   expect(performed).toEqual(["first", "second"]);
   expect(heard).toEqual([1, 2]);
   expect(unheard).toContainEqual(expect.stringContaining("record sink failed"));
+});
+
+// [LAW:single-enforcer] Where an act runs is the host's decision, read from how
+// its click was delivered: a copy or open of a click whose writer carries them
+// out is its outcome, in the order asked among the acts that failed or stayed,
+// and the world performs only the acts that stay. Its renderer hears it done.
+describe("a click's copy and open", () => {
+  const ASKED = [
+    { kind: "copy", id: 1 as never, session: null, text: "a" },
+    { kind: "type-slash", id: 2 as never, session: "s" as never, pane: {} as never, line: "/x" as never },
+    { kind: "open", id: 3 as never, session: null, target: "/x" },
+  ] as const;
+  const click = (delivery: Delivery) => ({
+    kind: "event" as const,
+    event: {
+      kind: "click" as const,
+      click: { scope: "global" as const, verb: "dispatch", steps: [] },
+      arrival: { via: "link" as const, delivery },
+      context: null,
+    },
+  });
+  async function clickedVia(delivery: Delivery) {
+    const performed: string[] = [];
+    const heard: Array<[number, string]> = [];
+    const lines: string[] = [];
+    const host = rendererHost(
+      MAIN_RENDERER,
+      clockAt({ wall: 0, mono: 0 }),
+      held({
+        answer: async ({ event }) => {
+          if (event.kind === "effect-done") heard.push([event.of, event.outcome.kind]);
+          return { ...answered(), effects: event.kind === "click" ? [...ASKED] : [] };
+        },
+      }),
+      (_level, line) => void lines.push(line),
+      {
+        subscribed: () => {},
+        frames: () => {},
+        stored: () => {},
+        recorded: () => {},
+        holding: () => () => {},
+      },
+      {
+        ...NO_ACTS,
+        perform: async (act) => {
+          performed.push(act.kind);
+          return act.kind === "type-slash"
+            ? { kind: "failed", reason: "no pane" }
+            : { kind: "ok" };
+        },
+      },
+    );
+    const turn = await host.answerClick(null, () => click(delivery));
+    return { turn, performed, heard, lines };
+  }
+
+  test("are left to a writer that carries them out, and the world performs only the acts that stay", async () => {
+    const { turn, performed, heard, lines } = await clickedVia({
+      kind: "desktop-forwarder",
+      urlV: 2,
+    });
+    expect(turn.settled).toEqual([
+      { kind: "left", act: { kind: "copy", text: "a" } },
+      { kind: "failed", reason: "no pane" },
+      { kind: "left", act: { kind: "open", target: "/x" } },
+    ]);
+    expect(performed).toEqual(["type-slash"]);
+    expect(heard).toEqual([
+      [1, "ok"],
+      [2, "failed"],
+      [3, "ok"],
+    ]);
+    // Said on an act line each, as any act is, so the log tells what left.
+    expect(lines.filter((line) => line.includes("outcome=left"))).toHaveLength(2);
+  });
+
+  test("are performed here for a writer that does not", async () => {
+    const { turn, performed } = await clickedVia({ kind: "forwarder", urlV: 2 });
+    expect(turn.settled.map(({ kind }) => kind)).toEqual(["ok", "failed", "ok"]);
+    expect(performed).toEqual(["copy", "type-slash", "open"]);
+  });
 });
 
 test("a config named by a command reaches the renderer before the next queued event", async () => {

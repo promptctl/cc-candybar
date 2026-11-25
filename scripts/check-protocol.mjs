@@ -187,6 +187,11 @@ const CHECKS = [
     swift: num(SWIFT_HANDLER, /^let FRAME_HEADER_BYTES = ([\d\s*]+)$/m),
   },
   {
+    label: "MAX_FRAME_BYTES, as the URL handler reads a verdict",
+    ts: num(TS_PROTOCOL, /export const MAX_FRAME_BYTES = ([\d\s*]+);/),
+    swift: num(SWIFT_HANDLER, /^let FRAME_MAX_BYTES = ([\d\s*]+)$/m),
+  },
+  {
     label: "frame-header byte order, as the URL handler writes it",
     ts: markers(TS_PROTOCOL, [/writeUInt32BE/], "u32 big-endian"),
     swift: markers(SWIFT_HANDLER, [/UInt32\(body\.count\)\.bigEndian/], "u32 big-endian"),
@@ -206,6 +211,25 @@ const CHECKS = [
     label: "the URL handler's frame fields",
     ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+)\??:/gm),
     swift: memberSet(SWIFT_HANDLER, /let fields: \[String: Any\?\] = \[[^\]]+\]/, /"(\w+)":/g),
+  },
+  // What the daemon hands back for the app to carry out: the verdict's key, and
+  // each act's kind and the fields of its arms, as the app reads them. A name
+  // that moved on one side would read as no acts, and nothing copied.
+  {
+    label: "the verdict's key for the acts a click leaves to the app",
+    ts: memberSet(TS_PROTOCOL, /export type ClickVerdict =[\s\S]+?\n    \};/, /(desktopActs):/g),
+    swift: memberSet(SWIFT_HANDLER, /^let DESKTOP_ACTS_KEY = "[^"]+"$/m, /"(\w+)"/g),
+  },
+  {
+    label: "the acts a click leaves to the app: their kinds and fields",
+    ts: () => {
+      const block = /export type DesktopAct =(?:\n  \| [^\n]+)+/;
+      return reads.union(
+        memberSet(TS_PROTOCOL, block, /readonly (\w+):/g)(),
+        memberSet(TS_PROTOCOL, block, /kind: "(\w+)"/g)(),
+      );
+    },
+    swift: memberSet(SWIFT_HANDLER, /enum DesktopActWire \{[^}]+\}/, /static let \w+ = "(\w+)"/g),
   },
   // Where a click's copy and open act, as the frame says it.
   {

@@ -75,18 +75,23 @@ const FORGED: Response = {
   code: "BAD_REQUEST",
   daemonV: 3,
 };
-const AT_ONCE: Told = { when: "at-once", verdict: FORGED };
+const AT_ONCE = "at-once";
 
 // A url frame's answer: when its writer is told, and when its click lands,
 // with the reply a writer told once it landed is sent.
 const urlAnswer = (
   landed: Promise<void> = Promise.resolve(),
-  told: Told = { when: "never" },
+  when: Told["when"] = "never",
   reply: Reply = replyOf(FORGED),
+  landing: () => Promise<void> = () => landed,
 ): HandledRequest => ({
   kind: "url",
-  told,
-  land: () => landed.then(() => reply),
+  told:
+    when === "landed"
+      ? { when, land: () => landing().then(() => reply) }
+      : when === "at-once"
+        ? { when, verdict: FORGED, land: landing }
+        : { when, land: landing },
 });
 
 // A memory stream runs on process ticks and microtasks, which all drain before
@@ -418,12 +423,10 @@ describe("a connection over a stream", () => {
     const log = jest.fn();
     const threw: Array<{ task: string; thrown: unknown }> = [];
     const daemon = standIn({
-      handle: async () => ({
-        ...urlAnswer(Promise.resolve(), AT_ONCE),
-        land: () => {
+      handle: async () =>
+        urlAnswer(Promise.resolve(), AT_ONCE, undefined, () => {
           throw new Error("the click broke as it began");
-        },
-      }),
+        }),
       clock: clockOver(systemTimers, (task, thrown) =>
         threw.push({ task, thrown }),
       ),
@@ -511,7 +514,7 @@ describe("a connection over a stream", () => {
       output: "",
       desktopActs: [{ kind: "copy", text: "a" }],
     });
-    request.answer(urlAnswer(landed, { when: "landed" }, came));
+    request.answer(urlAnswer(landed, "landed", came));
     await settled();
     expect(received).toEqual([]);
     expect(daemon.stats.inFlight).toBe(1);
@@ -526,12 +529,10 @@ describe("a connection over a stream", () => {
   test("a url frame whose writer waits on the landing is told the failure when the landing throws", async () => {
     const threw: Array<{ task: string; thrown: unknown }> = [];
     const daemon = standIn({
-      handle: async () => ({
-        ...urlAnswer(Promise.resolve(), { when: "landed" }),
-        land: async () => {
+      handle: async () =>
+        urlAnswer(Promise.resolve(), "landed", undefined, async () => {
           throw new Error("the click broke as it landed");
-        },
-      }),
+        }),
       clock: clockOver(systemTimers, (task, thrown) =>
         threw.push({ task, thrown }),
       ),

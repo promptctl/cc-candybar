@@ -71,8 +71,14 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
-import { desktopActOf, outlives, type HostAct } from "./acts.js";
-import type { DesktopAct } from "./foundations/protocol.js";
+import {
+  actLine,
+  desktopActOf,
+  outlives,
+  type HostAct,
+  type HostOutcome,
+} from "./acts.js";
+import { actsOnDesktop } from "../renderer-interface/click-arrival.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
@@ -88,9 +94,9 @@ import type { RendererName } from "./foundations/renderer-name.js";
 // mailbox, how long the renderer's turn took and what the hop to it cost, null
 // for a turn no renderer answered, and how each of its effects settled before
 // it returned: its changes, and the acts over in the turn, in the order they
-// were returned.
+// were returned, an act left to the click writer's machine as itself.
 export type HostTurn = TakenTurn & {
-  readonly settled: readonly EffectOutcome[];
+  readonly settled: readonly HostOutcome[];
 };
 type SettlePresentation = (
   effect: Pick<Present, "id" | "session" | "displayedEvents">,
@@ -129,11 +135,6 @@ interface MadeEvent<E = Event> {
   readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
-  // [LAW:effects-at-boundaries] Host-only. Where a click's copy and open go in
-  // the turn it is answered in, when they act on the machine its writer runs
-  // on: left to the writer, whom the click's answer hands them to, and
-  // performed nowhere here.
-  readonly leaveToDesktop?: (act: DesktopAct) => void;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
 
@@ -215,7 +216,7 @@ const THREW_AS = {
 interface Slotted {
   readonly received: boolean;
   readonly turn: TakenTurn;
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 }
 
 type ConfigDelivery =
@@ -229,7 +230,7 @@ type ConfigFollowing =
   | { readonly kind: "failed"; readonly failure: Failure };
 
 type ConfigTurn = {
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 } & (
   | { readonly kind: "received"; readonly failure: Failure | null }
   | { readonly kind: "unreceived"; readonly failure: Failure }
@@ -419,7 +420,6 @@ export function rendererHost(
     input: EventInput,
     queuedMs: number,
     captures: readonly RunEvidence[] = [],
-    leaveToDesktop?: (act: DesktopAct) => void,
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -498,7 +498,6 @@ export function rendererHost(
       output,
       captures,
       receipt,
-      leaveToDesktop,
     );
     return {
       received: true,
@@ -517,9 +516,8 @@ export function rendererHost(
     output: RendererOutput,
     captures: readonly RunEvidence[],
     receipt: SettlePresentation,
-    leaveToDesktop: ((act: DesktopAct) => void) | undefined,
   ): Promise<{
-    readonly settled: Promise<readonly EffectOutcome[]>;
+    readonly settled: Promise<readonly HostOutcome[]>;
     readonly configFailure: Failure | null;
   }> => {
     const changes = output.effects.filter(
@@ -543,7 +541,7 @@ export function rendererHost(
       receipt,
     );
     let configFailure: Failure | null = null;
-    const waited: Array<Promise<readonly EffectOutcome[]>> = [];
+    const waited: Array<Promise<readonly HostOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
     if (followed.kind === "failed") {
       if (
@@ -567,11 +565,11 @@ export function rendererHost(
             world.configs.landed(landed.files),
           ) ?? [])
         : [];
-    const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];
+    const reloaded: Array<Promise<readonly HostOutcome[]>> = [];
     for (const origin of moved)
       reloaded.push((await configInSlot(origin, "config-landed")).settled);
 
-    const owed: Array<Promise<EffectOutcome>> = [];
+    const owed: Array<Promise<HostOutcome>> = [];
     const acts: HostAct[] = [];
     for (const effect of output.effects) {
       if (effect.kind === "present") {
@@ -602,14 +600,20 @@ export function rendererHost(
     }
 
     // [LAW:single-enforcer] Where an act runs is decided here, where the turn
-    // that asked it is landed: a copy or open of a click whose writer carries
-    // them out is left to that writer, and every other act is the world's.
-    const performed = (act: HostAct): Promise<EffectOutcome> => {
-      const left = desktopActOf(act);
-      if (left === null || leaveToDesktop === undefined)
-        return world.perform(act);
-      leaveToDesktop(left);
-      return Promise.resolve({ kind: "ok" });
+    // that asked it is landed, from how its click was delivered: a copy or open
+    // of a click whose writer carries them out is left to that writer, as the
+    // outcome the click's answer is made of, and every other act is the
+    // world's. [LAW:nothing-unseen] A left act is said on its act line as any
+    // act is.
+    const onDesktop = event.kind === "click" && actsOnDesktop(event.arrival);
+    const performed = (act: HostAct): Promise<HostOutcome> => {
+      const left = onDesktop ? desktopActOf(act) : null;
+      if (left === null) return world.perform(act);
+      log(
+        "info",
+        actLine(act, "left", "left to the machine the click's writer runs on"),
+      );
+      return Promise.resolve({ kind: "left", act: left });
     };
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
@@ -623,7 +627,7 @@ export function rendererHost(
                   reason: failureOf(error).detail,
                 }),
               )
-          : Promise.resolve<EffectOutcome>(
+          : Promise.resolve<HostOutcome>(
               configOutcome.kind === "closing"
                 ? configOutcome
                 : {
@@ -927,11 +931,14 @@ export function rendererHost(
         ),
       );
     };
-  // An act's, once it ended: its `effect-done` joins the mailbox.
+  // An act's, once it ended: its `effect-done` joins the mailbox. An act left
+  // to its click writer's machine is done as far as its renderer is concerned.
   const settle = async (
     effect: HostAct,
-    outcome: EffectOutcome,
-  ): Promise<EffectOutcome> => {
+    ended: HostOutcome,
+  ): Promise<HostOutcome> => {
+    const outcome: EffectOutcome =
+      ended.kind === "left" ? { kind: "ok" } : ended;
     const failed =
       outcome.kind === "failed" || outcome.kind === "refused"
         ? outcome.reason
@@ -952,7 +959,7 @@ export function rendererHost(
       delivered.failure.kind === "down"
     )
       unheard(failed);
-    return outcome;
+    return ended;
   };
   // A change's or a refused present's, in the slot of the turn that
   // returned it: settled once that `effect-done` turn's own acts have.
@@ -1057,7 +1064,6 @@ export function rendererHost(
           stamped(made),
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : undefined,
-          made.event.kind === "click" ? made.leaveToDesktop : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         return { event: made.event, slotted };

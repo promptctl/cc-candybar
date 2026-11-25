@@ -41,6 +41,7 @@ import {
   type MainRendererParts,
 } from "./verbs/port.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
+import { actsOnDesktop } from "../renderer-interface/click-arrival.js";
 import { createGates } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import {
@@ -474,14 +475,13 @@ export function mainRenderer(
         if (context !== null) {
           const { origin } = context.durable;
           if (!parts.renderCache.holdsConfig(origin)) {
-            // [LAW:no-ambient-temporal-coupling] A click whose copy and open
-            // act on its writer's machine is answered when its turn ends, so
-            // a turn that runs it later has no answer to hand them to, and
-            // would act on this machine. It is refused by name instead.
-            if (
-              event.arrival.via === "link" &&
-              event.arrival.delivery.kind === "desktop-forwarder"
-            )
+            // [LAW:no-ambient-temporal-coupling] exception: a click is answered
+            // when its first turn ends, parked or not, so a parked click's
+            // acts, asked in a later turn, would have no answer to join and
+            // would act on this machine. One whose acts leave for its writer's
+            // machine is refused by name instead, until a parked click is
+            // answered when it has run.
+            if (actsOnDesktop(event.arrival))
               throw new ConfigPending(
                 "this bar's configuration is not loaded yet, so the click cannot say what to copy or open on your desktop: click again once the bar has redrawn",
               );

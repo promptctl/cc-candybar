@@ -51,6 +51,16 @@ export interface ActDeps {
   readonly log: DaemonLogger;
 }
 
+// [LAW:types-are-the-program] How an act ended as the host holds it: what its
+// renderer is told, or that the act was left to the machine its click's writer
+// runs on, which is the act itself, to be handed to that writer. Its renderer
+// is told `ok`: the daemon's part is done.
+export interface Left {
+  readonly kind: "left";
+  readonly act: DesktopAct;
+}
+export type HostOutcome = EffectOutcome | Left;
+
 // The acts a click may leave to the machine its writer runs on, as the wire
 // spells them; every other act is only ever performed here.
 export function desktopActOf(act: HostAct): DesktopAct | null {
@@ -81,6 +91,15 @@ function nameOf(act: HostAct): string {
       return `run ${act.action}`;
   }
 }
+
+// [LAW:single-enforcer] An act's line, in the one format, whoever says it:
+// what it did or why it did not, or that it was left to the writer's machine.
+export const actLine = (
+  act: HostAct,
+  outcome: HostOutcome["kind"],
+  said: string,
+): string =>
+  `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome} — ${nameOf(act)}: ${said}`;
 
 // [LAW:types-are-the-program] How an act ended: its outcome, and what its
 // line says of it — what it did, or why it did not.
@@ -174,7 +193,7 @@ export class Acts {
       : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${nameOf(act)}: ${said}`,
+      actLine(act, outcome.kind, said),
     );
     return outcome.kind === "ok"
       ? outcome

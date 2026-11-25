@@ -2165,8 +2165,9 @@ describe("a click", () => {
         },
       }),
     );
+    // The bar's own state, not a fault in the link: not the user's to fix.
     expect(refused.failure).toMatchObject({
-      kind: "bad-request",
+      kind: "threw",
       message: expect.stringContaining("click again"),
     });
     // Nothing waits: the config turn that follows runs no click.

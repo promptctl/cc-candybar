@@ -64,13 +64,11 @@ let WRITE_WAIT_MS: Int32 = 1000
 let VERDICT_WAIT_MS: Int32 = 1000
 
 // How long the app waits for the verdict on a forwarded link, which the daemon
-// writes after the click has landed: a copy or open runs a program, bounded at
-// five seconds, and the verdict crosses an ssh connection.
+// writes after the click has landed, behind whatever turn its renderer is in.
+// The click is not abandoned when this app stops waiting, so one that lands
+// later finds no one to carry its acts out: the daemon says so, and the notice
+// here says nothing was done on this Mac.
 let LANDED_WAIT_MS: Int32 = 15000
-
-// The longest verdict the app reads: a reason and the acts it hands back,
-// never a frame of the bar.
-let VERDICT_MAX_BYTES = 65536
 
 let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
@@ -86,7 +84,8 @@ func errnoText(_ what: String) -> String {
 }
 
 // One frame to the daemon's socket, non-blocking throughout, and its verdict.
-func forward(_ url: String, to path: String, actsOnDesktop: Bool) -> Forward {
+func forward(_ url: String, via route: Route) -> Forward {
+  let path = route.socket
   let fd = socket(AF_UNIX, SOCK_STREAM, 0)
   if fd < 0 { return .failed(errnoText("socket")) }
   defer { close(fd) }
@@ -119,7 +118,7 @@ func forward(_ url: String, to path: String, actsOnDesktop: Bool) -> Forward {
   }
   if connected < 0 { return .failed(errnoText("connect \(path)")) }
 
-  let bytes = frame(url, actsOnDesktop: actsOnDesktop)
+  let bytes = frame(url, actsOnDesktop: route.actsOnDesktop)
   let written: String? = bytes.withUnsafeBytes { buffer in
     var sent = 0
     while sent < bytes.count {
@@ -141,7 +140,7 @@ func forward(_ url: String, to path: String, actsOnDesktop: Bool) -> Forward {
     return nil
   }
   if let why = written { return .failed(why) }
-  return verdict(fd, waitMs: actsOnDesktop ? LANDED_WAIT_MS : VERDICT_WAIT_MS)
+  return verdict(fd, waitMs: route.actsOnDesktop ? LANDED_WAIT_MS : VERDICT_WAIT_MS)
 }
 
 // Where a link goes: this Mac's own daemon, or the forward its signer's id
@@ -149,10 +148,9 @@ func forward(_ url: String, to path: String, actsOnDesktop: Bool) -> Forward {
 // and only the daemon that signed a link opens it; the user's ssh forwards that
 // daemon's socket to `<key id>.<host>.sock` in REMOTE_SOCKET_DIR_UNDER_HOME
 // (`cc-candybar ssh-config` on that machine prints the lines). No route and no
-// key is learned, nothing is tried in turn, and no daemon sees a link that is
-// not its own. A link that names no forward on this Mac, its own or one whose
-// ssh connection is not set up, goes to this Mac's daemon, which says which
-// daemon signed it. [LAW:single-enforcer]
+// key is learned and nothing is tried in turn. A link that names no forward on
+// this Mac, its own or one whose ssh connection is not set up, goes to this
+// Mac's daemon, which says which daemon signed it. [LAW:single-enforcer]
 enum Route {
   case own(socket: String)
   case forward(name: ForwardName, socket: String)
@@ -171,26 +169,40 @@ enum Route {
     return false
   }
 
-  var host: String? {
+  var host: HostAlias? {
     if case .forward(let name, _) = self { return name.host }
     return nil
   }
 }
 
-func route(of link: String) -> Route {
-  guard let id = signerId(of: link) else { return .own(socket: socketPath(uid: getuid())) }
+// [LAW:no-silent-failure] A directory that is not there is a Mac with no
+// forwards set up, so the link goes to its own daemon; one that is there and
+// cannot be read is not that, and is told as what it is, never routed past.
+func route(of link: String) -> Result<Route, ForwardError> {
+  let own = Route.own(socket: socketPath(uid: getuid()))
+  guard let id = signerId(of: link) else { return .success(own) }
   // NSHomeDirectory, not $HOME: it is the account's home, which is what ssh's
   // `%d` spells in the stanza.
   let dir = NSHomeDirectory() + "/" + REMOTE_SOCKET_DIR_UNDER_HOME
-  let files = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).map {
-    name -> (name: String, modified: Date) in
-    let attrs = try? FileManager.default.attributesOfItem(atPath: dir + "/" + name)
-    return (name, attrs?[.modificationDate] as? Date ?? .distantPast)
+  guard FileManager.default.fileExists(atPath: dir) else { return .success(own) }
+  let names: [String]
+  do {
+    names = try FileManager.default.contentsOfDirectory(atPath: dir)
+  } catch {
+    return .failure(
+      ForwardError("the ssh forwards in \(dir) cannot be read: \(error.localizedDescription)"))
   }
-  guard let found = forwardFile(for: id, among: files) else {
-    return .own(socket: socketPath(uid: getuid()))
+  // Only this signer's files are looked at; one that vanishes between the
+  // listing and the look is an ssh that ended, and is no forward.
+  let files = names.filter { forwardName($0)?.id == id }.compactMap {
+    name -> (name: String, modified: Date)? in
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: dir + "/" + name),
+      let modified = attrs[.modificationDate] as? Date
+    else { return nil }
+    return (name, modified)
   }
-  return .forward(name: found.name, socket: dir + "/" + found.file)
+  guard let found = forwardFile(for: id, among: files) else { return .success(own) }
+  return .success(.forward(name: found.name, socket: dir + "/" + found.file))
 }
 
 // A forward file can outlive the ssh connection that made it (ssh killed), and
@@ -198,7 +210,7 @@ func route(of link: String) -> Route {
 // names that does not take the link says whose it is and what to look at,
 // before the cause. [LAW:no-silent-failure]
 func deliver(_ url: String, via route: Route) -> Forward {
-  let sent = forward(url, to: route.socket, actsOnDesktop: route.actsOnDesktop)
+  let sent = forward(url, via: route)
   guard case .forward(let name, _) = route, case .failed(let why) = sent else { return sent }
   return .failed(
     "the ssh forward for key \(name.id) did not take the link; is the ssh connection to the machine that drew it open? \(why)"
@@ -246,16 +258,15 @@ func verdict(_ fd: Int32, waitMs: Int32) -> Forward {
   case .failure(let e): return .unconfirmed(e.why)
   }
   let length = header.reduce(0) { ($0 << 8) | Int($1) }
-  if length > VERDICT_MAX_BYTES {
-    return .unconfirmed("the daemon's verdict is \(length) bytes, past \(VERDICT_MAX_BYTES)")
+  if length > FRAME_MAX_BYTES {
+    return .unconfirmed("the daemon's verdict is \(length) bytes, past \(FRAME_MAX_BYTES)")
   }
   let body: Data
   switch readExactly(fd, length, by: deadline, waited: waitMs) {
   case .success(let d): body = d
   case .failure(let e): return .unconfirmed(e.why)
   }
-  let read = verdictOf(body)
-  if case .unreadable = read.said {
+  guard let read = verdictOf(body) else {
     return .unconfirmed("the daemon's verdict is not one this app reads")
   }
   return .verdict(read)
@@ -333,7 +344,8 @@ func carryOut(_ steps: [Step]) {
         }
       }
     case .cannot(let why):
-      log.error("not carried out: \(why, privacy: .public)")
+      // Private: the reason can name the path the open was for.
+      log.error("not carried out: \(why, privacy: .private)")
       notify("Click not carried out", why, uncarriedActNotice)
     }
   }
@@ -341,7 +353,8 @@ func carryOut(_ steps: [Step]) {
 
 final class Handler: NSObject, NSApplicationDelegate {
   // One serial queue per socket: clicks to one daemon land in the order they
-  // were made, and a daemon slow to answer holds only its own.
+  // were made, and a daemon slow to answer holds only its own. Owned by the
+  // main thread, the one Launch Services delivers links on.
   private var queues: [String: DispatchQueue] = [:]
 
   private func queue(for socket: String) -> DispatchQueue {
@@ -354,10 +367,14 @@ final class Handler: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       let link = url.absoluteString
-      let routed = route(of: link)
-      queue(for: routed.socket).async {
-        let sent = deliver(link, via: routed)
-        DispatchQueue.main.async { Handler.conclude(link, routed, sent) }
+      switch route(of: link) {
+      case .failure(let error):
+        Handler.conclude(link, .failed(error.why), via: nil)
+      case .success(let routed):
+        queue(for: routed.socket).async {
+          let sent = deliver(link, via: routed)
+          DispatchQueue.main.async { Handler.conclude(link, sent, via: routed) }
+        }
       }
     }
   }
@@ -368,29 +385,38 @@ final class Handler: NSObject, NSApplicationDelegate {
   // and the unified log is readable by every admin on the machine. The
   // daemon's own click event records the link, in the user's own log.
   // [LAW:nothing-unseen]
-  static func conclude(_ link: String, _ routed: Route, _ sent: Forward) {
-    let socket = routed.socket
+  // `via` is nil for a link that was never routed, which has no socket to name.
+  static func conclude(_ link: String, _ sent: Forward, via routed: Route?) {
+    let socket = routed?.socket ?? "no socket"
+    func lost(_ why: String) {
+      log.error("lost \(link, privacy: .private) to \(socket, privacy: .public): \(why, privacy: .public)")
+      notify("Click not delivered", why, lostClickNotice)
+    }
     switch sent {
     case .verdict(let read):
       // The acts are what the click came to, so they are carried out whether
       // the click landed or failed after asking them.
-      carryOut(plan(read.acts, host: routed.host))
+      carryOut(
+        steps(for: read, asked: routed?.actsOnDesktop ?? false, host: routed?.host))
       switch read.said {
-      case .delivered, .unreadable:
+      case .delivered:
         log.notice("forwarded \(link, privacy: .private) to \(socket, privacy: .public)")
       case .refused(let why):
         log.error("refused \(link, privacy: .private) by \(socket, privacy: .public): \(why, privacy: .public)")
         notify("Click refused", why, refusedClickNotice)
       case .failed(let why):
-        log.error("lost \(link, privacy: .private) to \(socket, privacy: .public): \(why, privacy: .public)")
-        notify("Click not delivered", why, lostClickNotice)
+        lost(why)
       }
     case .unconfirmed(let why):
-      log.error("unconfirmed \(link, privacy: .private) at \(socket, privacy: .public): \(why, privacy: .public)")
-      notify("Click unconfirmed", why, lostClickNotice)
+      // A click that asked its acts on this Mac is done with them once this
+      // gives up: the verdict that carries them has no reader.
+      let said =
+        routed?.actsOnDesktop == true
+        ? "\(why); nothing was copied or opened on this Mac for it" : why
+      log.error("unconfirmed \(link, privacy: .private) at \(socket, privacy: .public): \(said, privacy: .public)")
+      notify("Click unconfirmed", said, lostClickNotice)
     case .failed(let why):
-      log.error("lost \(link, privacy: .private) to \(socket, privacy: .public): \(why, privacy: .public)")
-      notify("Click not delivered", why, lostClickNotice)
+      lost(why)
     }
   }
 }

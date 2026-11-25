@@ -25,6 +25,7 @@ import {
   ACTS_ON_DESKTOP,
   awaitsVerdict,
   type DesktopAct,
+  type ErrorCode,
   type Inbound,
   type OwnerFacts,
   type Request,
@@ -57,7 +58,10 @@ import {
 import { elapsedMs, spanMs } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import type { ClickArrival } from "../renderer-interface/click-arrival";
+import {
+  actsOnDesktop,
+  type ClickArrival,
+} from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
@@ -109,11 +113,20 @@ export interface Reply {
 // verdict: never (a version 1 writer hangs up at once), as soon as its frame is
 // read (whether its link opened: the app tells a refusal at once, and a slow
 // click that lands is never told as failed), or once its click has landed (a
-// writer that carries out the click's acts is told what the click came to).
+// writer that carries out the click's acts is told what the click came to). The
+// click is each one's `land`, which settles once the click's event is written;
+// only a writer told once it landed has what the click came to to be sent.
+// [LAW:no-ambient-temporal-coupling] The click is started by whoever wrote the
+// verdict, once it is written where it is told at once, so no work of the
+// click's stands before it.
 export type Told =
-  | { readonly when: "never" }
-  | { readonly when: "at-once"; readonly verdict: Response }
-  | { readonly when: "landed" };
+  | { readonly when: "never"; readonly land: () => Promise<void> }
+  | {
+      readonly when: "at-once";
+      readonly verdict: Response;
+      readonly land: () => Promise<void>;
+    }
+  | { readonly when: "landed"; readonly land: () => Promise<Reply> };
 
 // A subscription is the one request answered by a stream rather than a reply:
 // the connection boundary turns its socket over to the session's feed.
@@ -126,15 +139,7 @@ export type HandledRequest =
       // Set when the subscriber is the pane that owns the session's pointer.
       owner: PaneOwner | null;
     }
-  | {
-      kind: "url";
-      told: Told;
-      // [LAW:no-ambient-temporal-coupling] The click, started by whoever
-      // wrote the verdict once it is written, so no work of the click's
-      // stands before it. Settles once the click's event is written, with
-      // what the click came to, which a writer told once it landed is sent.
-      land: () => Promise<Reply>;
-    };
+  | { kind: "url"; told: Told };
 
 // The one way a reply is made.
 export function replyOf(
@@ -210,18 +215,26 @@ export function refuseClosingInbound(
   if (inbound.kind !== "url")
     return replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
   // A closing daemon answers at once, whatever the frame asks of its click.
-  const verdict = closingResponse(parts, "click", accepted);
   return {
     kind: "url",
-    told: toldAtOnce(inbound.frame.urlV, verdict),
-    land: async () => replyOf(verdict),
+    told: toldAtOnce(
+      inbound.frame.urlV,
+      closingResponse(parts, "click", accepted),
+      async () => {},
+    ),
   };
 }
 
 // [LAW:dataflow-not-control-flow] A verdict told as soon as the frame is read,
 // to a writer that reads one (every version from 2).
-const toldAtOnce = (urlV: unknown, verdict: Response): Told =>
-  awaitsVerdict(urlV) ? { when: "at-once", verdict } : { when: "never" };
+const toldAtOnce = (
+  urlV: unknown,
+  verdict: Response,
+  land: () => Promise<void>,
+): Told =>
+  awaitsVerdict(urlV)
+    ? { when: "at-once", verdict, land }
+    : { when: "never", land };
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
 // but a subscribe, the compiler naming one added to the protocol until it is,
@@ -681,8 +694,7 @@ export async function replyTo(
       accepted,
       timedOut,
       clientLeft,
-      (facts, click, desktop) =>
-        clickOutcome(parts, req, facts, click, desktop),
+      (facts, click) => clickOutcome(parts, req, facts, click),
     );
     return stay(clickReply(outcome));
   }
@@ -859,11 +871,7 @@ async function clickEvent(
   accepted: Acceptance,
   timedOut: () => boolean,
   clientLeft: () => boolean,
-  run: (
-    facts: RequestFacts,
-    click: ClickInFlight,
-    desktop: DesktopAct[],
-  ) => Promise<RequestOutcome>,
+  run: (facts: RequestFacts, click: ClickInFlight) => Promise<Clicked>,
 ): Promise<Clicked> {
   const { clock } = parts;
   const t0 = clock.monotonic();
@@ -879,20 +887,17 @@ async function clickEvent(
   const click: ClickInFlight = {
     gone: () => timedOut() || clientLeft(),
   };
-  // [LAW:single-enforcer] The acts a click leaves to its writer's machine are
-  // part of its one event, in the order asked, so they leave with it however
-  // it ended: a click that threw or failed after asking one still asked it.
-  const desktop: DesktopAct[] = [];
-  // Whatever a click throws is its outcome, whichever arm it took, so every
-  // click writes its event.
-  const outcome = await run(facts, click, desktop).catch(failureOf);
+  // [LAW:single-enforcer] Whatever a click throws is its outcome, whichever arm
+  // it took, so every click writes its event.
+  const { outcome, desktop } = await run(facts, click).catch(
+    (thrown: unknown): Clicked => nothingLeft(failureOf(thrown)),
+  );
   // Whether the client was told TIMEOUT, and whether a client that waited
   // hung up, by the time the click was done.
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N",
   });
-  if (desktop.length > 0) noteFacts(facts, { desktop: String(desktop.length) });
   const { level, line } = requestEvent(
     "click",
     facts,
@@ -904,30 +909,36 @@ async function clickEvent(
 }
 
 // A click as it ended: its outcome, and the acts it left to the machine its
-// writer runs on.
+// writer runs on, in the order asked, which are part of what it came to
+// however it ended: a click that failed after asking one still asked it.
 interface Clicked {
   readonly outcome: RequestOutcome;
   readonly desktop: readonly DesktopAct[];
 }
 
+const nothingLeft = (outcome: RequestOutcome): Clicked => ({
+  outcome,
+  desktop: [],
+});
+
 // [LAW:single-enforcer] The verdict of a writer told once its click landed:
-// what the click came to, and the acts it left for the writer to carry out,
-// which a click that failed after asking them leaves too, as it would on a bar
-// of the writer's own machine. [LAW:no-silent-failure] A verdict its writer
-// never took (it gave up waiting) takes its acts with it, and the daemon says
+// what the click came to, and the acts it left for the writer to carry out.
+// [LAW:no-silent-failure] A verdict its writer never took (it gave up waiting,
+// or the verdict could not be sent) takes its acts with it, and the daemon says
 // so.
 function landedReply(parts: DaemonParts, { outcome, desktop }: Clicked): Reply {
-  return replyOf(
+  const reply: Reply = replyOf(
     { ...clickReply(outcome), desktopActs: desktop },
     null,
     (taken) => {
       if (!taken && desktop.length > 0)
         parts.log(
           "warn",
-          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: it left before the verdict that carries them`,
+          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`,
         );
     },
   );
+  return reply;
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] A click request run to its
@@ -941,18 +952,18 @@ async function clickOutcome(
   req: { readonly url: unknown },
   facts: RequestFacts,
   click: ClickInFlight,
-  desktop: DesktopAct[],
-): Promise<RequestOutcome> {
+): Promise<Clicked> {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
-    return badRequest(`a click's url is a string, got ${typeof url}`);
+    return nothingLeft(
+      badRequest(`a click's url is a string, got ${typeof url}`),
+    );
   return ranClick(
     parts,
     routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
     facts,
     click,
-    desktop,
   );
 }
 
@@ -996,7 +1007,9 @@ function readUrlFrame(
 // the moment it is read and run to its outcome after. A link that does not
 // open is refused here, as a bad request on the click's event and in the
 // verdict, whose writer shows it as a notification, never dropped. A verb's
-// own failure is held on the bar, so the verdict does not say it twice.
+// own failure is held on the bar, so the verdict does not say it twice. A
+// writer that carries out its click's acts is told what the click came to
+// instead, once it landed.
 function urlClick(
   parts: DaemonParts,
   frame: Record<string, unknown>,
@@ -1005,34 +1018,31 @@ function urlClick(
   clientLeft: () => boolean,
 ): HandledRequest {
   const read = routeClick(parts, readUrlFrame(frame, parts.linkSigner));
-  // A writer that carries out its click's acts is told what the click came
-  // to, once it landed; any other, at once, whether its link opened.
-  const told: Told =
-    read.kind === "link" && read.delivery.kind === "desktop-forwarder"
-      ? { when: "landed" }
-      : toldAtOnce(
-          frame.urlV,
-          read.kind === "refused"
-            ? clickReply(read.failure)
-            : { ok: true, output: "" },
-        );
+  const onDesktop =
+    read.kind === "link" &&
+    actsOnDesktop({ via: "link", delivery: read.delivery });
+  // [LAW:nothing-unseen] Zero acts left and no count are different facts: a
+  // click that asked its acts on the desktop says how many it left.
+  const land = async (): Promise<Clicked> =>
+    clickEvent(parts, accepted, timedOut, clientLeft, async (facts, click) => {
+      noteFacts(facts, {
+        via: onDesktop ? "desktop-forwarder" : "forwarder",
+        urlV: String(frame.urlV),
+      });
+      const clicked = await ranClick(parts, read, facts, click);
+      if (onDesktop)
+        noteFacts(facts, { desktop: String(clicked.desktop.length) });
+      return clicked;
+    });
   return {
     kind: "url",
-    told,
-    land: async () =>
-      landedReply(
-        parts,
-        await clickEvent(
-          parts,
-          accepted,
-          timedOut,
-          clientLeft,
-          async (facts, click, desktop) => {
-            noteFacts(facts, { via: "forwarder", urlV: String(frame.urlV) });
-            return ranClick(parts, read, facts, click, desktop);
-          },
+    told: onDesktop
+      ? { when: "landed", land: async () => landedReply(parts, await land()) }
+      : toldAtOnce(
+          frame.urlV,
+          clickReply(read.kind === "refused" ? read.failure : { kind: "ok" }),
+          async () => void (await land()),
         ),
-      ),
   };
 }
 
@@ -1078,12 +1088,11 @@ async function ranClick(
   read: RoutedClick,
   facts: RequestFacts,
   click: ClickInFlight,
-  desktop: DesktopAct[],
-): Promise<RequestOutcome> {
+): Promise<Clicked> {
   switch (read.kind) {
     case "refused":
       if (read.signed !== undefined) noteFacts(facts, read.signed);
-      return read.failure;
+      return nothingLeft(read.failure);
     case "link":
       noteFacts(facts, { link: read.link });
       return handleClick(
@@ -1092,7 +1101,6 @@ async function ranClick(
         { via: "link", delivery: read.delivery },
         facts,
         click,
-        desktop,
       );
   }
 }
@@ -1115,8 +1123,7 @@ async function handleClick(
   arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
-  desktop: DesktopAct[],
-): Promise<RequestOutcome> {
+): Promise<Clicked> {
   const { verb } = admitted;
   const session = admitted.session ?? null;
   noteFacts(facts, { verb, sid: session ?? "-", renderer: target.name });
@@ -1130,12 +1137,6 @@ async function handleClick(
       : {
           kind: "event",
           runEvidence,
-          // [LAW:single-enforcer] Where this click's copy and open act is
-          // read from its delivery, which the frame set once.
-          leaveToDesktop:
-            arrival.delivery.kind === "desktop-forwarder"
-              ? (act) => void desktop.push(act)
-              : undefined,
           event: {
             kind: "click",
             click: admitted,
@@ -1153,15 +1154,26 @@ async function handleClick(
   // [LAW:nothing-unseen] How long the click waited for the renderer's turn.
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
-  if (delivered.kind === "threw") return delivered.failure;
+  // [LAW:dataflow-not-control-flow] The acts the turn left to its writer's
+  // machine, in the order asked, leave with the click however it ended.
+  const desktop = delivered.settled.flatMap((outcome) =>
+    outcome.kind === "left" ? [outcome.act] : [],
+  );
+  if (delivered.kind === "threw")
+    return { outcome: delivered.failure, desktop };
   // [LAW:no-silent-failure] A click whose changes did not land, or whose act
   // did not go, says so in its answer: by the first that did not. A skipped
   // act's cause is its changes' own outcome, which answers instead.
   const missed = delivered.settled.find(
     (outcome): outcome is Answering =>
-      outcome.kind !== "ok" && outcome.kind !== "skipped",
+      outcome.kind !== "ok" &&
+      outcome.kind !== "skipped" &&
+      outcome.kind !== "left",
   );
-  return missed === undefined ? { kind: "ok" } : clickFailure(missed);
+  return {
+    outcome: missed === undefined ? { kind: "ok" } : clickFailure(missed),
+    desktop,
+  };
 }
 
 type Answering = Exclude<EffectOutcome, { kind: "ok" | "skipped" }>;
@@ -1179,10 +1191,19 @@ const CLICK_FAILURE = {
   closing: "closing",
 } as const;
 
+// What a click's outcome tells, which a writer that carries out its acts is
+// handed them beside (`ClickVerdict`).
+type ClickAnswer =
+  | { ok: true; output: string }
+  | {
+      ok: false;
+      error: string;
+      code: Exclude<ErrorCode, "TIMEOUT">;
+      daemonV?: number;
+    };
+
 // [LAW:single-enforcer] The reply a click's outcome is answered with.
-function clickReply(
-  outcome: RequestOutcome,
-): Exclude<Response, { code: "TIMEOUT" }> {
+function clickReply(outcome: RequestOutcome): ClickAnswer {
   switch (outcome.kind) {
     case "ok":
       return { ok: true, output: "" };

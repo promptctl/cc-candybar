@@ -19,3 +19,10 @@ export type ClickArrival =
   | { readonly via: "link"; readonly delivery: Delivery }
   | { readonly via: "tmux-status" }
   | { readonly via: "command" };
+
+// [LAW:single-enforcer] Whether a click's copy and open act on its writer's
+// machine, read from how it was delivered: the one place the frame's say on it
+// is kept, so the host that performs the acts and the renderer that must not
+// park such a click cannot disagree.
+export const actsOnDesktop = (arrival: ClickArrival): boolean =>
+  arrival.via === "link" && arrival.delivery.kind === "desktop-forwarder";

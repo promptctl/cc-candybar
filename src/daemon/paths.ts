@@ -87,13 +87,15 @@ export const HOST_ALIAS_FIRST =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
 export const HOST_ALIAS_REST =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-";
-export function isHostAlias(word: string): boolean {
+declare const hostAliasSpelled: unique symbol;
+export type HostAlias = string & { readonly [hostAliasSpelled]: true };
+export function hostAliasOf(word: string): HostAlias | null {
   const [first, ...rest] = word;
-  return (
-    first !== undefined &&
+  return first !== undefined &&
     HOST_ALIAS_FIRST.includes(first) &&
     rest.every((char) => HOST_ALIAS_REST.includes(char))
-  );
+    ? (word as HostAlias)
+    : null;
 }
 
 export function remoteSocketDir(home: string): string {

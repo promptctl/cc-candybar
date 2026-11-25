@@ -476,11 +476,16 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       })
       .catch((err: unknown) => {
         daemon.log("error", `handler threw: ${inspect(err)}`);
-        on({ kind: "failed", answer: replyOf(renderFailed(err)) });
+        failed(err);
       });
     // [LAW:single-enforcer] A connection carries one frame: the reader reads
     // nothing after it.
     return "done";
+  }
+
+  // [LAW:single-enforcer] What a throw is answered with, whoever caught it.
+  function failed(err: unknown): void {
+    on({ kind: "failed", answer: replyOf(renderFailed(err)) });
   }
 
   function unparsed(err: Error): void {
@@ -499,18 +504,19 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // A url frame's verdict, then its click, which is in flight until it lands.
   // A version 1 writer has closed, and a write to its socket is only an error
   // event.
-  function clicked(r: Extract<HandledRequest, { kind: "url" }>): void {
-    if (r.told.when === "at-once")
-      on({ kind: "verdict", answer: replyOf(r.told.verdict) });
+  function clicked({ told }: Extract<HandledRequest, { kind: "url" }>): void {
+    if (told.when === "at-once")
+      on({ kind: "verdict", answer: replyOf(told.verdict) });
     // [LAW:no-silent-failure] A landing that throws reaches the clock, which
     // shows it on every bar, and is the failure its writer is told if it waits
     // on the landing; the connection hears it landed all the same.
     daemon.clock.detach("url click landing", async () => {
       try {
-        const landed = await r.land();
-        if (r.told.when === "landed") on({ kind: "verdict", answer: landed });
+        if (told.when === "landed")
+          on({ kind: "verdict", answer: await told.land() });
+        else await told.land();
       } catch (err) {
-        on({ kind: "failed", answer: replyOf(renderFailed(err)) });
+        failed(err);
         throw err;
       } finally {
         on({ kind: "landed" });

@@ -9,7 +9,7 @@ import {
   REMOTE_SOCKET_HOST_SEPARATOR,
   REMOTE_SOCKET_HOST_TOKEN,
   REMOTE_SOCKET_SUFFIX,
-  isHostAlias,
+  hostAliasOf,
   socketPath,
 } from "./daemon/paths.js";
 import type { Asked } from "./utils/outcome.js";
@@ -68,12 +68,20 @@ export function sshConfigPlan(
   args: readonly string[],
   asked: Asked<SshConfigFacts>,
 ): CliPlan {
-  const [alias, ...extra] = args;
+  const [word, ...extra] = args;
+  if (word === undefined || extra.length > 0) {
+    return { stdout: "", stderr: USAGE, code: 2 };
+  }
   // [LAW:parse-dont-validate] The alias is one word of ssh's config naming one
   // host, spelled so the forward's name can carry it to the app: no wildcard or
   // negation (`*`, `?`, `!`), which would make a pattern, and no `/`.
-  if (alias === undefined || extra.length > 0 || !isHostAlias(alias)) {
-    return { stdout: "", stderr: USAGE, code: 2 };
+  const alias = hostAliasOf(word);
+  if (alias === null) {
+    return {
+      stdout: "",
+      stderr: `ssh-config: ${JSON.stringify(word)} cannot be carried in a forward's file name: begin the alias with a letter, a digit or _, and spell the rest with letters, digits, _, . and - (a Host alias with another character cannot be pointed at by an editor from a click)\n`,
+      code: 2,
+    };
   }
   if (asked.kind === "failed") {
     return { stdout: "", stderr: `ssh-config: ${asked.reason}\n`, code: 1 };

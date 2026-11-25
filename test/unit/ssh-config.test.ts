@@ -22,17 +22,27 @@ describe("cc-candybar ssh-config", () => {
   it.each([
     ["none", []],
     ["two", ["a", "b"]],
-    ["an empty one", [""]],
-    ["one with a space", ["my box"]],
-    ["a pattern", ["*"]],
-    ["a negation", ["!dev"]],
-    ["a path", ["a/b"]],
-    ["one that leads with a dot", [".dev"]],
-    ["one with a non-ASCII letter", ["d\u00e9v"]],
-  ])("refuses %s as the alias", (_, args) => {
+  ])("refuses %s as the alias, saying the usage", (_, args) => {
     const plan = sshConfigPlan(args, facts);
     expect(plan.code).toBe(2);
     expect(plan.stderr).toContain("Usage: cc-candybar ssh-config ALIAS");
+    expect(plan.stdout).toBe("");
+  });
+
+  it.each([
+    ["an empty one", ""],
+    ["one with a space", "my box"],
+    ["a pattern", "*"],
+    ["a negation", "!dev"],
+    ["a path", "a/b"],
+    ["one that leads with a dot", ".dev"],
+    ["one with a non-ASCII letter", "d\u00e9v"],
+    ["one with a +", "web+eu"],
+  ])("refuses %s as the alias, saying how an alias is spelled", (_, alias) => {
+    const plan = sshConfigPlan([alias], facts);
+    expect(plan.code).toBe(2);
+    expect(plan.stderr).toContain(JSON.stringify(alias));
+    expect(plan.stderr).toContain("letters, digits");
     expect(plan.stdout).toBe("");
   });
 

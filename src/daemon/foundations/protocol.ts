@@ -412,7 +412,10 @@ export const awaitsVerdict = (urlV: unknown): boolean =>
 // machine its writer runs on, which is not the daemon's when the link was drawn
 // over ssh. The writer then reads the verdict after the click lands, because
 // the acts are what the click came to. Optional, so an older daemon and a newer
-// writer still serve every other link. Mirrored by url-handler/wire.swift.
+// writer still serve every other link: that daemon ignores the field and acts on
+// its own machine, and the writer learns it from a verdict with no `desktopActs`,
+// which every verdict of this daemon to such a frame carries. Mirrored by
+// url-handler/wire.swift.
 export const ACTS_ON_DESKTOP = "desktop";
 
 export interface UrlFrame {
@@ -427,6 +430,20 @@ export interface UrlFrame {
 export type DesktopAct =
   | { readonly kind: "copy"; readonly text: string }
   | { readonly kind: "open"; readonly target: string };
+
+// [LAW:types-are-the-program] A click's verdict to a writer that carries out
+// its acts: always the acts, in the order asked, on failure too, because a click
+// that fails after asking one still asked it. No other response carries them.
+// Mirrored by url-handler/wire.swift.
+export type ClickVerdict =
+  | { ok: true; output: string; desktopActs: readonly DesktopAct[] }
+  | {
+      ok: false;
+      error: string;
+      code: Exclude<ErrorCode, "TIMEOUT">;
+      daemonV?: number;
+      desktopActs: readonly DesktopAct[];
+    };
 
 // [LAW:parse-dont-validate] What came in over the wire, classified once, by
 // the connection that read it: the URL handler's frame, or a request the `v`
@@ -533,15 +550,7 @@ export type Request =
 
 export type Response =
   // A frame pushed to the pane lane also carries where a pointer can act on it.
-  // A click answered to a writer that carries out its acts also hands them back
-  // (`desktopActs`), on failure too: a click that fails after asking one still
-  // asked it.
-  | {
-      ok: true;
-      output: string;
-      hits?: HitMap;
-      desktopActs?: readonly DesktopAct[];
-    }
+  | { ok: true; output: string; hits?: HitMap }
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }
@@ -569,8 +578,8 @@ export type Response =
       error: string;
       code: Exclude<ErrorCode, "TIMEOUT">;
       daemonV?: number;
-      desktopActs?: readonly DesktopAct[];
     }
+  | ClickVerdict
   | {
       ok: false;
       error: string;
