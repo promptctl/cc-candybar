@@ -4,15 +4,22 @@
     {
       "version": "pr-965",
       "ref": "refs/pull/965/merge",
-      "sha": "6adec100d66ff11f39ca9fddd43207e0b2ead263",
-      "timestamp": "2026-11-25T07:39:30.065Z",
+      "sha": "42f806ca740be5ef6e2f653298fb6165a7fda4ed",
+      "timestamp": "2026-11-25T08:06:23.792Z",
       "commits": [
         {
-          "sha": "6adec100d66ff11f39ca9fddd43207e0b2ead263",
+          "sha": "42f806ca740be5ef6e2f653298fb6165a7fda4ed",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T07:38:25Z",
-          "message": "Merge aa5aee7c5026a41c5207e945c40c64db35c8f2e2 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+          "timestamp": "2026-11-25T08:05:19Z",
+          "message": "Merge 1a2b64ae8fc6dc7b5bc63e681433143c3cd708a4 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "1a2b64ae8fc6dc7b5bc63e681433143c3cd708a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T01:05:06-07:00",
+          "message": "fix(url-handler): a copy or open over ssh goes to the click that asked it, and a click that fails still hands back what it asked\n\nA desktop act carries the id of its click, held by the daemon from the\nmoment the click is handed to the renderer until its landing is over, so\nit reaches that click's verdict whichever turn asks it and whichever\nclick's landing settles it. The host no longer settles a description of an\nact as an outcome, and an act whose click was already answered fails by\nname on its bar.\n\nThe URL handler's pure reads move to wire.swift with expectations run by\nurl-handler/check.sh; its clicks to one daemon go through one serial queue,\nand the frame's policy comes from the route.\n"
         },
         {
           "sha": "aa5aee7c5026a41c5207e945c40c64db35c8f2e2",

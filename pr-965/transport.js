@@ -77015,8 +77015,8 @@ function spliceOp(text5, path31, op, suffix, rendered) {
 
 // src/renderer-interface/click-arrival.ts
 init_globals();
-var deliveredTo = (delivery) => delivery.kind === "forwarder" ? delivery.actsOn : "daemon";
-var actsOn = (arrival) => arrival.via === "link" ? deliveredTo(arrival.delivery) : "daemon";
+var ACTS_ON_DAEMON = { on: "daemon" };
+var actsOn = (arrival) => arrival.via === "link" ? arrival.acts : ACTS_ON_DAEMON;
 
 // src/claude-input/typing.ts
 init_globals();
@@ -77075,21 +77075,25 @@ function ask(ctx, act) {
   ctx.acts.ask(ctx.effects, placed2(actsOn(ctx.arrival), act));
 }
 function placed2(on2, act) {
-  if (on2 === "daemon") return act;
   switch (act.kind) {
     case "copy":
-      return {
+      return on2.on === "daemon" ? act : {
         kind: "desktop",
         session: act.session,
+        click: on2.click,
         act: { kind: "copy", text: act.text }
       };
     case "open":
-      return {
+      return on2.on === "daemon" ? act : {
         kind: "desktop",
         session: act.session,
+        click: on2.click,
         act: { kind: "open", target: act.target }
       };
-    default:
+    case "desktop":
+    case "type-slash":
+    case "run":
+    case "approve-repo":
       return act;
   }
 }
@@ -84667,9 +84671,8 @@ function recordingCommandOf(value) {
 }
 
 // src/daemon/reply.ts
-function toldTo(frame2, verdict, afterLanding) {
-  if (!awaitsVerdict(frame2.urlV)) return { when: "never" };
-  return afterLanding ? { when: "landed" } : { when: "at-once", verdict };
+function toldAtOnce(urlV, verdict) {
+  return awaitsVerdict(urlV) ? { when: "at-once", verdict } : { when: "never" };
 }
 function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
   const { sent, frame: frame2, unsent } = framedResponse(resp);
@@ -84711,12 +84714,8 @@ function refuseClosingInbound(parts, inbound, accepted) {
   const verdict = closingResponse(parts, "click", accepted);
   return {
     kind: "url",
-    told: toldTo(
-      inbound.frame,
-      verdict,
-      inbound.frame.actsOn === ACTS_ON_DESKTOP
-    ),
-    land: async () => verdict
+    told: toldAtOnce(inbound.frame.urlV, verdict),
+    land: async () => replyOf(verdict)
   };
 }
 var REPLY_EVENTS = {
@@ -85188,8 +85187,19 @@ var noDesktop = (outcome) => ({
   outcome,
   desktop: []
 });
-function landedReply({ outcome, desktop }) {
-  return outcome.kind === "ok" ? { ok: true, output: "", desktopActs: desktop } : clickReply(outcome);
+function landedReply(parts, { outcome, desktop }) {
+  const said3 = clickReply(outcome);
+  return replyOf(
+    said3.ok ? { ok: true, output: "", desktopActs: desktop } : { ...said3, desktopActs: desktop },
+    null,
+    (taken2) => {
+      if (!taken2 && desktop.length > 0)
+        parts.log(
+          "warn",
+          `${desktop.length} copy or open act(s) for the desktop the person sits at were not carried out: the URL handler left before the verdict that carries them`
+        );
+    }
+  );
 }
 async function clickOutcome(parts, req, facts, click2) {
   noteFacts(facts, { via: "cli" });
@@ -85201,48 +85211,48 @@ async function clickOutcome(parts, req, facts, click2) {
   return ranClick(
     parts,
     routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
+    "daemon",
     facts,
     click2
   );
 }
 function readUrlFrame(frame2, links) {
-  const { urlV, url } = frame2;
+  const refused2 = (problem) => ({
+    read: { kind: "refused", problem },
+    place: "daemon"
+  });
+  const { urlV, url, actsOn: actsOn2 } = frame2;
   if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
-    return {
-      kind: "refused",
-      problem: `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-    };
+    return refused2(
+      `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+    );
   if (typeof url !== "string")
-    return {
-      kind: "refused",
-      problem: "the URL handler's frame carries no url string"
-    };
-  const { actsOn: actsOn2 } = frame2;
+    return refused2("the URL handler's frame carries no url string");
   if (actsOn2 !== void 0 && actsOn2 !== ACTS_ON_DESKTOP)
-    return {
-      kind: "refused",
-      problem: `the URL handler's frame names ${inspect(actsOn2)} for its acts, which this daemon does not know (${ACTS_ON_DESKTOP})`
-    };
-  return parseClick(
-    url,
-    {
-      kind: "forwarder",
-      urlV,
-      actsOn: actsOn2 === ACTS_ON_DESKTOP ? "desktop" : "daemon"
-    },
-    links
-  );
+    return refused2(
+      `the URL handler's frame names ${inspect(actsOn2)} for its acts, which this daemon does not know (${ACTS_ON_DESKTOP})`
+    );
+  if (actsOn2 === ACTS_ON_DESKTOP && !awaitsVerdict(urlV))
+    return refused2(
+      `the URL handler's frame version ${urlV} reads no verdict, which carries the acts it asks for`
+    );
+  return {
+    read: parseClick(url, { kind: "forwarder", urlV }, links),
+    place: actsOn2 === ACTS_ON_DESKTOP ? "desktop" : "daemon"
+  };
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  const read3 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
+  const { read: parsed2, place } = readUrlFrame(frame2, parts.linkSigner);
+  const read3 = routeClick(parts, parsed2);
+  const told = read3.kind === "link" && place === "desktop" ? { when: "landed" } : toldAtOnce(
+    frame2.urlV,
+    read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" }
+  );
   return {
     kind: "url",
-    told: toldTo(
-      frame2,
-      read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" },
-      read3.kind === "link" && deliveredTo(read3.delivery) === "desktop"
-    ),
+    told,
     land: async () => landedReply(
+      parts,
       await clickEvent(
         parts,
         accepted,
@@ -85250,7 +85260,7 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
         clientLeft,
         async (facts, click2) => {
           noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
-          return ranClick(parts, read3, facts, click2);
+          return ranClick(parts, read3, place, facts, click2);
         }
       )
     )
@@ -85276,23 +85286,45 @@ function routeClick(parts, read3) {
     signed: { link: read3.link, verb: read3.click.verb }
   } : { ...read3, target };
 }
-async function ranClick(parts, read3, facts, click2) {
+async function ranClick(parts, read3, place, facts, click2) {
   switch (read3.kind) {
     case "refused":
       if (read3.signed !== void 0) noteFacts(facts, read3.signed);
       return noDesktop(read3.failure);
     case "link":
       noteFacts(facts, { link: read3.link });
-      return handleClick(
-        parts,
-        read3,
-        { via: "link", delivery: read3.delivery },
-        facts,
-        click2
-      );
+      return handleClick(parts, read3, place, facts, click2);
   }
 }
-async function handleClick(parts, {
+async function handleClick(parts, link, place, facts, click2) {
+  const { delivery } = link;
+  if (place === "daemon")
+    return noDesktop(
+      await deliverClick(
+        parts,
+        link,
+        { via: "link", delivery, acts: ACTS_ON_DAEMON },
+        facts,
+        click2
+      )
+    );
+  const held = parts.desktopActs.begin();
+  let outcome;
+  let desktop;
+  try {
+    outcome = await deliverClick(
+      parts,
+      link,
+      { via: "link", delivery, acts: { on: "desktop", click: held } },
+      facts,
+      click2
+    );
+  } finally {
+    desktop = parts.desktopActs.end(held);
+  }
+  return { outcome, desktop };
+}
+async function deliverClick(parts, {
   click: admitted,
   runEvidence,
   target
@@ -85319,16 +85351,11 @@ async function handleClick(parts, {
   );
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
-  if (delivered.kind === "threw") return noDesktop(delivered.failure);
+  if (delivered.kind === "threw") return delivered.failure;
   const missed = delivered.settled.find(
-    (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped" && outcome.kind !== "handed"
+    (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped"
   );
-  return {
-    outcome: missed === void 0 ? { kind: "ok" } : clickFailure(missed),
-    desktop: delivered.settled.flatMap(
-      (outcome) => outcome.kind === "handed" ? [outcome.act] : []
-    )
-  };
+  return missed === void 0 ? { kind: "ok" } : clickFailure(missed);
 }
 function clickFailure(outcome) {
   const kind = CLICK_FAILURE[outcome.kind];
@@ -91846,10 +91873,11 @@ var Acts = class {
     );
     this.performers = {
       // [LAW:effects-at-boundaries] Nothing happens on this machine: the act
-      // goes back to the click that asked it, as the outcome's data.
-      desktop: async (act) => ({
-        outcome: { kind: "handed", act: act.act },
-        said: "left to the URL handler on the desktop the person sits at"
+      // goes to the verdict of the click that asked it, and the URL handler on
+      // the desktop the person sits at carries it out.
+      desktop: async (act) => deps.desktop.deposit(act.click, act.act) ? did("left to the URL handler on the desktop the person sits at") : not({
+        kind: "failed",
+        reason: "the click that asked it was already answered, so nothing carried it out on the desktop the person sits at"
       }),
       copy: (act) => clickLaunch(
         deps.programsFor(act.session).launch,
@@ -91913,10 +91941,10 @@ var Acts = class {
   async perform(act) {
     const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act);
     this.deps.log(
-      outcome.kind === "ok" || outcome.kind === "handed" || outcome.kind === "closing" ? "info" : "warn",
+      outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
       `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} \u2014 ${nameOf2(act)}: ${said3}`
     );
-    return outcome.kind === "ok" || outcome.kind === "handed" ? outcome : { ...outcome, reason: `${nameOf2(act)}: ${outcome.reason}` };
+    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act)}: ${outcome.reason}` };
   }
   async performed(act) {
     try {
@@ -91932,6 +91960,35 @@ var Acts = class {
           return not({ kind: "failed", reason: failure2.message });
       }
     }
+  }
+};
+
+// src/daemon/desktop-acts.ts
+init_globals();
+var DesktopActs = class {
+  held = /* @__PURE__ */ new Map();
+  issued = 0;
+  // A click starts holding its acts as it is handed to the renderer.
+  begin() {
+    const click2 = `desktop-click-${++this.issued}`;
+    this.held.set(click2, []);
+    return click2;
+  }
+  // Whether the click still held its place for the act: one that has already
+  // been answered has no verdict left to carry it.
+  deposit(click2, act) {
+    const acts = this.held.get(click2);
+    if (acts === void 0) return false;
+    acts.push(act);
+    return true;
+  }
+  // The click's acts in the order asked, once its landing is over.
+  end(click2) {
+    const acts = this.held.get(click2);
+    if (acts === void 0)
+      throw new Error(`${click2} ended twice, or never began`);
+    this.held.delete(click2);
+    return acts;
   }
 };
 
@@ -93374,8 +93431,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     );
   };
-  const settle3 = async (effect, done) => {
-    const outcome = done.kind === "handed" ? { kind: "ok" } : done;
+  const settle3 = async (effect, outcome) => {
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
     const unheard = (reason) => {
       if (isEnvironmentOutput(outcome)) world.unheard(reason, true);
@@ -93388,7 +93444,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     );
     if (failed3 !== null && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
       unheard(failed3);
-    return done;
+    return outcome;
   };
   const settleInSlot = async (effect, outcome) => {
     const input = stamped(doneOf(effect, outcome));
@@ -93473,21 +93529,15 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       }
     }, at);
   };
-  const taken2 = async (make, at = "last", click2 = null, claimed = false) => {
+  const taken2 = async (make, at = "last", click2 = null) => {
     const { event, slotted } = await throughSlot(make, at, click2);
-    const settled3 = await slotted.settled;
-    if (!claimed) stranded(settled3);
-    return { event, turn: { ...slotted.turn, settled: settled3 } };
-  };
-  const stranded = (settled3) => {
-    for (const outcome of settled3)
-      if (outcome.kind === "handed")
-        world.unheard(
-          `a ${outcome.act.kind} for the desktop the person sits at had no click waiting to carry it out`
-        );
+    return {
+      event,
+      turn: { ...slotted.turn, settled: await slotted.settled }
+    };
   };
   const answer2 = async (make) => (await taken2(make)).turn;
-  const answerClick = async (session, make) => (await taken2(make, "last", session, true)).turn;
+  const answerClick = async (session, make) => (await taken2(make, "last", session)).turn;
   const recorded2 = (at) => async (make, about) => {
     const { event, turn } = await taken2(make, at);
     record2(event, about, turn);
@@ -93553,7 +93603,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         },
         "scheduled"
       );
-      unawaited("due acts", async () => stranded(await settled3));
+      unawaited("due acts", () => settled3);
       record2(event, [], turn);
       return turn;
     },
@@ -93663,7 +93713,7 @@ init_globals();
 
 // src/renderer-interface/recording.ts
 init_globals();
-var RECORDING_VERSION = 1;
+var RECORDING_VERSION = 2;
 
 // src/renderer-interface/wire.ts
 init_globals();
@@ -95323,8 +95373,10 @@ function createDaemon(inputs) {
     claudeInput: inputs.claudeInput(edge)
   });
   const desktopPrograms = programs2(launcher);
+  const desktopActs = new DesktopActs();
   const acts = new Acts({
     detach: clock.detach,
+    desktop: desktopActs,
     programsFor: (session) => {
       const context = session === null ? null : sessionBook.programContextOf(session);
       if (context === null) return desktopPrograms;
@@ -95677,6 +95729,7 @@ function createDaemon(inputs) {
     sessionBook,
     stats,
     linkSigner: linkSigner2,
+    desktopActs,
     publishFrame,
     renderSightings,
     watcherRegistry,
