@@ -4,15 +4,22 @@
     {
       "version": "pr-966",
       "ref": "refs/pull/966/merge",
-      "sha": "5e3824053fa6fc9782f80bf4eeb37019eaf4b1e5",
-      "timestamp": "2026-11-25T09:01:53.383Z",
+      "sha": "d3b12bbff5d6afb1d636119441f560b16fa46ca7",
+      "timestamp": "2026-11-25T09:29:44.515Z",
       "commits": [
         {
-          "sha": "5e3824053fa6fc9782f80bf4eeb37019eaf4b1e5",
+          "sha": "d3b12bbff5d6afb1d636119441f560b16fa46ca7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T02:00:44-07:00",
-          "message": "Merge 461c2309d4abf7f5dfb0925ab2b13c23ebddf73f into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+          "timestamp": "2026-11-25T09:28:26Z",
+          "message": "Merge 5515dd56e3019fc9724fa0f8c258faba9529994e into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "5515dd56e3019fc9724fa0f8c258faba9529994e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T02:28:08-07:00",
+          "message": "fix(url-handler): hand the acts of a forwarded click back as data in its verdict, and read them without answer-shaped voids (candybar-ssh-links-16rz.g1p)\n"
         },
         {
           "sha": "461c2309d4abf7f5dfb0925ab2b13c23ebddf73f",
