@@ -196,6 +196,17 @@ func destination(of link: String) -> String {
   return FileManager.default.fileExists(atPath: forwarded) ? forwarded : socketPath()
 }
 
+// A forward file can outlive the ssh connection that made it (ssh killed),
+// so a socket no daemon answers on, found by a link's id, says whose it is and
+// what to look at. [LAW:no-silent-failure]
+func forwarded(_ url: String, to path: String) -> Forward {
+  let sent = forward(url, to: path)
+  guard path != socketPath(), case .failed(let why) = sent else { return sent }
+  return .failed(
+    "the ssh forward this link names (\((path as NSString).lastPathComponent)) does not answer: is the ssh connection to the machine that drew it open? \(why)"
+  )
+}
+
 // Exactly `count` bytes from the socket by `deadline` (a monotonic ms count),
 // or what stopped them.
 func readExactly(_ fd: Int32, _ count: Int, by deadline: UInt64) -> Result<Data, ForwardError> {
@@ -302,7 +313,7 @@ final class Handler: NSObject, NSApplicationDelegate {
     for url in urls {
       let link = url.absoluteString
       let socket = destination(of: link)
-      switch forward(link, to: socket) {
+      switch forwarded(link, to: socket) {
       // Notice, not info: the unified log persists notice and above, so
       // `log show` can answer "did the click reach the socket" after the fact.
       // The link itself is private: a copy link carries the text being copied,

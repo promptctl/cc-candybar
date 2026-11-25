@@ -52,6 +52,9 @@ export interface OpenedLink {
 }
 
 export interface LinkSigner {
+  // The id of the key this signer signs with, as every link it signs names it,
+  // or why the key cannot be had.
+  readonly keyId: () => Asked<string>;
   // The mac a link carries for `fields`.
   readonly sign: (fields: SignedFields) => string;
   // Whether `mac` is the one `sign` gives `fields`, compared in constant time.
@@ -136,8 +139,13 @@ function linkMac(key: Buffer, link: string): string {
 // identity when the link has one, then a mac over the destination and all of
 // that. The raw fragment delimiter in the proof input is outside any authored
 // link's text: transitForm escapes any fragment an authored href names.
-function signLinkWith(key: Buffer, link: string, source?: FrameSource): string {
-  const signer = `${transitForm(link)}${LINK_MAC_MARK}${linkKeyId(key)}`;
+function signLinkWith(
+  key: Buffer,
+  id: string,
+  link: string,
+  source?: FrameSource,
+): string {
+  const signer = `${transitForm(link)}${LINK_MAC_MARK}${id}`;
   const issued =
     source === undefined
       ? signer
@@ -147,7 +155,11 @@ function signLinkWith(key: Buffer, link: string, source?: FrameSource): string {
 
 // [LAW:parse-dont-validate] Only an authenticated address can yield a
 // typed source. Names use the same parsers as renderer and session ingress.
-function openLinkWith(key: Buffer, signed: string): Asked<OpenedLink> {
+function openLinkWith(
+  key: Buffer,
+  own: string,
+  signed: string,
+): Asked<OpenedLink> {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
   if (mark === -1)
     return {
@@ -164,7 +176,6 @@ function openLinkWith(key: Buffer, signed: string): Asked<OpenedLink> {
       reason:
         "the link does not say which daemon signed it: the bar drew it before its links named their signer, and its next redraw does",
     };
-  const own = linkKeyId(key);
   if (signer !== own)
     return {
       kind: "failed",
@@ -237,7 +248,9 @@ export function linkSigner(key: Buffer): LinkSigner {
   // each is signed once and kept. The memo empties when it reaches its bound,
   // so links a config mints from changing values never grow it without end.
   const signed = new Map<string, string>();
+  const id = linkKeyId(key);
   return {
+    keyId: () => ({ kind: "ok", value: id }),
     sign: (fields) => digest(key, fields).toString("hex"),
     verify: (fields, mac) => {
       // Spelled exactly as `sign` spells one: Buffer's hex decode stops at
@@ -254,12 +267,12 @@ export function linkSigner(key: Buffer): LinkSigner {
       let done = signed.get(cacheKey);
       if (done === undefined) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
-        done = signLinkWith(key, link, source);
+        done = signLinkWith(key, id, link, source);
         signed.set(cacheKey, done);
       }
       return done;
     },
-    openLink: (link) => openLinkWith(key, link),
+    openLink: (link) => openLinkWith(key, id, link),
   };
 }
 
@@ -284,6 +297,10 @@ export function linkSignerOver(key: () => Asked<Buffer>): LinkSigner {
     return asked.value;
   };
   return {
+    keyId: () => {
+      const asked = loaded();
+      return asked.kind === "ok" ? asked.value.keyId() : asked;
+    },
     sign: (fields) => held().sign(fields),
     verify: (fields, mac) => held().verify(fields, mac),
     signLink: (link, source) => held().signLink(link, source),

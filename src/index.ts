@@ -102,7 +102,7 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     process.exit(0);
   },
   "ssh-config": async (args) => {
-    await exitWith(sshConfigPlan(args, sshConfigFacts(commandWorld().host)));
+    await exitWith(sshConfigPlan(args, await sshConfigFacts(commandWorld())));
   },
   "url-handle": async (args) => {
     await runUrlHandle(args[0], commandWorld());

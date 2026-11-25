@@ -31,13 +31,32 @@ describe("cc-candybar ssh-config", () => {
     expect(plan.stdout).toBe("");
   });
 
-  it("says why a key cannot be had, and prints no stanza", () => {
+  it("leaves the forward's directory to install, the one creator that checks it", () => {
+    const { stdout } = sshConfigPlan(["dev"], facts);
+    expect(stdout).toContain("cc-candybar install");
+    expect(stdout).not.toContain("mkdir");
+  });
+
+  it("says why the daemon's key cannot be had, and prints no stanza", () => {
     const plan = sshConfigPlan(["dev"], {
       kind: "failed",
-      reason: "link key /x/link.key holds 3 bytes, not 32",
+      reason: "no daemon answered on /tmp/x/socket",
     });
     expect(plan.code).toBe(1);
-    expect(plan.stderr).toContain("holds 3 bytes");
+    expect(plan.stderr).toContain("no daemon answered");
     expect(plan.stdout).toBe("");
   });
+
+  it.each(["/tmp/a b/socket", "/tmp/100%/socket"])(
+    "refuses a socket ssh's config cannot carry: %s",
+    (socket) => {
+      const plan = sshConfigPlan(["dev"], {
+        kind: "ok",
+        value: { keyId: "AbCd-_12", socket },
+      });
+      expect(plan.code).toBe(1);
+      expect(plan.stderr).toContain("CC_CANDYBAR_SOCKET");
+      expect(plan.stdout).toBe("");
+    },
+  );
 });
