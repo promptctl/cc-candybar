@@ -43,7 +43,8 @@ import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
 import { awaitingOf, type Awaiting } from "../facts/awaited.js";
-import { transcriptLossText, type WorldState } from "../facts/world-state.js";
+import type { WorldState } from "../facts/world-state.js";
+import { transcriptLossText } from "../utils/transcript-loss.js";
 import type { PendingRead } from "../var-system/types.js";
 import { isPending } from "../utils/outcome.js";
 import {

@@ -40,7 +40,7 @@ import { instantOf } from "../src/utils/instant";
 import { todayInfo } from "./helpers/today";
 import { until } from "../scripts/lib/until";
 import { usageFold } from "./helpers/usage-fold";
-import { transcriptLossText } from "../src/facts/world-state";
+import { transcriptLossText } from "../src/utils/transcript-loss";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const INC_2 = sessionIdOf("INC");
@@ -419,7 +419,17 @@ describe("foldAppended — the windowed fold", () => {
     [
       "usage but no timestamp",
       { message: { id: "m", usage: { input_tokens: 1200 } } },
-      "has usage but no timestamp",
+      "is a message with no timestamp",
+    ],
+    [
+      "a prompt but no timestamp",
+      { type: "user", message: { role: "user", content: "hi" } },
+      "is a message with no timestamp",
+    ],
+    [
+      "a null timestamp on a message",
+      { timestamp: null, message: { id: "m", usage: { input_tokens: 1 } } },
+      "is a message with no timestamp",
     ],
     [
       "a timestamp that is not a date",
@@ -442,14 +452,36 @@ describe("foldAppended — the windowed fold", () => {
     expect(folded.dropped).toEqual({ lines: 1, firstLine: 2, reason });
   });
 
-  test("a line with neither a timestamp nor usage is no entry and no loss", async () => {
+  test("a record of Claude Code's own, with no message and no timestamp or a null one, is no entry and no loss", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(
       t,
-      JSON.stringify({ type: "summary", summary: "s" }) + "\n" + line(new Date(), 0.01),
+      JSON.stringify({ type: "summary", summary: "s" }) +
+        "\n" +
+        JSON.stringify({ type: "ai-title", title: "t", timestamp: null }) +
+        "\n" +
+        line(new Date(), 0.01),
     );
     const { folded } = await foldOf(t);
     expect(costs(folded.value)).toEqual([0.01]);
+    expect(folded.dropped).toBeNull();
+  });
+
+  test("a message whose usage writes no token count has no usage, so no fold counts it as a response", async () => {
+    const t = join(dir, "A.jsonl");
+    writeFileSync(
+      t,
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        type: "assistant",
+        message: { id: "m", usage: { service_tier: "standard" } },
+      }) + "\n",
+    );
+    const { folded } = await foldOf(t);
+    expect(folded.value).toHaveLength(1);
+    expect(folded.value[0]!.message).toEqual(
+      expect.objectContaining({ id: "m", usage: undefined }),
+    );
     expect(folded.dropped).toBeNull();
   });
 
@@ -721,7 +753,9 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
-      logger: (_level, line) => logged.push(line),
+      logger: (level, line) => {
+        if (level === "warn") logged.push(line);
+      },
     });
     try {
       expect(store.lossesOf(sid)).toEqual([]);
@@ -745,7 +779,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       expect(store.lossesOf(sid)).toEqual(losses);
       // Each logged once, in the words the bar shows it in.
       const said = store.lossesOf(sid).map(transcriptLossText);
-      expect(logged.filter((l) => said.includes(l))).toEqual(said);
+      expect(logged).toEqual(said);
 
       // A warm refresh that reads only good lines leaves the totals short by
       // the same line, so the loss stands, and is not logged again.
@@ -755,7 +789,16 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       if (warm.kind !== "ok") throw new Error("expected ok");
       expect(warm.value.calculatedCost).toBeCloseTo(0.03, 5);
       expect(store.lossesOf(sid)).toEqual(losses);
-      expect(logged.filter((l) => said.includes(l))).toEqual(said);
+      expect(logged).toEqual(said);
+
+      // A second bad line is more of the same loss: the bar counts it, and
+      // the log, which said the loss when it began, says nothing new.
+      appendFileSync(mainPath, "{again\n");
+      touch(mainPath);
+      const more = await usageFold(store, sid, mainPath);
+      if (more.kind !== "ok") throw new Error("expected ok");
+      expect(store.lossesOf(sid)[0]).toEqual({ ...losses[0], lines: 2 });
+      expect(logged).toEqual(said);
     } finally {
       store.close();
     }

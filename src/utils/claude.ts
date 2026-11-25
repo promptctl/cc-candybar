@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { readAppendedText, readdir, type WholeLines } from "./transcript-fs";
 import { join } from "node:path";
 import { failed, ok, type Failed, type Ok, type Outcome } from "./outcome";
-import type { DroppedLines, TranscriptLoss } from "../facts/world-state";
+import type { DroppedLines, TranscriptLoss } from "./transcript-loss";
 import {
   entryActivity,
   turnText,
@@ -412,9 +412,10 @@ function firstBlockType(msg: Record<string, unknown> | undefined): unknown {
 }
 
 // [LAW:types-are-the-program] What one line gives a fold: its entry; nothing,
-// for a blank line or one with no timestamp and no usage (a summary, a
-// snapshot), which no fold reads; or a line the folds drop, and why (`reason`
-// says what the line is: "is not JSON (…)").
+// for a blank line or a record of Claude Code's own with no timestamp and no
+// message (a title, a mode, a snapshot), since a fold reads a line only for
+// its time and its message; or a line the folds drop, and why (`reason` says
+// what the line is: "is not JSON (…)").
 export type LineRead =
   | { readonly kind: "entry"; readonly entry: ParsedEntry }
   | { readonly kind: "none" }
@@ -431,21 +432,33 @@ const USAGE_COUNTS = [
   "cache_read_input_tokens",
 ] as const;
 
-// [LAW:parse-dont-validate] A message's usage as the folds read it: its token
-// counts (none written, or a null usage, is no counts), or null when a count
-// it gives is not a number.
-function usageOf(usage: unknown): { readonly counts?: UsageCounts } | null {
-  if (usage === undefined || usage === null) return {};
-  if (typeof usage !== "object" || Array.isArray(usage)) return null;
+// [LAW:parse-dont-validate] A message's usage as the folds read it: none,
+// when it writes no count (no usage, a null one, or one with none of the
+// counts), since a fold counts a response only for the tokens it gives; its
+// counts; or malformed, when a count it gives is not a number.
+type Usage =
+  | { readonly kind: "none" }
+  | { readonly kind: "counts"; readonly counts: UsageCounts }
+  | { readonly kind: "malformed" };
+
+const NO_USAGE: Usage = { kind: "none" };
+
+function usageOf(usage: unknown): Usage {
+  if (usage === undefined || usage === null) return NO_USAGE;
+  if (typeof usage !== "object" || Array.isArray(usage))
+    return { kind: "malformed" };
   const given = usage as Record<string, unknown>;
   const counts: UsageCounts = {};
   for (const key of USAGE_COUNTS) {
     const count = given[key];
     if (count === undefined || count === null) continue;
-    if (typeof count !== "number" || !Number.isFinite(count)) return null;
+    if (typeof count !== "number" || !Number.isFinite(count))
+      return { kind: "malformed" };
     counts[key] = count;
   }
-  return { counts };
+  return Object.keys(counts).length === 0
+    ? NO_USAGE
+    : { kind: "counts", counts };
 }
 
 // [LAW:parse-dont-validate] The one parse of a line's object into the entry
@@ -461,12 +474,16 @@ function entryOf(parsed: Record<string, unknown>): LineRead {
     typeof message === "object" && message !== null && !Array.isArray(message)
       ? (message as Record<string, unknown>)
       : undefined;
-  const usage = usageOf(msg?.usage);
-  if (usage === null) return dropped("has usage whose counts are not numbers");
-  if (parsed.timestamp === undefined)
-    return usage.counts === undefined
+  const read = usageOf(msg?.usage);
+  if (read.kind === "malformed")
+    return dropped("has usage whose counts are not numbers");
+  const usage = read.kind === "counts" ? read.counts : undefined;
+  // A JSON writer spells an absent field as null as readily as by leaving it
+  // out, so either is no timestamp.
+  if (parsed.timestamp === undefined || parsed.timestamp === null)
+    return msg === undefined
       ? NO_ENTRY
-      : dropped("has usage but no timestamp");
+      : dropped("is a message with no timestamp");
   const timestamp =
     typeof parsed.timestamp === "string"
       ? new Date(parsed.timestamp)
@@ -483,7 +500,7 @@ function entryOf(parsed: Record<string, unknown>): LineRead {
         ? {
             id: typeof msg.id === "string" ? msg.id : undefined,
             model: typeof msg.model === "string" ? msg.model : undefined,
-            usage: usage.counts,
+            usage,
             role: typeof msg.role === "string" ? msg.role : undefined,
             type: typeof msg.type === "string" ? msg.type : undefined,
             stopReason:
@@ -500,7 +517,7 @@ function entryOf(parsed: Record<string, unknown>): LineRead {
           ? {
               id: typeof msg.id === "string" ? msg.id : undefined,
               model: typeof msg.model === "string" ? msg.model : undefined,
-              usage: usage.counts,
+              usage,
             }
           : undefined,
         requestId:

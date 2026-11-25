@@ -37,10 +37,8 @@ import type { MetricsFold } from "../../../src/segments/metrics";
 import type { ActivityInfo } from "../../../src/segments/activity";
 import type { TranscriptUsage } from "../../../src/segments/session";
 import type { DaySums } from "../../../src/daemon/cache/session-usage-store";
-import type {
-  SpeedObservation,
-  TranscriptLoss,
-} from "../../../src/facts/world-state";
+import type { SpeedObservation } from "../../../src/facts/world-state";
+import type { TranscriptLoss } from "../../../src/utils/transcript-loss";
 import type { AutoCompactWindow } from "../../../src/segments/autocompact";
 import type { Instant } from "../../../src/utils/instant";
 import {
@@ -234,7 +232,12 @@ export function fakeUsage(
   } = {},
 ): Pick<
   SessionUsageStore,
-  "refresh" | "usageOf" | "declareToday" | "daysOutside" | "speedOf" | "lossesOf"
+  | "refresh"
+  | "usageOf"
+  | "declareToday"
+  | "daysOutside"
+  | "speedOf"
+  | "lossesOf"
 > {
   const usage = refreshed<TranscriptUsage>();
   const speed = refreshed<SpeedObservation>();

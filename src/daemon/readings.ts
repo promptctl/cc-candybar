@@ -27,9 +27,9 @@ import {
   type SpeedObservation,
   type TodayFacts,
   type RefreshLane,
-  type TranscriptLoss,
   shortDigest,
 } from "../facts/world-state.js";
+import type { TranscriptLoss } from "../utils/transcript-loss.js";
 import type { ContextProvider } from "./cache/context-provider.js";
 import type { MetricsFold } from "../segments/metrics.js";
 import type { MetricsProvider } from "./cache/metrics-provider.js";

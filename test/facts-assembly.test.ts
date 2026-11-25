@@ -5,7 +5,8 @@
 
 import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { restamp, type Fact } from "../src/facts/fact";
-import type { BuiltinFacts, TranscriptLoss } from "../src/facts/world-state";
+import type { BuiltinFacts } from "../src/facts/world-state";
+import type { TranscriptLoss } from "../src/utils/transcript-loss";
 import type { GitRead } from "../src/segments/git";
 import {
   assembleFacts,

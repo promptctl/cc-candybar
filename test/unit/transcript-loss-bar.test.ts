@@ -6,7 +6,7 @@
 
 import { clickOf } from "../../src/click/read";
 import { admitClick } from "../../src/click/wire";
-import type { TranscriptLoss } from "../../src/facts/world-state";
+import type { TranscriptLoss } from "../../src/utils/transcript-loss";
 import { textOf } from "../../src/render/frame";
 import type { RequestId } from "../../src/renderer-interface/interface";
 import { pageOf, viewerLink } from "../helpers/diagnostics-viewer";
