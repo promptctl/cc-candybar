@@ -55,7 +55,6 @@ import {
 import { elapsedMs, spanMs } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import type { ClickArrival } from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
@@ -893,7 +892,7 @@ async function clickOutcome(
     return badRequest(`a click's url is a string, got ${typeof url}`);
   return ranClick(
     parts,
-    routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
+    routeClick(parts, parseClick(url, parts.linkSigner)),
     facts,
     click,
   );
@@ -917,7 +916,7 @@ function readUrlFrame(
       kind: "refused",
       problem: "the URL handler's frame carries no url string",
     };
-  return parseClick(url, { kind: "forwarder", urlV }, links);
+  return parseClick(url, links);
 }
 
 // [LAW:no-silent-failure] The URL handler's frame, answered with its verdict
@@ -1003,13 +1002,7 @@ async function ranClick(
       return read.failure;
     case "link":
       noteFacts(facts, { link: read.link });
-      return handleClick(
-        parts,
-        read,
-        { via: "link", delivery: read.delivery },
-        facts,
-        click,
-      );
+      return handleClick(parts, read, facts, click);
   }
 }
 
@@ -1028,7 +1021,6 @@ async function handleClick(
     runEvidence,
     target,
   }: Extract<RoutedClick, { kind: "link" }>,
-  arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
@@ -1048,7 +1040,6 @@ async function handleClick(
           event: {
             kind: "click",
             click: admitted,
-            arrival,
             context:
               admitted.scope === "global"
                 ? null

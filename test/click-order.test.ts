@@ -71,7 +71,7 @@ function setup(
   const ctx = verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
     log: (_level, line) => logged.push(line),
   });
-  const { arrival: _a, context: _c, effects: _e, ...verbCtx } = ctx;
+  const { context: _c, effects: _e, ...verbCtx } = ctx;
   const clock = over.clock ?? systemTimekeeper;
   const host = clickParts(verbCtx, over.collector, undefined, clock);
   const events: string[] = [];

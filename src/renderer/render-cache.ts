@@ -68,7 +68,6 @@ import {
   type ViewSource,
 } from "../dsl/view-source.js";
 import { bindView } from "../dsl/parts.js";
-import { unusedDeclarations, type UnusedDecl } from "../config/unused.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import type { VarScope } from "../dsl/variable-scope.js";
@@ -295,9 +294,6 @@ export interface DslRenderState {
   // The roles of the chain a click can write — what the save offers.
   readonly writable: readonly LayerRole[];
   readonly remainingLanes: ReadonlyMap<string, LaneSwitches>;
-  // What the file declares that nothing uses — from the same raw parse, for
-  // the same reason. No bar reads it; the retired Doctor's config check did.
-  readonly unused: readonly UnusedDecl[];
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
   // [LAW:no-ambient-temporal-coupling] Each plugin source the config
@@ -733,9 +729,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const { layers, config, installed, dropped } = loaded;
   const userRaw = layers.find(({ path }) => path === files.user)?.raw ?? {};
   const projectRaw = layers.find(({ path }) => path === files.project)?.raw;
-  const inserted = layers.flatMap((l) =>
-    (l.raw.insert ?? []).map((cell) => cell.seg),
-  );
   // [LAW:one-source-of-truth] The advisories the build earns are facts of the
   // state it builds, carried on it, so a reload that keeps the state keeps
   // them too.
@@ -822,16 +815,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         loaded.base,
         projectRaw ?? {},
       ),
-      // One entry per declaration, however many layers declare it, judged
-      // over the trees as placed and every layer's insert entries, so a
-      // segment only an insert entry places is used, here or not.
-      unused: [
-        ...new Map(
-          layers
-            .flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted))
-            .map((u) => [`${u.kind}:${u.name}`, u] as const),
-        ).values(),
-      ],
       plugins: {
         checkout: installed.checkout,
         // What renders, as the loader decided it: a nearer layer's load or

@@ -2116,7 +2116,6 @@ describe("a click", () => {
   ): Event => ({
     kind: "click",
     click: { scope: "session", verb, session: SESSION, steps: [] },
-    arrival: { via: "link", delivery: { kind: "cli" } },
     context: live === null ? null : heardContextOf(live),
   });
 

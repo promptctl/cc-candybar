@@ -10,11 +10,11 @@ type ClickEvent = Extract<Event, { kind: "click" }>;
 
 export function clickTurn(
   { verbs }: Pick<MainRendererParts, "verbs">,
-  { click, arrival, context }: ClickEvent,
+  { click, context }: ClickEvent,
   // Where the click's config changes go, and what its turn's record notes,
   // kept by the turn even when the handler throws.
   effects: Effect[],
   record: RequestFacts,
 ): void {
-  verbs.click(click, { arrival, context, effects, record });
+  verbs.click(click, { context, effects, record });
 }

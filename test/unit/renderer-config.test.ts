@@ -470,7 +470,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   const click = (label: string) => {
     const link = linksOf(published).find(({ text }) => text === label);
     if (link === undefined) throw new Error(`frame drew no ${label} link`);
-    const admitted = parseClick(link.url, { kind: "cli" }, TEST_SIGNER);
+    const admitted = parseClick(link.url, TEST_SIGNER);
     if (admitted.kind === "refused") throw new Error(admitted.problem);
     return { link, admitted };
   };
@@ -482,7 +482,6 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
       {
         kind: "click",
         click: admitted.click,
-        arrival: { via: "link", delivery: admitted.delivery },
         context: { session, durable: { origin }, live: null },
       },
       10,
@@ -626,7 +625,6 @@ test("a click on a session with no live context waits for the config of the orig
     await handIn(r, {
       kind: "click",
       click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER).click,
-      arrival: { via: "link", delivery: { kind: "cli" } },
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },
     }),
