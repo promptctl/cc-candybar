@@ -23,6 +23,8 @@ import {
   UNKNOWN_REQUEST_KIND,
   URL_FRAME_VERSIONS,
   awaitsVerdict,
+  handsActsBack,
+  type ClientAct,
   type Inbound,
   type OwnerFacts,
   type Request,
@@ -44,6 +46,7 @@ import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererHost } from "./renderer-host.js";
+import type { HandBack } from "./acts.js";
 import {
   badRequest,
   ClickAbandoned,
@@ -121,12 +124,28 @@ export type HandledRequest =
       kind: "url";
       // Whether the frame's writer reads `verdict`.
       awaitsVerdict: boolean;
+      // Whether the frame's writer carries out the click's copy and open
+      // itself (`handsActsBack`): its verdict is written once the click has
+      // landed, with those acts in it (`withClientActs`), not before.
+      handsBack: boolean;
       verdict: Response;
       // [LAW:no-ambient-temporal-coupling] The click, started by whoever
       // wrote the verdict once it is written, so no work of the click's
-      // stands before it. Settles once the click's event is written.
-      land: () => Promise<void>;
+      // stands before it. Settles once the click's event is written, with the
+      // acts handed back to the frame's writer, in the order asked.
+      land: () => Promise<readonly ClientAct[]>;
     };
+
+// A verdict as a frame's writer that carries out acts reads it: the acts the
+// click handed back ride on an ok verdict, and a refusal carries none.
+export function withClientActs(
+  verdict: Response,
+  acts: readonly ClientAct[],
+): Response {
+  return verdict.ok && "output" in verdict
+    ? { ...verdict, clientActs: acts }
+    : verdict;
+}
 
 // The one way a reply is made.
 export function replyOf(
@@ -203,8 +222,9 @@ export function refuseClosingInbound(
     ? {
         kind: "url",
         awaitsVerdict: awaitsVerdict(inbound.frame.urlV),
+        handsBack: handsActsBack(inbound.frame.urlV),
         verdict: closingResponse(parts, "click", accepted),
-        land: async () => {},
+        land: async () => [],
       }
     : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
 }
@@ -934,24 +954,35 @@ function urlClick(
   clientLeft: () => boolean,
 ): HandledRequest {
   const read = routeClick(parts, readUrlFrame(frame, parts.linkSigner));
+  const handsBack = handsActsBack(frame.urlV);
   return {
     kind: "url",
     awaitsVerdict: awaitsVerdict(frame.urlV),
+    handsBack,
     verdict:
       read.kind === "refused"
         ? clickReply(read.failure)
         : { ok: true, output: "" },
-    land: () =>
-      clickEvent(
+    land: async () => {
+      const handed: ClientAct[] = [];
+      await clickEvent(
         parts,
         accepted,
         timedOut,
         clientLeft,
         async (facts, click) => {
           noteFacts(facts, { via: "forwarder", urlV: String(frame.urlV) });
-          return ranClick(parts, read, facts, click);
+          return ranClick(
+            parts,
+            read,
+            facts,
+            click,
+            handsBack ? (act) => void handed.push(act) : undefined,
+          );
         },
-      ).then(() => {}),
+      );
+      return handed;
+    },
   };
 }
 
@@ -997,6 +1028,7 @@ async function ranClick(
   read: RoutedClick,
   facts: RequestFacts,
   click: ClickInFlight,
+  handBack?: HandBack,
 ): Promise<RequestOutcome> {
   switch (read.kind) {
     case "refused":
@@ -1010,6 +1042,7 @@ async function ranClick(
         { via: "link", delivery: read.delivery },
         facts,
         click,
+        handBack,
       );
   }
 }
@@ -1032,6 +1065,7 @@ async function handleClick(
   arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
+  handBack: HandBack | undefined,
 ): Promise<RequestOutcome> {
   const { verb } = admitted;
   const session = admitted.session ?? null;
@@ -1046,6 +1080,7 @@ async function handleClick(
       : {
           kind: "event",
           runEvidence,
+          handBack,
           event: {
             kind: "click",
             click: admitted,

@@ -873,7 +873,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       {
         authorizeRun: (request, captures) =>
           authorizeRun(linkSigner, request, captures),
-        perform: (act) => acts.perform(act),
+        perform: (act, handBack) => acts.perform(act, handBack),
         stateDir: paths.state,
         configs: configDiscovery.forRenderer(name),
         writeConfigFile: inputs.writeConfigFile,

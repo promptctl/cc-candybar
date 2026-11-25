@@ -13,6 +13,7 @@ import {
   type TypeResult,
 } from "../claude-input/typing.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { ClientAct } from "./foundations/protocol.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
@@ -75,6 +76,24 @@ const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
   outcome,
   said: outcome.reason,
 });
+
+// Where a click's acts for the person's own machine go: the click's verdict.
+export type HandBack = (act: ClientAct) => void;
+
+// Whether the act was one for the person's machine, and so handed back.
+function handedBack(act: HostAct, handBack: HandBack): boolean {
+  switch (act.kind) {
+    case "copy":
+      handBack({ kind: "copy", text: act.text });
+      return true;
+    case "open":
+      handBack({ kind: "open", target: act.target });
+      return true;
+    case "type-slash":
+    case "run":
+      return false;
+  }
+}
 
 export class Acts {
   // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
@@ -152,11 +171,15 @@ export class Acts {
 
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
   // throw is classified once, here: a refusal the user can act on, the
-  // daemon's close, or a failure.
-  async perform(act: HostAct): Promise<EffectOutcome> {
+  // daemon's close, or a failure. A click that arrived through an ssh forward
+  // has a `handBack`: its copy and open are for the machine the person sits
+  // at, so they are handed to the URL handler there, never run on this one.
+  async perform(act: HostAct, handBack?: HandBack): Promise<EffectOutcome> {
     const { outcome, said } = this.deps.closing()
       ? not({ kind: "closing", reason: "the daemon is closing" })
-      : await this.performed(act);
+      : handBack !== undefined && handedBack(act, handBack)
+        ? did("handed to the URL handler on the machine the click came from")
+        : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
       `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${nameOf(act)}: ${said}`,

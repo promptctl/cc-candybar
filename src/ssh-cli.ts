@@ -6,7 +6,7 @@ import {
 import { fetchStats } from "./daemon/client-stats.js";
 import {
   REMOTE_SOCKET_DIR_UNDER_HOME,
-  REMOTE_SOCKET_SUFFIX,
+  remoteSocketName,
   socketPath,
 } from "./daemon/paths.js";
 import type { Asked } from "./utils/outcome.js";
@@ -48,6 +48,7 @@ export async function sshConfigFacts(
 }
 
 const USAGE = "Usage: cc-candybar ssh-config ALIAS\n";
+const ALIAS = /^[A-Za-z0-9._@-]+$/;
 
 // `cc-candybar ssh-config ALIAS`: the lines that make a click on this
 // machine's bar, drawn in a terminal on another machine, reach this machine's
@@ -67,8 +68,10 @@ export function sshConfigPlan(
 ): CliPlan {
   const [alias, ...extra] = args;
   // [LAW:parse-dont-validate] The alias is one word of ssh's config naming one
-  // host: no wildcard or negation (`*`, `?`, `!`), which would make a pattern.
-  if (alias === undefined || extra.length > 0 || !/^[^\s#*?!]+$/.test(alias)) {
+  // host, and it becomes part of a file name and of the URL the Mac's editor is
+  // opened with, so it is the spelling a host name has: no wildcard or negation
+  // (`*`, `?`, `!`), which would make a pattern, and no path separator.
+  if (alias === undefined || extra.length > 0 || !ALIAS.test(alias)) {
     return { stdout: "", stderr: USAGE, code: 2 };
   }
   if (asked.kind === "failed") {
@@ -89,7 +92,7 @@ export function sshConfigPlan(
     "# it while an ssh connection to it is open.",
     `Host ${alias}`,
     "  StreamLocalBindUnlink yes",
-    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${facts.keyId}${REMOTE_SOCKET_SUFFIX} ${facts.socket}`,
+    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${remoteSocketName(facts.keyId, alias)} ${facts.socket}`,
     "",
   ].join("\n");
   return { stdout: stanza, stderr: "", code: 0 };

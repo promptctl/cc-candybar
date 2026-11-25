@@ -15,7 +15,17 @@ describe("cc-candybar ssh-config", () => {
     expect(plan.stdout).toContain("Host dev\n");
     expect(plan.stdout).toContain("  StreamLocalBindUnlink yes\n");
     expect(plan.stdout).toContain(
-      "  LocalForward %d/.cc-candybar/remote/AbCd-_12.sock /tmp/cc-candybar-1000/socket\n",
+      "  LocalForward %d/.cc-candybar/remote/AbCd-_12.dev.sock /tmp/cc-candybar-1000/socket\n",
+    );
+  });
+
+  // The Mac's editor reaches the remote's files by this name, which the remote's
+  // daemon cannot know: it travels in the forward's file name.
+  it("puts the host name in the forward's file name, after the key id", () => {
+    const plan = sshConfigPlan(["me@box.example-1"], facts);
+    expect(plan.code).toBe(0);
+    expect(plan.stdout).toContain(
+      "remote/AbCd-_12.me@box.example-1.sock /tmp/",
     );
   });
 
@@ -26,6 +36,8 @@ describe("cc-candybar ssh-config", () => {
     ["one with a space", ["my box"]],
     ["a pattern", ["*"]],
     ["a negation", ["!dev"]],
+    ["a path", ["../dev"]],
+    ["a percent escape", ["d%20ev"]],
   ])("refuses %s as the alias", (_, args) => {
     const plan = sshConfigPlan(args, facts);
     expect(plan.code).toBe(2);

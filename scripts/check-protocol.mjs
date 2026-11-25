@@ -199,6 +199,28 @@ const CHECKS = [
     ts: num(TS_PROTOCOL, /export const URL_FRAME_VERSION = ([\d\s*]+);/),
     swift: num(SWIFT_HANDLER, /^let URL_FRAME_VERSION = ([\d\s*]+)$/m),
   },
+  {
+    label: "the version of a frame the URL handler asks the click's acts of",
+    ts: num(TS_PROTOCOL, /export const URL_FRAME_HAND_BACK_VERSION = ([\d\s*]+);/),
+    swift: num(SWIFT_HANDLER, /^let URL_FRAME_HAND_BACK_VERSION = ([\d\s*]+)$/m),
+  },
+  // The acts a verdict hands back, as the daemon writes them and the app reads
+  // them: the field they ride in, their kinds, and the field each kind carries.
+  {
+    label: "the verdict field that carries the acts handed to the URL handler",
+    ts: lit(TS_PROTOCOL, /(clientActs)\?: readonly ClientAct\[\]/),
+    swift: lit(SWIFT_HANDLER, /said\["(clientActs)"\]/),
+  },
+  {
+    label: "the kinds of act a verdict hands the URL handler",
+    ts: memberSet(TS_PROTOCOL, /export type ClientAct =[\s\S]+?;\n/, /kind: "(\w+)"/g),
+    swift: memberSet(SWIFT_HANDLER, /func clientActs[\s\S]+?\n\}\n/, /case \("(\w+)",/g),
+  },
+  {
+    label: "the fields an act handed to the URL handler carries",
+    ts: memberSet(TS_PROTOCOL, /export type ClientAct =[\s\S]+?;\n/, /readonly (text|target): string/g),
+    swift: memberSet(SWIFT_HANDLER, /func clientActs[\s\S]+?\n\}\n/, /act\["(text|target)"\]/g),
+  },
   // The frame's field names, as the daemon reads them and the app writes them.
   {
     label: "the URL handler's frame fields",
@@ -234,6 +256,14 @@ const CHECKS = [
     label: "a forwarded socket's suffix, as the URL handler opens it",
     ts: lit(TS_PATHS, /REMOTE_SOCKET_SUFFIX = "([^"]+)"/),
     swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_SUFFIX = "([^"]+)"$/m),
+  },
+  {
+    label: "what separates a forwarded socket's key id from the host name, as the URL handler reads it",
+    ts: lit(TS_PATHS, /REMOTE_SOCKET_ALIAS_SEPARATOR = "([^"]+)"/),
+    swift: lit(
+      SWIFT_HANDLER,
+      /^let REMOTE_SOCKET_ALIAS_SEPARATOR: Character = "([^"]+)"$/m,
+    ),
   },
   {
     label: "the length of the key id a link names its signer by, as the URL handler reads it",

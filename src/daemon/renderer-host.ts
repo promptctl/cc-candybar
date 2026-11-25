@@ -71,7 +71,7 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
-import { outlives, type HostAct } from "./acts.js";
+import { outlives, type HandBack, type HostAct } from "./acts.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
@@ -128,6 +128,9 @@ interface MadeEvent<E = Event> {
   readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
+  // Host-only data: where the click's copy and open acts go when the person
+  // is on another machine than this daemon.
+  readonly handBack?: HandBack;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
 
@@ -140,7 +143,10 @@ export interface HostWorld {
     request: RequestedRun,
     captures: readonly RunEvidence[],
   ) => Asked<RunAct>;
-  readonly perform: (act: HostAct) => Promise<EffectOutcome>;
+  readonly perform: (
+    act: HostAct,
+    handBack?: HandBack,
+  ) => Promise<EffectOutcome>;
   readonly stateDir: string;
   readonly configs: RendererConfigs;
   readonly writeConfigFile?: WriteConfigFile;
@@ -413,6 +419,7 @@ export function rendererHost(
     input: EventInput,
     queuedMs: number,
     captures: readonly RunEvidence[] = [],
+    handBack?: HandBack,
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -491,6 +498,7 @@ export function rendererHost(
       output,
       captures,
       receipt,
+      handBack,
     );
     return {
       received: true,
@@ -509,6 +517,7 @@ export function rendererHost(
     output: RendererOutput,
     captures: readonly RunEvidence[],
     receipt: SettlePresentation,
+    handBack: HandBack | undefined,
   ): Promise<{
     readonly settled: Promise<readonly EffectOutcome[]>;
     readonly configFailure: Failure | null;
@@ -597,7 +606,7 @@ export function rendererHost(
       const acted =
         configOutcome.kind === "ok"
           ? before
-              .then(() => world.perform(act))
+              .then(() => world.perform(act, handBack))
               .catch(
                 (error: unknown): EffectOutcome => ({
                   kind: "failed",
@@ -1038,6 +1047,7 @@ export function rendererHost(
           stamped(made),
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : undefined,
+          made.event.kind === "click" ? made.handBack : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         return { event: made.event, slotted };

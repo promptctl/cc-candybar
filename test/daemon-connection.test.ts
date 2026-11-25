@@ -22,6 +22,7 @@ import {
   encodeFrame,
   encodeJsonFrame,
   sendOne,
+  type ClientAct,
   type Request,
   type Response,
 } from "../src/daemon/foundations/protocol";
@@ -68,15 +69,22 @@ const replyWith = (
   ),
 });
 
-// A url frame's answer: its verdict, and when its click lands.
+// A url frame's answer: its verdict, and when its click lands. A frame whose
+// writer carries out acts (`handed`) has its verdict written once its click
+// has landed, with those acts in it.
 const urlAnswer = (
   landed: Promise<void> = Promise.resolve(),
   awaitsVerdict = false,
+  handed: readonly ClientAct[] | null = null,
 ): HandledRequest => ({
   kind: "url",
   awaitsVerdict,
-  verdict: { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
-  land: () => landed,
+  handsBack: handed !== null,
+  verdict:
+    handed === null
+      ? { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 }
+      : { ok: true, output: "" },
+  land: () => landed.then(() => handed ?? []),
 });
 
 // A memory stream runs on process ticks and microtasks, which all drain before
@@ -357,6 +365,35 @@ describe("a connection over a stream", () => {
     request.answer(urlAnswer());
     await settled();
     expect(daemon.stats.inFlight).toBe(0);
+  });
+
+  // [LAW:dataflow-not-control-flow] The acts a click hands back are its
+  // output, so the writer that carries them out hears its verdict only once the
+  // click has landed, and the verdict holds them in the order asked.
+  test("a url frame whose writer carries out acts is told once its click has landed, with the acts", async () => {
+    let land = () => {};
+    const landed = new Promise<void>((done) => (land = done));
+    const handed: ClientAct[] = [
+      { kind: "copy", text: "/work/repo" },
+      { kind: "open", target: "/work/repo" },
+    ];
+    const daemon = standIn({
+      handle: async () => urlAnswer(landed, true, handed),
+    });
+    const { client, received } = open(daemon);
+    client.allowHalfOpen = true;
+    client.write(encodeFrame({ kind: "url", urlV: 3, url: "cc-candybar://x" }));
+    await settled();
+    const before = [...received];
+    land();
+    await settled();
+    client.destroy();
+    await settled();
+    expect({ before, received, inFlight: daemon.stats.inFlight }).toEqual({
+      before: [],
+      received: [{ ok: true, output: "", clientActs: handed }],
+      inFlight: 0,
+    });
   });
 
   // A frame that reaches the daemon only after the backstop answered finds

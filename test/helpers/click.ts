@@ -436,7 +436,7 @@ export function actingWorld(
   const acts = testActs(ctx.log, deps);
   return {
     authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
-    perform: (act) => acts.perform(act),
+    perform: (act, handBack) => acts.perform(act, handBack),
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
