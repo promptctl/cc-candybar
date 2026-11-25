@@ -57975,9 +57975,10 @@ Subcommands:
                            after a build (\`just deploy\`).
   url-handle URL           Send a cc-candybar:// link to the daemon as a
                            click. Terminal links use the URL handler app.
-  ssh-config [ALIAS]       Print the ~/.ssh/config lines that make a click on
+  ssh-config ALIAS         Print the ~/.ssh/config lines that make a click on
                            this machine's bar reach this machine's daemon when
-                           the terminal is on another machine (ssh in).
+                           the terminal is on another machine. ALIAS is the
+                           Host that machine's ssh config reaches this one by.
   plugin install SOURCE    Install a repository's plugins into
                            $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
                            local path, a GitHub slug (owner/repo) or a git URL,
@@ -80443,6 +80444,15 @@ var LINK_MAC_BYTES = 16;
 var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 var LINK_MAC_MARK = "#";
 var SOURCE_VERSION = "v1";
+var LINK_KEY_ID_CHARS = 8;
+var LINK_KEY_ID_DOMAIN = "cc-candybar link key id";
+function base64url(bytes) {
+  return import_buffer.Buffer.from(bytes).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+function linkKeyId(key) {
+  const digest2 = createHmac("sha256", key).update(LINK_KEY_ID_DOMAIN).digest();
+  return base64url(digest2.subarray(0, LINK_KEY_ID_CHARS * 3 / 4));
+}
 function transitForm(link) {
   return link.toWellFormed().replace(
     /%(?![0-9A-Fa-f]{2})|[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu,
@@ -80454,16 +80464,13 @@ function unprovenLink(signed) {
   return mark === -1 ? signed : signed.slice(0, mark);
 }
 function linkMac(key, link) {
-  return import_buffer.Buffer.from(
+  return base64url(
     createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES)
-  ).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  );
 }
 function signLinkWith(key, link, source) {
-  const sent = transitForm(link);
-  if (source === void 0)
-    return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
-  const session = encodeURIComponent(JSON.stringify(source.session));
-  const issued = `${sent}${LINK_MAC_MARK}${SOURCE_VERSION}/${source.renderer}/${session}`;
+  const signer = `${transitForm(link)}${LINK_MAC_MARK}${linkKeyId(key)}`;
+  const issued = source === void 0 ? signer : `${signer}/${SOURCE_VERSION}/${source.renderer}/${encodeURIComponent(JSON.stringify(source.session))}`;
   return `${issued}/${linkMac(key, issued)}`;
 }
 function openLinkWith(key, signed) {
@@ -80473,22 +80480,35 @@ function openLinkWith(key, signed) {
       kind: "failed",
       reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
     };
-  const proofAt = Math.max(mark, signed.lastIndexOf("/"));
-  const mac = signed.slice(proofAt + 1);
+  const proof = signed.slice(mark + 1).split("/");
+  const mac = proof[proof.length - 1] ?? "";
+  const [signer, ...source] = proof.slice(0, -1);
+  if (signer === void 0)
+    return {
+      kind: "failed",
+      reason: "the link does not say which daemon signed it: the bar drew it before its links named their signer, and its next redraw does"
+    };
+  const own2 = linkKeyId(key);
+  if (signer !== own2)
+    return {
+      kind: "failed",
+      reason: `the link was signed by another daemon (key ${signer}, this one is ${own2}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`
+    };
   const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(
     import_buffer.Buffer.from(mac),
-    import_buffer.Buffer.from(linkMac(key, signed.slice(0, proofAt)))
+    import_buffer.Buffer.from(
+      linkMac(key, signed.slice(0, signed.length - mac.length - 1))
+    )
   );
   if (!proven)
     return {
       kind: "failed",
-      reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
+      reason: "the link's signature does not match what it carries: it was changed after the bar drew it"
     };
   const href = signed.slice(0, mark);
-  if (proofAt === mark) return { kind: "ok", value: { href } };
-  const fields2 = signed.slice(mark + 1, proofAt).split("/");
-  const [version, name, encoded] = fields2;
-  if (fields2.length !== 3 || version !== SOURCE_VERSION || name === void 0 || encoded === void 0)
+  if (source.length === 0) return { kind: "ok", value: { href } };
+  const [version, name, encoded] = source;
+  if (source.length !== 3 || version !== SOURCE_VERSION || name === void 0 || encoded === void 0)
     return { kind: "failed", reason: "the link has an unknown frame source" };
   try {
     const renderer = rendererNameOf(name);

@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-963",
+      "ref": "refs/pull/963/merge",
+      "sha": "8a36f679f4278d3c10efdc5dec620e809f603d75",
+      "timestamp": "2026-11-25T05:59:56.329Z",
+      "commits": [
+        {
+          "sha": "8a36f679f4278d3c10efdc5dec620e809f603d75",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T05:58:51Z",
+          "message": "Merge 4fbf1adc178adbbe3bd3ea1ad47667667f479611 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "4fbf1adc178adbbe3bd3ea1ad47667667f479611",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:58:39-07:00",
+          "message": "fix(url-handler): a link names the daemon that signed it, and the app opens exactly that daemon's forward\n\nTrying every forwarded socket in turn used a signature refusal as the routing signal: a dead forward ended the search before the owner, two machines with one short hostname shared a socket, a copy link went to machines that did not draw it, and the notice named a refusal that was only routing.\n\nEvery signed link now carries a one-way id of its signer's key as the first field of its proof. ssh-config names the forwarded socket by that id and requires the ssh alias, the app opens the one socket a link names (its own daemon's when no forward by that name exists), and a daemon that did not sign a link says which one did. Install creates the forward directory through the shared owner/mode enforcer.\n"
+        },
+        {
+          "sha": "ee63edd949442188e4ae33daa0203c445e560b0e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:32:03-07:00",
+          "message": "fix(url-handler): route a click on a bar drawn over ssh to the daemon that drew it\n\nThe URL handler only spoke to the local daemon, which refuses a link the\nremote daemon signed. It now tries each ssh-forwarded socket in\n~/.cc-candybar/remote after its own daemon's until one opens the link, and\n`cc-candybar ssh-config` prints the forward the remote needs.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-964",
       "ref": "refs/pull/964/merge",
       "sha": "f5d49808d59d18e2c5612d6c18defbdc0bc75e91",
@@ -63,28 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T17:55:41-07:00",
           "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-963",
-      "ref": "refs/pull/963/merge",
-      "sha": "f4f73335187d92fc6512a2633d7fe0eeecec2761",
-      "timestamp": "2026-11-25T05:35:43.144Z",
-      "commits": [
-        {
-          "sha": "f4f73335187d92fc6512a2633d7fe0eeecec2761",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:34:30-07:00",
-          "message": "Merge ee63edd949442188e4ae33daa0203c445e560b0e into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
-        },
-        {
-          "sha": "ee63edd949442188e4ae33daa0203c445e560b0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:32:03-07:00",
-          "message": "fix(url-handler): route a click on a bar drawn over ssh to the daemon that drew it\n\nThe URL handler only spoke to the local daemon, which refuses a link the\nremote daemon signed. It now tries each ssh-forwarded socket in\n~/.cc-candybar/remote after its own daemon's until one opens the link, and\n`cc-candybar ssh-config` prints the forward the remote needs.\n"
         }
       ]
     },
