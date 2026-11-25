@@ -28292,6 +28292,12 @@ var DaemonClosing = class extends Error {
     this.name = "DaemonClosing";
   }
 };
+var ConfigPending = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ConfigPending";
+  }
+};
 var ClickAbandoned = class extends Error {
   constructor(verb) {
     super(`the client left: ${verb} not run`);
@@ -28306,6 +28312,7 @@ var RendererDown = class extends Error {
 };
 var KINDS = [
   [BadVerbArgs, "bad-request"],
+  [ConfigPending, "bad-request"],
   [DaemonClosing, "closing"],
   [ClickAbandoned, "abandoned"],
   [RendererDown, "down"]
@@ -78667,6 +78674,10 @@ function mainRenderer(parts, stores) {
         if (context !== null) {
           const { origin } = context.durable;
           if (!parts.renderCache.holdsConfig(origin)) {
+            if (event.arrival.via === "link" && event.arrival.acts.on === "desktop")
+              throw new ConfigPending(
+                "this bar's configuration is not loaded yet, so the click cannot say what to copy or open on your desktop: click again once the bar has redrawn"
+              );
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
             runInAction(
@@ -85039,9 +85050,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const { outcome } = await clickEvent(
       parts,
       accepted,
+      "daemon",
       timedOut,
       clientLeft,
-      (facts, click2) => clickOutcome(parts, req, facts, click2)
+      (facts, click2, acts) => clickOutcome(parts, req, facts, click2, acts)
     );
     return stay(clickReply(outcome));
   }
@@ -85157,7 +85169,7 @@ function sourceSnapshots(parts) {
     }
   };
 }
-async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
+async function clickEvent(parts, accepted, place, timedOut, clientLeft, run2) {
   const { clock } = parts;
   const t0 = clock.monotonic();
   const facts = [
@@ -85167,9 +85179,13 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
   const click2 = {
     gone: () => timedOut() || clientLeft()
   };
-  const clicked = await run2(facts, click2).catch(
-    (thrown2) => noDesktop(failureOf(thrown2))
-  );
+  const held = place === "desktop" ? parts.desktopActs.begin() : null;
+  const acts = held === null ? ACTS_ON_DAEMON : { on: "desktop", click: held };
+  const outcome = await run2(facts, click2, acts).catch(failureOf);
+  const clicked = {
+    outcome,
+    desktop: held === null ? [] : parts.desktopActs.end(held)
+  };
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -85183,10 +85199,6 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
   parts.log(level, line);
   return clicked;
 }
-var noDesktop = (outcome) => ({
-  outcome,
-  desktop: []
-});
 function landedReply(parts, { outcome, desktop }) {
   const said3 = clickReply(outcome);
   return replyOf(
@@ -85201,19 +85213,17 @@ function landedReply(parts, { outcome, desktop }) {
     }
   );
 }
-async function clickOutcome(parts, req, facts, click2) {
+async function clickOutcome(parts, req, facts, click2, acts) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
-    return noDesktop(
-      badRequest(`a click's url is a string, got ${typeof url}`)
-    );
+    return badRequest(`a click's url is a string, got ${typeof url}`);
   return ranClick(
     parts,
     routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
-    "daemon",
     facts,
-    click2
+    click2,
+    acts
   );
 }
 function readUrlFrame(frame2, links) {
@@ -85256,11 +85266,12 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
       await clickEvent(
         parts,
         accepted,
+        place,
         timedOut,
         clientLeft,
-        async (facts, click2) => {
+        async (facts, click2, acts) => {
           noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
-          return ranClick(parts, read3, place, facts, click2);
+          return ranClick(parts, read3, facts, click2, acts);
         }
       )
     )
@@ -85286,43 +85297,21 @@ function routeClick(parts, read3) {
     signed: { link: read3.link, verb: read3.click.verb }
   } : { ...read3, target };
 }
-async function ranClick(parts, read3, place, facts, click2) {
+async function ranClick(parts, read3, facts, click2, acts) {
   switch (read3.kind) {
     case "refused":
       if (read3.signed !== void 0) noteFacts(facts, read3.signed);
-      return noDesktop(read3.failure);
+      return read3.failure;
     case "link":
       noteFacts(facts, { link: read3.link });
-      return handleClick(parts, read3, place, facts, click2);
-  }
-}
-async function handleClick(parts, link, place, facts, click2) {
-  const { delivery } = link;
-  if (place === "daemon")
-    return noDesktop(
-      await deliverClick(
+      return deliverClick(
         parts,
-        link,
-        { via: "link", delivery, acts: ACTS_ON_DAEMON },
+        read3,
+        { via: "link", delivery: read3.delivery, acts },
         facts,
         click2
-      )
-    );
-  const held = parts.desktopActs.begin();
-  let outcome;
-  let desktop;
-  try {
-    outcome = await deliverClick(
-      parts,
-      link,
-      { via: "link", delivery, acts: { on: "desktop", click: held } },
-      facts,
-      click2
-    );
-  } finally {
-    desktop = parts.desktopActs.end(held);
+      );
   }
-  return { outcome, desktop };
 }
 async function deliverClick(parts, {
   click: admitted,

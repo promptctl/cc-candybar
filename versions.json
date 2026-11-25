@@ -4,15 +4,22 @@
     {
       "version": "pr-965",
       "ref": "refs/pull/965/merge",
-      "sha": "42f806ca740be5ef6e2f653298fb6165a7fda4ed",
-      "timestamp": "2026-11-25T08:06:23.792Z",
+      "sha": "2ae981e0c97f614ac6bd186e4a242c2c09dbd61e",
+      "timestamp": "2026-11-25T08:29:48.066Z",
       "commits": [
         {
-          "sha": "42f806ca740be5ef6e2f653298fb6165a7fda4ed",
+          "sha": "2ae981e0c97f614ac6bd186e4a242c2c09dbd61e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T08:05:19Z",
-          "message": "Merge 1a2b64ae8fc6dc7b5bc63e681433143c3cd708a4 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+          "timestamp": "2026-11-25T08:28:44Z",
+          "message": "Merge 8fee5b4e8b60bef2bcc7502e4cdaa68e5c4c1bdd into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "8fee5b4e8b60bef2bcc7502e4cdaa68e5c4c1bdd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T01:28:27-07:00",
+          "message": "fix(url-handler): a copy or open click over ssh before its bar's config is held is refused by name, a click that throws still hands back what it asked, and a refusal reads as a refusal\n\nA click that acts on the desktop is answered when its first turn ends, so parking\nit until its config arrives left its later act with no answer to join: the\nrenderer now refuses it, saying to click again. The click's hold and its acts\nleave with its one event whether it returned or threw. The URL handler reads the\nkind of a failure from its code, apart from the acts it carries, and CI runs its\nwire expectations on the macOS runner.\n"
         },
         {
           "sha": "1a2b64ae8fc6dc7b5bc63e681433143c3cd708a4",
