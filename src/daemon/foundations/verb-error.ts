@@ -23,6 +23,15 @@ export class DaemonClosing extends Error {
   }
 }
 
+// A click whose answer cannot wait for the configuration it needs: it is the
+// person's to repeat once the bar has been drawn again.
+export class ConfigPending extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigPending";
+  }
+}
+
 // The client left before this click's turn came, so it never ran.
 export class ClickAbandoned extends Error {
   constructor(verb: string) {
@@ -58,6 +67,7 @@ const KINDS: ReadonlyArray<
   readonly [abstract new (...args: never[]) => Error, Failure["kind"]]
 > = [
   [BadVerbArgs, "bad-request"],
+  [ConfigPending, "bad-request"],
   [DaemonClosing, "closing"],
   [ClickAbandoned, "abandoned"],
   [RendererDown, "down"],

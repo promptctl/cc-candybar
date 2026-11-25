@@ -346,8 +346,9 @@ func settle(_ link: String, _ sent: Sent) {
     log.error("click failed \(link, privacy: .private) at \(socket, privacy: .public): \(why, privacy: .public)")
     carryOutAll(acts, sent)
     notify("Click not delivered", why, lostClickNotice)
-  case .refused(let why):
+  case .refused(let why, let acts):
     log.error("refused \(link, privacy: .private) by \(socket, privacy: .public): \(why, privacy: .public)")
+    carryOutAll(acts, sent)
     notify("Click refused", why, refusedClickNotice)
   case .unconfirmed(let why):
     log.error("unconfirmed \(link, privacy: .private) at \(socket, privacy: .public): \(why, privacy: .public)")

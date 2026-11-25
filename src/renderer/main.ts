@@ -73,7 +73,10 @@ import {
   serializeSegmentCells,
 } from "./debug.js";
 import { earliestOf, type Tick } from "../utils/instant.js";
-import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
+import {
+  ConfigPending,
+  rendererFailureOf,
+} from "../daemon/foundations/verb-error.js";
 import {
   isCommand,
   type Command,
@@ -471,6 +474,17 @@ export function mainRenderer(
         if (context !== null) {
           const { origin } = context.durable;
           if (!parts.renderCache.holdsConfig(origin)) {
+            // [LAW:no-ambient-temporal-coupling] A click that acts on the
+            // desktop the person sits at is answered when its turn ends, and
+            // what it asks in a later turn has no answer to join. It is
+            // refused by name instead of left to run unseen.
+            if (
+              event.arrival.via === "link" &&
+              event.arrival.acts.on === "desktop"
+            )
+              throw new ConfigPending(
+                "this bar's configuration is not loaded yet, so the click cannot say what to copy or open on your desktop: click again once the bar has redrawn",
+              );
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
             runInAction(() =>

@@ -260,6 +260,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # [LAW:verifiable-goals] The reads of the daemon's verdict, acts and
+      # forward names are run here, the one runner that can: check-protocol pins
+      # their spellings, not what they do with them.
+      - name: Check the wire reads
+        run: ./url-handler/check.sh
+
       - name: Build universal binary
         run: ./url-handler/build.sh build/cc-candybar-url-handler
 

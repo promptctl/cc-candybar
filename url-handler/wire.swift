@@ -58,11 +58,12 @@ enum DesktopAct: Equatable {
 enum Forward: Equatable {
   // The daemon opened the link, and asks these acts of this machine.
   case delivered([DesktopAct])
-  // The daemon opened the link and the click failed, after asking these acts
-  // of this machine, which a click on this machine's own bar would have run.
+  // The click failed in the daemon, after asking these acts of this machine,
+  // which a click on this machine's own bar would have run.
   case clickFailed(String, [DesktopAct])
-  // The daemon refused the link, for the reason it gave.
-  case refused(String)
+  // The daemon refused the link or its arguments, for the reason it gave,
+  // after asking these acts of this machine.
+  case refused(String, [DesktopAct])
   // The frame was written, and no verdict on it could be read.
   case unconfirmed(String)
   // The click landed, and what it asks of this machine could not be read.
@@ -250,7 +251,7 @@ func verdictOf(_ body: Data, place: Place) -> Forward {
   guard let said = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
     let ok = said["ok"] as? Bool
   else { return .unconfirmed("the daemon's verdict is not one this app reads") }
-  let why = said["error"] as? String ?? "the daemon gave no reason"
+  var why = said["error"] as? String ?? "the daemon gave no reason"
   if ok {
     guard place == .desktop else { return .delivered([]) }
     switch desktopActs(in: said) {
@@ -258,15 +259,19 @@ func verdictOf(_ body: Data, place: Place) -> Forward {
     case .failure(let e): return .unread(e.why)
     }
   }
+  // A failed click hands back what it asked before it failed, when its daemon
+  // hands acts back at all; one that does not has nothing to lose here.
+  var acts: [DesktopAct] = []
   if place == .desktop, said["desktopActs"] != nil {
     switch desktopActs(in: said) {
-    case .success(let acts): return .clickFailed(why, acts)
-    case .failure(let e): return .failed("\(why); its copy and open acts were not read: \(e.why)")
+    case .success(let asked): acts = asked
+    case .failure(let e): why += "; its copy and open acts were not read: \(e.why)"
     }
   }
-  // A refusal of the link is a bad request; any other failure is the daemon's
-  // own (it was closing), which lost the click.
-  return said["code"] as? String == "BAD_REQUEST" ? .refused(why) : .failed(why)
+  // What the failure is comes from its code, whatever the acts: a refusal of
+  // the link or its arguments is a bad request, the person's to act on; any
+  // other failure is the daemon's own, which lost the click.
+  return said["code"] as? String == "BAD_REQUEST" ? .refused(why, acts) : .clickFailed(why, acts)
 }
 
 // The editor's link to a path on another machine, which the editor reaches by

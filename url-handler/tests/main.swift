@@ -99,10 +99,25 @@ expect(
   "a click that failed after asking a copy still hands the copy back")
 expect(
   verdictOf(json(#"{"ok":false,"error":"forged","code":"BAD_REQUEST"}"#), place: .desktop),
-  .refused("forged"), "a link the daemon refused")
+  .refused("forged", []), "a link the daemon refused, from a daemon that hands no acts back")
+expect(
+  verdictOf(
+    json(#"{"ok":false,"error":"no","code":"BAD_REQUEST","desktopActs":[]}"#), place: .desktop),
+  .refused("no", []), "a refusal is a refusal whether or not its verdict lists acts")
+expect(
+  verdictOf(
+    json(#"{"ok":false,"error":"no","code":"BAD_REQUEST","desktopActs":[{"kind":"open","target":"/w"}]}"#),
+    place: .desktop),
+  .refused("no", [.open("/w")]), "a refusal after an act still hands the act back")
 expect(
   verdictOf(json(#"{"ok":false,"error":"closing","code":"RENDER_FAILED"}"#), place: .daemon),
-  .failed("closing"), "a daemon that failed")
+  .clickFailed("closing", []), "a daemon that failed")
+expect(
+  verdictOf(
+    json(#"{"ok":false,"error":"x","code":"RENDER_FAILED","desktopActs":[{"kind":"paste"}]}"#),
+    place: .desktop),
+  .clickFailed("x; its copy and open acts were not read: an act this app does not know: [\"kind\": paste]; is the app older than the daemon?", []),
+  "a failure whose acts cannot be read says so beside its own reason")
 if case .unconfirmed = verdictOf(json("not json"), place: .daemon) {
 } else {
   failures.append("a verdict that is not JSON is unconfirmed")

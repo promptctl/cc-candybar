@@ -689,9 +689,10 @@ export async function replyTo(
     const { outcome } = await clickEvent(
       parts,
       accepted,
+      "daemon",
       timedOut,
       clientLeft,
-      (facts, click) => clickOutcome(parts, req, facts, click),
+      (facts, click, acts) => clickOutcome(parts, req, facts, click, acts),
     );
     return stay(clickReply(outcome));
   }
@@ -866,9 +867,14 @@ function sourceSnapshots(parts: DaemonParts): SourceSnapshots {
 async function clickEvent(
   parts: DaemonParts,
   accepted: Acceptance,
+  place: ActsOn["on"],
   timedOut: () => boolean,
   clientLeft: () => boolean,
-  run: (facts: RequestFacts, click: ClickInFlight) => Promise<Clicked>,
+  run: (
+    facts: RequestFacts,
+    click: ClickInFlight,
+    acts: ActsOn,
+  ) => Promise<RequestOutcome>,
 ): Promise<Clicked> {
   const { clock } = parts;
   const t0 = clock.monotonic();
@@ -885,11 +891,21 @@ async function clickEvent(
   const click: ClickInFlight = {
     gone: () => timedOut() || clientLeft(),
   };
+  // [LAW:single-enforcer] A click that acts on the desktop the person sits at
+  // holds a place in the desktop acts from here until its landing is over, and
+  // what it asks in that time, in whichever turn, is its own. The acts of a
+  // click whose id is not held go to no verdict.
+  const held = place === "desktop" ? parts.desktopActs.begin() : null;
+  const acts: ActsOn =
+    held === null ? ACTS_ON_DAEMON : { on: "desktop", click: held };
   // [LAW:single-enforcer] Whatever a click throws is its outcome, whichever
-  // arm it took, so every click writes its event.
-  const clicked = await run(facts, click).catch((thrown: unknown) =>
-    noDesktop(failureOf(thrown)),
-  );
+  // arm it took, so every click writes its event, and its acts leave with it
+  // whether it returned or threw.
+  const outcome = await run(facts, click, acts).catch(failureOf);
+  const clicked: Clicked = {
+    outcome,
+    desktop: held === null ? [] : parts.desktopActs.end(held),
+  };
   // Whether the client was told TIMEOUT, and whether a client that waited
   // hung up, by the time the click was done.
   noteFacts(facts, {
@@ -912,10 +928,6 @@ interface Clicked {
   readonly outcome: RequestOutcome;
   readonly desktop: readonly DesktopAct[];
 }
-const noDesktop = (outcome: RequestOutcome): Clicked => ({
-  outcome,
-  desktop: [],
-});
 
 // [LAW:single-enforcer] The verdict of a writer told once its click landed:
 // what the click came to and the acts it left for the writer to carry out,
@@ -951,19 +963,18 @@ async function clickOutcome(
   req: { readonly url: unknown },
   facts: RequestFacts,
   click: ClickInFlight,
-): Promise<Clicked> {
+  acts: ActsOn,
+): Promise<RequestOutcome> {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
-    return noDesktop(
-      badRequest(`a click's url is a string, got ${typeof url}`),
-    );
+    return badRequest(`a click's url is a string, got ${typeof url}`);
   return ranClick(
     parts,
     routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
-    "daemon",
     facts,
     click,
+    acts,
   );
 }
 
@@ -1042,11 +1053,12 @@ function urlClick(
         await clickEvent(
           parts,
           accepted,
+          place,
           timedOut,
           clientLeft,
-          async (facts, click) => {
+          async (facts, click, acts) => {
             noteFacts(facts, { via: "forwarder", urlV: String(frame.urlV) });
-            return ranClick(parts, read, place, facts, click);
+            return ranClick(parts, read, facts, click, acts);
           },
         ),
       ),
@@ -1093,58 +1105,24 @@ function routeClick(parts: DaemonParts, read: ReadClick): RoutedClick {
 async function ranClick(
   parts: DaemonParts,
   read: RoutedClick,
-  place: ActsOn["on"],
   facts: RequestFacts,
   click: ClickInFlight,
-): Promise<Clicked> {
+  acts: ActsOn,
+): Promise<RequestOutcome> {
   switch (read.kind) {
     case "refused":
       if (read.signed !== undefined) noteFacts(facts, read.signed);
-      return noDesktop(read.failure);
+      return read.failure;
     case "link":
       noteFacts(facts, { link: read.link });
-      return handleClick(parts, read, place, facts, click);
-  }
-}
-
-// [LAW:single-enforcer] The one place a click's copy and open are given their
-// destination: a click that acts on the desktop the person sits at holds a
-// place in the desktop acts from the moment it is handed to the renderer until
-// its landing is over, and what it asked in that time, in whichever turn,
-// is its own. The acts of a click whose id is not held go to no verdict.
-async function handleClick(
-  parts: DaemonParts,
-  link: Extract<RoutedClick, { kind: "link" }>,
-  place: ActsOn["on"],
-  facts: RequestFacts,
-  click: ClickInFlight,
-): Promise<Clicked> {
-  const { delivery } = link;
-  if (place === "daemon")
-    return noDesktop(
-      await deliverClick(
+      return deliverClick(
         parts,
-        link,
-        { via: "link", delivery, acts: ACTS_ON_DAEMON },
+        read,
+        { via: "link", delivery: read.delivery, acts },
         facts,
         click,
-      ),
-    );
-  const held = parts.desktopActs.begin();
-  let outcome: RequestOutcome;
-  let desktop: readonly DesktopAct[];
-  try {
-    outcome = await deliverClick(
-      parts,
-      link,
-      { via: "link", delivery, acts: { on: "desktop", click: held } },
-      facts,
-      click,
-    );
-  } finally {
-    desktop = parts.desktopActs.end(held);
+      );
   }
-  return { outcome, desktop };
 }
 
 // [LAW:single-enforcer] A click that runs a verb is one turn of the renderer,
