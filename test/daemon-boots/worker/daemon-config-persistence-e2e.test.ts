@@ -28,7 +28,13 @@ import type { Frame } from "../../../src/render/frame";
 
 import { textOf } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
-import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  readFileSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -41,9 +47,19 @@ import { sharedMenuStateKey } from "../../../src/config/menu-keys";
 const showsTheme = (out: Frame, theme: string): boolean =>
   textOf(out).includes(`${theme} ▀▀▀`);
 // Opening the theme picker: the write its label's click makes.
-const OPEN_THEME_PICKER = [sharedMenuStateKey("candybar.pickers"), "candybar.apply.theme"];
+const OPEN_THEME_PICKER = [
+  sharedMenuStateKey("candybar.pickers"),
+  "candybar.apply.theme",
+];
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { BUNDLED, click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
+import {
+  BUNDLED,
+  click,
+  findUrl,
+  render,
+  renderUntil,
+  drawnLink,
+} from "../../helpers/daemon-e2e";
 import { landsAt } from "../../helpers/click";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
@@ -99,14 +115,28 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // rather than depending on extracting it.
       await click(
         daemon,
-        drawnLink(daemon, effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
-        ])),
+        drawnLink(
+          daemon,
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
+          ]),
+        ),
+      );
+
+      // The theme picker sits in the 🎨 look tab.
+      await click(
+        daemon,
+        drawnLink(
+          daemon,
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
+          ]),
+        ),
       );
 
       const menuOpen = await render(daemon, SID, projectDir);
 
-      // The door's first line shows the theme picker, `🎨 theme ▀▀▀`, not its row of
+      // The look tab shows the theme picker, `🎨 theme ▀▀▀`, not its row of
       // swatches: the label is the row's toggle (a set-state write on the
       // pickers accordion key, whose member is the apply action's name, with
       // the row's page cursor beside it). Click it before any per-theme
@@ -157,16 +187,20 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
             "bundled default's own palette — need one to try and one to commit",
         );
       }
-      const sessionThemeUrl = findUrl(linkUrls(sessionOnly), (effects) =>
-        effects[0]!.verb === "set-state" &&
-        effects[0]!.args[1] === "theme" &&
-        effects[0]!.args[2] === sessionTheme,
+      const sessionThemeUrl = findUrl(
+        linkUrls(sessionOnly),
+        (effects) =>
+          effects[0]!.verb === "set-state" &&
+          effects[0]!.args[1] === "theme" &&
+          effects[0]!.args[2] === sessionTheme,
       );
       expect(sessionThemeUrl).toBeDefined();
       // …not a second effect on the same link, and not a second link elsewhere.
       expect(
         findUrl(linkUrls(sessionOnly), (effects) =>
-          effects.some((e) => e.verb === "set-config" && e.args[1] === "palette"),
+          effects.some(
+            (e) => e.verb === "set-config" && e.args[1] === "palette",
+          ),
         ),
       ).toBeUndefined();
       // Nothing picked yet, so nothing to save.
@@ -179,7 +213,9 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // proves nothing about what another session renders.
       await click(daemon, sessionThemeUrl!);
       const OTHER_SID = "e2e-session-concurrent";
-      expect(showsTheme(await render(daemon, SID, projectDir), sessionTheme)).toBe(true);
+      expect(
+        showsTheme(await render(daemon, SID, projectDir), sessionTheme),
+      ).toBe(true);
       // Open the other session's menu to the same depth BEFORE asserting it
       // does not show the pick. A closed menu renders no theme name at all, so
       // asserting on a collapsed bar would pass whether or not the pick
@@ -190,10 +226,17 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       await render(daemon, OTHER_SID, projectDir);
       await click(
         daemon,
-        drawnLink(daemon, effectsUrl([
-          { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [OTHER_SID, ...OPEN_THEME_PICKER] },
-        ])),
+        drawnLink(
+          daemon,
+          effectsUrl([
+            {
+              verb: VERB_SET_STATE,
+              args: [OTHER_SID, "candybar.menu", "open"],
+            },
+            { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.tab", "look"] },
+            { verb: VERB_SET_STATE, args: [OTHER_SID, ...OPEN_THEME_PICKER] },
+          ]),
+        ),
       );
       const otherBar = await render(daemon, OTHER_SID, projectDir);
       expect(showsTheme(otherBar, "tokyo-night")).toBe(true); // its own default, shown
@@ -207,19 +250,24 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
 
       // Two more picks — the theme to keep, and a padding step — still drafts.
-      const targetThemeUrl = findUrl(linkUrls(drafted), (effects) =>
-        effects[0]!.verb === "set-state" &&
-        effects[0]!.args[1] === "theme" &&
-        effects[0]!.args[2] === targetTheme,
+      const targetThemeUrl = findUrl(
+        linkUrls(drafted),
+        (effects) =>
+          effects[0]!.verb === "set-state" &&
+          effects[0]!.args[1] === "theme" &&
+          effects[0]!.args[2] === targetTheme,
       );
       expect(targetThemeUrl).toBeDefined();
       await click(daemon, targetThemeUrl!);
       // The padding stepper sits in the ⚙ config tab.
       await click(
         daemon,
-        drawnLink(daemon, effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "config"] },
-        ])),
+        drawnLink(
+          daemon,
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "config"] },
+          ]),
+        ),
       );
       const configTab = await render(daemon, SID, projectDir);
       // The padding stepper's ▶: a relative step on the session key (the
@@ -260,7 +308,18 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       expect(showsTheme(afterClicks, targetTheme)).toBe(true);
 
       // …and the SAVING session shows it too, with nothing left to save: the
-      // save reloaded the file and released the picks.
+      // save reloaded the file and released the picks. Opening ⚙ config
+      // closed 🎨 look and the theme list in it, so it opens both again.
+      await click(
+        daemon,
+        drawnLink(
+          daemon,
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
+            { verb: VERB_SET_STATE, args: [SID, ...OPEN_THEME_PICKER] },
+          ]),
+        ),
+      );
       const committing = await renderUntil(
         daemon,
         SID,
@@ -290,7 +349,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // A brand-new session that never clicked anything. The persisted
       // theme is now every session's baseline PALETTE (colors the fresh
       // render already carries), but the THEME NAME text only appears in the
-      // settings menu's config row — collapsed by default per-session, since
+      // settings menu's 🎨 look tab — collapsed by default per-session, since
       // both disclosure keys are SessionState, not something a config write
       // touches. Open them for this fresh session (a pure UI affordance, not
       // a config mutation) to assert the persisted name shows up with zero
@@ -300,10 +359,17 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       await render(daemon, FRESH_SID, projectDir);
       await click(
         daemon,
-        drawnLink(daemon, effectsUrl([
-          { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [FRESH_SID, ...OPEN_THEME_PICKER] },
-        ])),
+        drawnLink(
+          daemon,
+          effectsUrl([
+            {
+              verb: VERB_SET_STATE,
+              args: [FRESH_SID, "candybar.menu", "open"],
+            },
+            { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.tab", "look"] },
+            { verb: VERB_SET_STATE, args: [FRESH_SID, ...OPEN_THEME_PICKER] },
+          ]),
+        ),
       );
       const freshOut = await renderUntil(
         daemon,

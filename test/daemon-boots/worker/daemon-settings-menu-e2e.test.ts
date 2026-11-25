@@ -16,7 +16,13 @@ import type { Frame } from "../../../src/render/frame";
 import { textOf } from "../../../src/render/frame";
 import { linksOf } from "../../../src/click/read";
 import { linkUrls, boldUrls } from "../../helpers/frame";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -26,10 +32,7 @@ import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { encodeLayoutOp } from "../../../src/config/layout-ops";
 import { EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
-import {
-  DOOR_CLOSE_GLYPH,
-  DOOR_GLYPH,
-} from "../../../src/config/disclosure";
+import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
 import { effectsOf } from "../../helpers/click";
 import { sharedMenuStateKey } from "../../../src/config/menu-keys";
 
@@ -67,7 +70,19 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
       expect(opened).toContain(DOOR_CLOSE_GLYPH);
       expect(opened).not.toContain(DOOR_GLYPH);
       expect(opened).toContain("✎ arrange"); // edit mode, on the first line
-      expect(opened).toContain("▦"); // preset switching
+
+      // Preset switching: 📚 saves & presets, on the first line, opens onto it.
+      await click(
+        daemon,
+        urlWriting(
+          await render(daemon, SID, projectDir),
+          "candybar.tab",
+          "presets",
+        ),
+      );
+      expect(textOf(await render(daemon, SID, projectDir))).toContain(
+        "▦ preset",
+      );
 
       // 3. Edit mode is genuinely entered from the menu's first line: the
       //    row's edit chrome is on screen the moment edit mode is, and the
@@ -77,18 +92,23 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
       await click(daemon, urlWriting(bodyOut, EDIT_MODE_KEY, "arrange"));
       const editing = await render(daemon, SID, projectDir);
       expect(textOf(editing)).toContain(DOOR_CLOSE_GLYPH);
-      expect(textOf(editing)).toContain("📐 layout");
+      expect(textOf(editing)).toContain("⚡ session");
       expect(
-        linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
-          .length,
+        linkUrls(editing).filter((u) => u.includes("apply-layout-op")).length,
       ).toBeGreaterThan(0);
       const removesModel = (frame: Frame) =>
-        linkUrls(frame).find((url) => effectsOf(url).some((effect) =>
-          effect.verb === "apply-layout-op" &&
-          effect.args[3] === encodeLayoutOp({ op: "remove", target: "model" }),
-        ));
+        linkUrls(frame).find((url) =>
+          effectsOf(url).some(
+            (effect) =>
+              effect.verb === "apply-layout-op" &&
+              effect.args[3] ===
+                encodeLayoutOp({ op: "remove", target: "model" }),
+          ),
+        );
       const affordance = (frame: Frame, verb: string) =>
-        linkUrls(frame).find((url) => effectsOf(url).some((effect) => effect.verb === verb));
+        linkUrls(frame).find((url) =>
+          effectsOf(url).some((effect) => effect.verb === verb),
+        );
       const bar = () => render(daemon, SID, projectDir);
       await click(daemon, removesModel(editing)!);
       const draft = await bar();
@@ -102,7 +122,9 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
       expect(removesModel(redone)).toBeUndefined();
       expect(readFileSync(file, "utf8")).toBe(original);
       await click(daemon, affordance(redone, "save")!);
-      expect(JSON.parse(readFileSync(file, "utf8")).root).toEqual({ h: ["directory"] });
+      expect(JSON.parse(readFileSync(file, "utf8")).root).toEqual({
+        h: ["directory"],
+      });
       expect(textOf(await bar())).not.toContain("✓ save");
     } finally {
       await daemon.stop();
@@ -121,9 +143,7 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
 // click gate, must each come back to an open picker marking the new preset.
 describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", () => {
   test("pick compact, then default: open after each, the pick current", async () => {
-    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
-      "ccb-preset-open",
-    );
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-preset-open");
     const projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-preset-stays-open-project-"),
     );
@@ -133,6 +153,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
       const bar = (): Promise<Frame> => render(daemon, SID, projectDir);
 
       await click(daemon, urlWriting(await bar(), SETTINGS_ANCHOR, "open"));
+      await click(daemon, urlWriting(await bar(), "candybar.tab", "presets"));
       await click(
         daemon,
         urlWriting(

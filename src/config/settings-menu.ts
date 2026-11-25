@@ -107,6 +107,7 @@ import {
   type Place,
   type PreviewName,
   type SubmenuName,
+  type TabLine,
   type TabName,
 } from "./menu-places.js";
 import { settingControlDomain } from "./globals-fields.js";
@@ -322,10 +323,10 @@ const anyResettable = (
 //
 // Brandon: "Each toggle should explain what it does. Each toggle also needs to
 // do all of the work needed to turn its lane on, not just part of it." A
-// lane's switch only lets its subscriber's frames through; the subscriber
-// itself — a mod, Claude Code under cc-attach, a tmux pane — is started by
-// the daemon when the switch the session renders by moves
-// (src/daemon/lane-setup.ts), so the toggle is a plain setting. Beside it, a
+// lane's switch only lets its subscriber's frames through, and the toggle is
+// a plain setting: the daemon opens or closes the tmux pane from the value
+// each session renders by (src/daemon/declared-bar-panes.ts), and lane B's
+// subscriber is a Claude Code started under the attach launcher. Beside it, a
 // `(?)` says what the lane is and what turning it on does, from the help
 // corpus `--help` prints.
 const laneSettings = LANE_NAMES.map(
@@ -508,20 +509,25 @@ const markedDisplay =
     `(print ${templateLiteral(text)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
       controlsUnder(place),
     )}))`;
-// The controls in `place`, each followed by the submenus laid beside it, whose
-// bodies are laid the same way.
+// The controls on one line of `place`, each followed by the submenus laid
+// beside it, whose bodies are laid the same way.
 // [LAW:single-enforcer] Everything laid at a control — the control, its `(?)`,
 // its submenus — is offered where the control is, by the control's one gate.
-const controlsAt = (place: Place): LayoutNode[] =>
-  controlsIn(place).flatMap((c) =>
-    [
-      controlNode(c),
-      ...c.help,
-      ...c.submenus.map((s) =>
-        disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
-      ),
-    ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` })),
-  );
+const controlsAt = (place: Place, line: number): LayoutNode[] =>
+  controlsIn(place)
+    .filter((c) => c.line === line)
+    .flatMap((c) =>
+      [
+        controlNode(c),
+        ...c.help,
+        ...c.submenus.map((s) =>
+          disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
+        ),
+      ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` })),
+    );
+// The lines `place`'s controls sit on, first to last.
+const linesOf = (place: Place): number[] =>
+  [...new Set(controlsIn(place).map((c) => c.line))].sort((a, b) => a - b);
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -767,9 +773,9 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 }
 
 // [LAW:one-source-of-truth] What each place holds (design-docs/SETTINGS-MENU-MAP.md,
-// "Structure") — the door's first line, each tab, each submenu — keyed by every
-// place so none can be left without a body: its own segments, then the
-// controls `PLACE` puts in it, then what follows them. Every body takes the
+// "Structure") — each tab, each submenu — keyed by every place so none can be
+// left without a body: its own segments, then the controls `PLACE` puts in
+// it, line by line, then what follows them. Every body takes the
 // controls, so `PLACE` naming any place is a placement the bar renders. A
 // body's own cell whose width changes — one that comes and goes, or relabels
 // itself — sits `after` the controls, so it moves none of them; a control's
@@ -780,13 +786,6 @@ interface PlaceBody {
   readonly after: readonly LayoutNode[];
 }
 const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)],
-  },
   // The quick actions, then the commands typed into Claude Code beside the
   // auto-compact window they would summarize at.
   session: {
@@ -801,8 +800,11 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
     ],
     after: [],
   },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  // The theme with its gear and the endcaps, then what moves — the effect and
+  // its speed — then the rest, each on its own row.
+  look: { direction: "vertical", content: [], after: [] },
+  // The preset, then the cell that saves the bar as a new one.
+  presets: { direction: "horizontal", content: [], after: [seg(PRESET_SAVE)] },
   config: { direction: "horizontal", content: [], after: [] },
   // The settings that adapt the theme, then — while the look they make
   // differs from the theme's own default — the cell that saves it as that
@@ -812,14 +814,29 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
     content: [],
     after: [seg(THEME_DEFAULT_SEG)],
   },
-  toggles: { direction: "horizontal", content: [], after: [] },
+  renderer: { direction: "horizontal", content: [], after: [] },
 };
+// [LAW:dataflow-not-control-flow] A body's direction is how it lays its
+// lines: a vertical one stacks each as a row, a horizontal one runs them on.
 function placeBody(place: Place): ContainerNode {
   const { direction, content, after } = PLACE_BODY[place];
+  const lines = linesOf(place).map((line) => controlsAt(place, line));
   return {
     kind: "container",
     direction,
-    children: [...content, ...controlsAt(place), ...after],
+    children: [
+      ...content,
+      ...(direction === "vertical"
+        ? lines.map(
+            (children): ContainerNode => ({
+              kind: "container",
+              direction: "horizontal",
+              children,
+            }),
+          )
+        : lines.flat()),
+      ...after,
+    ],
   };
 }
 
@@ -857,28 +874,33 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   return expandContainer(node);
 }
 
-// Two lines stacked over the bar, then the open tab's body. The first line
-// holds what the menu is most often opened for — the theme, the preset,
-// arranging the bar — and the save cell (PLACE_BODY.door). The second is the
-// tab strip.
+// The tabs whose triggers lead from `line`, each with its body dropped below
+// that line.
+const tabsOn = (line: TabLine): LayoutNode[] =>
+  TABS.filter((tab) => tab.line === line).map(({ member }) =>
+    disclosureNode(tabSeg(member), tabRef(member), placeBody(member), "drop"),
+  );
+
+// Two lines stacked over the bar, each with its open tab's body below it. The
+// first line holds `◁ back`, the tabs the menu is most often opened for,
+// arranging the bar, and the save cell whenever it has something to do. The
+// second is the tab strip.
 function doorBody(): ContainerNode {
   return {
     kind: "container",
     direction: "vertical",
     children: [
-      placeBody("door"),
       {
         kind: "container",
         direction: "horizontal",
-        children: TABS.map(({ member }) =>
-          disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop",
-          ),
-        ),
+        children: [
+          seg(BACK_SEG),
+          ...tabsOn("first"),
+          seg(EDIT_SEG),
+          seg(SAVE_SEG),
+        ],
       },
+      { kind: "container", direction: "horizontal", children: tabsOn("strip") },
     ],
   };
 }
