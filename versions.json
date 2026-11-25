@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-965",
+      "ref": "refs/pull/965/merge",
+      "sha": "efe73b346791c584ccc61f1f437411602563c991",
+      "timestamp": "2026-11-25T07:14:16.916Z",
+      "commits": [
+        {
+          "sha": "efe73b346791c584ccc61f1f437411602563c991",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T00:12:58-07:00",
+          "message": "Merge 359e86c75489d84b9226d13783aa956ba970025d into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "359e86c75489d84b9226d13783aa956ba970025d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T00:12:34-07:00",
+          "message": "feat(url-handler): copy and open clicks over ssh act on the Mac the person sits at\n\nA link the app sends down an ssh forward goes in a version 3 frame. The daemon on the far end hands that click's copy and open acts back in its verdict, written once the click has landed, instead of running pbcopy and open on a machine nobody sits at. The app puts the text on the Mac's clipboard and opens the remote path in VS Code Remote-SSH, reaching the machine by the ssh-config ALIAS, which now rides in the forward's file name after the key id. An act the app cannot carry out is said in a notification. Local links keep version 2 and behave as before.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "56989bba0d3078f7c2e2c76efa384cbe0197fa8a",
