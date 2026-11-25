@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-967",
+      "ref": "refs/pull/967/merge",
+      "sha": "a06f1873cf6d368cb2705a2ac6fd822ae26940aa",
+      "timestamp": "2026-11-25T09:32:22.746Z",
+      "commits": [
+        {
+          "sha": "a06f1873cf6d368cb2705a2ac6fd822ae26940aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T02:31:12-07:00",
+          "message": "Merge 7791b2ce8c10b68a72118c4fb1954932ecb83ab5 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "7791b2ce8c10b68a72118c4fb1954932ecb83ab5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T02:30:35-07:00",
+          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-966",
       "ref": "refs/pull/966/merge",
       "sha": "d3b12bbff5d6afb1d636119441f560b16fa46ca7",
