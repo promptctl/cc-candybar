@@ -4,15 +4,22 @@
     {
       "version": "pr-960",
       "ref": "refs/pull/960/merge",
-      "sha": "c0ecad7ed15a9ef1b9348825102c574b998d0afb",
-      "timestamp": "2026-11-25T01:13:14.583Z",
+      "sha": "ea4383504a6940e034787a8003427d97cfb33510",
+      "timestamp": "2026-11-25T01:45:48.445Z",
       "commits": [
         {
-          "sha": "c0ecad7ed15a9ef1b9348825102c574b998d0afb",
+          "sha": "ea4383504a6940e034787a8003427d97cfb33510",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T18:12:04-07:00",
-          "message": "Merge 663357257804bfc321870197915edca8d2c5142a into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+          "timestamp": "2026-11-25T01:44:30Z",
+          "message": "Merge aca63f36fd56e31a126c979e8580f18e09644da9 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "aca63f36fd56e31a126c979e8580f18e09644da9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T18:44:16-07:00",
+          "message": "fix(transcript): a sidechain the fold cannot read fails the refresh, and a line is parsed into its entry or dropped with why (candybar-later-fixes-nwu9.3fy)\n\nLaw-review pass 1 on #960.\n\n- A sidechains directory that cannot be listed, or a new sidechain whose\n  first line cannot be read, fails the refold through its one failed arm,\n  so nothing short is stored and the next render retries. A loss is only\n  what a read that succeeded could not use: a dropped line, or a sidechain\n  whose first line (blank, not JSON, naming no session) cannot say whose\n  it is.\n- The entry parse parses: a timestamp that is not a date, usage with no\n  timestamp, or usage counts that are not numbers drop the line with its\n  reason. A projection that throws is the daemon's fault, not a dropped line.\n- A drop names its line number, which the cursor counts, so it is exact\n  across windows and bytes that are not UTF-8.\n- The window parse returns its drops as data, and a reset replaces the\n  fold in one step.\n- Losses are derived once at refold, stored on the record, and logged once\n  when first met. A sidechain gone after the listing is out of the session,\n  as one gone before it.\n- The facts document carries its stamp failure and its transcript losses as\n  their own fields. The lane diagnostics, a copy of each lane's failed\n  reading that nothing drew, are gone. FACTS_VERSION 6.\n- The cache timer reads its lines through the one line reading.\n- templateHelperRefs and the comments naming the deleted unused check are\n  gone; the real lister's test covers the paths rotation removes; the\n  harness copies left in tests share one helper each.\n"
         },
         {
           "sha": "663357257804bfc321870197915edca8d2c5142a",
