@@ -40,8 +40,7 @@ import type { ClaudeHookData } from "../../src/utils/claude.js";
 import { fieldOf, valueOf } from "../../src/utils/logfmt.js";
 import { atOf, msOf } from "./log-event.js";
 import { barHook } from "../lib/hook-data.js";
-import { sessionEnv } from "../lib/session-env.js";
-import { transcriptPath } from "../lib/transcript.js";
+import { transcriptPath } from "./transcript.js";
 import { BUNDLE, requireCurrentBundle } from "./environment.js";
 import {
   HERMETIC_GIT_ENV,
@@ -185,7 +184,14 @@ async function startWorld(config = "{}\n"): Promise<World> {
     [PARENT_PID_ENV]: String(process.pid),
     ...HERMETIC_GIT_ENV,
   };
-  const terminal = sessionEnv(dirs.claude);
+  // What a client in a Claude Code session's terminal sees, from which it
+  // reports its hints (detectClientHints).
+  const terminal = {
+    CLAUDE_CONFIG_DIR: dirs.claude,
+    TERM: "xterm-ghostty",
+    TERM_PROGRAM: "ghostty",
+    COLORTERM: "truecolor",
+  };
   // The host this world's clients are handed: its socket, its home.
   const machine = processWorld();
   const host = { env, home: dirs.home, tmp: machine.host.tmp };

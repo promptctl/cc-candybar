@@ -1,5 +1,4 @@
-import { percentile } from "../../scripts/lib/percentile";
-import { distributionOf } from "../../scripts/bench/stats";
+import { distributionOf, percentile } from "../../scripts/bench/stats";
 
 describe("percentile", () => {
   it("is a sample that was observed, never an interpolation", () => {

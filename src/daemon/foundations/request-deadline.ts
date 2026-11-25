@@ -65,10 +65,11 @@ export const timeoutResponse = (
 
 // What a request's wait leaves for its draw: the synchronous turn that reads
 // the view and turns it into the answer's bytes, which the render event logs
-// as `drew=`. The reserve is wall time, so it covers the draw descheduled as
-// well as the draw's own work. A reserve too small answers after its client
-// has hung up, and the bar goes blank, where one too large only draws more
-// pending, so it is sized for a slow draw, not a typical one.
+// as `drew=` and `encoded=`. It is wall time, so it covers the draw
+// descheduled as well as its own work. It and the sources' wait split the
+// statusline client's budget (protocol.ts), and the split is a judgement that
+// favours the draw: a reserve too small answers after its client has hung up,
+// and the bar goes blank, where one too large only draws more pending.
 export const DRAW_RESERVE_MS = 60;
 
 // [LAW:parse-dont-validate] When the client hangs up, as the checkpoint

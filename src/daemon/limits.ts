@@ -89,12 +89,11 @@ import type { Asked } from "../utils/outcome";
 // check-protocol name the constants, so renaming them for wording alone would
 // break that contract for no change in meaning.
 //
-// The default is the round limit whose render cache share holds the hundred
-// sessions that share is sized for (render-cache.ts). Below what the share
-// needs, the cache cannot hold the directories being rendered from, every
-// render misses, and a miss's config load is longer than the client waits, so
-// every render fails rather than some. A higher default only lets a leak grow
-// further before the backstop sees it.
+// The default is the round limit whose render cache share holds the sessions
+// that share is sized for (render-cache.ts). When more directories render in
+// turn than a share holds, every render misses, and a miss's config load is
+// longer than the client waits, so every render fails rather than some. A
+// higher default only lets a leak grow further before the backstop sees it.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 export const DEFAULT_RSS_LIMIT_MB = 1024;
 export const HEAP_CAP_OVER_RSS = 2;
