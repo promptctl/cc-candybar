@@ -4,15 +4,22 @@
     {
       "version": "pr-968",
       "ref": "refs/pull/968/merge",
-      "sha": "92a05f0d96c0db32ca9fb019ab60833d727a8f92",
-      "timestamp": "2026-11-25T10:21:02.764Z",
+      "sha": "44c1b30c285cc6251ecb75478abf14f1118ab1d3",
+      "timestamp": "2026-11-25T10:46:40.845Z",
       "commits": [
         {
-          "sha": "92a05f0d96c0db32ca9fb019ab60833d727a8f92",
+          "sha": "44c1b30c285cc6251ecb75478abf14f1118ab1d3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T03:19:52-07:00",
-          "message": "Merge ec6e772eb7c0de33cbb3005d84a8c36406a197d5 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+          "timestamp": "2026-11-25T10:45:41Z",
+          "message": "Merge 59e9972a7a38c5916ec622784d78463893059b96 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "59e9972a7a38c5916ec622784d78463893059b96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T03:43:29-07:00",
+          "message": "fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n"
         },
         {
           "sha": "ec6e772eb7c0de33cbb3005d84a8c36406a197d5",

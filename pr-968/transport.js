@@ -28578,6 +28578,7 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   URL_FRAME_VERSION
 ]);
 var awaitsVerdict = (urlV) => typeof urlV === "number" && urlV >= 2;
+var ACTS_ON_DAEMON = "daemon";
 var ACTS_ON_DESKTOP = "desktop";
 var ProtocolError = class extends Error {
   constructor(message) {
@@ -77015,7 +77016,8 @@ function spliceOp(text5, path31, op, suffix, rendered) {
 
 // src/renderer-interface/click-arrival.ts
 init_globals();
-var actsOnDesktop = (arrival) => arrival.via === "link" && arrival.delivery.kind === "desktop-forwarder";
+var deliveredActsOn = (delivery) => delivery.kind === "forwarder" ? delivery.actsOn : "daemon";
+var actsOnOf = (arrival) => arrival.via === "link" ? deliveredActsOn(arrival.delivery) : "daemon";
 
 // src/claude-input/typing.ts
 init_globals();
@@ -77073,7 +77075,7 @@ var typeInPane = (edge) => async (tmux3, line) => {
 function ask(ctx, act) {
   ctx.acts.ask(
     ctx.effects,
-    (act.kind === "copy" || act.kind === "open") && actsOnDesktop(ctx.arrival) ? { ...act, forWriter: true } : act
+    act.kind === "copy" || act.kind === "open" ? { ...act, actsOn: actsOnOf(ctx.arrival) } : act
   );
 }
 function globalAct(step4, ctx, session) {
@@ -85193,32 +85195,31 @@ function readUrlFrame(frame2, links) {
       kind: "refused",
       problem: "the URL handler's frame carries no url string"
     };
-  const { actsOn } = frame2;
-  if (actsOn === void 0)
-    return parseClick(url, { kind: "forwarder", urlV }, links);
-  if (actsOn !== ACTS_ON_DESKTOP)
+  const actsOn = frame2.actsOn ?? ACTS_ON_DAEMON;
+  if (actsOn !== ACTS_ON_DAEMON && actsOn !== ACTS_ON_DESKTOP)
     return {
       kind: "refused",
-      problem: `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DESKTOP})`
+      problem: `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DAEMON}, ${ACTS_ON_DESKTOP})`
     };
-  if (!awaitsVerdict(urlV))
+  if (actsOn === ACTS_ON_DESKTOP && !awaitsVerdict(urlV))
     return {
       kind: "refused",
       problem: `a version ${urlV} frame reads no verdict, so the acts it asks on the desktop cannot reach it`
     };
-  return parseClick(url, { kind: "desktop-forwarder", urlV }, links);
+  return parseClick(url, { kind: "forwarder", urlV, actsOn }, links);
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
   const read3 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
-  const onDesktop = read3.kind === "link" && actsOnDesktop({ via: "link", delivery: read3.delivery });
+  const actsOn = read3.kind === "link" ? deliveredActsOn(read3.delivery) : ACTS_ON_DAEMON;
+  const onDesktop = actsOn === ACTS_ON_DESKTOP;
   const land = () => clickEvent(parts, accepted, timedOut, clientLeft, async (facts, click2) => {
     noteFacts(facts, {
-      via: onDesktop ? "desktop-forwarder" : "forwarder",
-      urlV: String(frame2.urlV)
+      via: "forwarder",
+      urlV: String(frame2.urlV),
+      actsOn
     });
     const clicked = await ranClick(parts, read3, facts, click2);
-    if (onDesktop)
-      noteFacts(facts, { desktop: String(clicked.desktop.length) });
+    noteFacts(facts, { desktop: String(clicked.desktop.length) });
     return clicked;
   });
   return {
@@ -85307,18 +85308,24 @@ async function handleClick(parts, {
   );
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
-  const desktop = delivered.settled.flatMap(
-    (outcome) => outcome.kind === "left" ? [outcome.act] : []
-  );
+  const { desktop, answered } = apartDesktop(delivered.settled);
   if (delivered.kind === "threw")
     return { outcome: delivered.failure, desktop };
-  const missed = delivered.settled.find(
-    (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped" && outcome.kind !== "left"
+  const missed = answered.find(
+    (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped"
   );
   return {
     outcome: missed === void 0 ? { kind: "ok" } : clickFailure(missed),
     desktop
   };
+}
+function apartDesktop(settled3) {
+  const desktop = [];
+  const answered = [];
+  for (const outcome of settled3)
+    if (outcome.kind === "desktop") desktop.push(outcome.act);
+    else answered.push(outcome);
+  return { desktop, answered };
 }
 function clickFailure(outcome) {
   const kind = CLICK_FAILURE[outcome.kind];
@@ -91811,9 +91818,9 @@ async function paneOff(tmux3, edge) {
 function desktopActOf(act) {
   switch (act.kind) {
     case "copy":
-      return act.forWriter === true ? { kind: "copy", text: act.text } : null;
+      return act.actsOn === ACTS_ON_DESKTOP ? { kind: "copy", text: act.text } : null;
     case "open":
-      return act.forWriter === true ? { kind: "open", target: act.target } : null;
+      return act.actsOn === ACTS_ON_DESKTOP ? { kind: "open", target: act.target } : null;
     case "type-slash":
     case "run":
       return null;
@@ -93155,13 +93162,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       } else acts.push(effect);
     }
     const performed = (act) => {
-      const left = desktopActOf(act);
-      if (left === null) return world.perform(act);
-      log(
-        "info",
-        actLine(act, "left", "left to the machine the click's writer runs on")
-      );
-      return Promise.resolve({ kind: "left", act: left });
+      const desktop = desktopActOf(act);
+      if (desktop === null) return world.perform(act);
+      log("info", actLine(act, "desktop", "handed to the desktop"));
+      return Promise.resolve({ kind: "desktop", act: desktop });
     };
     let before = Promise.resolve();
     for (const act of acts) {
@@ -93378,7 +93382,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     );
   };
   const settle3 = async (effect, ended) => {
-    const outcome = ended.kind === "left" ? { kind: "ok" } : ended;
+    const outcome = ended.kind === "desktop" ? { kind: "ok" } : ended;
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
     const unheard = (reason) => {
       if (isEnvironmentOutput(outcome)) world.unheard(reason, true);
