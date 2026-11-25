@@ -57,7 +57,7 @@ import {
   type CompiledConfig,
   type Registration,
 } from "../dsl/render.js";
-import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
+import { mb, nearAtOf } from "../daemon/foundations/memory-limit.js";
 import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import { deriveActionGates, type Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
@@ -103,11 +103,14 @@ import type { RenderCacheStats } from "../renderer-interface/renderer-stats";
 // test/render-cache-sharing.test.ts, which fails when either is exceeded.
 // Measured 2026-10-20 over the bundled default: a rendered entry 1.8 MB (2.4
 // MB in a daemon serving a full user config from forty real worktree
-// directories); a compile 7.1 MB, counted as an evicted builder leaves it —
-// its own heap and the part of that builder's config it still reaches. It was
-// 9.3 MB an entry, every one compiling its own.
+// directories).
 export const ENTRY_BYTES = 3 * 1024 * 1024;
-export const COMPILE_BYTES = 10 * 1024 * 1024;
+// A compile, counted as an evicted builder leaves it: its own heap and the
+// part of that builder's config it still reaches. The runtime moves it — V8's
+// version and the platform each by more than a tenth — so it is sized from
+// the runtime CI runs the test on, where it measured 10.2 MiB on 2026-11-24
+// over the bundled default. A user config merged over the default compiles to about the same.
+export const COMPILE_BYTES = 12 * 1024 * 1024;
 // A session's view (SessionView): its store of the session's values over the
 // entry's, and the parts of every placement it has drawn, kept until it is
 // disposed (src/dsl/parts.ts). Measured 2026-10-23 over the bundled default:
@@ -127,11 +130,11 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // runtime's copy of the loaded bundle (a bare node is charged ~12 MB), so it
 // holds under either. The charges' own headroom over what entries hold is the
 // heap's growth room, so reserving more would starve the cache at a lowered
-// limit for nothing. At the default limit the share is
-// 672 MB: ~120 sessions on one compile, each an entry and a view, against a
-// working set of ~20 directories in the production daemon.
-// Measured, a full share costs less than its charges: serving 100 sessions,
-// the daemon is charged ~430 MB in all with 560 MB of the share accounted.
+// limit for nothing. At the default limit the share holds several times the
+// production daemon's working set of ~20 directories, each an entry and a view
+// on one compile. Measured, a full share costs less than its charges: serving
+// 100 sessions, the daemon is charged ~430 MB in all, less than the share
+// accounts for them.
 const RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 // Never less than a quarter of the limit, which a small limit has always had:
 // there the reserve would leave the cache too little to hold two sessions.
@@ -139,7 +142,8 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
   return Math.floor(
     Math.max(
       memoryLimitBytes / 4,
-      memoryLimitBytes * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES,
+      // [LAW:single-enforcer] The near line is the one a reading is judged by.
+      nearAtOf(memoryLimitBytes) - RENDER_CACHE_RESERVE_BYTES,
     ),
   );
 }
@@ -147,7 +151,7 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 // The count ceiling beside the byte budget: every entry holds a
 // SourceRegistry (fs watchers, TTL timers), a resource the byte budget does
 // not see. At the default memory limit
-// the bytes bind just short of it (~230 entries with no view); it is what
+// the bytes bind just short of it, for entries with no view; it is what
 // bounds watchers above it, when CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
 const MAX_UNPINNED_FAILURES = 256;

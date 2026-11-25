@@ -530,6 +530,8 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const perView = (heapUsed() - beforeViews) / N;
   expect(cache.stats.views).toBe(2 * N + 2);
   expect(perView).toBeLessThan(VIEW_BYTES);
+  // The entry alone, without the view each of its sessions drew once.
+  expect(perEntry - perView).toBeLessThan(ENTRY_BYTES);
 
   // A view keeps the parts of every placement it has drawn until it is
   // disposed (src/dsl/parts.ts), so it is charged for the most the bundled
