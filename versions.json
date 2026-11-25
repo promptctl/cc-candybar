@@ -4,15 +4,29 @@
     {
       "version": "pr-961",
       "ref": "refs/pull/961/merge",
-      "sha": "4983b7c2e00b5f1362175a93734f756a0c6d88cc",
-      "timestamp": "2026-11-25T04:48:44.860Z",
+      "sha": "9665cd5d11279230dd1d999942ea12abe04389cc",
+      "timestamp": "2026-11-25T05:02:21.708Z",
       "commits": [
         {
-          "sha": "4983b7c2e00b5f1362175a93734f756a0c6d88cc",
+          "sha": "9665cd5d11279230dd1d999942ea12abe04389cc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T21:47:28-07:00",
-          "message": "Merge 553535f6f561660dbbe639b2ed56ad071e9e82dd into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+          "timestamp": "2026-11-25T05:01:12Z",
+          "message": "Merge 9e8baee585be83ce42c4d7494c64b43b7f09bc74 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "9e8baee585be83ce42c4d7494c64b43b7f09bc74",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:59:00-07:00",
+          "message": "fix(tests): each restated reason claims only what the code shows, and what only the benchmark uses lives with it (candybar-testing-do00.c3a)\n\nFrom the plan review. The render cache's capacity target is one value the\nbudget test reads. The share states the reserve's assumption about what each\nsession holds outside it, and the default's comment places the thrash at a\nworking set larger than the share. The draw reserve names both turns it\ncovers and the budget it splits. The daemon argv names every start that reads\nit. The percentile, the session terminal and the transcript generator had one\nconsumer once the load gate went, so they move into the benchmark and their\nsharing markers go with the sharing.\n"
+        },
+        {
+          "sha": "72cee05cfe63a3757c6f5e00599a61fbf550a204",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:55:14-07:00",
+          "message": "docs(design): the gap doc's dependency paragraph points into neither the withdrawn plan nor its epic (candybar-testing-do00.c3a)\n"
         },
         {
           "sha": "553535f6f561660dbbe639b2ed56ad071e9e82dd",
