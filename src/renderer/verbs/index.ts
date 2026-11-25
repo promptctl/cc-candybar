@@ -156,11 +156,12 @@ import {
   type Landed,
 } from "../config-writes";
 import type { LayerContent } from "../../config/config-snapshot.js";
-import type {
-  ActRequest,
-  Effect,
-  EffectId,
-  EffectOutcome,
+import {
+  asksDesktop,
+  type ActRequest,
+  type Effect,
+  type EffectId,
+  type EffectOutcome,
 } from "../../renderer-interface/interface";
 import type {
   DeclaredSources,
@@ -285,7 +286,10 @@ function ask(
 ): void {
   // [LAW:no-silent-failure] A copy or open of a click whose answer has gone has
   // no way to reach its writer's machine, which is where it acts.
-  if ((act.kind === "copy" || act.kind === "open") && answerSent(ctx.arrival))
+  // [LAW:single-enforcer] exception: the host decides where an act runs, but a
+  // replay's turn is not its click's, so the host cannot tell it apart; this
+  // refuses it first, until a parked click is answered when it has run.
+  if (asksDesktop(act) && answerSent(ctx.arrival))
     throw new ConfigPending(
       "this bar's configuration was not loaded when you clicked, so what to copy or open on your desktop could not be handed back: click again",
     );

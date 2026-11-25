@@ -438,6 +438,15 @@ export type Act = { readonly id: EffectId } & (
 
 // An act as its turn asks it, before the renderer names it.
 export type ActRequest = Unnamed<Act>;
+
+// [LAW:one-source-of-truth] The acts that act on the machine a click's writer
+// runs on, which over an ssh forward is not the daemon's: the host hands them
+// to that writer, and the renderer refuses one it can no longer hand back. The
+// one place the set is spelled.
+export const asksDesktop = <A extends { readonly kind: string }>(
+  act: A,
+): act is Extract<A, { readonly kind: "copy" | "open" }> =>
+  act.kind === "copy" || act.kind === "open";
 type Unnamed<A> = A extends unknown ? Omit<A, "id"> : never;
 
 export type Effect = Present | ConfigChange | Act;

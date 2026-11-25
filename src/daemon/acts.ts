@@ -4,7 +4,11 @@
 // what it did, or why it did not, said once on its act line and handed back as
 // the act's `effect-done`.
 
-import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
+import {
+  asksDesktop,
+  type Act,
+  type EffectOutcome,
+} from "../renderer-interface/interface.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -64,15 +68,10 @@ export type HostOutcome = EffectOutcome | Left;
 // The acts a click may leave to the machine its writer runs on, as the wire
 // spells them; every other act is only ever performed here.
 export function desktopActOf(act: HostAct): DesktopAct | null {
-  switch (act.kind) {
-    case "copy":
-      return { kind: "copy", text: act.text };
-    case "open":
-      return { kind: "open", target: act.target };
-    case "type-slash":
-    case "run":
-      return null;
-  }
+  if (!asksDesktop(act)) return null;
+  return act.kind === "copy"
+    ? { kind: "copy", text: act.text }
+    : { kind: "open", target: act.target };
 }
 
 // Runs can continue after the click reply. Other acts report their outcome
