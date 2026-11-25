@@ -28286,12 +28286,6 @@ var BadVerbArgs = class extends Error {
     this.name = "BadVerbArgs";
   }
 };
-var ConfigPending = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "ConfigPending";
-  }
-};
 var DaemonClosing = class extends Error {
   constructor(verb) {
     super(`the daemon closed: ${verb} refused`);
@@ -74493,7 +74487,6 @@ function followingOf(viewers) {
     if (seen.drawing) following.add(lane);
   return following;
 }
-var asksDesktop = (act) => act.kind === "copy" || act.kind === "open";
 
 // src/renderer/feeds.ts
 var FEED_PERIODS = {
@@ -77023,14 +77016,6 @@ function spliceOp(text5, path31, op, suffix, rendered) {
 // src/renderer-interface/click-arrival.ts
 init_globals();
 var actsOnDesktop = (arrival) => arrival.via === "link" && arrival.delivery.kind === "desktop-forwarder";
-var afterItsAnswer = (arrival) => arrival.via === "link" && arrival.delivery.kind === "desktop-forwarder" ? {
-  via: "link",
-  delivery: {
-    kind: "answered-desktop-forwarder",
-    urlV: arrival.delivery.urlV
-  }
-} : arrival;
-var answerSent = (arrival) => arrival.via === "link" && arrival.delivery.kind === "answered-desktop-forwarder";
 
 // src/claude-input/typing.ts
 init_globals();
@@ -77086,11 +77071,10 @@ var typeInPane = (edge) => async (tmux3, line) => {
 
 // src/renderer/verbs/index.ts
 function ask(ctx, act) {
-  if (asksDesktop(act) && answerSent(ctx.arrival))
-    throw new ConfigPending(
-      "this bar's configuration was not loaded when you clicked, so what to copy or open on your desktop could not be handed back: click again"
-    );
-  ctx.acts.ask(ctx.effects, act);
+  ctx.acts.ask(
+    ctx.effects,
+    (act.kind === "copy" || act.kind === "open") && actsOnDesktop(ctx.arrival) ? { ...act, forWriter: true } : act
+  );
 }
 function globalAct(step4, ctx, session) {
   ask(
@@ -78466,15 +78450,7 @@ function mainRenderer(parts, stores) {
     try {
       clickTurn(
         parts,
-        {
-          ...click2.event,
-          // [LAW:no-ambient-temporal-coupling] exception: a click is answered
-          // when its first turn ends, parked or not, so this replay's copy
-          // or open has no answer to ride in and fails by name, until a
-          // parked click is answered when it has run.
-          arrival: afterItsAnswer(click2.event.arrival),
-          context: parkedContext(click2)
-        },
+        { ...click2.event, context: parkedContext(click2) },
         effects,
         record2
       );
@@ -81547,6 +81523,8 @@ function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
   return import_node_path15.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
+var HOST_ALIAS_FIRST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
+var HOST_ALIAS_REST = `${HOST_ALIAS_FIRST}.-`;
 function sessionStatePath(host) {
   return import_node_path15.default.join(stateDir(host), "session-state.json");
 }
@@ -84674,6 +84652,7 @@ function recordingCommandOf(value) {
 }
 
 // src/daemon/reply.ts
+var toldAtOnce = (urlV, verdict, land) => awaitsVerdict(urlV) ? { when: "at-once", verdict, land } : { when: "never", land };
 function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
   const { sent, frame: frame2, unsent } = framedResponse(resp);
   return { resp: sent, frame: frame2, unsent, exitAfterFlush, settled: settled3 };
@@ -84709,9 +84688,7 @@ function refuseClosingReply(parts, kind, accepted) {
   return stay(closingResponse(parts, kind, accepted));
 }
 function refuseClosingInbound(parts, inbound, accepted) {
-  if (inbound.kind !== "url")
-    return replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
-  return {
+  return inbound.kind === "url" ? {
     kind: "url",
     told: toldAtOnce(
       inbound.frame.urlV,
@@ -84719,9 +84696,8 @@ function refuseClosingInbound(parts, inbound, accepted) {
       async () => {
       }
     )
-  };
+  } : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
 }
-var toldAtOnce = (urlV, verdict, land) => awaitsVerdict(urlV) ? { when: "at-once", verdict, land } : { when: "never", land };
 var REPLY_EVENTS = {
   recording: "request",
   render: "render",
@@ -85191,20 +85167,6 @@ var nothingLeft = (outcome) => ({
   outcome,
   desktop: []
 });
-function landedReply(parts, { desktop }) {
-  const reply = replyOf(
-    { ok: true, output: "", desktopActs: desktop },
-    null,
-    (taken2) => {
-      if (!taken2 && desktop.length > 0)
-        parts.log(
-          "warn",
-          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`
-        );
-    }
-  );
-  return reply;
-}
 async function clickOutcome(parts, req, facts, click2) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
@@ -85220,7 +85182,7 @@ async function clickOutcome(parts, req, facts, click2) {
   );
 }
 function readUrlFrame(frame2, links) {
-  const { urlV, url, actsOn } = frame2;
+  const { urlV, url } = frame2;
   if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
     return {
       kind: "refused",
@@ -85231,24 +85193,25 @@ function readUrlFrame(frame2, links) {
       kind: "refused",
       problem: "the URL handler's frame carries no url string"
     };
+  const { actsOn } = frame2;
   if (actsOn === void 0)
     return parseClick(url, { kind: "forwarder", urlV }, links);
   if (actsOn !== ACTS_ON_DESKTOP)
     return {
       kind: "refused",
-      problem: `the URL handler's frame names ${inspect(actsOn)} for its acts, which this daemon does not know (${ACTS_ON_DESKTOP})`
+      problem: `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DESKTOP})`
     };
   if (!awaitsVerdict(urlV))
     return {
       kind: "refused",
-      problem: `the URL handler's frame version ${urlV} reads no verdict, which carries the acts it asks for`
+      problem: `a version ${urlV} frame reads no verdict, so the acts it asks on the desktop cannot reach it`
     };
   return parseClick(url, { kind: "desktop-forwarder", urlV }, links);
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
   const read3 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
   const onDesktop = read3.kind === "link" && actsOnDesktop({ via: "link", delivery: read3.delivery });
-  const land = async () => clickEvent(parts, accepted, timedOut, clientLeft, async (facts, click2) => {
+  const land = () => clickEvent(parts, accepted, timedOut, clientLeft, async (facts, click2) => {
     noteFacts(facts, {
       via: onDesktop ? "desktop-forwarder" : "forwarder",
       urlV: String(frame2.urlV)
@@ -85262,10 +85225,24 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     kind: "url",
     told: onDesktop ? { when: "landed", land: async () => landedReply(parts, await land()) } : toldAtOnce(
       frame2.urlV,
-      clickReply(read3.kind === "refused" ? read3.failure : { kind: "ok" }),
+      read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" },
       async () => void await land()
     )
   };
+}
+function landedReply(parts, { desktop }) {
+  const reply = replyOf(
+    { ok: true, output: "", desktopActs: desktop },
+    null,
+    (taken2) => {
+      if (!taken2 && desktop.length > 0)
+        parts.log(
+          "warn",
+          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`
+        );
+    }
+  );
+  return reply;
 }
 function routeClick(parts, read3) {
   if (read3.kind === "refused")
@@ -91832,8 +91809,15 @@ async function paneOff(tmux3, edge) {
 
 // src/daemon/acts.ts
 function desktopActOf(act) {
-  if (!asksDesktop(act)) return null;
-  return act.kind === "copy" ? { kind: "copy", text: act.text } : { kind: "open", target: act.target };
+  switch (act.kind) {
+    case "copy":
+      return act.forWriter === true ? { kind: "copy", text: act.text } : null;
+    case "open":
+      return act.forWriter === true ? { kind: "open", target: act.target } : null;
+    case "type-slash":
+    case "run":
+      return null;
+  }
 }
 var outlives = (act) => act.kind === "run";
 function nameOf2(act) {
@@ -91847,12 +91831,12 @@ function nameOf2(act) {
       return `run ${act.action}`;
   }
 }
-var actLine = (act, outcome, said3) => `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome} \u2014 ${nameOf2(act)}: ${said3}`;
 var did = (said3) => ({ outcome: { kind: "ok" }, said: said3 });
 var not = (outcome) => ({
   outcome,
   said: outcome.reason
 });
+var actLine = (act, outcome, said3) => `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome} \u2014 ${nameOf2(act)}: ${said3}`;
 var Acts = class {
   constructor(deps) {
     this.deps = deps;
@@ -93170,9 +93154,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           );
       } else acts.push(effect);
     }
-    const onDesktop = event.kind === "click" && actsOnDesktop(event.arrival);
     const performed = (act) => {
-      const left = onDesktop ? desktopActOf(act) : null;
+      const left = desktopActOf(act);
       if (left === null) return world.perform(act);
       log(
         "info",
