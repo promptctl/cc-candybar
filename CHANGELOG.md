@@ -1,3 +1,9 @@
+## [1.238.3](https://github.com/promptctl/cc-candybar/compare/v1.238.2...v1.238.3) (2026-11-25)
+
+### Bug Fixes
+
+* **render-cache:** a compile is charged for what it holds on CI's runtime, so the cache's budget counts it in full (candybar-later-fixes-nwu9.asa) ([#959](https://github.com/promptctl/cc-candybar/issues/959)) ([6620855](https://github.com/promptctl/cc-candybar/commit/6620855aeeb445669a8aa3031da664c8416df276))
+
 ## [1.238.2](https://github.com/promptctl/cc-candybar/compare/v1.238.1...v1.238.2) (2026-11-24)
 
 ### Bug Fixes
