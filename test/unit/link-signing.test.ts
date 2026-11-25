@@ -3,6 +3,8 @@
 // sender is told why.
 
 import {
+  LINK_KEY_ID_CHARS,
+  linkKeyId,
   linkSigner,
   transitForm,
   unprovenLink,
@@ -22,7 +24,7 @@ import type { Frame } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { actionTarget, type DrawnLink } from "../../src/render/drawn-link";
 import { rendererNameOf } from "../../src/daemon/foundations/renderer-name";
-import { TEST_SIGNER } from "../helpers/link-signer";
+import { TEST_LINK_KEY, TEST_SIGNER } from "../helpers/link-signer";
 
 const FORWARDED = { kind: "forwarder", urlV: 2 } as const;
 const CLI = { kind: "cli" } as const;
@@ -50,6 +52,30 @@ describe("a link the bar draws", () => {
         link: COPY,
         delivery,
       });
+  });
+
+  // The URL handler app reads the signer from the link without opening it: the
+  // proof's first field, up to the first `/` after the last `#`. Its copy of
+  // that rule (url-handler/main.swift) rests on this spelling.
+  test.each([
+    ["an authored link", undefined],
+    [
+      "a frame's link",
+      { renderer: rendererNameOf("worktree"), session: sessionIdOf("s#1") },
+    ],
+  ])("names its signer in the first field of its proof, for %s", (_, source) => {
+    const signed = TEST_SIGNER.signLink(COPY, source);
+    const proof = signed.slice(signed.lastIndexOf("#") + 1);
+    const id = proof.slice(0, proof.indexOf("/"));
+    expect(id).toBe(linkKeyId(TEST_LINK_KEY));
+    expect(id).toMatch(new RegExp(`^[A-Za-z0-9_-]{${LINK_KEY_ID_CHARS}}$`));
+  });
+
+  test("a key's id is its own, and gives none of the key away", () => {
+    expect(linkKeyId(Buffer.alloc(32, 1))).not.toBe(
+      linkKeyId(Buffer.alloc(32, 2)),
+    );
+    expect(linkKeyId(Buffer.alloc(32, 1))).toBe(linkKeyId(Buffer.alloc(32, 1)));
   });
 
   // The OS normalizes a URL before the handler app forwards it, so the link
@@ -133,11 +159,34 @@ describe("a link the bar did not draw", () => {
       });
   });
 
-  test("signed by another key is refused", () => {
-    const other = linkSigner(Buffer.alloc(32, 9)).signLink(COPY);
+  test("signed by another key is refused, naming both daemons", () => {
+    const otherKey = Buffer.alloc(32, 9);
+    const other = linkSigner(otherKey).signLink(COPY);
     expect(refused(other)).toEqual({
       kind: "refused",
-      problem: expect.stringContaining("another key signed it"),
+      problem: expect.stringContaining(
+        `signed by another daemon (key ${linkKeyId(otherKey)}, this one is ${linkKeyId(TEST_LINK_KEY)})`,
+      ),
+    });
+  });
+
+  test("claiming this daemon's key id without its mac is refused as changed", () => {
+    const other = linkSigner(Buffer.alloc(32, 9)).signLink(COPY);
+    const claimed = other.replace(
+      linkKeyId(Buffer.alloc(32, 9)),
+      linkKeyId(TEST_LINK_KEY),
+    );
+    expect(refused(claimed)).toEqual({
+      kind: "refused",
+      problem: expect.stringContaining("the link's signature does not match"),
+    });
+  });
+
+  test("drawn before links named their signer is refused with that said", () => {
+    const old = `${unprovenLink(signed)}#${signed.slice(-22)}`;
+    expect(refused(old)).toEqual({
+      kind: "refused",
+      problem: expect.stringContaining("does not say which daemon signed it"),
     });
   });
 

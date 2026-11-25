@@ -3,26 +3,41 @@
 
 import { sshConfigPlan } from "../../src/ssh-cli";
 
-const facts = { hostname: "devbox", socket: "/tmp/cc-candybar-1000/socket" };
+const facts = {
+  kind: "ok",
+  value: { keyId: "AbCd-_12", socket: "/tmp/cc-candybar-1000/socket" },
+} as const;
 
 describe("cc-candybar ssh-config", () => {
-  it("forwards the daemon's socket into the directory the URL handler tries, named by this machine", () => {
-    const plan = sshConfigPlan([], facts);
+  it("forwards the daemon's socket to the name the URL handler opens for links this machine's key signs", () => {
+    const plan = sshConfigPlan(["dev"], facts);
     expect(plan.code).toBe(0);
-    expect(plan.stdout).toContain("Host devbox\n");
+    expect(plan.stdout).toContain("Host dev\n");
     expect(plan.stdout).toContain("  StreamLocalBindUnlink yes\n");
     expect(plan.stdout).toContain(
-      "  LocalForward %d/.cc-candybar/remote/devbox.sock /tmp/cc-candybar-1000/socket\n",
+      "  LocalForward %d/.cc-candybar/remote/AbCd-_12.sock /tmp/cc-candybar-1000/socket\n",
     );
   });
 
-  it("names the Host the user reaches this machine by when given one", () => {
-    expect(sshConfigPlan(["dev"], facts).stdout).toContain("Host dev\n");
+  it.each([
+    ["none", []],
+    ["two", ["a", "b"]],
+    ["an empty one", [""]],
+    ["one with a space", ["my box"]],
+  ])("refuses %s as the alias", (_, args) => {
+    const plan = sshConfigPlan(args, facts);
+    expect(plan.code).toBe(2);
+    expect(plan.stderr).toContain("Usage: cc-candybar ssh-config ALIAS");
+    expect(plan.stdout).toBe("");
   });
 
-  it("refuses more than one alias", () => {
-    const plan = sshConfigPlan(["a", "b"], facts);
-    expect(plan.code).toBe(2);
-    expect(plan.stderr).toContain("Usage: cc-candybar ssh-config");
+  it("says why a key cannot be had, and prints no stanza", () => {
+    const plan = sshConfigPlan(["dev"], {
+      kind: "failed",
+      reason: "link key /x/link.key holds 3 bytes, not 32",
+    });
+    expect(plan.code).toBe(1);
+    expect(plan.stderr).toContain("holds 3 bytes");
+    expect(plan.stdout).toBe("");
   });
 });

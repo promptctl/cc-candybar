@@ -73,6 +73,33 @@ const LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 const LINK_MAC_MARK = "#";
 const SOURCE_VERSION = "v1";
 
+// [LAW:one-source-of-truth] Which daemon signed a link, spelled in the link
+// itself: the first field of its proof, `#<id>/…`. A bar drawn over ssh is
+// signed by the remote's daemon and clicked on the machine the terminal is on,
+// whose URL handler reads the id to reach the one daemon that can open the link
+// (the handler's copy of the spelling is pinned by scripts/check-protocol.mjs).
+// The id is 48 bits of a one-way function of the key, so it names the key and
+// gives nothing of it away; it routes and never authenticates, because the mac
+// covers it.
+export const LINK_KEY_ID_CHARS = 8;
+const LINK_KEY_ID_DOMAIN = "cc-candybar link key id";
+
+// Spelled from base64 by hand, because the page's Buffer has no base64url.
+function base64url(bytes: Uint8Array): string {
+  return Buffer.from(bytes)
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
+
+// A link's text starts with its scheme, so no link is ever the domain text
+// above: the id and a link's mac are never one computation.
+export function linkKeyId(key: Buffer): string {
+  const digest = createHmac("sha256", key).update(LINK_KEY_ID_DOMAIN).digest();
+  return base64url(digest.subarray(0, (LINK_KEY_ID_CHARS * 3) / 4));
+}
+
 // [LAW:one-source-of-truth] A link spelled as it travels: every character
 // outside RFC 3986's unreserved and sub-delims, `:@/?`, escaped, and `%` kept
 // only where it starts an escape. The OS hands the URL handler a link it has
@@ -98,28 +125,23 @@ export function unprovenLink(signed: string): string {
 }
 
 // [LAW:types-are-the-program] What a link's mac is over, kept apart from the
-// fields' JSON array: a link's text starts with its scheme, never `[`. Spelled
-// from base64 by hand, because the page's Buffer has no base64url.
+// fields' JSON array: a link's text starts with its scheme, never `[`.
 function linkMac(key: Buffer, link: string): string {
-  return Buffer.from(
+  return base64url(
     createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES),
-  )
-    .toString("base64")
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "");
+  );
 }
 
-// [LAW:single-enforcer] A legacy proof covers the normalized destination.
-// The new proof covers that destination and the issuing frame's identity.
-// The raw fragment delimiter in the proof input is outside the legacy
-// signing domain: transitForm escapes any fragment an authored href names.
+// [LAW:single-enforcer] The proof is the signer's id, then the issuing frame's
+// identity when the link has one, then a mac over the destination and all of
+// that. The raw fragment delimiter in the proof input is outside any authored
+// link's text: transitForm escapes any fragment an authored href names.
 function signLinkWith(key: Buffer, link: string, source?: FrameSource): string {
-  const sent = transitForm(link);
-  if (source === undefined)
-    return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
-  const session = encodeURIComponent(JSON.stringify(source.session));
-  const issued = `${sent}${LINK_MAC_MARK}${SOURCE_VERSION}/${source.renderer}/${session}`;
+  const signer = `${transitForm(link)}${LINK_MAC_MARK}${linkKeyId(key)}`;
+  const issued =
+    source === undefined
+      ? signer
+      : `${signer}/${SOURCE_VERSION}/${source.renderer}/${encodeURIComponent(JSON.stringify(source.session))}`;
   return `${issued}/${linkMac(key, issued)}`;
 }
 
@@ -133,28 +155,42 @@ function openLinkWith(key: Buffer, signed: string): Asked<OpenedLink> {
       reason:
         "the link carries no signature: the bar did not draw it, or drew it before its links were signed",
     };
-  const proofAt = Math.max(mark, signed.lastIndexOf("/"));
-  const mac = signed.slice(proofAt + 1);
+  const proof = signed.slice(mark + 1).split("/");
+  const mac = proof[proof.length - 1] ?? "";
+  const [signer, ...source] = proof.slice(0, -1);
+  if (signer === undefined)
+    return {
+      kind: "failed",
+      reason:
+        "the link does not say which daemon signed it: the bar drew it before its links named their signer, and its next redraw does",
+    };
+  const own = linkKeyId(key);
+  if (signer !== own)
+    return {
+      kind: "failed",
+      reason: `the link was signed by another daemon (key ${signer}, this one is ${own}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`,
+    };
   // Compared as spelled, in constant time, once its spelling says it has the
   // length of one.
   const proven =
     LINK_MAC_SPELLING.test(mac) &&
     timingSafeEqual(
       Buffer.from(mac),
-      Buffer.from(linkMac(key, signed.slice(0, proofAt))),
+      Buffer.from(
+        linkMac(key, signed.slice(0, signed.length - mac.length - 1)),
+      ),
     );
   if (!proven)
     return {
       kind: "failed",
       reason:
-        "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it",
+        "the link's signature does not match what it carries: it was changed after the bar drew it",
     };
   const href = signed.slice(0, mark);
-  if (proofAt === mark) return { kind: "ok", value: { href } };
-  const fields = signed.slice(mark + 1, proofAt).split("/");
-  const [version, name, encoded] = fields;
+  if (source.length === 0) return { kind: "ok", value: { href } };
+  const [version, name, encoded] = source;
   if (
-    fields.length !== 3 ||
+    source.length !== 3 ||
     version !== SOURCE_VERSION ||
     name === undefined ||
     encoded === undefined

@@ -69,6 +69,7 @@ const TS_OUTCOME = "src/outcome-plan.ts";
 const TS_DIAG_TEXT = "src/render/diagnostic-text.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
+const TS_LINK_SIGNER = "src/click/link-signer.ts";
 const TS_ACQUIRE = "src/daemon/acquire.ts";
 const TS_LIMITS_TEST = "test/daemon-limits.test.ts";
 const TS_LIMITS = "src/daemon/limits.ts";
@@ -221,12 +222,23 @@ const CHECKS = [
     ),
   },
   // Where an ssh forward lands a remote daemon's socket on the machine the user
-  // sits at: the directory the handler tries after its own daemon's, and the
-  // one `cc-candybar ssh-config` and install name.
+  // sits at, and how a link names the daemon that signed it: the handler opens
+  // `<key id>.sock` in the directory, which `cc-candybar ssh-config` and install
+  // name too.
   {
-    label: "the remote socket directory, as the URL handler tries it",
+    label: "the remote socket directory, as the URL handler opens it",
     ts: lit(TS_PATHS, /REMOTE_SOCKET_DIR_UNDER_HOME = "([^"]+)"/),
     swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_DIR_UNDER_HOME = "([^"]+)"$/m),
+  },
+  {
+    label: "a forwarded socket's suffix, as the URL handler opens it",
+    ts: lit(TS_PATHS, /REMOTE_SOCKET_SUFFIX = "([^"]+)"/),
+    swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_SUFFIX = "([^"]+)"$/m),
+  },
+  {
+    label: "the length of the key id a link names its signer by, as the URL handler reads it",
+    ts: num(TS_LINK_SIGNER, /export const LINK_KEY_ID_CHARS = ([\d\s*]+);/),
+    swift: num(SWIFT_HANDLER, /^let LINK_KEY_ID_CHARS = ([\d\s*]+)$/m),
   },
   {
     label: "lane B's name, as the statusline push subscribes",

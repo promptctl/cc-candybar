@@ -64,11 +64,14 @@ export function defaultSocketPath(): string {
 }
 
 // [LAW:one-source-of-truth] Where a remote machine's daemon socket lands on
-// the machine the user sits at: the URL handler app tries every socket in this
-// directory (under the home, mirrored in url-handler/main.swift) after its own
-// daemon's, and the daemon that signed a link is the one that opens it. An ssh
-// `LocalForward` puts a socket here, one per remote machine, named by it.
+// the machine the user sits at. A link names the key of the daemon that signed
+// it (link-signer.ts), and the URL handler app opens `<key id>.sock` in this
+// directory (under the home; the directory and the suffix are mirrored in
+// url-handler/main.swift) when a link of another machine's is clicked. An ssh
+// `LocalForward` puts the socket there, named by the remote's key so two
+// remotes never share one, whatever they are called.
 export const REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote";
+export const REMOTE_SOCKET_SUFFIX = ".sock";
 
 export function remoteSocketDir(home: string): string {
   return path.join(home, REMOTE_SOCKET_DIR_UNDER_HOME);

@@ -173,7 +173,9 @@ const OWNED_IMPORTS = {
   },
   linkSignerFromKeyFile: {
     group: ["**/link-key", "**/link-key.js"],
-    owners: ["src/daemon/production-adapters.ts"],
+    // ssh-cli names the daemon's key by its id in the stanza it prints, from the
+    // same file the daemon reads, through the same accessors.
+    owners: ["src/daemon/production-adapters.ts", "src/ssh-cli.ts"],
     message: "A daemon is handed its link signer (production-adapters.ts).",
   },
   // Where files are, read from the environment by a process's entry point and
@@ -183,6 +185,7 @@ const OWNED_IMPORTS = {
     owners: [
       "src/daemon/server.ts",
       "src/renderer-process.ts",
+      "src/ssh-cli.ts",
     ],
     message: "A daemon is handed its paths: take the value you are given.",
   },

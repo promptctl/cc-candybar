@@ -8,7 +8,11 @@ import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { locations, remoteSocketDir } from "../daemon/paths";
+import {
+  ensureOwnedPrivateDir,
+  locations,
+  remoteSocketDir,
+} from "../daemon/paths";
 import type { Host, World } from "../host";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
@@ -429,8 +433,10 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   );
 
   // The directory an ssh forward from a remote machine lands its socket in
-  // (`cc-candybar ssh-config` on that machine); ssh makes none.
-  fs.mkdirSync(remoteSocketDir(host.home), { recursive: true, mode: 0o700 });
+  // (`cc-candybar ssh-config` on that machine); ssh makes none. The app writes
+  // every link to a socket found there, so it is held to the trust every
+  // socket directory is. [LAW:single-enforcer]
+  ensureOwnedPrivateDir(remoteSocketDir(host.home));
 
   process.stdout.write(`Registering ${URL_SCHEME}:// with Launch Services\n`);
   const lsr = launcher.launchSync({
