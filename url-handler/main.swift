@@ -67,6 +67,9 @@ func socketPath() -> String {
   return "/tmp/cc-candybar-\(uid)/socket"
 }
 
+// Mirrored: src/daemon/paths.ts REMOTE_SOCKET_DIR_UNDER_HOME.
+let REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote"
+
 let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
 enum Forward {
@@ -93,8 +96,7 @@ func errnoText(_ what: String) -> String {
 }
 
 // One frame to the daemon's socket, non-blocking throughout.
-func forward(_ url: String) -> Forward {
-  let path = socketPath()
+func forward(_ url: String, to path: String) -> Forward {
   let fd = socket(AF_UNIX, SOCK_STREAM, 0)
   if fd < 0 { return .failed(errnoText("socket")) }
   defer { close(fd) }
@@ -150,6 +152,63 @@ func forward(_ url: String) -> Forward {
   }
   if let why = written { return .failed(why) }
   return verdict(fd)
+}
+
+// A bar drawn by a daemon on another machine (the terminal is an ssh session)
+// is signed by that daemon, and the click opens here. The user's ssh forwards
+// that daemon's socket into REMOTE_SOCKET_DIR_UNDER_HOME (`cc-candybar
+// ssh-config` prints the lines), one socket per machine. The link goes to this
+// machine's own daemon first and then to each forwarded socket, newest first,
+// until one opens it: only the daemon that signed a link opens it, so which
+// daemon a link belongs to is the signature's to say and the app learns no
+// host name, no route and no key. [LAW:single-enforcer]
+struct Destination {
+  let label: String
+  let path: String
+}
+
+func destinations() -> [Destination] {
+  var found = [Destination(label: "this Mac", path: socketPath())]
+  let dir = NSHomeDirectory() + "/" + REMOTE_SOCKET_DIR_UNDER_HOME
+  let names = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+  let remote = names.compactMap { name -> (Destination, Date)? in
+    guard name.hasSuffix(".sock") else { return nil }
+    let path = dir + "/" + name
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+      attrs[.type] as? FileAttributeType == .typeSocket
+    else { return nil }
+    return (Destination(label: name, path: path), attrs[.modificationDate] as? Date ?? .distantPast)
+  }
+  found += remote.sorted { $0.1 > $1.1 }.map { $0.0 }
+  return found
+}
+
+// One link to each destination until a daemon takes it. A link a daemon
+// confirmed, or wrote to without a verdict back (it may have run), is not tried
+// on another. When none takes it, the user is told what each said, under the
+// kind of failure that matters most: a refusal (the link is not any reachable
+// daemon's), else a delivery that failed.
+func deliver(_ url: String) -> Forward {
+  var said: [(Destination, Forward)] = []
+  for destination in destinations() {
+    let result = forward(url, to: destination.path)
+    switch result {
+    case .delivered, .unconfirmed: return result
+    case .refused, .failed: said.append((destination, result))
+    }
+  }
+  func why(_ f: Forward) -> String {
+    switch f {
+    case .delivered: return ""
+    case .refused(let w), .unconfirmed(let w), .failed(let w): return w
+    }
+  }
+  let body =
+    said.count == 1
+    ? why(said[0].1)
+    : said.map { "\($0.0.label): \(why($0.1))" }.joined(separator: "\n")
+  let refused = said.contains { if case .refused = $0.1 { return true } else { return false } }
+  return refused ? .refused(body) : .failed(body)
 }
 
 // Exactly `count` bytes from the socket by `deadline` (a monotonic ms count),
@@ -257,7 +316,7 @@ final class Handler: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       let link = url.absoluteString
-      switch forward(link) {
+      switch deliver(link) {
       // Notice, not info: the unified log persists notice and above, so
       // `log show` can answer "did the click reach the socket" after the fact.
       // The link itself is private: a copy link carries the text being copied,

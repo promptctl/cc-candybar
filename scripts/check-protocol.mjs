@@ -220,6 +220,14 @@ const CHECKS = [
       "/tmp/cc-candybar-<uid>/socket",
     ),
   },
+  // Where an ssh forward lands a remote daemon's socket on the machine the user
+  // sits at: the directory the handler tries after its own daemon's, and the
+  // one `cc-candybar ssh-config` and install name.
+  {
+    label: "the remote socket directory, as the URL handler tries it",
+    ts: lit(TS_PATHS, /REMOTE_SOCKET_DIR_UNDER_HOME = "([^"]+)"/),
+    swift: lit(SWIFT_HANDLER, /^let REMOTE_SOCKET_DIR_UNDER_HOME = "([^"]+)"$/m),
+  },
   {
     label: "lane B's name, as the statusline push subscribes",
     ts: lit(TS_LANES, /^ {2}(statusline): \{/m),
