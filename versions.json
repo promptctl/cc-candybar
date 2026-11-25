@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5877b610c5add94bfeec9ef566be3e309841d7ec",
-      "timestamp": "2026-11-25T06:53:45.289Z",
+      "sha": "56989bba0d3078f7c2e2c76efa384cbe0197fa8a",
+      "timestamp": "2026-11-25T06:57:36.719Z",
       "commits": [
         {
-          "sha": "5877b610c5add94bfeec9ef566be3e309841d7ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T23:52:37-07:00",
-          "message": "fix(url-handler): route a click on a bar drawn over ssh to the daemon that drew it (#963)\n\n* fix(url-handler): route a click on a bar drawn over ssh to the daemon that drew it\n\nThe URL handler only spoke to the local daemon, which refuses a link the\nremote daemon signed. It now tries each ssh-forwarded socket in\n~/.cc-candybar/remote after its own daemon's until one opens the link, and\n`cc-candybar ssh-config` prints the forward the remote needs.\n\n* fix(url-handler): a link names the daemon that signed it, and the app opens exactly that daemon's forward\n\nTrying every forwarded socket in turn used a signature refusal as the routing signal: a dead forward ended the search before the owner, two machines with one short hostname shared a socket, a copy link went to machines that did not draw it, and the notice named a refusal that was only routing.\n\nEvery signed link now carries a one-way id of its signer's key as the first field of its proof. ssh-config names the forwarded socket by that id and requires the ssh alias, the app opens the one socket a link names (its own daemon's when no forward by that name exists), and a daemon that did not sign a link says which one did. Install creates the forward directory through the shared owner/mode enforcer.\n\n* fix(ssh-config): the stanza names the key the running daemon reports, and a forward nothing answers says so\n\nssh-config read the link key from its own shell's state directory, but the daemon is detached and keeps the key it loaded, so the stanza could name a key nothing signs with. The daemon's stats now carry the id of the key it signs links with, and ssh-config asks the daemon on the socket it forwards to. The install step is the one creator of the forward directory, a socket path ssh's config cannot carry is refused, the signer computes its id once, and the URL handler says when the forward a link names does not answer.\n\n* fix(links): a link's proof is read once, and a link drawn before links named their signer says so\n\nThe proof is a wire grammar the URL handler reads, so it gets one parser: a proof that does not begin with a key id (the old authored `#<mac>` and the old frame `#v1/...` shapes, or a changed one) is refused as such, and only a well-spelled id that is not this daemon's names another daemon. The id's alphabet is pinned between TS and Swift beside its length, the handler carries its routing choice as a type, install checks the forward directory before it replaces or quits anything, and ssh-config refuses a Host pattern.\n\n* fix(links): the proof's mark and separator are pinned with the handler, and a refusal names both causes of a mismatched key\n\nThe URL handler finds a link's signer by the mark before the proof and the separator after the id, so both are spelled once in the signer and pinned against the handler. A key a daemon does not hold is a bar on another machine with no forward open, or this machine's own key replaced, and the refusal says both. Install makes the forward directory a precondition of both its entry points, before the runtime is staged."
+          "sha": "56989bba0d3078f7c2e2c76efa384cbe0197fa8a",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-25T06:55:54Z",
+          "message": "chore(release): set `package.json` to 1.238.4\n\n## [1.238.4](https://github.com/promptctl/cc-candybar/compare/v1.238.3...v1.238.4) (2026-11-25)\n\n### Bug Fixes\n\n* **url-handler:** route a click on a bar drawn over ssh to the daemon that drew it ([#963](https://github.com/promptctl/cc-candybar/issues/963)) ([5877b61](https://github.com/promptctl/cc-candybar/commit/5877b610c5add94bfeec9ef566be3e309841d7ec))\n"
         }
       ]
     },
