@@ -4,15 +4,22 @@
     {
       "version": "pr-959",
       "ref": "refs/pull/959/merge",
-      "sha": "140012dca72ab848958cb892e2e1950090cb3cb6",
-      "timestamp": "2026-11-24T23:57:15.995Z",
+      "sha": "ffa27edbbe41a0a968a72bebf36535e6713f9203",
+      "timestamp": "2026-11-25T00:05:38.921Z",
       "commits": [
         {
-          "sha": "140012dca72ab848958cb892e2e1950090cb3cb6",
+          "sha": "ffa27edbbe41a0a968a72bebf36535e6713f9203",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T16:56:11-07:00",
-          "message": "Merge 1d2ef37733331d83b945098e3e341a2224068173 into 857fbb5ae27e566d5d9fe4da94a8f8bdfa1c9bbd\n"
+          "timestamp": "2026-11-25T00:04:36Z",
+          "message": "Merge 71c69c836dac2dc67dd33013b7128216951ef8ed into 857fbb5ae27e566d5d9fe4da94a8f8bdfa1c9bbd\n"
+        },
+        {
+          "sha": "71c69c836dac2dc67dd33013b7128216951ef8ed",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T17:04:22-07:00",
+          "message": "docs(render-cache): a compile's charge names the runtimes it was measured on, and the share's figures follow it (candybar-later-fixes-nwu9.asa)\n"
         },
         {
           "sha": "1d2ef37733331d83b945098e3e341a2224068173",
