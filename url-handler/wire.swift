@@ -80,10 +80,15 @@ func signerId(of link: String) -> String? {
   guard let mark = link.lastIndex(of: LINK_MAC_MARK) else { return nil }
   let proof = link[link.index(after: mark)...]
   guard let slash = proof.firstIndex(of: LINK_PROOF_SEPARATOR) else { return nil }
-  let id = proof[..<slash]
-  guard id.utf8.count == LINK_KEY_ID_CHARS, id.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) })
+  return keyId(String(proof[..<slash]))
+}
+
+// [LAW:single-enforcer] A key id as the signer spells it, for a link's proof and
+// a forward's file name alike: the one place the length and alphabet are read.
+func keyId(_ word: String) -> String? {
+  guard word.utf8.count == LINK_KEY_ID_CHARS, word.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) })
   else { return nil }
-  return String(id)
+  return word
 }
 
 // [LAW:parse-dont-validate] A host alias: one word of ssh's config that names
@@ -111,9 +116,7 @@ struct ForwardName: Equatable {
 func forwardName(_ file: String) -> ForwardName? {
   guard file.hasSuffix(REMOTE_SOCKET_SUFFIX) else { return nil }
   let stem = String(file.dropLast(REMOTE_SOCKET_SUFFIX.count))
-  guard stem.count >= LINK_KEY_ID_CHARS else { return nil }
-  let id = String(stem.prefix(LINK_KEY_ID_CHARS))
-  guard id.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) }) else { return nil }
+  guard let id = keyId(String(stem.prefix(LINK_KEY_ID_CHARS))) else { return nil }
   let rest = stem.dropFirst(LINK_KEY_ID_CHARS)
   if rest.isEmpty { return ForwardName(id: id, host: nil) }
   guard rest.hasPrefix(REMOTE_SOCKET_HOST_SEPARATOR) else { return nil }

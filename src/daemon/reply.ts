@@ -25,7 +25,6 @@ import {
   ACTS_ON_DESKTOP,
   awaitsVerdict,
   type DesktopAct,
-  type ErrorCode,
   type Inbound,
   type OwnerFacts,
   type Request,
@@ -921,14 +920,15 @@ const nothingLeft = (outcome: RequestOutcome): Clicked => ({
   desktop: [],
 });
 
-// [LAW:single-enforcer] The verdict of a writer told once its click landed:
-// what the click came to, and the acts it left for the writer to carry out.
+// [LAW:single-enforcer] The verdict of a writer told once its click landed: the
+// acts it left for the writer to carry out. Its failure is held as a click's
+// is, on its bar or in the daemon's warning, as it is for a writer told at once.
 // [LAW:no-silent-failure] A verdict its writer never took (it gave up waiting,
 // or the verdict could not be sent) takes its acts with it, and the daemon says
 // so.
-function landedReply(parts: DaemonParts, { outcome, desktop }: Clicked): Reply {
+function landedReply(parts: DaemonParts, { desktop }: Clicked): Reply {
   const reply: Reply = replyOf(
-    { ...clickReply(outcome), desktopActs: desktop },
+    { ok: true, output: "", desktopActs: desktop },
     null,
     (taken) => {
       if (!taken && desktop.length > 0)
@@ -1191,19 +1191,8 @@ const CLICK_FAILURE = {
   closing: "closing",
 } as const;
 
-// What a click's outcome tells, which a writer that carries out its acts is
-// handed them beside (`ClickVerdict`).
-type ClickAnswer =
-  | { ok: true; output: string }
-  | {
-      ok: false;
-      error: string;
-      code: Exclude<ErrorCode, "TIMEOUT">;
-      daemonV?: number;
-    };
-
 // [LAW:single-enforcer] The reply a click's outcome is answered with.
-function clickReply(outcome: RequestOutcome): ClickAnswer {
+function clickReply(outcome: RequestOutcome): Response {
   switch (outcome.kind) {
     case "ok":
       return { ok: true, output: "" };

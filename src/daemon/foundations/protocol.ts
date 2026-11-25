@@ -432,18 +432,17 @@ export type DesktopAct =
   | { readonly kind: "open"; readonly target: string };
 
 // [LAW:types-are-the-program] A click's verdict to a writer that carries out
-// its acts: always the acts, in the order asked, on failure too, because a click
-// that fails after asking one still asked it. No other response carries them.
+// its acts: the link was accepted, and always the acts, in the order asked,
+// even when the click then failed, because a click that fails after asking one
+// still asked it. The failure itself is held where any click's is (its bar, or
+// the daemon's warning), not said twice. A link refused is answered by the
+// ordinary refusal, at once, with no acts. No other response carries them.
 // Mirrored by url-handler/wire.swift.
-export type ClickVerdict =
-  | { ok: true; output: string; desktopActs: readonly DesktopAct[] }
-  | {
-      ok: false;
-      error: string;
-      code: Exclude<ErrorCode, "TIMEOUT">;
-      daemonV?: number;
-      desktopActs: readonly DesktopAct[];
-    };
+export interface ClickVerdict {
+  ok: true;
+  output: string;
+  desktopActs: readonly DesktopAct[];
+}
 
 // [LAW:parse-dont-validate] What came in over the wire, classified once, by
 // the connection that read it: the URL handler's frame, or a request the `v`

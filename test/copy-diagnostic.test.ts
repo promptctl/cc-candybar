@@ -3,6 +3,7 @@
 // under that key: the full prompt reaches the clipboard while the link stays
 // short, and a key that draw does not list is refused loudly.
 
+import { afterItsAnswer } from "../src/renderer-interface/click-arrival";
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { type LaunchOpts } from "../src/proc/launcher";
 import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
@@ -121,6 +122,26 @@ test("a copy in a click that names a session fails on that session's bar", async
   expect(lastClickError(state, sessionIdOf(SID))?.text).toMatch(
     /^copy: pbcopy failed/,
   );
+});
+
+// A parked click is replayed after its answer went, so a copy it asks has no
+// answer to ride in to its writer's machine: it is refused by name, never
+// performed on this one.
+test("a copy asked after its click's answer went is refused by name and copied nowhere", async () => {
+  const afterAnswer = afterItsAnswer({
+    via: "link",
+    delivery: { kind: "desktop-forwarder", urlV: 2 },
+  });
+  await expect(
+    clickActing(
+      effectsUrl([{ verb: VERB_COPY, args: ["x"] }]),
+      verbContextWith(testVerbContext(new SessionState()), {
+        arrival: afterAnswer,
+      }),
+      { launch: clickLaunchVia(recording) },
+    ),
+  ).rejects.toThrow(/not loaded when you clicked/);
+  expect(launched).toHaveLength(0);
 });
 
 // [LAW:single-enforcer] A step cut off by the daemon's close keeps that class

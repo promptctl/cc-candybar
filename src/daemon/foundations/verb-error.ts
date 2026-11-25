@@ -14,10 +14,10 @@ export class BadVerbArgs extends Error {
   }
 }
 
-// A click that cannot wait for the configuration it needs: its answer is
-// written when its turn ends, so what it would ask after has no answer to
-// join. The daemon's transient state, not a fault in the click: the person
-// repeats it once the bar has been drawn again.
+// A click that waited for the configuration it needs, so its answer was written
+// before it ran, and what it asks after has no answer to join. It is the
+// daemon's own state and no fault in the click, so it is classed as any thrown
+// error is: the person repeats the click once the bar has been drawn again.
 export class ConfigPending extends Error {
   constructor(message: string) {
     super(message);
@@ -69,7 +69,6 @@ const KINDS: ReadonlyArray<
   readonly [abstract new (...args: never[]) => Error, Failure["kind"]]
 > = [
   [BadVerbArgs, "bad-request"],
-  [ConfigPending, "threw"],
   [DaemonClosing, "closing"],
   [ClickAbandoned, "abandoned"],
   [RendererDown, "down"],

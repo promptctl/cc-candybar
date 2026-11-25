@@ -10,6 +10,10 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import {
+  afterItsAnswer,
+  type ClickArrival,
+} from "../src/renderer-interface/click-arrival";
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
@@ -2147,32 +2151,26 @@ describe("a click", () => {
     expect(seen).toEqual([heardContextOf(current)]);
   });
 
-  test("a click whose acts leave for its writer's machine is refused by name while its origin's config is not held, not parked to act after its answer", async () => {
-    const seen: Array<SessionContext | null> = [];
+  test("a click from a desktop forwarder parks like any other while its origin's config is not held, and replays as one whose answer went", async () => {
+    const seen: Array<ClickArrival> = [];
     const t = renderer({
       ...NO_VERBS,
-      click: (_click, facts) => void seen.push(facts.context),
+      click: (_click, facts) => void seen.push(facts.arrival),
     });
     const waiting = answered(await contextTurn(t, checked("%1")));
     const asked = click("act");
     if (asked.kind !== "click") throw new Error("not a click");
-    const refused = threw(
-      await handIn(t.r, {
-        ...asked,
-        arrival: {
-          via: "link",
-          delivery: { kind: "desktop-forwarder", urlV: 2 },
-        },
-      }),
-    );
-    // The bar's own state, not a fault in the link: not the user's to fix.
-    expect(refused.failure).toMatchObject({
-      kind: "threw",
-      message: expect.stringContaining("click again"),
-    });
-    // Nothing waits: the config turn that follows runs no click.
-    answered(await configsNamed(t, waiting));
+    const arrival: ClickArrival = {
+      via: "link",
+      delivery: { kind: "desktop-forwarder", urlV: 2 },
+    };
+    const parkedTurn = answered(await handIn(t.r, { ...asked, arrival }));
+    expect(parkedTurn.record).toContainEqual(["parked", "click"]);
     expect(seen).toEqual([]);
+    answered(await configsNamed(t, waiting));
+    // Its copy and open have no answer left to ride in.
+    expect(seen).toEqual([afterItsAnswer(arrival)]);
+    expect(seen[0]).not.toEqual(arrival);
   });
 
   test("a load that throws fails the request that needs it, and the next one loads the same delivery once it can", async () => {

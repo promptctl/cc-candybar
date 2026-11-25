@@ -304,7 +304,7 @@ describe("a frame that asks for its acts on the desktop", () => {
     ]);
   });
 
-  test("a click that fails after asking a copy still hands the copy back, in the failure", async () => {
+  test("a click that fails after asking a copy still hands the copy back, and its failure is the click event's, not said twice", async () => {
     const h = host(undefined, undefined, (renderer) => ({
       ...renderer,
       answerClick: async () => ({
@@ -322,11 +322,12 @@ describe("a frame that asks for its acts on the desktop", () => {
       }),
     }));
     const answered = await desktopFrame(h, TEST_SIGNER.signLink(COPY));
-    expect((await landed(answered)).resp).toMatchObject({
-      ok: false,
-      code: "RENDER_FAILED",
+    expect((await landed(answered)).resp).toEqual({
+      ok: true,
+      output: "",
       desktopActs: [{ kind: "copy", text: "asked before failing" }],
     });
+    expect(h.events).toEqual([expect.stringContaining("outcome=threw")]);
   });
 
   test("a verdict its writer never took says the acts it carried went with it", async () => {

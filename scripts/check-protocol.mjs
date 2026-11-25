@@ -217,7 +217,7 @@ const CHECKS = [
   // that moved on one side would read as no acts, and nothing copied.
   {
     label: "the verdict's key for the acts a click leaves to the app",
-    ts: memberSet(TS_PROTOCOL, /export type ClickVerdict =[\s\S]+?\n    \};/, /(desktopActs):/g),
+    ts: memberSet(TS_PROTOCOL, /export interface ClickVerdict \{[^}]+\}/, /(desktopActs):/g),
     swift: memberSet(SWIFT_HANDLER, /^let DESKTOP_ACTS_KEY = "[^"]+"$/m, /"(\w+)"/g),
   },
   {

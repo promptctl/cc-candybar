@@ -193,13 +193,24 @@ func route(of link: String) -> Result<Route, ForwardError> {
       ForwardError("the ssh forwards in \(dir) cannot be read: \(error.localizedDescription)"))
   }
   // Only this signer's files are looked at; one that vanishes between the
-  // listing and the look is an ssh that ended, and is no forward.
-  let files = names.filter { forwardName($0)?.id == id }.compactMap {
-    name -> (name: String, modified: Date)? in
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: dir + "/" + name),
-      let modified = attrs[.modificationDate] as? Date
-    else { return nil }
-    return (name, modified)
+  // listing and the look is an ssh that ended, and is no forward. One that is
+  // there and cannot be looked at is not that.
+  var files: [(name: String, modified: Date)] = []
+  for name in names where forwardName(name)?.id == id {
+    do {
+      let attrs = try FileManager.default.attributesOfItem(atPath: dir + "/" + name)
+      guard let modified = attrs[.modificationDate] as? Date else {
+        return .failure(ForwardError("the ssh forward \(name) in \(dir) has no modification time"))
+      }
+      files.append((name, modified))
+    } catch let error as NSError
+      where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError
+    {
+      continue
+    } catch {
+      return .failure(
+        ForwardError("the ssh forward \(name) in \(dir) cannot be read: \(error.localizedDescription)"))
+    }
   }
   guard let found = forwardFile(for: id, among: files) else { return .success(own) }
   return .success(.forward(name: found.name, socket: dir + "/" + found.file))
@@ -320,7 +331,10 @@ func notify(_ title: String, _ why: String, _ identifier: String) {
 // copied text and the opened path are private to the log, as the link is: the
 // unified log is readable by every admin on the machine.
 func carryOut(_ steps: [Step]) {
-  for step in steps {
+  // [LAW:nothing-unseen] One identifier per step, so acts that fail in one
+  // click are each seen: a notice with a repeated identifier replaces the last.
+  for (index, step) in steps.enumerated() {
+    let notice = "\(uncarriedActNotice)-\(index)"
     switch step {
     case .copy(let text):
       let board = NSPasteboard.general
@@ -329,7 +343,7 @@ func carryOut(_ steps: [Step]) {
         log.notice("copied \(text.utf8.count) bytes to the pasteboard")
       } else {
         log.error("the pasteboard refused \(text.utf8.count) bytes")
-        notify("Copy failed", "the pasteboard refused the text", uncarriedActNotice)
+        notify("Copy failed", "the pasteboard refused the text", notice)
       }
     case .open(let url):
       NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
@@ -338,7 +352,7 @@ func carryOut(_ steps: [Step]) {
           notify(
             "Open failed",
             "no editor took \(url.absoluteString) (VS Code with its Remote - SSH extension handles it): \(error.localizedDescription)",
-            uncarriedActNotice)
+            notice)
         } else {
           log.notice("opened \(url, privacy: .private)")
         }
@@ -346,7 +360,7 @@ func carryOut(_ steps: [Step]) {
     case .cannot(let why):
       // Private: the reason can name the path the open was for.
       log.error("not carried out: \(why, privacy: .private)")
-      notify("Click not carried out", why, uncarriedActNotice)
+      notify("Click not carried out", why, notice)
     }
   }
 }
@@ -369,7 +383,7 @@ final class Handler: NSObject, NSApplicationDelegate {
       let link = url.absoluteString
       switch route(of: link) {
       case .failure(let error):
-        Handler.conclude(link, .failed(error.why), via: nil)
+        Handler.lost(link, at: "no socket", error.why)
       case .success(let routed):
         queue(for: routed.socket).async {
           let sent = deliver(link, via: routed)
@@ -385,19 +399,18 @@ final class Handler: NSObject, NSApplicationDelegate {
   // and the unified log is readable by every admin on the machine. The
   // daemon's own click event records the link, in the user's own log.
   // [LAW:nothing-unseen]
-  // `via` is nil for a link that was never routed, which has no socket to name.
-  static func conclude(_ link: String, _ sent: Forward, via routed: Route?) {
-    let socket = routed?.socket ?? "no socket"
-    func lost(_ why: String) {
-      log.error("lost \(link, privacy: .private) to \(socket, privacy: .public): \(why, privacy: .public)")
-      notify("Click not delivered", why, lostClickNotice)
-    }
+  static func lost(_ link: String, at socket: String, _ why: String) {
+    log.error("lost \(link, privacy: .private) to \(socket, privacy: .public): \(why, privacy: .public)")
+    notify("Click not delivered", why, lostClickNotice)
+  }
+
+  static func conclude(_ link: String, _ sent: Forward, via routed: Route) {
+    let socket = routed.socket
     switch sent {
     case .verdict(let read):
       // The acts are what the click came to, so they are carried out whether
       // the click landed or failed after asking them.
-      carryOut(
-        steps(for: read, asked: routed?.actsOnDesktop ?? false, host: routed?.host))
+      carryOut(steps(for: read, asked: routed.actsOnDesktop, host: routed.host))
       switch read.said {
       case .delivered:
         log.notice("forwarded \(link, privacy: .private) to \(socket, privacy: .public)")
@@ -405,18 +418,18 @@ final class Handler: NSObject, NSApplicationDelegate {
         log.error("refused \(link, privacy: .private) by \(socket, privacy: .public): \(why, privacy: .public)")
         notify("Click refused", why, refusedClickNotice)
       case .failed(let why):
-        lost(why)
+        lost(link, at: socket, why)
       }
     case .unconfirmed(let why):
       // A click that asked its acts on this Mac is done with them once this
       // gives up: the verdict that carries them has no reader.
       let said =
-        routed?.actsOnDesktop == true
+        routed.actsOnDesktop
         ? "\(why); nothing was copied or opened on this Mac for it" : why
       log.error("unconfirmed \(link, privacy: .private) at \(socket, privacy: .public): \(said, privacy: .public)")
       notify("Click unconfirmed", said, lostClickNotice)
     case .failed(let why):
-      lost(why)
+      lost(link, at: socket, why)
     }
   }
 }

@@ -172,10 +172,17 @@ import {
   type ActionDecl,
   type SlashAction,
 } from "../../config/action";
-import type { ClickArrival } from "../../renderer-interface/click-arrival";
+import {
+  answerSent,
+  type ClickArrival,
+} from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
-import { BadVerbArgs, failureOf } from "../../daemon/foundations/verb-error";
+import {
+  BadVerbArgs,
+  ConfigPending,
+  failureOf,
+} from "../../daemon/foundations/verb-error";
 import type { RequestFacts } from "../../daemon/foundations/request-event";
 import type { ActsOnTheirWay } from "../acts";
 import { type SessionId } from "../../daemon/foundations/session-id";
@@ -273,9 +280,15 @@ export { BadVerbArgs };
 // [LAW:single-enforcer] What a handler asks of the host: an act in its
 // click's turn, performed once the click's changes have landed.
 function ask(
-  ctx: Pick<VerbContext, "acts" | "effects">,
+  ctx: Pick<VerbContext, "acts" | "arrival" | "effects">,
   act: ActRequest,
 ): void {
+  // [LAW:no-silent-failure] A copy or open of a click whose answer has gone has
+  // no way to reach its writer's machine, which is where it acts.
+  if ((act.kind === "copy" || act.kind === "open") && answerSent(ctx.arrival))
+    throw new ConfigPending(
+      "this bar's configuration was not loaded when you clicked, so what to copy or open on your desktop could not be handed back: click again",
+    );
   ctx.acts.ask(ctx.effects, act);
 }
 
