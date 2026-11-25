@@ -80443,6 +80443,7 @@ var MAC_SPELLING = /^[0-9a-f]{64}$/;
 var LINK_MAC_BYTES = 16;
 var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 var LINK_MAC_MARK = "#";
+var LINK_PROOF_SEPARATOR = "/";
 var SOURCE_VERSION = "v1";
 var LINK_KEY_ID_CHARS = 8;
 var LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -80472,8 +80473,13 @@ function linkMac(key, link) {
 }
 function signLinkWith(key, id2, link, source) {
   const signer = `${transitForm(link)}${LINK_MAC_MARK}${id2}`;
-  const issued = source === void 0 ? signer : `${signer}/${SOURCE_VERSION}/${source.renderer}/${encodeURIComponent(JSON.stringify(source.session))}`;
-  return `${issued}/${linkMac(key, issued)}`;
+  const issued = source === void 0 ? signer : [
+    signer,
+    SOURCE_VERSION,
+    source.renderer,
+    encodeURIComponent(JSON.stringify(source.session))
+  ].join(LINK_PROOF_SEPARATOR);
+  return `${issued}${LINK_PROOF_SEPARATOR}${linkMac(key, issued)}`;
 }
 function openLinkWith(key, own2, signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
@@ -80482,7 +80488,7 @@ function openLinkWith(key, own2, signed) {
       kind: "failed",
       reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
     };
-  const [signer, ...source] = signed.slice(mark + 1).split("/");
+  const [signer, ...source] = signed.slice(mark + 1).split(LINK_PROOF_SEPARATOR);
   const mac = source.pop();
   if (signer === void 0 || mac === void 0 || !isLinkKeyId(signer))
     return {
@@ -80492,7 +80498,7 @@ function openLinkWith(key, own2, signed) {
   if (signer !== own2)
     return {
       kind: "failed",
-      reason: `the link names key ${signer}, not this daemon's (${own2}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`
+      reason: `the link names key ${signer}, not this daemon's (${own2}): if a bar on another machine drew it, no ssh forward for that key is open here (\`cc-candybar ssh-config ALIAS\` run on that machine prints one); if this machine's bar drew it, its link key has been replaced since`
     };
   const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(
     import_buffer.Buffer.from(mac),

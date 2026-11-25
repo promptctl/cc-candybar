@@ -4,15 +4,22 @@
     {
       "version": "pr-963",
       "ref": "refs/pull/963/merge",
-      "sha": "66d2f1183807af3f68dc8dfc6fd02cd59ebc42b5",
-      "timestamp": "2026-11-25T06:33:15.696Z",
+      "sha": "e2bcbf0f800a15d98d0ff9344b840918d53d3ec5",
+      "timestamp": "2026-11-25T06:50:43.398Z",
       "commits": [
         {
-          "sha": "66d2f1183807af3f68dc8dfc6fd02cd59ebc42b5",
+          "sha": "e2bcbf0f800a15d98d0ff9344b840918d53d3ec5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T06:32:06Z",
-          "message": "Merge 4aaacee1373a06fe74fbde792d6ab51223f530d9 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+          "timestamp": "2026-11-25T06:49:33Z",
+          "message": "Merge 4f63e36aae614023461c0c661c32673581878d1f into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "4f63e36aae614023461c0c661c32673581878d1f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T23:49:17-07:00",
+          "message": "fix(links): the proof's mark and separator are pinned with the handler, and a refusal names both causes of a mismatched key\n\nThe URL handler finds a link's signer by the mark before the proof and the separator after the id, so both are spelled once in the signer and pinned against the handler. A key a daemon does not hold is a bar on another machine with no forward open, or this machine's own key replaced, and the refusal says both. Install makes the forward directory a precondition of both its entry points, before the runtime is staged.\n"
         },
         {
           "sha": "4aaacee1373a06fe74fbde792d6ab51223f530d9",
