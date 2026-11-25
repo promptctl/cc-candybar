@@ -80468,12 +80468,12 @@ function linkMac(key, link) {
     createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES)
   );
 }
-function signLinkWith(key, link, source) {
-  const signer = `${transitForm(link)}${LINK_MAC_MARK}${linkKeyId(key)}`;
+function signLinkWith(key, id2, link, source) {
+  const signer = `${transitForm(link)}${LINK_MAC_MARK}${id2}`;
   const issued = source === void 0 ? signer : `${signer}/${SOURCE_VERSION}/${source.renderer}/${encodeURIComponent(JSON.stringify(source.session))}`;
   return `${issued}/${linkMac(key, issued)}`;
 }
-function openLinkWith(key, signed) {
+function openLinkWith(key, own2, signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
   if (mark === -1)
     return {
@@ -80488,7 +80488,6 @@ function openLinkWith(key, signed) {
       kind: "failed",
       reason: "the link does not say which daemon signed it: the bar drew it before its links named their signer, and its next redraw does"
     };
-  const own2 = linkKeyId(key);
   if (signer !== own2)
     return {
       kind: "failed",
@@ -80539,7 +80538,9 @@ function linkSigner(key) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
   const signed = /* @__PURE__ */ new Map();
+  const id2 = linkKeyId(key);
   return {
+    keyId: () => ({ kind: "ok", value: id2 }),
     sign: (fields2) => digest(key, fields2).toString("hex"),
     verify: (fields2, mac) => {
       if (!MAC_SPELLING.test(mac)) return false;
@@ -80550,12 +80551,12 @@ function linkSigner(key) {
       let done = signed.get(cacheKey);
       if (done === void 0) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
-        done = signLinkWith(key, link, source);
+        done = signLinkWith(key, id2, link, source);
         signed.set(cacheKey, done);
       }
       return done;
     },
-    openLink: (link) => openLinkWith(key, link)
+    openLink: (link) => openLinkWith(key, id2, link)
   };
 }
 var SIGNED_LINKS_HELD = 1024;
@@ -80571,6 +80572,10 @@ function linkSignerOver(key) {
     return asked.value;
   };
   return {
+    keyId: () => {
+      const asked = loaded();
+      return asked.kind === "ok" ? asked.value.keyId() : asked;
+    },
     sign: (fields2) => held().sign(fields2),
     verify: (fields2, mac) => held().verify(fields2, mac),
     signLink: (link, source) => held().signLink(link, source),
@@ -84861,6 +84866,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
+        linkKeyId: parts.linkSigner.keyId(),
         host: limits.host(),
         renderers
       })
@@ -89646,6 +89652,7 @@ var RuntimeStats = class {
       subprocesses: this.snapshotSubprocesses(),
       clients: extras.clients,
       bundle: extras.bundle,
+      linkKeyId: extras.linkKeyId,
       host: extras.host,
       renderers: extras.renderers
     };
@@ -92357,6 +92364,10 @@ var STATS_SHAPE = object({
   }),
   clients: list2(SIGHTING),
   bundle: text4,
+  linkKeyId: tagged({
+    ok: { value: text4 },
+    failed: { reason: text4 }
+  }),
   host: PROCESS_MEMORY,
   renderers: list2(PANEL)
 });

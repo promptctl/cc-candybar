@@ -4,15 +4,22 @@
     {
       "version": "pr-963",
       "ref": "refs/pull/963/merge",
-      "sha": "8a36f679f4278d3c10efdc5dec620e809f603d75",
-      "timestamp": "2026-11-25T05:59:56.329Z",
+      "sha": "bc66b7bc402c382754086d21a7a76463096a448a",
+      "timestamp": "2026-11-25T06:15:55.062Z",
       "commits": [
         {
-          "sha": "8a36f679f4278d3c10efdc5dec620e809f603d75",
+          "sha": "bc66b7bc402c382754086d21a7a76463096a448a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T05:58:51Z",
-          "message": "Merge 4fbf1adc178adbbe3bd3ea1ad47667667f479611 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+          "timestamp": "2026-11-25T06:14:56Z",
+          "message": "Merge 8c7886284024411b574b5762a0b464ad9d5d3cd4 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "8c7886284024411b574b5762a0b464ad9d5d3cd4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T23:14:40-07:00",
+          "message": "fix(ssh-config): the stanza names the key the running daemon reports, and a forward nothing answers says so\n\nssh-config read the link key from its own shell's state directory, but the daemon is detached and keeps the key it loaded, so the stanza could name a key nothing signs with. The daemon's stats now carry the id of the key it signs links with, and ssh-config asks the daemon on the socket it forwards to. The install step is the one creator of the forward directory, a socket path ssh's config cannot carry is refused, the signer computes its id once, and the URL handler says when the forward a link names does not answer.\n"
         },
         {
           "sha": "4fbf1adc178adbbe3bd3ea1ad47667667f479611",
