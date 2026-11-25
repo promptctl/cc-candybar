@@ -28312,7 +28312,6 @@ var RendererDown = class extends Error {
 };
 var KINDS = [
   [BadVerbArgs, "bad-request"],
-  [ConfigPending, "threw"],
   [DaemonClosing, "closing"],
   [ClickAbandoned, "abandoned"],
   [RendererDown, "down"]
@@ -77020,6 +77019,18 @@ function spliceOp(text5, path31, op, suffix, rendered) {
   }
 }
 
+// src/renderer-interface/click-arrival.ts
+init_globals();
+var actsOnDesktop = (arrival) => arrival.via === "link" && arrival.delivery.kind === "desktop-forwarder";
+var afterItsAnswer = (arrival) => arrival.via === "link" && arrival.delivery.kind === "desktop-forwarder" ? {
+  via: "link",
+  delivery: {
+    kind: "answered-desktop-forwarder",
+    urlV: arrival.delivery.urlV
+  }
+} : arrival;
+var answerSent = (arrival) => arrival.via === "link" && arrival.delivery.kind === "answered-desktop-forwarder";
+
 // src/claude-input/typing.ts
 init_globals();
 
@@ -77074,6 +77085,10 @@ var typeInPane = (edge) => async (tmux3, line) => {
 
 // src/renderer/verbs/index.ts
 function ask(ctx, act) {
+  if ((act.kind === "copy" || act.kind === "open") && answerSent(ctx.arrival))
+    throw new ConfigPending(
+      "this bar's configuration was not loaded when you clicked, so what to copy or open on your desktop could not be handed back: click again"
+    );
   ctx.acts.ask(ctx.effects, act);
 }
 function globalAct(step4, ctx, session) {
@@ -78054,10 +78069,6 @@ function verbsOver(ctx) {
   };
 }
 
-// src/renderer-interface/click-arrival.ts
-init_globals();
-var actsOnDesktop = (arrival) => arrival.via === "link" && arrival.delivery.kind === "desktop-forwarder";
-
 // src/renderer-interface/request-context.ts
 init_globals();
 function durableOf(req) {
@@ -78454,7 +78465,15 @@ function mainRenderer(parts, stores) {
     try {
       clickTurn(
         parts,
-        { ...click2.event, context: parkedContext(click2) },
+        {
+          ...click2.event,
+          // [LAW:no-ambient-temporal-coupling] exception: a click is answered
+          // when its first turn ends, parked or not, so this replay's copy
+          // or open has no answer to ride in and fails by name, until a
+          // parked click is answered when it has run.
+          arrival: afterItsAnswer(click2.event.arrival),
+          context: parkedContext(click2)
+        },
         effects,
         record2
       );
@@ -78650,10 +78669,6 @@ function mainRenderer(parts, stores) {
         if (context !== null) {
           const { origin } = context.durable;
           if (!parts.renderCache.holdsConfig(origin)) {
-            if (actsOnDesktop(event.arrival))
-              throw new ConfigPending(
-                "this bar's configuration is not loaded yet, so the click cannot say what to copy or open on your desktop: click again once the bar has redrawn"
-              );
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
             runInAction(
@@ -85175,9 +85190,9 @@ var nothingLeft = (outcome) => ({
   outcome,
   desktop: []
 });
-function landedReply(parts, { outcome, desktop }) {
+function landedReply(parts, { desktop }) {
   const reply = replyOf(
-    { ...clickReply(outcome), desktopActs: desktop },
+    { ok: true, output: "", desktopActs: desktop },
     null,
     (taken2) => {
       if (!taken2 && desktop.length > 0)
