@@ -71,10 +71,12 @@ func socketPath() -> String {
 }
 
 // Mirrored: src/daemon/paths.ts REMOTE_SOCKET_DIR_UNDER_HOME and
-// REMOTE_SOCKET_SUFFIX, and src/click/link-signer.ts LINK_KEY_ID_CHARS.
+// REMOTE_SOCKET_SUFFIX, and src/click/link-signer.ts LINK_KEY_ID_CHARS and
+// LINK_KEY_ID_ALPHABET.
 let REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote"
 let REMOTE_SOCKET_SUFFIX = ".sock"
 let LINK_KEY_ID_CHARS = 8
+let LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
 let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
@@ -170,40 +172,51 @@ func forward(_ url: String, to path: String) -> Forward {
 // no daemon sees a link that is not its own. A link that names no forward on
 // this Mac, its own or one whose ssh connection is not set up, goes to this
 // Mac's daemon, which says which daemon signed it. [LAW:single-enforcer]
-func isKeyIdByte(_ b: UInt8) -> Bool {
-  (b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A)
-    || b == 0x2D || b == 0x5F
-}
-
-// The id a link names, or nil for a link that names none. The link comes from
-// any web page, and the id becomes part of a path, so it is the spelling the
-// signer writes and nothing else.
+// The id a link names, or nil for a link that names none (a proof that does not
+// begin with one, as links drawn before they named a signer do not). The link
+// comes from any web page, and the id becomes part of a path, so it is the
+// spelling the signer writes and nothing else.
 func signerId(of link: String) -> String? {
   guard let mark = link.lastIndex(of: "#") else { return nil }
   let proof = link[link.index(after: mark)...]
   guard let slash = proof.firstIndex(of: "/") else { return nil }
   let id = proof[..<slash]
-  guard id.utf8.count == LINK_KEY_ID_CHARS, id.utf8.allSatisfy(isKeyIdByte) else { return nil }
+  guard id.utf8.count == LINK_KEY_ID_CHARS, id.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) })
+  else { return nil }
   return String(id)
 }
 
-func destination(of link: String) -> String {
-  guard let id = signerId(of: link) else { return socketPath() }
+// Where a link goes: this Mac's own daemon, or the forward a link's id names.
+enum Route {
+  case own(socket: String)
+  case forward(id: String, socket: String)
+
+  var socket: String {
+    switch self {
+    case .own(let socket), .forward(_, let socket): return socket
+    }
+  }
+}
+
+func route(of link: String) -> Route {
+  guard let id = signerId(of: link) else { return .own(socket: socketPath()) }
   // NSHomeDirectory, not $HOME: it is the account's home, which is what ssh's
   // `%d` spells in the stanza.
   let forwarded =
     NSHomeDirectory() + "/" + REMOTE_SOCKET_DIR_UNDER_HOME + "/" + id + REMOTE_SOCKET_SUFFIX
-  return FileManager.default.fileExists(atPath: forwarded) ? forwarded : socketPath()
+  return FileManager.default.fileExists(atPath: forwarded)
+    ? .forward(id: id, socket: forwarded) : .own(socket: socketPath())
 }
 
-// A forward file can outlive the ssh connection that made it (ssh killed),
-// so a socket no daemon answers on, found by a link's id, says whose it is and
-// what to look at. [LAW:no-silent-failure]
-func forwarded(_ url: String, to path: String) -> Forward {
-  let sent = forward(url, to: path)
-  guard path != socketPath(), case .failed(let why) = sent else { return sent }
+// A forward file can outlive the ssh connection that made it (ssh killed), and
+// a daemon on the far end can be gone behind a live one, so a forward a link
+// names that does not take the link says whose it is and what to look at,
+// before the cause. [LAW:no-silent-failure]
+func deliver(_ url: String, via route: Route) -> Forward {
+  let sent = forward(url, to: route.socket)
+  guard case .forward(let id, _) = route, case .failed(let why) = sent else { return sent }
   return .failed(
-    "the ssh forward this link names (\((path as NSString).lastPathComponent)) does not answer: is the ssh connection to the machine that drew it open? \(why)"
+    "the ssh forward for key \(id) did not take the link; is the ssh connection to the machine that drew it open? \(why)"
   )
 }
 
@@ -312,8 +325,9 @@ final class Handler: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       let link = url.absoluteString
-      let socket = destination(of: link)
-      switch forwarded(link, to: socket) {
+      let routed = route(of: link)
+      let socket = routed.socket
+      switch deliver(link, via: routed) {
       // Notice, not info: the unified log persists notice and above, so
       // `log show` can answer "did the click reach the socket" after the fact.
       // The link itself is private: a copy link carries the text being copied,

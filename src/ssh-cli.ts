@@ -66,9 +66,9 @@ export function sshConfigPlan(
   asked: Asked<SshConfigFacts>,
 ): CliPlan {
   const [alias, ...extra] = args;
-  // [LAW:parse-dont-validate] A Host pattern and a LocalForward argument are
-  // each one word of ssh's config, and ssh expands `%` in the latter.
-  if (alias === undefined || extra.length > 0 || !/^[^\s#]+$/.test(alias)) {
+  // [LAW:parse-dont-validate] The alias is one word of ssh's config naming one
+  // host: no wildcard or negation (`*`, `?`, `!`), which would make a pattern.
+  if (alias === undefined || extra.length > 0 || !/^[^\s#*?!]+$/.test(alias)) {
     return { stdout: "", stderr: USAGE, code: 2 };
   }
   if (asked.kind === "failed") {

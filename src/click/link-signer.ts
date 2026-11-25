@@ -85,7 +85,14 @@ const SOURCE_VERSION = "v1";
 // gives nothing of it away; it routes and never authenticates, because the mac
 // covers it.
 export const LINK_KEY_ID_CHARS = 8;
+// The base64url alphabet, which is what an id is spelled in.
+export const LINK_KEY_ID_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 const LINK_KEY_ID_DOMAIN = "cc-candybar link key id";
+
+const isLinkKeyId = (text: string): boolean =>
+  text.length === LINK_KEY_ID_CHARS &&
+  [...text].every((c) => LINK_KEY_ID_ALPHABET.includes(c));
 
 // Spelled from base64 by hand, because the page's Buffer has no base64url.
 function base64url(bytes: Uint8Array): string {
@@ -167,22 +174,25 @@ function openLinkWith(
       reason:
         "the link carries no signature: the bar did not draw it, or drew it before its links were signed",
     };
-  const proof = signed.slice(mark + 1).split("/");
-  const mac = proof[proof.length - 1] ?? "";
-  const [signer, ...source] = proof.slice(0, -1);
-  if (signer === undefined)
+  // [LAW:parse-dont-validate] The proof is read once, here: the signer's id,
+  // then the issuing frame's fields when there are any, then the mac. A proof
+  // that does not begin with an id is one drawn before links named their
+  // signer (`#<mac>`, or `#v1/<renderer>/<session>/<mac>`), or a changed one.
+  const [signer, ...source] = signed.slice(mark + 1).split("/");
+  const mac = source.pop();
+  if (signer === undefined || mac === undefined || !isLinkKeyId(signer))
     return {
       kind: "failed",
       reason:
-        "the link does not say which daemon signed it: the bar drew it before its links named their signer, and its next redraw does",
+        "the link's proof does not begin with the key id of the daemon that signed it: the bar drew it before its links named their signer, and its next redraw does, or it was changed after the bar drew it",
     };
   if (signer !== own)
     return {
       kind: "failed",
-      reason: `the link was signed by another daemon (key ${signer}, this one is ${own}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`,
+      reason: `the link names key ${signer}, not this daemon's (${own}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`,
     };
   // Compared as spelled, in constant time, once its spelling says it has the
-  // length of one.
+  // length of one. The mac covers everything before it.
   const proven =
     LINK_MAC_SPELLING.test(mac) &&
     timingSafeEqual(

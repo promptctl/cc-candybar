@@ -165,7 +165,7 @@ describe("a link the bar did not draw", () => {
     expect(refused(other)).toEqual({
       kind: "refused",
       problem: expect.stringContaining(
-        `signed by another daemon (key ${linkKeyId(otherKey)}, this one is ${linkKeyId(TEST_LINK_KEY)})`,
+        `names key ${linkKeyId(otherKey)}, not this daemon's (${linkKeyId(TEST_LINK_KEY)})`,
       ),
     });
   });
@@ -182,13 +182,38 @@ describe("a link the bar did not draw", () => {
     });
   });
 
-  test("drawn before links named their signer is refused with that said", () => {
-    const old = `${unprovenLink(signed)}#${signed.slice(-22)}`;
-    expect(refused(old)).toEqual({
-      kind: "refused",
-      problem: expect.stringContaining("does not say which daemon signed it"),
-    });
-  });
+  // Both proofs a bar drew before links named their signer: an authored link's
+  // `#<mac>` and a frame link's `#v1/<renderer>/<session>/<mac>`. Neither is
+  // another daemon's, so neither sends the user to ssh.
+  test.each([
+    ["an authored link's", (mac: string) => mac],
+    [
+      "a frame link's",
+      (mac: string) => `v1/worktree/${encodeURIComponent('"s"')}/${mac}`,
+    ],
+  ])(
+    "drawn before links named their signer, %s proof is refused with that said",
+    (_, proof) => {
+      const old = `${unprovenLink(signed)}#${proof(signed.slice(-22))}`;
+      expect(refused(old)).toEqual({
+        kind: "refused",
+        problem: expect.stringContaining(
+          "does not begin with the key id of the daemon that signed it",
+        ),
+      });
+    },
+  );
+
+  test.each(["", "short", "AbCd-_1!", "AbCd-_123"])(
+    "a proof opening with %j is no key id",
+    (id) => {
+      const old = `${unprovenLink(signed)}#${id}/${signed.slice(-22)}`;
+      expect(refused(old)).toEqual({
+        kind: "refused",
+        problem: expect.stringContaining("does not begin with the key id"),
+      });
+    },
+  );
 
   test("is refused with the reason the host could not open it", () => {
     expect(parseClick(signed, FORWARDED, KEYLESS)).toEqual({

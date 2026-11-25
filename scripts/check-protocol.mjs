@@ -241,6 +241,11 @@ const CHECKS = [
     swift: num(SWIFT_HANDLER, /^let LINK_KEY_ID_CHARS = ([\d\s*]+)$/m),
   },
   {
+    label: "the alphabet a key id is spelled in, as the URL handler reads it",
+    ts: lit(TS_LINK_SIGNER, /LINK_KEY_ID_ALPHABET =\s*"([^"]+)"/),
+    swift: lit(SWIFT_HANDLER, /^let LINK_KEY_ID_ALPHABET = "([^"]+)"$/m),
+  },
+  {
     label: "lane B's name, as the statusline push subscribes",
     ts: lit(TS_LANES, /^ {2}(statusline): \{/m),
     push: lit(JS_PUSH, /^const LANE = '([a-z]+)';/m),

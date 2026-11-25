@@ -385,6 +385,13 @@ function installUrlHandlerFrom(sourceDist: string, world: World): void {
 function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   const bundle = appBundlePath(host);
 
+  // The directory an ssh forward from a remote machine lands its socket in
+  // (`cc-candybar ssh-config` on that machine); ssh makes none. The app writes
+  // every link to a socket found there, so it is held to the trust every
+  // socket directory is. [LAW:single-enforcer] Checked before anything is
+  // replaced or quit: a directory it refuses leaves the handler the user had.
+  ensureOwnedPrivateDir(remoteSocketDir(host.home));
+
   // [LAW:effects-at-boundaries] The app is assembled and signed beside its
   // place, then renamed over the old one: a copy or a sign that fails leaves
   // the handler the user had, registered and whole, not a half bundle.
@@ -431,12 +438,6 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
       ? `Quit the running ${APP_NAME}; the next click starts the new one\n`
       : `${APP_NAME} was not running\n`,
   );
-
-  // The directory an ssh forward from a remote machine lands its socket in
-  // (`cc-candybar ssh-config` on that machine); ssh makes none. The app writes
-  // every link to a socket found there, so it is held to the trust every
-  // socket directory is. [LAW:single-enforcer]
-  ensureOwnedPrivateDir(remoteSocketDir(host.home));
 
   process.stdout.write(`Registering ${URL_SCHEME}:// with Launch Services\n`);
   const lsr = launcher.launchSync({

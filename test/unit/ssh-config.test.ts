@@ -24,6 +24,8 @@ describe("cc-candybar ssh-config", () => {
     ["two", ["a", "b"]],
     ["an empty one", [""]],
     ["one with a space", ["my box"]],
+    ["a pattern", ["*"]],
+    ["a negation", ["!dev"]],
   ])("refuses %s as the alias", (_, args) => {
     const plan = sshConfigPlan(args, facts);
     expect(plan.code).toBe(2);
