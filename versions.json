@@ -4,15 +4,22 @@
     {
       "version": "pr-963",
       "ref": "refs/pull/963/merge",
-      "sha": "bc66b7bc402c382754086d21a7a76463096a448a",
-      "timestamp": "2026-11-25T06:15:55.062Z",
+      "sha": "66d2f1183807af3f68dc8dfc6fd02cd59ebc42b5",
+      "timestamp": "2026-11-25T06:33:15.696Z",
       "commits": [
         {
-          "sha": "bc66b7bc402c382754086d21a7a76463096a448a",
+          "sha": "66d2f1183807af3f68dc8dfc6fd02cd59ebc42b5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T06:14:56Z",
-          "message": "Merge 8c7886284024411b574b5762a0b464ad9d5d3cd4 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+          "timestamp": "2026-11-25T06:32:06Z",
+          "message": "Merge 4aaacee1373a06fe74fbde792d6ab51223f530d9 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "4aaacee1373a06fe74fbde792d6ab51223f530d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T23:31:40-07:00",
+          "message": "fix(links): a link's proof is read once, and a link drawn before links named their signer says so\n\nThe proof is a wire grammar the URL handler reads, so it gets one parser: a proof that does not begin with a key id (the old authored `#<mac>` and the old frame `#v1/...` shapes, or a changed one) is refused as such, and only a well-spelled id that is not this daemon's names another daemon. The id's alphabet is pinned between TS and Swift beside its length, the handler carries its routing choice as a type, install checks the forward directory before it replaces or quits anything, and ssh-config refuses a Host pattern.\n"
         },
         {
           "sha": "8c7886284024411b574b5762a0b464ad9d5d3cd4",

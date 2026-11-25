@@ -80445,7 +80445,9 @@ var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 var LINK_MAC_MARK = "#";
 var SOURCE_VERSION = "v1";
 var LINK_KEY_ID_CHARS = 8;
+var LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 var LINK_KEY_ID_DOMAIN = "cc-candybar link key id";
+var isLinkKeyId = (text5) => text5.length === LINK_KEY_ID_CHARS && [...text5].every((c) => LINK_KEY_ID_ALPHABET.includes(c));
 function base64url(bytes) {
   return import_buffer.Buffer.from(bytes).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
@@ -80480,18 +80482,17 @@ function openLinkWith(key, own2, signed) {
       kind: "failed",
       reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
     };
-  const proof = signed.slice(mark + 1).split("/");
-  const mac = proof[proof.length - 1] ?? "";
-  const [signer, ...source] = proof.slice(0, -1);
-  if (signer === void 0)
+  const [signer, ...source] = signed.slice(mark + 1).split("/");
+  const mac = source.pop();
+  if (signer === void 0 || mac === void 0 || !isLinkKeyId(signer))
     return {
       kind: "failed",
-      reason: "the link does not say which daemon signed it: the bar drew it before its links named their signer, and its next redraw does"
+      reason: "the link's proof does not begin with the key id of the daemon that signed it: the bar drew it before its links named their signer, and its next redraw does, or it was changed after the bar drew it"
     };
   if (signer !== own2)
     return {
       kind: "failed",
-      reason: `the link was signed by another daemon (key ${signer}, this one is ${own2}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`
+      reason: `the link names key ${signer}, not this daemon's (${own2}): a bar drawn on another machine over ssh reaches its daemon through an ssh forward, which \`cc-candybar ssh-config ALIAS\` run on that machine prints`
     };
   const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(
     import_buffer.Buffer.from(mac),
