@@ -71551,14 +71551,15 @@ function throwAll(thrown2) {
 
 // src/renderer/render-cache.ts
 var ENTRY_BYTES = 3 * 1024 * 1024;
-var COMPILE_BYTES = 10 * 1024 * 1024;
+var COMPILE_BYTES = 12 * 1024 * 1024;
 var VIEW_BYTES = 2.5 * 1024 * 1024;
 var RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 function renderCacheBudget(memoryLimitBytes2) {
   return Math.floor(
     Math.max(
       memoryLimitBytes2 / 4,
-      memoryLimitBytes2 * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES
+      // [LAW:single-enforcer] The near line is the one a reading is judged by.
+      nearAtOf(memoryLimitBytes2) - RENDER_CACHE_RESERVE_BYTES
     )
   );
 }
