@@ -66193,14 +66193,6 @@ var UNREAD_RUN = {
   reading: pendingOf("unread"),
   fault: null
 };
-function transcriptLossText(loss) {
-  switch (loss.kind) {
-    case "dropped-lines":
-      return loss.lines === 1 ? `${loss.path}: line ${loss.firstLine} ${loss.reason}, so the bar's figures for this session leave it out` : `${loss.path}: ${loss.lines} lines could not be read, so the bar's figures for this session leave them out; the first, line ${loss.firstLine}, ${loss.reason}`;
-    case "unowned-sidechain":
-      return `${loss.path}: its first line ${loss.reason}, so whose sidechain it is cannot be told, and the session's usage leaves it out`;
-  }
-}
 var REFRESH_LANES = [
   "session",
   "context",
@@ -73469,6 +73461,17 @@ function projectGitInfo(info, pullRequest, pending2) {
     ...repoUrl !== void 0 && { repoUrl },
     ...prFields
   };
+}
+
+// src/utils/transcript-loss.ts
+init_globals();
+function transcriptLossText(loss) {
+  switch (loss.kind) {
+    case "dropped-lines":
+      return loss.lines === 1 ? `${loss.path}: line ${loss.firstLine} ${loss.reason}, so the bar's figures for this session leave it out` : `${loss.path}: ${loss.lines} lines could not be read, so the bar's figures for this session leave them out; the first, line ${loss.firstLine}, ${loss.reason}`;
+    case "unowned-sidechain":
+      return `${loss.path}: its first line ${loss.reason}, so whose sidechain it is cannot be told, and the session's usage leaves it out`;
+  }
 }
 
 // src/render/pointer-facts.ts
@@ -86550,26 +86553,31 @@ var USAGE_COUNTS = [
   "cache_creation_input_tokens",
   "cache_read_input_tokens"
 ];
+var NO_USAGE = { kind: "none" };
 function usageOf(usage) {
-  if (usage === void 0 || usage === null) return {};
-  if (typeof usage !== "object" || Array.isArray(usage)) return null;
+  if (usage === void 0 || usage === null) return NO_USAGE;
+  if (typeof usage !== "object" || Array.isArray(usage))
+    return { kind: "malformed" };
   const given2 = usage;
   const counts = {};
   for (const key of USAGE_COUNTS) {
     const count = given2[key];
     if (count === void 0 || count === null) continue;
-    if (typeof count !== "number" || !Number.isFinite(count)) return null;
+    if (typeof count !== "number" || !Number.isFinite(count))
+      return { kind: "malformed" };
     counts[key] = count;
   }
-  return { counts };
+  return Object.keys(counts).length === 0 ? NO_USAGE : { kind: "counts", counts };
 }
 function entryOf3(parsed2) {
   const message = parsed2.message;
   const msg = typeof message === "object" && message !== null && !Array.isArray(message) ? message : void 0;
-  const usage = usageOf(msg?.usage);
-  if (usage === null) return dropped("has usage whose counts are not numbers");
-  if (parsed2.timestamp === void 0)
-    return usage.counts === void 0 ? NO_ENTRY : dropped("has usage but no timestamp");
+  const read3 = usageOf(msg?.usage);
+  if (read3.kind === "malformed")
+    return dropped("has usage whose counts are not numbers");
+  const usage = read3.kind === "counts" ? read3.counts : void 0;
+  if (parsed2.timestamp === void 0 || parsed2.timestamp === null)
+    return msg === void 0 ? NO_ENTRY : dropped("is a message with no timestamp");
   const timestamp = typeof parsed2.timestamp === "string" ? new Date(parsed2.timestamp) : void 0;
   if (timestamp === void 0 || Number.isNaN(timestamp.getTime()))
     return dropped("has a timestamp that is not a date");
@@ -86582,7 +86590,7 @@ function entryOf3(parsed2) {
       message: msg ? {
         id: typeof msg.id === "string" ? msg.id : void 0,
         model: typeof msg.model === "string" ? msg.model : void 0,
-        usage: usage.counts,
+        usage,
         role: typeof msg.role === "string" ? msg.role : void 0,
         type: typeof msg.type === "string" ? msg.type : void 0,
         stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
@@ -86596,7 +86604,7 @@ function entryOf3(parsed2) {
         message: msg ? {
           id: typeof msg.id === "string" ? msg.id : void 0,
           model: typeof msg.model === "string" ? msg.model : void 0,
-          usage: usage.counts
+          usage
         } : void 0,
         requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
       }
@@ -86828,6 +86836,14 @@ async function foldFile(state, entries2, cacheRoot, clock) {
     turnOpen,
     response: last2
   };
+}
+function lossIdentity(loss) {
+  switch (loss.kind) {
+    case "dropped-lines":
+      return `${loss.kind}\0${loss.path}\0${loss.firstLine}`;
+    case "unowned-sidechain":
+      return `${loss.kind}\0${loss.path}`;
+  }
 }
 function mergeFolds(files) {
   let count = 0;
@@ -87248,10 +87264,10 @@ var SessionUsageStore = class {
     const newFiles = /* @__PURE__ */ new Map();
     let mainStamp = "";
     const files = [
-      { path: transcriptPath, absent: prior?.files.get(transcriptPath) },
-      ...agents.paths.map((path31) => ({ path: path31, absent: void 0 }))
+      { path: transcriptPath, keptIfAbsent: prior?.files.get(transcriptPath) },
+      ...agents.paths.map((path31) => ({ path: path31, keptIfAbsent: void 0 }))
     ];
-    for (const { path: filePath2, absent } of files) {
+    for (const { path: filePath2, keptIfAbsent } of files) {
       const read3 = await foldAppended(
         filePath2,
         prior?.files.get(filePath2),
@@ -87260,7 +87276,7 @@ var SessionUsageStore = class {
       );
       if (read3.kind === "failed") return read3;
       if (read3.kind === "absent") {
-        if (absent) newFiles.set(filePath2, absent);
+        if (keptIfAbsent) newFiles.set(filePath2, keptIfAbsent);
         continue;
       }
       const { folded: folded2, longLines } = read3.value;
@@ -87274,9 +87290,10 @@ var SessionUsageStore = class {
       ),
       ...agents.unowned
     ];
-    const known = new Set(prior?.losses.map(transcriptLossText));
-    const met = losses.map(transcriptLossText).filter((t2) => !known.has(t2));
-    for (const text5 of met) this.log("warn", text5);
+    const known = new Set(prior?.losses.map(lossIdentity));
+    for (const loss of losses)
+      if (!known.has(lossIdentity(loss)))
+        this.log("warn", transcriptLossText(loss));
     return ok({
       files: newFiles,
       losses,

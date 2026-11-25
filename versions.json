@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-960",
+      "ref": "refs/pull/960/merge",
+      "sha": "1cf63a11c499c35514c3ae5ae98477f07a0d50a7",
+      "timestamp": "2026-11-25T05:39:55.550Z",
+      "commits": [
+        {
+          "sha": "1cf63a11c499c35514c3ae5ae98477f07a0d50a7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T05:38:16Z",
+          "message": "Merge ceebdbb094e5c0d7fb707505934937116722d671 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "ceebdbb094e5c0d7fb707505934937116722d671",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:38:01-07:00",
+          "message": "fix(transcript): the loss vocabulary sits below the fold and the document, a message's usage with no count is no usage, and a loss is logged once however it grows (candybar-later-fixes-nwu9.3fy)\n"
+        },
+        {
+          "sha": "aca63f36fd56e31a126c979e8580f18e09644da9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T18:44:16-07:00",
+          "message": "fix(transcript): a sidechain the fold cannot read fails the refresh, and a line is parsed into its entry or dropped with why (candybar-later-fixes-nwu9.3fy)\n\nLaw-review pass 1 on #960.\n\n- A sidechains directory that cannot be listed, or a new sidechain whose\n  first line cannot be read, fails the refold through its one failed arm,\n  so nothing short is stored and the next render retries. A loss is only\n  what a read that succeeded could not use: a dropped line, or a sidechain\n  whose first line (blank, not JSON, naming no session) cannot say whose\n  it is.\n- The entry parse parses: a timestamp that is not a date, usage with no\n  timestamp, or usage counts that are not numbers drop the line with its\n  reason. A projection that throws is the daemon's fault, not a dropped line.\n- A drop names its line number, which the cursor counts, so it is exact\n  across windows and bytes that are not UTF-8.\n- The window parse returns its drops as data, and a reset replaces the\n  fold in one step.\n- Losses are derived once at refold, stored on the record, and logged once\n  when first met. A sidechain gone after the listing is out of the session,\n  as one gone before it.\n- The facts document carries its stamp failure and its transcript losses as\n  their own fields. The lane diagnostics, a copy of each lane's failed\n  reading that nothing drew, are gone. FACTS_VERSION 6.\n- The cache timer reads its lines through the one line reading.\n- templateHelperRefs and the comments naming the deleted unused check are\n  gone; the real lister's test covers the paths rotation removes; the\n  harness copies left in tests share one helper each.\n"
+        },
+        {
+          "sha": "663357257804bfc321870197915edca8d2c5142a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T18:11:22-07:00",
+          "message": "fix(transcript): a transcript line or sidechain the fold cannot read shows as ⚠ on the session's bar (candybar-later-fixes-nwu9.3fy)\n\nA line that is not JSON, or whose entry cannot be projected, used to be\ndropped with only a debug-log line, and so did a sidechain whose read\nfailed, whose first line was not JSON, or whose directory could not be\nlisted. Each left the session's usage and cost short with nothing on the\nbar to say so.\n\nThe fold now keeps what it dropped (how many lines, where the first\nstarts, why) beside its cursor, so the loss lasts exactly as long as the\nnumbers it is missing from and goes when a rewrite re-folds the file. The\nusage store reports each file's losses and each unread sidechain into the\nsession's facts diagnostics, and the bar draws one standing warning per\nfile, with the viewer naming the file and the reason.\n\nTests share one in-process main-renderer harness instead of two copies.\n"
+        },
+        {
+          "sha": "da67ca007ef461236ac486e3271cae226b32ead3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T17:55:41-07:00",
+          "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-963",
       "ref": "refs/pull/963/merge",
       "sha": "f4f73335187d92fc6512a2633d7fe0eeecec2761",
@@ -99,42 +142,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T21:43:24-07:00",
           "message": "chore(tests): nothing caps end-to-end tests or scans the workflows for a daemon start (candybar-testing-do00.c3a)\n\nThe cap, the assertion limit and their sign-off policed a test/e2e/ that was\nnever created, and the workflow scanner failed CI on any step reaching a\nscript that starts a daemon, which laws:testing does not forbid. laws:testing's\ncap is a question a reviewer asks of a proposed test, not a hook.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-960",
-      "ref": "refs/pull/960/merge",
-      "sha": "ea4383504a6940e034787a8003427d97cfb33510",
-      "timestamp": "2026-11-25T01:45:48.445Z",
-      "commits": [
-        {
-          "sha": "ea4383504a6940e034787a8003427d97cfb33510",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T01:44:30Z",
-          "message": "Merge aca63f36fd56e31a126c979e8580f18e09644da9 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
-        },
-        {
-          "sha": "aca63f36fd56e31a126c979e8580f18e09644da9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T18:44:16-07:00",
-          "message": "fix(transcript): a sidechain the fold cannot read fails the refresh, and a line is parsed into its entry or dropped with why (candybar-later-fixes-nwu9.3fy)\n\nLaw-review pass 1 on #960.\n\n- A sidechains directory that cannot be listed, or a new sidechain whose\n  first line cannot be read, fails the refold through its one failed arm,\n  so nothing short is stored and the next render retries. A loss is only\n  what a read that succeeded could not use: a dropped line, or a sidechain\n  whose first line (blank, not JSON, naming no session) cannot say whose\n  it is.\n- The entry parse parses: a timestamp that is not a date, usage with no\n  timestamp, or usage counts that are not numbers drop the line with its\n  reason. A projection that throws is the daemon's fault, not a dropped line.\n- A drop names its line number, which the cursor counts, so it is exact\n  across windows and bytes that are not UTF-8.\n- The window parse returns its drops as data, and a reset replaces the\n  fold in one step.\n- Losses are derived once at refold, stored on the record, and logged once\n  when first met. A sidechain gone after the listing is out of the session,\n  as one gone before it.\n- The facts document carries its stamp failure and its transcript losses as\n  their own fields. The lane diagnostics, a copy of each lane's failed\n  reading that nothing drew, are gone. FACTS_VERSION 6.\n- The cache timer reads its lines through the one line reading.\n- templateHelperRefs and the comments naming the deleted unused check are\n  gone; the real lister's test covers the paths rotation removes; the\n  harness copies left in tests share one helper each.\n"
-        },
-        {
-          "sha": "663357257804bfc321870197915edca8d2c5142a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T18:11:22-07:00",
-          "message": "fix(transcript): a transcript line or sidechain the fold cannot read shows as ⚠ on the session's bar (candybar-later-fixes-nwu9.3fy)\n\nA line that is not JSON, or whose entry cannot be projected, used to be\ndropped with only a debug-log line, and so did a sidechain whose read\nfailed, whose first line was not JSON, or whose directory could not be\nlisted. Each left the session's usage and cost short with nothing on the\nbar to say so.\n\nThe fold now keeps what it dropped (how many lines, where the first\nstarts, why) beside its cursor, so the loss lasts exactly as long as the\nnumbers it is missing from and goes when a rewrite re-folds the file. The\nusage store reports each file's losses and each unread sidechain into the\nsession's facts diagnostics, and the bar draws one standing warning per\nfile, with the viewer naming the file and the reason.\n\nTests share one in-process main-renderer harness instead of two copies.\n"
-        },
-        {
-          "sha": "da67ca007ef461236ac486e3271cae226b32ead3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T17:55:41-07:00",
-          "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
         }
       ]
     },
