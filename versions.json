@@ -4,15 +4,22 @@
     {
       "version": "pr-965",
       "ref": "refs/pull/965/merge",
-      "sha": "efe73b346791c584ccc61f1f437411602563c991",
-      "timestamp": "2026-11-25T07:14:16.916Z",
+      "sha": "6adec100d66ff11f39ca9fddd43207e0b2ead263",
+      "timestamp": "2026-11-25T07:39:30.065Z",
       "commits": [
         {
-          "sha": "efe73b346791c584ccc61f1f437411602563c991",
+          "sha": "6adec100d66ff11f39ca9fddd43207e0b2ead263",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T00:12:58-07:00",
-          "message": "Merge 359e86c75489d84b9226d13783aa956ba970025d into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+          "timestamp": "2026-11-25T07:38:25Z",
+          "message": "Merge aa5aee7c5026a41c5207e945c40c64db35c8f2e2 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "aa5aee7c5026a41c5207e945c40c64db35c8f2e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T00:38:13-07:00",
+          "message": "fix(url-handler): a click over ssh says where its copy and open act, and the Mac carries them out after the click lands\n"
         },
         {
           "sha": "359e86c75489d84b9226d13783aa956ba970025d",
