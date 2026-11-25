@@ -57,7 +57,7 @@ import {
   type CompiledConfig,
   type Registration,
 } from "../dsl/render.js";
-import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
+import { mb, nearAtOf } from "../daemon/foundations/memory-limit.js";
 import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import { deriveActionGates, type Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
@@ -107,9 +107,9 @@ import type { RenderCacheStats } from "../renderer-interface/renderer-stats";
 export const ENTRY_BYTES = 3 * 1024 * 1024;
 // A compile, counted as an evicted builder leaves it: its own heap and the
 // part of that builder's config it still reaches. The runtime moves it — V8's
-// version and the platform each by more than a tenth — so the test holds it on
-// CI's runtime, where it measured 10.2 MiB on 2026-11-24 over the bundled
-// default. A user config merged over the default compiles to about the same.
+// version and the platform each by more than a tenth — so it is sized from
+// the runtime CI runs the test on, where it measured 10.2 MiB on 2026-11-24
+// over the bundled default. A user config merged over the default compiles to about the same.
 export const COMPILE_BYTES = 12 * 1024 * 1024;
 // A session's view (SessionView): its store of the session's values over the
 // entry's, and the parts of every placement it has drawn, kept until it is
@@ -142,7 +142,8 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
   return Math.floor(
     Math.max(
       memoryLimitBytes / 4,
-      memoryLimitBytes * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES,
+      // [LAW:single-enforcer] The near line is the one a reading is judged by.
+      nearAtOf(memoryLimitBytes) - RENDER_CACHE_RESERVE_BYTES,
     ),
   );
 }
