@@ -391,6 +391,36 @@ describe("foldAppended — the windowed fold", () => {
     expect(again.folded.value).toEqual([]);
     expect(again.folded.cursor.offset).toBe(first.folded.cursor.offset);
   });
+
+  test("a line that is not JSON is dropped and counted from its byte, and a later fold that reads no bad line still holds it", async () => {
+    const t = join(dir, "A.jsonl");
+    const good = line(new Date(), 0.01);
+    writeFileSync(t, good + "{not json\n" + line(new Date(), 0.02) + "]\n");
+    const first = await foldOf(t);
+    expect(costs(first.folded.value)).toEqual([0.01, 0.02]);
+    expect(first.folded.dropped).toEqual({
+      lines: 2,
+      firstAt: Buffer.byteLength(good),
+      reason: expect.any(String),
+    });
+
+    appendFileSync(t, line(new Date(), 0.03));
+    const warm = await foldOf(t, first.folded);
+    expect(costs(warm.folded.value)).toEqual([0.01, 0.02, 0.03]);
+    expect(warm.folded.dropped).toEqual(first.folded.dropped);
+  });
+
+  test("a rewrite folds the file anew, so what the old file dropped goes with it", async () => {
+    const t = join(dir, "A.jsonl");
+    writeFileSync(t, "{not json\n" + line(new Date(), 0.01) + line(new Date(), 0.02));
+    const first = await foldOf(t);
+    expect(first.folded.dropped?.lines).toBe(1);
+
+    writeFileSync(t, line(new Date(), 0.09));
+    const after = await foldOf(t, first.folded);
+    expect(costs(after.folded.value)).toEqual([0.09]);
+    expect(after.folded.dropped).toBeNull();
+  });
 });
 
 describe("SessionUsageStore — incremental fold equals from-scratch", () => {
@@ -607,6 +637,60 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       const second = await usageFold(store, sid, mainPath);
       if (second.kind !== "ok") throw new Error("expected ok");
       expect(second.value.calculatedCost).toBeCloseTo(0.03, 5);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("what the session's transcripts could not give is its losses: the main file's dropped lines, and each sidechain it could not check", async () => {
+    const sid = sessionIdOf("L");
+    const mainPath = join(dir, `${sid}.jsonl`);
+    const good = line(new Date(), 0.01);
+    writeFileSync(mainPath, good + "{not json\n");
+    const subagents = join(dir, sid, "subagents");
+    mkdirSync(subagents, { recursive: true });
+    const garbled = join(subagents, "agent-1.jsonl");
+    writeFileSync(garbled, "{not json\n");
+    // A directory where a sidechain file should be: its read fails.
+    const unreadable = join(subagents, "agent-2.jsonl");
+    mkdirSync(unreadable);
+
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      expect(store.lossesOf(sid)).toEqual([]);
+      const read = await usageFold(store, sid, mainPath);
+      if (read.kind !== "ok") throw new Error("expected ok");
+      expect(read.value.calculatedCost).toBeCloseTo(0.01, 5);
+      expect(store.lossesOf(sid)).toEqual([
+        {
+          kind: "lines",
+          path: mainPath,
+          lines: 1,
+          firstAt: Buffer.byteLength(good),
+          reason: expect.any(String),
+        },
+        {
+          kind: "file",
+          path: garbled,
+          reason: expect.stringContaining("its first line is not JSON"),
+        },
+        { kind: "file", path: unreadable, reason: expect.any(String) },
+      ]);
+
+      // A warm refresh that reads only good lines leaves the totals short by
+      // the same line, so the loss stands.
+      appendFileSync(mainPath, line(new Date(), 0.02));
+      touch(mainPath);
+      const warm = await usageFold(store, sid, mainPath);
+      if (warm.kind !== "ok") throw new Error("expected ok");
+      expect(warm.value.calculatedCost).toBeCloseTo(0.03, 5);
+      expect(store.lossesOf(sid)).toContainEqual(
+        expect.objectContaining({ kind: "lines", path: mainPath, lines: 1 }),
+      );
     } finally {
       store.close();
     }

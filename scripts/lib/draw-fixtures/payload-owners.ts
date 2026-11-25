@@ -37,7 +37,10 @@ import type { MetricsFold } from "../../../src/segments/metrics";
 import type { ActivityInfo } from "../../../src/segments/activity";
 import type { TranscriptUsage } from "../../../src/segments/session";
 import type { DaySums } from "../../../src/daemon/cache/session-usage-store";
-import type { SpeedObservation } from "../../../src/facts/world-state";
+import type {
+  SpeedObservation,
+  TranscriptLoss,
+} from "../../../src/facts/world-state";
 import type { AutoCompactWindow } from "../../../src/segments/autocompact";
 import type { Instant } from "../../../src/utils/instant";
 import {
@@ -227,10 +230,12 @@ export function fakeUsage(
       transcriptPath: string | undefined,
       nowMs: number,
     ) => Loose;
+    // What the session's transcripts could not give, as its last fold left it.
+    readonly losses?: (sessionId: string) => readonly TranscriptLoss[];
   } = {},
 ): Pick<
   SessionUsageStore,
-  "refresh" | "usageOf" | "declareToday" | "daysOutside" | "speedOf"
+  "refresh" | "usageOf" | "declareToday" | "daysOutside" | "speedOf" | "lossesOf"
 > {
   const usage = refreshed<TranscriptUsage>();
   const speed = refreshed<SpeedObservation>();
@@ -259,6 +264,7 @@ export function fakeUsage(
       return { current: () => scans(holds, claudeConfigDir) };
     },
     daysOutside: (): Outcome<never> => ABSENT,
+    lossesOf: (sessionId: string) => readers.losses?.(sessionId) ?? [],
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
   };

@@ -11,6 +11,7 @@ import type { FileEventsWarning } from "../daemon/foundations/file-events-warnin
 import type { LifelineWarning } from "../proc/launcher";
 import type { DaemonEvent } from "../utils/event-hold";
 import type { StoreUnsavedWarning } from "../daemon/foundations/stored-file";
+import type { DroppedLines, UnreadFile } from "../utils/claude";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -54,7 +55,8 @@ export interface TmuxFacts {
 }
 
 // A fault of the collector's own: one lane of the session whose refresh threw,
-// or the stamp itself, which kept the readings of the document before it.
+// the stamp itself, which kept the readings of the document before it, or what
+// the session's usage could not read of its transcripts.
 export interface LaneDiagnostic {
   readonly kind: "lane";
   readonly lane: RefreshLane;
@@ -64,7 +66,21 @@ export interface StampDiagnostic {
   readonly kind: "stamp";
   readonly reason: string;
 }
-export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
+// [LAW:no-silent-failure] Lines of one transcript the session's usage folds
+// without, or a whole sidechain it leaves out (or the directory of them). It
+// stands for as long as the folds missing them are the session's, since its
+// usage and cost are short by them for that long.
+export type TranscriptLoss =
+  | ({ readonly kind: "lines"; readonly path: string } & DroppedLines)
+  | ({ readonly kind: "file" } & UnreadFile);
+export interface TranscriptDiagnostic {
+  readonly kind: "transcript";
+  readonly loss: TranscriptLoss;
+}
+export type FactsDiagnostic =
+  | LaneDiagnostic
+  | StampDiagnostic
+  | TranscriptDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
 // daemon itself: whether file events are heard, the launch lifeline's fault

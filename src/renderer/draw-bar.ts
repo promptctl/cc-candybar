@@ -43,7 +43,7 @@ import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
 import { awaitingOf, type Awaiting } from "../facts/awaited.js";
-import type { WorldState } from "../facts/world-state.js";
+import type { TranscriptLoss, WorldState } from "../facts/world-state.js";
 import type { PendingRead } from "../var-system/types.js";
 import { isPending } from "../utils/outcome.js";
 import {
@@ -589,6 +589,22 @@ export function drawRender(
             message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`,
           }),
         ]),
+    // [LAW:no-silent-failure] What the session's transcripts could not give is
+    // missing from its usage and cost, so the bar says so for as long as the
+    // fold that lacks it holds the numbers. Each file is one message.
+    ...document.diagnostics.flatMap((diagnostic): readonly Standing[] =>
+      diagnostic.kind === "transcript"
+        ? [
+            {
+              warning: {
+                kind: "transcript",
+                message: transcriptLossText(diagnostic.loss),
+              },
+              about: aboutSubject("transcript", diagnostic.loss.path),
+            },
+          ]
+        : [],
+    ),
   ];
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
   // indicator reads it as the `diagnostics` projection and the viewer pages
@@ -926,6 +942,17 @@ interface FactsWarning {
   readonly message: string;
 }
 
+// What a transcript fold could not read, which the session's numbers lack.
+interface TranscriptWarning {
+  readonly kind: "transcript";
+  readonly message: string;
+}
+
+const transcriptLossText = (loss: TranscriptLoss): string =>
+  loss.kind === "lines"
+    ? `${loss.path}: ${loss.lines === 1 ? "a line" : `${loss.lines} lines`} could not be read, the first at byte ${loss.firstAt} (${loss.reason}), so the session's usage and cost leave ${loss.lines === 1 ? "it" : "them"} out`
+    : `${loss.path} could not be read (${loss.reason}), so the session's usage and cost leave it out`;
+
 type ThrewEvent = Extract<DaemonEvent, { kind: "task-threw" }>;
 
 // A daemon event a draw shows, and why: inside the hold, or owed past it.
@@ -976,7 +1003,8 @@ type StandingWarning =
   | DaemonEventWarning
   | ConfigWatchWarning
   | LoadWarning
-  | FactsWarning;
+  | FactsWarning
+  | TranscriptWarning;
 
 // A standing warning and what it is about: a kind that recurs (a pipe event's
 // count, a load's file) is about its subject, so its words change while it

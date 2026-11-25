@@ -30,7 +30,7 @@ const INDICATOR_GLYPHS = Object.values(DIAGNOSTIC_LEVELS).map(
   ({ glyph }) => `${glyph} `,
 );
 export function viewerLink(
-  rendered: Frame,
+  rendered: Pick<Frame, "rows">,
   control: ViewerControl,
 ): { url: string; text: string } | undefined {
   return linksOf(rendered).find(
@@ -46,13 +46,15 @@ export function viewerLink(
 
 // One page of the viewer: its position and the message's text, its words
 // joined by single spaces whatever rows they wrapped onto.
-export interface ViewerPage {
+export interface ViewerPage<F extends Pick<Frame, "rows"> = Frame> {
   readonly position: string;
   readonly text: string;
-  readonly rendered: Frame;
+  readonly rendered: F;
 }
 
-export function pageOf(rendered: Frame): ViewerPage {
+export function pageOf<F extends Pick<Frame, "rows">>(
+  rendered: F,
+): ViewerPage<F> {
   const [header = "", ...body] = rendered.rows.map(({ runs }) => plainOf(runs));
   const position = /\[(\d+\/\d+)\]/.exec(header)?.[1];
   if (position === undefined)

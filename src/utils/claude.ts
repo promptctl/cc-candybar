@@ -5,7 +5,6 @@ import { existsSync } from "node:fs";
 // one seam.
 import { readAppendedText, readdir, type WholeLines } from "./transcript-fs";
 import { join } from "node:path";
-import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
 import {
   entryActivity,
@@ -166,44 +165,70 @@ export async function findAgentTranscripts(
   // set) reads a first line only for NEWLY-appeared sidechains. The readdir
   // still runs (cheap).
   verified?: ReadonlySet<string>,
-): Promise<{ paths: string[]; longLines: readonly LongLine[] }> {
+): Promise<{
+  paths: string[];
+  longLines: readonly LongLine[];
+  unread: readonly UnreadFile[];
+}> {
   const paths: string[] = [];
+  const unread: UnreadFile[] = [];
   let longLines: readonly LongLine[] = [];
 
   const subagentsDir = join(projectPath, sessionId, "subagents");
 
+  // [LAW:no-silent-failure] A session with no sidechains has no directory;
+  // one that cannot be listed loses every sidechain in it, so it is unread.
+  let files: string[] | undefined;
   try {
-    const files = await readdir(subagentsDir);
-    const agentFileNames = files.filter(
-      (f) => f.startsWith("agent-") && f.endsWith(".jsonl"),
-    );
-
-    for (const fileName of agentFileNames) {
-      const filePath = join(subagentsDir, fileName);
-      if (verified?.has(filePath)) {
-        paths.push(filePath);
-        continue;
-      }
-      // The first line only: one forward read from the file start, decoding
-      // only the bytes before its first newline (a file with no complete line
-      // yet is read again next time).
-      const read = await readAppendedText(filePath, undefined, undefined);
-      if (read.kind !== "ok") {
-        debug(`Failed to check agent file ${filePath}`);
-        continue;
-      }
-      longLines = longLinesWith(longLines, filePath, read.value);
-      const { text } = read.value;
-      const line = jsonLine(text.slice(0, Math.max(0, text.indexOf("\n"))));
-      if (line.kind === "object" && line.value.sessionId === sessionId) {
-        paths.push(filePath);
-      }
-    }
+    files = await unlessGone(readdir(subagentsDir));
   } catch (error) {
-    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
+    return {
+      paths,
+      longLines,
+      unread: [{ path: subagentsDir, reason: String(error) }],
+    };
+  }
+  const agentFileNames = (files ?? []).filter(
+    (f) => f.startsWith("agent-") && f.endsWith(".jsonl"),
+  );
+
+  for (const fileName of agentFileNames) {
+    const filePath = join(subagentsDir, fileName);
+    if (verified?.has(filePath)) {
+      paths.push(filePath);
+      continue;
+    }
+    // The first line only: one forward read from the file start, decoding
+    // only the bytes before its first newline (a file with no complete line
+    // yet is read again next time).
+    const read = await readAppendedText(filePath, undefined, undefined);
+    if (read.kind === "absent") continue;
+    // [LAW:no-silent-failure] A sidechain in this session's own directory
+    // whose owner cannot be checked is a file the session's usage leaves out.
+    if (read.kind === "failed") {
+      unread.push({ path: filePath, reason: read.reason });
+      continue;
+    }
+    longLines = longLinesWith(longLines, filePath, read.value);
+    const { text } = read.value;
+    const line = jsonLine(text.slice(0, Math.max(0, text.indexOf("\n"))));
+    if (line.kind === "unparsed")
+      unread.push({
+        path: filePath,
+        reason: `its first line is not JSON: ${line.reason}`,
+      });
+    if (line.kind === "object" && line.value.sessionId === sessionId) {
+      paths.push(filePath);
+    }
   }
 
-  return { paths, longLines };
+  return { paths, longLines, unread };
+}
+
+// A transcript a fold could not read at all, and why.
+export interface UnreadFile {
+  readonly path: string;
+  readonly reason: string;
 }
 
 // [LAW:types-are-the-program] exception: kept as type-aliases (not
@@ -398,9 +423,9 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
 
 // [LAW:one-source-of-truth] The one reading of a transcript line in this
 // file's transcript parse (the segment cache parses its own lines, apart from it):
-// blank lines are none, and a line that is not a JSON object is `unparsed`. The
-// bar's parse skips those lines; nothing counts them today. Per line, so no
-// reader holds more than one line's full object at once — makeEntry drops it straight away.
+// blank lines are none, and a line that is not a JSON object is `unparsed`.
+// Per line, so no reader holds more than one line's full object at once —
+// makeEntry drops it straight away.
 // [LAW:effects-at-boundaries] Pure: a reader that wants the reason logs it.
 export type JsonLine =
   | { readonly kind: "blank" }
@@ -420,31 +445,72 @@ export function jsonLine(line: string): JsonLine {
   }
 }
 
-// The entry one line contributes, if any — the step every parse loop takes.
-function entryOf(line: string): ParsedEntry | null {
+// [LAW:types-are-the-program] What one line gives a fold — the step every
+// parse loop takes: its entry; nothing, for a blank line or one with no
+// timestamp, which no fold reads; or a line the fold drops, and why.
+type LineRead =
+  | { readonly kind: "entry"; readonly entry: ParsedEntry }
+  | { readonly kind: "none" }
+  | { readonly kind: "dropped"; readonly reason: string };
+
+const NO_ENTRY: LineRead = { kind: "none" };
+
+function lineOf(line: string): LineRead {
   const read = jsonLine(line);
-  if (read.kind === "unparsed") {
-    debug(`Failed to parse JSONL line: ${read.reason}`);
-    return null;
-  }
-  if (read.kind === "blank") return null;
-  // A projection that throws on one odd line skips that line, as a parse
+  if (read.kind === "unparsed") return { kind: "dropped", reason: read.reason };
+  if (read.kind === "blank") return NO_ENTRY;
+  // A projection that throws on one odd line drops that line, as a parse
   // failure does, rather than losing the whole transcript.
   try {
-    return makeEntry(read.value);
+    const entry = makeEntry(read.value);
+    return entry === null ? NO_ENTRY : { kind: "entry", entry };
   } catch (projectionError) {
-    debug(`Failed to project JSONL line: ${projectionError}`);
-    return null;
+    return {
+      kind: "dropped",
+      reason: `its entry could not be read: ${String(projectionError)}`,
+    };
   }
 }
 
+// [LAW:types-are-the-program] What a fold could not read of its file: how
+// many lines it dropped, and where the first of them starts and why. Kept
+// beside the cursor, so it lasts as long as the value those lines are missing
+// from, and goes with it when a reset re-folds the file from zero.
+export interface DroppedLines {
+  readonly lines: number;
+  readonly firstAt: number;
+  readonly reason: string;
+}
+
 // [LAW:one-source-of-truth] The one line→entry loop over text in hand: every
-// window foldAppended reads goes through here.
-function parseJsonlLines(text: string): ParsedEntry[] {
+// window foldAppended reads goes through here. `start` is the text's byte
+// offset in its file; a line the fold drops is told to `drop`, with its
+// reason and a reading of where it starts.
+function parseJsonlLines(
+  text: string,
+  start: number,
+  drop: (reason: string, at: () => number) => void,
+): ParsedEntry[] {
   const entries: ParsedEntry[] = [];
+  // The line's index in `text`, a byte offset only when a drop asks for it.
+  let at = 0;
   for (const line of text.split("\n")) {
-    const entry = entryOf(line);
-    if (entry) entries.push(entry);
+    const read = lineOf(line);
+    const lineAt = at;
+    switch (read.kind) {
+      case "entry":
+        entries.push(read.entry);
+        break;
+      case "dropped":
+        drop(
+          read.reason,
+          () => start + Buffer.byteLength(text.slice(0, lineAt)),
+        );
+        break;
+      case "none":
+        break;
+    }
+    at += line.length + 1;
   }
   return entries;
 }
@@ -489,13 +555,15 @@ export function longLineLog(longLines: readonly LongLine[]): string[] {
   );
 }
 
-// A fold of one transcript as its consumer keeps it: the value, and the
-// cursor through the bytes that value has folded. [LAW:one-source-of-truth]
-// The one pair every consumer stores, so a cursor and the fold it marks
-// cannot be kept apart.
+// A fold of one transcript as its consumer keeps it: the value, the cursor
+// through the bytes that value has folded, and the lines among them it could
+// not read. [LAW:one-source-of-truth] The one record every consumer stores,
+// so a cursor, the fold it marks and what that fold is missing cannot be kept
+// apart.
 export interface Folded<S> {
   readonly cursor: TranscriptCursor;
   readonly value: S;
+  readonly dropped: DroppedLines | null;
 }
 
 // [LAW:dataflow-not-control-flow][LAW:one-source-of-truth] Fold the entries
@@ -522,6 +590,7 @@ export async function foldAppended<S>(
   let longLines: readonly LongLine[] = [];
   let cursor = prior?.cursor;
   let value = prior?.value ?? empty;
+  let dropped = prior?.dropped ?? null;
   let end: { size: number; stamp: string } | undefined;
   for (;;) {
     const read = await readAppendedText(
@@ -533,21 +602,32 @@ export async function foldAppended<S>(
     );
     if (read.kind !== "ok") return read;
     const window = read.value;
-    // A reset discards what was folded, the long lines read for it included.
+    // A reset discards what was folded, the long lines read for it and the
+    // lines it dropped included.
     if (window.reset) value = empty;
     longLines = longLinesWith(window.reset ? [] : longLines, filePath, window);
+    dropped = window.reset ? null : dropped;
     if (end === undefined || window.reset) {
       end = { size: window.size, stamp: window.stamp };
     }
     const next = window.start + window.bytes;
     // Pass the entries directly so the fold does not hold them across the
     // next window's I/O.
-    value = await step(value, parseJsonlLines(window.text));
+    value = await step(
+      value,
+      parseJsonlLines(window.text, window.start, (reason, at) => {
+        dropped =
+          dropped === null
+            ? { lines: 1, firstAt: at(), reason }
+            : { ...dropped, lines: dropped.lines + 1 };
+      }),
+    );
     cursor = {
       offset: next,
       stamp: end.stamp,
       ino: window.ino,
     };
-    if (window.atEnd) return ok({ folded: { cursor, value }, longLines });
+    if (window.atEnd)
+      return ok({ folded: { cursor, value, dropped }, longLines });
   }
 }

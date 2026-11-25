@@ -19,6 +19,7 @@ import {
   unlessGone,
   type Folded,
   type ParsedEntry,
+  type UnreadFile,
 } from "../../utils/claude";
 // [LAW:single-enforcer] The once-per-day seed's directory walk shares the same
 // in-flight-I/O budget (gn4.2) as every other transcript scan.
@@ -66,6 +67,7 @@ import type {
   DayUsage,
   SpeedObservation,
   SpeedSample,
+  TranscriptLoss,
 } from "../../facts/world-state";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
@@ -120,6 +122,9 @@ interface SessionRecord {
   // sidechains, each its own incremental FileFold); `usage`/`days` are
   // derived from mergeFolds and re-synced on every ingest — the single writer.
   files: Map<string, Folded<FileFold>>;
+  // The sidechains the fold could not check as the session's, which no file
+  // in `files` stands for.
+  unread: readonly UnreadFile[];
   usage: TranscriptUsage;
   days: DayLedgers;
   turnOpen: boolean;
@@ -329,6 +334,7 @@ async function foldFile(
 // transcript's stamp they were read at.
 type Refolded = {
   readonly files: Map<string, Folded<FileFold>>;
+  readonly unread: readonly UnreadFile[];
   readonly mainStamp: string;
   // Whether the session's turn is open: the main transcript's fold alone,
   // since a sidechain's entries move no turn (turnOpenAfter).
@@ -599,6 +605,21 @@ export class SessionUsageStore {
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
     return ok(slot.record?.usage ?? EMPTY_USAGE);
+  }
+
+  // [LAW:no-silent-failure] What the session's usage leaves out of its
+  // transcripts as its last refresh left them: each file's dropped lines and
+  // each sidechain it could not read. A session with no record yet has folded
+  // nothing, so it leaves nothing out.
+  lossesOf(sessionId: SessionId): readonly TranscriptLoss[] {
+    const record = this.sessions.get(sessionId)?.record;
+    if (record === undefined) return [];
+    return [
+      ...[...record.files].flatMap(([path, { dropped }]) =>
+        dropped === null ? [] : [{ kind: "lines" as const, path, ...dropped }],
+      ),
+      ...record.unread.map((file) => ({ kind: "file" as const, ...file })),
+    ];
   }
 
   // A refresh's ingest of its session, whose outcome the session's slot keeps
@@ -944,6 +965,7 @@ export class SessionUsageStore {
     }
     return ok({
       files: newFiles,
+      unread: agents.unread,
       ...mergeFolds(newFiles),
       mainStamp,
       turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false,
