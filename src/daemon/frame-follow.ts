@@ -109,9 +109,9 @@ export interface FrameFollow {
   readonly fault: (reason: string, retryMs: number) => void;
   readonly exit: (reason: string) => void;
   readonly beforeReconnect?: () => Promise<void>;
-  // The pointer a pane that owns the session's declares at each opening, as it
-  // stands then: a stream that reconnects restates it, so the host never holds
-  // what the pane no longer says.
+  // The pointer a follower that owns the session's declares at each opening, as
+  // it stands then: a stream that reconnects restates it, so the host never holds
+  // what the follower no longer says.
   readonly owner?: () => OwnerFacts;
 }
 

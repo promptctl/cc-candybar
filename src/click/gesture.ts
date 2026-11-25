@@ -60,15 +60,15 @@ export function parseGesture(text: string): Asked<Gesture> {
 }
 
 // What a surface delivers to the draw: gestures, and hover, which no link
-// carries and only a pane that sees the pointer move can report.
+// carries and only a follower that sees the pointer move can report.
 export const HOVER = "hover";
 export type Delivered = GestureName | typeof HOVER;
 
-// [LAW:one-source-of-truth] What the pane that owns a session's pane lane says
-// of its pointer: the gestures its terminal delivers, and the action the
-// pointer last stood on (null: none). It lives as long as the owner's
-// subscription and is never session state.
-export interface PanePointer {
+// [LAW:one-source-of-truth] What the follower that owns a session's pointer
+// says of it: the gestures its surface delivers, and the action the pointer
+// last stood on (null: none). It lives as long as the owner's subscription and
+// is never session state.
+export interface Pointer {
   readonly gestures: readonly Delivered[];
   readonly hover: string | null;
 }

@@ -4,11 +4,12 @@
 import {
   PROTOCOL_VERSION,
   encodeJsonFrame,
-  type RenderEncoding,
   type Response,
   type Refusal,
 } from "./protocol";
 import { composeBar, type Frame } from "../../render/frame.js";
+import type { FeedEncoding, RenderEncoding } from "../../render/encodings.js";
+import { hitMapOf } from "../../render/hit-map.js";
 import { failureOf, type Failure } from "./verb-error.js";
 
 // A value as it crosses the wire: the value its frame carries, the frame, and
@@ -72,4 +73,18 @@ export const RENDER_ANSWERS: Readonly<
 > = {
   ansi: (frame) => ({ ok: true, output: composeBar(frame) }),
   frame: (frame) => ({ ok: true, frame }),
+};
+
+// [LAW:dataflow-not-control-flow] A lane's pushed frame in each encoding its
+// lane names (src/config/lanes.ts): a render's answer, or the ANSI with the
+// hit map a hit-testing follower reads.
+export const FEED_ANSWERS: Readonly<
+  Record<FeedEncoding, (frame: Frame<string>) => Response>
+> = {
+  ...RENDER_ANSWERS,
+  "hit-mapped": (frame) => ({
+    ok: true,
+    output: composeBar(frame),
+    hits: hitMapOf(frame),
+  }),
 };

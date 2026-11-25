@@ -403,7 +403,7 @@ const followFeed = (r: Renderer) =>
     kind: "viewers",
     viewers: {
       [SESSION]: {
-        lanes: { statusline: { subscribers: 1, drawing: true } },
+        lanes: { statusline: { subscribers: 1, drawing: true } }, pointer: null,
         shown: true,
         joined: 1,
       },
@@ -693,7 +693,7 @@ describe("a statusline request", () => {
         kind: "start",
         viewers: {
           [SESSION]: {
-            lanes: { pane: { drawing: true, subscribers: 1 } },
+            lanes: { pane: { drawing: true, subscribers: 1 } }, pointer: null,
             shown: true,
             joined: 1,
           },
@@ -1120,7 +1120,7 @@ describe("a feed's frame", () => {
           kind: "viewers",
           viewers: {
             [SESSION]: {
-              lanes: { pane: { drawing: true, subscribers: 1 } },
+              lanes: { pane: { drawing: true, subscribers: 1 } }, pointer: null,
               shown: true,
               joined: 1,
             },
@@ -1153,7 +1153,7 @@ describe("a feed's frame", () => {
           kind: "viewers",
           viewers: {
             [SESSION]: {
-              lanes: { pane: { drawing: true, subscribers: 1 } },
+              lanes: { pane: { drawing: true, subscribers: 1 } }, pointer: null,
               shown: true,
               joined: 1,
             },

@@ -23,7 +23,7 @@ use serde::Deserialize;
 use crate::{read_frame, socket_path, write_frame, PROTOCOL_VERSION};
 
 // [LAW:one-source-of-truth] Mirrors LANES in src/config/lanes.ts.
-const LANE_NAMES: [&str; 2] = ["statusline", "pane"];
+const LANE_NAMES: [&str; 3] = ["statusline", "pane", "window"];
 // [LAW:one-source-of-truth] Mirror src/daemon/frame-follow.ts.
 const RECONNECT_FIRST_MS: u64 = 250;
 const RECONNECT_MAX_MS: u64 = 2000;

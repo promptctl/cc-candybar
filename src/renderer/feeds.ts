@@ -29,7 +29,7 @@ import {
 } from "../config/lanes.js";
 import type { Frame } from "../render/frame.js";
 import type { PrepareDelivery } from "./draw-bar.js";
-import type { PanePointer } from "../click/gesture.js";
+import type { Pointer } from "../click/gesture.js";
 import {
   followingOf,
   type FeedFrame,
@@ -114,7 +114,7 @@ export interface FeedDeps {
     readings: Readings,
     following: ReadonlySet<Lane>,
     feeds: LaneFeeds,
-    pointer: PanePointer | null,
+    pointer: Pointer | null,
     prepare: PrepareDelivery,
   ) => FeedDraw | null;
   // [LAW:no-ambient-temporal-coupling] Holds the session's view open from the
@@ -302,11 +302,11 @@ export class Feeds {
     return followingOf(this.feeds.get(sessionId)?.viewers);
   }
 
-  // [LAW:one-source-of-truth] What the pane that owns the session's pointer
-  // last said of it, as the host handed it with who watches: none while no
-  // pane owns it.
-  pointerOf(sessionId: SessionId): PanePointer | null {
-    return this.feeds.get(sessionId)?.viewers.lanes.pane?.pointer ?? null;
+  // [LAW:one-source-of-truth] What the follower that owns the session's
+  // pointer last said of it, as the host handed it with who watches: none
+  // while no follower owns it.
+  pointerOf(sessionId: SessionId): Pointer | null {
+    return this.feeds.get(sessionId)?.viewers.pointer ?? null;
   }
 
   // [LAW:nothing-unseen] What each lane of the session's frames is doing at

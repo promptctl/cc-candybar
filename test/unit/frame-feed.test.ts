@@ -289,12 +289,14 @@ describe("the viewers the renderer is handed", () => {
     expect(r.feeds.viewers()).toEqual({
       [S]: {
         lanes: { pane: { subscribers: 2, drawing: true } },
+        pointer: null,
         shown: false,
         joined: 2,
       },
       // A session with no request yet counts as shown.
       [T]: {
         lanes: { statusline: { subscribers: 1, drawing: false } },
+        pointer: null,
         shown: true,
         joined: 3,
       },
@@ -375,21 +377,19 @@ const paneOwnedBy = (owner: ReturnType<typeof owned>) => {
 };
 
 describe("the owner of a session's pointer", () => {
-  test("is handed to the renderer on its lane, as the pane declared it", () => {
+  test("is handed to the renderer with the session's viewers, as the pane declared it", () => {
     const r = rig();
     r.feeds.subscribe(S, paneOwnedBy(owned("a", "copy")).sub);
     r.feeds.subscribe(S, subscriber("statusline").sub);
-    const { lanes } = r.feeds.viewers()[S]!;
-    expect(lanes.pane?.pointer).toEqual({
+    expect(r.feeds.viewers()[S]!.pointer).toEqual({
       gestures: ["left", "hover"],
       hover: "copy",
     });
-    expect(lanes.statusline).not.toHaveProperty("pointer");
   });
 
   test("is the pane that spoke last, so the pointer follows the user from one pane to another", () => {
     const r = rig();
-    const hover = () => r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover;
+    const hover = () => r.feeds.viewers()[S]!.pointer?.hover;
     r.feeds.subscribe(S, paneOwnedBy(owned("first")).sub);
     r.feeds.subscribe(S, paneOwnedBy(owned("second", "x")).sub);
     expect(hover()).toBe("x");
@@ -421,7 +421,7 @@ describe("the owner of a session's pointer", () => {
 
   test("keeps a pane's facts while another owns, for the pane it returns to", () => {
     const r = rig();
-    const hover = () => r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover;
+    const hover = () => r.feeds.viewers()[S]!.pointer?.hover;
     r.feeds.subscribe(S, paneOwnedBy(owned("a")).sub);
     const leaveB = r.feeds.subscribe(S, paneOwnedBy(owned("b", "b-first")).sub);
     r.feeds.pointerOf(S, owned("a", "a-last"));
@@ -435,7 +435,7 @@ describe("the owner of a session's pointer", () => {
   // from the pane the user is moving in is the pointer again.
   test("is not held by a pane whose stream reconnects while the user is in another", () => {
     const r = rig();
-    const hover = () => r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover;
+    const hover = () => r.feeds.viewers()[S]!.pointer?.hover;
     r.feeds.subscribe(S, paneOwnedBy(owned("a", "a-old")).sub);
     r.feeds.subscribe(S, paneOwnedBy(owned("b", "b-over")).sub);
     r.feeds.subscribe(S, paneOwnedBy(owned("a", "a-restated")).sub);
@@ -452,9 +452,9 @@ describe("the owner of a session's pointer", () => {
       paneOwnedBy(owned("second", "y")).sub,
     );
     leaveSecond();
-    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("x");
+    expect(r.feeds.viewers()[S]!.pointer?.hover).toBe("x");
     expect(r.feeds.pointerOf(S, owned("first", "z"))).toEqual({ kind: "ok" });
-    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("z");
+    expect(r.feeds.viewers()[S]!.pointer?.hover).toBe("z");
   });
 
   test("keeps what it holds when the stream it replaced ends after it", () => {
@@ -465,7 +465,7 @@ describe("the owner of a session's pointer", () => {
     );
     r.feeds.subscribe(S, paneOwnedBy(owned("pane", "new")).sub);
     leaveOld();
-    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("new");
+    expect(r.feeds.viewers()[S]!.pointer?.hover).toBe("new");
   });
 
   test("ends with its subscription, and a report after that is refused saying why", () => {
@@ -473,10 +473,10 @@ describe("the owner of a session's pointer", () => {
     const leave = r.feeds.subscribe(S, paneOwnedBy(owned("a", "copy")).sub);
     r.feeds.subscribe(S, subscriber("pane").sub);
     leave();
-    expect(r.feeds.viewers()[S]!.lanes.pane).not.toHaveProperty("pointer");
+    expect(r.feeds.viewers()[S]!.pointer).toBeNull();
     expect(r.feeds.pointerOf(S, owned("a", "late"))).toMatchObject({
       kind: "refused",
-      reason: expect.stringContaining('no pane "a" follows session'),
+      reason: expect.stringContaining('no owner "a" follows session'),
     });
   });
 
@@ -489,7 +489,7 @@ describe("the owner of a session's pointer", () => {
     r.feeds.pointerOf(S, owned("a", "copy"));
     expect(r.owed).toHaveLength(1);
     await r.slot();
-    expect(r.handed.at(-1)![S]!.lanes.pane?.pointer?.hover).toBe("copy");
+    expect(r.handed.at(-1)![S]!.pointer?.hover).toBe("copy");
   });
 });
 
@@ -956,6 +956,7 @@ describe("a subscription's lane", () => {
   const OFF: LaneSwitches = {
     statusline: true,
     pane: false,
+    window: false,
   };
 
   test("switched off in the session's settings is refused at once, and opens nothing", () => {
@@ -1155,7 +1156,7 @@ test("a pane write confirmed while its lane's refusal is flushing still answers 
   };
   const offered = frame(S, "warning", null, 1, [shown]);
   took([offered]);
-  feeds.switched({ [S]: { pane: false, statusline: true } });
+  feeds.switched({ [S]: { pane: false, statusline: true, window: false } });
   expect(settled).toEqual([[offered, false]]);
   expect(acknowledged).toEqual([]);
 
@@ -1164,4 +1165,53 @@ test("a pane write confirmed while its lane's refusal is flushing still answers 
   expect(acknowledged).toEqual([shown]);
   expect(settled).toEqual([[offered, false]]);
   writes.shift()!();
+});
+
+describe("each lane's answer", () => {
+  // [LAW:behavior-not-structure] What each kind of reader is sent of one draw:
+  // a page the Frame's runs, each carrying its signed link; a hit-testing
+  // terminal the ANSI with where a pointer acts; a terminal the ANSI alone.
+  test("is the frame its lane's encoding names, and every lane shows the same signed link", async () => {
+    const r = linkedFeeds();
+    const window = subscriber("window");
+    const pane = subscriber("pane");
+    const statusline = subscriber("statusline");
+    for (const view of [window, pane, statusline])
+      r.feeds.subscribe(S, view.sub);
+    await r.deliver(0);
+    r.due(0);
+
+    const [sent] = window.sent.map(
+      (json) =>
+        JSON.parse(json) as {
+          ok: boolean;
+          frame?: WireFrame<string>;
+          output?: unknown;
+        },
+    );
+    expect(sent).toMatchObject({ ok: true });
+    expect(sent).not.toHaveProperty("output");
+    expect(sent!.frame!.rows[0]!.runs[0]).toMatchObject({
+      text: "copy",
+      link: r.signed,
+    });
+    expect(JSON.parse(pane.sent[0]!)).toMatchObject({
+      ok: true,
+      output: expect.stringContaining(r.signed),
+      hits: [[expect.objectContaining({ links: { left: r.signed } })]],
+    });
+    expect(statusline.sent).toEqual(pane.sent.map(withoutHits));
+  });
+});
+
+describe("a window that owns the session's pointer", () => {
+  test("hands the renderer its pointer, as a pane does", () => {
+    const r = rig();
+    const view = subscriber("window");
+    r.feeds.subscribe(S, { ...view.sub, owner: owned("w", "copy") });
+    expect(r.feeds.viewers()[S]!.pointer).toEqual({
+      gestures: ["left", "hover"],
+      hover: "copy",
+    });
+  });
 });
