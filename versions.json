@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-961",
+      "ref": "refs/pull/961/merge",
+      "sha": "4983b7c2e00b5f1362175a93734f756a0c6d88cc",
+      "timestamp": "2026-11-25T04:48:44.860Z",
+      "commits": [
+        {
+          "sha": "4983b7c2e00b5f1362175a93734f756a0c6d88cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:47:28-07:00",
+          "message": "Merge 553535f6f561660dbbe639b2ed56ad071e9e82dd into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
+        },
+        {
+          "sha": "553535f6f561660dbbe639b2ed56ad071e9e82dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:46:07-07:00",
+          "message": "chore(tests): no limit or comment rests on a load run, and the heap capture script goes (candybar-testing-do00.c3a)\n\nThe memory default and the render cache's share state their reason from the\nshare's own arithmetic and the working set it is sized for, the draw reserve\nfrom what it covers, and the shared bench helpers name the consumers they\nhave. The benchmark world loses the daemon environment only the heap capture\npassed.\n"
+        },
+        {
+          "sha": "6969de6669c7279562b8f53dd7118057f3f0af11",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:44:04-07:00",
+          "message": "docs(tests): the withdrawn test plan and the reports it commissioned are deleted (candybar-testing-do00.c3a)\n\nlaws:testing is the test plan. The design docs that cited the withdrawn one\nname what they meant instead, and no longer state its end-to-end cap.\n"
+        },
+        {
+          "sha": "bda987c8274561e69b773906215b1176024f14c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:43:24-07:00",
+          "message": "chore(tests): nothing caps end-to-end tests or scans the workflows for a daemon start (candybar-testing-do00.c3a)\n\nThe cap, the assertion limit and their sign-off policed a test/e2e/ that was\nnever created, and the workflow scanner failed CI on any step reaching a\nscript that starts a daemon, which laws:testing does not forbid. laws:testing's\ncap is a question a reviewer asks of a proposed test, not a hook.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-960",
       "ref": "refs/pull/960/merge",
       "sha": "ea4383504a6940e034787a8003427d97cfb33510",
