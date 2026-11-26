@@ -43108,9 +43108,10 @@ var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
 // src/config/globals-fields.ts
 var control = (label2, place, {
+  line = 0,
   previews = [],
   shown = "true"
-} = {}) => ({ label: label2, place, previews, shown });
+} = {}) => ({ label: label2, place, line, previews, shown });
 var enumValues = (members, optionDomain, facets = {}) => ({
   spec: optionalEnumSpec(members),
   domain: { from: members },
@@ -43240,7 +43241,7 @@ var menuGlyphSpec = {
 var LANE_ROWS = Object.fromEntries(
   TOGGLED_LANES.map((lane) => [
     LANES[lane].switch.setting,
-    boolSetting(false, control(LANES[lane].label, "toggles"))
+    boolSetting(false, control(LANES[lane].label, "renderer"))
   ])
 );
 var GLOBAL_FIELDS = {
@@ -43251,20 +43252,19 @@ var GLOBAL_FIELDS = {
     "theme",
     paletteOrRuleSpec,
     { themes: "themes" },
-    control("\u{1F3A8} theme", "door")
+    control("\u{1F3A8} theme", "look")
   ),
   // The config default for the PRESET — a named fragment from `presets:`
   // whose globals and root the session renders. Membership in the merged
   // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
   // globals may NOT carry it: a
   // preset selecting a preset is a second, cyclic authority over which is
-  // active. Its control sits on the door's first line, one click away:
-  // switching arrangement is what people open the menu for.
+  // active.
   preset: selection(
     "preset",
     optionalStringSpec(),
     { from: "presets" },
-    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
+    control("\u25A6 preset", "presets", { previews: ["layout", "presetDelete"] })
   ),
   // The config default for the STYLE (a named theme adaptation from
   // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
@@ -43282,7 +43282,7 @@ var GLOBAL_FIELDS = {
     "effect",
     effectOrRuleSpec,
     { from: EFFECT_NAMES },
-    control("\u2728 effect", "look")
+    control("\u2728 effect", "look", { line: 1 })
   ),
   // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
   endcaps: enumSetting(
@@ -43328,7 +43328,7 @@ var GLOBAL_FIELDS = {
   // Whether a placement that appears mid-session fades in over 20 s
   // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
   // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
-  transitions: boolSetting(false, control("fade in/out", "look")),
+  transitions: boolSetting(false, control("fade in/out", "look", { line: 2 })),
   // How fast every decorative animation runs — the effects above, fades and
   // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
   // the rate the session's animation clock advances against the wall clock
@@ -43336,7 +43336,7 @@ var GLOBAL_FIELDS = {
   animationSpeed: enumSetting(
     ANIMATION_SPEED_NAMES,
     "1x",
-    control("speed", "look")
+    control("speed", "look", { line: 1 })
   ),
   // Whether a root row that exceeds the usable width soft-wraps, between
   // cells and through a cell wider than a line (the legacy display.autoWrap).
@@ -57800,18 +57800,18 @@ var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${
 // src/config/menu-places.ts
 init_globals();
 var TABS = [
-  { member: "session", label: "\u26A1 session" },
-  { member: "look", label: "\u{1F3A8} look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "\u{1F4D0} layout" },
-  { member: "config", label: "\u2699 config" }
+  { member: "look", label: "\u{1F3A8} look", line: "first" },
+  { member: "presets", label: "\u{1F4DA} saves & presets", line: "first" },
+  { member: "session", label: "\u26A1 session", line: "strip" },
+  { member: "config", label: "\u2699 config", line: "strip" }
 ];
+var tabsOnLine = (line) => TABS.filter((tab) => tab.line === line);
 var TAB_LABEL = Object.fromEntries(
   TABS.map((t2) => [t2.member, t2.label])
 );
 var SUBMENUS = {
   gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "padding", trigger: "\u{1F9EA} toggles" }
+  renderer: { beside: "padding", trigger: "\u{1F4FA} renderer" }
 };
 var SUBMENU_NAMES = Object.keys(SUBMENUS);
 var PLACE = perSetting(
@@ -57819,14 +57819,19 @@ var PLACE = perSetting(
 );
 var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
 var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
-var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
+var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : TAB_LABEL[place];
 var settingMenuPath = (name) => placePath(PLACE[name]);
-var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
+function settingRows(place) {
+  const settings = SETTING_NAMES.filter((name) => PLACE[name] === place);
+  const lines2 = [...new Set(settings.map((name) => SETTINGS[name].line))];
+  return lines2.sort((a, b) => a - b).map((line) => settings.filter((name) => SETTINGS[name].line === line));
+}
+var settingsByPlace = () => TABS.map((t2) => t2.member).flatMap((top) => [
   top,
   ...SUBMENU_NAMES.filter((s) => within(s, top))
 ]).map((place) => ({
   path: placePath(place),
-  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
+  names: settingRows(place).flat()
 })).filter(({ names }) => names.length > 0);
 var laneOffReason = (lane) => {
   const { setting, on: on2 } = LANES[lane].switch;
@@ -57896,6 +57901,7 @@ var LANE_PLACES = [
     Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
   )
 ].join(" or ");
+var tabsOn = (line) => tabsOnLine(line).map((t2) => t2.label).join(", ");
 var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
 var EDIT_MODE_HELP = [
   `${ADD_GLYPH} inserts`,
@@ -57939,11 +57945,11 @@ Configuration:
   Every bar carries a settings menu, whatever your config says \u2014 no config
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
-  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t2) => t2.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  the settings listed below, its first line holds \u25C1 back, the tabs
+  ${tabsOn("first")}, \u270E arrange (edit mode) and \u{1F4BE} save, which appears while
+  you have unsaved changes and writes them to your config file. Under it are
+  the tabs ${tabsOn("strip")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.presets} the preset and a new preset.
   A change applies to this session at once.
   Where each setting is in the menu: the globals field that sets it in a
   config file, then the control's label.
@@ -58093,7 +58099,7 @@ var PREVIEWS = {
   palette: { template: "{{ themePreview }}" },
   // While the preset ring is on a preset the user made
   // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
+  // 📚 saves & presets tab makes one.
   presetDelete: {
     when: `{{ and ${USER_LAYER_WRITABLE} (not .preset.bundled) }}`,
     template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
@@ -58181,21 +58187,22 @@ var menuControl = (name) => {
     submenus: submenusBeside(name)
   };
 };
-var CONTROLS = Object.keys(SETTINGS).map(menuControl);
-var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
+var CONTROL_BY_NAME = perSetting(menuControl);
+var CONTROLS = Object.values(CONTROL_BY_NAME);
 var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
 var markedDisplay = (place) => (text5) => `(print ${templateLiteral(text5)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
   controlsUnder(place)
 )}))`;
-var controlsAt = (place) => controlsIn(place).flatMap(
-  (c) => [
+var nodesForControl = (name) => {
+  const c = CONTROL_BY_NAME[name];
+  return [
     controlNode(c),
     ...c.help,
     ...c.submenus.map(
       (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
     )
-  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
-);
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }));
+};
 var SETTINGS_WRITTEN_KEYS = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
 );
@@ -58313,13 +58320,6 @@ function anchorUnderGate(node, gated2 = false) {
   return node.children.some((child) => anchorUnderGate(child, here));
 }
 var PLACE_BODY = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
-  },
   // The quick actions, then the commands typed into Claude Code beside the
   // auto-compact window they would summarize at.
   session: {
@@ -58334,8 +58334,11 @@ var PLACE_BODY = {
     ],
     after: []
   },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  // The theme with its gear and the endcaps, then what moves — the effect and
+  // its speed — then the rest, each on its own row.
+  look: { direction: "vertical", content: [], after: [] },
+  // The preset, then the cell that saves the bar as a new one.
+  presets: { direction: "horizontal", content: [], after: [seg(PRESET_SAVE)] },
   config: { direction: "horizontal", content: [], after: [] },
   // The settings that adapt the theme, then — while the look they make
   // differs from the theme's own default — the cell that saves it as that
@@ -58345,14 +58348,25 @@ var PLACE_BODY = {
     content: [],
     after: [seg(THEME_DEFAULT_SEG)]
   },
-  toggles: { direction: "horizontal", content: [], after: [] }
+  renderer: { direction: "horizontal", content: [], after: [] }
 };
 function placeBody(place) {
   const { direction, content, after } = PLACE_BODY[place];
+  const lines2 = settingRows(place).map((row) => row.flatMap(nodesForControl));
   return {
     kind: "container",
     direction,
-    children: [...content, ...controlsAt(place), ...after]
+    children: [
+      ...content,
+      ...direction === "vertical" ? lines2.map(
+        (children2) => ({
+          kind: "container",
+          direction: "horizontal",
+          children: children2
+        })
+      ) : lines2.flat(),
+      ...after
+    ]
   };
 }
 function expandAnchor(node) {
@@ -58369,24 +58383,25 @@ function expandAnchor(node) {
   }
   return expandContainer(node);
 }
+var tabsOn2 = (line) => tabsOnLine(line).map(
+  ({ member }) => disclosureNode(tabSeg(member), tabRef(member), placeBody(member), "drop")
+);
 function doorBody() {
   return {
     kind: "container",
     direction: "vertical",
     children: [
-      placeBody("door"),
       {
         kind: "container",
         direction: "horizontal",
-        children: TABS.map(
-          ({ member }) => disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop"
-          )
-        )
-      }
+        children: [
+          seg(BACK_SEG),
+          ...tabsOn2("first"),
+          seg(EDIT_SEG),
+          seg(SAVE_SEG)
+        ]
+      },
+      { kind: "container", direction: "horizontal", children: tabsOn2("strip") }
     ]
   };
 }
