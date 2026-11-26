@@ -92817,11 +92817,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
     }
-    if (input.event.kind === "click" && input.event.coldConfig !== void 0 && input.event.context !== null) {
-      const key = originKey(input.event.context.durable.origin);
-      if (output.subscriptions.configs.some((origin) => originKey(origin) === key))
-        configs.set(key, { kind: "received", config: input.event.coldConfig });
-    }
     const {
       subscriptions,
       wake: wake2,
@@ -92876,12 +92871,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
+    const retryOrigin = event.kind === "click" && event.coldConfig !== void 0 ? event.context?.durable.origin ?? null : requested;
     const followed = took(
       output.subscriptions,
       output.wake,
       output.frames,
       output.stored,
-      requested,
+      retryOrigin,
       receipt
     );
     let configFailure = null;

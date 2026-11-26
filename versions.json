@@ -2,173 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-971",
-      "ref": "refs/pull/971/merge",
-      "sha": "78971687a33de163fffd34697503f29d50353224",
-      "timestamp": "2026-11-26T06:08:59.481Z",
-      "commits": [
-        {
-          "sha": "78971687a33de163fffd34697503f29d50353224",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:07:58Z",
-          "message": "Merge 6ff91ac25c73972d4a3babaa6e19655aa2a356ba into 98827016846125701459a4fd629a6ffbba742261\n"
-        },
-        {
-          "sha": "6ff91ac25c73972d4a3babaa6e19655aa2a356ba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:07:39-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\ttest/daemon-watchers.test.ts\n"
-        },
-        {
-          "sha": "11108238f214d74f631b06c066b4a6770dd534aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:07:17-07:00",
-          "message": "test: drive wait deadlines without leaving real timers running\n"
-        },
-        {
-          "sha": "e05de374ad89dacbce6f91b24435b47bf891e8a7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:01:31-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
-        },
-        {
-          "sha": "3c019796f6ce495f4264e98b41285fc2031f5d26",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:01:31-07:00",
-          "message": "test(renderer): close the idle wake of every click fixture\n"
-        },
-        {
-          "sha": "28b27f8c14cc462f174a20abe9fd47fd6ffb8484",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:55:01-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\ttest/daemon-boots/worker/drive-bar.test.ts\n"
-        },
-        {
-          "sha": "d40c57d3fedff8a3bf2f7ef6258a77db8a6d86b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:54:50-07:00",
-          "message": "test: await the grandchild socket events through case teardown\n"
-        },
-        {
-          "sha": "1c4660c8b66a176f686596b3bde70272d92b172d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:52:21-07:00",
-          "message": "fix(client): drain buffered render frames within the wire deadline\n"
-        },
-        {
-          "sha": "43d554ff608b52172369a4fa4320ffe5893e2093",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:50:05-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
-        },
-        {
-          "sha": "9e06a55bf24367690b4b985e1b1c578ecff5862c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:45:40-07:00",
-          "message": "docs(testing): describe the owner-based heap assertion\n"
-        },
-        {
-          "sha": "0472980e370768e57d6be4339d68fdf0381a38b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:44:44-07:00",
-          "message": "fix(tools): retain the command-line daemon startup deadline\n"
-        },
-        {
-          "sha": "f1658748c97dd0e30ef43949d335668d7e73513e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:43:00-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\tscripts/lib/draw-fixtures/payload-owners.ts\n#\ttest/daemon-boots/process/daemon-renderer-backstop.test.ts\n"
-        },
-        {
-          "sha": "dab3aace49fa65ef6536e46e1e412531b11d079b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:42:44-07:00",
-          "message": "test: observe a held grandchild through its owned connection\n"
-        },
-        {
-          "sha": "a2148ea36d3468a71987bfbfacb160b50d005999",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:36:50-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
-        },
-        {
-          "sha": "0c981736f95ed5bc34789696b943c75007c1c247",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:08:33-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
-        },
-        {
-          "sha": "8273f12d451f7b785236c2a016f3477278dd9a31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:08:31-07:00",
-          "message": "test(cache): measure renderer entries after retiring their views\n"
-        },
-        {
-          "sha": "b7108dc95d2711709728160552ce3b284f7ce972",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:06:55-07:00",
-          "message": "test(heap): distinguish compile-owned stores from live WeakMap keys\n"
-        },
-        {
-          "sha": "3559a6ccbfdc96ff22e7c602311acff9ee1b4874",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:45-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
-        },
-        {
-          "sha": "d773a10147554d29bf14e469179274b07f6e03ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:21-07:00",
-          "message": "test: isolate terminal, filesystem and process observations from the host\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "98827016846125701459a4fd629a6ffbba742261",
-      "timestamp": "2026-11-26T06:07:44.905Z",
-      "commits": [
-        {
-          "sha": "98827016846125701459a4fd629a6ffbba742261",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:06:27-07:00",
-          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) (#967)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n\n* test(follow): cover the window lane in the native client\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n* fix(window): distinguish the window lane from renderer wire version 19\n\n* test(window): save every renderer switch through the menu\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        }
-      ]
-    },
-    {
       "version": "pr-968",
       "ref": "refs/pull/968/merge",
-      "sha": "4bf3c35f35697e60758f46e153e44cfd76e42879",
-      "timestamp": "2026-11-26T06:03:27.355Z",
+      "sha": "84f19f9fb0daef4b771ba4cfae84c33753a3c395",
+      "timestamp": "2026-11-26T06:09:39.352Z",
       "commits": [
         {
-          "sha": "4bf3c35f35697e60758f46e153e44cfd76e42879",
+          "sha": "84f19f9fb0daef4b771ba4cfae84c33753a3c395",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:00:21Z",
-          "message": "Merge e03ea239ba841d5139afe8f97a5d1ef9332de13c into 1969cd19c238271c7dd5591ed3904b49984a8863\n"
+          "timestamp": "2026-11-26T06:08:26Z",
+          "message": "Merge 0fb1c1082cadcb0c6ca6babfd65a3b36c4d56d76 into 98827016846125701459a4fd629a6ffbba742261\n"
+        },
+        {
+          "sha": "0fb1c1082cadcb0c6ca6babfd65a3b36c4d56d76",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:08:03-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-ssh-links-16rz.6oi\n\n# Conflicts:\n#\tsrc/daemon/foundations/protocol.ts\n#\tsrc/renderer-interface/wire.ts\n"
+        },
+        {
+          "sha": "b9df4174f9a9ef7f52720bf9fc1946fa5812b2f8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:07:25-07:00",
+          "message": "fix(ssh): retain ordinary config delivery after a cold click\n"
         },
         {
           "sha": "e03ea239ba841d5139afe8f97a5d1ef9332de13c",
@@ -323,6 +181,162 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:38:17-07:00",
           "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-971",
+      "ref": "refs/pull/971/merge",
+      "sha": "78971687a33de163fffd34697503f29d50353224",
+      "timestamp": "2026-11-26T06:08:59.481Z",
+      "commits": [
+        {
+          "sha": "78971687a33de163fffd34697503f29d50353224",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T06:07:58Z",
+          "message": "Merge 6ff91ac25c73972d4a3babaa6e19655aa2a356ba into 98827016846125701459a4fd629a6ffbba742261\n"
+        },
+        {
+          "sha": "6ff91ac25c73972d4a3babaa6e19655aa2a356ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:07:39-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\ttest/daemon-watchers.test.ts\n"
+        },
+        {
+          "sha": "11108238f214d74f631b06c066b4a6770dd534aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:07:17-07:00",
+          "message": "test: drive wait deadlines without leaving real timers running\n"
+        },
+        {
+          "sha": "e05de374ad89dacbce6f91b24435b47bf891e8a7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:01:31-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
+        },
+        {
+          "sha": "3c019796f6ce495f4264e98b41285fc2031f5d26",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:01:31-07:00",
+          "message": "test(renderer): close the idle wake of every click fixture\n"
+        },
+        {
+          "sha": "28b27f8c14cc462f174a20abe9fd47fd6ffb8484",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:55:01-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\ttest/daemon-boots/worker/drive-bar.test.ts\n"
+        },
+        {
+          "sha": "d40c57d3fedff8a3bf2f7ef6258a77db8a6d86b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:54:50-07:00",
+          "message": "test: await the grandchild socket events through case teardown\n"
+        },
+        {
+          "sha": "1c4660c8b66a176f686596b3bde70272d92b172d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:52:21-07:00",
+          "message": "fix(client): drain buffered render frames within the wire deadline\n"
+        },
+        {
+          "sha": "43d554ff608b52172369a4fa4320ffe5893e2093",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:50:05-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
+        },
+        {
+          "sha": "9e06a55bf24367690b4b985e1b1c578ecff5862c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:45:40-07:00",
+          "message": "docs(testing): describe the owner-based heap assertion\n"
+        },
+        {
+          "sha": "0472980e370768e57d6be4339d68fdf0381a38b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:44:44-07:00",
+          "message": "fix(tools): retain the command-line daemon startup deadline\n"
+        },
+        {
+          "sha": "f1658748c97dd0e30ef43949d335668d7e73513e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:00-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\tscripts/lib/draw-fixtures/payload-owners.ts\n#\ttest/daemon-boots/process/daemon-renderer-backstop.test.ts\n"
+        },
+        {
+          "sha": "dab3aace49fa65ef6536e46e1e412531b11d079b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:42:44-07:00",
+          "message": "test: observe a held grandchild through its owned connection\n"
+        },
+        {
+          "sha": "a2148ea36d3468a71987bfbfacb160b50d005999",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:36:50-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
+        },
+        {
+          "sha": "0c981736f95ed5bc34789696b943c75007c1c247",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:33-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
+        },
+        {
+          "sha": "8273f12d451f7b785236c2a016f3477278dd9a31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:31-07:00",
+          "message": "test(cache): measure renderer entries after retiring their views\n"
+        },
+        {
+          "sha": "b7108dc95d2711709728160552ce3b284f7ce972",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:06:55-07:00",
+          "message": "test(heap): distinguish compile-owned stores from live WeakMap keys\n"
+        },
+        {
+          "sha": "3559a6ccbfdc96ff22e7c602311acff9ee1b4874",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:45-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
+        },
+        {
+          "sha": "d773a10147554d29bf14e469179274b07f6e03ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:21-07:00",
+          "message": "test: isolate terminal, filesystem and process observations from the host\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "98827016846125701459a4fd629a6ffbba742261",
+      "timestamp": "2026-11-26T06:07:44.905Z",
+      "commits": [
+        {
+          "sha": "98827016846125701459a4fd629a6ffbba742261",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:06:27-07:00",
+          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) (#967)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n\n* test(follow): cover the window lane in the native client\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n* fix(window): distinguish the window lane from renderer wire version 19\n\n* test(window): save every renderer switch through the menu\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },
