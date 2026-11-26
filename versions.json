@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-969",
+      "ref": "refs/pull/969/merge",
+      "sha": "d72156a2979eb6dcbc165409ef82464133d7316c",
+      "timestamp": "2026-11-26T05:45:26.016Z",
+      "commits": [
+        {
+          "sha": "d72156a2979eb6dcbc165409ef82464133d7316c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:43:39Z",
+          "message": "Merge 2f47d0f1114f270414f8365234dd7ef538c6bd60 into 2ccd7d18d29936c29c3f7f7f09208c87d6c65270\n"
+        },
+        {
+          "sha": "2f47d0f1114f270414f8365234dd7ef538c6bd60",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:31-07:00",
+          "message": "fix(install): prepare replacements before publishing under a recoverable process claim\n"
+        },
+        {
+          "sha": "d8b53c5636f542de0367436018f423ffdc6c3ad0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:40:45-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
+        },
+        {
+          "sha": "a74a3d3fdf09db2c05c59d838db5b19dba3407b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:06:42-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
+        },
+        {
+          "sha": "f0aace7b83ca835ecd7a4251b049ac18defff325",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:55-07:00",
+          "message": "fix(install): exclude overlapping runtime and handler installs\n"
+        },
+        {
+          "sha": "88d61b8e61362d703448d7158c6582dc5a42bc78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:40-07:00",
+          "message": "test(install): preserve active forwards during installation rollback\n"
+        },
+        {
+          "sha": "ac6bd4979d1f322664fed1525c70761b1c417d97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:57:07-07:00",
+          "message": "fix(install): plan settings edits and roll back incomplete installs\n"
+        },
+        {
+          "sha": "a956081a51d8bfdcf2c604591fdebd9a2f12ac82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:29:00-07:00",
+          "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-970",
       "ref": "refs/pull/970/merge",
       "sha": "f195c76c13fcba09bdd37e40831dbf3b3eda827a",
@@ -256,49 +320,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T03:19:33-07:00",
           "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-969",
-      "ref": "refs/pull/969/merge",
-      "sha": "a65b43095ba60643c2811dd35a2cc3fcc09308cf",
-      "timestamp": "2026-11-26T05:04:29.037Z",
-      "commits": [
-        {
-          "sha": "a65b43095ba60643c2811dd35a2cc3fcc09308cf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:03:06Z",
-          "message": "Merge f0aace7b83ca835ecd7a4251b049ac18defff325 into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
-        },
-        {
-          "sha": "f0aace7b83ca835ecd7a4251b049ac18defff325",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:55-07:00",
-          "message": "fix(install): exclude overlapping runtime and handler installs\n"
-        },
-        {
-          "sha": "88d61b8e61362d703448d7158c6582dc5a42bc78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:59:40-07:00",
-          "message": "test(install): preserve active forwards during installation rollback\n"
-        },
-        {
-          "sha": "ac6bd4979d1f322664fed1525c70761b1c417d97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:57:07-07:00",
-          "message": "fix(install): plan settings edits and roll back incomplete installs\n"
-        },
-        {
-          "sha": "a956081a51d8bfdcf2c604591fdebd9a2f12ac82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:29:00-07:00",
-          "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
         }
       ]
     }
