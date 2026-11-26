@@ -293,6 +293,8 @@ class EditDraft implements DraftWrites {
             requireLayerText(path, target.content),
             diffChanges(requireLayerText(path, source.content), after),
           );
+          if (applied.kind === "incomplete")
+            throw new BadVerbArgs(`save: ${path}: ${applied.reason}`);
           if (applied.kind !== "applied")
             throw new BadVerbArgs(
               `save: ${addressText(applied.at)} in the ${source.role} layer changed while editing`,

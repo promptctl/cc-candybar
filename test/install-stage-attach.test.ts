@@ -5,7 +5,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runStageRuntime } from "../src/install/index";
+import { __test__ as installer } from "../src/install/index";
+const runStageRuntime = (source: string, dir: string, platform: NodeJS.Platform) =>
+  installer.runStageRuntime(source, dir, platform, {
+    launchSync: () => ({ok:true, exitCode:0, stdout:"test installer start", stderr:""}),
+  });
 import { attachLauncherOf, attachPreloadOf, ATTACH_DIR } from "../src/attach-launcher";
 
 describe("staging the runtime", () => {
@@ -47,11 +51,11 @@ describe("staging the runtime", () => {
   };
 
   test("the launcher is staged beside the staged bundle, and a stale one is replaced whole", () => {
-    const staged = runStageRuntime(pkg("// launcher v1\n"), stage);
+    const staged = runStageRuntime(pkg("// launcher v1\n"), stage, process.platform);
     const stale = path.join(path.dirname(staged.distPath), ATTACH_DIR, "src", "gone.js");
     fs.writeFileSync(stale, "// from an older release\n");
     fs.writeFileSync(attachLauncherOf(path.join(home, "pkg", "dist", "index.mjs")), "// launcher v2\n");
-    runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage);
+    runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage, process.platform);
     expect(staged.distPath.startsWith(stage)).toBe(true);
     expect(fs.readFileSync(attachLauncherOf(staged.distPath), "utf8")).toBe("// launcher v2\n");
     expect(fs.existsSync(stale)).toBe(false);
@@ -63,11 +67,11 @@ describe("staging the runtime", () => {
     const old = "#!/bin/sh\necho first\n";
     const next = "#!/bin/sh\necho second\n";
     fs.writeFileSync(source, old);
-    const { binPath } = runStageRuntime(sourceDist, stage);
+    const { binPath } = runStageRuntime(sourceDist, stage, process.platform);
     const installed = fs.openSync(binPath, "r");
     try {
       fs.writeFileSync(source, next);
-      runStageRuntime(sourceDist, stage);
+      runStageRuntime(sourceDist, stage, process.platform);
       expect(fs.readFileSync(installed, "utf8")).toBe(old);
       expect(fs.readFileSync(binPath, "utf8")).toBe(next);
       const info = fs.statSync(binPath);
@@ -79,26 +83,26 @@ describe("staging the runtime", () => {
   });
 
   test("a package with no launcher is refused, naming where it looked", () => {
-    expect(() => runStageRuntime(pkg(null), stage)).toThrow(
+    expect(() => runStageRuntime(pkg(null), stage, process.platform)).toThrow(
       /attach launcher was not found at .*dist\/cc-extra/,
     );
   });
 
   test("staging from the staged runtime itself leaves the launcher in place", () => {
-    const staged = runStageRuntime(pkg("// launcher\n"), stage);
-    runStageRuntime(staged.distPath, stage);
+    const staged = runStageRuntime(pkg("// launcher\n"), stage, process.platform);
+    runStageRuntime(staged.distPath, stage, process.platform);
     expect(fs.readFileSync(attachLauncherOf(staged.distPath), "utf8")).toBe("// launcher\n");
   });
 
   test("the preload that starts Claude Code under the launcher is staged beside the staged bundle", () => {
-    const staged = runStageRuntime(pkg("// launcher\n", "// preload v1\n"), stage);
+    const staged = runStageRuntime(pkg("// launcher\n", "// preload v1\n"), stage, process.platform);
     fs.writeFileSync(attachPreloadOf(path.join(home, "pkg", "dist", "index.mjs")), "// preload v2\n");
-    runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage);
+    runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage, process.platform);
     expect(fs.readFileSync(attachPreloadOf(staged.distPath), "utf8")).toBe("// preload v2\n");
   });
 
   test("a package with no preload is refused, naming where it looked", () => {
-    expect(() => runStageRuntime(pkg("// launcher\n", null), stage)).toThrow(
+    expect(() => runStageRuntime(pkg("// launcher\n", null), stage, process.platform)).toThrow(
       /attach preload was not found at .*dist\/attach-preload\.cjs/,
     );
   });

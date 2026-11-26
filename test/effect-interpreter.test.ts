@@ -142,6 +142,15 @@ describe("performChanges", () => {
     expect(read(user)).toBe(USER);
   });
 
+  test("a historical whole-file edit does not overwrite the same blank bytes at the live host", () => {
+    const truncated = " \n";
+    fs.writeFileSync(user, truncated);
+    const result = perform([change(user, truncated, USER)], null);
+    expect(result.kind).toBe("refused");
+    expect(JSON.stringify(result)).toContain("holds no value");
+    expect(read(user)).toBe(truncated);
+  });
+
   test("a write that fails puts back the file already written", () => {
     const inUser = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     const unwritable = path.join(dir, "locked", "project.json5");

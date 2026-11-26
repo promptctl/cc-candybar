@@ -12,6 +12,8 @@
 import JSON5 from "json5";
 import {
   deleteValue,
+  holdsNoValue,
+  HOLDS_NO_VALUE,
   insertValue,
   JSON5_DIALECT,
   movableTextOf,
@@ -61,6 +63,11 @@ export type Change =
   | { readonly op: "remove"; readonly at: Address; readonly read: Read };
 
 export type Applied =
+  | {
+      readonly kind: "incomplete";
+      readonly at: Address;
+      readonly reason: string;
+    }
   | { readonly kind: "applied"; readonly text: string | null }
   // The first address that moved: what the change read there (`object` for
   // an ancestor it needed to hold the setting), and what is there instead.
@@ -73,19 +80,16 @@ export type Applied =
 
 const ABSENT: Read = { kind: "absent" };
 
-// [LAW:types-are-the-program] An absent file holds none. One holding only
-// whitespace is empty: an object with no members, as every reader of a config
-// or a settings file reads it, with no text a span could point into. Text the
-// span editor refuses is unparsed: a change can only replace it whole.
+// [LAW:types-are-the-program] A missing file has no values. An existing file
+// the editor cannot parse, including one containing only comments or whitespace,
+// can only be replaced whole.
 type Parsed =
   | { readonly kind: "none" }
-  | { readonly kind: "empty" }
   | { readonly kind: "unparsed" }
   | { readonly kind: "document"; readonly root: Node };
 
 function parse(text: string | null): Parsed {
   if (text === null) return { kind: "none" };
-  if (/^\s*$/.test(text)) return { kind: "empty" };
   try {
     return { kind: "document", root: parseDocument(text) };
   } catch (e) {
@@ -100,14 +104,9 @@ function parse(text: string | null): Parsed {
 function readAt(text: string | null, parsed: Parsed, at: Address): Read {
   if (text === null) return ABSENT;
   if (at.length === 0) return { kind: "file", text };
-  switch (parsed.kind) {
-    case "empty":
-      return ABSENT;
-    case "document":
-      return readOf(text, nodeAt(parsed.root, at));
-    default:
-      return { kind: "file", text };
-  }
+  return parsed.kind === "document"
+    ? readOf(text, nodeAt(parsed.root, at))
+    : { kind: "file", text };
 }
 
 function readOf(text: string, node: Node | undefined): Read {
@@ -285,6 +284,16 @@ export function applyChanges(
 ): Applied {
   let current = text;
   for (const change of changes) {
+    // Historical undo/redo entries and draft saves go through this same
+    // checkpoint. A whole-file byte match is no authority to overwrite a
+    // file another program may have truncated before writing its contents.
+    if (
+      change.at.length === 0 &&
+      ((current !== null && holdsNoValue(current)) ||
+        (change.op !== "remove" && holdsNoValue(change.text)))
+    )
+      return { kind: "incomplete", at: [], reason: HOLDS_NO_VALUE };
+
     const parsed = parse(current);
     const ancestor = movedAncestor(parsed, change.at);
     if (ancestor !== null)
@@ -307,9 +316,6 @@ export function applyChanges(
 // when every one is. The document is the first ancestor of every setting.
 function movedAncestor(parsed: Parsed, at: Address): Address | null {
   if (at.length === 0) return null;
-  // An empty document is an object holding nothing, so only its own members
-  // have every ancestor.
-  if (parsed.kind === "empty") return at.length === 1 ? null : at.slice(0, 1);
   if (parsed.kind !== "document") return [];
   for (let depth = 0; depth < at.length; depth++) {
     const up = at.slice(0, depth);

@@ -753,6 +753,7 @@ const stepConfig: VerbHandler = (args, ctx) => {
   );
   const store = editStore(ctx, sid);
   const declared = readDeclared(
+    into.path,
     requireLayerText(into.path, store.read(into.path)),
     landing.key,
   );
@@ -992,8 +993,12 @@ function landStateWrites(
 
 // The name a layer's text declares at a value key, or nothing when it declares
 // none or something that is no name.
-function declaredName(text: string | null, key: string): string | undefined {
-  const declared = readDeclared(text, key);
+function declaredName(
+  file: string,
+  text: string | null,
+  key: string,
+): string | undefined {
+  const declared = readDeclared(file, text, key);
   return declared.kind === "text" ? declared.value : undefined;
 }
 
@@ -1031,6 +1036,7 @@ const ringConfig: VerbHandler = (args, ctx) => {
         r.key,
       ).key;
       const declared = declaredName(
+        into.path,
         requireLayerText(
           into.path,
           editStore(ctx, ctx.session).read(into.path),

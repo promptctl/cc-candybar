@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { HOST } from "../scripts/lib/host";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";
@@ -8,10 +7,7 @@ import { PLATFORM_PACKAGES } from "../src/install/platforms";
 import { shellWord } from "../src/shell-word";
 
 const {
-  updateClaudeSettings,
-  buildStatusLineCommand,
-  DEFAULT_INSTALL_ARGS,
-  stageFile,
+  planSettings,
   stagedEntryKind,
   resolveRenderEntry,
   installSuccessMessage,
@@ -34,240 +30,157 @@ function mkTmpDir(prefix: string): string {
 // quoting the real darwin path needs.
 const BIN = "/Users/x/Library/Application Support/CCCandybar/bin/cc-candybar";
 
-function tmpSettingsPath(): string {
-  return path.join(mkTmpDir("cpwl-install-test-"), "settings.json");
+// The plan is pure over the text it is handed: the file is only named.
+const FILE = "/Users/u/.claude/settings.json";
+
+// What the install would write over `text`, or what it keeps.
+function plan(text: string | null, force = false, bin = BIN) {
+  return planSettings(FILE, text, bin, force).change;
 }
 
-function readCommand(settingsPath: string): string | undefined {
-  if (!fs.existsSync(settingsPath)) return undefined;
-  const s = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-  return s.statusLine?.command;
+function written(text: string | null, force = false, bin = BIN): string {
+  const change = plan(text, force, bin);
+  if (change.kind !== "set") throw new Error(`kept ${change.command}`);
+  return change.text;
 }
 
-describe("buildStatusLineCommand", () => {
-  test("quotes a bin path containing spaces", () => {
-    const cmd = buildStatusLineCommand(BIN, []);
-    expect(cmd).toBe(shellWord(BIN));
-    expect(cmd).toContain("'");
+const settingsWith = (command: string, rest: object = {}) =>
+  JSON.stringify({ ...rest, statusLine: { type: "command", command } });
+
+describe("the statusLine command install writes", () => {
+  test("is the staged entry alone, quoted where its path needs it", () => {
+    expect(plan(null)).toMatchObject({ kind: "set", command: shellWord(BIN) });
+    expect(shellWord(BIN)).toContain("'");
+    expect(JSON.parse(written(null))).toEqual({
+      statusLine: { type: "command", command: shellWord(BIN) },
+    });
   });
 
-  test("appends renderer args, each escaped", () => {
-    const cmd = buildStatusLineCommand("/opt/bin/cc-candybar", [
-      "--style=minimal",
-      "weird arg",
-    ]);
-    expect(cmd).toBe("/opt/bin/cc-candybar --style=minimal 'weird arg'");
-  });
-});
-
-describe("install — clobber protection", () => {
-  test("fresh install writes the staged bin command", () => {
-    const p = tmpSettingsPath();
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
-    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
+  test.each([
+    ["no file", null],
+    ["an empty object", "{}"],
+    ["settings with no statusLine", JSON.stringify({ someOtherKey: true })],
+  ])("%s gets the statusLine written", (_, text) => {
+    expect(JSON.parse(written(text)).statusLine).toEqual({
+      type: "command",
+      command: shellWord(BIN),
+    });
   });
 
-  test("re-install overwrites our own prior command (version upgrade)", () => {
-    const p = tmpSettingsPath();
-    updateClaudeSettings(BIN, ["--style=minimal"], false, HOST, p);
-    expect(readCommand(p)).toContain("--style=minimal");
+  test.each(["\u2028", "\u2029"])(
+    "keeps a literal separator inside a JSON string when publishing a new key",
+    (separator) => {
+      const note = `hello${separator}world`;
+      const text = `{"note":${JSON.stringify(note)},\n"statusLine":{}\n}`;
+      expect(JSON.parse(written(text))).toEqual({
+        note,
+        statusLine: { type: "command", command: shellWord(BIN) },
+      });
+    },
+  );
 
-    updateClaudeSettings(BIN, ["--style=powerline"], false, HOST, p);
-    expect(readCommand(p)).toContain("--style=powerline");
+  test("a re-install over the command it wrote changes nothing", () => {
+    const text = settingsWith(shellWord(BIN));
+    expect(written(text)).toBe(text);
   });
 
-  test("legacy pnpm-dlx command is recognized as ours and upgraded", () => {
-    const p = tmpSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(
-      p,
-      JSON.stringify({
-        statusLine: {
-          type: "command",
-          command: "pnpm dlx @promptctl/cc-candybar@1.17.5",
-        },
-      }),
-    );
-
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
-    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
+  test("the legacy pnpm-dlx command is recognized as ours and upgraded", () => {
+    expect(
+      JSON.parse(
+        written(settingsWith("pnpm dlx @promptctl/cc-candybar@1.17.5")),
+      ).statusLine.command,
+    ).toBe(shellWord(BIN));
   });
 
   test("a single-quoted path an older quoter wrote is recognized as ours", () => {
-    const p = tmpSettingsPath();
     const bin = "/opt/c++@x/cc-candybar";
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(
-      p,
-      JSON.stringify({ statusLine: { type: "command", command: `'${bin}'` } }),
-    );
-
-    updateClaudeSettings(bin, DEFAULT_INSTALL_ARGS, false, HOST, p);
-    expect(readCommand(p)).toBe(bin);
-  });
-
-  test("refuses to overwrite user-customized command", () => {
-    const p = tmpSettingsPath();
-    // Write a non-standard command manually.
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(
-      p,
-      JSON.stringify({
-        statusLine: {
-          type: "command",
-          command: "/usr/local/bin/my-custom-renderer --theme=nord",
-        },
-      }),
-    );
-
-    // Should refuse and leave the file unchanged.
-    const stderr: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk: string | Buffer) => {
-      stderr.push(String(chunk));
-      return true;
-    };
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
-    process.stderr.write = origWrite;
-
-    expect(readCommand(p)).toBe(
-      "/usr/local/bin/my-custom-renderer --theme=nord",
-    );
-    expect(stderr.join("")).toContain("customized");
-    expect(stderr.join("")).toContain("--force");
-  });
-
-  test("a path-superset command (ours + suffix) is NOT claimed as ours", () => {
-    const p = tmpSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    // Bare (unquoted) path whose string is a superset of the staged bin path:
-    // startsWith would match; the token-boundary rule must not.
-    const bareBin = "/opt/bin/cc-candybar";
-    fs.writeFileSync(
-      p,
-      JSON.stringify({
-        statusLine: { type: "command", command: `${bareBin}-backup --mine` },
-      }),
-    );
-
-    const stderr: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk: string | Buffer) => {
-      stderr.push(String(chunk));
-      return true;
-    };
-    const owned = updateClaudeSettings(
-      bareBin,
-      DEFAULT_INSTALL_ARGS,
-      false,
-      HOST,
-      p,
-    );
-    process.stderr.write = origWrite;
-
-    expect(readCommand(p)).toBe(`${bareBin}-backup --mine`);
-    expect(stderr.join("")).toContain("customized");
-    // The install records its bundle only for a statusline it owns.
-    expect(owned).toBe(false);
-  });
-
-  test("our bare command followed by args is still recognized as ours", () => {
-    const p = tmpSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    const bareBin = "/opt/bin/cc-candybar";
-    fs.writeFileSync(
-      p,
-      JSON.stringify({
-        statusLine: { type: "command", command: `${bareBin} --style=minimal` },
-      }),
-    );
-
     expect(
-      updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, HOST, p),
-    ).toBe(true);
-    expect(readCommand(p)).toBe(buildStatusLineCommand(bareBin, []));
+      JSON.parse(written(settingsWith(`'${bin}'`), false, bin)).statusLine
+        .command,
+    ).toBe(bin);
   });
 
-  test("--force overwrites user-customized command", () => {
-    const p = tmpSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(
-      p,
-      JSON.stringify({
-        statusLine: {
-          type: "command",
-          command: "/usr/local/bin/my-custom-renderer --theme=nord",
-        },
-      }),
+  // A command the install did not write is the user's, even one that runs the
+  // staged entry with flags of their own after it.
+  test.each([
+    [
+      "the legacy command with arguments",
+      "pnpm dlx @promptctl/cc-candybar@1.17.5 --style=x",
+    ],
+    [
+      "a legacy command with a shell suffix",
+      "pnpm dlx @promptctl/cc-candybar@1.17.5|custom",
+    ],
+    ["another program", "/usr/local/bin/my-custom-renderer --theme=nord"],
+    ["the entry with words after it", `${shellWord(BIN)} --style=minimal`],
+    ["a path that only begins with the entry's", `${BIN}-backup --mine`],
+  ])("%s is kept, and replaced only with --force", (_, command) => {
+    expect(plan(settingsWith(command))).toEqual({ kind: "kept", command });
+    expect(JSON.parse(written(settingsWith(command), true)).statusLine).toEqual(
+      { type: "command", command: shellWord(BIN) },
     );
-
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, true, HOST, p);
-    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
-  });
-
-  test("empty settings.json gets statusLine written", () => {
-    const p = tmpSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, "{}");
-
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
-    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
   // brandon-effects-2gka.21e: the doctor's effectRefresh fix writes
   // `statusLine.refreshInterval`. Reinstalling changes only the command.
-  test("re-install keeps every other statusLine key and every other byte", () => {
-    const p = tmpSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
+  test("a re-install keeps every other statusLine key and every other byte", () => {
+    const legacy = "pnpm dlx @promptctl/cc-candybar@1.17.5";
     const before = `{
     "env": { "A": "1" },
     "statusLine": {
         "type": "command",
-        "command": ${JSON.stringify(buildStatusLineCommand(BIN, ["--style=minimal"]))},
+        "command": ${JSON.stringify(legacy)},
         "refreshInterval": 1,
         "padding": 2
     }
 }
 `;
-    fs.writeFileSync(p, before);
-
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
-
-    expect(fs.readFileSync(p, "utf-8")).toBe(
-      before.replace(
-        JSON.stringify(buildStatusLineCommand(BIN, ["--style=minimal"])),
-        JSON.stringify(buildStatusLineCommand(BIN, [])),
-      ),
+    expect(written(before)).toBe(
+      before.replace(JSON.stringify(legacy), JSON.stringify(shellWord(BIN))),
     );
   });
+});
 
-  // A statusLine that is not an object runs nothing and holds no command to
-  // protect, so install replaces it whole — with or without --force.
-  test.each([["null"], [`"cc-candybar"`]])(
-    "a statusLine of %s is replaced by a statusLine object",
-    (text) => {
-      const p = tmpSettingsPath();
-      fs.mkdirSync(path.dirname(p), { recursive: true });
-      fs.writeFileSync(p, `{ "model": "opus", "statusLine": ${text} }\n`);
+// [LAW:no-silent-failure] A settings file the install cannot read as Claude
+// Code's is refused naming the file and what is wrong, with --force or not.
+describe("a settings file that is not the shape install reads", () => {
+  test.each([
+    [
+      "a statusLine of null",
+      `{ "statusLine": null }`,
+      "statusLine is null, not an object",
+    ],
+    [
+      "a statusLine that is a string",
+      `{ "statusLine": "cc-candybar" }`,
+      `statusLine is "cc-candybar", not an object`,
+    ],
+    [
+      "a statusLine that is a list",
+      `{ "statusLine": [] }`,
+      "statusLine is [], not an object",
+    ],
+    [
+      "a command that is not a string",
+      `{ "statusLine": { "command": 7 } }`,
+      "statusLine.command is 7, not a string",
+    ],
+    ["a document that is not an object", "[1]", "not a JSON object"],
+    ["an existing blank document", "  \n", "cannot read"],
+    ["text that is not JSON", "{ statusLine: 1 }", "cannot read"],
+  ])("%s is refused", (_, text, why) => {
+    for (const force of [false, true]) {
+      expect(() => plan(text, force)).toThrow(`cannot read ${FILE}`);
+      expect(() => plan(text, force)).toThrow(why);
+    }
+  });
 
-      updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
-      expect(JSON.parse(fs.readFileSync(p, "utf-8"))).toEqual({
-        model: "opus",
-        statusLine: {
-          type: "command",
-          command: buildStatusLineCommand(BIN, []),
-        },
-      });
-    },
-  );
-
-  test("settings without statusLine gets statusLine written", () => {
-    const p = tmpSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, JSON.stringify({ someOtherKey: true }));
-
-    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, HOST, p);
-    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
+  test("a key written twice, which JSON reads as its last, is refused naming the file", () => {
+    expect(() =>
+      plan(
+        `{ "statusLine": { "command": "a" }, "statusLine": { "command": "b" } }`,
+      ),
+    ).toThrow(new RegExp(`cannot edit ${FILE}: .*statusLine`));
   });
 });
 
@@ -348,25 +261,5 @@ describe("stagedEntryKind", () => {
     // Mach-O 64-bit magic — what a previously staged Rust binary starts with.
     fs.writeFileSync(f, Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00]));
     expect(stagedEntryKind(f)).toBe("native");
-  });
-});
-
-describe("stageFile", () => {
-  test("copies source to dest", () => {
-    const dir = mkTmpDir("cpwl-stage-test-");
-    const src = path.join(dir, "src.bin");
-    const dest = path.join(dir, "dest.bin");
-    fs.writeFileSync(src, "payload");
-    stageFile(src, dest);
-    expect(fs.readFileSync(dest, "utf-8")).toBe("payload");
-  });
-
-  test("identity staging is a no-op, never a truncation", () => {
-    const dir = mkTmpDir("cpwl-stage-test-");
-    const f = path.join(dir, "same.bin");
-    fs.writeFileSync(f, "payload");
-    // Same file reached through a dot-dot detour — must not truncate it.
-    stageFile(f, path.join(dir, "..", path.basename(dir), "same.bin"));
-    expect(fs.readFileSync(f, "utf-8")).toBe("payload");
   });
 });

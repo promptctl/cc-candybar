@@ -1,4 +1,4 @@
-import type { Launcher } from "../proc/launcher";
+import type { Launcher, LaunchOpts, LaunchResult } from "../proc/launcher";
 
 // ─── Process start-time fingerprint ──────────────────────────────────────────
 //
@@ -68,11 +68,8 @@ export type StartTimeRead =
 // spawn-error, timeout — is `unavailable`, deferring the alive/dead call to
 // kill(pid,0) rather than risk declaring a live owner dead from a `ps` exit
 // code that cannot distinguish "gone" from "cannot read".
-async function readStartTime(
-  pid: number,
-  launch: Launcher["launch"],
-): Promise<StartTimeRead> {
-  const res = await launch({
+function startTimeCommand(pid: number): LaunchOpts {
+  return {
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid)],
     category: "process-fingerprint",
@@ -83,7 +80,10 @@ async function readStartTime(
     // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
     // can't make one live process render two different start-time strings.
     envOverlay: { LC_ALL: "C", TZ: "UTC" },
-  });
+  };
+}
+
+function startTimeOf(res: LaunchResult): StartTimeRead {
   if (res.ok) {
     const token = res.stdout.trim();
     if (token.length > 0) return { kind: "start", token };
@@ -111,18 +111,32 @@ export interface ProcessProbe {
   startTime(pid: number): Promise<StartTimeRead>;
 }
 
+// The synchronous install transaction reads the same kernel identity as
+// the daemon's asynchronous process probe.
+export function readStartTimeSync(
+  pid: number,
+  launch: (opts: LaunchOpts) => LaunchResult,
+): StartTimeRead {
+  return startTimeOf(launch(startTimeCommand(pid)));
+}
+
+export function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH" || code === "EPERM") return false;
+    throw error;
+  }
+}
+
 // The machine's own process table, read through the owner's launcher.
 export function systemProbe(launcher: Pick<Launcher, "launch">): ProcessProbe {
   return {
-    alive: (pid) => {
-      try {
-        process.kill(pid, 0);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    startTime: (pid) => readStartTime(pid, launcher.launch),
+    alive: processAlive,
+    startTime: async (pid) =>
+      startTimeOf(await launcher.launch(startTimeCommand(pid))),
   };
 }
 

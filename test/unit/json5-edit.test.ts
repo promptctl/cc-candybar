@@ -7,6 +7,7 @@
 import JSON5 from "json5";
 import {
   deleteValue,
+  EMPTY_DOCUMENT,
   hasSegmentRef,
   insertSegmentRef,
   json5Text,
@@ -232,11 +233,10 @@ describe("setValue — adding an entry matches the container's own style", () =>
     expect(JSON5.parse(after).presets["v1.compact"].root).toBe("x");
   });
 
-  test("an empty document becomes a one-entry object", () => {
-    expect(setValue("", ["globals", "palette"], '"nord"')).toBe(
+  test("the empty document an absent file starts from becomes a one-entry object", () => {
+    expect(setValue(EMPTY_DOCUMENT, ["globals", "palette"], '"nord"')).toBe(
       `{\n  globals: {\n    palette: "nord",\n  },\n}\n`,
     );
-    expect(setValue("  \n", ["padding"], "1")).toBe(`{\n  padding: 1,\n}\n`);
   });
 
   test("a step through a non-object is a loud error", () => {
@@ -247,6 +247,14 @@ describe("setValue — adding an entry matches the container's own style", () =>
 });
 
 describe("deleteValue", () => {
+  it.each(["\r", "\r\n", "\u2028", "\u2029"])(
+    "keeps the next member after a comment ended by %j",
+    (ending) => {
+      const edited = deleteValue(`{\n  a: 1, // note${ending}  b: 2\n}`, ["a"]);
+      expect(JSON5.parse(edited)).toEqual({ b: 2 });
+    },
+  );
+
   test("a member alone on its line takes its whole line, including its trailing comment", () => {
     const after = deleteValue(CONFIG, ["segments", "directory", "template"]);
     expect(after).toBe(
@@ -311,10 +319,9 @@ describe("deleteValue", () => {
     ).toBe(`{ presets: { mine: {  } } }`);
   });
 
-  test("an absent path returns the text unchanged; an empty document stays empty", () => {
+  test("an absent path returns the text unchanged", () => {
     expect(deleteValue(CONFIG, ["globals", "style"])).toBe(CONFIG);
     expect(deleteValue(CONFIG, ["nope", "x"])).toBe(CONFIG);
-    expect(deleteValue("", ["a"])).toBe("");
   });
 });
 
@@ -706,9 +713,11 @@ describe("a CRLF document keeps its own line terminator", () => {
     noBareLf(nested);
   });
 
-  test("an empty document takes LF; a CRLF-only document takes CRLF", () => {
-    expect(setValue("", ["globals", "padding"], "2")).not.toContain("\r");
-    const crlf = setValue("\r\n", ["globals", "padding"], "2");
+  test("the empty document takes LF; an empty CRLF document takes CRLF", () => {
+    expect(setValue(EMPTY_DOCUMENT, ["globals", "padding"], "2")).not.toContain(
+      "\r",
+    );
+    const crlf = setValue("{}\r\n", ["globals", "padding"], "2");
     expect(JSON5.parse(crlf)).toEqual({ globals: { padding: 2 } });
     expect(crlf).toContain("\r\n");
     noBareLf(crlf);
@@ -742,8 +751,8 @@ describe("json5Text", () => {
 // (Claude Code's settings.json) can read back — quoted keys, no trailing comma
 // on minted containers — while an existing member's style is still mirrored.
 describe("setValue — the JSON dialect mints strict JSON", () => {
-  test("an empty document", () => {
-    const after = setValue("", ["env", "X"], '"1"', JSON_DIALECT);
+  test("the empty document", () => {
+    const after = setValue(EMPTY_DOCUMENT, ["env", "X"], '"1"', JSON_DIALECT);
     expect(JSON.parse(after)).toEqual({ env: { X: "1" } });
     expect(after).toBe('{\n  "env": {\n    "X": "1"\n  }\n}\n');
   });

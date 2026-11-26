@@ -159,6 +159,8 @@ export function performChanges(
         list,
         JSON5_DIALECT,
       );
+      if (applied.kind === "incomplete")
+        return refused(`${file}: ${applied.reason}`);
       if (applied.kind === "moved")
         return refused(
           `${addressText(applied.at)} in ${file} changed since it was read (it was ${said(applied.read)}, it is ${said(applied.found)})`,

@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { JsonValue } from "./var-system/types.js";
 
 // [LAW:one-source-of-truth] The variable that moves Claude Code's
 // configuration directory. Mirrored by the Rust client
@@ -41,15 +40,13 @@ export function claudeSettingsPath(configDir: string): string {
   return path.join(configDir, "settings.json");
 }
 
-// [LAW:types-are-the-program] A settings document as JSON parsed it: JSON
-// values all the way down, so a reading of it crosses a process as it is.
+// [LAW:parse-dont-validate] A JSON object as a parse finds it: each member is
+// whatever the text holds there until the reader of that key parses it.
 export interface JsonObject {
-  readonly [key: string]: JsonValue;
+  readonly [key: string]: unknown;
 }
 
 // A JSON object — the shape the document and each of its sections (`env`,
 // `statusLine`) must have for a key to be read or spliced inside it.
-export const isJsonObject = (
-  value: JsonValue | undefined,
-): value is JsonObject =>
+export const isJsonObject = (value: unknown): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);

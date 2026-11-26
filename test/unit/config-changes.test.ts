@@ -3,7 +3,6 @@
 // whole list naming where, and a write elsewhere in the file refuses nothing.
 
 import { applyChanges, diffChanges } from "../../src/config/config-changes";
-import { JSON_DIALECT } from "../../src/config/json5-edit";
 
 const BEFORE = `{
   // the user's own
@@ -50,6 +49,20 @@ const WRITES: ReadonlyArray<readonly [string, string | null, string | null]> = [
 ];
 
 describe("diffChanges", () => {
+  test.each(["", "  \n", "// editor is writing"])(
+    "refuses a historical whole-file change to or from an incomplete document",
+    (incomplete) => {
+      for (const [before, after] of [
+        [incomplete, BEFORE],
+        [BEFORE, incomplete],
+      ] as const)
+        expect(applyChanges(before, diffChanges(before, after))).toMatchObject({
+          kind: "incomplete",
+          at: [],
+        });
+    },
+  );
+
   test.each(WRITES)("%s rebuilds what was written", (_, before, after) => {
     expect(applyChanges(before, diffChanges(before, after))).toEqual({
       kind: "applied",
@@ -159,18 +172,21 @@ describe("applyChanges", () => {
     });
   });
 
-  // A reader takes a file of whitespace for an empty object, so a member it
-  // found missing there is inserted, in the file's own dialect.
-  test.each(["", "  \n"])(
-    "inserts a member into a file holding only %j",
+  // A file that holds no value is no document, so no member of it is there to
+  // change: a change finds the whole file where its ancestor should be.
+  test.each(["", "  \n", "// note\n"])(
+    "a member change to a file holding only %j finds the whole file",
     (blank) => {
       expect(
-        applyChanges(
-          blank,
-          [{ op: "insert", at: ["env"], text: `{ "A": "1" }`, precedes: null }],
-          JSON_DIALECT,
-        ),
-      ).toEqual({ kind: "applied", text: `{\n  "env": { "A": "1" }\n}\n` });
+        applyChanges(blank, [
+          { op: "insert", at: ["env"], text: `{ A: "1" }`, precedes: null },
+        ]),
+      ).toEqual({
+        kind: "moved",
+        at: [],
+        read: "object",
+        found: { kind: "file", text: blank },
+      });
     },
   );
 });

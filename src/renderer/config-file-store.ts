@@ -25,7 +25,6 @@
 // when the file already authors it.
 
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
-import JSON5 from "json5";
 import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import {
   inheritedConfig,
@@ -41,7 +40,7 @@ import {
 } from "../config/config-snapshot.js";
 import { requireLayerText } from "./config-writes.js";
 import { LAYER_ROLES, type LayerRole } from "../config/layer-role.js";
-import { ConfigError } from "../config/loader/diagnostics.js";
+import { ConfigError, parseJson5Syntax } from "../config/loader/diagnostics.js";
 import type {
   DslConfig,
   Globals,
@@ -55,10 +54,12 @@ import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
   deleteValue,
+  EMPTY_DOCUMENT,
   hasSegmentRef,
   insertSegmentRef,
   json5Text,
   JSON5_DIALECT,
+  Json5EditError,
   movableTextOf,
   nodeAt,
   parseDocument,
@@ -101,12 +102,30 @@ export function persistValueText(key: string, raw: string): string {
 
 // ─── The file ────────────────────────────────────────────────────────────────
 
-function docOf(text: string): Node | null {
-  return /^\s*$/.test(text) ? null : parseDocument(text);
+// [LAW:single-enforcer] A layer as a click edits it: the text the edit starts
+// from, the file's or the empty document where the layer has no file, and
+// the document the editor reads there. A file the editor refuses (one holding
+// no value, a duplicate key) is the click's refusal, naming the file in the
+// editor's words, and nothing is written.
+interface EditedText {
+  readonly text: string;
+  readonly doc: Node;
 }
 
-function has(doc: Node | null, p: ConfigPath): boolean {
-  return doc !== null && nodeAt(doc, p) !== undefined;
+function editedText(file: string, before: string | null): EditedText {
+  const text = before ?? EMPTY_DOCUMENT;
+  try {
+    return { text, doc: parseDocument(text) };
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    throw new BadVerbArgs(
+      `refused: ${file}: ${e.reason} — the settings menu cannot edit this file until it is fixed`,
+    );
+  }
+}
+
+function has(doc: Node, p: ConfigPath): boolean {
+  return nodeAt(doc, p) !== undefined;
 }
 
 // ─── Where a target lives, and what authors it ──────────────────────────────
@@ -162,7 +181,7 @@ export function authoredFragment(fragment: RootFragment): unknown {
 // never falls through — for a preset, "not declared" once read as "declares
 // no root" and redirected the write onto the file's own top-level `root`.
 function requireDeclared(
-  doc: Node | null,
+  doc: Node,
   own: ConfigPath,
   inherited: unknown,
   key: string,
@@ -178,7 +197,7 @@ function requireDeclared(
 // segment field needs its segment declared somewhere, since the one field
 // the file would then hold is a delta over the bundled declaration.
 function valuePathOf(
-  doc: Node | null,
+  doc: Node,
   under: DslConfig,
   target: ValueTarget,
 ): ConfigPath {
@@ -240,8 +259,8 @@ function inheritedRowLayers(under: DslConfig): readonly RootLayer[] {
   });
 }
 
-function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
-  const fragment = doc === null ? undefined : nodeAt(doc, path);
+function fileLayer(doc: Node, path: ConfigPath): RootLayer | null {
+  const fragment = nodeAt(doc, path);
   return fragment === undefined ? null : { path, fragment, unit: null };
 }
 
@@ -271,7 +290,7 @@ function inheritedRootLayer(
 // (root.ts's `restages`), so every path this module names agrees with the
 // one the renderer reports.
 function presetLayer(
-  doc: Node | null,
+  doc: Node,
   under: DslConfig,
   preset: string,
 ): RootLayer | null {
@@ -323,11 +342,7 @@ function applyLayer(base: Cascade, layer: RootLayer): Cascade {
       ]);
 }
 
-function cascadeOf(
-  doc: Node | null,
-  under: DslConfig,
-  preset: string,
-): Cascade {
+function cascadeOf(doc: Node, under: DslConfig, preset: string): Cascade {
   const layers = [
     ...inheritedRowLayers(under),
     fileLayer(doc, ["root"]),
@@ -341,7 +356,7 @@ function cascadeOf(
 // [LAW:no-silent-failure] No row holds it ⇒ the bar clicked rendered before
 // the row changed under it — loud, never a write somewhere plausible.
 function layoutPlacementOf(
-  doc: Node | null,
+  doc: Node,
   under: DslConfig,
   preset: string,
   id: string,
@@ -357,16 +372,12 @@ function layoutPlacementOf(
 // The path a preset's layout is authored at: the fragment it stages (the
 // file's, or the bundled one's place in the file), else the config's own
 // `root` — the same fact presetRoot's reported path projects.
-function stagedPathOf(
-  doc: Node | null,
-  under: DslConfig,
-  preset: string,
-): ConfigPath {
+function stagedPathOf(doc: Node, under: DslConfig, preset: string): ConfigPath {
   return presetLayer(doc, under, preset)?.path ?? ["root"];
 }
 
 function resetPathOf(
-  doc: Node | null,
+  doc: Node,
   under: DslConfig,
   target: PersistTarget,
 ): ConfigPath {
@@ -718,12 +729,16 @@ export type Declared =
   | { readonly kind: "text"; readonly value: string; readonly source: string }
   | { readonly kind: "other"; readonly source: string };
 
-export function readDeclared(text: string | null, key: string): Declared {
+export function readDeclared(
+  file: string,
+  before: string | null,
+  key: string,
+): Declared {
   const target = requireValueTarget(key);
-  const doc = docOf(text ?? "");
-  const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
+  const { text, doc } = editedText(file, before);
+  const node = nodeAt(doc, persistPath(target));
   if (node === undefined) return { kind: "none" };
-  const source = textOf(text ?? "", node);
+  const source = textOf(text, node);
   if (node.kind === "number" && Number.isInteger(node.value))
     return { kind: "integer", value: node.value };
   return node.kind === "string"
@@ -765,16 +780,17 @@ export function writeDrafts(
 ): DslConfig {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
+  const { text } = editedText(into.path, before);
   const under = inheritedOf(into);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
         text,
-        valuePathOf(docOf(text), under, requireValueTarget(key)),
+        valuePathOf(parseDocument(text), under, requireValueTarget(key)),
         persistValueText(key, raw),
         JSON5_DIALECT,
       ),
-    before ?? "",
+    text,
   );
   return commit(
     store,
@@ -808,7 +824,7 @@ function withPlacements(
   const landed = new Map<string, { preset: string; value: string }>();
   return placements.reduce((prior, { preset, id, setting, value }) => {
     const acc = own(prior, under, preset, id);
-    const placement = layoutPlacementOf(docOf(acc), under, preset, id);
+    const placement = layoutPlacementOf(parseDocument(acc), under, preset, id);
     const spelled = json5Text(value);
     const slot = `${placement.path.join(".")}\u0000${id}\u0000${setting}`;
     const rival = landed.get(slot);
@@ -847,7 +863,7 @@ function ownRow(
   preset: string,
   id: string,
 ): string {
-  const doc = docOf(text);
+  const doc = parseDocument(text);
   const own: ConfigPath = ["presets", preset, "root"];
   for (const [row, { path, unit, node }] of cascadeOf(doc, under, preset)) {
     if (!hasSegmentRef(node, id)) continue;
@@ -897,21 +913,25 @@ export function deleteValues(
   const into = seenBy(layer, (file) => store.read(file));
   const targets = keys.map(requireTarget);
   const before = requireLayerText(into.path, store.read(into.path));
-  if (before === null) return;
+  const { text } = editedText(into.path, before);
   const under = inheritedOf(into);
   const after = targets.reduce(
     (text, target) =>
-      deleteAtPath(text, under, resetPathOf(docOf(text), under, target)),
-    before,
+      deleteAtPath(
+        text,
+        under,
+        resetPathOf(parseDocument(text), under, target),
+      ),
+    text,
   );
-  if (after === before) return;
+  if (after === text) return;
   commit(store, into, before, after, releases);
 }
 
 const SAVED_PRESET_PREFIX = "custom-";
 
-function presetKeys(doc: Node | null): string[] {
-  const declared = doc === null ? undefined : nodeAt(doc, ["presets"]);
+function presetKeys(doc: Node): string[] {
+  const declared = nodeAt(doc, ["presets"]);
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
 
@@ -920,19 +940,23 @@ function presetKeys(doc: Node | null): string[] {
 // inherits, the file's own read from the very text the write lands in, and
 // every layer's above it (a name another layer holds would merge the copy
 // into its preset).
-function freePresetName(
-  doc: Node | null,
-  under: DslConfig,
-  into: Seen,
-): string {
+function freePresetName(doc: Node, under: DslConfig, into: Seen): string {
   const taken = new Set([
     ...Object.keys(under.presets),
     ...presetKeys(doc),
-    // Each layer above as the loader reads it (JSON5, duplicate keys and
-    // all) — the editor refuses files the loader renders.
-    ...into.above.flatMap((l) =>
-      Object.keys((JSON5.parse(l.text) as { presets?: object }).presets ?? {}),
-    ),
+    // Each layer above as the loader reads it (duplicate keys and all): the
+    // editor refuses files the loader renders.
+    ...into.above.flatMap((l) => {
+      const syntax = parseJson5Syntax(l.text);
+      if (syntax.kind === "invalid")
+        throw new BadVerbArgs(
+          `refused: ${l.path}, above ${into.path}, does not load — ${new ConfigError(l.path, [syntax.issue]).message}`,
+        );
+      const presets = isPlainObject(syntax.value)
+        ? syntax.value.presets
+        : undefined;
+      return isPlainObject(presets) ? Object.keys(presets) : [];
+    }),
   ]);
   // One more candidate than there are names, so one is always free.
   return Array.from(
@@ -959,7 +983,7 @@ export function writePreset(
 ): { readonly name: string; readonly config: DslConfig } {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
-  const doc = docOf(before ?? "");
+  const { text, doc } = editedText(into.path, before);
   const under = inheritedOf(into);
   const name = freePresetName(doc, under, into);
   const own: ConfigPath = ["presets", name];
@@ -971,7 +995,7 @@ export function writePreset(
           [
             [...own, "root"],
             staged.unit === null
-              ? movableTextOf(before ?? "", staged.fragment)
+              ? movableTextOf(text, staged.fragment)
               : json5Text(staged.unit.value),
           ] as const,
         ]),
@@ -988,7 +1012,7 @@ export function writePreset(
   });
   const after = [...copied, ...pinned].reduce(
     (text, [at, value]) => setValue(text, at, value, JSON5_DIALECT),
-    setValue(before ?? "", own, "{}", JSON5_DIALECT),
+    setValue(text, own, "{}", JSON5_DIALECT),
   );
   // The placements the session configured, each in a row the new preset
   // owns — never in a layer the preset it was copied from renders too.
@@ -1021,7 +1045,7 @@ export function writeThemeDefault(
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
   const after = setValue(
-    before ?? "",
+    editedText(into.path, before).text,
     ["themeDefaults", theme],
     json5Text(look),
     JSON5_DIALECT,
@@ -1051,8 +1075,8 @@ export function deletePreset(
   }
   const own: ConfigPath = ["presets", name];
   const before = requireLayerText(into.path, store.read(into.path));
-  const doc = docOf(before ?? "");
-  if (before === null || doc === null || nodeAt(doc, own) === undefined) {
+  const { text, doc } = editedText(into.path, before);
+  if (nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": ${into.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
     );
@@ -1068,7 +1092,7 @@ export function deletePreset(
     store,
     into,
     before,
-    paths.reduce((text, at) => deleteAtPath(text, under, at), before),
+    paths.reduce((text, at) => deleteAtPath(text, under, at), text),
     releases,
   );
 }
@@ -1093,12 +1117,13 @@ export function applyLayoutOp(
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
   const before = requireLayerText(into.path, store.read(into.path));
+  const { text, doc } = editedText(into.path, before);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const under = inheritedOf(into);
   const placement = writtenOnly(into, () =>
-    layoutPlacementOf(docOf(before ?? ""), under, target.preset, subject),
+    layoutPlacementOf(doc, under, target.preset, subject),
   );
-  const authored = ensureAuthored(before ?? "", placement);
+  const authored = ensureAuthored(text, placement);
   const { after, placed } = spliceOp(
     authored,
     placement.path,

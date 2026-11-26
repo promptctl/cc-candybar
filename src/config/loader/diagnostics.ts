@@ -8,6 +8,8 @@ import JSON5 from "json5";
 import { aboutSubject, type About } from "../about.js";
 import {
   entryOf,
+  HOLDS_NO_VALUE,
+  holdsNoValue,
   Json5EditError,
   parseDocument,
   type Node,
@@ -32,7 +34,11 @@ export type Json5Syntax =
 
 // [LAW:single-enforcer] Discovery examines includes and the loader
 // validates the document with the same JSON5 syntax and source positions.
+// A text that holds no value is refused by the editor's own rule, so the two
+// never disagree on what an empty file is.
 export function parseJson5Syntax(source: string): Json5Syntax {
+  if (holdsNoValue(source))
+    return { kind: "invalid", issue: { path: "", message: HOLDS_NO_VALUE } };
   try {
     return { kind: "parsed", value: JSON5.parse(source) };
   } catch (e) {
