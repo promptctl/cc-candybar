@@ -92,6 +92,12 @@ The running bar shows config and source diagnostics under `⚠`. From a source c
 
 Saving the file triggers a hot-reload of every active session.
 
+### Floating window on macOS
+
+In a local tmux session with named event support (tested on tmux 3.8a), open **⚙ config → 📺 renderer**, enable **🧪 window (D)**. The selection applies to this session immediately. Use **Save** to keep it in the configuration file. The window follows the terminal and leaves keyboard focus there. Claude Code shows a **[⟲ claude]** button that returns the bar to the statusline.
+
+**Window placement** defaults to **docked**, just below the terminal or along its bottom edge when it reaches the edge of the display. Choose **inset** to reserve a tmux pane under Claude sized to the bar’s rows. Switching back releases that pane. The helper needs macOS Accessibility access to follow the terminal. When the window cannot be placed, Claude Code keeps the bar and reports the reason in diagnostics.
+
 ## Record and replay a renderer
 
 With the daemon running, start a capture, reproduce the bar behavior, and stop the capture to save it.
@@ -155,7 +161,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
 | `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
 
-Every bar also carries, right after the settings menu's door, a cell saying how it is redrawn: `≤30 fps` while an animation lane draws it where you can see it, ` ≤1 fps` while that lane's bar is off screen, and ` polled` when Claude Code reruns the statusline itself. The number is the most frames a second the lane draws; a lane redraws the bar only when it changes, so a still bar is redrawn far less often. It sits wherever the door does, so no layout has to place it, and none can leave it out. On the statusline, which can't see the pointer move or deliver an alt+click, a click-mode toggle sits beside it: `☝` clicks as usual, `⌖` hovers and `⌥` runs each region's alt+click binding. The tmux bar pane delivers those gestures itself, so it shows no toggle there.
+Every bar also carries, right after the settings menu's door, a cell saying how it is redrawn: `≤30 fps` while an animation lane draws it where you can see it, ` ≤1 fps` while that lane's bar is off screen, and ` polled` when Claude Code reruns the statusline itself. The number gives the animation rate. A click that changes a visible pane or window sends the updated view immediately. Claude Code picks up statusline changes on its next poll. It sits wherever the door does, so no layout has to place it, and none can leave it out. On the statusline, which can't see the pointer move or deliver an alt+click, a click-mode toggle sits beside it: `☝` clicks as usual, `⌖` hovers and `⌥` runs each region's alt+click binding. The tmux bar pane delivers those gestures itself, so it shows no toggle there.
 
 The lit ticket a checkout is working on is not bundled: it is a plugin, installed with `cc-candybar plugin install promptctl/links-issue-tracker`, whose one segment (`plugins.lit.ticket`, each of its parts a setting) is in edit mode's add-segment library. It reads the `.lit/statusline.json` lit keeps in each checkout, so no lit process runs for the bar.
 

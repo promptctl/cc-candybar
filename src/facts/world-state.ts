@@ -108,6 +108,7 @@ export interface WorldState {
   // [LAW:types-are-the-program] Why the document is drawn from older facts:
   // the stamp that threw, which kept the readings of the document before it;
   // null while the stamp holds.
+  readonly windowIssue?: string;
   readonly stampFailure: string | null;
   readonly transcriptLosses: readonly TranscriptLoss[];
 }

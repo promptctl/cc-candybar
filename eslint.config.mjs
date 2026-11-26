@@ -203,6 +203,7 @@ const OWNED_IMPORTS = {
           "src/frames-cli.ts",
           "src/ssh-cli.ts",
           "src/bar-pane/index.ts",
+          "src/bar-window/index.ts",
           "src/daemon/client-transport.ts",
           "src/daemon/acquire.ts",
         ],

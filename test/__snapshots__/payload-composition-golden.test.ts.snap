@@ -165,6 +165,7 @@ exports[`a sample session payload preset compact: the payload and its day 1`] = 
       "theme": true,
       "transitions": true,
       "variation": true,
+      "windowPlacement": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
     "session": {
@@ -195,6 +196,9 @@ exports[`a sample session payload preset compact: the payload and its day 1`] = 
     "weekly": {
       "percentage": 21,
       "resetsAt": 1700432000,
+    },
+    "windowPlacement": {
+      "effective": "docked",
     },
     "workspace": {
       "added_dirs": [],
@@ -375,6 +379,7 @@ exports[`a sample session payload preset default: the payload and its day 1`] = 
       "theme": true,
       "transitions": true,
       "variation": true,
+      "windowPlacement": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
     "session": {
@@ -405,6 +410,9 @@ exports[`a sample session payload preset default: the payload and its day 1`] = 
     "weekly": {
       "percentage": 21,
       "resetsAt": 1700432000,
+    },
+    "windowPlacement": {
+      "effective": "docked",
     },
     "workspace": {
       "added_dirs": [],
@@ -585,6 +593,7 @@ exports[`a sample session payload preset dense: the payload and its day 1`] = `
       "theme": true,
       "transitions": true,
       "variation": true,
+      "windowPlacement": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
     "session": {
@@ -615,6 +624,9 @@ exports[`a sample session payload preset dense: the payload and its day 1`] = `
     "weekly": {
       "percentage": 21,
       "resetsAt": 1700432000,
+    },
+    "windowPlacement": {
+      "effective": "docked",
     },
     "workspace": {
       "added_dirs": [],
@@ -795,6 +807,7 @@ exports[`a sample session payload preset git: the payload and its day 1`] = `
       "theme": true,
       "transitions": true,
       "variation": true,
+      "windowPlacement": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
     "session": {
@@ -825,6 +838,9 @@ exports[`a sample session payload preset git: the payload and its day 1`] = `
     "weekly": {
       "percentage": 21,
       "resetsAt": 1700432000,
+    },
+    "windowPlacement": {
+      "effective": "docked",
     },
     "workspace": {
       "added_dirs": [],
@@ -1005,6 +1021,7 @@ exports[`a sample session payload preset usage: the payload and its day 1`] = `
       "theme": true,
       "transitions": true,
       "variation": true,
+      "windowPlacement": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
     "session": {
@@ -1035,6 +1052,9 @@ exports[`a sample session payload preset usage: the payload and its day 1`] = `
     "weekly": {
       "percentage": 21,
       "resetsAt": 1700432000,
+    },
+    "windowPlacement": {
+      "effective": "docked",
     },
     "workspace": {
       "added_dirs": [],
@@ -1215,6 +1235,7 @@ exports[`a sample session payload preset verbose: the payload and its day 1`] = 
       "theme": true,
       "transitions": true,
       "variation": true,
+      "windowPlacement": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
     "session": {
@@ -1245,6 +1266,9 @@ exports[`a sample session payload preset verbose: the payload and its day 1`] = 
     "weekly": {
       "percentage": 21,
       "resetsAt": 1700432000,
+    },
+    "windowPlacement": {
+      "effective": "docked",
     },
     "workspace": {
       "added_dirs": [],
@@ -1425,6 +1449,7 @@ exports[`a sample session payload preset zen: the payload and its day 1`] = `
       "theme": true,
       "transitions": true,
       "variation": true,
+      "windowPlacement": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
     "session": {
@@ -1455,6 +1480,9 @@ exports[`a sample session payload preset zen: the payload and its day 1`] = `
     "weekly": {
       "percentage": 21,
       "resetsAt": 1700432000,
+    },
+    "windowPlacement": {
+      "effective": "docked",
     },
     "workspace": {
       "added_dirs": [],
@@ -1628,6 +1656,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -1660,6 +1689,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],
@@ -1830,6 +1862,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -1862,6 +1895,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],
@@ -2032,6 +2068,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -2064,6 +2101,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],
@@ -2234,6 +2274,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -2266,6 +2307,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],
@@ -2436,6 +2480,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -2468,6 +2513,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],
@@ -2639,6 +2687,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -2671,6 +2720,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],
@@ -2843,6 +2895,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -2875,6 +2928,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],
@@ -3042,6 +3098,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "theme": false,
     "transitions": false,
     "variation": false,
+    "windowPlacement": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
@@ -3074,6 +3131,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   "weekly": {
     "percentage": 21,
     "resetsAt": 1700432000,
+  },
+  "windowPlacement": {
+    "effective": "docked",
   },
   "workspace": {
     "added_dirs": [],

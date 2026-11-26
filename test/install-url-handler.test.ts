@@ -1,3 +1,4 @@
+import { windowRuntime } from "./helpers/window-runtime";
 // candybar-daemon-health-ajx0.co4 — `cc-candybar install` assembles the URL
 // handler app around the prebuilt Swift forwarder: the bundle on disk, the
 // commands it runs and their order (sign, quit the resident instance,
@@ -39,6 +40,7 @@ describe("assembling the URL handler app", () => {
   // the binary sits where `just install-url-handler` leaves it.
   const checkout = (forwarder: string | null): string => {
     const root = path.join(home, "checkout");
+    windowRuntime(root);
     for (const dir of ["dist/cc-extra", "src", "bin"]) {
       fs.mkdirSync(path.join(root, dir), { recursive: true });
     }
@@ -81,7 +83,7 @@ describe("assembling the URL handler app", () => {
           stdout: "",
           stderr: "",
           exitCode: 0,
-          ...answers[path.basename(opts.bin)],
+          ...(opts.args?.includes("--verify") ? {} : answers[path.basename(opts.bin)]),
         } as LaunchResult;
       },
     };
@@ -125,6 +127,7 @@ describe("assembling the URL handler app", () => {
       "<key>CFBundleDisplayName</key>\n  <string>cc-candybar</string>",
     );
     expect(ran).toEqual([
+      expect.stringMatching(/^codesign --verify --strict /),
       expect.stringMatching(
         new RegExp(
           `^codesign --force --sign - ${app()}\\.\\d+\\.[0-9a-f]+\\.tmp$`,

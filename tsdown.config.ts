@@ -87,7 +87,10 @@ export default defineConfig([{
 	// The attach launcher lane B restarts Claude Code under
 	// (scripts/vendor-cc-extra.mjs), beside the bundle that runs it: an
 	// install stages dist/cc-extra with dist/index.mjs.
-	copy: [{ from: 'vendor/cc-extra', to: 'dist', flatten: false }],
+	copy: [
+        { from: 'vendor/cc-extra', to: 'dist', flatten: false },
+        { from: ['resources/bar-window/*', 'scripts/bar-web/rich-powerline.woff2', 'scripts/bar-web/FONT-LICENSE'], to: 'dist/bar-window' },
+    ],
 }, {
 	// The preload `BUN_OPTIONS='--preload <dist>/attach-preload.cjs' claude`
 	// runs inside Claude Code to start it under that launcher

@@ -60,6 +60,9 @@ export const LAUNCH_CATEGORIES = [
   // session's pane sits, twice a second, and the pane's height when the frame's
   // changes. Never in the daemon.
   "bar-pane.tmux",
+  "bar-window.tmux",
+  "bar-window.panel",
+  "bar-window.follower",
   // The host lifecycle of a tmux bar pane.
   "lane.tmux",
   // A renderer's own process (src/daemon/renderer-process.ts): one channel at

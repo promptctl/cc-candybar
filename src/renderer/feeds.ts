@@ -74,6 +74,7 @@ export const WAKE_CAUSES = [
   "reload",
   "visibility",
   "viewers",
+  "interaction",
 ] as const;
 
 export type WakeCause = (typeof WAKE_CAUSES)[number];
@@ -246,7 +247,14 @@ export class Feeds {
     if (feed === undefined) return;
     feed.woke[cause]++;
     const { kind, next } = feed.schedule;
-    const soonest = Math.max(tick, feed.last + this.spacingOf(feed)) as Tick;
+    // [LAW:no-ambient-temporal-coupling] A visible control that changed in
+    // this click can respond on the next host turn, including while an
+    // animation is at its frame ceiling. Background data and animation keep
+    // their budget. Several clicks before the draw share that draw.
+    const soonest =
+      cause === "interaction" && feed.viewers.shown
+        ? tick
+        : (Math.max(tick, feed.last + this.spacingOf(feed)) as Tick);
     if (kind === "retry" || (next !== null && next <= soonest)) {
       feed.coalesced++;
       return;
@@ -353,7 +361,14 @@ export class Feeds {
       failed: 0,
       evaluated: 0,
       cellBreaks: 0,
-      woke: { data: 0, state: 0, reload: 0, visibility: 0, viewers: 0 },
+      woke: {
+        data: 0,
+        state: 0,
+        reload: 0,
+        visibility: 0,
+        viewers: 0,
+        interaction: 0,
+      },
       coalesced: 0,
       lateness: durationHistogram(),
       unpin: this.deps.pin(sessionId),
@@ -382,9 +397,9 @@ export class Feeds {
       if (!feed.rates.has(lane)) feed.rates.set(lane, []);
   }
 
-  // [LAW:single-enforcer] The one bound on how close a feed's frames are, in
+  // [LAW:single-enforcer] The interval between scheduled frames, in
   // seconds: the moving period while its bar is on a screen, the still period
-  // while it is not. No cause of a wake sets the rate, so an unseen feed draws
+  // while it is not. Interaction can wake a visible feed immediately. An unseen feed draws
   // at most once a still period however often it is woken.
   private spacingOf(feed: Feed): number {
     const { moving, still } = this.deps.periods;

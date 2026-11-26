@@ -60,7 +60,8 @@ import type { BarPaneEdge } from "./lane-setup.js";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import { Acts } from "./acts.js";
-import { DeclaredBarPanes } from "./declared-bar-panes.js";
+import { WindowFollowers } from "./window-followers.js";
+import { DeclaredSurfaces } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
 import { authorizeRun } from "./foundations/run-authorization.js";
 import { publishingFrames } from "./foundations/frame-publication.js";
@@ -149,6 +150,7 @@ export interface DaemonAdapters {
     log: DaemonLogger,
   ) => SessionFileStorage<DurableContext>;
   readonly claudeInput: (launcher: Pick<Launcher, "launch">) => ClaudeInputEdge;
+  readonly nativeWindowSupported: boolean;
   readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
   // [LAW:one-source-of-truth] The host uses one key to publish and admit
   // terminal clicks.
@@ -626,7 +628,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
     log,
   );
-  const declaredBarPanes = new DeclaredBarPanes(
+  const windowFollowers = new WindowFollowers(
+    launcher,
+    { bundle: bundle.path, node: bundle.node, socket: paths.socket },
+    clock,
+    log,
+    inputs.nativeWindowSupported,
+  );
+  const declaredSurfaces = new DeclaredSurfaces(
     (sessionId) => {
       const latest = frameFeeds.latestWithOrder(sessionId);
       const pane = latest?.req.hints.tmux;
@@ -637,6 +646,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     (pane, on) => acts.setBarPane(pane, on),
     clock,
     log,
+    (desired) => windowFollowers.declare(desired),
   );
   // Who watches each session's frames (candybar-animation-wbxz.jmm.usl),
   // handed to the renderer, whose feeds draw them, and what each subscriber
@@ -645,7 +655,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     publishFrame,
     acknowledgeDisplayed,
     requestChanged: (session, previous) =>
-      declaredBarPanes.reported(session, previous?.hints.tmux ?? null),
+      declaredSurfaces.reported(session, previous?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: async (make) => {
@@ -714,6 +724,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // after a request, so the parts exist by then.
   const collector = new Collector<CheckedRenderRequest>({
     owners: payloadProviders,
+    windowIssue: (session) => windowFollowers.issue(session),
     daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),
@@ -781,7 +792,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     managedStorage.follow(folders);
     collector.subscribed({ sources });
     frameFeeds.switched(lanes);
-    declaredBarPanes.declare(lanes);
+    declaredSurfaces.declare(lanes);
   };
 
   function prepareRenderer(
@@ -1204,6 +1215,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
       ...rendererSteps("close-journal"),
+      ["window followers close", () => windowFollowers.close()],
       // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
       // is in flight is terminated, whichever owner's work it was, and the
       // launcher's lifeline goes.

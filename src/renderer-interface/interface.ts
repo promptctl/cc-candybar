@@ -36,7 +36,7 @@ import type {
   DebugWhat,
 } from "../daemon/foundations/debug-types";
 import type { Crosses } from "./crosses";
-import type { Lane, LaneSwitches } from "../config/lanes";
+import type { Lane, DeclaredLanes } from "../config/lanes";
 import type { Pointer } from "../click/gesture";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
@@ -490,7 +490,7 @@ export interface Subscriptions {
   // the host gates every subscriber by its lane, and reconciles the tmux bar
   // pane of each session from its `pane` switch, in the pane its newest
   // request reports. A session with no view has no switch to read.
-  readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
+  readonly lanes: Readonly<Record<SessionId, DeclaredLanes>>;
   // The origins whose config the renderer holds: each live session's, and
   // each a parked event waits on. The host discovers an origin as it is
   // first named, follows its files while it is named, and lets it go when it

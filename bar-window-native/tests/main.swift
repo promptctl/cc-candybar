@@ -25,4 +25,22 @@ expect(CellGrid.measure(viewport: view, columns: 80, rows: 24, ttyCell: nil) { p
 } == empty, "Two neighboring AX cells can witness size without pixel metrics")
 expect(CellGrid.measure(viewport: view, columns: 80, rows: 24, ttyCell: nil) { _ in first } == nil,
        "Without a tty measurement or two adjacent cells, explain the ambiguity")
+let viewport = CGRect(x: -25, y: 32, width: 402, height: 303)
+let pixels = CGSize(width: 804, height: 606)
+let integral = unpaddedGhosttyGrid(viewport: viewport, pixels: pixels, scale: 2, columns: 80, rows: 30)
+expect(integral?.firstCell == CGRect(x: -25, y: 32, width: 5, height: 10),
+       "An incomplete final cell must not change the backing-pixel pitch")
+expect(unpaddedGhosttyGrid(viewport: viewport.insetBy(dx: -1, dy: 0),
+                          pixels: pixels, scale: 2, columns: 80, rows: 30) == nil,
+       "A different AX extent leaves the per-side padding ambiguous")
+expect(unpaddedGhosttyGrid(viewport: viewport, pixels: pixels, scale: 2, columns: 3, rows: 30) == nil,
+       "Several possible physical pitches cannot identify a cell")
+let snapshot = WindowGridSnapshot(frame: viewport, measurement: .measured(integral!))
+expect(snapshot.measure(frame: viewport, columns: 80, rows: 30) == .measured(integral!), "A stable grid remains measured")
+if case .measured = snapshot.measure(frame: viewport.offsetBy(dx: 1, dy: 0), columns: 80, rows: 30) {
+    expect(false, "A moved window cannot consume a stale absolute terminal grid")
+}
+if case .measured = snapshot.measure(frame: viewport, columns: 80, rows: 29) {
+    expect(false, "An asynchronously resized tty cannot consume its old grid")
+}
 print("Geometry expectations passed")

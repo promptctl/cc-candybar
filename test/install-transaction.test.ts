@@ -1,3 +1,4 @@
+import { windowRuntime } from "./helpers/window-runtime";
 // [LAW:verifiable-goals] `cc-candybar install` changes the user's files whole
 // or not at all: an install that fails at any step leaves every file under
 // the home as it found it, and the statusLine command it writes is the
@@ -57,6 +58,7 @@ function checkout(version: string): string {
     "bin/cc-candybar": `#!/bin/sh\n# shim ${version}\n`,
     "bin/cc-candybar-url-handler-native": `MACHO ${version}`,
   };
+  windowRuntime(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
@@ -159,7 +161,7 @@ describe("an install that lands", () => {
     expect(fs.statSync(stagedBin()).mode & 0o777).toBe(0o755);
     expect(readHostBundle(w.host)).toEqual({ kind: "ok", value: stagedDist() });
     expect(fs.statSync(remoteSocketDir(home)).mode & 0o777).toBe(0o700);
-    expect(ran).toEqual(["codesign", "killall", "lsregister"]);
+    expect(ran).toEqual(["codesign", "codesign", "killall", "lsregister"]);
     expect(out.join("")).toContain(
       `Set the statusLine command in ${settingsFile()}: ${shellWord(stagedBin())}`,
     );
@@ -274,7 +276,7 @@ describe("an install that fails", () => {
     expect(() => install([], checkout("v2"), w, "darwin")).toThrow(
       /lsregister failed[^]*put back every change it made/,
     );
-    expect(ran).toEqual(["codesign", "killall", "lsregister"]);
+    expect(ran).toEqual(["codesign", "codesign", "killall", "lsregister"]);
     expect(tree()).toEqual(before);
   });
 
@@ -402,4 +404,22 @@ describe("an install that fails", () => {
       [path.relative(home, settingsFile())]: `644 ${theirs}`,
     });
   });
+});
+
+test("an upgrade retains the approved window image and replaces its page; a changed helper source replaces the image", () => {
+  const w = world().world;
+  install([], checkout("first"), w, "darwin");
+  const helper = path.join(path.dirname(stagedBin()), "cc-candybar-window");
+  const previous = fs.statSync(helper).ino;
+  const source = checkout("second");
+  const candidate = path.resolve(path.dirname(source), "../bin/cc-candybar-window");
+  fs.writeFileSync(candidate, "a separately signed build");
+  fs.writeFileSync(path.join(path.dirname(source), "bar-window/index.html"), "updated page");
+  install([], source, w, "darwin");
+  expect(fs.statSync(helper).ino).toBe(previous);
+  expect(fs.readFileSync(path.join(path.dirname(stagedDist()),"bar-window/index.html"),"utf8")).toBe("updated page");
+  fs.writeFileSync(candidate+".source", "b".repeat(64)+"\n");
+  install([], source, w, "darwin");
+  expect(fs.statSync(helper).ino).not.toBe(previous);
+  expect(fs.readFileSync(helper,"utf8")).toBe("a separately signed build");
 });

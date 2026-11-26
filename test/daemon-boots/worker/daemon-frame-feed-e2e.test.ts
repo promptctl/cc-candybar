@@ -995,7 +995,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     );
     const handedOff = await render(sockPath, sid, projectDir, {}, args("windowed"));
     expect(textOf(handedOff).trim().split("\n")).toEqual([
-      `🧪 ${HANDOFF_BUTTON}`,
+      // This fixture has no attaching tty. Its manual window subscriber
+      // receives the bar and the handoff still shows the native setup warning.
+      `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
     ]);
     await loggedLines(
       env,

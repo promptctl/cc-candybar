@@ -41,6 +41,7 @@ import { PACKAGE_VERSION } from "./version";
 import { terminalObservation } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { runFrames } from "./frames-cli";
+import { runBarWindow } from "./bar-window";
 import { runBarPane } from "./bar-pane";
 import { exitWith } from "./cli-plan";
 import { recordPlan, replayPlan } from "./recording-cli.js";
@@ -137,6 +138,9 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     await exitWith(schemaPlan());
   },
   // Runs until the pane closes.
+  "bar-window": async (args) => {
+    process.exit(await runBarWindow(args, RUNNING_BUNDLE, commandWorld()));
+  },
   "bar-pane": async (args) => {
     process.exit(await runBarPane(args, commandWorld()));
   },

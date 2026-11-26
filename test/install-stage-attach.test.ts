@@ -1,3 +1,4 @@
+import { windowRuntime } from "./helpers/window-runtime";
 // brandon-menus-sjhy.amf — lane B restarts Claude Code under the attach
 // launcher beside the bundle (src/attach-launcher.ts), so an install stages
 // it with the bundle: the daemon an install starts runs the staged bundle.
@@ -35,6 +36,7 @@ describe("staging the runtime", () => {
   // beside it, the node shim.
   const pkg = (launcher: string | null, preload: string | null = "// preload\n"): string => {
     const root = path.join(home, "pkg");
+    windowRuntime(root);
     fs.mkdirSync(path.join(root, "dist"), { recursive: true });
     fs.mkdirSync(path.join(root, "bin"), { recursive: true });
     fs.writeFileSync(path.join(root, "dist", "index.mjs"), "// bundle\n");

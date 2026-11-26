@@ -11,13 +11,13 @@ private let onAXEvent: AXObserverCallback = { _, element, notification, context 
     observer.received(element, notification as String)
 }
 
-private func screenFrame(_ id: CGWindowID, pid: pid_t) throws -> CGRect? {
+func screenFrame(_ id: CGWindowID, pid: pid_t, onscreenOnly: Bool = true) throws -> CGRect? {
     guard let info = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]] else {
         throw LocationFailure("WindowServer could not list terminal window \(id)")
     }
     guard let row = info.first else { return nil }
     guard row[kCGWindowOwnerPID as String] as? pid_t == pid else { throw LocationFailure("Terminal window owner changed") }
-    guard row[kCGWindowIsOnscreen as String] as? Bool == true else { return nil }
+    if onscreenOnly, row[kCGWindowIsOnscreen as String] as? Bool != true { return nil }
     guard let bounds = row[kCGWindowBounds as String] as? NSDictionary,
           let frame = CGRect(dictionaryRepresentation: bounds), !frame.isEmpty else {
         throw LocationFailure("WindowServer returned invalid bounds for terminal window \(id)")
@@ -28,18 +28,20 @@ private func screenFrame(_ id: CGWindowID, pid: pid_t) throws -> CGRect? {
 final class WindowObserver {
     private let client: AttachedClient
     private var tty: String { client.tty }
-    private var terminal: ScriptableTerminal { client.terminal }
+    private var terminal: LocalTerminal { client.terminal }
     private var previousDisplay: Display?
     private var targetWindow: AXUIElement?
     private var scrollBar: AXUIElement?
     private var exitWatch: DispatchSourceProcess?
     private let report: (TerminalObservation) -> Void
     private var listeners = [(NotificationCenter, NSObjectProtocol)]()
+    private var poll: Timer?
+    private var nextPoll = TimeInterval.zero
     private var drag: Any?
     private var ax: AXObserver?
     private var axApp: AXUIElement?
     private var pid: pid_t?
-    private var identity: Result<TerminalSession?, Error>?
+    private var identity: Result<TerminalLocation, Error>?
     private var preferred: CGWindowID?
     private var generation: UInt64 = 0
     private var looking = false
@@ -87,12 +89,27 @@ final class WindowObserver {
             else { return }
             self.invalidate(.position)
         }
+        if terminal.requiresSessionPolling {
+            // Native GPU tabs and scrollback are not consistently exposed as AX
+            // events. Refresh their authoritative session data without hiding
+            // a correctly placed panel while the read-only query is in flight.
+            let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+                guard let self, let pid = self.pid, self.identity != nil, ProcessInfo.processInfo.systemUptime >= self.nextPoll,
+                      (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool != true
+                else { return }
+                self.lookup(pid: pid)
+            }
+            timer.tolerance = 0.05
+            RunLoop.main.add(timer, forMode: .common)
+            poll = timer
+        }
         refresh(.session)
     }
 
     deinit {
         for (center, token) in listeners { center.removeObserver(token) }
         exitWatch?.cancel()
+        poll?.invalidate()
         if let drag { NSEvent.removeMonitor(drag) }
         detachAX()
     }
@@ -183,9 +200,12 @@ final class WindowObserver {
         guard !looking else { return }
         looking = true
         let revision = generation
-        let (terminal, tty, preferred) = (self.terminal, self.tty, self.preferred)
+        let (terminal, tty, preferred, client) = (self.terminal, self.tty, self.preferred, self.client)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = Result { try terminal.session(tty: tty, pid: pid, preferred: preferred) }
+            let result = Result {
+                try client.verify()
+                return try terminal.session(tty: tty, clientPID: client.pid, pid: pid, preferred: preferred)
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.looking = false
@@ -193,7 +213,9 @@ final class WindowObserver {
                 // discovery. A stale answer cannot show the previous tab.
                 if self.generation == revision, self.pid == pid {
                     self.identity = result
-                    self.preferred = (try? result.get())?.window
+                    if case .failure = result { self.nextPoll = ProcessInfo.processInfo.systemUptime + 5 }
+                    else { self.nextPoll = 0 }
+                    self.preferred = (try? result.get())?.windowID
                 }
                 self.invalidate(.grid)
             }
@@ -216,7 +238,12 @@ final class WindowObserver {
             lookup(pid: app.processIdentifier)
             return .hidden("Locating terminal tab")
         }
-        guard let session = try identity.get() else { throw LocationFailure("\(terminal.name) has no local window for \(tty)") }
+        let session: TerminalSession
+        switch try identity.get() {
+        case let .window(located): session = located
+        case let .hidden(reason): return .hidden(reason)
+        case .missing: throw LocationFailure("\(terminal.name) has no local window for \(tty)")
+        }
         guard session.selected else { return .hidden("Another terminal tab is selected") }
         guard !session.minimized, !app.isHidden, let frame = try screenFrame(session.window, pid: app.processIdentifier) else {
             return .hidden("Terminal window is hidden, minimized or on another Space")
@@ -237,9 +264,13 @@ final class WindowObserver {
         guard let ttyGrid = TTYGrid(tty: tty, display: display) else {
             return .visible(window: session.window, frame: frame, grid: .unavailable("Cannot read attaching tty grid dimensions"))
         }
+        if let reported = session.reportedGrid {
+            return .visible(window: session.window, frame: frame,
+                            grid: reported.measure(frame: frame, columns: ttyGrid.columns, rows: ttyGrid.rows))
+        }
         targetWindow = axApp.flatMap { accessibleWindow(app: $0, frame: frame) }
         let grid = targetWindow.map {
-            measureGrid(window: $0, frame: frame, session: session, tty: ttyGrid, watchScroll: observeScroll)
+            measureGrid(window: $0, frame: frame, session: session, terminal: terminal, tty: ttyGrid, watchScroll: observeScroll)
         } ?? .unavailable("Accessibility could not identify this terminal's cell grid")
         return .visible(window: session.window, frame: frame, grid: grid)
     }

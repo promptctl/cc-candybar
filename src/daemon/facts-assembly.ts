@@ -69,6 +69,7 @@ export function assembleFacts(
   readings: Readings,
   daemon: DaemonFacts,
   at: Instant,
+  windowIssue?: string,
 ): WorldState {
   const { lanes } = readings;
   const stamp = <T>(held: Fact<T> | undefined, reading: Reading<T>): Fact<T> =>
@@ -136,6 +137,7 @@ export function assembleFacts(
     runs,
     env,
     daemon,
+    ...(windowIssue === undefined ? {} : { windowIssue }),
     stampFailure: null,
     transcriptLosses,
   };
@@ -152,6 +154,7 @@ export function assembleFacts(
     sameFacts(sources, prior.sources) &&
     sameFacts(runs, prior.runs) &&
     sameFacts(env, prior.env) &&
+    prior.windowIssue === windowIssue &&
     prior.stampFailure === null &&
     compareStructural(
       { daemon, transcriptLosses },
@@ -179,8 +182,19 @@ export function failedStamp(
   prior: WorldState,
   reason: string,
   daemon: DaemonFacts,
+  windowIssue?: string,
 ): WorldState {
-  if (prior.stampFailure === reason && compareStructural(daemon, prior.daemon))
+  if (
+    prior.windowIssue === windowIssue &&
+    prior.stampFailure === reason &&
+    compareStructural(daemon, prior.daemon)
+  )
     return prior;
-  return { ...prior, daemon, seq: prior.seq + 1, stampFailure: reason };
+  return {
+    ...prior,
+    windowIssue,
+    daemon,
+    seq: prior.seq + 1,
+    stampFailure: reason,
+  };
 }

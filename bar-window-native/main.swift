@@ -17,6 +17,10 @@ func writeObservation(_ observation: TerminalObservation) {
     case let .hidden(reason): output = ["kind": "hidden", "reason": reason]
     case let .unavailable(reason): output = ["kind": "unavailable", "reason": reason]
     }
+    writeMessage(output)
+}
+
+func writeMessage(_ output: [String: Any]) {
     do {
         var bytes = try JSONSerialization.data(withJSONObject: output, options: [.sortedKeys])
         bytes.append(0x0a)
@@ -28,6 +32,18 @@ func writeObservation(_ observation: TerminalObservation) {
 }
 
 let args = CommandLine.arguments
+if args.count == 4, args[1] == "panel" {
+    do {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        let panel = try WindowPanel(page: URL(fileURLWithPath: args[2]), lockPath: args[3])
+        panel.followInput()
+        withExtendedLifetime(panel) { app.run() }
+    } catch {
+        writeMessage(["kind": "unavailable", "reason": error.localizedDescription])
+        exit(EXIT_FAILURE)
+    }
+}
 guard args.count == 4, args[1] == "observe", let pid = pid_t(args[3]), pid > 1 else {
     fputs("usage: cc-candybar-window observe <attaching-client-tty> <attaching-client-pid>\n", stderr)
     exit(EX_USAGE)
