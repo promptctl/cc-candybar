@@ -43108,6 +43108,8 @@ var LANES = {
     called: "the window"
   }
 };
+var WINDOW_PLACEMENTS = ["docked", "inset"];
+var DEFAULT_WINDOW_PLACEMENT = "inset";
 var ownsPointer = (lane) => SAYS_WHERE_POINTER_ACTS[LANES[lane].encoding];
 var LANE_NAMES = Object.keys(LANES);
 var TOGGLED_LANES = LANE_NAMES.filter(
@@ -43407,6 +43409,11 @@ var GLOBAL_FIELDS = {
     control("menu timeout", "config")
   ),
   ...LANE_ROWS,
+  windowPlacement: enumSetting(
+    WINDOW_PLACEMENTS,
+    DEFAULT_WINDOW_PLACEMENT,
+    control("window placement", "renderer")
+  ),
   // The color depth rich-js downsamples output to (the legacy
   // display.colorCompatibility) — truecolor by default, deliberately NOT the
   // legacy "auto", which the detached daemon cannot honour (see
@@ -65035,6 +65042,10 @@ function underThemeDefault(globals, fragment) {
 
 // src/config/effective-globals.ts
 var laneSwitches = (effective) => perLane((lane) => effective[LANES[lane].switch.setting]);
+function declaredLanes(effective) {
+  const switches = laneSwitches(effective);
+  return switches.window ? { ...switches, windowPlacement: effective.windowPlacement } : switches;
+}
 function editGlobalsOf(config, sessionPick) {
   return sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
 }
@@ -73812,9 +73823,9 @@ function viewLanes(parts, sessionId2, committed) {
     const { renderCache } = parts;
     const hold2 = __using(_stack, renderCache.holdView(sessionId2));
     if (hold2 === null) return null;
-    if (committed === null) return laneSwitches(hold2.view.source.effective());
+    if (committed === null) return declaredLanes(hold2.view.source.effective());
     const { config, authoredRoots: authoredRoots2 } = committed.state;
-    return laneSwitches(
+    return declaredLanes(
       resolveEffectiveGlobals(
         config,
         (key) => committed.settings.get(sessionId2, key),
@@ -73974,6 +73985,7 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     })
   );
   const standing2 = [
+    ...document.windowIssue ? [alone({ kind: "window", message: document.windowIssue })] : [],
     ...daemon2.fileEvents.map(alone),
     ...daemon2.launcher === null ? [] : [alone(daemon2.launcher)],
     ...daemon2.unsaved.map(
@@ -83541,6 +83553,7 @@ var BACKSTOP_BOUNDS_READ = {
   render: true,
   [SESSION_RENDER_KIND]: true,
   subscribe: true,
+  "measure-window": true,
   "pane-session": true,
   pointer: true,
   shutdown: true,
@@ -84737,8 +84750,28 @@ function subscription(req) {
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`
     );
+  if (req.kind === "measure-window") {
+    if (lane !== "window" || req.owner !== void 0)
+      return refuse2(
+        "BAD_REQUEST",
+        "A window measurement cannot own a pointer or another lane"
+      );
+    return {
+      kind: "subscribe",
+      sessionId: sessionId2.id,
+      lane,
+      owner: null,
+      drawing: false
+    };
+  }
   if (req.owner === void 0)
-    return { kind: "subscribe", sessionId: sessionId2.id, lane, owner: null };
+    return {
+      kind: "subscribe",
+      sessionId: sessionId2.id,
+      lane,
+      owner: null,
+      drawing: true
+    };
   if (!ownsPointer(lane))
     return refuse2(
       "BAD_REQUEST",
@@ -84751,7 +84784,8 @@ function subscription(req) {
     kind: "subscribe",
     sessionId: sessionId2.id,
     lane,
-    owner: owner.value
+    owner: owner.value,
+    drawing: true
   };
 }
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
@@ -84775,7 +84809,8 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
       })
     );
   }
-  if (req.kind === "subscribe") return subscription(req);
+  if (req.kind === "subscribe" || req.kind === "measure-window")
+    return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_EVENTS, req.kind))
     return refuse2("BAD_REQUEST", UNKNOWN_REQUEST_KIND);
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
@@ -88438,20 +88473,24 @@ function invocation(hint, category, args, stdinInput) {
     stdinInput
   };
 }
-function tmuxRun(result, args) {
+function tmuxRun(result, args, socket) {
   if (result.ok) return { kind: "ok", stdout: result.stdout };
   if (result.reason === "rate-limited") {
     return { kind: "rate-limited", reason: failureText(result) };
   }
+  const detail = result.stderr.trim();
+  const serverGone = result.reason === "non-zero" && (detail === `no server running on ${socket}` || detail === `error connecting to ${socket} (No such file or directory)` || detail === `error connecting to ${socket} (Connection refused)`);
   return {
     kind: "failed",
+    ...serverGone && { serverGone: true },
     reason: `tmux ${args[0]} failed (${failureText(result)})`
   };
 }
 async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
     await launcher.launch(invocation(hint, category, args, stdinInput)),
-    args
+    args,
+    hint.socket
   );
 }
 
@@ -90211,7 +90250,7 @@ var sameFacts = (now2, held) => {
 function gitFactsOf({ pullRequest: _pullRequest, ...git }) {
   return git;
 }
-function assembleFacts(prior, session, readings, daemon2, at) {
+function assembleFacts(prior, session, readings, daemon2, at, windowIssue) {
   const { lanes } = readings;
   const stamp2 = (held2, reading) => restamp(held2, reading, at);
   const held = prior?.builtins;
@@ -90264,10 +90303,11 @@ function assembleFacts(prior, session, readings, daemon2, at) {
     runs,
     env: env2,
     daemon: daemon2,
+    ...windowIssue === void 0 ? {} : { windowIssue },
     stampFailure: null,
     transcriptLosses
   };
-  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && sameFacts(env2, prior.env) && prior.stampFailure === null && compareStructural(
+  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && sameFacts(env2, prior.env) && prior.windowIssue === windowIssue && prior.stampFailure === null && compareStructural(
     { daemon: daemon2, transcriptLosses },
     { daemon: prior.daemon, transcriptLosses: prior.transcriptLosses }
   )) {
@@ -90280,10 +90320,16 @@ function assembleFacts(prior, session, readings, daemon2, at) {
     ...parts
   };
 }
-function failedStamp(prior, reason, daemon2) {
-  if (prior.stampFailure === reason && compareStructural(daemon2, prior.daemon))
+function failedStamp(prior, reason, daemon2, windowIssue) {
+  if (prior.windowIssue === windowIssue && prior.stampFailure === reason && compareStructural(daemon2, prior.daemon))
     return prior;
-  return { ...prior, daemon: daemon2, seq: prior.seq + 1, stampFailure: reason };
+  return {
+    ...prior,
+    windowIssue,
+    daemon: daemon2,
+    seq: prior.seq + 1,
+    stampFailure: reason
+  };
 }
 
 // src/daemon/foundations/judge-run.ts
@@ -90548,7 +90594,8 @@ var Collector = class {
         session,
         first2.owners.value,
         first2.daemon,
-        instantAt(this.deps.clock)
+        instantAt(this.deps.clock),
+        first2.windowIssue
       );
     } catch (e) {
       reader.holds.close();
@@ -90597,7 +90644,8 @@ var Collector = class {
       declared,
       inputs: computed(() => ({
         owners: owners.get(),
-        daemon: this.daemon.get()
+        daemon: this.daemon.get(),
+        windowIssue: this.deps.windowIssue?.(keys2.session)
       }))
     };
   }
@@ -90689,11 +90737,12 @@ var Collector = class {
   stamp({ session, stamped }, moved) {
     const prior = stamped.document;
     const { owners, daemon: daemon2 } = moved;
-    const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2) : this.assembled(
+    const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2, moved.windowIssue) : this.assembled(
       prior,
       owners.value,
       daemon2,
-      instantAt(this.deps.clock)
+      instantAt(this.deps.clock),
+      moved.windowIssue
     );
     const failure2 = next2 === prior ? null : next2.stampFailure;
     if (failure2 !== null)
@@ -90705,14 +90754,22 @@ var Collector = class {
     stamped.from = moved;
     return next2 !== prior;
   }
-  assembled(prior, readings, daemon2, at) {
+  assembled(prior, readings, daemon2, at, windowIssue) {
     try {
-      return assembleFacts(prior, prior.session, readings, daemon2, at);
+      return assembleFacts(
+        prior,
+        prior.session,
+        readings,
+        daemon2,
+        at,
+        windowIssue
+      );
     } catch (e) {
       return failedStamp(
         prior,
         `stamping the world state: ${String(e)}`,
-        daemon2
+        daemon2,
+        windowIssue
       );
     }
   }
@@ -91177,7 +91234,7 @@ var FrameFeeds = class {
       return;
     }
     if (latest === void 0 && follower.confirmed !== null && covers(follower.confirmed, answer2)) {
-      done?.(true);
+      done?.(sub2.drawing());
       return;
     }
     const write = { answer: answer2, done };
@@ -91185,11 +91242,12 @@ var FrameFeeds = class {
     this.pushed++;
     watched.pushed++;
     const finished = (delivered) => {
-      if (delivered && answer2.displayedEvents !== void 0)
+      const displayed = delivered && sub2.drawing();
+      if (displayed && answer2.displayedEvents !== void 0)
         this.deps.acknowledgeDisplayed(answer2.displayedEvents);
       if (!follower.writes.delete(write)) return;
       if (delivered) follower.confirmed = answer2;
-      settleWrite(write, delivered);
+      settleWrite(write, displayed);
     };
     try {
       sub2.frame(answer2.json, finished);
@@ -91835,20 +91893,229 @@ var Acts = class {
   }
 };
 
+// src/daemon/window-followers.ts
+init_globals();
+
+// src/bar-window/exit.ts
+init_globals();
+var SOURCE_PANE_CLOSED = 66;
+
+// src/renderer-interface/wire.ts
+init_globals();
+var RENDERER_WIRE_VERSION = 22;
+function lineSplitter(heard) {
+  let rest2 = "";
+  return {
+    push: (chunk3) => {
+      let from = 0;
+      let at = chunk3.indexOf("\n");
+      while (at !== -1) {
+        const line = rest2 + chunk3.slice(from, at);
+        rest2 = "";
+        heard(line);
+        from = at + 1;
+        at = chunk3.indexOf("\n", from);
+      }
+      rest2 += chunk3.slice(from);
+    },
+    end: () => {
+      if (rest2 === "") return;
+      const line = rest2;
+      rest2 = "";
+      heard(line);
+    }
+  };
+}
+
+// src/daemon/window-followers.ts
+var WindowFollowers = class {
+  constructor(launcher, host, clock, log, supported) {
+    this.launcher = launcher;
+    this.host = host;
+    this.clock = clock;
+    this.log = log;
+    this.supported = supported;
+  }
+  launcher;
+  host;
+  clock;
+  log;
+  supported;
+  desired = /* @__PURE__ */ new Map();
+  active = /* @__PURE__ */ new Map();
+  issues = observable.map();
+  waiting = /* @__PURE__ */ new Map();
+  closing = false;
+  issue(session) {
+    return this.issues.get(session);
+  }
+  report(session, reason) {
+    if ((this.issue(session) ?? "") === reason) return;
+    runInAction(() => {
+      if (reason) this.issues.set(session, reason);
+      else this.issues.delete(session);
+    });
+    this.log(
+      reason ? "warn" : "info",
+      `window sid=${JSON.stringify(session)} ${reason || "ready"}`
+    );
+  }
+  declare(desired) {
+    this.desired = desired;
+    for (const [sid, wait] of this.waiting) {
+      const pane = desired.get(sid)?.pane;
+      if (!pane || paneKey(pane) !== wait.target) {
+        wait.cancelRetry?.();
+        this.waiting.delete(sid);
+      }
+    }
+    for (const session of [...this.issues.keys()])
+      if (!desired.has(session)) this.report(session, "");
+    this.reconcile();
+  }
+  reconcile() {
+    if (this.closing) return;
+    const retiring = /* @__PURE__ */ new Set();
+    for (const [sid, follower] of this.active) {
+      const want = this.desired.get(sid);
+      if (!want?.pane || paneKey(want.pane) !== follower.target) {
+        follower.stop();
+      } else if (!follower.stopping && want.placement !== follower.placement) {
+        follower.placement = want.placement;
+        follower.channel.write(
+          JSON.stringify({ kind: "placement", value: want.placement }) + "\n"
+        );
+      }
+      if (follower.stopping) retiring.add(follower.target);
+    }
+    for (const [sid, want] of this.desired) {
+      if (!want.pane) {
+        this.report(
+          sid,
+          "The window surface requires an attached local tmux client."
+        );
+        continue;
+      }
+      if (!this.supported) {
+        this.report(sid, "The window surface requires macOS.");
+        continue;
+      }
+      if (!this.active.has(sid) && !this.waiting.has(sid) && !retiring.has(paneKey(want.pane)))
+        this.start(sid, want.pane, want.placement);
+    }
+  }
+  start(sid, pane, placement) {
+    let reason = "";
+    const heard = (message) => {
+      reason = message;
+      if (!this.closing && !follower.stopping && this.active.get(sid) === follower)
+        this.report(sid, message);
+    };
+    const stdout2 = lineSplitter((line) => {
+      try {
+        const event = JSON.parse(line);
+        if (event?.kind !== "issue" || typeof event.reason !== "string")
+          throw new Error("invalid window status");
+        heard(event.reason);
+      } catch (e) {
+        heard(String(e));
+      }
+    });
+    const stderr2 = lineSplitter(heard);
+    const termination = new AbortController();
+    let cancelDeadline;
+    const channel = this.launcher.launchChannel({
+      signal: termination.signal,
+      bin: this.host.node[0],
+      args: [
+        ...this.host.node.slice(1),
+        this.host.bundle,
+        "bar-window",
+        sid,
+        pane.socket,
+        pane.pane,
+        placement
+      ],
+      envOverlay: { CC_CANDYBAR_SOCKET: this.host.socket },
+      category: "bar-window.follower",
+      heard: { stdout: stdout2.push, stderr: stderr2.push }
+    });
+    const follower = {
+      channel,
+      target: paneKey(pane),
+      placement,
+      stopping: false,
+      stop: () => {
+        if (follower.stopping) return;
+        follower.stopping = true;
+        channel.end();
+        cancelDeadline = this.clock.after(
+          "window follower shutdown " + sid,
+          5e3,
+          () => termination.abort(),
+          { unref: true }
+        );
+      }
+    };
+    this.active.set(sid, follower);
+    this.clock.detach(`window follower ${sid}`, async () => {
+      const result = await channel.ended;
+      cancelDeadline?.();
+      stdout2.end();
+      stderr2.end();
+      this.active.delete(sid);
+      if (this.closing) return;
+      if (!follower.stopping && this.desired.has(sid)) {
+        const target = follower.target;
+        if (!result.ok && result.reason === "non-zero" && result.exitCode === SOURCE_PANE_CLOSED) {
+          this.report(sid, "Claude's tmux pane closed");
+          this.waiting.set(sid, { target });
+        } else {
+          this.report(
+            sid,
+            reason || (result.ok ? "Window follower exited" : whyFailed(result))
+          );
+          const cancelRetry = this.clock.after(
+            `window follower restart ${sid}`,
+            5e3,
+            () => {
+              this.waiting.delete(sid);
+              this.reconcile();
+            },
+            { unref: true }
+          );
+          this.waiting.set(sid, { target, cancelRetry });
+        }
+      }
+      this.reconcile();
+    });
+  }
+  async close() {
+    this.closing = true;
+    for (const wait of this.waiting.values()) wait.cancelRetry?.();
+    for (const follower of this.active.values()) follower.stop();
+    await Promise.all(
+      [...this.active.values()].map((follower) => follower.channel.ended)
+    );
+  }
+};
+
 // src/daemon/declared-bar-panes.ts
 init_globals();
 var RETRY_MS2 = 1e3;
-var DeclaredBarPanes = class {
-  constructor(paneOf, setPane, clock, log) {
+var DeclaredSurfaces = class {
+  constructor(paneOf, setPane, clock, log, windows2) {
     this.paneOf = paneOf;
     this.setPane = setPane;
     this.clock = clock;
     this.log = log;
+    this.windows = windows2;
   }
   paneOf;
   setPane;
   clock;
   log;
+  windows;
   held = /* @__PURE__ */ new Map();
   lanes = {};
   declare(lanes) {
@@ -91883,6 +92150,17 @@ var DeclaredBarPanes = class {
       if (competing === void 0 || competing.order < reported2.order)
         next2.set(key, { ...reported2, session, on: switches.pane });
     }
+    const windows2 = /* @__PURE__ */ new Map();
+    for (const [sid, switches] of Object.entries(this.lanes)) {
+      if (!switches.window) continue;
+      const pane = this.paneOf(sid)?.pane;
+      if (!pane || next2.get(paneKey(pane))?.session === sid)
+        windows2.set(sid, {
+          pane,
+          placement: switches.windowPlacement ?? DEFAULT_WINDOW_PLACEMENT
+        });
+    }
+    this.windows(windows2);
     for (const [key, demand] of next2) {
       const held = this.held.get(key);
       if (held === void 0)
@@ -93536,10 +93814,6 @@ init_globals();
 // src/renderer-interface/recording.ts
 init_globals();
 var RECORDING_VERSION = 1;
-
-// src/renderer-interface/wire.ts
-init_globals();
-var RENDERER_WIRE_VERSION = 21;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -95242,7 +95516,14 @@ function createDaemon(inputs) {
     clock,
     log
   );
-  const declaredBarPanes = new DeclaredBarPanes(
+  const windowFollowers = new WindowFollowers(
+    launcher,
+    { bundle: bundle.path, node: bundle.node, socket: paths2.socket },
+    clock,
+    log,
+    inputs.nativeWindowSupported
+  );
+  const declaredSurfaces = new DeclaredSurfaces(
     (sessionId2) => {
       const latest = frameFeeds.latestWithOrder(sessionId2);
       const pane = latest?.req.hints.tmux;
@@ -95250,12 +95531,13 @@ function createDaemon(inputs) {
     },
     (pane, on2) => acts.setBarPane(pane, on2),
     clock,
-    log
+    log,
+    (desired) => windowFollowers.declare(desired)
   );
   const frameFeeds = new FrameFeeds({
     publishFrame,
     acknowledgeDisplayed,
-    requestChanged: (session, previous2) => declaredBarPanes.reported(session, previous2?.hints.tmux ?? null),
+    requestChanged: (session, previous2) => declaredSurfaces.reported(session, previous2?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: async (make) => {
@@ -95311,6 +95593,7 @@ function createDaemon(inputs) {
   });
   const collector = new Collector({
     owners: payloadProviders,
+    windowIssue: (session) => windowFollowers.issue(session),
     daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId2) => frameFeeds.isWatched(sessionId2),
@@ -95355,7 +95638,7 @@ function createDaemon(inputs) {
     managedStorage.follow(folders);
     collector.subscribed({ sources });
     frameFeeds.switched(lanes);
-    declaredBarPanes.declare(lanes);
+    declaredSurfaces.declare(lanes);
   };
   function prepareRenderer(name, reported2, entry) {
     const stores = new HeldStores(inputs.profile(name, log), clock);
@@ -95704,6 +95987,7 @@ function createDaemon(inputs) {
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
       ...rendererSteps("close-journal"),
+      ["window followers close", () => windowFollowers.close()],
       // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
       // is in flight is terminated, whichever owner's work it was, and the
       // launcher's lifeline goes.
@@ -96370,6 +96654,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     linkKey: linkKeyFromFile(linkKeyFile(paths2.state), daemonLog.log),
     claudeInput: productionClaudeInputEdge,
     barPaneEdge: productionBarPaneEdge,
+    nativeWindowSupported: process.platform === "darwin",
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
       log,

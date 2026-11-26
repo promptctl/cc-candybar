@@ -2,102 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-975",
-      "ref": "refs/pull/975/merge",
-      "sha": "9fadc6cc96347e5af0252b1b8eb0bcbe7ad08432",
-      "timestamp": "2026-11-26T15:06:52.489Z",
-      "commits": [
-        {
-          "sha": "9fadc6cc96347e5af0252b1b8eb0bcbe7ad08432",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T15:05:44Z",
-          "message": "Merge 55ec1abed8e11039d06c9c51bc9449bac2ec7da8 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
-        },
-        {
-          "sha": "55ec1abed8e11039d06c9c51bc9449bac2ec7da8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T08:05:32-07:00",
-          "message": "feat(window): default to inset and place padded terminal grids\n"
-        },
-        {
-          "sha": "50d29fc87e498f1ae42ef58bab94bb418820ed77",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:30:41-07:00",
-          "message": "style(window): format subscription interest types\n"
-        },
-        {
-          "sha": "beba2dfe9e204876cf9c5974a9207110ef47c8d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:29:35-07:00",
-          "message": "fix(window): recognize an ended tmux server and constrain measurement subscribers\n"
-        },
-        {
-          "sha": "824b97a521bc8e46da069e60e5b161787a9125e6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:27:24-07:00",
-          "message": "fix(window): recover inset when its menu fits again without taking over the statusline\n"
-        },
-        {
-          "sha": "b0e46f9cbd0f97abc0fb6824d1ab3227786058da",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:19:19-07:00",
-          "message": "fix(window): stop restarting a follower whose source pane closed\n"
-        },
-        {
-          "sha": "08790515fe54b90e95ee56f24903fac2ae373b16",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:14:36-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into feat/window-follower\n"
-        },
-        {
-          "sha": "af0e200ff13e73b42f962ec71462b5f695ae5055",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:14:34-07:00",
-          "message": "fix(window): follow visible attachments and retire stale inset reservations and controls\n"
-        },
-        {
-          "sha": "b682773f754c738658e22c56beb936ae22b95ba8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:07:00-07:00",
-          "message": "fix(window): retain crash cleanup when a local tmux hook shadows the global one\n"
-        },
-        {
-          "sha": "443d39566a8ef1b68c46dc04d8605d357982608e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:03:12-07:00",
-          "message": "test(window): verify repeated tmux hook edits preserve the reservation\n"
-        },
-        {
-          "sha": "709a427cbb883299cd05e3ed5ba59df5a27f3067",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:01:37-07:00",
-          "message": "feat(window): show an interactive session bar docked or inset beside its terminal\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "da4a9f02ee553c2281358391119e354c9ea6f1b9",
-      "timestamp": "2026-11-26T14:14:11.652Z",
+      "sha": "f1dc2bae0c6e4047a6adaa456317fbf08fabfdb0",
+      "timestamp": "2026-11-26T15:09:42.888Z",
       "commits": [
         {
-          "sha": "da4a9f02ee553c2281358391119e354c9ea6f1b9",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-26T14:12:42Z",
-          "message": "chore(release): set `package.json` to 1.242.1\n\n## [1.242.1](https://github.com/promptctl/cc-candybar/compare/v1.242.0...v1.242.1) (2026-11-26)\n\n### Bug Fixes\n\n* **renderer:** publish interaction feedback immediately on visible surfaces ([84f2f6f](https://github.com/promptctl/cc-candybar/commit/84f2f6f784c98c23b64d5eb6f7db8c0fc84d6fac))\n"
+          "sha": "f1dc2bae0c6e4047a6adaa456317fbf08fabfdb0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T08:08:45-07:00",
+          "message": "feat(window): show an interactive session bar beside its terminal (#975)\n\n* feat(window): show an interactive session bar docked or inset beside its terminal\n\n* test(window): verify repeated tmux hook edits preserve the reservation\n\n* fix(window): retain crash cleanup when a local tmux hook shadows the global one\n\n* fix(window): follow visible attachments and retire stale inset reservations and controls\n\n* fix(window): stop restarting a follower whose source pane closed\n\n* fix(window): recover inset when its menu fits again without taking over the statusline\n\n* fix(window): recognize an ended tmux server and constrain measurement subscribers\n\n* style(window): format subscription interest types\n\n* feat(window): default to inset and place padded terminal grids"
         }
       ]
     }
