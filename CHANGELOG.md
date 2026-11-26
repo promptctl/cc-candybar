@@ -1,3 +1,9 @@
+## [1.238.4](https://github.com/promptctl/cc-candybar/compare/v1.238.3...v1.238.4) (2026-11-25)
+
+### Bug Fixes
+
+* **url-handler:** route a click on a bar drawn over ssh to the daemon that drew it ([#963](https://github.com/promptctl/cc-candybar/issues/963)) ([5877b61](https://github.com/promptctl/cc-candybar/commit/5877b610c5add94bfeec9ef566be3e309841d7ec))
+
 ## [1.238.3](https://github.com/promptctl/cc-candybar/compare/v1.238.2...v1.238.3) (2026-11-25)
 
 ### Bug Fixes
