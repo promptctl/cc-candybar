@@ -1,3 +1,9 @@
+## [1.241.1](https://github.com/promptctl/cc-candybar/compare/v1.241.0...v1.241.1) (2026-11-26)
+
+### Bug Fixes
+
+* **config:** preserve comments and roll back failed installs ([#969](https://github.com/promptctl/cc-candybar/issues/969)) ([17339bc](https://github.com/promptctl/cc-candybar/commit/17339bc95bd7d8e527c9de56d2d06a3c029bf27c))
+
 ## [1.241.0](https://github.com/promptctl/cc-candybar/compare/v1.240.0...v1.241.0) (2026-11-26)
 
 ### Features
