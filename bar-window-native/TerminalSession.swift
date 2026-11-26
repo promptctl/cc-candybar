@@ -6,6 +6,7 @@ struct TerminalSession {
     let selected: Bool
     let minimized: Bool
     let nativeSplits: Int
+    var wezPaneSize: WezPaneSize? = nil
     var reportedGrid: WindowGridSnapshot? = nil
 }
 

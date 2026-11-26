@@ -27,14 +27,22 @@ expect(CellGrid.measure(viewport: view, columns: 80, rows: 24, ttyCell: nil) { _
        "Without a tty measurement or two adjacent cells, explain the ambiguity")
 let viewport = CGRect(x: -25, y: 32, width: 402, height: 303)
 let pixels = CGSize(width: 804, height: 606)
-let integral = unpaddedGhosttyGrid(viewport: viewport, pixels: pixels, scale: 2, columns: 80, rows: 30)
+let integral = estimatedGrid(in: viewport, pixels: pixels, scale: 2, columns: 80, rows: 30)
 expect(integral?.firstCell == CGRect(x: -25, y: 32, width: 5, height: 10),
        "An incomplete final cell must not change the backing-pixel pitch")
-expect(unpaddedGhosttyGrid(viewport: viewport.insetBy(dx: -1, dy: 0),
-                          pixels: pixels, scale: 2, columns: 80, rows: 30) == nil,
-       "A different AX extent leaves the per-side padding ambiguous")
-expect(unpaddedGhosttyGrid(viewport: viewport, pixels: pixels, scale: 2, columns: 3, rows: 30) == nil,
-       "Several possible physical pitches cannot identify a cell")
+let padded = estimatedGrid(in: viewport.insetBy(dx: -7, dy: -5), pixels: pixels, scale: 2, columns: 80, rows: 30)
+expect(padded?.frame(column: 41, row: 28, width: 39, height: 2) ==
+       CGRect(x: 180, y: 312, width: 195, height: 20), "A padded viewport places the right tmux pane at its split")
+expect(estimatedGrid(in: viewport.insetBy(dx: 1, dy: 0), pixels: pixels, scale: 2, columns: 80, rows: 30) == nil,
+       "A tty larger than its viewport cannot place a bar")
+let wezWindow = CGRect(x: 469, y: 157, width: 574, height: 453)
+let wezSize = WezPaneSize(cols: 80, rows: 24, pixel_width: 1120, pixel_height: 768)
+if case let .measured(grid) = wezSize.measure(in: wezWindow, scale: 2, columns: 80, rows: 24) {
+    expect(grid.frame(column: 41, row: 22, width: 39, height: 2) == CGRect(x: 763, y: 570, width: 273, height: 32),
+           "WezTerm uses the measured pane pixels and bottom inset below a decorated title bar")
+} else { expect(false, "The observed stable WezTerm dimensions must resolve") }
+if case .remeasuring = wezSize.measure(in: wezWindow, scale: 2, columns: 80, rows: 23) { }
+else { expect(false, "A resize must invalidate old WezTerm pane dimensions") }
 let snapshot = WindowGridSnapshot(frame: viewport, measurement: .measured(integral!))
 expect(snapshot.measure(frame: viewport, columns: 80, rows: 30) == .measured(integral!), "A stable grid remains measured")
 if case .measured = snapshot.measure(frame: viewport.offsetBy(dx: 1, dy: 0), columns: 80, rows: 30) {

@@ -123,8 +123,8 @@ func measureGrid(window: AXUIElement, frame: CGRect, session: TerminalSession, t
     } else if viewport.scrollable { return .unavailable("Cannot observe the terminal scroll position") }
     guard !viewport.showingHistory else { return .unavailable("Terminal is showing scrollback") }
     if let grid = viewport.measure(tty, terminal: terminal) { return .measured(grid) }
-    if terminal == .ghostty, let scale = tty.backingScale, viewport.scrollBar != nil,
-       let grid = unpaddedGhosttyGrid(viewport: viewport.viewport, pixels: tty.pixels, scale: scale,
+    if terminal == .ghostty, let scale = tty.backingScale,
+       let grid = estimatedGrid(in: viewport.viewport, pixels: tty.pixels, scale: scale,
                                       columns: tty.columns, rows: tty.rows) { return .measured(grid) }
     return .unavailable("\(terminal.name) did not expose an unambiguous cell origin and size")
 }

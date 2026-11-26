@@ -1,22 +1,35 @@
 import CoreGraphics
 
-// Ghostty's pty reports viewport pixels *without padding*, including the
-// incomplete last row/column. When the AX viewport has exactly that extent,
-// the origin is proven. Infer integer backing-pixel cell size only if unique.
-func unpaddedGhosttyGrid(viewport: CGRect, pixels: CGSize, scale: CGFloat, columns: Int, rows: Int) -> CellGrid? {
-    guard scale.isFinite, scale > 0, !viewport.isEmpty, !viewport.isInfinite,
-          abs(viewport.width * scale - pixels.width) < 0.01,
-          abs(viewport.height * scale - pixels.height) < 0.01 else { return nil }
-    func pitch(_ extent: CGFloat, count: Int) -> CGFloat? {
-        guard extent > 0, extent < CGFloat(UInt16.max), count > 1, count <= Int(UInt16.max) else { return nil }
-        let whole = Int(extent)
-        let smallest = whole / (count + 1) + 1
-        let largest = whole / count
-        return smallest == largest ? CGFloat(largest) / scale : nil
+// The tty extent can include a partial trailing cell. Keep it when estimating
+// padding and discard it when deriving the cell pitch in backing pixels.
+func estimatedGrid(in bounds: CGRect, pixels: CGSize, scale: CGFloat, columns: Int, rows: Int,
+                   bottomPaddingInRows: CGFloat? = nil) -> CellGrid? {
+    guard scale.isFinite, scale > 0, !bounds.isEmpty, !bounds.isInfinite,
+          columns > 0, rows > 0, pixels.width > 0, pixels.height > 0 else { return nil }
+    let width = pixels.width / scale, height = pixels.height / scale
+    let cell = CGSize(width: floor(pixels.width / CGFloat(columns)) / scale,
+                      height: floor(pixels.height / CGFloat(rows)) / scale)
+    let spareX = bounds.width - width, spareY = bounds.height - height
+    guard spareX >= 0, spareY >= 0, cell.width > 0, cell.height > 0 else { return nil }
+    // A text viewport excludes chrome. For a decorated window, anchor to the
+    // bottom so title and tab bars above the grid do not move the last row.
+    let top = bottomPaddingInRows.map { max(0, spareY - $0 * cell.height) } ?? spareY / 2
+    return CellGrid(firstCell: CGRect(origin: CGPoint(x: bounds.minX + spareX / 2, y: bounds.minY + top),
+                                      size: cell), columns: columns, rows: rows)
+}
+
+// WezTerm's CLI reports the pixel extent of complete cells, including on
+// releases where Accessibility exposes only the decorated window frame.
+struct WezPaneSize: Decodable {
+    let cols, rows, pixel_width, pixel_height: Int
+
+    func measure(in frame: CGRect, scale: CGFloat?, columns: Int, rows ttyRows: Int) -> GridMeasurement {
+        guard cols == columns, rows == ttyRows else { return .remeasuring("WezTerm pane was resized") }
+        guard let scale, let grid = estimatedGrid(in: frame, pixels: CGSize(width: pixel_width, height: pixel_height),
+                                                  scale: scale, columns: cols, rows: rows, bottomPaddingInRows: 0.5)
+        else { return .unavailable("WezTerm pane dimensions do not fit its window") }
+        return .measured(grid)
     }
-    guard let width = pitch(pixels.width, count: columns), let height = pitch(pixels.height, count: rows) else { return nil }
-    return CellGrid(firstCell: CGRect(origin: viewport.origin, size: CGSize(width: width, height: height)),
-                    columns: columns, rows: rows)
 }
 
 // A terminal-reported pixel measurement and its WindowServer frame are one

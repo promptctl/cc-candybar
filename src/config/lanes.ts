@@ -57,6 +57,7 @@ export const LANES = {
 
 export const WINDOW_PLACEMENTS = ["docked", "inset"] as const;
 export type WindowPlacement = (typeof WINDOW_PLACEMENTS)[number];
+export const DEFAULT_WINDOW_PLACEMENT = "inset" satisfies WindowPlacement;
 export type DeclaredLanes = LaneSwitches & {
   readonly windowPlacement?: WindowPlacement;
 };

@@ -123,6 +123,7 @@ private struct WezPane: Decodable {
     let window_id, tab_id, pane_id: Int
     let window_title, workspace: String
     let tty_name: String?
+    let size: WezPaneSize?
     let is_zoomed: Bool
 }
 
@@ -194,5 +195,6 @@ func remoteSession(terminal: LocalTerminal, tty: String, clientPID: pid_t, pid: 
     }
     let splits = tabs[pane.tab_id] ?? []
     if splits.contains(where: \.is_zoomed) { selected = selected && pane.is_zoomed }
-    return .window(TerminalSession(window: native.id, selected: selected, minimized: native.minimized, nativeSplits: splits.count))
+    return .window(TerminalSession(window: native.id, selected: selected, minimized: native.minimized, nativeSplits: splits.count,
+                                   wezPaneSize: splits.count == 1 || pane.is_zoomed ? pane.size : nil))
 }

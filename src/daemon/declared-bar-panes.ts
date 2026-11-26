@@ -1,4 +1,7 @@
-import type { DeclaredLanes } from "../config/lanes.js";
+import {
+  DEFAULT_WINDOW_PLACEMENT,
+  type DeclaredLanes,
+} from "../config/lanes.js";
 import type { WindowDemand } from "./window-followers.js";
 import type { Timekeeper } from "../time.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
@@ -93,7 +96,7 @@ export class DeclaredSurfaces {
       if (!pane || next.get(paneKey(pane))?.session === sid)
         windows.set(sid, {
           pane,
-          placement: switches.windowPlacement ?? "docked",
+          placement: switches.windowPlacement ?? DEFAULT_WINDOW_PLACEMENT,
         });
     }
     this.windows(windows);

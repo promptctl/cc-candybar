@@ -198,7 +198,7 @@ exports[`a sample session payload preset compact: the payload and its day 1`] = 
       "resetsAt": 1700432000,
     },
     "windowPlacement": {
-      "effective": "docked",
+      "effective": "inset",
     },
     "workspace": {
       "added_dirs": [],
@@ -412,7 +412,7 @@ exports[`a sample session payload preset default: the payload and its day 1`] = 
       "resetsAt": 1700432000,
     },
     "windowPlacement": {
-      "effective": "docked",
+      "effective": "inset",
     },
     "workspace": {
       "added_dirs": [],
@@ -626,7 +626,7 @@ exports[`a sample session payload preset dense: the payload and its day 1`] = `
       "resetsAt": 1700432000,
     },
     "windowPlacement": {
-      "effective": "docked",
+      "effective": "inset",
     },
     "workspace": {
       "added_dirs": [],
@@ -840,7 +840,7 @@ exports[`a sample session payload preset git: the payload and its day 1`] = `
       "resetsAt": 1700432000,
     },
     "windowPlacement": {
-      "effective": "docked",
+      "effective": "inset",
     },
     "workspace": {
       "added_dirs": [],
@@ -1054,7 +1054,7 @@ exports[`a sample session payload preset usage: the payload and its day 1`] = `
       "resetsAt": 1700432000,
     },
     "windowPlacement": {
-      "effective": "docked",
+      "effective": "inset",
     },
     "workspace": {
       "added_dirs": [],
@@ -1268,7 +1268,7 @@ exports[`a sample session payload preset verbose: the payload and its day 1`] = 
       "resetsAt": 1700432000,
     },
     "windowPlacement": {
-      "effective": "docked",
+      "effective": "inset",
     },
     "workspace": {
       "added_dirs": [],
@@ -1482,7 +1482,7 @@ exports[`a sample session payload preset zen: the payload and its day 1`] = `
       "resetsAt": 1700432000,
     },
     "windowPlacement": {
-      "effective": "docked",
+      "effective": "inset",
     },
     "workspace": {
       "added_dirs": [],
@@ -1691,7 +1691,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],
@@ -1897,7 +1897,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],
@@ -2103,7 +2103,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],
@@ -2309,7 +2309,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],
@@ -2515,7 +2515,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],
@@ -2722,7 +2722,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],
@@ -2930,7 +2930,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],
@@ -3133,7 +3133,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "resetsAt": 1700432000,
   },
   "windowPlacement": {
-    "effective": "docked",
+    "effective": "inset",
   },
   "workspace": {
     "added_dirs": [],

@@ -269,6 +269,10 @@ final class WindowObserver {
             return .visible(window: session.window, frame: frame,
                             grid: reported.measure(frame: frame, columns: ttyGrid.columns, rows: ttyGrid.rows))
         }
+        if let size = session.wezPaneSize {
+            return .visible(window: session.window, frame: frame,
+                            grid: size.measure(in: frame, scale: ttyGrid.backingScale, columns: ttyGrid.columns, rows: ttyGrid.rows))
+        }
         targetWindow = axApp.flatMap { accessibleWindow(app: $0, frame: frame) }
         let grid = targetWindow.map {
             measureGrid(window: $0, frame: frame, session: session, terminal: terminal, tty: ttyGrid, watchScroll: observeScroll)
