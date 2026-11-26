@@ -31,3 +31,7 @@ install-rust:
 install-url-handler:
     ./url-handler/build.sh bin/cc-candybar-url-handler-native
     @echo "URL handler binary staged at bin/cc-candybar-url-handler-native."
+
+# Compile the macOS terminal geometry and panel helper for a checkout.
+install-bar-window:
+    ./bar-window-native/build.sh bin/cc-candybar-window

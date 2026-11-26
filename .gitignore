@@ -36,3 +36,6 @@ test-records/
 
 # The URL handler app a checkout builds (`just install-url-handler`).
 bin/cc-candybar-url-handler-native
+
+bin/cc-candybar-window
+bin/cc-candybar-window.source
