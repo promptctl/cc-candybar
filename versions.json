@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7138496ca34979f4494658136320889c7360fe00",
+      "timestamp": "2026-11-26T05:40:37.559Z",
+      "commits": [
+        {
+          "sha": "7138496ca34979f4494658136320889c7360fe00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:38:51-07:00",
+          "message": "fix(transcript): a transcript line or sidechain the fold cannot read shows as ⚠, and code only a removed feature read is deleted (candybar-later-fixes-nwu9.3fy) (#960)\n\n* refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n\n* fix(transcript): a transcript line or sidechain the fold cannot read shows as ⚠ on the session's bar (candybar-later-fixes-nwu9.3fy)\n\nA line that is not JSON, or whose entry cannot be projected, used to be\ndropped with only a debug-log line, and so did a sidechain whose read\nfailed, whose first line was not JSON, or whose directory could not be\nlisted. Each left the session's usage and cost short with nothing on the\nbar to say so.\n\nThe fold now keeps what it dropped (how many lines, where the first\nstarts, why) beside its cursor, so the loss lasts exactly as long as the\nnumbers it is missing from and goes when a rewrite re-folds the file. The\nusage store reports each file's losses and each unread sidechain into the\nsession's facts diagnostics, and the bar draws one standing warning per\nfile, with the viewer naming the file and the reason.\n\nTests share one in-process main-renderer harness instead of two copies.\n\n* fix(transcript): a sidechain the fold cannot read fails the refresh, and a line is parsed into its entry or dropped with why (candybar-later-fixes-nwu9.3fy)\n\nLaw-review pass 1 on #960.\n\n- A sidechains directory that cannot be listed, or a new sidechain whose\n  first line cannot be read, fails the refold through its one failed arm,\n  so nothing short is stored and the next render retries. A loss is only\n  what a read that succeeded could not use: a dropped line, or a sidechain\n  whose first line (blank, not JSON, naming no session) cannot say whose\n  it is.\n- The entry parse parses: a timestamp that is not a date, usage with no\n  timestamp, or usage counts that are not numbers drop the line with its\n  reason. A projection that throws is the daemon's fault, not a dropped line.\n- A drop names its line number, which the cursor counts, so it is exact\n  across windows and bytes that are not UTF-8.\n- The window parse returns its drops as data, and a reset replaces the\n  fold in one step.\n- Losses are derived once at refold, stored on the record, and logged once\n  when first met. A sidechain gone after the listing is out of the session,\n  as one gone before it.\n- The facts document carries its stamp failure and its transcript losses as\n  their own fields. The lane diagnostics, a copy of each lane's failed\n  reading that nothing drew, are gone. FACTS_VERSION 6.\n- The cache timer reads its lines through the one line reading.\n- templateHelperRefs and the comments naming the deleted unused check are\n  gone; the real lister's test covers the paths rotation removes; the\n  harness copies left in tests share one helper each.\n\n* fix(transcript): the loss vocabulary sits below the fold and the document, a message's usage with no count is no usage, and a loss is logged once however it grows (candybar-later-fixes-nwu9.3fy)"
+        }
+      ]
+    },
+    {
       "version": "pr-964",
       "ref": "refs/pull/964/merge",
       "sha": "1b5a2880cd95b2d6553ab7934908647382d47605",
@@ -98,21 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:02:21-07:00",
           "message": "test: isolate terminal, filesystem and process observations from the host\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7b3c063cc9a84b9c7c7abb11d8ef71b3fcf7fdb1",
-      "timestamp": "2026-11-26T05:12:39.918Z",
-      "commits": [
-        {
-          "sha": "7b3c063cc9a84b9c7c7abb11d8ef71b3fcf7fdb1",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-26T05:11:26Z",
-          "message": "chore(release): set `package.json` to 1.238.5\n\n## [1.238.5](https://github.com/promptctl/cc-candybar/compare/v1.238.4...v1.238.5) (2026-11-26)\n\n### Bug Fixes\n\n* **audits:** the nightly colour audit holds the joiner rule's identity under every look, not the ΔE floor it deleted (candybar-later-fixes-nwu9.ic0) ([#962](https://github.com/promptctl/cc-candybar/issues/962)) ([fa1eeb9](https://github.com/promptctl/cc-candybar/commit/fa1eeb9b93a826b08a71ce2eefe360f86ea343cc))\n"
         }
       ]
     },
