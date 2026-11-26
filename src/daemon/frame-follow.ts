@@ -109,12 +109,12 @@ export type FrameFollow = {
   readonly fault: (reason: string, retryMs: number) => void;
   readonly exit: (reason: string) => void;
   readonly beforeReconnect?: () => Promise<void>;
-} & (
+} &
   // A drawing follower restates its current pointer at each opening. A
   // measuring window never owns that pointer, including across reconnects.
-  | { readonly owner?: () => OwnerFacts; readonly measureWindow?: false }
-  | { readonly owner?: never; readonly measureWindow: true }
-);
+  (| { readonly owner?: () => OwnerFacts; readonly measureWindow?: false }
+    | { readonly owner?: never; readonly measureWindow: true }
+  );
 
 export interface FrameFollower {
   close(): void;

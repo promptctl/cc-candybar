@@ -65,15 +65,21 @@ export function openFrameStream(
   if (interest === "measure-window" && lane !== "window")
     throw new Error("Only the window lane can measure an inset");
   const sock = net.createConnection({ path: sockPath });
-  const subscribe: SubscribeRequest = interest === "measure-window"
-    ? { v: PROTOCOL_VERSION, kind: "measure-window", sessionId, lane: "window" }
-    : {
-        v: PROTOCOL_VERSION,
-        kind: "subscribe",
-        sessionId,
-        lane,
-        ...(interest !== undefined && { owner: interest }),
-      };
+  const subscribe: SubscribeRequest =
+    interest === "measure-window"
+      ? {
+          v: PROTOCOL_VERSION,
+          kind: "measure-window",
+          sessionId,
+          lane: "window",
+        }
+      : {
+          v: PROTOCOL_VERSION,
+          kind: "subscribe",
+          sessionId,
+          lane,
+          ...(interest !== undefined && { owner: interest }),
+        };
   sock.once("connect", () => sock.write(encodeFrame(subscribe)));
   sock.on(
     "data",
