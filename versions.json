@@ -2,61 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5c1508325297fa412a0c37795cb434b5e28aeabe",
-      "timestamp": "2026-11-26T06:45:22.964Z",
-      "commits": [
-        {
-          "sha": "5c1508325297fa412a0c37795cb434b5e28aeabe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:44:13-07:00",
-          "message": "test: isolate the suite from the machine running it (#971)\n\n* test: isolate terminal, filesystem and process observations from the host\n\n* test(heap): distinguish compile-owned stores from live WeakMap keys\n\n* test(cache): measure renderer entries after retiring their views\n\n* test: observe a held grandchild through its owned connection\n\n* fix(tools): retain the command-line daemon startup deadline\n\n* docs(testing): describe the owner-based heap assertion\n\n* fix(client): drain buffered render frames within the wire deadline\n\n* test: await the grandchild socket events through case teardown\n\n* test(renderer): close the idle wake of every click fixture\n\n* test: drive wait deadlines without leaving real timers running\n\n* test(git): isolate fixture commits from parent hook repository overrides\n\n* test(proc): release signal-refused readers after pipe assertions\n\n* test(git): isolate the native Jest worker process before it forks"
-        }
-      ]
-    },
-    {
-      "version": "pr-972",
-      "ref": "refs/pull/972/merge",
-      "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
-      "timestamp": "2026-11-26T06:29:32.635Z",
-      "commits": [
-        {
-          "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:28:02Z",
-          "message": "Merge e3c10c2272e0485db5f6088cf659294f1d8c5ee9 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
-        },
-        {
-          "sha": "e3c10c2272e0485db5f6088cf659294f1d8c5ee9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:27:50-07:00",
-          "message": "fix(menu): pin former wire pairs and verify their load diagnostics\n"
-        },
-        {
-          "sha": "30eb8be64c757e606f332e5a4ba1d2be6fa54345",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:11:40-07:00",
-          "message": "fix(menu): retire saved selections that block recording after upgrade\n"
-        }
-      ]
-    },
-    {
       "version": "pr-969",
       "ref": "refs/pull/969/merge",
-      "sha": "6fcc14a4e75ca11f2f42ba9a88417073e5541198",
-      "timestamp": "2026-11-26T06:15:15.075Z",
+      "sha": "e8d01b39e6a964c77b840fcd0f51235756493a0a",
+      "timestamp": "2026-11-26T06:47:15.069Z",
       "commits": [
         {
-          "sha": "6fcc14a4e75ca11f2f42ba9a88417073e5541198",
+          "sha": "e8d01b39e6a964c77b840fcd0f51235756493a0a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:13:59Z",
-          "message": "Merge 4d4ece717909e01445dd0e68539ad53beec187d0 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
+          "timestamp": "2026-11-26T06:46:06Z",
+          "message": "Merge f4c19ec44ae1730d8dfeb85a1bca0c54ec46ab09 into 5c1508325297fa412a0c37795cb434b5e28aeabe\n"
+        },
+        {
+          "sha": "f4c19ec44ae1730d8dfeb85a1bca0c54ec46ab09",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:45:55-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n\n# Conflicts:\n#\tsrc/install/index.ts\n#\ttest/install-clobber.test.ts\n"
         },
         {
           "sha": "4d4ece717909e01445dd0e68539ad53beec187d0",
@@ -162,6 +125,50 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:29:00-07:00",
           "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5c1508325297fa412a0c37795cb434b5e28aeabe",
+      "timestamp": "2026-11-26T06:45:22.964Z",
+      "commits": [
+        {
+          "sha": "5c1508325297fa412a0c37795cb434b5e28aeabe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:44:13-07:00",
+          "message": "test: isolate the suite from the machine running it (#971)\n\n* test: isolate terminal, filesystem and process observations from the host\n\n* test(heap): distinguish compile-owned stores from live WeakMap keys\n\n* test(cache): measure renderer entries after retiring their views\n\n* test: observe a held grandchild through its owned connection\n\n* fix(tools): retain the command-line daemon startup deadline\n\n* docs(testing): describe the owner-based heap assertion\n\n* fix(client): drain buffered render frames within the wire deadline\n\n* test: await the grandchild socket events through case teardown\n\n* test(renderer): close the idle wake of every click fixture\n\n* test: drive wait deadlines without leaving real timers running\n\n* test(git): isolate fixture commits from parent hook repository overrides\n\n* test(proc): release signal-refused readers after pipe assertions\n\n* test(git): isolate the native Jest worker process before it forks"
+        }
+      ]
+    },
+    {
+      "version": "pr-972",
+      "ref": "refs/pull/972/merge",
+      "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
+      "timestamp": "2026-11-26T06:29:32.635Z",
+      "commits": [
+        {
+          "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T06:28:02Z",
+          "message": "Merge e3c10c2272e0485db5f6088cf659294f1d8c5ee9 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
+        },
+        {
+          "sha": "e3c10c2272e0485db5f6088cf659294f1d8c5ee9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:27:50-07:00",
+          "message": "fix(menu): pin former wire pairs and verify their load diagnostics\n"
+        },
+        {
+          "sha": "30eb8be64c757e606f332e5a4ba1d2be6fa54345",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:11:40-07:00",
+          "message": "fix(menu): retire saved selections that block recording after upgrade\n"
         }
       ]
     }
