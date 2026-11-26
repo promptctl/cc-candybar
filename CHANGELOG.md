@@ -1,3 +1,9 @@
+## [1.242.1](https://github.com/promptctl/cc-candybar/compare/v1.242.0...v1.242.1) (2026-11-26)
+
+### Bug Fixes
+
+* **renderer:** publish interaction feedback immediately on visible surfaces ([84f2f6f](https://github.com/promptctl/cc-candybar/commit/84f2f6f784c98c23b64d5eb6f7db8c0fc84d6fac))
+
 ## [1.242.0](https://github.com/promptctl/cc-candybar/compare/v1.241.2...v1.242.0) (2026-11-26)
 
 ### Features
