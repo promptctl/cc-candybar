@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3d41a203e6668a403f56f409957220a1dbacf79e",
+      "timestamp": "2026-11-26T06:11:33.105Z",
+      "commits": [
+        {
+          "sha": "3d41a203e6668a403f56f409957220a1dbacf79e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T06:09:54Z",
+          "message": "chore(release): set `package.json` to 1.240.0\n\n## [1.240.0](https://github.com/promptctl/cc-candybar/compare/v1.239.0...v1.240.0) (2026-11-26)\n\n### Features\n\n* **lanes:** a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) ([#967](https://github.com/promptctl/cc-candybar/issues/967)) ([9882701](https://github.com/promptctl/cc-candybar/commit/98827016846125701459a4fd629a6ffbba742261))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-968",
       "ref": "refs/pull/968/merge",
       "sha": "84f19f9fb0daef4b771ba4cfae84c33753a3c395",
@@ -322,21 +337,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:02:21-07:00",
           "message": "test: isolate terminal, filesystem and process observations from the host\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "98827016846125701459a4fd629a6ffbba742261",
-      "timestamp": "2026-11-26T06:07:44.905Z",
-      "commits": [
-        {
-          "sha": "98827016846125701459a4fd629a6ffbba742261",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:06:27-07:00",
-          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) (#967)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n\n* test(follow): cover the window lane in the native client\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n* fix(window): distinguish the window lane from renderer wire version 19\n\n* test(window): save every renderer switch through the menu\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },
