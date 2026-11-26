@@ -16,13 +16,11 @@ import {
 } from "../src/renderer/verbs";
 import {
   VERB_DISPATCH,
-  VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_UNDO,
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
-import type { Failure } from "../src/daemon/foundations/verb-error";
 import { tickAt, type Tick } from "../src/utils/instant";
 import { fieldOf, fieldsOf } from "../src/utils/logfmt";
 import {
@@ -32,10 +30,7 @@ import {
   verbContextWith,
   CLICK_VERBS,
 } from "./helpers/click";
-import { EMPTY_DEFAULT, parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
-import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
-import { durableConfig } from "./helpers/durable-config";
+import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { type Timekeeper } from "../src/time";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -43,7 +38,6 @@ import { NO_LAYERS, undoOf } from "./helpers/history-step";
 import { heldClock } from "./helpers/held-clock";
 import { FOREGROUND_BURST } from "../src/utils/keyed-serial-queue";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const A = sessionIdOf("session-a");
 const S = sessionIdOf("s");
 
@@ -71,7 +65,7 @@ function setup(
   const ctx = verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
     log: (_level, line) => logged.push(line),
   });
-  const { arrival: _a, context: _c, effects: _e, ...verbCtx } = ctx;
+  const { context: _c, effects: _e, ...verbCtx } = ctx;
   const clock = over.clock ?? systemTimekeeper;
   const host = clickParts(verbCtx, over.collector, undefined, clock);
   const events: string[] = [];

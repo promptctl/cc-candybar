@@ -9,7 +9,6 @@ import {
   RSS_LIMIT_ENV,
   memoryLimitMb,
   heapCapMb,
-  listPostMortems,
   postMortemsOf,
   realLimitsDeps,
 } from "../src/daemon/limits";
@@ -1134,58 +1133,34 @@ describe("post-mortems", () => {
     );
   });
 
-  test("the breaches a state directory keeps are listed by breach; one that cannot be listed is a failure naming why, never no breaches", () => {
+  test("the real lister: a breach's files by their full path, and no other file; a directory not yet made holds none; one that is a file is said so", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
     try {
-      expect(listPostMortems(path.join(root, "absent"))).toEqual({
-        kind: "ok",
-        value: [],
-      });
-      const dir = path.join(root, "state");
-      fs.mkdirSync(dir);
-      const report = path.join(dir, "memory-2026-03-01T00-00-00-000Z-7.txt");
+      const lister = (snapshotDir: string) =>
+        realLimitsDeps(0, () => {}, {
+          launcher: unscriptedLauncher,
+          log: () => {},
+          clock: systemTimekeeper,
+          snapshotDir,
+          writeLogNow: () => {},
+        }).listArtifacts;
+      expect(lister(path.join(root, "absent"))()).toEqual([]);
+      // Rotation removes what the listing names, so each is a path that
+      // reaches the file whatever the daemon's working directory.
+      const state = path.join(root, "state");
+      fs.mkdirSync(state);
+      const report = path.join(state, "memory-2026-03-01T00-00-00-000Z-7.txt");
       fs.writeFileSync(report, "");
-      expect(listPostMortems(dir)).toEqual({
-        kind: "ok",
-        value: [
-          {
-            identity: "2026-03-01T00-00-00-000Z-7",
-            process: { kind: "host" },
-            artifacts: { memoryReport: report },
-          },
-        ],
-      });
+      fs.writeFileSync(path.join(state, "daemon.log"), "");
+      expect(postMortemsOf(lister(state)())).toEqual([
+        {
+          identity: "2026-03-01T00-00-00-000Z-7",
+          process: { kind: "host" },
+          artifacts: { memoryReport: report },
+        },
+      ]);
       fs.writeFileSync(path.join(root, "file"), "");
-      const unlisted = listPostMortems(path.join(root, "file"));
-      expect(unlisted.kind).toBe("failed");
-      expect(unlisted.kind === "failed" && unlisted.reason).toMatch(/ENOTDIR/);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  test("the real lister: a directory not yet made holds none; one that is a file is said so", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
-    try {
-      expect(
-        realLimitsDeps(0, () => {}, {
-          launcher: unscriptedLauncher,
-          log: () => {},
-          clock: systemTimekeeper,
-          snapshotDir: path.join(root, "absent"),
-          writeLogNow: () => {},
-        }).listArtifacts(),
-      ).toEqual([]);
-      fs.writeFileSync(path.join(root, "file"), "");
-      expect(() =>
-        realLimitsDeps(0, () => {}, {
-          launcher: unscriptedLauncher,
-          log: () => {},
-          clock: systemTimekeeper,
-          snapshotDir: path.join(root, "file"),
-          writeLogNow: () => {},
-        }).listArtifacts(),
-      ).toThrow(/ENOTDIR/);
+      expect(lister(path.join(root, "file"))).toThrow(/ENOTDIR/);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

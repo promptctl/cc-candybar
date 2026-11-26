@@ -26,8 +26,8 @@ import {
   type RendererPanel,
 } from "../../../src/daemon/foundations/stats-snapshot";
 import {
-  listPostMortems,
   memoryLimitBytes,
+  postMortemsOf,
   realLimitsDeps,
 } from "../../../src/daemon/limits";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
@@ -243,10 +243,11 @@ test("a renderer past its memory limit is ended alone and started again, and eve
     );
     expect(warned).toContain("drawn");
 
-    const postMortems = listPostMortems(paths.state);
-    if (postMortems.kind !== "ok") throw new Error(postMortems.reason);
-    expect(postMortems.value).toHaveLength(1);
-    expect(postMortems.value[0]).toMatchObject({
+    const postMortems = postMortemsOf(
+      fs.readdirSync(paths.state).map((f) => path.join(paths.state, f)),
+    );
+    expect(postMortems).toHaveLength(1);
+    expect(postMortems[0]).toMatchObject({
       process: { kind: "renderer", name: WORKTREE },
       artifacts: {
         memoryReport: expect.stringContaining(
@@ -257,7 +258,7 @@ test("a renderer past its memory limit is ended alone and started again, and eve
         ),
       },
     });
-    const { memoryReport, heapSnapshot } = postMortems.value[0]!.artifacts;
+    const { memoryReport, heapSnapshot } = postMortems[0]!.artifacts;
     expect(fs.readFileSync(memoryReport!, "utf8")).toBe(
       `the report of ${breached}`,
     );
