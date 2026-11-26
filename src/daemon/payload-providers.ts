@@ -12,6 +12,7 @@
 
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
+import type { Prices } from "./cache/pricing";
 import type { WatcherRegistry } from "./cache/watchers";
 import { GitService } from "./cache/git-service";
 import type { Host } from "../host";
@@ -41,6 +42,9 @@ export function createPayloadProviders(opts: {
   readonly launcher: Launcher;
   // The machine the providers read: where transcripts and settings live.
   readonly host: Host;
+  // What the usage store prices an entry without a cost by: the caller's,
+  // which it closes.
+  readonly prices: Prices;
   readonly watchers: WatcherRegistry;
   // Whether the OS is delivering file events: the caller's one owner, which
   // only the daemon starts.
@@ -60,6 +64,7 @@ export function createPayloadProviders(opts: {
   const lanes = {
     usageStore: new SessionUsageStore({
       host: opts.host,
+      prices: opts.prices,
       clock,
       logger,
       ledger,

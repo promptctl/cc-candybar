@@ -20,6 +20,7 @@ import type { DaemonLog } from "./log";
 import { profilePaths, type DaemonPaths } from "./paths";
 import { checkoutFiles } from "../utils/git-root.js";
 import { writeConfigFile } from "./file-rewrites.js";
+import { fetchPricing } from "./cache/pricing-fetch";
 
 // [LAW:effects-at-boundaries] Every real adapter, over the paths and the log it
 // is given, so a daemon built over a temporary directory touches nothing else.
@@ -62,5 +63,6 @@ export function productionAdapters(
     stat: fs.statSync,
     checkoutFiles,
     writeConfigFile,
+    fetchPricing,
   };
 }

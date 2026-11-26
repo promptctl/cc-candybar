@@ -7,8 +7,7 @@ import {
   type TokenBreakdown,
 } from "../../segments/session";
 import type { Host } from "../../host";
-import { cacheDir } from "../paths";
-import { PricingService } from "./pricing";
+import { costOf, type PriceTable, type Prices } from "./pricing";
 import {
   getClaudePaths,
   findProjectPaths,
@@ -261,24 +260,24 @@ function responseOf(entry: ParsedEntry): string | undefined {
   return id === undefined ? undefined : `${id}:${entry.raw.requestId ?? ""}`;
 }
 
-// [LAW:effects-at-boundaries] The fold step: NEW entries onto a file fold.
-// Returns a FRESH FileFold (the state is never mutated) so two concurrent
+// [LAW:effects-at-boundaries] The fold step: NEW entries onto a file fold,
+// returning a fresh FileFold (the state is never mutated) so two concurrent
 // refolds sharing one prior snapshot can't corrupt each other. A rewritten
-// file is foldAppended's to start over from EMPTY_FILE_FOLD.
+// file is foldAppended's to start over from EMPTY_FILE_FOLD. `keep` is the
+// oldest day whose ledger is kept: dayKey strings sort lexically ==
+// chronologically, so "keep recent" is a string comparison.
 //
 // [LAW:one-source-of-truth] Session cost and day cost use the SAME priced value:
-// an entry lacking costUSD is priced once (PricingService) and that figure feeds
-// BOTH the session total and its day bucket, so `today` is not silently
-// under-counted for un-costed entries.
+// an entry lacking costUSD is priced once, by the table the refold read, and
+// that figure feeds BOTH the session total and its day bucket, so `today` is
+// not silently under-counted for un-costed entries.
 async function foldFile(
   state: FileFold,
   entries: readonly ParsedEntry[],
-  cacheRoot: string,
-  clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
+  prices: () => Promise<PriceTable>,
+  keep: string,
 ): Promise<FileFold> {
-  // dayKey strings sort lexically == chronologically, so "keep recent" is a
-  // string comparison against yesterday's key.
-  const keep = dayKey(new Date(seedCutoffMs(clock.now())));
+  let table: PriceTable | undefined;
   let count = state.entries;
   let cost = state.cost;
   let turnOpen = state.turnOpen;
@@ -294,8 +293,7 @@ async function foldFile(
     last = response;
     count++;
     const priced =
-      entry.costUSD ??
-      (await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock));
+      entry.costUSD ?? costOf((table ??= await prices()), entry.raw);
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -468,9 +466,9 @@ export class SessionUsageStore {
   // speed) share it, so it records and logs once.
   private readonly refreshFlight = new SingleFlight();
   private readonly staleAgeMs: number;
-  // The machine the store reads: where transcripts live, and where the
-  // pricing table is cached.
+  // The machine the store reads: where transcripts live.
   private readonly host: Host;
+  private readonly prices: Prices;
   private readonly log: DaemonLogger;
   private readonly refreshTally: IngestTally = { hits: 0, misses: 0 };
   private readonly ledger: RefreshLedger;
@@ -487,6 +485,8 @@ export class SessionUsageStore {
 
   constructor(opts: {
     host: Host;
+    // What an entry without a cost is priced by.
+    prices: Prices;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep and the scans'
     // periods, and the instants the store stamps, ages and cuts off by.
     clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every" | "detach">;
@@ -500,6 +500,7 @@ export class SessionUsageStore {
     ledger?: RefreshLedger;
   }) {
     this.host = opts.host;
+    this.prices = opts.prices;
     this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
@@ -794,14 +795,13 @@ export class SessionUsageStore {
     // advances — `today` never steps back to a shorter fold — and since
     // `refold` writes the byte cursor and the fold as ONE pair
     // covering exactly [0, cursor), the next refold folds each byte once.
-    // `foldFile` is pure (fresh FileFold, prior never mutated), so the shared
+    // `foldFile` returns a fresh FileFold without mutating its input, so the shared
     // prior can't corrupt. Pinned by the concurrency test in
     // test/transcript-incremental.test.ts.
     // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
-    // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
-    // throwing on a bad rate table or network hiccup inside foldFile) would
-    // escape the Outcome contract entirely. The deleted getSessionUsageFromPath
-    // wrapped this; keep that guarantee by mapping any throw to `failed`.
+    // `.kind`, so a rejected promise from the refold (a throw inside its
+    // reads or its fold) would escape the Outcome contract entirely; any
+    // throw maps to `failed`.
     let refolded: {
       prior: SessionRecord | undefined;
       outcome: Outcome<Refolded>;
@@ -917,6 +917,11 @@ export class SessionUsageStore {
       prior === undefined ? undefined : new Set(prior.files.keys()),
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
+    // [LAW:effects-at-boundaries] A refold shares one table across its files
+    // and windows, and asks only if a usage entry needs a calculated cost.
+    let table: Promise<PriceTable> | undefined;
+    const prices = () => (table ??= this.prices.table());
+    const keep = dayKey(new Date(seedCutoffMs(this.clock.now())));
     const newFiles = new Map<string, Folded<FileFold>>();
     let mainStamp = "";
     for (const filePath of [transcriptPath, ...agents.paths]) {
@@ -925,8 +930,7 @@ export class SessionUsageStore {
         filePath,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) =>
-          foldFile(state, entries, cacheDir(this.host), this.clock),
+        (state, entries) => foldFile(state, entries, prices, keep),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {

@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
+import { settledPrices } from "./helpers/prices";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import { composePayload } from "../src/renderer/render-payload";
 import {
@@ -121,6 +122,7 @@ afterEach(() => {
 // refresh stores cannot reach the other's document.
 function inputsOf(hookData: CheckedHookData) {
   const usageStore = new SessionUsageStore({
+    prices: settledPrices,
     clock: systemTimekeeper,
     host: HOST,
     sweepIntervalMs: 0,
