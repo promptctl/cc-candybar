@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-970",
+      "ref": "refs/pull/970/merge",
+      "sha": "e78e68c19bb50636a7cd5379976e8b9934fbad31",
+      "timestamp": "2026-11-26T05:42:09.987Z",
+      "commits": [
+        {
+          "sha": "e78e68c19bb50636a7cd5379976e8b9934fbad31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:40:14Z",
+          "message": "Merge 0c558e28f0ddaf9403063cf2c71e065c3bc9aca3 into 7138496ca34979f4494658136320889c7360fe00\n"
+        },
+        {
+          "sha": "0c558e28f0ddaf9403063cf2c71e065c3bc9aca3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:40:06-07:00",
+          "message": "test(pricing): supply prices to transcript loss fixtures\n"
+        },
+        {
+          "sha": "25d0b4c8c6910261f3c18d820d97db1183c6cb57",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:39:09-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into brandon-unfiled-3248.cfxk\n"
+        },
+        {
+          "sha": "f2dd43eadf6448ebeeca8caba98bc9608267440f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:04:01-07:00",
+          "message": "fix(pricing): bound every fetch until its socket closes\n"
+        },
+        {
+          "sha": "ccfda41fc37bad7201bfd6a788da7773e9ac6fa2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:12-07:00",
+          "message": "fix(pricing): own, refresh and abort the daemon price table\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7138496ca34979f4494658136320889c7360fe00",
@@ -156,35 +199,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T03:19:33-07:00",
           "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-970",
-      "ref": "refs/pull/970/merge",
-      "sha": "70c5516db43fa4b818583643336e820dfb737623",
-      "timestamp": "2026-11-26T05:05:45.294Z",
-      "commits": [
-        {
-          "sha": "70c5516db43fa4b818583643336e820dfb737623",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:04:09Z",
-          "message": "Merge f2dd43eadf6448ebeeca8caba98bc9608267440f into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
-        },
-        {
-          "sha": "f2dd43eadf6448ebeeca8caba98bc9608267440f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:04:01-07:00",
-          "message": "fix(pricing): bound every fetch until its socket closes\n"
-        },
-        {
-          "sha": "ccfda41fc37bad7201bfd6a788da7773e9ac6fa2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:59:12-07:00",
-          "message": "fix(pricing): own, refresh and abort the daemon price table\n"
         }
       ]
     },
