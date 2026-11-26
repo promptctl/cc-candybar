@@ -4,15 +4,22 @@
     {
       "version": "pr-969",
       "ref": "refs/pull/969/merge",
-      "sha": "e8d01b39e6a964c77b840fcd0f51235756493a0a",
-      "timestamp": "2026-11-26T06:47:15.069Z",
+      "sha": "314955b6b346140dee0526b9db91f9e0cd3543b8",
+      "timestamp": "2026-11-26T06:49:50.577Z",
       "commits": [
         {
-          "sha": "e8d01b39e6a964c77b840fcd0f51235756493a0a",
+          "sha": "314955b6b346140dee0526b9db91f9e0cd3543b8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:46:06Z",
-          "message": "Merge f4c19ec44ae1730d8dfeb85a1bca0c54ec46ab09 into 5c1508325297fa412a0c37795cb434b5e28aeabe\n"
+          "timestamp": "2026-11-26T06:48:39Z",
+          "message": "Merge b3c1e20df13e248c867bdff0314985d8e23e8f21 into 5c1508325297fa412a0c37795cb434b5e28aeabe\n"
+        },
+        {
+          "sha": "b3c1e20df13e248c867bdff0314985d8e23e8f21",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:48:28-07:00",
+          "message": "style(install): format the integrated platform lookup signatures\n"
         },
         {
           "sha": "f4c19ec44ae1730d8dfeb85a1bca0c54ec46ab09",
