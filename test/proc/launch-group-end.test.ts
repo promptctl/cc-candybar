@@ -17,7 +17,7 @@ import {
 } from "../../src/proc/launcher";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
-import { grandchildConnection } from "../helpers/held-grandchild";
+import { heldGrandchild } from "../helpers/held-grandchild";
 import { untilTestEnds } from "../helpers/test-end";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
@@ -317,25 +317,25 @@ describe("the pipes a descendant holds past its launch", () => {
   });
 
   it("are destroyed on the spot when the launcher closed while the launch ran", async () => {
-    await using holder = await grandchildConnection();
+    await using holder = await heldGrandchild();
     // [LAW:behavior-not-structure] The escaped writer reports what the kernel
-    // did to each write. Its PID can remain visible after both pipes broke.
+    // did to each write. An unreaped PID stays visible even after exit.
     const pending = launch(
       python(`
-import os, signal, socket
+import os, socket
 if os.fork():
-    signal.pause()
-    os._exit(1)
-os.setsid()
-with socket.create_connection(("127.0.0.1", ${holder.port})) as peer:
-    if peer.recv(1) == b"?":
-        for fd in (1, 2):
-            try:
-                os.write(fd, b"x")
-            except BrokenPipeError:
-                peer.sendall(b"broken\\n")
-            else:
-                peer.sendall(b"writable\\n")
+    os.wait()
+else:
+    os.setsid()
+    with socket.create_connection((${JSON.stringify(holder.address)}, ${holder.port})) as peer:
+        if peer.recv(1) == b"?":
+            for fd in (1, 2):
+                try:
+                    os.write(fd, b"x")
+                except BrokenPipeError:
+                    peer.sendall(b"broken\\n")
+                else:
+                    peer.sendall(b"writable\\n")
 `),
     );
     const peer = await holder.connected();
