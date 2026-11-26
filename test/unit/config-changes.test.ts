@@ -49,6 +49,20 @@ const WRITES: ReadonlyArray<readonly [string, string | null, string | null]> = [
 ];
 
 describe("diffChanges", () => {
+  test.each(["", "  \n", "// editor is writing"])(
+    "refuses a historical whole-file change to or from an incomplete document",
+    (incomplete) => {
+      for (const [before, after] of [
+        [incomplete, BEFORE],
+        [BEFORE, incomplete],
+      ] as const)
+        expect(applyChanges(before, diffChanges(before, after))).toMatchObject({
+          kind: "incomplete",
+          at: [],
+        });
+    },
+  );
+
   test.each(WRITES)("%s rebuilds what was written", (_, before, after) => {
     expect(applyChanges(before, diffChanges(before, after))).toEqual({
       kind: "applied",

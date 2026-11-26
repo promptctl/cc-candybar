@@ -413,10 +413,11 @@ export function json5Text(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** The document's first line terminator, or LF for a single-line document. */
+// CR and LF separate lines in both supported file formats. JSON permits
+// literal Unicode line/paragraph separators inside strings but forbids them
+// between members, so never synthesize whitespace from those characters.
 function eolOf(text: string): string {
-  LINE_END.lastIndex = 0;
-  return LINE_END.exec(text)?.[0] ?? "\n";
+  return /\r\n|[\r\n]/.exec(text)?.[0] ?? "\n";
 }
 
 /**

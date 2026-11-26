@@ -7,6 +7,8 @@ import {
   stagedName,
 } from "../utils/atomic-write.js";
 import { readTextIfPresent } from "../utils/regular-text.js";
+import type { OneShotLauncher } from "../proc/launch";
+import { withInstallClaim } from "./claim.js";
 import { InstallJournal, contentsOf, fileIdentity } from "./journal.js";
 
 // [LAW:single-enforcer] Every change an install makes to the user's files,
@@ -19,14 +21,16 @@ import { InstallJournal, contentsOf, fileIdentity } from "./journal.js";
 export class InstallChanges {
   constructor(private readonly journal: InstallJournal) {}
   private readonly publications: Array<() => void> = [];
+  private readonly activation: Array<() => void> = [];
   private readonly reports: Array<() => void> = [];
 
   publish(): void {
     for (const publish of this.publications) publish();
+    for (const activate of this.activation) activate();
   }
 
   afterPublish(action: () => void): void {
-    this.publications.push(action);
+    this.activation.push(action);
   }
 
   report(message: string, stream: "stdout" | "stderr" = "stdout"): void {
@@ -81,7 +85,7 @@ export class InstallChanges {
     build(staging);
     const contents = contentsOf(staging);
     const installed = fileIdentity(staging)!;
-    this.afterPublish(() => {
+    this.publications.push(() => {
       const original = fileIdentity(dest);
       const old = original === null ? null : stagedName(dest);
       this.journal.record({
@@ -102,7 +106,7 @@ export class InstallChanges {
   }
 
   remove(file: string): void {
-    this.afterPublish(() => {
+    this.publications.push(() => {
       if (fileIdentity(file) === null) return;
       const old = stagedName(file);
       this.journal.record({ op: "remove", file, old });
@@ -117,7 +121,7 @@ export class InstallChanges {
     was: string | null,
     target = resolvedTarget(file),
   ): void {
-    this.afterPublish(() => {
+    this.publications.push(() => {
       if (resolvedTarget(file) !== target || readTextIfPresent(target) !== was)
         throw new Error(
           `${file} changed while the install ran, so the install did not write it`,
@@ -141,9 +145,21 @@ export class InstallChanges {
 // [LAW:no-silent-failure] An install whose step throws puts back every
 // change it made, and its error says so, naming each it could not put back.
 // One that stands removes the old copies, and names each that would not go.
-export function transacted<T>(
+export function changeInstallation<T>(
+  world: {
+    host: { home: string };
+    launcher: Pick<OneShotLauncher, "launchSync">;
+  },
   install: (changes: InstallChanges) => T,
-  home?: string,
+): T {
+  return withInstallClaim(world.host.home, world.launcher, () =>
+    transacted(install, world.host.home),
+  );
+}
+
+function transacted<T>(
+  install: (changes: InstallChanges) => T,
+  home: string,
 ): T {
   const journal = InstallJournal.start(home);
   const changes = new InstallChanges(journal);

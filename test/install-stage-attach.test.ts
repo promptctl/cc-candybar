@@ -6,7 +6,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { __test__ as installer } from "../src/install/index";
-const { runStageRuntime } = installer;
+const runStageRuntime = (source: string, dir: string, platform: NodeJS.Platform) =>
+  installer.runStageRuntime(source, dir, platform, {
+    launchSync: () => ({ok:true, exitCode:0, stdout:"test installer start", stderr:""}),
+  });
 import { attachLauncherOf, attachPreloadOf, ATTACH_DIR } from "../src/attach-launcher";
 
 describe("staging the runtime", () => {

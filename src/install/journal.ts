@@ -156,39 +156,36 @@ const JOURNAL = ".cc-candybar-install-v1.jsonl";
 export class InstallJournal {
   private readonly entries: Pending[] = [];
   private committed = false;
-  private constructor(private readonly file: string | null) {}
+  private constructor(private readonly file: string) {}
 
-  static start(home?: string): InstallJournal {
-    const file = home === undefined ? null : path.join(home, JOURNAL);
-    const journal = new InstallJournal(file);
-    if (file !== null) {
-      const existing = fs.lstatSync(file, { throwIfNoEntry: false });
-      if (existing !== undefined) {
-        if (
-          !existing.isFile() ||
-          existing.nlink !== 1 ||
-          (existing.mode & 0o077) !== 0 ||
-          existing.uid !== process.getuid?.()
-        )
-          throw new Error(`cannot trust installer recovery journal ${file}`);
-        const previous = new InstallJournal(file);
-        try {
-          // An incomplete last append preceded the operation and can be ignored.
-          for (const line of readRegularTextSync(file).split("\n").slice(0, -1))
-            previous.remember(entryOf(JSON.parse(line)));
-        } catch (error) {
-          throw new Error(`cannot read ${file}: ${asError(error).message}`, {
-            cause: error,
-          });
-        }
-        const kept = previous.settle();
-        process.stderr.write(
-          `install: recovered interrupted installation${kept.length ? "\n" + kept.join("\n") : ""}\n`,
-        );
+  static start(home: string): InstallJournal {
+    const file = path.join(home, JOURNAL);
+    const existing = fs.lstatSync(file, { throwIfNoEntry: false });
+    if (existing !== undefined) {
+      if (
+        !existing.isFile() ||
+        existing.nlink !== 1 ||
+        (existing.mode & 0o077) !== 0 ||
+        existing.uid !== process.getuid?.()
+      )
+        throw new Error(`cannot trust installer recovery journal ${file}`);
+      const previous = new InstallJournal(file);
+      try {
+        // An incomplete last append preceded the operation and can be ignored.
+        for (const line of readRegularTextSync(file).split("\n").slice(0, -1))
+          previous.remember(entryOf(JSON.parse(line)));
+      } catch (error) {
+        throw new Error(`cannot read ${file}: ${asError(error).message}`, {
+          cause: error,
+        });
       }
-      fs.writeFileSync(file, "", { flag: "wx", mode: 0o600 });
+      const kept = previous.settle();
+      process.stderr.write(
+        `install: recovered interrupted installation${kept.length ? "\n" + kept.join("\n") : ""}\n`,
+      );
     }
-    return journal;
+    fs.writeFileSync(file, "", { flag: "wx", mode: 0o600 });
+    return new InstallJournal(file);
   }
 
   private remember(entry: Entry): void {
@@ -211,8 +208,7 @@ export class InstallJournal {
   }
 
   record(entry: Entry): void {
-    if (this.file !== null)
-      fs.appendFileSync(this.file, JSON.stringify(entry) + "\n");
+    fs.appendFileSync(this.file, JSON.stringify(entry) + "\n");
     this.remember(entry);
   }
 
@@ -256,9 +252,9 @@ export class InstallJournal {
     }
     if (failures.length > 0)
       throw new Error(
-        `install could not finish recovery${this.file === null ? "" : ` (journal retained at ${this.file})`}:\n${[...kept, ...failures].join("\n")}`,
+        `install could not finish recovery (journal retained at ${this.file}):\n${[...kept, ...failures].join("\n")}`,
       );
-    if (this.file !== null) fs.unlinkSync(this.file);
+    fs.unlinkSync(this.file);
     return kept;
   }
 }

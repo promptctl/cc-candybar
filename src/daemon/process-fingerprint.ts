@@ -125,7 +125,8 @@ export function processAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH" || code === "EPERM") return false;
     throw error;
   }
 }
@@ -133,14 +134,7 @@ export function processAlive(pid: number): boolean {
 // The machine's own process table, read through the owner's launcher.
 export function systemProbe(launcher: Pick<Launcher, "launch">): ProcessProbe {
   return {
-    alive: (pid) => {
-      try {
-        process.kill(pid, 0);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    alive: processAlive,
     startTime: async (pid) =>
       startTimeOf(await launcher.launch(startTimeCommand(pid))),
   };

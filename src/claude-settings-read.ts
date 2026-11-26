@@ -5,7 +5,7 @@
 import { types } from "node:util";
 import { EMPTY_DOCUMENT, JSON_DIALECT } from "./config/json5-edit.js";
 import { failed, ok, type Failed, type Ok } from "./utils/outcome.js";
-import { readRegularTextSync } from "./utils/regular-text.js";
+import { readTextIfPresent } from "./utils/regular-text.js";
 import { type JsonObject, isJsonObject } from "./claude-settings";
 
 const cannotRead = (settingsPath: string, e: unknown): Error =>
@@ -15,13 +15,9 @@ const cannotRead = (settingsPath: string, e: unknown): Error =>
 // with a meaning: Claude Code has written nothing yet.
 export function readClaudeSettingsText(settingsPath: string): string | null {
   try {
-    return readRegularTextSync(settingsPath);
-  } catch (e) {
-    // [LAW:no-silent-failure] The install can create a missing settings file.
-    // A settings file it could not read is an error the user can act on.
-    if (types.isNativeError(e) && "code" in e && e.code === "ENOENT")
-      return null;
-    throw cannotRead(settingsPath, e);
+    return readTextIfPresent(settingsPath);
+  } catch (error) {
+    throw new Error(`cannot read ${messageOf(error)}`, { cause: error });
   }
 }
 
@@ -37,17 +33,16 @@ export interface ClaudeSettings {
 }
 
 // [LAW:one-source-of-truth] The ONE reading of Claude Code's settings as a
-// document, shared by install and the auto-compact window. No file, or one of
-// only whitespace, is Claude Code having written nothing yet: the empty
-// document. Text that does not parse, or parses to anything but an object,
+// document, shared by install and the auto-compact window. A missing file
+// means Claude Code has written nothing yet. Existing text that does not
+// parse, or parses to anything but an object,
 // throws naming the file ([LAW:no-silent-failure]: Claude Code is not running
 // with whatever a guess would say).
 export function parseClaudeSettings(
   settingsPath: string,
   text: string | null,
 ): ClaudeSettings {
-  if (text === null || /^\s*$/.test(text))
-    return { text, edited: EMPTY_DOCUMENT, document: {} };
+  if (text === null) return { text, edited: EMPTY_DOCUMENT, document: {} };
   let parsed: unknown;
   try {
     parsed = JSON_DIALECT.parse(text);

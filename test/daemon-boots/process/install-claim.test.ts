@@ -195,9 +195,10 @@ test.each(["file", "link", "directory"] as const)(
           `
       import fs from "node:fs";
       import path from "node:path";
-      import {transacted} from "./src/install/changes.ts";
+      import {changeInstallation} from "./src/install/changes.ts";
+      import {processWorld} from "./src/host.ts";
       const [home,dir]=process.argv.slice(1);
-      transacted(changes=>{ ${script} },home);
+      changeInstallation({host:{home},launcher:processWorld().launcher},changes=>{ ${script} });
     `,
           home,
           dir,

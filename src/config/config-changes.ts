@@ -12,6 +12,8 @@
 import JSON5 from "json5";
 import {
   deleteValue,
+  holdsNoValue,
+  HOLDS_NO_VALUE,
   insertValue,
   JSON5_DIALECT,
   movableTextOf,
@@ -61,6 +63,11 @@ export type Change =
   | { readonly op: "remove"; readonly at: Address; readonly read: Read };
 
 export type Applied =
+  | {
+      readonly kind: "incomplete";
+      readonly at: Address;
+      readonly reason: string;
+    }
   | { readonly kind: "applied"; readonly text: string | null }
   // The first address that moved: what the change read there (`object` for
   // an ancestor it needed to hold the setting), and what is there instead.
@@ -277,6 +284,16 @@ export function applyChanges(
 ): Applied {
   let current = text;
   for (const change of changes) {
+    // Historical undo/redo entries and draft saves go through this same
+    // checkpoint. A whole-file byte match is no authority to overwrite a
+    // file another program may have truncated before writing its contents.
+    if (
+      change.at.length === 0 &&
+      ((current !== null && holdsNoValue(current)) ||
+        (change.op !== "remove" && holdsNoValue(change.text)))
+    )
+      return { kind: "incomplete", at: [], reason: HOLDS_NO_VALUE };
+
     const parsed = parse(current);
     const ancestor = movedAncestor(parsed, change.at);
     if (ancestor !== null)

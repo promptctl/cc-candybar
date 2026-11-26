@@ -52,8 +52,7 @@ import { PLATFORM_PACKAGES } from "./platforms";
 import { recordIfInstall, statusLineRunsBundle } from "./record";
 import { hostBundleRecordText } from "../daemon/host-bundle";
 import { readTextIfPresent } from "../utils/regular-text";
-import { withInstallClaim } from "./claim";
-import { transacted, type InstallChanges } from "./changes";
+import { changeInstallation, type InstallChanges } from "./changes";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
@@ -374,9 +373,13 @@ function runStageRuntime(
   sourceDist: string,
   dir: string,
   platform: NodeJS.Platform,
+  launcher: InstallWorld["launcher"],
 ): StagedRuntime {
   const sources = runtimeSources(sourceDist, platform);
-  return transacted((changes) => stageRuntime(sources, dir, platform, changes));
+  return changeInstallation(
+    { host: { home: path.dirname(dir) }, launcher },
+    (changes) => stageRuntime(sources, dir, platform, changes),
+  );
 }
 
 // The app's Info.plist, whole: a background-only app that claims the scheme.
@@ -471,6 +474,8 @@ function buildUrlHandler(
 // fails after them.
 function registerUrlHandler({ host, launcher }: InstallWorld): void {
   const bundle = appBundlePath(host);
+  // [LAW:no-ambient-temporal-coupling] Launch Services reuses a running app,
+  // so upgrading must quit the resident forwarder before registering its replacement.
   // killall exits 1 when no process matches, which is the other legal state
   // here: the app is only ever ours, in our own home, so no other exit 1 cause
   // (another user's process) applies.
@@ -506,15 +511,32 @@ function registerUrlHandler({ host, launcher }: InstallWorld): void {
   );
 }
 
-// Only the holder of this home's claim may recover the previous install or
-// start its own journal, across both installer commands.
-function changeInstallation(
+// Both installer commands prepare the same runtime and platform-owned app.
+function prepareInstallation(
+  bundle: string,
   world: InstallWorld,
-  prepare: (changes: InstallChanges) => void,
-): void {
-  withInstallClaim(world.host.home, world.launcher, () =>
-    transacted(prepare, world.host.home),
+  platform: NodeJS.Platform,
+  changes: InstallChanges,
+): StagedRuntime {
+  const forwarder =
+    platform === "darwin"
+      ? resolveForwarder(bundle, platform, world.host)
+      : null;
+  const sources = runtimeSources(bundle, platform);
+  if (forwarder !== null) prepareForwardDirectory(world.host, changes);
+  const staged = stageRuntime(
+    sources,
+    supportDir(world.host, platform),
+    platform,
+    changes,
   );
+  if (forwarder !== null) {
+    buildUrlHandler(forwarder, world, changes);
+    changes.afterPublish(() => registerUrlHandler(world));
+  } else {
+    changes.report("Skipping URL handler (cmd-click verbs are macOS-only).\n");
+  }
+  return staged;
 }
 
 export function runInstallUrlHandler(
@@ -525,14 +547,9 @@ export function runInstallUrlHandler(
   // Preconditions before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS(platform);
-  changeInstallation(world, (changes) => {
-    const forwarder = resolveForwarder(bundle, platform, world.host);
-    const sources = runtimeSources(bundle, platform);
-    prepareForwardDirectory(world.host, changes);
-    stageRuntime(sources, supportDir(world.host, platform), platform, changes);
-    buildUrlHandler(forwarder, world, changes);
-    changes.afterPublish(() => registerUrlHandler(world));
-  });
+  changeInstallation(world, (changes) =>
+    prepareInstallation(bundle, world, platform, changes),
+  );
 }
 
 // [LAW:single-enforcer] The URL handler sends the raw link to the host and
@@ -674,11 +691,6 @@ export function install(
 ): void {
   const { force } = installOptions(args);
   changeInstallation(world, (changes) => {
-    const forwarder =
-      platform === "darwin"
-        ? resolveForwarder(bundle, platform, world.host)
-        : null;
-    const sources = runtimeSources(bundle, platform);
     const dir = supportDir(world.host, platform);
     const settingsPath = userSettingsPath(world.host);
     const settings = planSettings(
@@ -690,15 +702,7 @@ export function install(
     const record = hostBundlePath(world.host);
     const recorded = readTextIfPresent(record);
 
-    if (forwarder !== null) prepareForwardDirectory(world.host, changes);
-    const staged = stageRuntime(sources, dir, platform, changes);
-    if (forwarder !== null) {
-      buildUrlHandler(forwarder, world, changes);
-    } else {
-      process.stdout.write(
-        "Skipping URL handler (cmd-click verbs are macOS-only).\n",
-      );
-    }
+    const staged = prepareInstallation(bundle, world, platform, changes);
 
     const { change } = settings;
     if (change.kind === "set") {
@@ -734,9 +738,6 @@ export function install(
         `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
       );
     }
-
-    if (forwarder !== null)
-      changes.afterPublish(() => registerUrlHandler(world));
   });
 }
 
@@ -814,8 +815,7 @@ interface SettingsPlan {
 type SettingsEdit = readonly [keyPath: readonly string[], value: unknown];
 
 // [LAW:one-source-of-truth] The command install writes is the staged entry
-// alone: no renderer flag, since the bar's config file holds everything a bar
-// shows. A command install owns is one it could have written — the staged
+// alone. The config file holds the renderer settings. Install adopts the staged
 // entry in any spelling a version of install used (a version whose quoter
 // left fewer characters bare wrote the path quoted where shellWord leaves it
 // bare), or the legacy `pnpm dlx` form with a package version and no arguments.

@@ -38,6 +38,8 @@ That single command (re-run it any time to update to the latest release):
 
 On an upgrade, install prepares the new runtime and signs the macOS app while the previous installation remains available. A second installer reports which process is active. If that process is killed, the next installer recovers its filesystem changes before reading settings. It restores interrupted publications and cleans up backups from a completed publication.
 
+Install creates a missing settings file. If an existing settings file is blank, malformed, or has an invalid statusline declaration, install reports the path and leaves the file intact.
+
 If installation fails, it restores the files it changed and reports any path it could not restore.
 
 Restart Claude Code. The statusline appears with the bundled default layout — an identity row (host, directory, gitaculous) over a status row (model, context, autocompact, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).

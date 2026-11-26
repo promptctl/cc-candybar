@@ -65,7 +65,6 @@ describe("the statusLine command install writes", () => {
 
   test.each([
     ["no file", null],
-    ["a blank file", "  \n"],
     ["an empty object", "{}"],
     ["settings with no statusLine", JSON.stringify({ someOtherKey: true })],
   ])("%s gets the statusLine written", (_, text) => {
@@ -74,6 +73,18 @@ describe("the statusLine command install writes", () => {
       command: shellWord(BIN),
     });
   });
+
+  test.each(["\u2028", "\u2029"])(
+    "keeps a literal separator inside a JSON string when publishing a new key",
+    (separator) => {
+      const note = `hello${separator}world`;
+      const text = `{"note":${JSON.stringify(note)},\n"statusLine":{}\n}`;
+      expect(JSON.parse(written(text))).toEqual({
+        note,
+        statusLine: { type: "command", command: shellWord(BIN) },
+      });
+    },
+  );
 
   test("a re-install over the command it wrote changes nothing", () => {
     const text = settingsWith(shellWord(BIN));
@@ -162,6 +173,7 @@ describe("a settings file that is not the shape install reads", () => {
       "statusLine.command is 7, not a string",
     ],
     ["a document that is not an object", "[1]", "not a JSON object"],
+    ["an existing blank document", "  \n", "cannot read"],
     ["text that is not JSON", "{ statusLine: 1 }", "cannot read"],
   ])("%s is refused", (_, text, why) => {
     for (const force of [false, true]) {
