@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-971",
+      "ref": "refs/pull/971/merge",
+      "sha": "4d67a10ea3e646075fec0f6fd9e4c4aba543357e",
+      "timestamp": "2026-11-26T05:11:29.380Z",
+      "commits": [
+        {
+          "sha": "4d67a10ea3e646075fec0f6fd9e4c4aba543357e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:08:41Z",
+          "message": "Merge 0c981736f95ed5bc34789696b943c75007c1c247 into fa1eeb9b93a826b08a71ce2eefe360f86ea343cc\n"
+        },
+        {
+          "sha": "0c981736f95ed5bc34789696b943c75007c1c247",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:33-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
+        },
+        {
+          "sha": "8273f12d451f7b785236c2a016f3477278dd9a31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:31-07:00",
+          "message": "test(cache): measure renderer entries after retiring their views\n"
+        },
+        {
+          "sha": "b7108dc95d2711709728160552ce3b284f7ce972",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:06:55-07:00",
+          "message": "test(heap): distinguish compile-owned stores from live WeakMap keys\n"
+        },
+        {
+          "sha": "3559a6ccbfdc96ff22e7c602311acff9ee1b4874",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:45-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
+        },
+        {
+          "sha": "d773a10147554d29bf14e469179274b07f6e03ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:21-07:00",
+          "message": "test: isolate terminal, filesystem and process observations from the host\n"
+        }
+      ]
+    },
+    {
       "version": "pr-960",
       "ref": "refs/pull/960/merge",
       "sha": "bb9a9a3e8ceab57625a64edf3c124a89e2e39996",
@@ -62,42 +112,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T17:55:41-07:00",
           "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-971",
-      "ref": "refs/pull/971/merge",
-      "sha": "906f10c236b7a92e5825549e4a7f34e1aeb1f554",
-      "timestamp": "2026-11-26T05:09:07.273Z",
-      "commits": [
-        {
-          "sha": "906f10c236b7a92e5825549e4a7f34e1aeb1f554",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:07:07Z",
-          "message": "Merge b7108dc95d2711709728160552ce3b284f7ce972 into fa1eeb9b93a826b08a71ce2eefe360f86ea343cc\n"
-        },
-        {
-          "sha": "b7108dc95d2711709728160552ce3b284f7ce972",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:06:55-07:00",
-          "message": "test(heap): distinguish compile-owned stores from live WeakMap keys\n"
-        },
-        {
-          "sha": "3559a6ccbfdc96ff22e7c602311acff9ee1b4874",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:45-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
-        },
-        {
-          "sha": "d773a10147554d29bf14e469179274b07f6e03ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:21-07:00",
-          "message": "test: isolate terminal, filesystem and process observations from the host\n"
         }
       ]
     },
