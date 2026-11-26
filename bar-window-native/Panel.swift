@@ -157,6 +157,7 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
                 frame = dock
             case let .inset(x, y, width, height):
                 switch grid {
+                case let .remeasuring(reason): hide("hidden", reason); return
                 case let .unavailable(reason): hide("unavailable", reason); return
                 case let .measured(cells):
                     guard let box = cells.frame(column: x, row: y, width: width, height: height) else {
@@ -210,6 +211,7 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
             message["state"] = "visible"
             switch grid {
             case let .measured(cells): message["columns"] = cells.columns; message["rows"] = cells.rows
+            case .remeasuring: message["state"] = "remeasuring"
             case let .unavailable(reason): message["reason"] = reason
             }
         }

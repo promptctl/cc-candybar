@@ -390,6 +390,7 @@ describe("a connection to a daemon built in this worker", () => {
       leaving.send(request);
       expect(await read.promise).toEqual({
         kind: "subscribe",
+        drawing: true,
         sessionId,
         lane: "pane",
         owner: null,

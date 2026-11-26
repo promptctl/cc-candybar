@@ -84,7 +84,13 @@ test("one panel follows a visible attachment and retires only its unusable reser
     expect(neither.clients).toHaveLength(2);
     visible(a);
     expect((await locate("docked", b)).selected).toEqual(a);
-    if (!tmux.run("list-commands", "split-window").includes("[-T title]"))
+    if (
+      !tmux
+        .run("list-commands")
+        .split("\n")
+        .find((command) => command.startsWith("split-window "))
+        ?.includes("[-T title]")
+    )
       return;
     tmux.run("set-option", "-g", reservationLease(title), "1");
     const reserved = () =>
@@ -110,6 +116,13 @@ test("one panel follows a visible attachment and retires only its unusable reser
     observations.set(clientKey(a), {
       kind: "availability",
       ...a,
+      state: "remeasuring",
+    });
+    expect((await locate("inset")).layout.placement).toBe("hidden");
+    expect(reserved()).toHaveLength(1);
+    observations.set(clientKey(a), {
+      kind: "availability",
+      ...a,
       state: "visible",
       reason: "No measured grid",
     });
@@ -122,7 +135,13 @@ test("one panel follows a visible attachment and retires only its unusable reser
     expect((await locate("inset", b)).selected).toBeUndefined();
     expect(reserved()).toHaveLength(0);
     attached = [b];
-    expect((await locate("inset", b, 50)).issue).toMatch(/too small/);
+    expect(await locate("inset", b, 50)).toMatchObject({
+      issue: expect.stringMatching(/too small/),
+      measureHeight: true,
+    });
+    hidden(b);
+    expect((await locate("inset", b, 50)).measureHeight).toBe(false);
+    visible(b);
     expect(reserved()).toHaveLength(0);
     expect((await locate("inset", b)).selected).toEqual(b);
     tmux.run("new-session", "-d", "-s", "survivor");

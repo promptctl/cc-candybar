@@ -26,12 +26,12 @@ struct WindowGridSnapshot {
     let measurement: GridMeasurement
 
     func measure(frame current: CGRect, columns: Int, rows: Int) -> GridMeasurement {
-        guard current == frame else { return .unavailable("Terminal window moved during cell measurement") }
+        guard current == frame else { return .remeasuring("Terminal window moved during cell measurement") }
         guard case let .measured(grid) = measurement else { return measurement }
         guard grid.columns == columns, grid.rows == rows,
               let full = grid.frame(column: 0, row: 0, width: columns, height: rows),
               current.insetBy(dx: -0.5, dy: -0.5).contains(full) else {
-            return .unavailable("Terminal grid changed during cell measurement")
+            return .remeasuring("Terminal grid changed during cell measurement")
         }
         return measurement
     }

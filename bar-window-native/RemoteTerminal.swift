@@ -163,7 +163,7 @@ func remoteSession(terminal: LocalTerminal, tty: String, clientPID: pid_t, pid: 
         let after = try screenFrame(sample.window, pid: pid, onscreenOnly: false)
         guard let frame = after else { throw LocationFailure("kitty window no longer exists") }
         let measured: GridMeasurement = id == sample.window && before == frame ? sample.grid :
-            .unavailable("kitty window changed during cell measurement")
+            .remeasuring("kitty window changed during cell measurement")
         return .window(TerminalSession(window: sample.window, selected: sample.selected, minimized: false, nativeSplits: 1,
                                        reportedGrid: WindowGridSnapshot(frame: frame, measurement: measured)))
     }

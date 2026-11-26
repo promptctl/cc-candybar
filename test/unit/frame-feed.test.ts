@@ -33,6 +33,7 @@ import {
   MAIN_RENDERER,
   rendererNameOf,
 } from "../../src/daemon/foundations/renderer-name";
+import { followingOf } from "../../src/renderer-interface/interface";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
 import type { DaemonEvent } from "../../src/utils/event-hold";
@@ -1003,6 +1004,35 @@ describe("the daemon's close", () => {
       `info feed sid="${T}" dropped lane=pane daemon-closed`,
     );
   });
+});
+
+test("measuring a window receives changed frames while display receipts and events remain unclaimed", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const measure = subscriber("window", false);
+  const leave = feeds.subscribe(S, measure.sub);
+  expect(followingOf(feeds.viewers()[S])).toEqual(new Set());
+  expect(feeds.viewers()[S]).toMatchObject({
+    lanes: { window: { subscribers: 1, drawing: false } },
+    pointer: null,
+  });
+  const event: DaemonEvent = {
+    kind: "act-failed",
+    about: "act-failed",
+    event: { text: "an act failed", at: 7 as Instant, answered: false },
+  };
+  const first = frame(S, "menu open", null, 1, [event]);
+  const second = frame(S, "menu closed", null, 2, [event]);
+  const unchanged = frame(S, "menu closed", null, 3, [event]);
+  took([first, second, unchanged]);
+  expect(measure.sent).toHaveLength(2);
+  expect(settled).toEqual([[first, false], [second, false], [unchanged, false]]);
+  expect(acknowledged).toEqual([]);
+  leave();
+  feeds.subscribe(S, subscriber("window").sub);
+  expect(followingOf(feeds.viewers()[S])).toEqual(new Set(["window"]));
+  took([unchanged]);
+  expect(acknowledged).toEqual([event]);
+  expect(settled.at(-1)).toEqual([unchanged, true]);
 });
 
 test("equal pane bytes with a different event require a new confirmed write", () => {

@@ -50,6 +50,7 @@ struct CellGrid: Equatable {
 }
 
 enum GridMeasurement: Equatable {
+    case remeasuring(String)
     case measured(CellGrid)
     case unavailable(String)
 }

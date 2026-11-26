@@ -16,6 +16,7 @@ import { parseSessionId } from "../daemon/foundations/session-id.js";
 import { lineSplitter } from "../renderer-interface/wire.js";
 import { whyFailed } from "../proc/launcher.js";
 import { WindowLayout } from "./layout.js";
+import { WindowIssues } from "./issues.js";
 import { clientKey, type Availability, type Client } from "./availability.js";
 import { renderFailedFrame } from "../render/frame.js";
 import {
@@ -64,17 +65,16 @@ export async function runBarWindow(
   let target: Client | undefined;
   let owned = false;
   let closed = false;
-  let status: string | undefined;
   let feed: FrameFollower | undefined;
+  let feedMode: "draw" | "measure" | undefined;
   let hover: string | null = null;
   const wire = { attached: false };
   const observations = new Map<string, Availability>();
   let watching = new Set<string>();
   let observedClients = "";
-  let layoutIssue = "";
-  let surfaceIssue = "";
   let sourceRetired = false;
   let appliedLayout = "";
+  let layoutCanDraw = false;
   let refreshPending = false;
   let refreshing: Promise<void> | undefined;
   let watcher: ReturnType<typeof watchTmuxEvents> | undefined;
@@ -88,16 +88,10 @@ export async function runBarWindow(
     gestures: [...ALL_GESTURES, HOVER],
     hover,
   });
-  function publishStatus() {
-    const reason = layoutIssue || surfaceIssue;
-    if (status === reason) return;
-    status = reason;
+  const issues = new WindowIssues((reason) => {
     process.stdout.write(JSON.stringify({ kind: "issue", reason }) + "\n");
-  }
-  const writeStatus = (reason: string) => {
-    surfaceIssue = reason;
-    publishStatus();
-  };
+  });
+  const writeStatus = (reason: string) => issues.setSurface(reason);
   function stop() {
     if (!closed) {
       closed = true;
@@ -107,6 +101,7 @@ export async function runBarWindow(
   function unsubscribe() {
     feed?.close();
     feed = undefined;
+    feedMode = undefined;
     wire.attached = false;
     hover = null;
   }
@@ -138,11 +133,27 @@ export async function runBarWindow(
       stop();
     }
   });
-  const subscribe = () => {
-    if (feed || closed) return;
+  function updateHeight(rows: number) {
+    const next = Math.max(1, rows);
+    if (height !== next) {
+      height = next;
+      if (placement === "inset") refresh();
+    }
+  }
+  const subscribe = (mode: "draw" | "measure") => {
+    if (feedMode === mode || closed) return;
+    unsubscribe();
+    feedMode = mode;
     feed = followFrames(world, hostSocket, session, "window", {
-      owner: facts,
+      measureWindow: mode === "measure",
+      owner: mode === "draw" ? facts : undefined,
       frame(response) {
+        if (feedMode !== mode) return;
+        if (mode === "measure") {
+          if (response.ok && "frame" in response)
+            updateHeight(response.frame.rows.length);
+          return;
+        }
         if (!wire.attached) {
           wire.attached = true;
           report();
@@ -156,11 +167,7 @@ export async function runBarWindow(
           throw new Error("Window subscription received a non-frame response");
         writeStatus(response.ok ? "" : response.error);
         displaying.offer(frame);
-        const next = Math.max(1, frame.rows.length);
-        if (height !== next) {
-          height = next;
-          if (placement === "inset") refresh();
-        }
+        updateHeight(frame.rows.length);
       },
       off: () => stop(),
       fault: (reason) => {
@@ -213,17 +220,17 @@ export async function runBarWindow(
         break;
       }
       case "ready":
-        if (!layoutIssue) {
+        if (layoutCanDraw) {
           writeStatus("");
-          subscribe();
+          subscribe("draw");
         }
         break;
       case "hidden":
-        unsubscribe();
+        if (feedMode !== "measure") unsubscribe();
         writeStatus("");
         break;
       case "unavailable":
-        unsubscribe();
+        if (feedMode !== "measure") unsubscribe();
         writeStatus(String(message.reason));
         break;
       case "presented":
@@ -276,6 +283,7 @@ export async function runBarWindow(
             target,
             observations,
           );
+          if (next.closed) sourceRetired = true;
           if (requested !== placement || closed) continue;
           watching = new Set(next.clients.map(clientKey));
           for (const key of observations.keys())
@@ -288,20 +296,19 @@ export async function runBarWindow(
           if (next.selected) target = next.selected;
           else if (target && !watching.has(clientKey(target)))
             target = undefined;
-          layoutIssue = next.issue ?? "";
-          publishStatus();
+          layoutCanDraw = next.selected !== undefined;
+          issues.setLayout(next.issue ?? "");
+          if (next.measureHeight) subscribe("measure");
+          else if (!layoutCanDraw || feedMode === "measure") unsubscribe();
           const encoded = JSON.stringify(next.layout);
           if (encoded !== appliedLayout) {
             send(next.layout);
             appliedLayout = encoded;
           }
-          if (next.closed) {
-            sourceRetired = true;
-            stop();
-          }
+          if (next.closed) stop();
         } catch (error) {
-          layoutIssue = String(error);
-          publishStatus();
+          layoutCanDraw = false;
+          issues.setLayout(String(error));
           unsubscribe();
           const hidden = { kind: "layout", placement: "hidden" };
           const encoded = JSON.stringify(hidden);

@@ -113,6 +113,7 @@ export interface FrameFollow {
   // it stands then: a stream that reconnects restates it, so the host never holds
   // what the follower no longer says.
   readonly owner?: () => OwnerFacts;
+  readonly measureWindow?: boolean;
 }
 
 export interface FrameFollower {
@@ -176,6 +177,7 @@ export function followFrames(
         }
       },
       follow.owner?.(),
+      follow.measureWindow,
     );
   };
 

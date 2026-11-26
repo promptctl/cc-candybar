@@ -45,6 +45,7 @@ final class WindowObserver {
     private var preferred: CGWindowID?
     private var generation: UInt64 = 0
     private var looking = false
+    private var remeasurementStarted: TimeInterval?
     private var last: TerminalObservation?
     private var scheduled: Refresh?
 
@@ -276,9 +277,20 @@ final class WindowObserver {
     }
 
     private func refresh(_ change: Refresh) {
-        let snapshot: TerminalObservation
+        var snapshot: TerminalObservation
         do { snapshot = try sample(change) }
         catch { snapshot = .unavailable(error.localizedDescription) }
+        // A single frame may be sampled across a resize. kitty supplies a
+        // fresh native layout every half second; repeated disagreement cannot
+        // keep a blank reservation indefinitely.
+        if case let .visible(id, frame, .remeasuring(reason)) = snapshot {
+            let now = ProcessInfo.processInfo.systemUptime
+            if let began = remeasurementStarted {
+                if now - began >= 2 { snapshot = .visible(window: id, frame: frame, grid: .unavailable(reason)) }
+            } else { remeasurementStarted = now }
+        } else if case .locating = snapshot {
+            // Discovery belongs to the same pending measurement.
+        } else { remeasurementStarted = nil }
         if snapshot != last { last = snapshot; report(snapshot) }
     }
 }

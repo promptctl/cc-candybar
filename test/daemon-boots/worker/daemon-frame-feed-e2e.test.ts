@@ -48,6 +48,7 @@ import {
 import {
   click,
   frameRequest,
+  linkTo,
   refusedClick,
   render,
   renderBody,
@@ -970,6 +971,42 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     ).toContain("a handed-off mark");
     // The pane subscription ends once its preference is off.
     expect(await stream.ended).toMatchObject({ kind: "refused" });
+  });
+
+  test("a height-blocked window measures the menu closing in the interactive statusline", async () => {
+    const sid = "feed-window-inset-height";
+    const draw = () => render(sockPath, sid, projectDir, {}, args("windowed"));
+    const closed = await draw();
+    await click(sockPath, linkTo(closed, "🍫"));
+    const opened = await draw();
+    expect(opened.rows.length).toBeGreaterThan(closed.rows.length);
+    const heights: number[] = [];
+    let end: StreamEnd | undefined;
+    const measure = openFrameStream(sockPath, sid, "window", (response) => {
+      const frame = frameOf(response);
+      if (frame) heights.push(frame.rows.length);
+    }, (reason) => { end = reason; }, undefined, true);
+    try {
+      const waitForHeight = (height: number) => until(() => {
+        if (end) throw new Error(JSON.stringify(end));
+        return heights.at(-1) === height;
+      }, `the window to receive ${height} rows`);
+      await waitForHeight(opened.rows.length);
+      const fallback = await draw();
+      expect(textOf(fallback)).toContain("door shut");
+      expect(textOf(fallback)).not.toContain(HANDOFF_BUTTON);
+      await click(sockPath, linkTo(fallback, "✖"));
+      await waitForHeight(closed.rows.length);
+      expect(textOf(await draw())).toContain("door shut");
+    } finally {
+      measure.close();
+    }
+    for (const invalid of [{ lane: "pane" }, { lane: "window", owner: { id: "hidden" } }]) {
+      const refusal = await sendDaemonRequest(sockPath, {
+        v: PROTOCOL_VERSION, kind: "measure-window", sessionId: sid, ...invalid,
+      });
+      expect(refusal).toMatchObject({ ok: false, code: "BAD_REQUEST", error: expect.stringContaining("cannot own") });
+    }
   });
 
   // [LAW:verifiable-goals] The window replaces the statusline as the pane

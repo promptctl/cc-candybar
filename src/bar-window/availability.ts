@@ -10,6 +10,7 @@ export type Availability = Client & {
   readonly kind: "availability";
 } & (
     | { readonly state: "locating" }
+    | { readonly state: "remeasuring" }
     | { readonly state: "hidden" | "unavailable"; readonly reason: string }
     | {
         readonly state: "visible";
@@ -29,7 +30,8 @@ export function readAvailability(event: Message): Availability {
     pid > 1
   ) {
     const client = { kind: "availability" as const, pid, tty };
-    if (state === "locating") return { ...client, state };
+    if (state === "locating" || state === "remeasuring")
+      return { ...client, state };
     if (
       state === "visible" &&
       typeof columns === "number" &&

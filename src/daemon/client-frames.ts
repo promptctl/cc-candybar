@@ -54,6 +54,7 @@ export function openFrameStream(
   // A follower that owns the session's pointer says so as it subscribes, with what
   // it knows of it now.
   owner?: OwnerFacts,
+  measureWindow = false,
 ): FrameStream {
   let end: StreamEnd | null = null;
   const finish = (why: StreamEnd): void => {
@@ -62,14 +63,18 @@ export function openFrameStream(
     sock.destroy();
     onEnd(why);
   };
+  if (measureWindow && (lane !== "window" || owner !== undefined))
+    throw new Error("Window measurement cannot own a pointer or another lane");
   const sock = net.createConnection({ path: sockPath });
-  const subscribe: SubscribeRequest = {
-    v: PROTOCOL_VERSION,
-    kind: "subscribe",
-    sessionId,
-    lane,
-    ...(owner !== undefined && { owner }),
-  };
+  const subscribe: SubscribeRequest = measureWindow
+    ? { v: PROTOCOL_VERSION, kind: "measure-window", sessionId, lane: "window" }
+    : {
+        v: PROTOCOL_VERSION,
+        kind: "subscribe",
+        sessionId,
+        lane,
+        ...(owner !== undefined && { owner }),
+      };
   sock.once("connect", () => sock.write(encodeFrame(subscribe)));
   sock.on(
     "data",

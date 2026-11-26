@@ -12,7 +12,7 @@ func writeObservation(_ observation: TerminalObservation) {
         switch measurement {
         case let .measured(cells):
             grid = ["kind": "measured", "cell": rect(cells.firstCell), "rows": cells.rows, "columns": cells.columns]
-        case let .unavailable(reason): grid = ["kind": "unavailable", "reason": reason]
+        case let .remeasuring(reason), let .unavailable(reason): grid = ["kind": "unavailable", "reason": reason]
         }
         output = ["kind": "visible", "window": window, "frame": rect(frame), "grid": grid]
     case let .hidden(reason): output = ["kind": "hidden", "reason": reason]

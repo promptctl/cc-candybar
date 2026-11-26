@@ -120,6 +120,7 @@ export type HandledRequest =
   | ({ kind: "reply" } & Reply)
   | {
       kind: "subscribe";
+      drawing: boolean;
       sessionId: SessionId;
       lane: Lane;
       // Set when the subscriber is a follower that owns the session's pointer.
@@ -322,8 +323,28 @@ function subscription(req: SubscribeRequest): HandledRequest {
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
     );
+  if (req.kind === "measure-window") {
+    if (lane !== "window" || req.owner !== undefined)
+      return refuse(
+        "BAD_REQUEST",
+        "A window measurement cannot own a pointer or another lane",
+      );
+    return {
+      kind: "subscribe",
+      sessionId: sessionId.id,
+      lane,
+      owner: null,
+      drawing: false,
+    };
+  }
   if (req.owner === undefined)
-    return { kind: "subscribe", sessionId: sessionId.id, lane, owner: null };
+    return {
+      kind: "subscribe",
+      sessionId: sessionId.id,
+      lane,
+      owner: null,
+      drawing: true,
+    };
   if (!ownsPointer(lane))
     return refuse(
       "BAD_REQUEST",
@@ -337,6 +358,7 @@ function subscription(req: SubscribeRequest): HandledRequest {
     sessionId: sessionId.id,
     lane,
     owner: owner.value,
+    drawing: true,
   };
 }
 
@@ -385,7 +407,8 @@ export async function handleRequest(
     );
   }
 
-  if (req.kind === "subscribe") return subscription(req);
+  if (req.kind === "subscribe" || req.kind === "measure-window")
+    return subscription(req);
   // [LAW:parse-dont-validate] The kind is untrusted JSON: one no request
   // carries — a name no kind has, or no name at all, which `Object.hasOwn`
   // would coerce into one — is refused here, so replyTo is total over the
