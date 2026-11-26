@@ -22,7 +22,12 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { variableOf } from "../../src/daemon/foundations/session-env";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { sharedMenuStateKey } from "../../src/config/menu-keys";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import {
+  SESSION_STATE_FILE,
+  sessionsOf,
+} from "../../src/daemon/session-state-file";
 import type { RunReading } from "../../src/daemon/readings";
 import {
   recordingBootProblem,
@@ -346,7 +351,11 @@ test("action overlays are refused before raw layer, plugin or retained config by
     input({ kind: "config", origin, config: snapshot(ACTION_CONFIG) }),
     input({
       kind: "click",
-      click: admitClick(VERB_SET_STATE, encodeSegments([SESSION, "example", "value"]), TEST_SIGNER).click,
+      click: admitClick(
+        VERB_SET_STATE,
+        encodeSegments([SESSION, "example", "value"]),
+        TEST_SIGNER,
+      ).click,
       context: heardContextOf(checked().req),
       coldConfig: snapshot(ACTION_CONFIG),
     }),
@@ -428,6 +437,106 @@ test("the output check sees the evaluated run environment in ordinary and pane f
     expect(problem).toMatch(/run action supplies environment/);
     expect(problem).not.toContain(ACTION_SECRET);
   }
+});
+
+test("recording can start from a profile saved with the former layout and toggles menus open", () => {
+  // The keys on disk in the release that offered these two menu members.
+  const tab = "candybar.tab";
+  const picker = "menus._candybarZ00002epickers";
+  const fromDisk = (sessions: unknown) => {
+    const parsed = sessionsOf(SESSION_STATE_FILE)(sessions);
+    if (parsed.kind !== "ok") throw new Error(parsed.reason);
+    const boot = {
+      ...BOOT,
+      stored: {
+        sessions: Object.fromEntries(parsed.value.sessions),
+        history: {},
+      },
+    };
+    return { boot, dropped: parsed.value.dropped };
+  };
+  // Captured by clicking the drawn controls of v1.238.6. Every door open
+  // disarms both confirm buttons before a user can reach either old member.
+  const door = {
+    "candybar.menu": "open",
+    "candybar.resetAll.armed": "disarmed",
+    "candybar.commands.clear.armed": "disarmed",
+  };
+  const old = {
+    layout: { ...door, [tab]: "layout" },
+    toggles: { ...door, [tab]: "config", [picker]: "toggles" },
+    retiredOnly: { [tab]: "layout" },
+    current: { [tab]: "config", [picker]: "renderer", padding: "2" },
+  };
+  const { boot, dropped } = fromDisk(old);
+  expect(dropped).toEqual([
+    { session: "layout", part: tab, why: expect.stringContaining('"layout"') },
+    {
+      session: "toggles",
+      part: picker,
+      why: expect.stringContaining('"toggles"'),
+    },
+    {
+      session: "retiredOnly",
+      part: null,
+      why: expect.stringContaining('"layout"'),
+    },
+  ]);
+  expect(recordingBootProblem(boot)).toBeNull();
+  expect(boot.stored.sessions).toEqual({
+    layout: door,
+    toggles: { ...door, [tab]: "config" },
+    current: old.current,
+  });
+  expect(
+    recordingBootProblem(
+      fromDisk({
+        picking: {
+          [picker]: "candybar.apply.theme",
+          [`menupages.${picker}`]: "-1",
+          "candybar.resetAll.armed": "armed",
+          "candybar.diagnostics": "0",
+          style: "vivid",
+          preset: "compact",
+        },
+      }).boot,
+    ),
+  ).toBeNull();
+  for (const privatePick of [
+    { [tab]: SECRET },
+    { [picker]: SECRET },
+    { [tab]: "toggles" },
+    { [picker]: "layout" },
+    { authored: "layout" },
+    { authored: "toggles" },
+    { [tab]: "renderer" },
+    { "candybar.resetAll.armed": SECRET },
+    { [`${SECRET}.armed`]: "disarmed" },
+    { [sharedMenuStateKey(SECRET)]: "closed" },
+    { [`menupages.${picker}`]: "146832902767011" },
+    { style: SECRET },
+    { preset: SECRET },
+  ]) {
+    expect(
+      recordingBootProblem(fromDisk({ ...old, private: privatePick }).boot),
+    ).toMatch(/saved renderer state contains values of unknown origin/);
+  }
+  expect(
+    recordingBootProblem({
+      ...boot,
+      stored: {
+        ...boot.stored,
+        history: {
+          [SESSION]: {
+            past: [
+              [{ kind: "session", key: "padding", before: SECRET, after: "2" }],
+            ],
+            future: [],
+          },
+        },
+      },
+    }),
+  ).toMatch(/saved renderer state contains values of unknown origin/);
 });
 
 test("boot admits the click mode and refuses a hovered region's name", () => {
