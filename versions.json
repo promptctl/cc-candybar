@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f1dc2bae0c6e4047a6adaa456317fbf08fabfdb0",
-      "timestamp": "2026-11-26T15:09:42.888Z",
+      "sha": "8684e9e2a1cac1590f5ee4ca99bee60729084947",
+      "timestamp": "2026-11-26T15:14:01.035Z",
       "commits": [
         {
-          "sha": "f1dc2bae0c6e4047a6adaa456317fbf08fabfdb0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T08:08:45-07:00",
-          "message": "feat(window): show an interactive session bar beside its terminal (#975)\n\n* feat(window): show an interactive session bar docked or inset beside its terminal\n\n* test(window): verify repeated tmux hook edits preserve the reservation\n\n* fix(window): retain crash cleanup when a local tmux hook shadows the global one\n\n* fix(window): follow visible attachments and retire stale inset reservations and controls\n\n* fix(window): stop restarting a follower whose source pane closed\n\n* fix(window): recover inset when its menu fits again without taking over the statusline\n\n* fix(window): recognize an ended tmux server and constrain measurement subscribers\n\n* style(window): format subscription interest types\n\n* feat(window): default to inset and place padded terminal grids"
+          "sha": "8684e9e2a1cac1590f5ee4ca99bee60729084947",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T15:12:13Z",
+          "message": "chore(release): set `package.json` to 1.243.0\n\n## [1.243.0](https://github.com/promptctl/cc-candybar/compare/v1.242.1...v1.243.0) (2026-11-26)\n\n### Features\n\n* **window:** show an interactive session bar beside its terminal ([#975](https://github.com/promptctl/cc-candybar/issues/975)) ([f1dc2ba](https://github.com/promptctl/cc-candybar/commit/f1dc2bae0c6e4047a6adaa456317fbf08fabfdb0))\n"
         }
       ]
     }
