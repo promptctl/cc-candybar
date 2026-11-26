@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-970",
+      "ref": "refs/pull/970/merge",
+      "sha": "906e28ce6eb1debef220db4ec887e2d09cabc129",
+      "timestamp": "2026-11-26T05:01:48.846Z",
+      "commits": [
+        {
+          "sha": "906e28ce6eb1debef220db4ec887e2d09cabc129",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:00:07-07:00",
+          "message": "Merge ccfda41fc37bad7201bfd6a788da7773e9ac6fa2 into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
+        },
+        {
+          "sha": "ccfda41fc37bad7201bfd6a788da7773e9ac6fa2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:12-07:00",
+          "message": "fix(pricing): own, refresh and abort the daemon price table\n"
+        }
+      ]
+    },
+    {
       "version": "pr-962",
       "ref": "refs/pull/962/merge",
       "sha": "ce81b303fe91b9c4cb7620c7efe957e3a4afe8df",
