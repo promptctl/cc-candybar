@@ -32,6 +32,13 @@ import { HOST } from "../../scripts/lib/host";
 import { stateDir } from "../../src/daemon/paths";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 
+// A click can re-arm the renderer's menu-idle wake for another thirty
+// seconds. The fixture owns that wake just as a running daemon does.
+const renderers: ReturnType<typeof rendererHost>[] = [];
+afterEach(() => {
+  for (const renderer of renderers.splice(0)) renderer.closeWake();
+});
+
 export function clickParts(
   verbCtx: DaemonVerbContext,
   collector: Pick<Collector, "holding" | "clicked"> = {
@@ -134,6 +141,7 @@ export function clickParts(
     },
     world,
   );
+  renderers.push(renderer);
   return {
     renderer,
     collector,

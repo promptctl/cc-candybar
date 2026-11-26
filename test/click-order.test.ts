@@ -237,7 +237,6 @@ describe("the idle close decides as its turn comes", () => {
     expect(theme()).toBe("nord");
     expect(closes(logged)).toEqual(beforeClick);
     expect(menuIdle.next()).toBe(60);
-    renderer.closeWake();
   });
 
   test("a due waiting behind a click finds the period the click restarted, and closes nothing", async () => {
