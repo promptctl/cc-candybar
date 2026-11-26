@@ -26,8 +26,6 @@ import { actionTarget, type DrawnLink } from "../../src/render/drawn-link";
 import { rendererNameOf } from "../../src/daemon/foundations/renderer-name";
 import { TEST_LINK_KEY, TEST_SIGNER } from "../helpers/link-signer";
 
-const FORWARDED = { kind: "forwarder", urlV: 2 } as const;
-const CLI = { kind: "cli" } as const;
 const COPY = effectsUrl([{ verb: VERB_COPY, args: ["rm -rf ~"] }]);
 
 // A signer with no key to have: what the host holds while its key file is
@@ -38,20 +36,18 @@ const KEYLESS: LinkSigner = {
 };
 
 describe("a link the bar draws", () => {
-  test("opens to what it carries, from either delivery", () => {
+  test("opens to what it carries", () => {
     const signed = TEST_SIGNER.signLink(COPY);
-    for (const delivery of [FORWARDED, CLI])
-      expect(parseClick(signed, delivery, TEST_SIGNER)).toEqual({
-        kind: "link",
-        click: {
-          scope: "global",
-          verb: "dispatch",
-          steps: [{ kind: "global", verb: VERB_COPY, value: "rm -rf ~" }],
-        },
-        runEvidence: [],
-        link: COPY,
-        delivery,
-      });
+    expect(parseClick(signed, TEST_SIGNER)).toEqual({
+      kind: "link",
+      click: {
+        scope: "global",
+        verb: "dispatch",
+        steps: [{ kind: "global", verb: VERB_COPY, value: "rm -rf ~" }],
+      },
+      runEvidence: [],
+      link: COPY,
+    });
   });
 
   // The URL handler app reads the signer from the link without opening it: the
@@ -110,19 +106,19 @@ describe("a link the bar draws", () => {
       kind: "ok",
       value: { href: COPY, source },
     });
-    expect(parseClick(signed, FORWARDED, TEST_SIGNER)).toMatchObject({
+    expect(parseClick(signed, TEST_SIGNER)).toMatchObject({
       kind: "link",
       source,
       click: { scope: "global", session: source.session },
     });
     expect(
-      parseClick(signed.replace("/worktree/", "/main/"), CLI, TEST_SIGNER),
+      parseClick(signed.replace("/worktree/", "/main/"), TEST_SIGNER),
     ).toMatchObject({
       kind: "refused",
       problem: expect.stringContaining("signature"),
     });
     const legacy = TEST_SIGNER.signLink(COPY);
-    expect(parseClick(legacy, CLI, TEST_SIGNER)).not.toHaveProperty("source");
+    expect(parseClick(legacy, TEST_SIGNER)).not.toHaveProperty("source");
   });
 
   test("keeps what an effect list says when its readers take the mac off", () => {
@@ -137,7 +133,7 @@ describe("a link the bar draws", () => {
 
 describe("a link the bar did not draw", () => {
   const signed = TEST_SIGNER.signLink(COPY);
-  const refused = (url: string) => parseClick(url, FORWARDED, TEST_SIGNER);
+  const refused = (url: string) => parseClick(url, TEST_SIGNER);
 
   test("unsigned, as one in scrollback from before links were signed, is refused saying so", () => {
     expect(refused(COPY)).toEqual({
@@ -216,7 +212,7 @@ describe("a link the bar did not draw", () => {
   );
 
   test("is refused with the reason the host could not open it", () => {
-    expect(parseClick(signed, FORWARDED, KEYLESS)).toEqual({
+    expect(parseClick(signed, KEYLESS)).toEqual({
       kind: "refused",
       problem: "no key",
     });
@@ -225,12 +221,10 @@ describe("a link the bar did not draw", () => {
 
 test("a retired status-line range cannot bypass signed click admission", () => {
   const range = "cc-candybar://tmux-status-click/sock/3/r1";
-  for (const delivery of [CLI, FORWARDED]) {
-    expect(parseClick(range, delivery, KEYLESS)).toEqual({
-      kind: "refused",
-      problem: "no key",
-    });
-  }
+  expect(parseClick(range, KEYLESS)).toEqual({
+    kind: "refused",
+    problem: "no key",
+  });
 });
 
 
@@ -297,7 +291,7 @@ describe("a draw's frames", () => {
       session: sessionIdOf("drawn"),
     };
     expect(
-      parseClick(TEST_SIGNER.signLink(href, source), CLI, TEST_SIGNER),
+      parseClick(TEST_SIGNER.signLink(href, source), TEST_SIGNER),
     ).toMatchObject({
       kind: "refused",
       problem: expect.stringContaining("different sessions"),
@@ -323,7 +317,7 @@ describe("a draw's frames", () => {
     const sent = sign(frame([target, legacy])).rows[0]?.runs.map(({ link }) => link);
     const signed = TEST_SIGNER.signLink(legacy);
     expect(sent).toEqual([signed, signed]);
-    expect(parseClick(signed, FORWARDED, TEST_SIGNER)).toMatchObject({
+    expect(parseClick(signed, TEST_SIGNER)).toMatchObject({
       kind: "link",
       click: {
         scope: "session",
@@ -342,7 +336,7 @@ describe("a draw's frames", () => {
     ["unknown answer", [session, dir, "pending", proof]],
   ])("leaves an authored repository href with %s inert", (_, args) => {
     const [run] = publishingFrames(TEST_SIGNER)(frame([unsigned(args)])).rows[0]!.runs;
-    expect(parseClick(run!.link!, CLI, TEST_SIGNER)).toMatchObject({
+    expect(parseClick(run!.link!, TEST_SIGNER)).toMatchObject({
       kind: "link",
       click: {
         steps: [{ kind: "invalid", reason: expect.stringContaining("signature does not match") }],
@@ -357,7 +351,7 @@ describe("a draw's frames", () => {
       { verb: VERB_REPO_CONFIG, args: [session, dir, decision] },
       write("two"),
     ]);
-    expect(parseClick(TEST_SIGNER.signLink(url), CLI, TEST_SIGNER)).toMatchObject({
+    expect(parseClick(TEST_SIGNER.signLink(url), TEST_SIGNER)).toMatchObject({
       kind: "link",
       click: {
         steps: [
@@ -392,7 +386,7 @@ describe("a draw's frames", () => {
       verb: VERB_RUN,
       args: [run.session, run.action, run.evaluated, run.mac],
     })));
-    const admitted = parseClick(TEST_SIGNER.signLink(raw), CLI, TEST_SIGNER);
+    const admitted = parseClick(TEST_SIGNER.signLink(raw), TEST_SIGNER);
     if (admitted.kind !== "link") throw new Error(admitted.problem);
     expect(admitted.click.steps).toEqual([
       { kind: "run", verb: VERB_RUN, action, capture: 0 },
