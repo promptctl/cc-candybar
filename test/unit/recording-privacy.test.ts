@@ -435,20 +435,29 @@ test("recording can start from a profile saved with the former layout and toggle
   const fromDisk = (sessions: unknown) => {
     const parsed = sessionsOf(SESSION_STATE_FILE)(sessions);
     if (parsed.kind !== "ok") throw new Error(parsed.reason);
-    return {
+    const boot = {
       ...BOOT,
       stored: {
         sessions: Object.fromEntries(parsed.value.sessions),
         history: {},
       },
     };
+    return { boot, dropped: parsed.value.dropped };
   };
   const old = {
     layout: { [tab]: "layout", padding: "2" },
     toggles: { [picker]: "toggles" },
     current: { [tab]: "config", [picker]: "renderer" },
   };
-  const boot = fromDisk(old);
+  const { boot, dropped } = fromDisk(old);
+  expect(dropped).toEqual([
+    { session: "layout", part: tab, why: expect.stringContaining('"layout"') },
+    {
+      session: "toggles",
+      part: null,
+      why: expect.stringContaining('"toggles"'),
+    },
+  ]);
   expect(recordingBootProblem(boot)).toBeNull();
   expect(boot.stored.sessions).toEqual({
     layout: { padding: "2" },
@@ -463,7 +472,7 @@ test("recording can start from a profile saved with the former layout and toggle
     { authored: "toggles" },
   ]) {
     expect(
-      recordingBootProblem(fromDisk({ ...old, private: privatePick })),
+      recordingBootProblem(fromDisk({ ...old, private: privatePick }).boot),
     ).toMatch(/saved renderer state contains values of unknown origin/);
   }
   expect(

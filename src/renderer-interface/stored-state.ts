@@ -9,7 +9,7 @@ import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
 import { kept, type Kept } from "../daemon/foundations/stored-file";
 import { isEditModeKey } from "../config/session-key";
-import { menuOfKey, sharedMenuStateKey } from "../config/menu-keys";
+import { menuOfKey } from "../config/menu-keys";
 import { CLICK_ERROR_KEY, isMenuStateKey } from "../config/reserved-names";
 import { isClickErrorRecord } from "../daemon/foundations/click-error";
 import {
@@ -43,20 +43,19 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
       };
 }
 
-// Historical wire pairs. Both keys still serve other menu members. A session
-// saved with either retired member reads as closed when that one pick leaves.
-const retiredMenuMembers = new Map([
-  ["candybar.tab", "layout"],
-  [sharedMenuStateKey("candybar.pickers"), "toggles"],
-]);
-
 // Why this build reads nothing of a stored pick, or undefined for one a
 // render can read. A key no current spelling mints is never read again and
 // never cleared, so it would sit in the profile for good; a click error that
 // does not parse would throw in every render of its session.
 function retiredBecause(key: string, value: string): string | undefined {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
-  if (retiredMenuMembers.get(key) === value)
+  // [LAW:one-source-of-truth] Keep the two wire pairs the old release wrote.
+  // Both keys still serve other members. Changing today's shared-menu key
+  // encoder cannot change the spelling on an old profile's disk.
+  if (
+    (key === "candybar.tab" && value === "layout") ||
+    (key === "menus._candybarZ00002epickers" && value === "toggles")
+  )
     return `the settings menu no longer has a "${value}" member on this key`;
   if (isMenuStateKey(key) && menuOfKey(key) === undefined)
     return "no menu is keyed that way in this build";
@@ -68,8 +67,8 @@ function retiredBecause(key: string, value: string): string | undefined {
 // [LAW:no-silent-failure] A session's picks load without the ones nothing in
 // this build reads (edit mode's own, which would reopen a panel or a library
 // on a bar with no edit, a menu key this build does not mint, a click error
-// it cannot read), each named in what the load dropped. A session left
-// holding nothing is refused, so it takes no slot.
+// it cannot read, or a retired settings menu selection), each named in what
+// the load dropped. A session left holding nothing takes no slot.
 export function withoutRetiredKeys(
   picks: SessionPicks,
 ): Asked<Kept<SessionPicks>> {
