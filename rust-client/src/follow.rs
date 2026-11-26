@@ -40,9 +40,9 @@ sends the lane's subscriber, one JSON line on stdout, until stdout closes or the
 process that started it exits. The frames are drawn from the data the session's
 own statusline client sends.
 
-The stream outlives the daemon: one that ends is reconnected, starting a daemon
-when none answers. While the lane's toggle is off the daemon's refusal is
-written once, and asked again every {}s. What goes wrong is said on stderr.
+If the daemon stops, the follower retries until a statusline client starts it
+again. While the lane is off, the follower prints the refusal once and checks
+again every {}s. Errors go to stderr.
 
 Exit 2: bad arguments. Exit 1: a daemon that refuses for good (it speaks a newer
 protocol than this client). Exit 0: stdout closed, or the process that started

@@ -13,7 +13,10 @@ import path from "node:path";
 
 import { RichText } from "@promptctl/rich-js";
 import { click, render, urlWriting, drawnLink } from "../../helpers/daemon-e2e";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
+import {
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import {
   indicatorOf,
@@ -93,8 +96,7 @@ describe("a config that cannot be drawn as written", () => {
     );
     // An unknown flag is this request's own error, ahead of the file's warning.
     const flagged = [...a, "--no-such-flag"];
-    const draw = (argv: string[]) =>
-      render(daemon, sid, projectDir, {}, argv);
+    const draw = (argv: string[]) => render(daemon, sid, projectDir, {}, argv);
     const bar = await draw(a);
     expect(indicatorOf(bar)).toBe("⚠ 1");
     await click(daemon, viewerLink(bar, "open")!.url);
@@ -136,7 +138,10 @@ describe("a config that cannot be drawn as written", () => {
         null,
         2,
       );
-    const a = args("two-load-warnings", declare("project_dir", "transcript_path"));
+    const a = args(
+      "two-load-warnings",
+      declare("project_dir", "transcript_path"),
+    );
     const draw = () => render(daemon, sid, projectDir, {}, a);
     const bar = await draw();
     expect(indicatorOf(bar)).toBe("⚠ 2");
@@ -176,8 +181,12 @@ describe("a config that cannot be drawn as written", () => {
     await click(daemon, urlWriting(bar, SETTINGS_ANCHOR, "open"));
     const opened = await render(daemon, sid, projectDir, {}, a);
     expect(textOf(opened)).toContain(DOOR_CLOSE_GLYPH);
-    expect(textOf(opened)).toContain("▦"); // preset switching is reachable
     expect(indicatorOf(opened)).toBe("⚠ 1"); // still loud
+    // Preset switching is reachable: 📚 saves & presets opens onto it.
+    await click(daemon, urlWriting(opened, "candybar.tab", "presets"));
+    expect(textOf(await render(daemon, sid, projectDir, {}, a))).toContain(
+      "▦ preset",
+    );
     const [page] = await readDiagnostics(
       daemon,
       sid,
@@ -226,14 +235,7 @@ describe("a config that cannot be drawn as written", () => {
     // red, since one is an error. The cell of a plugin absent here adds
     // nothing to either.
     expect(indicatorOf(bar)).toBe("⚠ 2");
-    const pages = await readDiagnostics(
-      daemon,
-      sid,
-      projectDir,
-      bar,
-      hints,
-      a,
-    );
+    const pages = await readDiagnostics(daemon, sid, projectDir, bar, hints, a);
     expect(pages.map((p) => p.position)).toEqual(["1/2", "2/2"]);
     expect(pages[0]!.text).toContain("first-missing-segment");
     expect(pages[0]!.text).toContain("second-missing");

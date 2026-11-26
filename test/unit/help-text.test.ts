@@ -10,14 +10,10 @@ describe("HELP_TEXT", () => {
   // landed. The glyph is read from the synthesis that renders it, not spelled
   // again here — a renamed anchor must break this loudly.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
-    for (const tab of [
-      "⚡ session",
-      "🎨 look",
-      "📐 layout",
-      "⚙ config",
-    ]) {
-      expect(HELP_TEXT).toContain(tab);
-    }
+    expect(HELP_TEXT).toMatch(
+      /first line holds ◁ back, the tabs\s+🎨 look, 📚 saves & presets,/,
+    );
+    expect(HELP_TEXT).toMatch(/the tabs ⚡ session, ⚙ config;/);
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
     expect(HELP_TEXT).toMatch(/💾 save/);
   });
@@ -32,7 +28,10 @@ describe("HELP_TEXT", () => {
         new RegExp(`\\n\\s+${escaped(configKey)}\\s+${escaped(label)}\\n`),
       );
     }
-    expect(HELP_TEXT).toMatch(/first line\n\s+palette\s+🎨 theme\n\s+preset\s/);
+    expect(HELP_TEXT).toMatch(
+      /🎨 look\n\s+palette\s+🎨 theme\n\s+endcaps\s+✦ endcaps\n\s+effect\s/,
+    );
+    expect(HELP_TEXT).toMatch(/📚 saves & presets\n\s+preset\s+▦ preset\n/);
     expect(HELP_TEXT).toMatch(
       /⚙ config\n\s+autoWrap\s+wrap\n\s+padding\s+padding\n/,
     );
@@ -40,7 +39,9 @@ describe("HELP_TEXT", () => {
 
   test("documents both config scopes and the editor schema", () => {
     expect(HELP_TEXT).toMatch(/--config PATH\s+Use PATH as the user layer/);
-    expect(HELP_TEXT).toMatch(/--config-only PATH\s+Load only PATH over the bundled base/);
+    expect(HELP_TEXT).toMatch(
+      /--config-only PATH\s+Load only PATH over the bundled base/,
+    );
     expect(HELP_TEXT).toMatch(/^\s+schema\s+Print the JSON Schema/m);
   });
 });

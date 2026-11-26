@@ -21,6 +21,7 @@ import {
   listThemePalettes,
 } from "@promptctl/rich-js";
 import { DOOR_GLYPH } from "../src/config/disclosure";
+import { TABS, type TabName } from "../src/config/menu-places";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { POLLED, SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import type { Frame } from "../src/render/frame";
@@ -40,7 +41,6 @@ const THEMES = listThemePalettes();
 // Every shade of a role a cell can wear: the ladder and the muted form.
 const ROLE_SHADES: readonly RoleShade[] = [...LADDER, "muted"];
 const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
-const TABS = ["session", "look", "layout", "config"] as const;
 const COLS = 200;
 const AT = instantOf(new Date("2026-10-30T12:00:00Z"));
 
@@ -52,7 +52,7 @@ interface View {
   readonly open: boolean;
   readonly show: (bar: SessionBar) => void;
 }
-const opened = (tab: string, picker: string | null) => (bar: SessionBar) => {
+const opened = (tab: TabName, picker: string | null) => (bar: SessionBar) => {
   bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
   bar.pick(`${SETTINGS_NS}tab`, tab);
   bar.pick(sharedMenuStateKey("candybar.pickers"), "gear");
@@ -61,8 +61,8 @@ const opened = (tab: string, picker: string | null) => (bar: SessionBar) => {
 };
 const VIEWS: readonly View[] = [
   { name: "closed", open: false, show: (bar) => bar.pick(SETTINGS_ANCHOR, "closed") },
-  ...TABS.map((tab) => ({ name: `${tab} tab`, open: true, show: opened(tab, null) })),
-  { name: "style picker in the ⚙", open: true, show: opened("session", "candybar.apply.style") },
+  ...TABS.map(({ member: tab }) => ({ name: `${tab} tab`, open: true, show: opened(tab, null) })),
+  { name: "style picker in the ⚙", open: true, show: opened("look", "candybar.apply.style") },
 ];
 
 /**

@@ -14,14 +14,23 @@ import {
 } from "./setting-projections.js";
 import { LANES, type Lane } from "./lanes.js";
 
-// The tabs the door opens onto, in strip order.
+// The tabs the door opens onto, and the line of the menu each one's trigger
+// leads from: the first line, beside ◁, holds what the menu is most often
+// opened for, and the strip under it the rest. Each line lists its tabs in
+// this order, and every tab is one accordion whichever line it sits on.
+export type TabLine = "first" | "strip";
 export const TABS = [
-  { member: "session", label: "⚡ session" },
-  { member: "look", label: "🎨 look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "📐 layout" },
-  { member: "config", label: "⚙ config" },
-] as const;
+  { member: "look", label: "🎨 look", line: "first" },
+  { member: "presets", label: "📚 saves & presets", line: "first" },
+  { member: "session", label: "⚡ session", line: "strip" },
+  { member: "config", label: "⚙ config", line: "strip" },
+] as const satisfies ReadonlyArray<{
+  readonly member: string;
+  readonly label: string;
+  readonly line: TabLine;
+}>;
+export const tabsOnLine = (line: TabLine) =>
+  TABS.filter((tab) => tab.line === line);
 export type TabName = (typeof TABS)[number]["member"];
 // [LAW:types-are-the-program] Total over TABS: the one place the totality
 // `Object.fromEntries` cannot see is asserted.
@@ -34,13 +43,12 @@ export const TAB_LABEL = Object.fromEntries(
 // the controls `PLACE` puts in it. The theme picker is `[Theme ▀▀▀] [⚙]`, and
 // the gear opens "the theme configuration menu … bright/dim, etc, and the
 // primary/secondary, etc": the settings that adapt the theme rather than
-// choose it. The toggles menu (Brandon: "Put the three feature toggles we
-// added into the menu, as a toggles menu under config") holds the switches
-// for experimental features.
+// choose it. The renderer menu holds the switches for the displays that
+// draw the bar beyond Claude Code's polled statusline.
 // [LAW:types-are-the-program] The submenu names are spelled as a type of their
 // own, before the table: a setting's row names its place, so the places must
 // not be computed from a table whose type reads the settings.
-export type SubmenuName = "gear" | "toggles";
+export type SubmenuName = "gear" | "renderer";
 export const SUBMENUS: Readonly<
   Record<
     SubmenuName,
@@ -48,14 +56,13 @@ export const SUBMENUS: Readonly<
   >
 > = {
   gear: { beside: "theme", trigger: "⚙" },
-  toggles: { beside: "padding", trigger: "🧪 toggles" },
+  renderer: { beside: "padding", trigger: "📺 renderer" },
 };
 export const SUBMENU_NAMES = Object.keys(SUBMENUS) as readonly SubmenuName[];
 
-// Where a setting's control renders — the door's first line, exactly one
-// tab, or inside a submenu. Each setting's row declares it
-// (src/config/globals-fields.ts).
-export type Place = "door" | TabName | SubmenuName;
+// Where a setting's control renders — exactly one tab, or inside a submenu.
+// Each setting's row declares it (src/config/globals-fields.ts).
+export type Place = TabName | SubmenuName;
 export const PLACE: Readonly<Record<SettingName, Place>> = perSetting(
   (name) => SETTINGS[name].place,
 );
@@ -82,30 +89,38 @@ export const within = (place: Place, container: Place): boolean =>
 const placePath = (place: Place): string =>
   isSubmenu(place)
     ? `${placePath(PLACE[SUBMENUS[place].beside])} › ${SUBMENUS[place].trigger}`
-    : place === "door"
-      ? "first line"
-      : TAB_LABEL[place];
+    : TAB_LABEL[place];
 
-// Where a setting's control is in the settings menu — `⚙ config › 🧪 toggles`.
+// Where a setting's control is in the settings menu — `⚙ config › 📺 renderer`.
 export const settingMenuPath = (name: SettingName): string =>
   placePath(PLACE[name]);
 
-// Every place that holds a control, in the order the menu opens them — the
-// first line, then each tab, each followed by the submenus inside it — with
+// Both the menu and CLI help traverse the same rows. Settings sharing a line
+// retain the order of their declarations.
+export function settingRows(place: Place): SettingName[][] {
+  const settings = SETTING_NAMES.filter((name) => PLACE[name] === place);
+  const lines = [...new Set(settings.map((name) => SETTINGS[name].line))];
+  return lines
+    .sort((a, b) => a - b)
+    .map((line) => settings.filter((name) => SETTINGS[name].line === line));
+}
+
+// Every place that holds a control, in the order the menu opens them — each
+// tab, followed by the submenus inside it — with
 // the settings whose controls it holds, in the order it draws them.
 interface PlaceSettings {
   readonly path: string;
   readonly names: readonly SettingName[];
 }
 export const settingsByPlace = (): readonly PlaceSettings[] =>
-  (["door", ...TABS.map((t) => t.member)] as const)
+  TABS.map((t) => t.member)
     .flatMap((top): Place[] => [
       top,
       ...SUBMENU_NAMES.filter((s) => within(s, top)),
     ])
     .map((place) => ({
       path: placePath(place),
-      names: SETTING_NAMES.filter((name) => PLACE[name] === place),
+      names: settingRows(place).flat(),
     }))
     .filter(({ names }) => names.length > 0);
 
