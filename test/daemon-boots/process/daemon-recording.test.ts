@@ -23,7 +23,7 @@ const LOCALIZED = "50.000 1969-12-31 19:00 -0500";
 
 function replayedFrames(stdout: string): readonly {
   readonly session: string;
-  readonly surface: "statusline" | "pane";
+  readonly surface: "statusline" | "bar";
   readonly frame: WireFrame;
 }[] {
   return stdout.trimEnd().split("\n").map((line) => JSON.parse(line));
@@ -182,8 +182,8 @@ test("the running host records two independent renderer sessions for offline rep
     expect(new Set(frames.map(({ session }) => session))).toEqual(new Set([namedSession]));
     expect(frames.some(({ surface, frame }) => surface === "statusline" && textOf(frame).includes("recorded-source padding=1"))).toBe(true);
     expect(frames.some(({ surface, frame }) => surface === "statusline" && textOf(frame).includes(LOCALIZED))).toBe(true);
-    const panes = frames.filter(({ surface }) => surface === "pane").map(({ frame }) => textOf(frame));
-    expect(panes).toEqual(expect.arrayContaining([
+    const bars = frames.filter(({ surface }) => surface === "bar").map(({ frame }) => textOf(frame));
+    expect(bars).toEqual(expect.arrayContaining([
       expect.stringContaining("recorded-source padding=2 WIDER phase-a saved-by-click"),
       expect.stringContaining("recorded-source padding=2 WIDER phase-b saved-by-click"),
       expect.stringContaining("reloaded-source"),

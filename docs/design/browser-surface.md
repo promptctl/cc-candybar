@@ -2,7 +2,7 @@
 
 `scene-and-browser.md` supersedes this document where they differ: the page paints a Scene instead of a Frame once the Scene exists (that document's steps 3 to 5), this document's build order is that document's step 1, and depth and width are settled there (§2).
 
-Status: design, nothing built. [The Frame](areas/frame.md) it depends on is built. Tickets: `candybar-browser-surface-97sw`.
+Status: design. [The Frame](areas/frame.md) it depends on is built, and so is the `window` lane a native panel follows (below). A browser tab, and the loopback listener it would need, are not built.
 
 ## Goal
 
@@ -23,9 +23,9 @@ The browser is one more surface. The page is a Frame painter with no renderer of
 
 `Subscriber.lane` is required, and rates, `feedsOf`, `answerOf` and `feedsFact` all key on it. A surface gets compile-time totality, the rate readout and feed facts for free. A separate subscriber kind would need parallel paths for each, and it would be invisible to `feeds=`.
 
-`browser` is a `LANES` entry with `handsOff: false`, so closing a tab never touches Claude Code's bar, and `inTmux: false`. Its setup does no relaunch: turning it on reports the URL.
+The `window` lane is one: a `LANES` entry with `handsOff: true`, so while a window follows the session Claude Code's statusline shows the one-row handoff, exactly as for the tmux pane. Its encoding is `frame`, the Frame's runs with each link signed, so its page needs no hit map and no link ids.
 
-Adding a surface touches `LANES`, `LANE_FRAMES`, `LANE_SETUP` and `LANE_HELP`, which the compiler enforces, and these by hand: `LANE_NAMES` in `rust-client/src/follow.rs` (policed by `check-protocol`), the schema, and `docs/interaction-authoring.md`.
+Adding a surface touches `LANES` (its encoding names one of the feed's answers in `src/render/encodings.ts`) and `LANE_HELP`, which the compiler enforces, and these by hand: `LANE_NAMES` in `rust-client/src/follow.rs` (policed by `check-protocol`), the schema, and `docs/interaction-authoring.md`.
 
 ### One feed, the session's width and depth
 
@@ -112,7 +112,7 @@ One `browser` check with `takesMark: false`: is the listener wanted, is it bound
 
 The renderer is a page, so any browser can show it. Two ways to put it beside Claude Code came out of this session. Neither is required.
 
-**A floating borderless panel.** A small Swift WebKit panel worked and you liked it; the source is [probes/float.swift](probes/float.swift). It covered the input box, because nothing ties it to a terminal window. Following a window needs the Accessibility API or a terminal's own API, because macOS only attaches windows within one app. Untried.
+**A floating borderless panel.** This is the `window` lane. A follower subscribes to the session's feed over the daemon's unix socket and drives a Swift WebKit panel over stdio; the page is bundled and loaded from files, so there is no listener, no token and no CDN, and a click sends the run's signed link back over the socket as the tmux pane's does. The panel follows the session's terminal window through the Accessibility API, docked under it or inset over a reserved tmux pane, by a setting. The probe it grew from is [probes/float.swift](probes/float.swift), which covered the input box because nothing tied it to a terminal window.
 
 **An iTerm2 browser pane.** It requires iTerm2, so it can only ever be an option, and it needs the browser plugin. Through the Python API: split with `profile_customizations` `set_use_custom_command("Browser")`. The URL given at split time is ignored while the welcome page shows, so call `session.async_load_url` after the split. Height responds to `preferred_size` plus `tab.async_update_layout`, in fake units. Hiding the toolbar is refused by iTerm2 3.7.6.
 

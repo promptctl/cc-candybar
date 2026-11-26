@@ -601,6 +601,7 @@ describe("WatcherRegistry", () => {
           },
         ]);
         expect(reg.dirWatches()).toBe(3);
+        // A write made before the watch is live can be lost on FSEvents.
         await live(seen, path.join(root, "team", "open"));
       },
     );

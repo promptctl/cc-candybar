@@ -124,7 +124,7 @@ function collectFrames(lines: string[]): ReplayTurn {
   let bytes = 0;
   const emit = (
     session: string,
-    surface: "statusline" | "pane",
+    surface: "statusline" | "bar",
     frame: WireFrame,
   ): void => {
     const line = JSON.stringify({ session, surface, frame }) + "\n";
@@ -144,7 +144,7 @@ function collectFrames(lines: string[]): ReplayTurn {
     }
     for (const { session, frame } of output.frames) {
       if (frame.kind !== "drawn") continue;
-      emit(session, "pane", frame.bar);
+      emit(session, "bar", frame.bar);
       if (frame.handoff !== null) emit(session, "statusline", frame.handoff);
     }
   };

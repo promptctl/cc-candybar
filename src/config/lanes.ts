@@ -1,4 +1,9 @@
-// The two pushed displays. The ordinary statusline also draws on request.
+// The pushed displays. The ordinary statusline also draws on request.
+
+import {
+  SAYS_WHERE_POINTER_ACTS,
+  type FeedEncoding,
+} from "../render/encodings.js";
 
 // [LAW:one-source-of-truth] The one spelling of "this session runs in a tmux
 // pane", as a template expression over the client's tmux hint: a slash click
@@ -10,22 +15,53 @@ export const IN_TMUX = 'ne .tmux.pane ""';
 // `handsOff` is whether a lane draws the bar somewhere other than the
 // statusline: while it is on, the statusline hands off to it
 // (src/renderer/lane-handoff.ts). Lane B draws the statusline itself, so it
-// hands off nowhere. [LAW:one-source-of-truth] Settings and the protocol
-// derive the available displays from this table.
+// hands off nowhere. `encoding` is what its subscribers are pushed
+// (src/render/encodings.ts), and `called` is what prose calls it.
+// [LAW:one-source-of-truth] Settings, the feed and the protocol derive the
+// available displays from this table.
 export const LANES = {
   statusline: {
     switch: { setting: "experimentalStatusline", on: true },
     label: "🧪 statusline (B)",
     handsOff: false,
+    encoding: "ansi",
+    called: "the statusline",
   },
   pane: {
     switch: { setting: "experimentalPane", on: true },
     label: "🧪 tmux pane (C)",
     handsOff: true,
+    encoding: "hit-mapped",
+    called: "the pane",
   },
-} as const;
+  // The native window the bar floats in beside the session's terminal.
+  window: {
+    switch: { setting: "experimentalWindow", on: true },
+    label: "🧪 window (D)",
+    handsOff: true,
+    encoding: "frame",
+    called: "the window",
+  },
+} as const satisfies Readonly<
+  Record<
+    string,
+    {
+      readonly switch: { readonly setting: string; readonly on: boolean };
+      readonly label: string;
+      readonly handsOff: boolean;
+      readonly encoding: FeedEncoding;
+      readonly called: string;
+    }
+  >
+>;
 
 export type Lane = keyof typeof LANES;
+
+// [LAW:one-source-of-truth] Whether a lane's follower may own the session's
+// pointer: only one whose frames say where a pointer can act, since the hover
+// it reports is the action it found there.
+export const ownsPointer = (lane: Lane): boolean =>
+  SAYS_WHERE_POINTER_ACTS[LANES[lane].encoding];
 export type LaneSwitch = (typeof LANES)[Lane]["switch"];
 // The settings that are a lane's own 🧪 toggle: a flag, on at `true`.
 export type LaneSetting = Extract<LaneSwitch, { readonly on: true }>["setting"];

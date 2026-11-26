@@ -49,6 +49,7 @@ const watched = (
   lanes: Object.fromEntries(
     lanes.map((lane) => [lane, { subscribers: 1, drawing: true }]),
   ),
+  pointer: null,
   shown,
   joined: 1,
 });

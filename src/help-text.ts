@@ -67,6 +67,10 @@ export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
     "animates the bar in a tmux pane under this session's",
     "on: opens that pane · off: closes it",
   ],
+  window: [
+    "animates the bar in a window that follows this session's terminal",
+    "on: a window following this session draws the bar · off: it stops",
+  ],
 };
 
 export const HELP_TEXT = `

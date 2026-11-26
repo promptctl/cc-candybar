@@ -19,9 +19,9 @@
 // session's frames drawn from its own statusline client's data, named by id,
 // are the native client's `follow` (rust-client/src/follow.rs).
 //
-// The stream outlives the daemon: one that restarts (a rebuild, the memory
-// backstop) is reconnected, spawning it when none answers, and handed the
-// last statusline JSON again so it has data to draw from.
+// If the daemon stops, this client retries and sends the last statusline JSON
+// again so the replacement daemon can draw the session. The regular
+// statusline command starts the daemon.
 
 import { CONFIG_FLAGS, isConfigFlag } from "./config-hint.js";
 import process from "node:process";
