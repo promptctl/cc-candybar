@@ -138,6 +138,11 @@ interface MadeEvent<E = Event> {
   readonly actsOn?: ActsOn;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
+type MadeClick =
+  | (MadeEvent<Extract<Notification, { kind: "click" }>> & {
+      readonly actsOn: ActsOn;
+    })
+  | Failure;
 
 // What the host's turns act in: the performer of acts, the trust book's
 // directory, what config discovery found at each origin it follows, whether
@@ -170,7 +175,10 @@ export interface RendererHost {
   // which is the turn's failure.
   answer(make: () => Made): Promise<HostTurn>;
   // A click keeps its session busy until its mailbox slot lands.
-  answerClick(session: SessionId | null, make: () => Made): Promise<HostTurn>;
+  answerClick(
+    session: SessionId | null,
+    make: () => MadeClick,
+  ): Promise<HostTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
   deliver(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
@@ -463,19 +471,6 @@ export function rendererHost(
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
     }
-    if (
-      input.event.kind === "click" &&
-      input.event.coldConfig !== undefined &&
-      input.event.context !== null
-    ) {
-      const key = originKey(input.event.context.durable.origin);
-      // [LAW:one-source-of-truth] The declaration tells us whether the
-      // renderer retained the snapshot supplied in this turn.
-      if (
-        output.subscriptions.configs.some((origin) => originKey(origin) === key)
-      )
-        configs.set(key, { kind: "received", config: input.event.coldConfig });
-    }
     const {
       subscriptions,
       wake,
@@ -549,12 +544,19 @@ export function rendererHost(
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
+    // A cold snapshot belongs to one click. If the renderer also wants this
+    // origin after the click, its normal config turn opens waiting sessions
+    // and updates their edits. Only that delivery earns a receipt.
+    const retryOrigin =
+      event.kind === "click" && event.coldConfig !== undefined
+        ? (event.context?.durable.origin ?? null)
+        : requested;
     const followed = took(
       output.subscriptions,
       output.wake,
       output.frames,
       output.stored,
-      requested,
+      retryOrigin,
       receipt,
     );
     let configFailure: Failure | null = null;
@@ -784,8 +786,8 @@ export function rendererHost(
       configs = next;
       origins = subscriptions.configs;
     }
-    // [LAW:no-ambient-temporal-coupling] A new context retries just its
-    // undelivered config, even if the complete declaration stayed the same.
+    // [LAW:no-ambient-temporal-coupling] A context or cold click retries its
+    // undelivered config while the renderer still asks for that origin.
     // A feed tick cannot poll a failed follow or delivery.
     if (requested !== null) {
       const key = originKey(requested);
@@ -881,8 +883,7 @@ export function rendererHost(
     const input = stamped(made);
     const { received, turn, settled } = await inSlot(input, 0);
     record(input.event, [["why", why]], turn);
-    // A `config` turn that threw failed whatever waited on it, as its own
-    // turn would have: a waiting click's bad request is still the user's.
+    // A config failure belongs to the turn that requested its delivery.
     const threw: readonly EffectOutcome[] =
       turn.kind === "threw"
         ? [
@@ -1139,7 +1140,7 @@ export function rendererHost(
     (await taken(make)).turn;
   const answerClick = async (
     session: SessionId | null,
-    make: () => Made,
+    make: () => MadeClick,
   ): Promise<HostTurn> => (await taken(make, "last", session)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
