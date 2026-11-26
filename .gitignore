@@ -39,3 +39,5 @@ bin/cc-candybar-url-handler-native
 
 bin/cc-candybar-window
 bin/cc-candybar-window.source
+
+/bin/terminal-adapters/

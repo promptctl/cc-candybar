@@ -45,6 +45,7 @@ export function productionAdapters(
     linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),
     claudeInput: productionClaudeInputEdge,
     barPaneEdge: productionBarPaneEdge,
+    nativeWindowSupported: process.platform === "darwin",
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {
         launcher,

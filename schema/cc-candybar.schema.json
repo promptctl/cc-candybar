@@ -119,6 +119,12 @@
         "experimentalWindow": {
           "type": "boolean"
         },
+        "windowPlacement": {
+          "enum": [
+            "docked",
+            "inset"
+          ]
+        },
         "colorCompatibility": {
           "enum": [
             "truecolor",
@@ -1634,6 +1640,12 @@
               "experimentalWindow": {
                 "type": "boolean"
               },
+              "windowPlacement": {
+                "enum": [
+                  "docked",
+                  "inset"
+                ]
+              },
               "colorCompatibility": {
                 "enum": [
                   "truecolor",
@@ -1805,6 +1817,12 @@
         },
         "experimentalWindow": {
           "type": "boolean"
+        },
+        "windowPlacement": {
+          "enum": [
+            "docked",
+            "inset"
+          ]
         },
         "colorCompatibility": {
           "enum": [

@@ -25,4 +25,41 @@ expect(CellGrid.measure(viewport: view, columns: 80, rows: 24, ttyCell: nil) { p
 } == empty, "Two neighboring AX cells can witness size without pixel metrics")
 expect(CellGrid.measure(viewport: view, columns: 80, rows: 24, ttyCell: nil) { _ in first } == nil,
        "Without a tty measurement or two adjacent cells, explain the ambiguity")
+let viewport = CGRect(x: -25, y: 32, width: 402, height: 303)
+let pixels = CGSize(width: 804, height: 606)
+let integral = estimatedGrid(in: viewport, pixels: pixels, scale: 2, columns: 80, rows: 30)
+expect(integral?.firstCell == CGRect(x: -25, y: 32, width: 5, height: 10),
+       "An incomplete final cell must not change the backing-pixel pitch")
+let padded = estimatedGrid(in: viewport.insetBy(dx: -7, dy: -5), pixels: pixels, scale: 2, columns: 80, rows: 30)
+expect(padded?.frame(column: 41, row: 28, width: 39, height: 2) ==
+       CGRect(x: 180, y: 312, width: 195, height: 20), "A padded viewport places the right tmux pane at its split")
+expect(estimatedGrid(in: viewport.insetBy(dx: 1, dy: 0), pixels: pixels, scale: 2, columns: 80, rows: 30) == nil,
+       "A tty larger than its viewport cannot place a bar")
+let wezWindow = CGRect(x: 469, y: 157, width: 574, height: 453)
+let wezSize = WezPaneSize(cols: 80, rows: 24, pixel_width: 1120, pixel_height: 768)
+if case let .measured(grid) = wezSize.measure(in: wezWindow, scale: 2, columns: 80, rows: 24) {
+    expect(grid.frame(column: 41, row: 22, width: 39, height: 2) == CGRect(x: 763, y: 570, width: 273, height: 32),
+           "WezTerm uses the measured pane pixels and bottom inset below a decorated title bar")
+} else { expect(false, "The observed stable WezTerm dimensions must resolve") }
+if case .remeasuring = wezSize.measure(in: wezWindow, scale: 2, columns: 80, rows: 23) { }
+else { expect(false, "A resize must invalidate old WezTerm pane dimensions") }
+let snapshot = WindowGridSnapshot(frame: viewport, measurement: .measured(integral!))
+expect(snapshot.measure(frame: viewport, columns: 80, rows: 30) == .measured(integral!), "A stable grid remains measured")
+if case .measured = snapshot.measure(frame: viewport.offsetBy(dx: 1, dy: 0), columns: 80, rows: 30) {
+    expect(false, "A moved window cannot consume a stale absolute terminal grid")
+}
+if case .measured = snapshot.measure(frame: viewport, columns: 80, rows: 29) {
+    expect(false, "An asynchronously resized tty cannot consume its old grid")
+}
+let left = CGRect(x: -1200, y: 0, width: 1200, height: 800)
+let right = CGRect(x: 0, y: 0, width: 1400, height: 900)
+let crossing = CGRect(x: -200, y: 100, width: 600, height: 500)
+expect(dockedFrame(window: crossing, height: 22, screens: [left, right]) ==
+       CGRect(x: -200, y: 600, width: 600, height: 22), "Dock below a terminal spanning adjoining displays")
+expect(dockedFrame(window: right, height: 22, screens: [right]) ==
+       CGRect(x: 0, y: 878, width: 1400, height: 22), "Keep a full-screen terminal's footer visible")
+expect(dockedFrame(window: crossing, height: 22, screens: [left.offsetBy(dx: -50, dy: 0), right]) ==
+       CGRect(x: -200, y: 578, width: 600, height: 22), "A display gap cannot cover the footer")
+expect(dockedFrame(window: crossing, height: 22, screens: [right.offsetBy(dx: 2000, dy: 0)]) == nil,
+       "Hide after the terminal's display is removed")
 print("Geometry expectations passed")

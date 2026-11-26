@@ -1,0 +1,25 @@
+@font-face {
+  font-family: Candybar Powerline;
+  src: url("rich-powerline.woff2") format("woff2");
+  unicode-range: U+E0A0-E0D7;
+}
+:root { color-scheme: dark light; }
+* { box-sizing: border-box; }
+html, body, main { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+main {
+  background: Canvas; color: CanvasText;
+  font-family: "Candybar Powerline", Menlo, monospace;
+  font-variant-ligatures: none; white-space: pre; user-select: none;
+}
+.row { overflow: hidden; }
+[role="button"] { cursor: pointer; }
+.bold { font-weight: bold; }
+.dim { opacity: .65; }
+.italic { font-style: italic; }
+.conceal { color: transparent !important; }
+.frame { outline: 1px solid currentColor; outline-offset: -1px; }
+.encircle { outline: 1px solid currentColor; outline-offset: -1px; border-radius: 50%; }
+.blink { animation: blink 1.2s steps(1) infinite; }
+.blink2 { animation: blink .6s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .blink, .blink2 { animation: none; } }

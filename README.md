@@ -92,6 +92,14 @@ The running bar shows config and source diagnostics under `⚠`. From a source c
 
 Saving the file triggers a hot-reload of every active session.
 
+### Floating window on macOS
+
+In a local tmux session with named event support (tested on tmux 3.8a), open **⚙ config → 📺 renderer**, enable **🧪 window (D)**. The selection applies to this session immediately. Use **Save** to keep it in the configuration file. The window follows the terminal and leaves keyboard focus there. Claude Code shows a **[⟲ claude]** button that returns the bar to the statusline.
+
+**Window placement** defaults to **inset**. It reserves just enough rows under Claude’s tmux pane, including in a side-by-side split. Choose **docked** to release those rows and draw the bar below the terminal, or along its bottom edge when the window reaches the edge of the display. If an open menu makes the inset too tall, you can close it in Claude Code’s statusline and the window returns when it fits. The helper needs macOS Accessibility access to follow the terminal. When the window cannot be placed, Claude Code keeps the bar and reports the reason in diagnostics.
+
+iTerm2 and Terminal.app report cell positions through Accessibility. Kitty uses its authorized local remote-control socket. When Ghostty or WezTerm supplies grid dimensions without a cell origin, Candybar estimates the side margins from the space around the grid. WezTerm also assumes its default half-row of bottom padding. Custom padding can shift the inset. In WezTerm the bar can stay visible during GUI scrollback.
+
 ## Record and replay a renderer
 
 With the daemon running, start a capture, reproduce the bar behavior, and stop the capture to save it.

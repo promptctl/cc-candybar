@@ -48,6 +48,7 @@ import {
 import {
   click,
   frameRequest,
+  linkTo,
   refusedClick,
   render,
   renderBody,
@@ -972,6 +973,62 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(await stream.ended).toMatchObject({ kind: "refused" });
   });
 
+  test("a height-blocked window measures the menu closing in the interactive statusline", async () => {
+    const sid = "feed-window-inset-height";
+    const draw = () => render(sockPath, sid, projectDir, {}, args("windowed"));
+    const closed = await draw();
+    await click(sockPath, linkTo(closed, "🍫"));
+    const opened = await draw();
+    expect(opened.rows.length).toBeGreaterThan(closed.rows.length);
+    const heights: number[] = [];
+    let end: StreamEnd | undefined;
+    const measure = openFrameStream(
+      sockPath,
+      sid,
+      "window",
+      (response) => {
+        const frame = frameOf(response);
+        if (frame) heights.push(frame.rows.length);
+      },
+      (reason) => {
+        end = reason;
+      },
+      "measure-window",
+    );
+    try {
+      const waitForHeight = (height: number) =>
+        until(() => {
+          if (end) throw new Error(JSON.stringify(end));
+          return heights.at(-1) === height;
+        }, `the window to receive ${height} rows`);
+      await waitForHeight(opened.rows.length);
+      const fallback = await draw();
+      expect(textOf(fallback)).toContain("door shut");
+      expect(textOf(fallback)).not.toContain(HANDOFF_BUTTON);
+      await click(sockPath, linkTo(fallback, "✖"));
+      await waitForHeight(closed.rows.length);
+      expect(textOf(await draw())).toContain("door shut");
+    } finally {
+      measure.close();
+    }
+    for (const invalid of [
+      { lane: "pane" },
+      { lane: "window", owner: { id: "hidden" } },
+    ]) {
+      const refusal = await sendDaemonRequest(sockPath, {
+        v: PROTOCOL_VERSION,
+        kind: "measure-window",
+        sessionId: sid,
+        ...invalid,
+      });
+      expect(refusal).toMatchObject({
+        ok: false,
+        code: "BAD_REQUEST",
+        error: expect.stringContaining("cannot own"),
+      });
+    }
+  });
+
   // [LAW:verifiable-goals] The window replaces the statusline as the pane
   // does, from the Frame: its follower clicks a link read off a run, and the
   // handoff row's button turns the window off and brings the bar back.
@@ -995,7 +1052,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     );
     const handedOff = await render(sockPath, sid, projectDir, {}, args("windowed"));
     expect(textOf(handedOff).trim().split("\n")).toEqual([
-      `🧪 ${HANDOFF_BUTTON}`,
+      // This fixture has no attaching tty. Its manual window subscriber
+      // receives the bar and the handoff still shows the native setup warning.
+      `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
     ]);
     await loggedLines(
       env,

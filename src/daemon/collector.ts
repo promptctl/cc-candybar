@@ -78,6 +78,7 @@ export interface CollectorDeps {
   readonly owners: RenderPayloadDeps;
   // The daemon diagnostics every session's document carries. An observable
   // change restamps every session.
+  readonly windowIssue?: (session: SessionId) => string | undefined;
   readonly daemon: () => DaemonFacts;
   readonly clock: Pick<Timekeeper, "now" | "every" | "detach">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
@@ -165,6 +166,7 @@ interface SessionRecord<Context extends ViewFacts> {
 // the daemon's facts re-reads no owner.
 interface StampInputs {
   readonly owners: Ok<Readings> | Failed;
+  readonly windowIssue?: string;
   readonly daemon: DaemonFacts;
 }
 
@@ -441,6 +443,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
         first.owners.value,
         first.daemon,
         instantAt(this.deps.clock),
+        first.windowIssue,
       );
     } catch (e) {
       reader.holds.close();
@@ -495,6 +498,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
       inputs: computed(() => ({
         owners: owners.get(),
         daemon: this.daemon.get(),
+        windowIssue: this.deps.windowIssue?.(keys.session),
       })),
     };
   }
@@ -611,12 +615,13 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     const { owners, daemon } = moved;
     const next =
       owners.kind === "failed"
-        ? failedStamp(prior, owners.reason, daemon)
+        ? failedStamp(prior, owners.reason, daemon, moved.windowIssue)
         : this.assembled(
             prior,
             owners.value,
             daemon,
             instantAt(this.deps.clock),
+            moved.windowIssue,
           );
     const failure = next === prior ? null : next.stampFailure;
     // [LAW:no-silent-failure] Told to the log as well as to the bar.
@@ -635,14 +640,23 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     readings: Readings,
     daemon: DaemonFacts,
     at: Instant,
+    windowIssue?: string,
   ): WorldState {
     try {
-      return assembleFacts(prior, prior.session, readings, daemon, at);
+      return assembleFacts(
+        prior,
+        prior.session,
+        readings,
+        daemon,
+        at,
+        windowIssue,
+      );
     } catch (e) {
       return failedStamp(
         prior,
         `stamping the world state: ${String(e)}`,
         daemon,
+        windowIssue,
       );
     }
   }

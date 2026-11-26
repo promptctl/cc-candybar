@@ -80,6 +80,7 @@ type Event =
       readonly sessionId: SessionId;
       readonly lane: Lane;
       readonly owner: PointerOwner | null;
+      readonly drawing: boolean;
     }
   | { readonly kind: "attached"; readonly unsubscribe: () => void }
   | { readonly kind: "close" };
@@ -99,6 +100,7 @@ type Act =
       readonly sessionId: SessionId;
       readonly lane: Lane;
       readonly owner: PointerOwner | null;
+      readonly drawing: boolean;
     }
   | { readonly kind: "unsubscribe"; readonly unsubscribe: () => void };
 
@@ -279,6 +281,7 @@ const STEP: {
             sessionId: e.sessionId,
             lane: e.lane,
             owner: e.owner,
+            drawing: e.drawing,
           },
         ]
       : [
@@ -390,7 +393,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         );
         return act.owed.settled(false);
       case "attach":
-        return attach(act.sessionId, act.lane, act.owner);
+        return attach(act.sessionId, act.lane, act.owner, act.drawing);
       case "unsubscribe":
         return act.unsubscribe();
       default: {
@@ -466,6 +469,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
               sessionId: r.sessionId,
               lane: r.lane,
               owner: r.owner,
+              drawing: r.drawing,
             });
           default: {
             const unhandled: never = r;
@@ -531,6 +535,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     sessionId: SessionId,
     lane: Lane,
     owner: PointerOwner | null,
+    drawing: boolean,
   ): void {
     const push = newestWins(sock);
     const unsubscribe = daemon.subscribe(sessionId, {
@@ -550,7 +555,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         push(frame, (written) => settled(written && unsent === null));
       },
       refused: (resp) => on({ kind: "refused", answer: replyOf(resp) }),
-      drawing: () => true,
+      drawing: () => drawing,
     });
     on({ kind: "attached", unsubscribe });
   }

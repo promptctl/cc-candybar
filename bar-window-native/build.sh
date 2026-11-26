@@ -9,6 +9,12 @@ trap 'rm -rf "$work"' EXIT
 (cd "$here" && shasum -a 256 ./*.swift build.sh) > "$work/inputs"
 shasum -a 256 < "$work/inputs" > "$work/digest-line"
 cut -d ' ' -f 1 "$work/digest-line" > "$work/source"
+adapter="$(dirname "$out")/terminal-adapters/kitty_geometry.py"
+mkdir -p "$(dirname "$adapter")"
+if ! cmp -s "$here/../resources/terminal-adapters/kitty_geometry.py" "$adapter"; then
+    cp "$here/../resources/terminal-adapters/kitty_geometry.py" "$work/kitty_geometry.py"
+    mv -f "$work/kitty_geometry.py" "$adapter"
+fi
 if [ -x "$out" ] && cmp -s "$work/source" "$out.source" && codesign --verify "$out" 2>/dev/null; then
     exit 0
 fi

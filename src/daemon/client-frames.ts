@@ -51,9 +51,9 @@ export function openFrameStream(
   lane: Lane,
   onFrame: (resp: Response) => void,
   onEnd: (end: StreamEnd) => void,
-  // A follower that owns the session's pointer says so as it subscribes, with what
-  // it knows of it now.
-  owner?: OwnerFacts,
+  // A drawing surface can claim its current pointer. A height-blocked
+  // window receives frames solely to learn when the inset fits again.
+  interest?: OwnerFacts | "measure-window",
 ): FrameStream {
   let end: StreamEnd | null = null;
   const finish = (why: StreamEnd): void => {
@@ -62,14 +62,24 @@ export function openFrameStream(
     sock.destroy();
     onEnd(why);
   };
+  if (interest === "measure-window" && lane !== "window")
+    throw new Error("Only the window lane can measure an inset");
   const sock = net.createConnection({ path: sockPath });
-  const subscribe: SubscribeRequest = {
-    v: PROTOCOL_VERSION,
-    kind: "subscribe",
-    sessionId,
-    lane,
-    ...(owner !== undefined && { owner }),
-  };
+  const subscribe: SubscribeRequest =
+    interest === "measure-window"
+      ? {
+          v: PROTOCOL_VERSION,
+          kind: "measure-window",
+          sessionId,
+          lane: "window",
+        }
+      : {
+          v: PROTOCOL_VERSION,
+          kind: "subscribe",
+          sessionId,
+          lane,
+          ...(interest !== undefined && { owner: interest }),
+        };
   sock.once("connect", () => sock.write(encodeFrame(subscribe)));
   sock.on(
     "data",

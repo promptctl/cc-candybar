@@ -1,4 +1,8 @@
-import type { LaneSwitches } from "../config/lanes.js";
+import {
+  DEFAULT_WINDOW_PLACEMENT,
+  type DeclaredLanes,
+} from "../config/lanes.js";
+import type { WindowDemand } from "./window-followers.js";
 import type { Timekeeper } from "../time.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -31,18 +35,21 @@ const RETRY_MS = 1000;
 
 // [LAW:effects-at-boundaries] The host reconciles tmux panes from the
 // renderer's effective settings, independent of which input changed them.
-export class DeclaredBarPanes {
+export class DeclaredSurfaces {
   private readonly held = new Map<string, HeldPane>();
-  private lanes: Readonly<Record<SessionId, LaneSwitches>> = {};
+  private lanes: Readonly<Record<SessionId, DeclaredLanes>> = {};
 
   constructor(
     private readonly paneOf: (session: SessionId) => ReportedPane | undefined,
     private readonly setPane: (pane: TmuxHint, on: boolean) => Promise<string>,
     private readonly clock: Pick<Timekeeper, "monotonic" | "detach">,
     private readonly log: DaemonLogger,
+    private readonly windows: (
+      desired: ReadonlyMap<SessionId, WindowDemand>,
+    ) => void,
   ) {}
 
-  declare(lanes: Readonly<Record<SessionId, LaneSwitches>>): void {
+  declare(lanes: Readonly<Record<SessionId, DeclaredLanes>>): void {
     this.lanes = lanes;
     this.reconcileDemands();
   }
@@ -71,7 +78,7 @@ export class DeclaredBarPanes {
     // A pane can begin another session while the old view is still held.
     // Its newest request selects the effective setting for the pane.
     for (const [session, switches] of Object.entries(this.lanes) as Array<
-      [SessionId, LaneSwitches]
+      [SessionId, DeclaredLanes]
     >) {
       const reported = this.paneOf(session);
       if (reported === undefined) continue;
@@ -80,6 +87,19 @@ export class DeclaredBarPanes {
       if (competing === undefined || competing.order < reported.order)
         next.set(key, { ...reported, session, on: switches.pane });
     }
+    const windows = new Map<SessionId, WindowDemand>();
+    for (const [sid, switches] of Object.entries(this.lanes) as Array<
+      [SessionId, DeclaredLanes]
+    >) {
+      if (!switches.window) continue;
+      const pane = this.paneOf(sid)?.pane;
+      if (!pane || next.get(paneKey(pane))?.session === sid)
+        windows.set(sid, {
+          pane,
+          placement: switches.windowPlacement ?? DEFAULT_WINDOW_PLACEMENT,
+        });
+    }
+    this.windows(windows);
     for (const [key, demand] of next) {
       const held = this.held.get(key);
       if (held === undefined)

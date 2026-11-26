@@ -359,6 +359,7 @@ jobs:
           # The URL handler app's binary, which `cc-candybar install` wraps in
           # an app bundle (src/install/index.ts FORWARDER_BIN names it).
           for platform in darwin-arm64 darwin-x64; do
+            install -D -m 0644 resources/terminal-adapters/kitty_geometry.py "npm/cc-candybar-${platform}/bin/terminal-adapters/kitty_geometry.py"
             install -m 0755 artifacts/cc-candybar-window/cc-candybar-window "npm/cc-candybar-${platform}/bin/"
             install -m 0644 artifacts/cc-candybar-window/cc-candybar-window.source "npm/cc-candybar-${platform}/bin/"
             cp "artifacts/cc-candybar-url-handler/cc-candybar-url-handler" \

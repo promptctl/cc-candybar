@@ -50,6 +50,7 @@ import { isPending } from "../utils/outcome.js";
 import {
   editGlobalsOf,
   laneSwitches,
+  declaredLanes,
   resolveEffectiveGlobals,
 } from "../config/effective-globals.js";
 import type { PassageFrame } from "../render/effect.js";
@@ -63,6 +64,7 @@ import {
   type Lane,
   type LaneFeeds,
   type LaneSwitches,
+  type DeclaredLanes,
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
 import type { Pointer } from "../click/gesture.js";
@@ -209,16 +211,16 @@ export function viewLanes(
     readonly settings: SessionStateRW;
     readonly state: DslRenderState;
   } | null,
-): LaneSwitches | null {
+): DeclaredLanes | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
   if (hold === null) return null;
-  if (committed === null) return laneSwitches(hold.view.source.effective());
+  if (committed === null) return declaredLanes(hold.view.source.effective());
 
   // [LAW:effects-at-boundaries] Only committed settings declare a live
   // host surface. A draft changes the bar's preview until Save lands.
   const { config, authoredRoots } = committed.state;
-  return laneSwitches(
+  return declaredLanes(
     resolveEffectiveGlobals(
       config,
       (key) => committed.settings.get(sessionId, key),
@@ -559,6 +561,9 @@ export function drawRender(
     }),
   );
   const standing: readonly Standing[] = [
+    ...(document.windowIssue
+      ? [alone({ kind: "window", message: document.windowIssue })]
+      : []),
     ...daemon.fileEvents.map(alone),
     ...(daemon.launcher === null ? [] : [alone(daemon.launcher)]),
     ...daemon.unsaved.map(
@@ -925,7 +930,7 @@ const faultAbout = (
 // turn not stamped (`facts`); and what a transcript gave the session's folds
 // less of (`transcript`).
 interface MessageWarning {
-  readonly kind: "load" | "config-watch" | "facts" | "transcript";
+  readonly kind: "load" | "config-watch" | "facts" | "transcript" | "window";
   readonly message: string;
 }
 

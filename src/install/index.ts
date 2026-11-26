@@ -7,7 +7,7 @@ import {
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
+import { stageWindow } from "./window-runtime.js";
 import {
   checkOwnedPrivateDir,
   hostBundlePath,
@@ -48,7 +48,7 @@ import {
   PACKAGE_NAME,
   REGISTRY_URL,
 } from "./currency";
-import { PLATFORM_PACKAGES, machinePlatform } from "./platforms";
+import { platformPackageFile, machinePlatform } from "./platforms";
 import { recordIfInstall, statusLineRunsBundle } from "./record";
 import { hostBundleRecordText } from "../daemon/host-bundle";
 import { readTextIfPresent } from "../utils/regular-text";
@@ -167,34 +167,6 @@ function resolveForwarder(
       throw new Error(
         `install: the URL handler app was not found in ${shipped.pkgName} (bin/${FORWARDER_BIN}). The optional platform package is missing or older than this release: reinstall the package.`,
       );
-  }
-}
-
-// [LAW:one-source-of-truth] One lookup of a file the running platform's
-// package ships, for everything install stages from it: the package is named
-// by platform and arch (PLATFORM_PACKAGES) and resolved from the installed
-// bundle's own node_modules, where the optional dependency lives — anchored
-// to the bundle's real location, not this module's compiled form (which
-// ts-jest loads as CJS where import.meta is illegal).
-type PlatformPackageFile =
-  | { kind: "found"; path: string }
-  | { kind: "no-package"; platform: string }
-  | { kind: "missing"; pkgName: string };
-
-function platformPackageFile(
-  sourceDist: string,
-  file: string,
-  platform: string,
-): PlatformPackageFile {
-  const pkgName = PLATFORM_PACKAGES[platform];
-  if (pkgName === undefined) return { kind: "no-package", platform };
-  try {
-    return {
-      kind: "found",
-      path: createRequire(sourceDist).resolve(`${pkgName}/${file}`),
-    };
-  } catch {
-    return { kind: "missing", pkgName };
   }
 }
 
@@ -324,12 +296,14 @@ function stageRuntime(
   dir: string,
   platform: NodeJS.Platform,
   changes: InstallChanges,
+  launcher: InstallWorld["launcher"],
 ): StagedRuntime {
   const distPath = stagedDistPath(dir);
   const binPath = stagedBinPath(dir);
   changes.mkdir(path.dirname(distPath));
   changes.mkdir(path.dirname(binPath));
   stageFile(changes, sources.dist, distPath);
+  if (platform === "darwin") stageWindow(sources.dist, dir, changes, launcher);
   // A directory staged whole, so no file of an older launcher outlives it.
   changes.replaceDir(path.join(path.dirname(distPath), ATTACH_DIR), (staging) =>
     fs.cpSync(sources.attach, staging, { recursive: true }),
@@ -374,7 +348,7 @@ function runStageRuntime(
   const sources = runtimeSources(sourceDist, platform);
   return changeInstallation(
     { host: { home: path.dirname(dir) }, launcher },
-    (changes) => stageRuntime(sources, dir, platform, changes),
+    (changes) => stageRuntime(sources, dir, platform, changes, launcher),
   );
 }
 
@@ -525,6 +499,7 @@ function prepareInstallation(
     supportDir(world.host, platform),
     platform,
     changes,
+    world.launcher,
   );
   if (forwarder !== null) {
     buildUrlHandler(forwarder, world, changes);

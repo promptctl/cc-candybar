@@ -8,7 +8,7 @@
 // stands when it starts, so the newest request is the last one served.
 export function singleFlight(
   run: () => Promise<void>,
-  failed: (e: unknown) => never,
+  failed: (e: unknown) => void,
 ): () => void {
   let running = false;
   let due = false;

@@ -29,7 +29,7 @@ import { TurnTime } from "./turn-time.js";
 import { TurnLog } from "./turn-log.js";
 import { runEach } from "../utils/run-each.js";
 import { FEED_PERIODS, Feeds } from "./feeds.js";
-import type { LaneSwitches } from "../config/lanes.js";
+import type { DeclaredLanes } from "../config/lanes.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -458,7 +458,7 @@ export function mainRenderer(
       // view closes stops being named, so its switches go. Each switch comes
       // from the view, or from the last returned plan for a draft whose
       // committed config is not held.
-      const lanes: Record<SessionId, LaneSwitches> = {};
+      const lanes: Record<SessionId, DeclaredLanes> = {};
       const unprepared = new Map<string, RenderOrigin>();
       for (const session of Object.keys(sources.get()) as SessionId[]) {
         const editing = parts.edits.draft(session) !== null;

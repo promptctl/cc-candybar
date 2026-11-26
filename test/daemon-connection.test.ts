@@ -51,6 +51,7 @@ const SUBSCRIBE: Request = {
 };
 const SUBSCRIBED: HandledRequest = {
   kind: "subscribe",
+  drawing: true,
   sessionId: sessionIdOf("a-session"),
   lane: "statusline",
   owner: null,

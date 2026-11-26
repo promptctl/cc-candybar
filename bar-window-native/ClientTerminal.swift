@@ -18,7 +18,7 @@ struct AttachedClient {
     let tty: String
     private let device: dev_t
     private let start: timeval
-    let terminal: ScriptableTerminal
+    let terminal: LocalTerminal
     let terminalPID: pid_t
 
     init(pid: pid_t, tty: String) throws {
@@ -45,7 +45,7 @@ struct AttachedClient {
     }
 }
 
-private func terminalAncestor(pid: pid_t, tty: String) throws -> (ScriptableTerminal, pid_t) {
+private func terminalAncestor(pid: pid_t, tty: String) throws -> (LocalTerminal, pid_t) {
     var current = pid
     var visited = Set<pid_t>()
     while current > 1, visited.insert(current).inserted {
@@ -64,11 +64,17 @@ private func terminalAncestor(pid: pid_t, tty: String) throws -> (ScriptableTerm
             // claim the session in its own name.
             if let appPart = url.pathComponents.firstIndex(where: { $0.hasSuffix(".app") }) {
                 let path = NSString.path(withComponents: Array(url.pathComponents[...appPart]))
-                if let bundle = Bundle(path: path)?.bundleIdentifier {
-                    guard let terminal = ScriptableTerminal(rawValue: bundle) else {
-                        throw LocationFailure("Unsupported terminal: \(URL(fileURLWithPath: path).lastPathComponent) (\(bundle))")
-                    }
-                    if let app = NSRunningApplication(processIdentifier: current), app.bundleIdentifier == bundle {
+                // The daemon can attach before LaunchServices publishes an
+                // NSRunningApplication in this bootstrap session. Helpers and
+                // bundled CLI tools cannot claim the enclosing app's identity.
+                if let appBundle = Bundle(path: path), let executable = appBundle.executableURL,
+                   let bundle = appBundle.bundleIdentifier {
+                    var actual = stat(), declared = stat()
+                    if stat(url.path, &actual) == 0, stat(executable.path, &declared) == 0,
+                       actual.st_dev == declared.st_dev, actual.st_ino == declared.st_ino {
+                        guard let terminal = LocalTerminal(rawValue: bundle) else {
+                            throw LocationFailure("Unsupported terminal: \(URL(fileURLWithPath: path).lastPathComponent) (\(bundle))")
+                        }
                         return (terminal, current)
                     }
                 }
@@ -99,6 +105,8 @@ struct TTYGrid {
     let columns: Int
     let rows: Int
     let cell: CGSize?
+    let pixels: CGSize
+    let backingScale: CGFloat?
 
     init?(tty: String, display: Display?) {
         let fd = open(tty, O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC)
@@ -108,6 +116,8 @@ struct TTYGrid {
         guard ioctl(fd, TIOCGWINSZ, &size) == 0, size.ws_col > 0, size.ws_row > 0 else { return nil }
         columns = Int(size.ws_col)
         rows = Int(size.ws_row)
+        pixels = CGSize(width: Int(size.ws_xpixel), height: Int(size.ws_ypixel))
+        backingScale = display?.scale
         if let scale = display?.scale, size.ws_xpixel > 0, size.ws_ypixel > 0 {
             cell = CGSize(width: CGFloat(size.ws_xpixel) / CGFloat(columns) / scale,
                           height: CGFloat(size.ws_ypixel) / CGFloat(rows) / scale)

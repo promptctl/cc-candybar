@@ -57,6 +57,8 @@ import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "./disclosure.js";
 import {
   LANES,
   TOGGLED_LANES,
+  DEFAULT_WINDOW_PLACEMENT,
+  WINDOW_PLACEMENTS,
   type LaneSetting,
   type ToggledLane,
 } from "./lanes.js";
@@ -508,6 +510,11 @@ export const GLOBAL_FIELDS = {
     control("menu timeout", "config"),
   ),
   ...LANE_ROWS,
+  windowPlacement: enumSetting(
+    WINDOW_PLACEMENTS,
+    DEFAULT_WINDOW_PLACEMENT,
+    control("window placement", "renderer"),
+  ),
   // The color depth rich-js downsamples output to (the legacy
   // display.colorCompatibility) — truecolor by default, deliberately NOT the
   // legacy "auto", which the detached daemon cannot honour (see

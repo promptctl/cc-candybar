@@ -674,7 +674,7 @@ export class FrameFeeds<Req> {
       follower.confirmed !== null &&
       covers(follower.confirmed, answer)
     ) {
-      done?.(true);
+      done?.(sub.drawing());
       return;
     }
     const write: PendingWrite = { answer, done };
@@ -685,11 +685,12 @@ export class FrameFeeds<Req> {
       // [LAW:effects-at-boundaries] A refusal can detach the subscription
       // while the socket flushes its previous frame. That confirmed write
       // still carried the daemon's event, even after the view receipt ended.
-      if (delivered && answer.displayedEvents !== undefined)
+      const displayed = delivered && sub.drawing();
+      if (displayed && answer.displayedEvents !== undefined)
         this.deps.acknowledgeDisplayed(answer.displayedEvents);
       if (!follower.writes.delete(write)) return;
       if (delivered) follower.confirmed = answer;
-      settleWrite(write, delivered);
+      settleWrite(write, displayed);
     };
     try {
       sub.frame(answer.json, finished);
