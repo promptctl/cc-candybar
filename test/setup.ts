@@ -1,7 +1,6 @@
 import path from "node:path";
 import { createRequire } from "node:module";
 
-import { isolateGit } from "./helpers/checkout";
 import { SSH_ENV_VARS } from "../src/client-hints";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
 import { TERMINAL_ENV_VARS } from "../src/terminal-hint";
@@ -64,9 +63,6 @@ for (const name of [
   ...SSH_ENV_VARS,
 ])
   delete process.env[name];
-
-// Every subprocess started by the suite also inherits the test's Git settings.
-isolateGit(process.env);
 
 // [LAW:single-enforcer] No test load finds the host's own config: the XDG
 // location is the lowest layer of every chain (src/config/loader/chain-places.ts),
