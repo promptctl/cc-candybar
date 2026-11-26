@@ -42083,23 +42083,30 @@ function turnsHeld(palette, decor, dealt, drawnAt) {
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
   const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
-  const apart = (at, off) => {
+  const apart = (at, beside2, off) => {
     const { hue } = line[at];
-    const taken2 = [drawn(at - 1), drawn(at + 1), ...off].filter(
+    const taken2 = [...beside2.map(drawn), ...off].filter(
       (colour) => colour !== void 0
     );
     const window2 = windowAt(palette, hue, decor.shade, drawnAt);
     const tone = window2.find((t2) => !taken2.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken2, drawnAt);
     return tone === void 0 ? void 0 : { hue, shade: tone };
   };
-  const moves = (at) => [[pressed], []].flatMap(
-    (off) => [at, at - 1].map((place) => ({ place, off }))
-  );
+  const moves = (at) => [
+    ...[[pressed], []].flatMap(
+      (off) => [at, at - 1].map((place) => ({
+        place,
+        beside: [place - 1, place + 1],
+        off
+      }))
+    ),
+    ...[[pressed], []].map((off) => ({ place: at, beside: [at - 1], off }))
+  ];
   for (let at = 1; at < line.length; at++) {
-    if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
-      continue;
-    for (const { place, off } of moves(at)) {
-      const entry = apart(place, off);
+    const held = line[at - 1].hue !== line[at].hue || line[at - 1].shade !== dealt[at - 1].shade;
+    if (!held || drawn(at - 1) !== drawn(at)) continue;
+    for (const { place, beside: beside2, off } of moves(at)) {
+      const entry = apart(place, beside2, off);
       if (entry === void 0) continue;
       line[place] = entry;
       break;
