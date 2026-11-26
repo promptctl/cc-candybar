@@ -11,8 +11,13 @@ const open = new Set<Promise<unknown>>();
 
 export function untilTestEnds<T>(
   wait: (ended: AbortSignal) => Promise<T>,
+  what: string,
 ): Promise<T> {
-  const waiting = wait(ending.signal);
+  const { signal } = ending;
+  const waiting = wait(signal).catch((error: unknown) => {
+    if (!signal.aborted) throw error;
+    throw new Error(`${what}: ${String(error)}`, { cause: error });
+  });
   open.add(waiting);
   const settled = () => open.delete(waiting);
   waiting.then(settled, settled);

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,10 +15,10 @@ import {
 } from "../../src/proc/launcher";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
+import { heldGrandchild } from "../helpers/held-grandchild";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
-// What these cases launch leaves its process group with setsid, which only
-// python reaches portably: macOS has no setsid command.
+// The fork fixtures call setsid directly on both Linux and macOS.
 const python = (code: string) => ({ bin: "python3", args: ["-c", code] });
 
 const SET = "import os,sys,time\n";
@@ -313,28 +313,15 @@ describe("the pipes a descendant holds past its launch", () => {
   });
 
   it("are destroyed on the spot when the launcher closed while the launch ran", async () => {
-    // The holder writes without end once the launch is over: only a destroyed
-    // pipe ends it, since an open one nobody reads blocks it for good.
-    const dir = mkdtempSync(join(tmpdir(), "drain-abort-"));
-    const pidFile = join(dir, "pid");
-    const pending = launch(
-      python(
-        `${SET}if os.fork()==0:\n  os.setsid()\n  open(${JSON.stringify(pidFile)},'w').write(str(os.getpid()))\n  time.sleep(0.5)\n  while True: os.write(1,b'x'*65536)\ntime.sleep(0.3)\nos._exit(0)\n`,
-      ),
-    );
-    await until(() => existsSync(pidFile), "the holder's start");
+    await using holder = await heldGrandchild();
+    // [LAW:behavior-not-structure] The escaped writer reports what the kernel
+    // did to each write. An unreaped PID stays visible even after exit.
+    const pending = launch(holder.escapedWriter);
+    await holder.connected();
     ending.abort();
-    await pending;
+    await expect(launcher.settled()).resolves.toEqual({ unreaped: [] });
+    expect(await pending).toMatchObject({ ok: false, reason: "aborted" });
     expect(drainsOpened).toEqual([]);
-    const pid = Number(readFileSync(pidFile, "utf8"));
-    rmSync(dir, { recursive: true });
-    await until(() => {
-      try {
-        process.kill(pid, 0);
-        return false;
-      } catch {
-        return true;
-      }
-    }, "the holder's end at its cut pipe");
+    expect(await holder.writes()).toBe("EPIPE EPIPE");
   });
 });

@@ -52,6 +52,8 @@ import {
   urlsOfAnsi,
 } from "../../helpers/daemon-e2e";
 import { spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
+import { heldGrandchild } from "../../helpers/held-grandchild";
+import { SOURCE_ENTRY } from "../../../scripts/lib/daemon/process";
 import { type IsolatedDaemonHandle } from "../../../scripts/lib/daemon/isolated";
 import { until } from "../../../scripts/lib/until";
 import {
@@ -726,34 +728,48 @@ describe("the daemon's renderer process", () => {
       pane.close();
     }
   });
+});
 
-  test("a renderer outlives no daemon, even one killed with no cleanup", async () => {
-    await render(handle.sockPath, "rproc", projectDir);
-    const [pid] = rendererStarts(handle);
-    const alive = (): boolean => {
-      try {
-        process.kill(pid!, 0);
-        return true;
-      } catch {
-        return false;
-      }
+test("a renderer outlives no daemon, even one killed with no cleanup", async () => {
+  await using renderer = await heldGrandchild();
+  // [LAW:behavior-not-structure] The renderer alone owns this socket. The
+  // kernel closes it at exit, including while the orphan awaits reaping.
+  // Unref leaves the renderer's lifetime to production. If the test ends
+  // first, the socket's EOF releases a renderer that survived its daemon.
+  const probe = `
+    import { connect } from "node:net";
+    if (process.argv[2] === "renderer") {
+      const witness = connect(${renderer.port}, ${JSON.stringify(renderer.address)});
+      witness.unref().resume().on("end", () => process.exit(1));
+      witness.on("error", () => process.exit(1));
+    }
+  `;
+  const handle = await spawnIsolatedDaemon("cc-candybar-rproc", (env) => {
+    const entry = SOURCE_ENTRY(env);
+    return {
+      ...entry,
+      args: [
+        "--import",
+        `data:text/javascript,${encodeURIComponent(probe)}`,
+        ...entry.args,
+      ],
     };
-    expect(alive()).toBe(true);
-    // The renderer is launched detached and leads a group of its own, so no
-    // signal to the daemon's group reaches it; its end here can only be the
-    // daemon's lifeline. The renderer's parent is the process the test holds,
-    // so that pid is the daemon's own.
-    const parent = Number(
-      spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], {
-        encoding: "utf8",
-      }).stdout.trim(),
-    );
-    expect(parent).toBe(handle.child.pid);
-    process.kill(parent, "SIGKILL");
-    await until(
-      () => !alive(),
-      () => `renderer ${pid} to end with its daemon`,
-      10_000,
-    );
   });
+  try {
+    await render(handle.sockPath, "rproc", handle.stateDir);
+    const witness = await renderer.connected();
+    const [pid] = rendererStarts(handle);
+    const parent = spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], {
+      encoding: "utf8",
+    });
+    expect(parent.status).toBe(0);
+    expect(Number(parent.stdout.trim())).toBe(handle.child.pid);
+    // Only the daemon receives this signal. The detached renderer has to
+    // observe its lifeline ending on its own.
+    expect(witness.destroyed).toBe(false);
+    expect(handle.child.kill("SIGKILL")).toBe(true);
+    await renderer.ended();
+  } finally {
+    await handle.cleanup();
+  }
 });

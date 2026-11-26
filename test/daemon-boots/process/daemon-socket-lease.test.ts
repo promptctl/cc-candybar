@@ -77,6 +77,7 @@ function exitOf(child: ChildProcess): Promise<ExitResult> {
           reject(new Error("the daemon was still running when its test ended")),
         );
       }),
+    "the daemon to exit",
   );
 }
 
