@@ -455,7 +455,8 @@ function releaseSpawnLock(): void {
 // value the same way (rust-client/src/launch.rs).
 //
 // [LAW:one-source-of-truth] node's argv for a daemon running `script`: what
-// the client spawns, and what the load gate spawns to measure the same thing.
+// the client spawns, and what every tool or test that starts a real daemon
+// spawns, so each runs under the heap cap a client's daemon gets.
 export function daemonArgs(script: string, env: NodeJS.ProcessEnv): string[] {
   return [`--max-old-space-size=${heapCapMb(env)}`, ...daemonCommand(script)];
 }

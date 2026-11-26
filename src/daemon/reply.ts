@@ -25,6 +25,7 @@ import {
   ACTS_ON_DAEMON,
   ACTS_ON_DESKTOP,
   awaitsVerdict,
+  type ActsOn,
   type DesktopAct,
   type Inbound,
   type OwnerFacts,
@@ -43,7 +44,6 @@ import type {
   SourceSnapshots,
 } from "./foundations/stats-snapshot";
 import type { RendererProcessState } from "./renderer-process.js";
-import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererHost } from "./renderer-host.js";
@@ -59,10 +59,6 @@ import {
 import { elapsedMs, spanMs } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import {
-  deliveredActsOn,
-  type ClickArrival,
-} from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
@@ -941,7 +937,7 @@ async function clickOutcome(
     );
   return ranClick(
     parts,
-    routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
+    routeClick(parts, parseClick(url, parts.linkSigner), ACTS_ON_DAEMON),
     facts,
     click,
   );
@@ -952,34 +948,28 @@ async function clickOutcome(
 // link that does not open.
 function readUrlFrame(
   frame: Record<string, unknown>,
-  links: LinkSigner,
-): ReadClick {
+  parts: DaemonParts,
+): RoutedClick {
   const { urlV, url } = frame;
   if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
-    return {
-      kind: "refused",
-      problem: `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
-    };
+    return refusedClick(
+      `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
+    );
   if (typeof url !== "string")
-    return {
-      kind: "refused",
-      problem: "the URL handler's frame carries no url string",
-    };
+    return refusedClick("the URL handler's frame carries no url string");
   // [LAW:parse-dont-validate] Where the click's copy and open act, read once
   // here: a place this daemon does not know is refused, and so is a frame whose
   // writer reads no verdict to carry acts on the desktop in.
   const actsOn: unknown = frame.actsOn ?? ACTS_ON_DAEMON;
   if (actsOn !== ACTS_ON_DAEMON && actsOn !== ACTS_ON_DESKTOP)
-    return {
-      kind: "refused",
-      problem: `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DAEMON}, ${ACTS_ON_DESKTOP})`,
-    };
+    return refusedClick(
+      `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DAEMON}, ${ACTS_ON_DESKTOP})`,
+    );
   if (actsOn === ACTS_ON_DESKTOP && !awaitsVerdict(urlV))
-    return {
-      kind: "refused",
-      problem: `a version ${urlV} frame reads no verdict, so the acts it asks on the desktop cannot reach it`,
-    };
-  return parseClick(url, { kind: "forwarder", urlV, actsOn }, links);
+    return refusedClick(
+      `a version ${urlV} frame reads no verdict, so the acts it asks on the desktop cannot reach it`,
+    );
+  return routeClick(parts, parseClick(url, parts.linkSigner), actsOn);
 }
 
 // [LAW:no-silent-failure] The URL handler's frame, answered with its verdict
@@ -994,9 +984,9 @@ function urlClick(
   accepted: Acceptance,
   clientLeft: () => boolean,
 ): HandledRequest {
-  const read = routeClick(parts, readUrlFrame(frame, parts.linkSigner));
+  const read = readUrlFrame(frame, parts);
   const actsOn =
-    read.kind === "link" ? deliveredActsOn(read.delivery) : ACTS_ON_DAEMON;
+    read.kind === "link" ? read.actsOn : ACTS_ON_DAEMON;
   const onDesktop = actsOn === ACTS_ON_DESKTOP;
   // [LAW:nothing-unseen] Where the click's acts went, and how many went to the
   // desktop: zero acts and no count are different facts.
@@ -1055,25 +1045,32 @@ function landedReply(parts: DaemonParts, { desktop, outcome }: Clicked): Reply {
 
 type ClickLink = Extract<ReadClick, { kind: "link" }>;
 type RoutedClick =
-  | (ClickLink & { readonly target: RendererHost })
+  | (ClickLink & { readonly target: RendererHost; readonly actsOn: ActsOn })
   | {
       readonly kind: "refused";
       readonly failure: Failure;
       readonly signed: Extract<ReadClick, { kind: "refused" }>["signed"];
     };
 
+function refusedClick(
+  problem: string,
+  signed?: Extract<ReadClick, { kind: "refused" }>["signed"],
+): RoutedClick {
+  return { kind: "refused", failure: badRequest(problem), signed };
+}
+
 // [LAW:single-enforcer] Both entrances resolve the signed publisher before
 // they promise delivery. A link never admits a renderer bundle of its own.
-function routeClick(parts: DaemonParts, read: ReadClick): RoutedClick {
+function routeClick(
+  parts: DaemonParts,
+  read: ReadClick,
+  actsOn: ActsOn,
+): RoutedClick {
   if (read.kind === "refused")
-    return {
-      kind: "refused",
-      failure: badRequest(read.problem),
-      signed: read.signed,
-    };
+    return refusedClick(read.problem, read.signed);
 
   const { source } = read;
-  if (source === undefined) return { ...read, target: parts.renderer };
+  if (source === undefined) return { ...read, target: parts.renderer, actsOn };
   const target = parts.rendererForClick(source.renderer);
   return target === undefined
     ? {
@@ -1085,7 +1082,7 @@ function routeClick(parts: DaemonParts, read: ReadClick): RoutedClick {
         ),
         signed: { link: read.link, verb: read.click.verb },
       }
-    : { ...read, target };
+    : { ...read, target, actsOn };
 }
 
 // [LAW:types-are-the-program] A refused click has an outcome already.
@@ -1102,13 +1099,7 @@ async function ranClick(
       return nothingLeft(read.failure);
     case "link":
       noteFacts(facts, { link: read.link });
-      return handleClick(
-        parts,
-        read,
-        { via: "link", delivery: read.delivery },
-        facts,
-        click,
-      );
+      return handleClick(parts, read, facts, click);
   }
 }
 
@@ -1125,9 +1116,9 @@ async function handleClick(
   {
     click: admitted,
     runEvidence,
+    actsOn,
     target,
   }: Extract<RoutedClick, { kind: "link" }>,
-  arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<Clicked> {
@@ -1144,11 +1135,10 @@ async function handleClick(
       : {
           kind: "event",
           runEvidence,
-          actsOn: deliveredActsOn(arrival.delivery),
+          actsOn,
           event: {
             kind: "click",
             click: admitted,
-            arrival,
             context:
               admitted.scope === "global"
                 ? null

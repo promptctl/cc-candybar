@@ -38,6 +38,7 @@ import type { SourceStats } from "../utils/keyed-source.js";
 import { valueOf } from "../utils/logfmt.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { readTailText, statStamp } from "../utils/transcript-fs.js";
+import { lineOf } from "../utils/claude.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
@@ -57,36 +58,19 @@ const TAIL_MAX = 1 * 1024 * 1024;
 const CACHE_HIT_RE =
   /"(?:cache_read_input_tokens|cache_creation_input_tokens)":[1-9]/;
 
-// The transcript-line shape this provider reads. Untrusted JSON — every field is
-// optional and narrowed at use; only positive `message.usage` cache tokens count.
-interface UsageLine {
-  readonly timestamp?: string;
-  readonly message?: {
-    readonly usage?: {
-      readonly cache_read_input_tokens?: number;
-      readonly cache_creation_input_tokens?: number;
-    };
-  };
-}
-
-// Parse a candidate line and return its millisecond timestamp ONLY if its
-// `message.usage` actually records positive cache activity. A content-only
-// mention (or unparseable line) yields null, so a false-positive regex match
-// can never set the timer warm.
+// [LAW:one-source-of-truth] A candidate line's millisecond timestamp ONLY if
+// its `message.usage` actually records positive cache activity, read through
+// the one line reading. A content-only mention, a partial line or one the
+// reading drops (the usage fold reports that one) yields null, so a
+// false-positive regex match can never set the timer warm.
 function cacheActivityTs(line: string): number | null {
-  let parsed: UsageLine;
-  try {
-    parsed = JSON.parse(line) as UsageLine;
-  } catch {
-    return null;
-  }
-  const usage = parsed.message?.usage;
+  const read = lineOf(line);
+  if (read.kind !== "entry") return null;
+  const usage = read.entry.message?.usage;
   const positive =
     (usage?.cache_read_input_tokens ?? 0) > 0 ||
     (usage?.cache_creation_input_tokens ?? 0) > 0;
-  if (!positive) return null;
-  const ms = parsed.timestamp != null ? Date.parse(parsed.timestamp) : NaN;
-  return Number.isNaN(ms) ? null : ms;
+  return positive ? read.entry.timestamp.getTime() : null;
 }
 
 // One entry per session that rendered; bounded like the transcript folds.

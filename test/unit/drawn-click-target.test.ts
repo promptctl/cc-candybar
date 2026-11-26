@@ -121,8 +121,7 @@ test("the host signs the generated control and retains legacy authored click beh
     { text: CLOSE, link: signed },
     { text: "literal", link: TEST_SIGNER.signLink(copy) },
   ]);
-  const delivery = { kind: "forwarder", urlV: 2, actsOn: "daemon" } as const;
-  expect(parseClick(signed, delivery, TEST_SIGNER)).toMatchObject({
+  expect(parseClick(signed, TEST_SIGNER)).toMatchObject({
     kind: "link",
     click: {
       scope: "session",
@@ -136,7 +135,7 @@ test("the host signs the generated control and retains legacy authored click beh
     },
   });
   expect(
-    parseClick(TEST_SIGNER.signLink(copy), delivery, TEST_SIGNER),
+    parseClick(TEST_SIGNER.signLink(copy), TEST_SIGNER),
   ).toMatchObject({
     kind: "link",
     click: {

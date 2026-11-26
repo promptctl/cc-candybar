@@ -21,7 +21,6 @@ import {
   rendererFailureOf,
   type Failure,
 } from "../daemon/foundations/verb-error";
-import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
@@ -272,7 +271,6 @@ export type Notification =
       readonly click: AdmittedClick;
       // The host's snapshot when this origin has yet to be delivered.
       readonly coldConfig?: ConfigSnapshot;
-      readonly arrival: ClickArrival;
       // A scoped click's context, once the host has heard from its session.
       readonly context: SessionContext | null;
     }

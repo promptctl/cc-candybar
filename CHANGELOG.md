@@ -1,3 +1,9 @@
+## [1.238.5](https://github.com/promptctl/cc-candybar/compare/v1.238.4...v1.238.5) (2026-11-26)
+
+### Bug Fixes
+
+* **audits:** the nightly colour audit holds the joiner rule's identity under every look, not the ΔE floor it deleted (candybar-later-fixes-nwu9.ic0) ([#962](https://github.com/promptctl/cc-candybar/issues/962)) ([fa1eeb9](https://github.com/promptctl/cc-candybar/commit/fa1eeb9b93a826b08a71ce2eefe360f86ea343cc))
+
 ## [1.238.4](https://github.com/promptctl/cc-candybar/compare/v1.238.3...v1.238.4) (2026-11-25)
 
 ### Bug Fixes

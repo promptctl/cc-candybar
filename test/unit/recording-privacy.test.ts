@@ -128,7 +128,7 @@ function facts(
         env,
       },
       today: ABSENT,
-      faults: [],
+      losses: [],
     },
     daemonFactsOf(),
     AT,
@@ -318,7 +318,6 @@ test("capture refuses raw hook extensions and the raw hint payload the renderer 
     const asClick = input({
       kind: "click",
       click,
-      arrival: { via: "link", delivery: { kind: "cli" } },
       context: heardContextOf(req),
     });
     expect(JSON.stringify(asRequest)).toContain(UNREQUESTED);
@@ -348,7 +347,6 @@ test("action overlays are refused before raw layer, plugin or retained config by
     input({
       kind: "click",
       click: admitClick(VERB_SET_STATE, encodeSegments([SESSION, "example", "value"]), TEST_SIGNER).click,
-      arrival: { via: "link", delivery: { kind: "cli" } },
       context: heardContextOf(checked().req),
       coldConfig: snapshot(ACTION_CONFIG),
     }),
