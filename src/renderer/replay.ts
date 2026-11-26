@@ -26,7 +26,7 @@ const EVENT_FIELDS = {
   "world-state": ["worldState"],
   retire: ["session"],
   "effect-done": ["session", "of", "outcome"],
-  click: ["click", "arrival", "context"],
+  click: ["click", "context"],
   viewers: ["viewers"],
   due: [],
   stats: [],

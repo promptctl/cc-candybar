@@ -30,7 +30,6 @@ import {
 import {
   type DaemonFacts,
   type WorldState,
-  stampFailureOf,
   shortDigest,
 } from "../facts/world-state.js";
 import {
@@ -619,7 +618,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
             daemon,
             instantAt(this.deps.clock),
           );
-    const failure = next === prior ? null : stampFailureOf(next);
+    const failure = next === prior ? null : next.stampFailure;
     // [LAW:no-silent-failure] Told to the log as well as to the bar.
     if (failure !== null)
       this.deps.log(

@@ -68,7 +68,6 @@ import {
   type ViewSource,
 } from "../dsl/view-source.js";
 import { bindView } from "../dsl/parts.js";
-import { unusedDeclarations, type UnusedDecl } from "../config/unused.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import type { VarScope } from "../dsl/variable-scope.js";
@@ -123,19 +122,23 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // a reading calls near the limit once the rest of the process holding it is
 // reserved — so a share full at its charges, which a test holds real heap
 // under and so are the most the cache can cost, never puts that process past
-// that line, whatever the limit. The limit judges each process alone, and the
-// cache lives in its renderer's: a process of its own, or the host's for an
-// in-process renderer. The reserve is the ~60 MB one process doing the host's
-// work and a renderer's was charged serving one session, and a second
-// runtime's copy of the loaded bundle (a bare node is charged ~12 MB), so it
-// holds under either. The charges' own headroom over what entries hold is the
-// heap's growth room, so reserving more would starve the cache at a lowered
-// limit for nothing. At the default limit the share holds several times the
-// production daemon's working set of ~20 directories, each an entry and a view
-// on one compile. Measured, a full share costs less than its charges: serving
-// 100 sessions, the daemon is charged ~430 MB in all, less than the share
-// accounts for them.
+// that line while the rest of it fits the reserve. The limit judges each
+// process alone, and the cache lives in its renderer's: a process of its own,
+// or the host's for an in-process renderer. The reserve is the ~60 MB one
+// process doing the host's work and a renderer's was charged serving one
+// session, and a second runtime's copy of the loaded bundle (a bare node is
+// charged ~12 MB), so it holds under either. What each further session holds
+// outside the cache (its sources, folds and watchers) is assumed small beside
+// an entry and a view: nothing bounds it, so a source that grows per session
+// is what breaks the line. The charges' own headroom over what entries hold is
+// the heap's growth room, so reserving more would starve the cache at a
+// lowered limit for nothing.
 const RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
+// The sessions the share holds at the default limit, each an entry and a view
+// on one compile: five times the ~20 directories a production daemon renders
+// from, so sessions spread over many worktrees still hit. The default limit is
+// sized to it (limits.ts).
+export const SESSIONS_AT_DEFAULT_LIMIT = 100;
 // Never less than a quarter of the limit, which a small limit has always had:
 // there the reserve would leave the cache too little to hold two sessions.
 export function renderCacheBudget(memoryLimitBytes: number): number {
@@ -295,9 +298,6 @@ export interface DslRenderState {
   // The roles of the chain a click can write — what the save offers.
   readonly writable: readonly LayerRole[];
   readonly remainingLanes: ReadonlyMap<string, LaneSwitches>;
-  // What the file declares that nothing uses — from the same raw parse, for
-  // the same reason. No bar reads it; the retired Doctor's config check did.
-  readonly unused: readonly UnusedDecl[];
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
   // [LAW:no-ambient-temporal-coupling] Each plugin source the config
@@ -733,9 +733,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const { layers, config, installed, dropped } = loaded;
   const userRaw = layers.find(({ path }) => path === files.user)?.raw ?? {};
   const projectRaw = layers.find(({ path }) => path === files.project)?.raw;
-  const inserted = layers.flatMap((l) =>
-    (l.raw.insert ?? []).map((cell) => cell.seg),
-  );
   // [LAW:one-source-of-truth] The advisories the build earns are facts of the
   // state it builds, carried on it, so a reload that keeps the state keeps
   // them too.
@@ -822,16 +819,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         loaded.base,
         projectRaw ?? {},
       ),
-      // One entry per declaration, however many layers declare it, judged
-      // over the trees as placed and every layer's insert entries, so a
-      // segment only an insert entry places is used, here or not.
-      unused: [
-        ...new Map(
-          layers
-            .flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted))
-            .map((u) => [`${u.kind}:${u.name}`, u] as const),
-        ).values(),
-      ],
       plugins: {
         checkout: installed.checkout,
         // What renders, as the loader decided it: a nearer layer's load or

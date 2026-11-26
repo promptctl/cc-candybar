@@ -27,12 +27,9 @@ import {
   type VerbContext,
 } from "./index.js";
 
-// What the verb context holds of one click: how it arrived, its session's
-// context, and its turn's effects.
-export type ClickFacts = Pick<
-  VerbContext,
-  "arrival" | "context" | "effects" | "record"
->;
+// What the verb context holds of one click: its session's context, its
+// turn's effects and its turn's record.
+export type ClickFacts = Pick<VerbContext, "context" | "effects" | "record">;
 
 // The daemon's verb context, less what each click brings.
 export type DaemonVerbContext = Omit<VerbContext, keyof ClickFacts>;

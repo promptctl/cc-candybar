@@ -52,7 +52,7 @@ export function samplePayload(
       env: new Map(),
     },
     today: ok({ sums: sampleDay(at).sums, own: {} }),
-    faults: [],
+    losses: [],
   };
   const document = assembleFacts(
     undefined,
