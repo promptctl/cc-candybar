@@ -2,6 +2,119 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-969",
+      "ref": "refs/pull/969/merge",
+      "sha": "09521a72e15a415cf2cf5e5af79c897deb1197c5",
+      "timestamp": "2026-11-26T06:12:03.663Z",
+      "commits": [
+        {
+          "sha": "09521a72e15a415cf2cf5e5af79c897deb1197c5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T06:10:37Z",
+          "message": "Merge 5623e6b3b480adaf71f044e1608c3d006f859706 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
+        },
+        {
+          "sha": "5623e6b3b480adaf71f044e1608c3d006f859706",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:10:21-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
+        },
+        {
+          "sha": "7cd957d25bfde47522fb43dbb780d16c355f7ec5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:10:21-07:00",
+          "message": "fix(config): guard incomplete history edits and preserve strict settings JSON\n"
+        },
+        {
+          "sha": "385a8f98bb3222b93b47590be5b6e99db1434d19",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:57:15-07:00",
+          "message": "fix(install): preserve replaced directories during interrupted recovery\n"
+        },
+        {
+          "sha": "6acf565c80eb341689c08a1f2b9b9bd2d36c680c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:54:47-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
+        },
+        {
+          "sha": "92df238b22a491840c3dcc730a5b803ce1a6d9e3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:54:46-07:00",
+          "message": "fix(install): recover interrupted publications before retrying an install\n"
+        },
+        {
+          "sha": "d6b86d4707456a5011e2fc450960d9bebbf8522c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:48:24-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
+        },
+        {
+          "sha": "aa86e615adcf5ce189b8b48694b201f92164f917",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:48:06-07:00",
+          "message": "fix(install): name directories retained for concurrent SSH forwards\n"
+        },
+        {
+          "sha": "2f47d0f1114f270414f8365234dd7ef538c6bd60",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:31-07:00",
+          "message": "fix(install): prepare replacements before publishing under a recoverable process claim\n"
+        },
+        {
+          "sha": "d8b53c5636f542de0367436018f423ffdc6c3ad0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:40:45-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
+        },
+        {
+          "sha": "a74a3d3fdf09db2c05c59d838db5b19dba3407b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:06:42-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
+        },
+        {
+          "sha": "f0aace7b83ca835ecd7a4251b049ac18defff325",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:55-07:00",
+          "message": "fix(install): exclude overlapping runtime and handler installs\n"
+        },
+        {
+          "sha": "88d61b8e61362d703448d7158c6582dc5a42bc78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:40-07:00",
+          "message": "test(install): preserve active forwards during installation rollback\n"
+        },
+        {
+          "sha": "ac6bd4979d1f322664fed1525c70761b1c417d97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:57:07-07:00",
+          "message": "fix(install): plan settings edits and roll back incomplete installs\n"
+        },
+        {
+          "sha": "a956081a51d8bfdcf2c604591fdebd9a2f12ac82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:29:00-07:00",
+          "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3d41a203e6668a403f56f409957220a1dbacf79e",
@@ -337,105 +450,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:02:21-07:00",
           "message": "test: isolate terminal, filesystem and process observations from the host\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-969",
-      "ref": "refs/pull/969/merge",
-      "sha": "8040cf8a9261bc61b1d0503472b1a89b1d7d1597",
-      "timestamp": "2026-11-26T05:59:54.614Z",
-      "commits": [
-        {
-          "sha": "8040cf8a9261bc61b1d0503472b1a89b1d7d1597",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:57:28Z",
-          "message": "Merge 385a8f98bb3222b93b47590be5b6e99db1434d19 into bee4d68899303097cdf3530e031aa66ec1dc1f7c\n"
-        },
-        {
-          "sha": "385a8f98bb3222b93b47590be5b6e99db1434d19",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:57:15-07:00",
-          "message": "fix(install): preserve replaced directories during interrupted recovery\n"
-        },
-        {
-          "sha": "6acf565c80eb341689c08a1f2b9b9bd2d36c680c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:54:47-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "92df238b22a491840c3dcc730a5b803ce1a6d9e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:54:46-07:00",
-          "message": "fix(install): recover interrupted publications before retrying an install\n"
-        },
-        {
-          "sha": "d6b86d4707456a5011e2fc450960d9bebbf8522c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:48:24-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "aa86e615adcf5ce189b8b48694b201f92164f917",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:48:06-07:00",
-          "message": "fix(install): name directories retained for concurrent SSH forwards\n"
-        },
-        {
-          "sha": "2f47d0f1114f270414f8365234dd7ef538c6bd60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:43:31-07:00",
-          "message": "fix(install): prepare replacements before publishing under a recoverable process claim\n"
-        },
-        {
-          "sha": "d8b53c5636f542de0367436018f423ffdc6c3ad0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:40:45-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "a74a3d3fdf09db2c05c59d838db5b19dba3407b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:06:42-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "f0aace7b83ca835ecd7a4251b049ac18defff325",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:55-07:00",
-          "message": "fix(install): exclude overlapping runtime and handler installs\n"
-        },
-        {
-          "sha": "88d61b8e61362d703448d7158c6582dc5a42bc78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:59:40-07:00",
-          "message": "test(install): preserve active forwards during installation rollback\n"
-        },
-        {
-          "sha": "ac6bd4979d1f322664fed1525c70761b1c417d97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:57:07-07:00",
-          "message": "fix(install): plan settings edits and roll back incomplete installs\n"
-        },
-        {
-          "sha": "a956081a51d8bfdcf2c604591fdebd9a2f12ac82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:29:00-07:00",
-          "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
         }
       ]
     }
