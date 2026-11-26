@@ -2,46 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-967",
-      "ref": "refs/pull/967/merge",
-      "sha": "30da1d7113de3422661150c73a655cef8d46bf0b",
-      "timestamp": "2026-11-26T04:56:00.189Z",
-      "commits": [
-        {
-          "sha": "30da1d7113de3422661150c73a655cef8d46bf0b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T04:54:39Z",
-          "message": "Merge cf441f771e9880b2b6a4aa58b3a4de26e4360734 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
-        },
-        {
-          "sha": "cf441f771e9880b2b6a4aa58b3a4de26e4360734",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:54:28-07:00",
-          "message": "test(follow): cover the window lane in the native client\n"
-        },
-        {
-          "sha": "7791b2ce8c10b68a72118c4fb1954932ecb83ab5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T02:30:35-07:00",
-          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-961",
       "ref": "refs/pull/961/merge",
-      "sha": "eb60ca7946f55f20f20f6f111fb4cb5011f0cdad",
-      "timestamp": "2026-11-26T04:55:12.669Z",
+      "sha": "870dcf127e26508b6828f617f158462b189403b0",
+      "timestamp": "2026-11-26T04:56:50.869Z",
       "commits": [
         {
-          "sha": "eb60ca7946f55f20f20f6f111fb4cb5011f0cdad",
+          "sha": "870dcf127e26508b6828f617f158462b189403b0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T04:53:40Z",
-          "message": "Merge 40855e0986251bbeb672f4ca0633daa99013b653 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+          "timestamp": "2026-11-26T04:55:41Z",
+          "message": "Merge 0a1cdf3abcc83e0ecef2f89a77ad783e3f501ff9 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "0a1cdf3abcc83e0ecef2f89a77ad783e3f501ff9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:55:29-07:00",
+          "message": "test: remove the remaining assumptions of the withdrawn tier\n"
         },
         {
           "sha": "40855e0986251bbeb672f4ca0633daa99013b653",
@@ -84,6 +62,35 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T21:43:24-07:00",
           "message": "chore(tests): nothing caps end-to-end tests or scans the workflows for a daemon start (candybar-testing-do00.c3a)\n\nThe cap, the assertion limit and their sign-off policed a test/e2e/ that was\nnever created, and the workflow scanner failed CI on any step reaching a\nscript that starts a daemon, which laws:testing does not forbid. laws:testing's\ncap is a question a reviewer asks of a proposed test, not a hook.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-967",
+      "ref": "refs/pull/967/merge",
+      "sha": "30da1d7113de3422661150c73a655cef8d46bf0b",
+      "timestamp": "2026-11-26T04:56:00.189Z",
+      "commits": [
+        {
+          "sha": "30da1d7113de3422661150c73a655cef8d46bf0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T04:54:39Z",
+          "message": "Merge cf441f771e9880b2b6a4aa58b3a4de26e4360734 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "cf441f771e9880b2b6a4aa58b3a4de26e4360734",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:54:28-07:00",
+          "message": "test(follow): cover the window lane in the native client\n"
+        },
+        {
+          "sha": "7791b2ce8c10b68a72118c4fb1954932ecb83ab5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T02:30:35-07:00",
+          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
         }
       ]
     },
