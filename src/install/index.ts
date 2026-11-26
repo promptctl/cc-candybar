@@ -206,10 +206,7 @@ type RenderEntry =
   | { kind: "native"; sourcePath: string }
   | { kind: "node-shim"; sourcePath: string };
 
-function resolveRenderEntry(
-  sourceDist: string,
-  platform: string,
-): RenderEntry {
+function resolveRenderEntry(sourceDist: string, platform: string): RenderEntry {
   const shipped = platformPackageFile(sourceDist, "bin/cc-candybar", platform);
   if (shipped.kind === "found") {
     return { kind: "native", sourcePath: shipped.path };
