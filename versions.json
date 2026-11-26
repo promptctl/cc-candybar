@@ -2,32 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "98827016846125701459a4fd629a6ffbba742261",
-      "timestamp": "2026-11-26T06:07:44.905Z",
-      "commits": [
-        {
-          "sha": "98827016846125701459a4fd629a6ffbba742261",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:06:27-07:00",
-          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) (#967)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n\n* test(follow): cover the window lane in the native client\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n* fix(window): distinguish the window lane from renderer wire version 19\n\n* test(window): save every renderer switch through the menu\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        }
-      ]
-    },
-    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
-      "sha": "b5f2cd5c7f368cc3462822769afbad80bbe7d041",
-      "timestamp": "2026-11-26T06:03:42.180Z",
+      "sha": "78971687a33de163fffd34697503f29d50353224",
+      "timestamp": "2026-11-26T06:08:59.481Z",
       "commits": [
         {
-          "sha": "b5f2cd5c7f368cc3462822769afbad80bbe7d041",
+          "sha": "78971687a33de163fffd34697503f29d50353224",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:01:43Z",
-          "message": "Merge e05de374ad89dacbce6f91b24435b47bf891e8a7 into 1969cd19c238271c7dd5591ed3904b49984a8863\n"
+          "timestamp": "2026-11-26T06:07:58Z",
+          "message": "Merge 6ff91ac25c73972d4a3babaa6e19655aa2a356ba into 98827016846125701459a4fd629a6ffbba742261\n"
+        },
+        {
+          "sha": "6ff91ac25c73972d4a3babaa6e19655aa2a356ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:07:39-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\ttest/daemon-watchers.test.ts\n"
+        },
+        {
+          "sha": "11108238f214d74f631b06c066b4a6770dd534aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:07:17-07:00",
+          "message": "test: drive wait deadlines without leaving real timers running\n"
         },
         {
           "sha": "e05de374ad89dacbce6f91b24435b47bf891e8a7",
@@ -140,6 +139,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:02:21-07:00",
           "message": "test: isolate terminal, filesystem and process observations from the host\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "98827016846125701459a4fd629a6ffbba742261",
+      "timestamp": "2026-11-26T06:07:44.905Z",
+      "commits": [
+        {
+          "sha": "98827016846125701459a4fd629a6ffbba742261",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:06:27-07:00",
+          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) (#967)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n\n* test(follow): cover the window lane in the native client\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n* fix(window): distinguish the window lane from renderer wire version 19\n\n* test(window): save every renderer switch through the menu\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },

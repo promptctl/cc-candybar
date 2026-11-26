@@ -16613,12 +16613,12 @@ var require_util4 = __commonJS({
       AggregateError: AggregateError2,
       kEmptyObject: Object.freeze({}),
       once(callback) {
-        let called = false;
+        let called2 = false;
         return function(...args) {
-          if (called) {
+          if (called2) {
             return;
           }
-          called = true;
+          called2 = true;
           callback.apply(this, args);
         };
       },
@@ -17499,12 +17499,12 @@ var require_destroy = __commonJS({
       return this;
     }
     function _destroy(self2, err, cb) {
-      let called = false;
+      let called2 = false;
       function onDestroy(err2) {
-        if (called) {
+        if (called2) {
           return;
         }
-        called = true;
+        called2 = true;
         const r = self2._readableState;
         const w = self2._writableState;
         checkError(err2, w, r);
@@ -17630,13 +17630,13 @@ var require_destroy = __commonJS({
       process2.nextTick(constructNT, stream);
     }
     function constructNT(stream) {
-      let called = false;
+      let called2 = false;
       function onConstruct(err) {
-        if (called) {
+        if (called2) {
           errorOrDestroy(stream, err !== null && err !== void 0 ? err : new ERR_MULTIPLE_CALLBACK());
           return;
         }
-        called = true;
+        called2 = true;
         const r = stream._readableState;
         const w = stream._writableState;
         const s = w || r;
@@ -19817,13 +19817,13 @@ var require_writable = __commonJS({
       return state.ending && !state.destroyed && state.constructed && state.length === 0 && !state.errored && state.buffered.length === 0 && !state.finished && !state.writing && !state.errorEmitted && !state.closeEmitted;
     }
     function callFinal(stream, state) {
-      let called = false;
+      let called2 = false;
       function onFinish(err) {
-        if (called) {
+        if (called2) {
           errorOrDestroy(stream, err !== null && err !== void 0 ? err : ERR_MULTIPLE_CALLBACK());
           return;
         }
-        called = true;
+        called2 = true;
         state.pendingcb--;
         if (err) {
           const onfinishCallbacks = state[kOnFinished].splice(0);
@@ -28485,7 +28485,6 @@ var ENVIRONMENT_NEEDED = "environment";
 var UNKNOWN_REQUEST_KIND = "unknown kind";
 var CONNECT_TIMEOUT_MS = 50;
 var TOTAL_BUDGET_MS = 150;
-var RENDER_ENCODINGS = ["ansi", "frame"];
 var CLIENT_HINT_FIELDS = Object.keys({
   termCols: true,
   termRows: true,
@@ -43050,19 +43049,43 @@ function oneOfPresentJson(schema) {
 
 // src/config/lanes.ts
 init_globals();
+
+// src/render/encodings.ts
+init_globals();
+var RENDER_ENCODINGS = ["ansi", "frame"];
+var SAYS_WHERE_POINTER_ACTS = {
+  ansi: false,
+  "hit-mapped": true,
+  frame: true
+};
+
+// src/config/lanes.ts
 var IN_TMUX = 'ne .tmux.pane ""';
 var LANES = {
   statusline: {
     switch: { setting: "experimentalStatusline", on: true },
     label: "\u{1F9EA} statusline (B)",
-    handsOff: false
+    handsOff: false,
+    encoding: "ansi",
+    called: "the statusline"
   },
   pane: {
     switch: { setting: "experimentalPane", on: true },
     label: "\u{1F9EA} tmux pane (C)",
-    handsOff: true
+    handsOff: true,
+    encoding: "hit-mapped",
+    called: "the pane"
+  },
+  // The native window the bar floats in beside the session's terminal.
+  window: {
+    switch: { setting: "experimentalWindow", on: true },
+    label: "\u{1F9EA} window (D)",
+    handsOff: true,
+    encoding: "frame",
+    called: "the window"
   }
 };
+var ownsPointer = (lane) => SAYS_WHERE_POINTER_ACTS[LANES[lane].encoding];
 var LANE_NAMES = Object.keys(LANES);
 var TOGGLED_LANES = LANE_NAMES.filter(
   (lane) => LANES[lane].switch.on === true
@@ -57578,20 +57601,20 @@ function bindsComputedAction(template, helpers) {
 }
 var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
 function templateFunctions(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
+  const called2 = /* @__PURE__ */ new Set();
   for (const { code: code2 } of callGraph(template, helpers)) {
     for (const [name] of code2.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
-      called.add(name);
+      called2.add(name);
     }
   }
-  return called;
+  return called2;
 }
 function templateHelperCalls(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
+  const called2 = /* @__PURE__ */ new Set();
   for (const { code: code2, dot, root } of callGraph(template, helpers)) {
-    for (const { name } of helperCalls(code2, dot, root)) called.add(name);
+    for (const { name } of helperCalls(code2, dot, root)) called2.add(name);
   }
-  return called;
+  return called2;
 }
 var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
 function bindSelf(template, self2, ns) {
@@ -57917,6 +57940,10 @@ var LANE_HELP = {
   pane: [
     "animates the bar in a tmux pane under this session's",
     "on: opens that pane \xB7 off: closes it"
+  ],
+  window: [
+    "animates the bar in a window that follows this session's terminal",
+    "on: a window following this session draws the bar \xB7 off: it stops"
   ]
 };
 var HELP_TEXT = `
@@ -65313,9 +65340,12 @@ function laneDefaultsAfterReset(config, bundled, project) {
     })
   );
 }
+var called = (lanes) => lanes.map((lane) => LANES[lane].called).join(" and ");
+var capitalized = (text5) => text5.charAt(0).toUpperCase() + text5.slice(1);
 function laneHandoff(sessionId2, writable2, lanes, remaining) {
   const personal = writable2.filter((role) => role !== "project");
-  const reason = personal.length === 0 ? "No writable personal config layer for the pane" : lanes.some((lane) => remaining[lane]) ? "The pane stays enabled by its config" : null;
+  const pinned = lanes.filter((lane) => remaining[lane]);
+  const reason = personal.length === 0 ? `No writable personal config layer for ${called(lanes)}` : pinned.length > 0 ? `${capitalized(called(pinned))} ${pinned.length === 1 ? "stays" : "stay"} enabled by ${pinned.length === 1 ? "its" : "their"} config` : null;
   const line = reason === null ? diagnosticSpan(
     HANDOFF_BUTTON,
     actionTarget(
@@ -73638,6 +73668,37 @@ function drawEvent(kind, facts, outcome) {
 
 // src/daemon/foundations/render-answers.ts
 init_globals();
+
+// src/render/hit-map.ts
+init_globals();
+var linksOf = (run2) => run2.link !== void 0 && isBarLink(run2.link) ? { [PLAIN_CLICK]: run2.link, ...run2.region?.gestures } : null;
+var sameRegion2 = (a, links, run2) => a.action === (run2.region?.name ?? null) && Object.keys(a.links).length === Object.keys(links).length && Object.entries(links).every(([gesture, link]) => a.links[gesture] === link);
+function hitMapOf(frame2) {
+  return frame2.rows.map(({ runs }) => {
+    const hits = [];
+    let column = 0;
+    for (const run2 of runs) {
+      const to = column + cellLen(run2.text);
+      const links = linksOf(run2);
+      const last2 = hits.at(-1);
+      if (links !== null) {
+        if (last2 !== void 0 && last2.to === column && sameRegion2(last2, links, run2))
+          hits[hits.length - 1] = { ...last2, to };
+        else
+          hits.push({
+            from: column,
+            to,
+            action: run2.region?.name ?? null,
+            links
+          });
+      }
+      column = to;
+    }
+    return hits;
+  });
+}
+
+// src/daemon/foundations/render-answers.ts
 function framed(value, encode, failure2) {
   try {
     return { sent: value, frame: encodeJsonFrame(encode(value)), unsent: null };
@@ -73662,6 +73723,14 @@ var renderFailure = (failure2) => failure2.kind === "bad-request" ? { ...failure
 var RENDER_ANSWERS = {
   ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
   frame: (frame2) => ({ ok: true, frame: frame2 })
+};
+var FEED_ANSWERS = {
+  ...RENDER_ANSWERS,
+  "hit-mapped": (frame2) => ({
+    ok: true,
+    output: composeBar(frame2),
+    hits: hitMapOf(frame2)
+  })
 };
 
 // src/renderer/draw-bar.ts
@@ -74524,11 +74593,11 @@ var Feeds = class {
   following(sessionId2) {
     return followingOf(this.feeds.get(sessionId2)?.viewers);
   }
-  // [LAW:one-source-of-truth] What the pane that owns the session's pointer
-  // last said of it, as the host handed it with who watches: none while no
-  // pane owns it.
+  // [LAW:one-source-of-truth] What the follower that owns the session's
+  // pointer last said of it, as the host handed it with who watches: none
+  // while no follower owns it.
   pointerOf(sessionId2) {
-    return this.feeds.get(sessionId2)?.viewers.lanes.pane?.pointer ?? null;
+    return this.feeds.get(sessionId2)?.viewers.pointer ?? null;
   }
   // [LAW:nothing-unseen] What each lane of the session's frames is doing at
   // `tick`: its subscribers, the frames that went out to it in the last
@@ -80495,7 +80564,7 @@ function linkSignerOver(key) {
 }
 
 // src/click/read.ts
-function linksOf({ rows }) {
+function linksOf2({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
     for (const { link, text: text5 } of runs.filter((run2) => run2.text !== "")) {
@@ -84645,10 +84714,10 @@ function subscription(req) {
     );
   if (req.owner === void 0)
     return { kind: "subscribe", sessionId: sessionId2.id, lane, owner: null };
-  if (lane !== "pane")
+  if (!ownsPointer(lane))
     return refuse2(
       "BAD_REQUEST",
-      `only the pane lane has an owner: got ${lane}`
+      `only a lane whose frames say where a pointer acts has an owner (${LANE_NAMES.filter(ownsPointer).join(", ")}): got ${lane}`
     );
   const owner = parseOwner(req.owner);
   if (owner.kind !== "ok")
@@ -90618,37 +90687,6 @@ var Collector = class {
 
 // src/daemon/frame-feed.ts
 init_globals();
-
-// src/render/hit-map.ts
-init_globals();
-var linksOf2 = (run2) => run2.link !== void 0 && isBarLink(run2.link) ? { [PLAIN_CLICK]: run2.link, ...run2.region?.gestures } : null;
-var sameRegion2 = (a, links, run2) => a.action === (run2.region?.name ?? null) && Object.keys(a.links).length === Object.keys(links).length && Object.entries(links).every(([gesture, link]) => a.links[gesture] === link);
-function hitMapOf(frame2) {
-  return frame2.rows.map(({ runs }) => {
-    const hits = [];
-    let column = 0;
-    for (const run2 of runs) {
-      const to = column + cellLen(run2.text);
-      const links = linksOf2(run2);
-      const last2 = hits.at(-1);
-      if (links !== null) {
-        if (last2 !== void 0 && last2.to === column && sameRegion2(last2, links, run2))
-          hits[hits.length - 1] = { ...last2, to };
-        else
-          hits.push({
-            from: column,
-            to,
-            action: run2.region?.name ?? null,
-            links
-          });
-      }
-      column = to;
-    }
-    return hits;
-  });
-}
-
-// src/daemon/frame-feed.ts
 var MAX_REQUESTS = 256;
 function ownerOf(watched) {
   let found2 = null;
@@ -90659,7 +90697,7 @@ function ownerOf(watched) {
 }
 var failedFeed = (refusal2) => {
   const encoded = { json: JSON.stringify(refusal2) };
-  return { resp: encoded, statusline: encoded };
+  return { answer: () => encoded, failure: encoded.json };
 };
 function covers(prior, offered) {
   if (prior.json !== offered.json) return false;
@@ -90674,24 +90712,27 @@ function settleWrite(write, delivered) {
 }
 function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
-  const answer2 = (published, hits) => ({
-    json: JSON.stringify({
-      ...RENDER_ANSWERS.ansi(published),
-      ...hits !== void 0 && { hits }
-    }),
-    displayedEvents: frame2.displayedEvents
-  });
   const bar = publish(frame2.bar, source);
-  const statusline = answer2(
-    frame2.handoff === null ? bar : publish(frame2.handoff, source),
-    void 0
-  );
-  let resp;
+  const shown = {
+    resp: bar,
+    statusline: frame2.handoff === null ? bar : publish(frame2.handoff, source)
+  };
+  const answers = /* @__PURE__ */ new Map();
   return {
-    statusline,
-    get resp() {
-      return resp ??= answer2(bar, hitMapOf(bar));
-    }
+    answer(lane) {
+      let answer2 = answers.get(lane);
+      if (answer2 === void 0) {
+        answer2 = {
+          json: JSON.stringify(
+            FEED_ANSWERS[LANES[lane].encoding](answerOf2(shown, lane))
+          ),
+          displayedEvents: frame2.displayedEvents
+        };
+        answers.set(lane, answer2);
+      }
+      return answer2;
+    },
+    failure: null
   };
 }
 var FrameFeeds = class {
@@ -90712,7 +90753,7 @@ var FrameFeeds = class {
   // what it holds is unknown (a delivery failed).
   handed = JSON.stringify({});
   frameDemands = 0;
-  panesSaid = 0;
+  ownersSaid = 0;
   pushed = 0;
   refused = 0;
   lookups = 0;
@@ -90801,26 +90842,26 @@ var FrameFeeds = class {
       }
     });
   }
-  // [LAW:single-enforcer] A pane's facts of its pointer, as a subscribe and
-  // each report admit them: its latest, and the latest word of any pane.
-  held(pane) {
-    return { ...pane, said: ++this.panesSaid };
+  // [LAW:single-enforcer] An owner's facts of its pointer, as a subscribe and
+  // each report admit them: its latest, and the latest word of any owner.
+  held(owner) {
+    return { ...owner, said: ++this.ownersSaid };
   }
-  // A pane's report of its pointer: held for the pane, which then owns the
+  // An owner's report of its pointer: held for the owner, which then owns the
   // session's pointer, and the renderer is handed the change like any change
-  // of who watches. A pane that does not follow the session is refused.
-  pointerOf(sessionId2, pane) {
+  // of who watches. An owner that does not follow the session is refused.
+  pointerOf(sessionId2, owner) {
     const watched = this.watched.get(sessionId2);
     const reporting = [...watched?.followers.values() ?? []].filter(
-      (follower) => follower.owner?.id === pane.id
+      (follower) => follower.owner?.id === owner.id
     );
     if (watched === void 0 || reporting.length === 0)
       return {
         kind: "refused",
-        reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId2)}`
+        reason: `no owner ${JSON.stringify(owner.id)} follows session ${JSON.stringify(sessionId2)}`
       };
     const owned = ownerOf(watched)?.id ?? null;
-    const admitted = this.held(pane);
+    const admitted = this.held(owner);
     for (const follower of reporting) follower.owner = admitted;
     this.ownerMoved(sessionId2, owned, watched);
     this.announce();
@@ -90859,16 +90900,12 @@ var FrameFeeds = class {
   }
   seen(sessionId2, watched) {
     const lanes = {};
-    const owner = ownerOf(watched);
-    for (const [sub2, follower] of watched.followers) {
+    for (const sub2 of watched.followers.keys()) {
       const seen = lanes[sub2.lane];
       lanes[sub2.lane] = {
         ...seen,
         subscribers: (seen?.subscribers ?? 0) + 1,
-        drawing: (seen?.drawing ?? false) || sub2.drawing(),
-        // [LAW:one-source-of-truth] The owner's facts ride on its own lane: the
-        // renderer reads the pointer where it reads who watches.
-        ...owner !== null && follower.owner === owner && { pointer: owner.pointer }
+        drawing: (seen?.drawing ?? false) || sub2.drawing()
       };
     }
     return {
@@ -90878,6 +90915,7 @@ var FrameFeeds = class {
           return viewed === void 0 ? [] : [[lane, viewed]];
         })
       ),
+      pointer: ownerOf(watched)?.pointer ?? null,
       shown: this.shown(sessionId2),
       joined: watched.frameDemand
     };
@@ -90946,12 +90984,11 @@ var FrameFeeds = class {
           renderer,
           session
         });
-        for (const { lane } of watched.followers.keys())
-          answerOf2(encoded, lane);
+        for (const { lane } of watched.followers.keys()) encoded.answer(lane);
       } catch (error) {
         const refused2 = renderFailed(error);
         encoded = failedFeed(refused2);
-        if (watched.last?.resp.json !== encoded.resp.json)
+        if (watched.last?.failure !== encoded.failure)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused2.error)}`
@@ -91059,7 +91096,7 @@ var FrameFeeds = class {
       done?.(false);
       return;
     }
-    const answer2 = answerOf2(encoded, sub2.lane);
+    const answer2 = encoded.answer(sub2.lane);
     let latest;
     for (const write2 of follower.writes) latest = write2;
     if (latest !== void 0 && covers(latest.answer, answer2)) {
@@ -93384,7 +93421,7 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 19;
+var RENDERER_WIRE_VERSION = 20;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -96760,7 +96797,7 @@ async function render2(size) {
   const drawn = await frame(size);
   return {
     ansi: composeBar(drawn),
-    links: linksOf(drawn).map((l) => ({
+    links: linksOf2(drawn).map((l) => ({
       ...l,
       does: describeLink(l, sessionId)
     })),
