@@ -23,7 +23,6 @@
     "test:unit": "jest --config jest.unit.config.js",
     "test:worker": "jest --config jest.worker.config.js",
     "test:process": "jest --config jest.process.config.js",
-    "test:e2e": "jest --config jest.e2e.config.js --passWithNoTests",
     "test:report": "node scripts/test-report.mjs",
     "test:watch": "jest --config jest.unit.config.js --watch",
     "test:coverage": "jest --config jest.unit.config.js --coverage",

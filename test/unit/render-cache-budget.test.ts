@@ -2,6 +2,7 @@ import {
   COMPILE_BYTES,
   ENTRY_BYTES,
   renderCacheBudget,
+  SESSIONS_AT_DEFAULT_LIMIT,
   VIEW_BYTES,
 } from "../../src/renderer/render-cache";
 import { memoryLimitBytes } from "../../src/daemon/limits";
@@ -10,11 +11,8 @@ const MB = 1024 * 1024;
 // What n sessions on one compile are charged: an entry and a view each.
 const sessions = (n: number) => n * (ENTRY_BYTES + VIEW_BYTES) + COMPILE_BYTES;
 
-// Whether the reserve covers the rest of the daemon is measured, not derived:
-// the load gate serves a hundred sessions at the default limit without the
-// backstop firing, charged less than the share accounts for them.
 describe("the render cache's share of the memory limit", () => {
-  // Below that the share is the quarter a small limit has always had.
+  // A small limit's share is the quarter it has always had.
   test.each([64, 96, 128])(
     "at %i MB the share is a quarter of the limit",
     (limitMb) => {
@@ -28,9 +26,9 @@ describe("the render cache's share of the memory limit", () => {
     expect(renderCacheBudget(160 * MB)).toBeGreaterThanOrEqual(sessions(5));
   });
 
-  test("at the default limit it holds the load gate's hundred sessions", () => {
+  test("at the default limit it holds the sessions it is sized for", () => {
     expect(renderCacheBudget(memoryLimitBytes({}))).toBeGreaterThanOrEqual(
-      sessions(100),
+      sessions(SESSIONS_AT_DEFAULT_LIMIT),
     );
   });
 });
