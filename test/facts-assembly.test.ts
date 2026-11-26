@@ -6,13 +6,13 @@
 import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { restamp, type Fact } from "../src/facts/fact";
 import type { BuiltinFacts } from "../src/facts/world-state";
+import type { TranscriptLoss } from "../src/utils/transcript-loss";
 import type { GitRead } from "../src/segments/git";
 import {
   assembleFacts,
   failedStamp,
   FACTS_VERSION,
 } from "../src/daemon/facts-assembly";
-import { stampFailureOf } from "../src/facts/world-state";
 import { readingsOf } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { oneDay } from "../src/daemon/foundations/today-facts";
@@ -84,7 +84,10 @@ const PR = {
 };
 
 // Every lane over the value it is given; the git lane answers `git`.
-function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
+function owners(
+  git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) }),
+  losses: () => readonly TranscriptLoss[] = () => [],
+) {
   return {
     ...absentOwners(TEST_ENVIRONMENT),
     gitProvider: fakeGit(() => git),
@@ -93,6 +96,7 @@ function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
       usage: () => ok({ calculatedCost: 2, tokens: 10, tokenBreakdown: null }),
       today: () => ok(sumsOf(T0, 5, 50)),
       speed: () => ABSENT,
+      losses,
     }),
     contextProvider: fakeContext(() => ok(1_200)),
     metricsProvider: fakeMetrics(() => ABSENT),
@@ -107,8 +111,11 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
-function rig(git?: Outcome<unknown>) {
-  const held = owners(git);
+function rig(
+  git?: Outcome<unknown>,
+  losses?: () => readonly TranscriptLoss[],
+) {
+  const held = owners(git, losses);
   const deps = withTranscriptLanes(held);
   cleanups.push(() => deps.transcriptLanes.close());
   const inputs: LanedInputs = {
@@ -313,9 +320,6 @@ describe("a session's facts document", () => {
       for (const key of BUILTIN_KEYS.filter((k) => k !== "cache")) {
         expect(second.builtins[key]).toBe(first.builtins[key]);
       }
-      expect(second.diagnostics).toEqual([
-        { kind: "lane", lane: "cache", reason: "refresh threw" },
-      ]);
 
       // The refresh running clean again is a change too: stamped when it came.
       r.held.faults.refreshed(SID, "cache", null);
@@ -332,7 +336,50 @@ describe("a session's facts document", () => {
         value: 1_700_003_600,
         at: at(120),
       });
-      expect(third.diagnostics).toEqual([]);
+    });
+
+    test("what the session's transcripts gave its folds less of is on its document for as long as the usage store holds it", async () => {
+      let losses: readonly TranscriptLoss[] = [];
+      const r = await sampled(rig(undefined, () => losses));
+      const first = assembleFacts(
+        undefined,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        daemonFactsOf(),
+        T0,
+      );
+      expect(first.transcriptLosses).toEqual([]);
+
+      const loss: TranscriptLoss = {
+        kind: "dropped-lines",
+        path: "/t/s.jsonl",
+        lines: 2,
+        firstLine: 4,
+        reason: "is not JSON (Unexpected token)",
+      };
+      losses = [loss];
+      const second = assembleFacts(
+        first,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        daemonFactsOf(),
+        at(60),
+      );
+      expect(second.seq).toBe(2);
+      expect(second.transcriptLosses).toEqual([loss]);
+      for (const key of BUILTIN_KEYS) {
+        expect(second.builtins[key]).toBe(first.builtins[key]);
+      }
+
+      // Still held: the same document.
+      const again = assembleFacts(
+        second,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        daemonFactsOf(),
+        at(120),
+      );
+      expect(again).toBe(second);
     });
 
     test("daemon warnings land without restamping the built-ins", async () => {
@@ -365,7 +412,7 @@ describe("a session's facts document", () => {
   });
 
   describe("a stamp that threw", () => {
-    test("is the prior document with the failure among its diagnostics and the next seq; the same failure again is that document", async () => {
+    test("is the prior document with its stamp failure and the next seq; the same failure again is that document", async () => {
       const r = await sampled(rig());
       const first = assembleFacts(
         undefined,
@@ -377,12 +424,12 @@ describe("a session's facts document", () => {
       const failedOnce = failedStamp(first, "the read broke", daemonFactsOf());
       expect(failedOnce.seq).toBe(first.seq + 1);
       expect(failedOnce.builtins).toBe(first.builtins);
-      expect(stampFailureOf(failedOnce)).toBe("the read broke");
+      expect(failedOnce.stampFailure).toBe("the read broke");
       expect(failedStamp(failedOnce, "the read broke", daemonFactsOf())).toBe(
         failedOnce,
       );
       expect(
-        stampFailureOf(failedStamp(failedOnce, "another", daemonFactsOf())),
+        failedStamp(failedOnce, "another", daemonFactsOf()).stampFailure,
       ).toBe("another");
       // The daemon's facts are read apart from the owners that threw, so a
       // failure that persists still carries them as they stand.
@@ -394,7 +441,7 @@ describe("a session's facts document", () => {
       expect(moved.seq).toBe(failedOnce.seq + 1);
       expect(moved.daemon.fileEvents).toBe(FILE_EVENTS_STALLED);
       expect(moved.builtins).toBe(first.builtins);
-      expect(stampFailureOf(first)).toBeNull();
+      expect(first.stampFailure).toBeNull();
       // The next clean stamp is a document without it.
       const clean = assembleFacts(
         failedOnce,
@@ -404,7 +451,7 @@ describe("a session's facts document", () => {
         at(60),
       );
       expect(clean.seq).toBe(failedOnce.seq + 1);
-      expect(stampFailureOf(clean)).toBeNull();
+      expect(clean.stampFailure).toBeNull();
     });
   });
 });

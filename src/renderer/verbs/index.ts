@@ -172,7 +172,6 @@ import {
   type ActionDecl,
   type SlashAction,
 } from "../../config/action";
-import type { ClickArrival } from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
 import { BadVerbArgs, failureOf } from "../../daemon/foundations/verb-error";
@@ -236,11 +235,6 @@ export interface DaemonContext {
 }
 
 export interface VerbContext extends DaemonContext {
-  // How THIS click arrived — a link the URL handler delivered (its staged
-  // runtime's version, or null from one too old to report it), or a tmux
-  // status-line range — the one per-click fact here; the daemon's dispatcher
-  // sets it on each click.
-  readonly arrival: ClickArrival;
   // THIS click's session as the host's book holds it.
   readonly context: SessionContext | null;
   // THIS click's turn's effects, which its config changes join.

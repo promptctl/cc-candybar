@@ -5,6 +5,7 @@ import type { GitRead, PullRequest } from "../segments/git";
 import type { MetricsFold } from "../segments/metrics";
 import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
+import type { TranscriptLoss } from "../utils/transcript-loss";
 import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
@@ -52,19 +53,6 @@ export const UNREAD_RUN: RunFact = {
 export interface TmuxFacts {
   readonly session: string;
 }
-
-// A fault of the collector's own: one lane of the session whose refresh threw,
-// or the stamp itself, which kept the readings of the document before it.
-export interface LaneDiagnostic {
-  readonly kind: "lane";
-  readonly lane: RefreshLane;
-  readonly reason: string;
-}
-export interface StampDiagnostic {
-  readonly kind: "stamp";
-  readonly reason: string;
-}
-export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
 // daemon itself: whether file events are heard, the launch lifeline's fault
@@ -117,7 +105,11 @@ export interface WorldState {
   // those alone, since an environment holds keys and tokens.
   readonly env: Readonly<Record<string, Fact<string>>>;
   readonly daemon: DaemonFacts;
-  readonly diagnostics: readonly FactsDiagnostic[];
+  // [LAW:types-are-the-program] Why the document is drawn from older facts:
+  // the stamp that threw, which kept the readings of the document before it;
+  // null while the stamp holds.
+  readonly stampFailure: string | null;
+  readonly transcriptLosses: readonly TranscriptLoss[];
 }
 
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
@@ -174,8 +166,7 @@ export interface TodayFacts {
 
 // The lanes a session's transcript read refreshes
 // (src/daemon/cache/transcript-lanes.ts). [LAW:one-source-of-truth] The list is
-// the one declaration: the type derives from it, and a facts document's
-// diagnostics walk it in this order.
+// the one declaration: the type derives from it.
 export const REFRESH_LANES = [
   "session",
   "context",
@@ -195,10 +186,3 @@ export const SHORT_DIGEST_LENGTH = 7;
 
 export const shortDigest = (digest: string): string =>
   digest.slice(0, SHORT_DIGEST_LENGTH);
-
-// Why the document is drawn from older facts, or null when its stamp held.
-export function stampFailureOf(
-  document: Pick<WorldState, "diagnostics">,
-): string | null {
-  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
-}
