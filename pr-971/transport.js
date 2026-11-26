@@ -42083,30 +42083,23 @@ function turnsHeld(palette, decor, dealt, drawnAt) {
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
   const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
-  const apart = (at, beside2, off) => {
+  const apart = (at, off) => {
     const { hue } = line[at];
-    const taken2 = [...beside2.map(drawn), ...off].filter(
+    const taken2 = [drawn(at - 1), drawn(at + 1), ...off].filter(
       (colour) => colour !== void 0
     );
     const window2 = windowAt(palette, hue, decor.shade, drawnAt);
     const tone = window2.find((t2) => !taken2.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken2, drawnAt);
     return tone === void 0 ? void 0 : { hue, shade: tone };
   };
-  const moves = (at) => [
-    ...[[pressed], []].flatMap(
-      (off) => [at, at - 1].map((place) => ({
-        place,
-        beside: [place - 1, place + 1],
-        off
-      }))
-    ),
-    ...[[pressed], []].map((off) => ({ place: at, beside: [at - 1], off }))
-  ];
+  const moves = (at) => [[pressed], []].flatMap(
+    (off) => [at, at - 1].map((place) => ({ place, off }))
+  );
   for (let at = 1; at < line.length; at++) {
-    const held = line[at - 1].hue !== line[at].hue || line[at - 1].shade !== dealt[at - 1].shade;
-    if (!held || drawn(at - 1) !== drawn(at)) continue;
-    for (const { place, beside: beside2, off } of moves(at)) {
-      const entry = apart(place, beside2, off);
+    if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
+      continue;
+    for (const { place, off } of moves(at)) {
+      const entry = apart(place, off);
       if (entry === void 0) continue;
       line[place] = entry;
       break;
@@ -83872,7 +83865,11 @@ function detectTmuxHint(env2) {
 }
 
 // src/client-hints.ts
-var SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
+var SSH_ENV_VARS = [
+  "SSH_CONNECTION",
+  "SSH_CLIENT",
+  "SSH_TTY"
+];
 function terminalObservation(env2, tty) {
   return {
     termCols: detectTermExtent(env2.COLUMNS, tty.columns),
@@ -88553,6 +88550,10 @@ function shortHostname(hostname2) {
   const dot = hostname2.indexOf(".");
   return dot < 0 ? hostname2 : hostname2.slice(0, dot);
 }
+var MACHINE_HOST_READS = {
+  hostname: () => os_default.hostname(),
+  username: () => os_default.userInfo().username
+};
 function syscall(field, read3) {
   try {
     const value = read3();
@@ -88582,12 +88583,12 @@ var HostService = class {
     this.name = new KeyedSource({
       ...one,
       name: "host.name",
-      read: () => syscall("name", () => shortHostname(os_default.hostname()))
+      read: () => syscall("name", () => shortHostname(opts.reads.hostname()))
     });
     this.user = new KeyedSource({
       ...one,
       name: "host.user",
-      read: () => syscall("user", () => os_default.userInfo().username)
+      read: () => syscall("user", opts.reads.username)
     });
   }
   declareName(holds3) {
@@ -89409,7 +89410,12 @@ function createPayloadProviders(opts) {
     faults: new RefreshFaults()
   };
   const owners = {
-    hostService: new HostService({ clock, logger, ledger }),
+    hostService: new HostService({
+      clock,
+      logger,
+      ledger,
+      reads: MACHINE_HOST_READS
+    }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
       watchers: opts.watchers,
