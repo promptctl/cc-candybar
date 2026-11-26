@@ -5040,11 +5040,11 @@ var require_dist = __commonJS({
           return final;
         }
       };
-      var JSON56 = {
+      var JSON55 = {
         parse: parse3,
         stringify
       };
-      var lib = JSON56;
+      var lib = JSON55;
       var es5 = lib;
       return es5;
     }));
@@ -28640,6 +28640,7 @@ var IDENT_START = /[A-Za-z_$\p{L}]/u;
 var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
 var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
 var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var LINE_END = /\r\n|[\n\r\u2028\u2029]/g;
 var Scanner = class {
   constructor(text5) {
     this.text = text5;
@@ -28652,21 +28653,26 @@ var Scanner = class {
   fail(message) {
     throw new Json5EditError(message, this.pos);
   }
+  // Past whitespace and comments. Returns where the last comment it passed
+  // ends, or where it started when it passed none.
   skipTrivia() {
+    let commentEnd = this.pos;
     for (; ; ) {
       const c = this.peek();
-      if (c === "") return;
+      if (c === "") return commentEnd;
       if (WHITESPACE.test(c)) {
         this.pos++;
       } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
+        LINE_END.lastIndex = this.pos;
+        this.pos = LINE_END.exec(this.text)?.index ?? this.text.length;
+        commentEnd = this.pos;
       } else if (c === "/" && this.text[this.pos + 1] === "*") {
         const close = this.text.indexOf("*/", this.pos + 2);
         if (close === -1) this.fail("unterminated block comment");
         this.pos = close + 2;
+        commentEnd = this.pos;
       } else {
-        return;
+        return commentEnd;
       }
     }
   }
@@ -28790,7 +28796,20 @@ var Scanner = class {
     return { kind: "array", span: { start, end: this.pos }, elements };
   }
 };
+var HOLDS_NO_VALUE = "the file holds no value (a config that sets nothing is {})";
+function holdsNoValue(text5) {
+  const s = new Scanner(text5);
+  try {
+    s.skipTrivia();
+  } catch (e) {
+    if (e instanceof Json5EditError) return false;
+    throw e;
+  }
+  return s.pos === text5.length;
+}
+var EMPTY_DOCUMENT = "{}\n";
 function parseDocument(text5) {
+  if (holdsNoValue(text5)) throw new Json5EditError(HOLDS_NO_VALUE, 0);
   const s = new Scanner(text5);
   const root = s.value();
   s.skipTrivia();
@@ -28871,7 +28890,7 @@ ${items.join("\n")}
   return JSON.stringify(value);
 }
 function eolOf(text5) {
-  return text5.includes("\r\n") ? "\r\n" : "\n";
+  return /\r\n|[\r\n]/.exec(text5)?.[0] ?? "\n";
 }
 function reindent(valueText, indent2, eol) {
   return valueText.split("\n").join(`${eol}${indent2}`);
@@ -28887,7 +28906,9 @@ function splice(text5, start, end, insert) {
   return text5.slice(0, start) + insert + text5.slice(end);
 }
 function lineStartOf(text5, offset) {
-  return text5.lastIndexOf("\n", offset - 1) + 1;
+  let start = offset;
+  while (start > 0 && !/[\r\n\u2028\u2029]/.test(text5[start - 1])) start--;
+  return start;
 }
 function isBlank(s) {
   return /^[ \t]*$/.test(s);
@@ -28899,7 +28920,7 @@ function indentOfLine(text5, offset) {
 function startsLine(text5, offset) {
   return isBlank(text5.slice(lineStartOf(text5, offset), offset));
 }
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+var LINE_TRAILER = /(?:\/\/[^\r\n\u2028\u2029]*)?(\r\n|[\r\n\u2028\u2029]|$)/y;
 function trailerAfter(text5, end) {
   let i2 = end;
   while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
@@ -28937,6 +28958,11 @@ function insertLineAfter(text5, span, trailer, memberText, indent2) {
   const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
   return splice(withComma, at, at, line);
 }
+function commentsEnd(text5, from) {
+  const s = new Scanner(text5);
+  s.pos = from;
+  return s.skipTrivia();
+}
 function appendMember(text5, container, memberText, dialect) {
   const members = container.kind === "object" ? container.entries : container.elements;
   const last2 = members[members.length - 1];
@@ -28946,7 +28972,7 @@ function appendMember(text5, container, memberText, dialect) {
     const eol = eolOf(text5);
     return splice(
       text5,
-      container.span.start + 1,
+      commentsEnd(text5, container.span.start + 1),
       container.span.end - 1,
       `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
     );
@@ -28974,16 +29000,10 @@ function setValue(text5, path31, valueText, dialect) {
   if (path31.length === 0) {
     throw new Json5EditError("setValue needs a non-empty path", 0);
   }
-  if (/^\s*$/.test(text5)) {
-    const eol = eolOf(text5);
-    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
   return setBelow(text5, parseDocument(text5), path31, valueText, dialect);
 }
 function insertValue(text5, path31, valueText, dialect, precedes) {
   const parentPath = path31.slice(0, -1);
-  if (/^\s*$/.test(text5) && parentPath.length === 0)
-    return setValue(text5, path31, valueText, dialect);
   const leaf2 = path31[path31.length - 1];
   const parent = nodeAt(parseDocument(text5), parentPath);
   if (leaf2 === void 0 || parent?.kind !== "object")
@@ -29046,7 +29066,6 @@ function deleteValue(text5, path31, keep = 0) {
   if (path31.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
-  if (/^\s*$/.test(text5)) return text5;
   const parentPath = path31.slice(0, -1);
   const parent = nodeAt(parseDocument(text5), parentPath);
   const entry = parent === void 0 ? void 0 : entryOf(parent, path31[path31.length - 1]);
@@ -29156,6 +29175,8 @@ function setPlacementSetting(text5, rootPath, id2, setting, valueText) {
 
 // src/config/loader/diagnostics.ts
 function parseJson5Syntax(source) {
+  if (holdsNoValue(source))
+    return { kind: "invalid", issue: { path: "", message: HOLDS_NO_VALUE } };
   try {
     return { kind: "parsed", value: import_json52.default.parse(source) };
   } catch (e) {
@@ -57996,11 +58017,12 @@ ${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
 ${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
 
 Subcommands:
-  install                  One-shot setup: stages the runtime (native render
+  install [--force]        One-shot setup: stages the runtime (native render
                            binary + dist bundle) at a stable path, creates the
                            URL handler app + cc-candybar:// scheme (macOS), and
                            writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
+                           ~/.claude/settings.json. Keeps customized commands unless
+                           --force is set. Configure the bar in its config file.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
   record-host-bundle       Record this bundle as the one a cold host starts
@@ -74785,7 +74807,6 @@ var import_json54 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
 function parse2(text5) {
   if (text5 === null) return { kind: "none" };
-  if (/^\s*$/.test(text5)) return { kind: "empty" };
   try {
     return { kind: "document", root: parseDocument(text5) };
   } catch (e) {
@@ -74796,14 +74817,7 @@ function parse2(text5) {
 function readAt(text5, parsed2, at) {
   if (text5 === null) return ABSENT3;
   if (at.length === 0) return { kind: "file", text: text5 };
-  switch (parsed2.kind) {
-    case "empty":
-      return ABSENT3;
-    case "document":
-      return readOf(text5, nodeAt(parsed2.root, at));
-    default:
-      return { kind: "file", text: text5 };
-  }
+  return parsed2.kind === "document" ? readOf(text5, nodeAt(parsed2.root, at)) : { kind: "file", text: text5 };
 }
 function readOf(text5, node) {
   return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text5, node) };
@@ -74903,6 +74917,8 @@ function diffMembers(at, beforeText, was, afterText, will) {
 function applyChanges(text5, changes, dialect = JSON5_DIALECT) {
   let current = text5;
   for (const change of changes) {
+    if (change.at.length === 0 && (current !== null && holdsNoValue(current) || change.op !== "remove" && holdsNoValue(change.text)))
+      return { kind: "incomplete", at: [], reason: HOLDS_NO_VALUE };
     const parsed2 = parse2(current);
     const ancestor = movedAncestor(parsed2, change.at);
     if (ancestor !== null)
@@ -74922,7 +74938,6 @@ function applyChanges(text5, changes, dialect = JSON5_DIALECT) {
 }
 function movedAncestor(parsed2, at) {
   if (at.length === 0) return null;
-  if (parsed2.kind === "empty") return at.length === 1 ? null : at.slice(0, 1);
   if (parsed2.kind !== "document") return [];
   for (let depth = 0; depth < at.length; depth++) {
     const up = at.slice(0, depth);
@@ -75893,7 +75908,7 @@ function stepOf(click2, sessionId2, change, to) {
   return applied3.kind === "applied" ? { kind: "file", file, text: applied3.text } : {
     kind: "moved",
     target: identity(change),
-    what: `${addressText(applied3.at)} in the ${change.role} layer`
+    what: applied3.kind === "incomplete" ? `${file}: ${applied3.reason}` : `${addressText(applied3.at)} in the ${change.role} layer`
   };
 }
 function forgotten({ past, future }, gone) {
@@ -76102,6 +76117,8 @@ var EditDraft = class {
             requireLayerText(path31, target.content),
             diffChanges(requireLayerText(path31, source.content), after)
           );
+          if (applied3.kind === "incomplete")
+            throw new BadVerbArgs(`save: ${path31}: ${applied3.reason}`);
           if (applied3.kind !== "applied")
             throw new BadVerbArgs(
               `save: ${addressText(applied3.at)} in the ${source.role} layer changed while editing`
@@ -76434,7 +76451,6 @@ function closingView(store, nestOf2, log) {
 
 // src/renderer/config-file-store.ts
 init_globals();
-var import_json55 = __toESM(require_dist(), 1);
 function persistValueText(key, raw) {
   const lifted = persistedValueOf(requireValueTarget(key), raw);
   if ("reason" in lifted) {
@@ -76442,11 +76458,19 @@ function persistValueText(key, raw) {
   }
   return JSON.stringify(lifted.value);
 }
-function docOf(text5) {
-  return /^\s*$/.test(text5) ? null : parseDocument(text5);
+function editedText(file, before) {
+  const text5 = before ?? EMPTY_DOCUMENT;
+  try {
+    return { text: text5, doc: parseDocument(text5) };
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    throw new BadVerbArgs(
+      `refused: ${file}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`
+    );
+  }
 }
 function has2(doc, p2) {
-  return doc !== null && nodeAt(doc, p2) !== void 0;
+  return nodeAt(doc, p2) !== void 0;
 }
 function authoredLayout(node) {
   if (node.kind === "segment") {
@@ -76514,7 +76538,7 @@ function inheritedRowLayers(under2) {
   });
 }
 function fileLayer(doc, path31) {
-  const fragment = doc === null ? void 0 : nodeAt(doc, path31);
+  const fragment = nodeAt(doc, path31);
   return fragment === void 0 ? null : { path: path31, fragment, unit: null };
 }
 function inheritedRootLayer(path31, root) {
@@ -76755,12 +76779,12 @@ function refuseNewDrops(into, was, will) {
     );
   }
 }
-function readDeclared(text5, key) {
+function readDeclared(file, before, key) {
   const target = requireValueTarget(key);
-  const doc = docOf(text5 ?? "");
-  const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
+  const { text: text5, doc } = editedText(file, before);
+  const node = nodeAt(doc, persistPath(target));
   if (node === void 0) return { kind: "none" };
-  const source = textOf(text5 ?? "", node);
+  const source = textOf(text5, node);
   if (node.kind === "number" && Number.isInteger(node.value))
     return { kind: "integer", value: node.value };
   return node.kind === "string" ? { kind: "text", value: node.value, source } : { kind: "other", source };
@@ -76771,15 +76795,16 @@ function writeValues(store, into, pairs2) {
 function writeDrafts(store, layer, pairs2, placements) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
+  const { text: text5 } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const valued = pairs2.reduce(
-    (text5, [key, raw]) => setValue(
-      text5,
-      valuePathOf(docOf(text5), under2, requireValueTarget(key)),
+    (text6, [key, raw]) => setValue(
+      text6,
+      valuePathOf(parseDocument(text6), under2, requireValueTarget(key)),
       persistValueText(key, raw),
       JSON5_DIALECT
     ),
-    before ?? ""
+    text5
   );
   return commit2(
     store,
@@ -76787,7 +76812,7 @@ function writeDrafts(store, layer, pairs2, placements) {
     before,
     writtenOnly(
       into,
-      () => withPlacements(valued, under2, into.path, placements, (text5) => text5)
+      () => withPlacements(valued, under2, into.path, placements, (text6) => text6)
     ),
     refuseHidden
   );
@@ -76796,7 +76821,7 @@ function withPlacements(text5, under2, file, placements, own2) {
   const landed = /* @__PURE__ */ new Map();
   return placements.reduce((prior, { preset, id: id2, setting, value }) => {
     const acc = own2(prior, under2, preset, id2);
-    const placement = layoutPlacementOf(docOf(acc), under2, preset, id2);
+    const placement = layoutPlacementOf(parseDocument(acc), under2, preset, id2);
     const spelled3 = json5Text(value);
     const slot = `${placement.path.join(".")}\0${id2}\0${setting}`;
     const rival = landed.get(slot);
@@ -76822,7 +76847,7 @@ function withPlacements(text5, under2, file, placements, own2) {
   }, text5);
 }
 function ownRow(text5, under2, preset, id2) {
-  const doc = docOf(text5);
+  const doc = parseDocument(text5);
   const own2 = ["presets", preset, "root"];
   for (const [row, { path: path31, unit, node }] of cascadeOf(doc, under2, preset)) {
     if (!hasSegmentRef(node, id2)) continue;
@@ -76848,29 +76873,39 @@ function deleteValues(store, layer, keys2) {
   const into = seenBy(layer, (file) => store.read(file));
   const targets = keys2.map(requireTarget);
   const before = requireLayerText(into.path, store.read(into.path));
-  if (before === null) return;
+  const { text: text5 } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const after = targets.reduce(
-    (text5, target) => deleteAtPath(text5, under2, resetPathOf(docOf(text5), under2, target)),
-    before
+    (text6, target) => deleteAtPath(
+      text6,
+      under2,
+      resetPathOf(parseDocument(text6), under2, target)
+    ),
+    text5
   );
-  if (after === before) return;
+  if (after === text5) return;
   commit2(store, into, before, after, releases);
 }
 var SAVED_PRESET_PREFIX = "custom-";
 function presetKeys(doc) {
-  const declared = doc === null ? void 0 : nodeAt(doc, ["presets"]);
+  const declared = nodeAt(doc, ["presets"]);
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
 function freePresetName(doc, under2, into) {
   const taken2 = /* @__PURE__ */ new Set([
     ...Object.keys(under2.presets),
     ...presetKeys(doc),
-    // Each layer above as the loader reads it (JSON5, duplicate keys and
-    // all) — the editor refuses files the loader renders.
-    ...into.above.flatMap(
-      (l) => Object.keys(import_json55.default.parse(l.text).presets ?? {})
-    )
+    // Each layer above as the loader reads it (duplicate keys and all): the
+    // editor refuses files the loader renders.
+    ...into.above.flatMap((l) => {
+      const syntax = parseJson5Syntax(l.text);
+      if (syntax.kind === "invalid")
+        throw new BadVerbArgs(
+          `refused: ${l.path}, above ${into.path}, does not load \u2014 ${new ConfigError(l.path, [syntax.issue]).message}`
+        );
+      const presets = isPlainObject4(syntax.value) ? syntax.value.presets : void 0;
+      return isPlainObject4(presets) ? Object.keys(presets) : [];
+    })
   ]);
   return Array.from(
     { length: taken2.size + 1 },
@@ -76880,7 +76915,7 @@ function freePresetName(doc, under2, into) {
 function writePreset(store, layer, from, globals, picks, placements) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
-  const doc = docOf(before ?? "");
+  const { text: text5, doc } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const name = freePresetName(doc, under2, into);
   const own2 = ["presets", name];
@@ -76889,7 +76924,7 @@ function writePreset(store, layer, from, globals, picks, placements) {
     ...staged === null ? [] : [
       [
         [...own2, "root"],
-        staged.unit === null ? movableTextOf(before ?? "", staged.fragment) : json5Text(staged.unit.value)
+        staged.unit === null ? movableTextOf(text5, staged.fragment) : json5Text(staged.unit.value)
       ]
     ],
     ...Object.keys(globals).length === 0 ? [] : [[[...own2, "globals"], json5Text(globals)]]
@@ -76902,8 +76937,8 @@ function writePreset(store, layer, from, globals, picks, placements) {
     ];
   });
   const after = [...copied, ...pinned].reduce(
-    (text5, [at, value]) => setValue(text5, at, value, JSON5_DIALECT),
-    setValue(before ?? "", own2, "{}", JSON5_DIALECT)
+    (text6, [at, value]) => setValue(text6, at, value, JSON5_DIALECT),
+    setValue(text5, own2, "{}", JSON5_DIALECT)
   );
   const placed2 = writtenOnly(
     into,
@@ -76921,7 +76956,7 @@ function writeThemeDefault(store, layer, theme24, look) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
   const after = setValue(
-    before ?? "",
+    editedText(into.path, before).text,
     ["themeDefaults", theme24],
     json5Text(look),
     JSON5_DIALECT
@@ -76938,8 +76973,8 @@ function deletePreset(store, layer, name) {
   }
   const own2 = ["presets", name];
   const before = requireLayerText(into.path, store.read(into.path));
-  const doc = docOf(before ?? "");
-  if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
+  const { text: text5, doc } = editedText(into.path, before);
+  if (nodeAt(doc, own2) === void 0) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": ${into.path} declares no ${own2.join(".")} \u2014 the bar you clicked is stale; it reloads on the next render`
     );
@@ -76953,7 +76988,7 @@ function deletePreset(store, layer, name) {
     store,
     into,
     before,
-    paths2.reduce((text5, at) => deleteAtPath(text5, under2, at), before),
+    paths2.reduce((text6, at) => deleteAtPath(text6, under2, at), text5),
     releases
   );
 }
@@ -76964,13 +76999,14 @@ function applyLayoutOp(store, layer, key, op, suffix) {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
   const before = requireLayerText(into.path, store.read(into.path));
+  const { text: text5, doc } = editedText(into.path, before);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const under2 = inheritedOf(into);
   const placement = writtenOnly(
     into,
-    () => layoutPlacementOf(docOf(before ?? ""), under2, target.preset, subject)
+    () => layoutPlacementOf(doc, under2, target.preset, subject)
   );
-  const authored = ensureAuthored(before ?? "", placement);
+  const authored = ensureAuthored(text5, placement);
   const { after, placed: placed2 } = spliceOp(
     authored,
     placement.path,
@@ -77326,6 +77362,7 @@ var stepConfig = (args, ctx) => {
   );
   const store = editStore(ctx, sid);
   const declared = readDeclared(
+    into.path,
     requireLayerText(into.path, store.read(into.path)),
     landing2.key
   );
@@ -77447,8 +77484,8 @@ function landStateWrites(writes, ctx) {
     ctx
   );
 }
-function declaredName(text5, key) {
-  const declared = readDeclared(text5, key);
+function declaredName(file, text5, key) {
+  const declared = readDeclared(file, text5, key);
   return declared.kind === "text" ? declared.value : void 0;
 }
 var ringConfig = (args, ctx) => {
@@ -77476,6 +77513,7 @@ var ringConfig = (args, ctx) => {
         r.key
       ).key;
       const declared = declaredName(
+        into.path,
         requireLayerText(
           into.path,
           editStore(ctx, ctx.session).read(into.path)
@@ -80738,6 +80776,31 @@ var import_node_path12 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/file-rewrites.ts
 init_globals();
+
+// src/utils/undo-log.ts
+init_globals();
+var UndoLog = class {
+  undos = [];
+  // A change to `file` landed; `undo` puts back what it replaced.
+  landed(file, undo2) {
+    this.undos.push({ file, undo: undo2 });
+  }
+  // [LAW:no-silent-failure] Every change put back, newest first: the undos that failed, in the order
+  // they ran.
+  undo() {
+    const failed3 = [];
+    for (const { file, undo: undo2 } of this.undos.splice(0).reverse()) {
+      try {
+        undo2();
+      } catch (e) {
+        failed3.push({ file, error: asError(e) });
+      }
+    }
+    return failed3;
+  }
+};
+
+// src/daemon/file-rewrites.ts
 var writeConfigFile = (file, text5, mode) => text5 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text5, mode);
 function setAside(file) {
   const from = resolvedTarget(file);
@@ -80746,24 +80809,34 @@ function setAside(file) {
   return { from, to };
 }
 function writeRevisions({ setAside: unread2, rewrites, retire }, write = writeConfigFile) {
-  const written2 = [];
+  const log = new UndoLog();
+  const files = [];
   let aside = null;
   try {
-    if (unread2 !== null)
-      aside = {
+    if (unread2 !== null) {
+      const kept2 = {
         file: unread2.file,
         reason: unread2.reason,
         ...setAside(unread2.file)
       };
-    for (const rewrite of rewrites) {
-      const removedMode = rewrite.will === null && rewrite.was !== null ? filePermissions(rewrite.file) : void 0;
-      write(rewrite.file, rewrite.will);
-      written2.push({ ...rewrite, removedMode });
+      aside = kept2;
+      files.push(kept2.to);
+      log.landed(kept2.from, () => {
+        try {
+          fs_default.renameSync(kept2.to, kept2.from);
+        } catch (rollback) {
+          const { message } = asError(rollback);
+          throw new Error(`${message} \u2014 its bytes are kept at ${kept2.to}`);
+        }
+      });
     }
-    const files = [
-      ...aside === null ? [] : [aside.to],
-      ...written2.map(({ file }) => file)
-    ];
+    for (const { file, was, will } of rewrites) {
+      const removedMode = will === null && was !== null ? filePermissions(file) : void 0;
+      write(file, will);
+      files.push(file);
+      if (will !== null || removedMode !== void 0)
+        log.landed(file, () => write(file, was, removedMode));
+    }
     if (retire !== null) {
       fs_default.renameSync(retire.from, retire.to);
       files.push(retire.from, retire.to);
@@ -80771,26 +80844,7 @@ function writeRevisions({ setAside: unread2, rewrites, retire }, write = writeCo
     return { kind: "ok", files, setAside: aside };
   } catch (cause) {
     const error = asError(cause);
-    const failed3 = [];
-    for (const { file, was, will, removedMode } of written2.reverse()) {
-      if (will === null && removedMode === void 0) continue;
-      try {
-        write(file, was, removedMode);
-      } catch (rollback) {
-        failed3.push({ file, error: asError(rollback) });
-      }
-    }
-    if (aside !== null)
-      try {
-        fs_default.renameSync(aside.to, aside.from);
-      } catch (rollback) {
-        const { message } = asError(rollback);
-        failed3.push({
-          file: aside.from,
-          error: new Error(`${message} \u2014 its bytes are kept at ${aside.to}`)
-        });
-      }
-    const [first2, ...remaining] = failed3;
+    const [first2, ...remaining] = log.undo();
     return first2 === void 0 ? { kind: "failed", error } : { kind: "incomplete", error, unrestored: [first2, ...remaining] };
   }
 }
@@ -88506,12 +88560,23 @@ init_globals();
 var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 function readClaudeSettingsText(settingsPath) {
   try {
-    return readRegularTextSync(settingsPath);
+    return readTextIfPresent(settingsPath);
+  } catch (error) {
+    throw new Error(`cannot read ${messageOf(error)}`, { cause: error });
+  }
+}
+function parseClaudeSettings(settingsPath, text5) {
+  if (text5 === null) return { text: text5, edited: EMPTY_DOCUMENT, document: {} };
+  let parsed2;
+  try {
+    parsed2 = JSON_DIALECT.parse(text5);
   } catch (e) {
-    if (types.isNativeError(e) && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR"))
-      return "";
     throw cannotRead(settingsPath, e);
   }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return { text: text5, edited: text5, document: parsed2 };
 }
 function readClaudeSettingsOutcome(settingsPath) {
   let text5;
@@ -88521,23 +88586,10 @@ function readClaudeSettingsOutcome(settingsPath) {
     return failed(messageOf(e), "read");
   }
   try {
-    return ok(parseSettings(settingsPath, text5));
+    return ok(parseClaudeSettings(settingsPath, text5).document);
   } catch (e) {
     return failed(messageOf(e), "parse");
   }
-}
-function parseSettings(settingsPath, text5) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text5)) return {};
-    parsed2 = JSON_DIALECT.parse(text5);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
 }
 var messageOf = (e) => types.isNativeError(e) ? e.message : String(e);
 
@@ -92461,6 +92513,8 @@ function performChanges(changes, book, files, write) {
         list3,
         JSON5_DIALECT
       );
+      if (applied3.kind === "incomplete")
+        return refused(`${file}: ${applied3.reason}`);
       if (applied3.kind === "moved")
         return refused(
           `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said2(applied3.read)}, it is ${said2(applied3.found)})`

@@ -2,151 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-969",
-      "ref": "refs/pull/969/merge",
-      "sha": "314955b6b346140dee0526b9db91f9e0cd3543b8",
-      "timestamp": "2026-11-26T06:49:50.577Z",
-      "commits": [
-        {
-          "sha": "314955b6b346140dee0526b9db91f9e0cd3543b8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:48:39Z",
-          "message": "Merge b3c1e20df13e248c867bdff0314985d8e23e8f21 into 5c1508325297fa412a0c37795cb434b5e28aeabe\n"
-        },
-        {
-          "sha": "b3c1e20df13e248c867bdff0314985d8e23e8f21",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:48:28-07:00",
-          "message": "style(install): format the integrated platform lookup signatures\n"
-        },
-        {
-          "sha": "f4c19ec44ae1730d8dfeb85a1bca0c54ec46ab09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:45:55-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n\n# Conflicts:\n#\tsrc/install/index.ts\n#\ttest/install-clobber.test.ts\n"
-        },
-        {
-          "sha": "4d4ece717909e01445dd0e68539ad53beec187d0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:13:34-07:00",
-          "message": "test(config): verify blank Claude settings fail at the shared read\n"
-        },
-        {
-          "sha": "5623e6b3b480adaf71f044e1608c3d006f859706",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:10:21-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "7cd957d25bfde47522fb43dbb780d16c355f7ec5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:10:21-07:00",
-          "message": "fix(config): guard incomplete history edits and preserve strict settings JSON\n"
-        },
-        {
-          "sha": "385a8f98bb3222b93b47590be5b6e99db1434d19",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:57:15-07:00",
-          "message": "fix(install): preserve replaced directories during interrupted recovery\n"
-        },
-        {
-          "sha": "6acf565c80eb341689c08a1f2b9b9bd2d36c680c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:54:47-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "92df238b22a491840c3dcc730a5b803ce1a6d9e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:54:46-07:00",
-          "message": "fix(install): recover interrupted publications before retrying an install\n"
-        },
-        {
-          "sha": "d6b86d4707456a5011e2fc450960d9bebbf8522c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:48:24-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "aa86e615adcf5ce189b8b48694b201f92164f917",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:48:06-07:00",
-          "message": "fix(install): name directories retained for concurrent SSH forwards\n"
-        },
-        {
-          "sha": "2f47d0f1114f270414f8365234dd7ef538c6bd60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:43:31-07:00",
-          "message": "fix(install): prepare replacements before publishing under a recoverable process claim\n"
-        },
-        {
-          "sha": "d8b53c5636f542de0367436018f423ffdc6c3ad0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:40:45-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "a74a3d3fdf09db2c05c59d838db5b19dba3407b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:06:42-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-law-review-ibyq.562\n"
-        },
-        {
-          "sha": "f0aace7b83ca835ecd7a4251b049ac18defff325",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:55-07:00",
-          "message": "fix(install): exclude overlapping runtime and handler installs\n"
-        },
-        {
-          "sha": "88d61b8e61362d703448d7158c6582dc5a42bc78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:59:40-07:00",
-          "message": "test(install): preserve active forwards during installation rollback\n"
-        },
-        {
-          "sha": "ac6bd4979d1f322664fed1525c70761b1c417d97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:57:07-07:00",
-          "message": "fix(install): plan settings edits and roll back incomplete installs\n"
-        },
-        {
-          "sha": "a956081a51d8bfdcf2c604591fdebd9a2f12ac82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:29:00-07:00",
-          "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5c1508325297fa412a0c37795cb434b5e28aeabe",
-      "timestamp": "2026-11-26T06:45:22.964Z",
+      "sha": "17339bc95bd7d8e527c9de56d2d06a3c029bf27c",
+      "timestamp": "2026-11-26T06:52:39.114Z",
       "commits": [
         {
-          "sha": "5c1508325297fa412a0c37795cb434b5e28aeabe",
+          "sha": "17339bc95bd7d8e527c9de56d2d06a3c029bf27c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:44:13-07:00",
-          "message": "test: isolate the suite from the machine running it (#971)\n\n* test: isolate terminal, filesystem and process observations from the host\n\n* test(heap): distinguish compile-owned stores from live WeakMap keys\n\n* test(cache): measure renderer entries after retiring their views\n\n* test: observe a held grandchild through its owned connection\n\n* fix(tools): retain the command-line daemon startup deadline\n\n* docs(testing): describe the owner-based heap assertion\n\n* fix(client): drain buffered render frames within the wire deadline\n\n* test: await the grandchild socket events through case teardown\n\n* test(renderer): close the idle wake of every click fixture\n\n* test: drive wait deadlines without leaving real timers running\n\n* test(git): isolate fixture commits from parent hook repository overrides\n\n* test(proc): release signal-refused readers after pipe assertions\n\n* test(git): isolate the native Jest worker process before it forks"
+          "timestamp": "2026-11-25T23:51:27-07:00",
+          "message": "fix(config): preserve comments and roll back failed installs (#969)\n\n* fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n\n* fix(install): plan settings edits and roll back incomplete installs\n\n* test(install): preserve active forwards during installation rollback\n\n* fix(install): exclude overlapping runtime and handler installs\n\n* fix(install): prepare replacements before publishing under a recoverable process claim\n\n* fix(install): name directories retained for concurrent SSH forwards\n\n* fix(install): recover interrupted publications before retrying an install\n\n* fix(install): preserve replaced directories during interrupted recovery\n\n* fix(config): guard incomplete history edits and preserve strict settings JSON\n\n* test(config): verify blank Claude settings fail at the shared read\n\n* style(install): format the integrated platform lookup signatures"
         }
       ]
     },
