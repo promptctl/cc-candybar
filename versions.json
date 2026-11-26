@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-970",
+      "ref": "refs/pull/970/merge",
+      "sha": "70c5516db43fa4b818583643336e820dfb737623",
+      "timestamp": "2026-11-26T05:05:45.294Z",
+      "commits": [
+        {
+          "sha": "70c5516db43fa4b818583643336e820dfb737623",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:04:09Z",
+          "message": "Merge f2dd43eadf6448ebeeca8caba98bc9608267440f into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
+        },
+        {
+          "sha": "f2dd43eadf6448ebeeca8caba98bc9608267440f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:04:01-07:00",
+          "message": "fix(pricing): bound every fetch until its socket closes\n"
+        },
+        {
+          "sha": "ccfda41fc37bad7201bfd6a788da7773e9ac6fa2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:12-07:00",
+          "message": "fix(pricing): own, refresh and abort the daemon price table\n"
+        }
+      ]
+    },
+    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
       "sha": "197de65d316c38b7b8505167a30fdb1b35bef14a",
@@ -70,28 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:29:00-07:00",
           "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-970",
-      "ref": "refs/pull/970/merge",
-      "sha": "906e28ce6eb1debef220db4ec887e2d09cabc129",
-      "timestamp": "2026-11-26T05:01:48.846Z",
-      "commits": [
-        {
-          "sha": "906e28ce6eb1debef220db4ec887e2d09cabc129",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:00:07-07:00",
-          "message": "Merge ccfda41fc37bad7201bfd6a788da7773e9ac6fa2 into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
-        },
-        {
-          "sha": "ccfda41fc37bad7201bfd6a788da7773e9ac6fa2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:59:12-07:00",
-          "message": "fix(pricing): own, refresh and abort the daemon price table\n"
         }
       ]
     },

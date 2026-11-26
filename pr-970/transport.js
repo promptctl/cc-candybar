@@ -86124,7 +86124,7 @@ var Pricing = class {
   table() {
     const standing2 = this.standing;
     if (standing2 === null) return this.load("first");
-    if (this.opts.clock.now() >= standing2.dueAt) {
+    if (this.opts.clock.monotonic() >= standing2.dueAt) {
       this.opts.clock.detach("pricing refresh", () => this.load("period"));
     }
     return Promise.resolve(standing2.table);
@@ -86151,11 +86151,11 @@ var Pricing = class {
     const ms = elapsedMs(this.opts.clock, started2);
     if (signal.aborted) {
       this.refreshes.abandoned("-", by, ms);
-      return standing2.table;
+      return prior?.table ?? bundledTable();
     }
     this.standing = standing2;
     this.refreshes.recorded(
-      `prices=${standing2.source} dueInMs=${standing2.dueAt - this.opts.clock.now()}`,
+      `prices=${standing2.source} dueInMs=${standing2.dueAt - this.opts.clock.monotonic()}`,
       by,
       outcome,
       ms
@@ -86168,13 +86168,14 @@ var Pricing = class {
   async attempt(prior, signal) {
     let cached = null;
     try {
-      cached = await this.readCache(signal);
-      if (cached !== null && this.opts.clock.now() < cached.timestamp + DAY_MS2) {
+      cached = prior === null ? await this.readCache(signal) : null;
+      const now2 = this.opts.clock.now();
+      if (cached !== null && cached.timestamp <= now2 && now2 < cached.timestamp + DAY_MS2) {
         return {
           standing: {
             table: cached.table,
             source: "cache",
-            dueAt: cached.timestamp + DAY_MS2,
+            dueAt: this.opts.clock.monotonic() + (DAY_MS2 - (now2 - cached.timestamp)),
             failures: 0
           },
           outcome: ok(null)
@@ -86194,7 +86195,7 @@ var Pricing = class {
           standing: {
             table: fetched.value,
             source: "fetched",
-            dueAt: this.opts.clock.now() + DAY_MS2,
+            dueAt: this.opts.clock.monotonic() + DAY_MS2,
             failures: 0
           },
           outcome: fetched
@@ -86214,7 +86215,7 @@ var Pricing = class {
     return {
       table: kept2.table,
       source: kept2.source,
-      dueAt: this.opts.clock.now() + backedOffMs(EVERY, failures, BACKOFF_CEILING_MS),
+      dueAt: this.opts.clock.monotonic() + backedOffMs(EVERY, failures, BACKOFF_CEILING_MS),
       failures
     };
   }
@@ -96092,20 +96093,23 @@ var MAX_BYTES4 = 1024 * 1024;
 var PRICING_URL = new URL(
   "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json"
 );
-function remotePricing(get3, url) {
+function fetchPricing(clock, get3 = get2, url = PRICING_URL) {
   return (signal) => new Promise((resolve2) => {
+    let result;
+    const finish = (answer2) => {
+      result ??= answer2;
+    };
     const request2 = get3(
       url,
       {
         agent: false,
         signal,
-        timeout: TIMEOUT_MS,
         headers: { "User-Agent": "cc-candybar", "Cache-Control": "no-cache" }
       },
       (response) => {
-        response.on("error", (e) => resolve2(failed(e.message, "read")));
+        response.on("error", (e) => finish(failed(e.message, "read")));
         if (response.statusCode !== 200) {
-          resolve2(
+          finish(
             failed(
               `HTTP ${response.statusCode} ${response.statusMessage}`,
               "read"
@@ -96120,23 +96124,31 @@ function remotePricing(get3, url) {
         response.on("data", (chunk3) => {
           bytes += import_buffer.Buffer.byteLength(chunk3);
           if (bytes > MAX_BYTES4) {
-            resolve2(failed(`the body passed ${MAX_BYTES4} bytes`, "read"));
+            finish(failed(`the body passed ${MAX_BYTES4} bytes`, "read"));
             request2.destroy();
             return;
           }
           body += chunk3;
         });
-        response.on("end", () => resolve2(ok(body)));
+        response.on("end", () => finish(ok(body)));
       }
     );
-    request2.on(
-      "timeout",
-      () => request2.destroy(new Error(`no answer in ${TIMEOUT_MS} ms`))
+    const cancelDeadline = clock.after(
+      "pricing request deadline",
+      TIMEOUT_MS,
+      () => {
+        request2.destroy(new Error(`no answer in ${TIMEOUT_MS} ms`));
+      }
     );
-    request2.on("error", (e) => resolve2(failed(e.message, "read")));
+    request2.once("close", () => {
+      cancelDeadline();
+      resolve2(
+        result ?? failed("request closed before its response ended", "read")
+      );
+    });
+    request2.on("error", (e) => finish(failed(e.message, "read")));
   });
 }
-var fetchPricing = remotePricing(get2, PRICING_URL);
 
 // src/daemon/production-adapters.ts
 function productionAdapters(paths2, daemonLog, machine) {
@@ -96168,7 +96180,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     stat: fs_default.statSync,
     checkoutFiles,
     writeConfigFile,
-    fetchPricing
+    fetchPricing: fetchPricing(machine)
   };
 }
 
