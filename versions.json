@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-972",
+      "ref": "refs/pull/972/merge",
+      "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
+      "timestamp": "2026-11-26T06:29:32.635Z",
+      "commits": [
+        {
+          "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T06:28:02Z",
+          "message": "Merge e3c10c2272e0485db5f6088cf659294f1d8c5ee9 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
+        },
+        {
+          "sha": "e3c10c2272e0485db5f6088cf659294f1d8c5ee9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:27:50-07:00",
+          "message": "fix(menu): pin former wire pairs and verify their load diagnostics\n"
+        },
+        {
+          "sha": "30eb8be64c757e606f332e5a4ba1d2be6fa54345",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:11:40-07:00",
+          "message": "fix(menu): retire saved selections that block recording after upgrade\n"
+        }
+      ]
+    },
+    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
       "sha": "876d5872c9758eec217ef2380307518347be62dd",
@@ -470,28 +499,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:29:00-07:00",
           "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-972",
-      "ref": "refs/pull/972/merge",
-      "sha": "b43607acbb959ac4219b2fafd0630058747dfd94",
-      "timestamp": "2026-11-26T06:13:54.391Z",
-      "commits": [
-        {
-          "sha": "b43607acbb959ac4219b2fafd0630058747dfd94",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:12:05-07:00",
-          "message": "Merge 30eb8be64c757e606f332e5a4ba1d2be6fa54345 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
-        },
-        {
-          "sha": "30eb8be64c757e606f332e5a4ba1d2be6fa54345",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:11:40-07:00",
-          "message": "fix(menu): retire saved selections that block recording after upgrade\n"
         }
       ]
     },

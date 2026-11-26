@@ -75387,13 +75387,9 @@ function parseSessionPicks(value) {
     reason: `has a ${JSON.stringify(bad)} that is not a string`
   };
 }
-var retiredMenuMembers = /* @__PURE__ */ new Map([
-  ["candybar.tab", "layout"],
-  [sharedMenuStateKey("candybar.pickers"), "toggles"]
-]);
 function retiredBecause(key, value) {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
-  if (retiredMenuMembers.get(key) === value)
+  if (key === "candybar.tab" && value === "layout" || key === "menus._candybarZ00002epickers" && value === "toggles")
     return `the settings menu no longer has a "${value}" member on this key`;
   if (isMenuStateKey(key) && menuOfKey(key) === void 0)
     return "no menu is keyed that way in this build";
