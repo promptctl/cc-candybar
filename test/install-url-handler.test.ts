@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   __test__ as install,
   forwarderExecutable,
+  runInstallUrlHandler,
   type InstallWorld,
 } from "../src/install/index";
 import type { LaunchOpts, LaunchResult } from "../src/proc/launcher";
@@ -38,10 +39,19 @@ describe("assembling the URL handler app", () => {
   // the binary sits where `just install-url-handler` leaves it.
   const checkout = (forwarder: string | null): string => {
     const root = path.join(home, "checkout");
-    for (const dir of ["dist", "src", "bin"]) {
+    for (const dir of ["dist/cc-extra", "src", "bin"]) {
       fs.mkdirSync(path.join(root, dir), { recursive: true });
     }
     fs.writeFileSync(path.join(root, "dist", "index.mjs"), "// bundle\n");
+    fs.writeFileSync(
+      path.join(root, "dist", "cc-extra", "launcher.js"),
+      "// launcher",
+    );
+    fs.writeFileSync(
+      path.join(root, "dist", "attach-preload.cjs"),
+      "// preload",
+    );
+    fs.writeFileSync(path.join(root, "bin", "cc-candybar"), "#!/bin/sh");
     if (forwarder !== null) {
       fs.writeFileSync(
         path.join(root, "bin", "cc-candybar-url-handler-native"),
@@ -58,6 +68,13 @@ describe("assembling the URL handler app", () => {
     const ran: string[] = [];
     const fake: InstallWorld["launcher"] = {
       launchSync: (opts: LaunchOpts): LaunchResult => {
+        if (opts.bin === "ps")
+          return {
+            ok: true,
+            stdout: "installer started",
+            stderr: "",
+            exitCode: 0,
+          };
         ran.push(`${path.basename(opts.bin)} ${(opts.args ?? []).join(" ")}`);
         return {
           ok: true,
@@ -76,6 +93,9 @@ describe("assembling the URL handler app", () => {
     launcher: l,
   });
 
+  const installHandler = (source: string, w: InstallWorld) =>
+    runInstallUrlHandler(source, w, "darwin");
+
   const app = () => path.join(home, "Applications", "CCCandybarURLHandler.app");
   // What ~/Applications holds: the app, and no name an install staged or
   // kept aside.
@@ -85,7 +105,7 @@ describe("assembling the URL handler app", () => {
     const { ran, launcher: l } = launcher({
       killall: { ok: false, reason: "non-zero", exitCode: 1 },
     });
-    install.installUrlHandlerFrom(checkout("MACHO"), world(l));
+    installHandler(checkout("MACHO"), world(l));
 
     const exe = forwarderExecutable(app());
     expect(fs.readFileSync(exe, "utf8")).toBe("MACHO");
@@ -122,13 +142,13 @@ describe("assembling the URL handler app", () => {
   // handler the user had, whole.
   test("a sign that fails leaves the previous bundle whole and no staging behind", () => {
     const { launcher: l } = launcher();
-    install.installUrlHandlerFrom(checkout("OLD"), world(l));
+    installHandler(checkout("OLD"), world(l));
     const { launcher: failing } = launcher({
       codesign: { ok: false, stderr: "no identity\n", reason: "non-zero" },
     });
-    expect(() =>
-      install.installUrlHandlerFrom(checkout("NEW"), world(failing)),
-    ).toThrow(/codesign failed/);
+    expect(() => installHandler(checkout("NEW"), world(failing))).toThrow(
+      /codesign failed/,
+    );
     expect(fs.readFileSync(forwarderExecutable(app()), "utf8")).toBe("OLD");
     expect(applications()).toEqual(["CCCandybarURLHandler.app"]);
   });
@@ -138,7 +158,7 @@ describe("assembling the URL handler app", () => {
   // keep delivering through it until logout.
   test("a resident instance is quit before the scheme is registered, and the user is told", () => {
     const { ran, launcher: l } = launcher();
-    install.installUrlHandlerFrom(checkout("MACHO"), world(l));
+    installHandler(checkout("MACHO"), world(l));
     expect(ran.indexOf("killall CCCandybarURLHandler")).toBeLessThan(
       ran.findIndex((c) => c.startsWith("lsregister")),
     );
@@ -156,7 +176,7 @@ describe("assembling the URL handler app", () => {
     fs.mkdirSync(path.dirname(stale), { recursive: true });
     fs.writeFileSync(stale, "applet");
     const { launcher: l } = launcher();
-    install.installUrlHandlerFrom(checkout("MACHO"), world(l));
+    installHandler(checkout("MACHO"), world(l));
     expect(fs.existsSync(stale)).toBe(false);
     expect(applications()).toEqual(["CCCandybarURLHandler.app"]);
   });
@@ -164,9 +184,7 @@ describe("assembling the URL handler app", () => {
   // [LAW:no-silent-failure] No applet is built in the forwarder's place.
   test("a checkout with no forwarder built is refused before anything is written", () => {
     const { ran, launcher: l } = launcher();
-    expect(() =>
-      install.installUrlHandlerFrom(checkout(null), world(l)),
-    ).toThrow(
+    expect(() => installHandler(checkout(null), world(l))).toThrow(
       /not built at .*bin\/cc-candybar-url-handler-native\. Run `just install-url-handler`/,
     );
     expect(fs.existsSync(path.dirname(app()))).toBe(false);
@@ -178,7 +196,7 @@ describe("assembling the URL handler app", () => {
     process.stderr.write = (() => true) as typeof process.stderr.write;
     try {
       expect(() =>
-        install.installUrlHandlerFrom(
+        installHandler(
           checkout("MACHO"),
           world(
             launcher({
@@ -188,7 +206,7 @@ describe("assembling the URL handler app", () => {
         ),
       ).toThrow("codesign failed (exited with code 1)");
       expect(() =>
-        install.installUrlHandlerFrom(
+        installHandler(
           checkout("MACHO"),
           world(
             launcher({

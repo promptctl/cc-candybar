@@ -75,6 +75,13 @@ function world(
   const ran: string[] = [];
   const launcher: InstallWorld["launcher"] = {
     launchSync: (opts: LaunchOpts): LaunchResult => {
+      if (opts.bin === "ps")
+        return {
+          ok: true,
+          stdout: "installer started",
+          stderr: "",
+          exitCode: 0,
+        };
       const bin = path.basename(opts.bin);
       ran.push(bin);
       during[bin]?.();
@@ -169,6 +176,13 @@ describe("an install that lands", () => {
     );
     expect(ran).toEqual([]);
     expect(out.join("")).toContain("Skipping URL handler");
+  });
+
+  test("the staged bundle can reinstall its actual runtime, entry and existing forwarder", () => {
+    install([], checkout("v1"), world().world, "darwin");
+    const before = tree();
+    install([], stagedDist(), world().world, "darwin");
+    expect(tree()).toEqual(before);
   });
 
   test("a re-install replaces every staged file, and leaves none of the old ones", () => {
@@ -266,9 +280,16 @@ describe("an install that fails", () => {
 
   test("while signing the app leaves the staged runtime and the app as they were", () => {
     const before = installedThenStale();
-    const { world: w } = world({
-      codesign: { ok: false, reason: "non-zero", exitCode: 1 },
-    });
+    const { world: w } = world(
+      { codesign: { ok: false, reason: "non-zero", exitCode: 1 } },
+      {
+        codesign: () => {
+          const live = tree();
+          for (const [name, bytes] of Object.entries(before))
+            expect(live[name]).toBe(bytes);
+        },
+      },
+    );
     expect(() => install([], checkout("v2"), w, "darwin")).toThrow(
       /codesign failed/,
     );
@@ -283,6 +304,31 @@ describe("an install that fails", () => {
       /lsregister failed/,
     );
     expect(tree()).toEqual({});
+  });
+
+  test("rollback preserves a settings edit made by another process after publication", () => {
+    installedThenStale();
+    const old = fs.readFileSync(settingsFile(), "utf8");
+    const theirs = JSON.stringify({ env: { SET_DURING_REGISTRATION: "1" } });
+    const { world: w } = world(
+      { lsregister: { ok: false, reason: "non-zero", exitCode: 1 } },
+      { lsregister: () => fs.writeFileSync(settingsFile(), theirs) },
+    );
+    expect(() => install([], checkout("v2"), w, "darwin")).toThrow(
+      /settings\.json: changed after publication; kept the current path; previous contents kept at/,
+    );
+    expect(fs.readFileSync(settingsFile(), "utf8")).toBe(theirs);
+    const backups = fs
+      .readdirSync(path.dirname(settingsFile()))
+      .filter((name) => name.endsWith(".tmp"));
+    expect(backups).toHaveLength(1);
+    expect(
+      fs.readFileSync(
+        path.join(path.dirname(settingsFile()), backups[0]!),
+        "utf8",
+      ),
+    ).toBe(old);
+    expect(fs.readFileSync(stagedDist(), "utf8")).toBe("// bundle v1\n");
   });
 
   test("a second install cannot land files in an install that may still roll back", () => {

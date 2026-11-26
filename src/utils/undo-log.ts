@@ -21,7 +21,7 @@ export class UndoLog {
     this.undos.push({ file, undo });
   }
 
-  // Every change put back, newest first: the undos that failed, in the order
+  // [LAW:no-silent-failure] Every change put back, newest first: the undos that failed, in the order
   // they ran.
   undo(): UndoFailure[] {
     const failed: UndoFailure[] = [];

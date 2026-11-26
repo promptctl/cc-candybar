@@ -83,9 +83,7 @@ describe("the statusLine command install writes", () => {
   test("the legacy pnpm-dlx command is recognized as ours and upgraded", () => {
     expect(
       JSON.parse(
-        written(
-          settingsWith("pnpm dlx @promptctl/cc-candybar@1.17.5 --style=x"),
-        ),
+        written(settingsWith("pnpm dlx @promptctl/cc-candybar@1.17.5")),
       ).statusLine.command,
     ).toBe(shellWord(BIN));
   });
@@ -101,6 +99,14 @@ describe("the statusLine command install writes", () => {
   // A command the install did not write is the user's, even one that runs the
   // staged entry with flags of their own after it.
   test.each([
+    [
+      "the legacy command with arguments",
+      "pnpm dlx @promptctl/cc-candybar@1.17.5 --style=x",
+    ],
+    [
+      "a legacy command with a shell suffix",
+      "pnpm dlx @promptctl/cc-candybar@1.17.5|custom",
+    ],
     ["another program", "/usr/local/bin/my-custom-renderer --theme=nord"],
     ["the entry with words after it", `${shellWord(BIN)} --style=minimal`],
     ["a path that only begins with the entry's", `${BIN}-backup --mine`],
@@ -169,7 +175,7 @@ describe("a settings file that is not the shape install reads", () => {
       plan(
         `{ "statusLine": { "command": "a" }, "statusLine": { "command": "b" } }`,
       ),
-    ).toThrow(new RegExp(`cannot read ${FILE}: .*statusLine`));
+    ).toThrow(new RegExp(`cannot edit ${FILE}: .*statusLine`));
   });
 });
 

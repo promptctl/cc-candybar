@@ -1,10 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { writeConfigFile } from "../daemon/file-rewrites.js";
 import {
   asError,
-  publishByRename,
-  publishByLink,
+  filePermissions,
   resolvedTarget,
   stagedName,
 } from "../utils/atomic-write.js";
@@ -20,6 +18,21 @@ import { UndoLog, type UndoFailure } from "../utils/undo-log.js";
 // the next run's way, and each one left is named.
 export class InstallChanges {
   private readonly log = new UndoLog();
+  private readonly publications: Array<() => void> = [];
+  private readonly reports: Array<() => void> = [];
+
+  publish(): void {
+    for (const publish of this.publications) publish();
+  }
+
+  afterPublish(action: () => void): void {
+    this.publications.push(action);
+  }
+
+  report(message: string, stream: "stdout" | "stderr" = "stdout"): void {
+    this.reports.push(() => process[stream].write(message));
+  }
+
   // The old copies kept aside, removed once the install stands.
   private readonly kept: string[] = [];
 
@@ -38,67 +51,74 @@ export class InstallChanges {
     }
   }
 
-  // `dest` replaced in one rename, so a reader finds the old file or the new
-  // one, never neither. The old file stays linked aside until the install
-  // stands.
-  replaceFile(dest: string, bytes: string | Uint8Array, mode: number): void {
-    const old = present(dest) ? stagedName(dest) : null;
-    if (old !== null) fs.linkSync(dest, old);
-    try {
-      publishByRename(dest, bytes, mode);
-    } catch (e) {
-      throw old === null ? e : removing(old, e);
-    }
-    this.landed(dest, old);
+  // Prepare artifacts beside their targets. Signing and copying finish before
+  // any existing runtime or app path changes. Only the final renames and
+  // Launch Services registration can require restoring a published version.
+  replaceFile(dest: string, bytes: string | Uint8Array, mode?: number): void {
+    this.prepare(
+      dest,
+      (staging) => {
+        fs.writeFileSync(staging, bytes, { flag: "wx", mode });
+        if (mode !== undefined) fs.chmodSync(staging, mode);
+      },
+      false,
+    );
   }
 
-  // `dest` replaced whole: `build` fills a directory beside it, and the old
-  // one moves aside as the new one moves in. A build that fails leaves `dest`
-  // as it was.
   replaceDir(dest: string, build: (staging: string) => void): void {
+    this.prepare(dest, build, true);
+  }
+
+  private prepare(
+    dest: string,
+    build: (staging: string) => void,
+    directory: boolean,
+  ): void {
     const staging = stagedName(dest);
-    try {
-      build(staging);
-    } catch (e) {
-      throw removing(staging, e);
-    }
-    try {
-      this.moveAside(dest);
-      fs.renameSync(staging, dest);
-    } catch (e) {
-      throw removing(staging, e);
-    }
-    this.landed(dest, null);
+    this.log.landed(staging, () =>
+      fs.rmSync(staging, { recursive: true, force: true }),
+    );
+    build(staging);
+    this.afterPublish(() => {
+      let old: string | null = null;
+      if (present(dest)) {
+        if (directory) {
+          this.moveAside(dest);
+        } else {
+          old = stagedName(dest);
+          fs.linkSync(dest, old);
+        }
+      }
+      try {
+        fs.renameSync(staging, dest);
+      } catch (error) {
+        throw old === null ? error : removing(old, error);
+      }
+      this.landed(dest, old);
+    });
   }
 
-  // `file` gone from its place, kept aside until the install stands.
   remove(file: string): void {
-    this.moveAside(file);
+    this.afterPublish(() => this.moveAside(file));
   }
 
-  // `file`'s text replaced by `will`, only while it still holds `was`, the
-  // bytes the install planned from: a write that landed since is never
-  // overwritten. The undo writes `was` back only over `will`, for the same
-  // reason. A link is written where it points (writeConfigFile).
+  // Check the settings and the record immediately before publication. Other
+  // writers may still change either after this observation.
   expectText(file: string, was: string | null): void {
-    if (readTextIfPresent(file) !== was)
-      throw new Error(
-        `${file} changed while the install ran, so the install did not write it`,
-      );
+    this.afterPublish(() => {
+      if (readTextIfPresent(file) !== was)
+        throw new Error(
+          `${file} changed while the install ran, so the install did not write it`,
+        );
+    });
   }
 
   writeText(file: string, was: string | null, will: string): void {
     this.expectText(file, was);
     if (was === will) return;
-    this.mkdir(path.dirname(resolvedTarget(file)));
-    writeConfigFile(file, will);
-    this.log.landed(file, () => {
-      if (readTextIfPresent(file) !== will)
-        throw new Error(
-          `it changed after the install wrote it, so it is left as it is`,
-        );
-      writeConfigFile(file, was);
-    });
+    const target = resolvedTarget(file);
+    this.mkdir(path.dirname(target));
+    this.replaceFile(target, will, filePermissions(target));
   }
 
   // Every change put back, newest first: the ones that could not be.
@@ -108,6 +128,7 @@ export class InstallChanges {
 
   // The install stands: the old copies go. Returns each that would not.
   finish(): string[] {
+    for (const say of this.reports) say();
     return this.kept.flatMap((old) => {
       try {
         fs.rmSync(old, { recursive: true, force: true });
@@ -122,27 +143,34 @@ export class InstallChanges {
     if (!present(file)) return;
     const old = stagedName(file);
     fs.renameSync(file, old);
-    this.landed(file, old);
-  }
-
-  // A change to `file` landed, its old self at `old`, or none there before.
-  private landed(file: string, old: string | null): void {
-    if (old === null) {
-      this.log.landed(file, () =>
-        fs.rmSync(file, { recursive: true, force: true }),
-      );
-      return;
-    }
     this.kept.push(old);
     this.log.landed(file, () => {
-      try {
-        fs.renameSync(old, file);
-      } catch (e) {
-        // [LAW:no-silent-failure] The old bytes stay aside: say where.
+      if (present(file))
         throw new Error(
-          `${asError(e).message} — what it held is kept at ${old}`,
+          `the path is occupied; its previous contents are kept at ${old}`,
         );
-      }
+      fs.renameSync(old, file);
+    });
+  }
+
+  private landed(file: string, old: string | null): void {
+    const installed = fs.lstatSync(file, { bigint: true });
+    if (old !== null) this.kept.push(old);
+    this.log.landed(file, () => {
+      const current = fs.lstatSync(file, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      if (
+        current?.dev !== installed.dev ||
+        current.ino !== installed.ino ||
+        current.ctimeNs !== installed.ctimeNs
+      )
+        throw new Error(
+          `changed after publication; kept the current path${old === null ? "" : `; previous contents kept at ${old}`}`,
+        );
+      if (old === null) fs.rmSync(file, { recursive: true, force: true });
+      else fs.renameSync(old, file);
     });
   }
 }
@@ -167,34 +195,12 @@ function removing(staged: string, e: unknown): Error {
 // [LAW:no-silent-failure] An install whose step throws puts back every
 // change it made, and its error says so, naming each it could not put back.
 // One that stands removes the old copies, and names each that would not go.
-export function transacted<T>(
-  lockDir: string,
-  install: (changes: InstallChanges) => T,
-): T {
-  // [LAW:no-ambient-temporal-coupling] A rollback only owns its own files.
-  // Give one installer the runtime and the handler together, until its last
-  // restore or cleanup. Even the URL-handler-only command stages the runtime.
-  const lock = path.join(lockDir, ".cc-candybar-install.lock");
-  const acquired = publishByLink(lock, String(process.pid), 0o600);
-  if (acquired.leftover !== null)
-    process.stderr.write(`install: ${acquired.leftover}\n`);
-  if (acquired.outcome === "taken") {
-    throw new Error(
-      `Another install holds ${lock}. Retry after it finishes. If it was interrupted, verify its process (PID in the lock file) has exited before removing the lock.`,
-    );
-  }
-  try {
-    return applyChanges(install);
-  } finally {
-    fs.unlinkSync(lock);
-  }
-}
-
-function applyChanges<T>(install: (changes: InstallChanges) => T): T {
+export function transacted<T>(install: (changes: InstallChanges) => T): T {
   const changes = new InstallChanges();
   let done: T;
   try {
     done = install(changes);
+    changes.publish();
   } catch (e) {
     const error = asError(e);
     const unrestored = changes.undo();

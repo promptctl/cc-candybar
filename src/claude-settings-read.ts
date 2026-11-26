@@ -3,11 +3,7 @@
 // (src/claude-settings.ts).
 
 import { types } from "node:util";
-import {
-  EMPTY_DOCUMENT,
-  JSON_DIALECT,
-  parseDocument,
-} from "./config/json5-edit.js";
+import { EMPTY_DOCUMENT, JSON_DIALECT } from "./config/json5-edit.js";
 import { failed, ok, type Failed, type Ok } from "./utils/outcome.js";
 import { readRegularTextSync } from "./utils/regular-text.js";
 import { type JsonObject, isJsonObject } from "./claude-settings";
@@ -23,11 +19,7 @@ export function readClaudeSettingsText(settingsPath: string): string | null {
   } catch (e) {
     // [LAW:no-silent-failure] The install can create a missing settings file.
     // A settings file it could not read is an error the user can act on.
-    if (
-      types.isNativeError(e) &&
-      "code" in e &&
-      (e.code === "ENOENT" || e.code === "ENOTDIR")
-    )
+    if (types.isNativeError(e) && "code" in e && e.code === "ENOENT")
       return null;
     throw cannotRead(settingsPath, e);
   }
@@ -59,9 +51,6 @@ export function parseClaudeSettings(
   let parsed: unknown;
   try {
     parsed = JSON_DIALECT.parse(text);
-    // Every reader must agree on the key an install can edit. JSON.parse
-    // alone would silently choose the last of two conflicting definitions.
-    parseDocument(text);
   } catch (e) {
     throw cannotRead(settingsPath, e);
   }

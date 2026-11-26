@@ -35,7 +35,12 @@ import {
   readClaudeSettingsText,
   type StatusLine,
 } from "../claude-settings-read";
-import { JSON_DIALECT, Json5EditError, setValue } from "../config/json5-edit";
+import {
+  JSON_DIALECT,
+  Json5EditError,
+  parseDocument,
+  setValue,
+} from "../config/json5-edit";
 import {
   assessCurrency,
   currencyReport,
@@ -47,6 +52,7 @@ import { PLATFORM_PACKAGES } from "./platforms";
 import { recordIfInstall, statusLineRunsBundle } from "./record";
 import { hostBundleRecordText } from "../daemon/host-bundle";
 import { readTextIfPresent } from "../utils/regular-text";
+import { withInstallClaim } from "./claim";
 import { transacted, type InstallChanges } from "./changes";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
@@ -121,6 +127,7 @@ export function forwarderExecutable(app: string): string {
 function resolveForwarder(
   sourceDist: string,
   platform: NodeJS.Platform,
+  host: Host,
 ): string {
   const checkout = sourceCheckoutOf(sourceDist);
   if (checkout !== null) {
@@ -131,6 +138,19 @@ function resolveForwarder(
       );
     }
     return built;
+  }
+  // A re-install from the fixed runtime has no package tree beside it.
+  // Its matching forwarder is the binary previously staged in the app.
+  const staged = stagedDistPath(supportDir(host, platform));
+  if (
+    fs.existsSync(staged) &&
+    fs.realpathSync(sourceDist) === fs.realpathSync(staged)
+  ) {
+    const executable = forwarderExecutable(appBundlePath(host));
+    if (fs.existsSync(executable)) return executable;
+    throw new Error(
+      `install: no installed forwarder at ${executable}. Reinstall from the package.`,
+    );
   }
   const shipped = platformPackageFile(
     sourceDist,
@@ -334,9 +354,9 @@ function stageRuntime(
   // can't drift. [LAW:one-source-of-truth]
   changes.remove(path.join(dir, "url-handler.mjs"));
 
-  const stagedKind = stagedEntryKind(binPath);
+  const stagedKind = stagedEntryKind(sources.entry.sourcePath);
   const machine = `${platform}-${process.arch}`;
-  process.stdout.write(
+  changes.report(
     `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${dir}\n` +
       (stagedKind === "native"
         ? `  render entry: native binary (${machine})\n`
@@ -356,9 +376,7 @@ export function runStageRuntime(
   platform: NodeJS.Platform,
 ): StagedRuntime {
   const sources = runtimeSources(sourceDist, platform);
-  return transacted(path.dirname(dir), (changes) =>
-    stageRuntime(sources, dir, platform, changes),
-  );
+  return transacted((changes) => stageRuntime(sources, dir, platform, changes));
 }
 
 // The app's Info.plist, whole: a background-only app that claims the scheme.
@@ -412,39 +430,19 @@ function infoPlist(): string {
   ].join("\n");
 }
 
-// Callers establish the macOS precondition ([LAW:single-enforcer] — the
-// subcommand entry checks before any side effect; runInstall reaches here
-// only through its darwin dispatch).
-//
-// The app is assembled around the prebuilt forwarder: the bundle is written
-// fresh, ad-hoc signed (Launch Services registers a signed bundle; nothing
-// here passes through Gatekeeper, since no package manager quarantines what it
-// unpacks), the instance a previous install left resident is quit, and the
-// scheme is registered. [LAW:no-ambient-temporal-coupling] The quit is
-// install's: Launch Services never relaunches a running app, so without it a
-// reinstall would leave the old forwarder delivering until logout.
-function installUrlHandlerFrom(sourceDist: string, world: InstallWorld): void {
-  const forwarder = resolveForwarder(sourceDist, "darwin");
-  transacted(world.host.home, (changes) => {
-    buildUrlHandler(forwarder, world, changes);
-    registerUrlHandler(world);
-  });
+function prepareForwardDirectory(host: Host, changes: InstallChanges): void {
+  // [LAW:single-enforcer] A refused forwarding directory must leave the
+  // installed app untouched. The daemon and installer share the trust check.
+  const socketDir = remoteSocketDir(host.home);
+  changes.mkdir(socketDir, 0o700);
+  checkOwnedPrivateDir(socketDir);
 }
 
-// The app assembled around a forwarder binary already resolved: install
-// resolves it first, as a precondition, so a checkout with no build or a
-// package with no binary fails with nothing staged. [LAW:effects-at-boundaries]
-// The app is assembled and signed beside its place, then swapped in whole: a
-// copy or a sign that fails leaves the handler the user had, registered and
-// whole, not a half bundle.
 function buildUrlHandler(
   forwarder: string,
   { host, launcher }: InstallWorld,
   changes: InstallChanges,
 ): void {
-  const socketDir = remoteSocketDir(host.home);
-  changes.mkdir(socketDir, 0o700);
-  checkOwnedPrivateDir(socketDir);
   const bundle = appBundlePath(host);
   process.stdout.write(`Building ${bundle}\n`);
   changes.mkdir(path.dirname(bundle));
@@ -516,13 +514,21 @@ export function runInstallUrlHandler(
   // Preconditions before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS(platform);
-  const forwarder = resolveForwarder(bundle, platform);
-  const sources = runtimeSources(bundle, platform);
-  transacted(world.host.home, (changes) => {
-    stageRuntime(sources, supportDir(world.host, platform), platform, changes);
-    buildUrlHandler(forwarder, world, changes);
-    registerUrlHandler(world);
-  });
+  withInstallClaim(world.host.home, world.launcher, () =>
+    transacted((changes) => {
+      const forwarder = resolveForwarder(bundle, platform, world.host);
+      const sources = runtimeSources(bundle, platform);
+      prepareForwardDirectory(world.host, changes);
+      stageRuntime(
+        sources,
+        supportDir(world.host, platform),
+        platform,
+        changes,
+      );
+      buildUrlHandler(forwarder, world, changes);
+      changes.afterPublish(() => registerUrlHandler(world));
+    }),
+  );
 }
 
 // [LAW:single-enforcer] The URL handler sends the raw link to the host and
@@ -663,67 +669,73 @@ export function install(
   platform: NodeJS.Platform,
 ): void {
   const { force } = installOptions(args);
-  const forwarder =
-    platform === "darwin" ? resolveForwarder(bundle, platform) : null;
-  const sources = runtimeSources(bundle, platform);
-  const dir = supportDir(world.host, platform);
-  const settingsPath = userSettingsPath(world.host);
-  const settings = planSettings(
-    settingsPath,
-    readClaudeSettingsText(settingsPath),
-    stagedBinPath(dir),
-    force,
+  withInstallClaim(world.host.home, world.launcher, () =>
+    transacted((changes) => {
+      const forwarder =
+        platform === "darwin"
+          ? resolveForwarder(bundle, platform, world.host)
+          : null;
+      const sources = runtimeSources(bundle, platform);
+      const dir = supportDir(world.host, platform);
+      const settingsPath = userSettingsPath(world.host);
+      const settings = planSettings(
+        settingsPath,
+        readClaudeSettingsText(settingsPath),
+        stagedBinPath(dir),
+        force,
+      );
+      const record = hostBundlePath(world.host);
+      const recorded = readTextIfPresent(record);
+
+      if (forwarder !== null) prepareForwardDirectory(world.host, changes);
+      const staged = stageRuntime(sources, dir, platform, changes);
+      if (forwarder !== null) {
+        buildUrlHandler(forwarder, world, changes);
+      } else {
+        process.stdout.write(
+          "Skipping URL handler (cmd-click verbs are macOS-only).\n",
+        );
+      }
+
+      const { change } = settings;
+      if (change.kind === "set") {
+        changes.writeText(settingsPath, settings.was, change.text);
+        changes.report(
+          `Set the statusLine command in ${settingsPath}: ${change.command}\n`,
+        );
+      } else {
+        changes.expectText(settingsPath, settings.was);
+        process.stderr.write(
+          `Skipping settings.json update: existing statusLine.command appears customized.\n` +
+            `  Current: ${change.command}\n` +
+            `  To overwrite, re-run with --force.\n`,
+        );
+      }
+
+      // [LAW:one-source-of-truth] The install knows which bundle it staged, and
+      // whether it set the statusline command that runs it. A customized command
+      // it kept is read for whether it runs the staged entry: that setup is the
+      // install too, and `--force` would destroy the command that makes it so.
+      if (
+        change.kind === "set" ||
+        statusLineRunsBundle(settings.statusLine, staged.distPath)
+      ) {
+        changes.writeText(
+          record,
+          recorded,
+          hostBundleRecordText(staged.distPath),
+        );
+        changes.report(recordedMessage(staged.distPath));
+      } else {
+        process.stdout.write(
+          `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
+        );
+      }
+
+      if (forwarder !== null)
+        changes.afterPublish(() => registerUrlHandler(world));
+    }),
   );
-  const record = hostBundlePath(world.host);
-  const recorded = readTextIfPresent(record);
-
-  transacted(world.host.home, (changes) => {
-    const staged = stageRuntime(sources, dir, platform, changes);
-    if (forwarder !== null) {
-      buildUrlHandler(forwarder, world, changes);
-    } else {
-      process.stdout.write(
-        "Skipping URL handler (cmd-click verbs are macOS-only).\n",
-      );
-    }
-
-    const { change } = settings;
-    if (change.kind === "set") {
-      changes.writeText(settingsPath, settings.was, change.text);
-      process.stdout.write(
-        `Set the statusLine command in ${settingsPath}: ${change.command}\n`,
-      );
-    } else {
-      changes.expectText(settingsPath, settings.was);
-      process.stderr.write(
-        `Skipping settings.json update: existing statusLine.command appears customized.\n` +
-          `  Current: ${change.command}\n` +
-          `  To overwrite, re-run with --force.\n`,
-      );
-    }
-
-    // [LAW:one-source-of-truth] The install knows which bundle it staged, and
-    // whether it set the statusline command that runs it. A customized command
-    // it kept is read for whether it runs the staged entry: that setup is the
-    // install too, and `--force` would destroy the command that makes it so.
-    if (
-      change.kind === "set" ||
-      statusLineRunsBundle(settings.statusLine, staged.distPath)
-    ) {
-      changes.writeText(
-        record,
-        recorded,
-        hostBundleRecordText(staged.distPath),
-      );
-      process.stdout.write(recordedMessage(staged.distPath));
-    } else {
-      process.stdout.write(
-        `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
-      );
-    }
-
-    if (forwarder !== null) registerUrlHandler(world);
-  });
 }
 
 export async function runInstall(
@@ -804,7 +816,7 @@ type SettingsEdit = readonly [keyPath: readonly string[], value: unknown];
 // shows. A command install owns is one it could have written — the staged
 // entry in any spelling a version of install used (a version whose quoter
 // left fewer characters bare wrote the path quoted where shellWord leaves it
-// bare), or the legacy `pnpm dlx` form (an open prefix, a version follows).
+// bare), or the legacy `pnpm dlx` form with a package version and no arguments.
 // Any other command is the user's, the entry with words of theirs after it
 // included, and is kept unless `--force`.
 function planSettings(
@@ -814,11 +826,21 @@ function planSettings(
   force: boolean,
 ): SettingsPlan {
   const settings = parseClaudeSettings(settingsPath, text);
+  try {
+    parseDocument(settings.edited);
+  } catch (error) {
+    if (!(error instanceof Json5EditError)) throw error;
+    throw new Error(`cannot edit ${settingsPath}: ${error.reason}`);
+  }
   const statusLine = parseStatusLine(settingsPath, settings.document);
   const existing = statusLine?.command ?? null;
   const ours =
     existing === null ||
-    existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) ||
+    existing.trim() === "" ||
+    (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) &&
+      /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(
+        existing.slice(`pnpm dlx ${PACKAGE_NAME}@`.length),
+      )) ||
     [binPath, shellWord(binPath), singleQuoted(binPath)].includes(existing);
   if (!ours && !force)
     return {
@@ -868,7 +890,6 @@ function planSettings(
 // Exports for testing
 export const __test__ = {
   infoPlist,
-  installUrlHandlerFrom,
   planSettings,
   resolveRenderEntry,
   stagedEntryKind,

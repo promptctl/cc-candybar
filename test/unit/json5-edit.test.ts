@@ -247,6 +247,14 @@ describe("setValue — adding an entry matches the container's own style", () =>
 });
 
 describe("deleteValue", () => {
+  it.each(["\r", "\r\n", "\u2028", "\u2029"])(
+    "keeps the next member after a comment ended by %j",
+    (ending) => {
+      const edited = deleteValue(`{\n  a: 1, // note${ending}  b: 2\n}`, ["a"]);
+      expect(JSON5.parse(edited)).toEqual({ b: 2 });
+    },
+  );
+
   test("a member alone on its line takes its whole line, including its trailing comment", () => {
     const after = deleteValue(CONFIG, ["segments", "directory", "template"]);
     expect(after).toBe(

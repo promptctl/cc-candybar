@@ -76,7 +76,7 @@ const WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
 // [LAW:one-source-of-truth] JSON5's line terminators, which end a `//`
 // comment: a scanner that ran a comment on past one would hide from the
 // editor a value the loader reads.
-const LINE_END = /[\n\r\u2028\u2029]/g;
+const LINE_END = /\r\n|[\n\r\u2028\u2029]/g;
 
 class Scanner {
   pos = 0;
@@ -413,9 +413,10 @@ export function json5Text(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** The document's line terminator: CRLF when it uses one anywhere, else LF. */
+/** The document's first line terminator, or LF for a single-line document. */
 function eolOf(text: string): string {
-  return text.includes("\r\n") ? "\r\n" : "\n";
+  LINE_END.lastIndex = 0;
+  return LINE_END.exec(text)?.[0] ?? "\n";
 }
 
 /**
@@ -457,7 +458,9 @@ function splice(
 }
 
 function lineStartOf(text: string, offset: number): number {
-  return text.lastIndexOf("\n", offset - 1) + 1;
+  let start = offset;
+  while (start > 0 && !/[\r\n\u2028\u2029]/.test(text[start - 1]!)) start--;
+  return start;
 }
 
 function isBlank(s: string): boolean {
@@ -476,7 +479,8 @@ function startsLine(text: string, offset: number): boolean {
 }
 
 /** An optional line comment, then the line's terminator (CRLF, LF, or the text's end). */
-const LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+const LINE_TRAILER =
+  /(?:\/\/[^\r\n\u2028\u2029]*)?(\r\n|[\r\n\u2028\u2029]|$)/y;
 
 /** Where a line ends: its terminator's start, and the next line's start (both EOF at the text's end). */
 interface LineEnd {
