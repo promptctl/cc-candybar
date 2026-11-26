@@ -88472,20 +88472,24 @@ function invocation(hint, category, args, stdinInput) {
     stdinInput
   };
 }
-function tmuxRun(result, args) {
+function tmuxRun(result, args, socket) {
   if (result.ok) return { kind: "ok", stdout: result.stdout };
   if (result.reason === "rate-limited") {
     return { kind: "rate-limited", reason: failureText(result) };
   }
+  const detail = result.stderr.trim();
+  const serverGone = result.reason === "non-zero" && (detail === `no server running on ${socket}` || detail === `error connecting to ${socket} (No such file or directory)` || detail === `error connecting to ${socket} (Connection refused)`);
   return {
     kind: "failed",
+    ...serverGone && { serverGone: true },
     reason: `tmux ${args[0]} failed (${failureText(result)})`
   };
 }
 async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
     await launcher.launch(invocation(hint, category, args, stdinInput)),
-    args
+    args,
+    hint.socket
   );
 }
 

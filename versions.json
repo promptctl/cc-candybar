@@ -4,15 +4,22 @@
     {
       "version": "pr-975",
       "ref": "refs/pull/975/merge",
-      "sha": "9a939638fbc9829ad05d6dc871c4c3af400aa2c9",
-      "timestamp": "2026-11-26T14:28:43.273Z",
+      "sha": "6157a73a059655f41da190049d2ae18cd8d76cda",
+      "timestamp": "2026-11-26T14:31:02.998Z",
       "commits": [
         {
-          "sha": "9a939638fbc9829ad05d6dc871c4c3af400aa2c9",
+          "sha": "6157a73a059655f41da190049d2ae18cd8d76cda",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T14:27:37Z",
-          "message": "Merge 824b97a521bc8e46da069e60e5b161787a9125e6 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+          "timestamp": "2026-11-26T14:29:47Z",
+          "message": "Merge beba2dfe9e204876cf9c5974a9207110ef47c8d5 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+        },
+        {
+          "sha": "beba2dfe9e204876cf9c5974a9207110ef47c8d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:29:35-07:00",
+          "message": "fix(window): recognize an ended tmux server and constrain measurement subscribers\n"
         },
         {
           "sha": "824b97a521bc8e46da069e60e5b161787a9125e6",
