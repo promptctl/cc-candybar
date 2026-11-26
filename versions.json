@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-961",
+      "ref": "refs/pull/961/merge",
+      "sha": "eb60ca7946f55f20f20f6f111fb4cb5011f0cdad",
+      "timestamp": "2026-11-26T04:55:12.669Z",
+      "commits": [
+        {
+          "sha": "eb60ca7946f55f20f20f6f111fb4cb5011f0cdad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T04:53:40Z",
+          "message": "Merge 40855e0986251bbeb672f4ca0633daa99013b653 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "40855e0986251bbeb672f4ca0633daa99013b653",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:53:36-07:00",
+          "message": "Merge branch 'main' into candybar-testing-do00.c3a"
+        },
+        {
+          "sha": "9e8baee585be83ce42c4d7494c64b43b7f09bc74",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:59:00-07:00",
+          "message": "fix(tests): each restated reason claims only what the code shows, and what only the benchmark uses lives with it (candybar-testing-do00.c3a)\n\nFrom the plan review. The render cache's capacity target is one value the\nbudget test reads. The share states the reserve's assumption about what each\nsession holds outside it, and the default's comment places the thrash at a\nworking set larger than the share. The draw reserve names both turns it\ncovers and the budget it splits. The daemon argv names every start that reads\nit. The percentile, the session terminal and the transcript generator had one\nconsumer once the load gate went, so they move into the benchmark and their\nsharing markers go with the sharing.\n"
+        },
+        {
+          "sha": "72cee05cfe63a3757c6f5e00599a61fbf550a204",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:55:14-07:00",
+          "message": "docs(design): the gap doc's dependency paragraph points into neither the withdrawn plan nor its epic (candybar-testing-do00.c3a)\n"
+        },
+        {
+          "sha": "553535f6f561660dbbe639b2ed56ad071e9e82dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:46:07-07:00",
+          "message": "chore(tests): no limit or comment rests on a load run, and the heap capture script goes (candybar-testing-do00.c3a)\n\nThe memory default and the render cache's share state their reason from the\nshare's own arithmetic and the working set it is sized for, the draw reserve\nfrom what it covers, and the shared bench helpers name the consumers they\nhave. The benchmark world loses the daemon environment only the heap capture\npassed.\n"
+        },
+        {
+          "sha": "6969de6669c7279562b8f53dd7118057f3f0af11",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:44:04-07:00",
+          "message": "docs(tests): the withdrawn test plan and the reports it commissioned are deleted (candybar-testing-do00.c3a)\n\nlaws:testing is the test plan. The design docs that cited the withdrawn one\nname what they meant instead, and no longer state its end-to-end cap.\n"
+        },
+        {
+          "sha": "bda987c8274561e69b773906215b1176024f14c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T21:43:24-07:00",
+          "message": "chore(tests): nothing caps end-to-end tests or scans the workflows for a daemon start (candybar-testing-do00.c3a)\n\nThe cap, the assertion limit and their sign-off policed a test/e2e/ that was\nnever created, and the workflow scanner failed CI on any step reaching a\nscript that starts a daemon, which laws:testing does not forbid. laws:testing's\ncap is a question a reviewer asks of a proposed test, not a hook.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-962",
       "ref": "refs/pull/962/merge",
       "sha": "b8b9bc8f7249a562186199c671eb3c29ad245d28",
@@ -165,56 +222,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T17:55:41-07:00",
           "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-961",
-      "ref": "refs/pull/961/merge",
-      "sha": "9665cd5d11279230dd1d999942ea12abe04389cc",
-      "timestamp": "2026-11-25T05:02:21.708Z",
-      "commits": [
-        {
-          "sha": "9665cd5d11279230dd1d999942ea12abe04389cc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T05:01:12Z",
-          "message": "Merge 9e8baee585be83ce42c4d7494c64b43b7f09bc74 into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
-        },
-        {
-          "sha": "9e8baee585be83ce42c4d7494c64b43b7f09bc74",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T21:59:00-07:00",
-          "message": "fix(tests): each restated reason claims only what the code shows, and what only the benchmark uses lives with it (candybar-testing-do00.c3a)\n\nFrom the plan review. The render cache's capacity target is one value the\nbudget test reads. The share states the reserve's assumption about what each\nsession holds outside it, and the default's comment places the thrash at a\nworking set larger than the share. The draw reserve names both turns it\ncovers and the budget it splits. The daemon argv names every start that reads\nit. The percentile, the session terminal and the transcript generator had one\nconsumer once the load gate went, so they move into the benchmark and their\nsharing markers go with the sharing.\n"
-        },
-        {
-          "sha": "72cee05cfe63a3757c6f5e00599a61fbf550a204",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T21:55:14-07:00",
-          "message": "docs(design): the gap doc's dependency paragraph points into neither the withdrawn plan nor its epic (candybar-testing-do00.c3a)\n"
-        },
-        {
-          "sha": "553535f6f561660dbbe639b2ed56ad071e9e82dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T21:46:07-07:00",
-          "message": "chore(tests): no limit or comment rests on a load run, and the heap capture script goes (candybar-testing-do00.c3a)\n\nThe memory default and the render cache's share state their reason from the\nshare's own arithmetic and the working set it is sized for, the draw reserve\nfrom what it covers, and the shared bench helpers name the consumers they\nhave. The benchmark world loses the daemon environment only the heap capture\npassed.\n"
-        },
-        {
-          "sha": "6969de6669c7279562b8f53dd7118057f3f0af11",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T21:44:04-07:00",
-          "message": "docs(tests): the withdrawn test plan and the reports it commissioned are deleted (candybar-testing-do00.c3a)\n\nlaws:testing is the test plan. The design docs that cited the withdrawn one\nname what they meant instead, and no longer state its end-to-end cap.\n"
-        },
-        {
-          "sha": "bda987c8274561e69b773906215b1176024f14c3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T21:43:24-07:00",
-          "message": "chore(tests): nothing caps end-to-end tests or scans the workflows for a daemon start (candybar-testing-do00.c3a)\n\nThe cap, the assertion limit and their sign-off policed a test/e2e/ that was\nnever created, and the workflow scanner failed CI on any step reaching a\nscript that starts a daemon, which laws:testing does not forbid. laws:testing's\ncap is a question a reviewer asks of a proposed test, not a hook.\n"
         }
       ]
     }
