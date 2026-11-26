@@ -23,6 +23,10 @@ import {
 import { variableOf } from "../../src/daemon/foundations/session-env";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import {
+  SESSION_STATE_FILE,
+  sessionsOf,
+} from "../../src/daemon/session-state-file";
 import type { RunReading } from "../../src/daemon/readings";
 import {
   recordingBootProblem,
@@ -422,6 +426,62 @@ test("the output check sees the evaluated run environment in ordinary and pane f
     expect(problem).toMatch(/run action supplies environment/);
     expect(problem).not.toContain(ACTION_SECRET);
   }
+});
+
+test("recording can start from a profile saved with the former layout and toggles menus open", () => {
+  // The keys on disk in the release that offered these two menu members.
+  const tab = "candybar.tab";
+  const picker = "menus._candybarZ00002epickers";
+  const fromDisk = (sessions: unknown) => {
+    const parsed = sessionsOf(SESSION_STATE_FILE)(sessions);
+    if (parsed.kind !== "ok") throw new Error(parsed.reason);
+    return {
+      ...BOOT,
+      stored: {
+        sessions: Object.fromEntries(parsed.value.sessions),
+        history: {},
+      },
+    };
+  };
+  const old = {
+    layout: { [tab]: "layout", padding: "2" },
+    toggles: { [picker]: "toggles" },
+    current: { [tab]: "config", [picker]: "renderer" },
+  };
+  const boot = fromDisk(old);
+  expect(recordingBootProblem(boot)).toBeNull();
+  expect(boot.stored.sessions).toEqual({
+    layout: { padding: "2" },
+    current: old.current,
+  });
+  for (const privatePick of [
+    { [tab]: SECRET },
+    { [picker]: SECRET },
+    { [tab]: "toggles" },
+    { [picker]: "layout" },
+    { authored: "layout" },
+    { authored: "toggles" },
+  ]) {
+    expect(
+      recordingBootProblem(fromDisk({ ...old, private: privatePick })),
+    ).toMatch(/saved renderer state contains values of unknown origin/);
+  }
+  expect(
+    recordingBootProblem({
+      ...boot,
+      stored: {
+        ...boot.stored,
+        history: {
+          [SESSION]: {
+            past: [
+              [{ kind: "session", key: "padding", before: SECRET, after: "2" }],
+            ],
+            future: [],
+          },
+        },
+      },
+    }),
+  ).toMatch(/saved renderer state contains values of unknown origin/);
 });
 
 test("boot admits the click mode and refuses a hovered region's name", () => {
