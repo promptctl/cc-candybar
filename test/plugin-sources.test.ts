@@ -6,7 +6,10 @@
 
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
-import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
+import {
+  daemonFactsOf,
+  FILE_EVENTS_STALLED,
+} from "../scripts/lib/draw-fixtures/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import {
   eventRenderer,
@@ -29,6 +32,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
+import { settledPrices } from "./helpers/prices";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import {
   WatcherRegistry,
@@ -218,6 +222,7 @@ function rig(): Rig {
   const providers = withTranscriptLanes({
     environment: TEST_ENVIRONMENT,
     ...createPayloadProviders({
+      prices: settledPrices,
       clock: systemTimekeeper,
       launcher: world.launcher,
       host,
@@ -232,7 +237,9 @@ function rig(): Rig {
     }),
   });
   const sessionState = new SessionState();
-  const warnings = observable.box<DaemonFacts["fileEvents"]>([], { deep: false });
+  const warnings = observable.box<DaemonFacts["fileEvents"]>([], {
+    deep: false,
+  });
   const reloads = new ReloadSignal();
   const hints = { claudeConfigDir: path.join(dir, "claude") };
   const served = collected(
@@ -469,11 +476,7 @@ describe("a source's declaration", () => {
     "%s drops the plugin, naming the field and what is built",
     async (_what, source, field) => {
       const message = fatal(
-        await renderConfig(
-          world,
-          listing(`{ status: ${source} }`),
-          dir,
-        ),
+        await renderConfig(world, listing(`{ status: ${source} }`), dir),
       );
       expect(message).toContain(
         `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
@@ -553,11 +556,7 @@ describe("a source's declaration", () => {
 
   test("a source's name is one identifier", async () => {
     const message = fatal(
-      await renderConfig(
-        world,
-        listing(`{ "a.b": ${SOURCE} }`),
-        dir,
-      ),
+      await renderConfig(world, listing(`{ "a.b": ${SOURCE} }`), dir),
     );
     expect(message).toContain(`source name "a.b" is not one identifier`);
   });
@@ -832,7 +831,7 @@ function statusline(r: Rig, configFile: string) {
       sessionState: r.sessionState,
       worldStates: r.worldStates,
     }),
-      NOTHING_STORED,
+    NOTHING_STORED,
   );
   const host = rendererHost(
     MAIN_RENDERER,
@@ -1243,7 +1242,10 @@ describe("a storage folder's watch", () => {
 
     jest.restoreAllMocks();
     const opened = fakeWatches();
-    fs.appendFileSync(path.join(dir, "selected-0.json5"), "\n// physical edit\n");
+    fs.appendFileSync(
+      path.join(dir, "selected-0.json5"),
+      "\n// physical edit\n",
+    );
     r.configs.again();
     expect(opened.map((watch) => watch.path)).toEqual([folders[0]]);
   });

@@ -10,6 +10,10 @@ import path from "node:path";
 import { processWorld } from "../../../src/host.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
+import {
+  bundledTable,
+  type Prices,
+} from "../../../src/daemon/cache/pricing.js";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id.js";
 import { GitService } from "../../../src/daemon/cache/git-service.js";
 import {
@@ -25,6 +29,11 @@ import { measured, type Benchmark } from "../types.js";
 import fs from "node:fs";
 
 const SESSION = sessionIdOf("bench-usage");
+
+// A table already loaded, as a daemon's stands after its first load: what a
+// fold waits on for prices is no part of the fold's time.
+const BUNDLED = bundledTable();
+const PRICES: Prices = { table: () => Promise.resolve(BUNDLED) };
 
 const REPOS: ReadonlyArray<readonly [string, RepoShape, number]> = [
   ["small", { files: 100, commits: 20, modified: 5, untracked: 3 }, 40],
@@ -118,6 +127,7 @@ const coldFold = ([
       const ms = await repeat(plan.samples, async () => {
         const store = new SessionUsageStore({
           host: world.host,
+          prices: PRICES,
           clock: world.clock,
           sweepIntervalMs: 0,
         });
@@ -153,6 +163,7 @@ const warmFold = (
       const world = processWorld();
       const store = new SessionUsageStore({
         host: world.host,
+        prices: PRICES,
         clock: world.clock,
         sweepIntervalMs: 0,
       });

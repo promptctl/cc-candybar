@@ -34,6 +34,7 @@ import {
   transcriptReads,
 } from "../src/utils/transcript-fs";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
+import { settledPrices } from "./helpers/prices";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
@@ -541,6 +542,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const incPath = join(dir, "inc.jsonl");
     writeFileSync(incPath, "");
     const incStore = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -560,6 +562,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const fullPath = join(dir, "full.jsonl");
     writeFileSync(fullPath, contents.join(""));
     const freshStore = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -598,6 +601,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const l3 = line(new Date(), 0.03, 300, 60);
 
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -626,6 +630,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       const fullPath = join(dir, "Rfull.jsonl");
       writeFileSync(fullPath, l1 + l2 + l3);
       const fresh = new SessionUsageStore({
+        prices: settledPrices,
         clock: systemTimekeeper,
         host: HOST,
         sweepIntervalMs: 0,
@@ -655,6 +660,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   test("a newer fold that lands after an older one is still the one stored", async () => {
     const t = join(dir, "N.jsonl");
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -720,6 +726,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     );
 
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -750,6 +757,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
 
     const logged: string[] = [];
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -815,6 +823,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       JSON.stringify({ sessionId: sid }) + "\n" + line(new Date(), 0.1),
     );
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -879,6 +888,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         }) + "\n",
       );
       const store = new SessionUsageStore({
+        prices: settledPrices,
         clock: systemTimekeeper,
         host: HOST,
         sweepIntervalMs: 0,
@@ -913,6 +923,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03),
     );
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
