@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "98827016846125701459a4fd629a6ffbba742261",
+      "timestamp": "2026-11-26T06:07:44.905Z",
+      "commits": [
+        {
+          "sha": "98827016846125701459a4fd629a6ffbba742261",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:06:27-07:00",
+          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) (#967)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n\n* test(follow): cover the window lane in the native client\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n* fix(window): distinguish the window lane from renderer wire version 19\n\n* test(window): save every renderer switch through the menu\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+        }
+      ]
+    },
+    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
       "sha": "b5f2cd5c7f368cc3462822769afbad80bbe7d041",
@@ -294,127 +309,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:38:17-07:00",
           "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-967",
-      "ref": "refs/pull/967/merge",
-      "sha": "f246144a7758bc3971f654b1947019f660fcda1c",
-      "timestamp": "2026-11-26T06:02:22.775Z",
-      "commits": [
-        {
-          "sha": "f246144a7758bc3971f654b1947019f660fcda1c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:00:18-07:00",
-          "message": "Merge 2e557d4f020dd689328c44b39e155f51486a3658 into 1969cd19c238271c7dd5591ed3904b49984a8863\n"
-        },
-        {
-          "sha": "2e557d4f020dd689328c44b39e155f51486a3658",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:00:09-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-bar-window-hpro.akk\n"
-        },
-        {
-          "sha": "877f90b5bdd646c63080ae1da564c9f3a8cbd036",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:55:13-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-bar-window-hpro.akk\n\n# Conflicts:\n#\ttest/__snapshots__/default-menu-bytes.test.ts.snap\n#\ttest/daemon-boots/worker/daemon-lane-setup-e2e.test.ts\n"
-        },
-        {
-          "sha": "5d8b7a8fa74a6e766482a50204c593d9cac51ed6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:51:04-07:00",
-          "message": "test(window): save every renderer switch through the menu\n"
-        },
-        {
-          "sha": "9ccaaf59675ddbd998a5106b63b0dc3fd35e03c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:50:13-07:00",
-          "message": "Merge renderer menu into window lane and verify its new toggle\n"
-        },
-        {
-          "sha": "19585af5c82fca5a10948cf9a0a62b8899dd5ea7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:43:07-07:00",
-          "message": "fix(window): distinguish the window lane from renderer wire version 19\n"
-        },
-        {
-          "sha": "9f91b084bb5bc72e77d57519f8bc6f1ffa34157b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:42:43-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-bar-window-hpro.akk\n"
-        },
-        {
-          "sha": "074143686836e48fcc23412d39f5c072249b613b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:39:54-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
-        },
-        {
-          "sha": "595b71d14a02671706913efefe900e7dda8f03ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:38:32-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
-        },
-        {
-          "sha": "ba765379794a61525fec2b26ffb7c4e784da7a37",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:38:32-07:00",
-          "message": "fix(settings-menu): share row order and verify saved renderer switches\n"
-        },
-        {
-          "sha": "24f90b85823d0ea3187e278eb6074325ce20c86e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:06:44-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
-        },
-        {
-          "sha": "cf441f771e9880b2b6a4aa58b3a4de26e4360734",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:54:28-07:00",
-          "message": "test(follow): cover the window lane in the native client\n"
-        },
-        {
-          "sha": "7791b2ce8c10b68a72118c4fb1954932ecb83ab5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T02:30:35-07:00",
-          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
-        },
-        {
-          "sha": "f383ef936de918f8ea459f998babc1ce8bf8646f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:38:17-07:00",
-          "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1969cd19c238271c7dd5591ed3904b49984a8863",
-      "timestamp": "2026-11-26T06:02:03.489Z",
-      "commits": [
-        {
-          "sha": "1969cd19c238271c7dd5591ed3904b49984a8863",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-26T05:59:14Z",
-          "message": "chore(release): set `package.json` to 1.239.0\n\n## [1.239.0](https://github.com/promptctl/cc-candybar/compare/v1.238.6...v1.239.0) (2026-11-26)\n\n### Features\n\n* **settings-menu:** the menu leads with 🎨 look and 📚 saves & presets; lane switches under 📺 renderer ([#964](https://github.com/promptctl/cc-candybar/issues/964)) ([bee4d68](https://github.com/promptctl/cc-candybar/commit/bee4d68899303097cdf3530e031aa66ec1dc1f7c))\n\n### Bug Fixes\n\n* **pricing:** refresh the daemon price table and abort loads on close ([#970](https://github.com/promptctl/cc-candybar/issues/970)) ([9b01fa7](https://github.com/promptctl/cc-candybar/commit/9b01fa771aca2c9d48588a1646094f09f858199f))\n"
         }
       ]
     },
