@@ -1,3 +1,4 @@
+import { SOURCE_PANE_CLOSED } from "../src/bar-window/exit";
 import { WindowFollowers } from "../src/daemon/window-followers";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { ChannelOpts, LaunchResult } from "../src/proc/launcher";
@@ -9,12 +10,13 @@ test("placement changes reuse a follower and a new session waits for the pane's 
     opts: ChannelOpts;
     write: jest.Mock;
     end: jest.Mock;
-    finish: () => void;
+    finish: (exit?: LaunchResult) => void;
   }> = [];
   const launchChannel = (opts: ChannelOpts) => {
-    let finish!: () => void;
+    let finish!: (exit?: LaunchResult) => void;
     const ended = new Promise<LaunchResult>((resolve) => {
-      finish = () => resolve({ ok: true, stdout: "", stderr: "", exitCode: 0 });
+      finish = (exit) =>
+        resolve(exit ?? { ok: true, stdout: "", stderr: "", exitCode: 0 });
     });
     const write = jest.fn(),
       end = jest.fn();
@@ -49,8 +51,25 @@ test("placement changes reuse a follower and a new session waits for the pane's 
   await clock.settle(0);
   expect(channels).toHaveLength(2);
   expect(channels[1]!.opts.args).toContain(b);
+  channels[1]!.finish({
+    ok: false,
+    reason: "non-zero",
+    exitCode: SOURCE_PANE_CLOSED,
+    stdout: "",
+    stderr: "",
+    signal: null,
+  });
+  await clock.settle(0);
+  windows.declare(new Map([[b, { pane, placement: "inset" }]]));
+  await clock.settle(6000);
+  expect(channels).toHaveLength(2);
+  expect(windows.issue(b)).toBe("Claude's tmux pane closed");
+  windows.declare(
+    new Map([[b, { pane: { ...pane, pane: "%74" }, placement: "inset" }]]),
+  );
+  expect(channels).toHaveLength(3);
   const closed = windows.close();
-  expect(channels[1]!.end).toHaveBeenCalledTimes(1);
-  channels[1]!.finish();
+  expect(channels[2]!.end).toHaveBeenCalledTimes(1);
+  channels[2]!.finish();
   await closed;
 });

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { SOURCE_PANE_CLOSED } from "./exit.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { WindowPlacement } from "../config/lanes.js";
 import type { World } from "../host.js";
@@ -347,5 +348,5 @@ export async function runBarWindow(
       process.stdin.off("data", commands.push).pause();
     }
   }
-  return 0;
+  return sourceRetired ? SOURCE_PANE_CLOSED : 0;
 }
