@@ -22,6 +22,7 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { variableOf } from "../../src/daemon/foundations/session-env";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { sharedMenuStateKey } from "../../src/config/menu-keys";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
 import {
   SESSION_STATE_FILE,
@@ -350,7 +351,11 @@ test("action overlays are refused before raw layer, plugin or retained config by
     input({ kind: "config", origin, config: snapshot(ACTION_CONFIG) }),
     input({
       kind: "click",
-      click: admitClick(VERB_SET_STATE, encodeSegments([SESSION, "example", "value"]), TEST_SIGNER).click,
+      click: admitClick(
+        VERB_SET_STATE,
+        encodeSegments([SESSION, "example", "value"]),
+        TEST_SIGNER,
+      ).click,
       context: heardContextOf(checked().req),
       coldConfig: snapshot(ACTION_CONFIG),
     }),
@@ -450,25 +455,53 @@ test("recording can start from a profile saved with the former layout and toggle
     };
     return { boot, dropped: parsed.value.dropped };
   };
+  // Captured by clicking the drawn controls of v1.238.6. Every door open
+  // disarms both confirm buttons before a user can reach either old member.
+  const door = {
+    "candybar.menu": "open",
+    "candybar.resetAll.armed": "disarmed",
+    "candybar.commands.clear.armed": "disarmed",
+  };
   const old = {
-    layout: { [tab]: "layout", padding: "2" },
-    toggles: { [picker]: "toggles" },
-    current: { [tab]: "config", [picker]: "renderer" },
+    layout: { ...door, [tab]: "layout" },
+    toggles: { ...door, [tab]: "config", [picker]: "toggles" },
+    retiredOnly: { [tab]: "layout" },
+    current: { [tab]: "config", [picker]: "renderer", padding: "2" },
   };
   const { boot, dropped } = fromDisk(old);
   expect(dropped).toEqual([
     { session: "layout", part: tab, why: expect.stringContaining('"layout"') },
     {
       session: "toggles",
-      part: null,
+      part: picker,
       why: expect.stringContaining('"toggles"'),
+    },
+    {
+      session: "retiredOnly",
+      part: null,
+      why: expect.stringContaining('"layout"'),
     },
   ]);
   expect(recordingBootProblem(boot)).toBeNull();
   expect(boot.stored.sessions).toEqual({
-    layout: { padding: "2" },
+    layout: door,
+    toggles: { ...door, [tab]: "config" },
     current: old.current,
   });
+  expect(
+    recordingBootProblem(
+      fromDisk({
+        picking: {
+          [picker]: "candybar.apply.theme",
+          [`menupages.${picker}`]: "-1",
+          "candybar.resetAll.armed": "armed",
+          "candybar.diagnostics": "0",
+          style: "vivid",
+          preset: "compact",
+        },
+      }).boot,
+    ),
+  ).toBeNull();
   for (const privatePick of [
     { [tab]: SECRET },
     { [picker]: SECRET },
@@ -476,6 +509,13 @@ test("recording can start from a profile saved with the former layout and toggle
     { [picker]: "layout" },
     { authored: "layout" },
     { authored: "toggles" },
+    { [tab]: "renderer" },
+    { "candybar.resetAll.armed": SECRET },
+    { [`${SECRET}.armed`]: "disarmed" },
+    { [sharedMenuStateKey(SECRET)]: "closed" },
+    { [`menupages.${picker}`]: "146832902767011" },
+    { style: SECRET },
+    { preset: SECRET },
   ]) {
     expect(
       recordingBootProblem(fromDisk({ ...old, private: privatePick }).boot),

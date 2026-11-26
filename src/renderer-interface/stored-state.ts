@@ -49,14 +49,14 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
 // does not parse would throw in every render of its session.
 function retiredBecause(key: string, value: string): string | undefined {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
-  // [LAW:one-source-of-truth] Keep the two wire pairs the old release wrote.
+  // [LAW:one-source-of-truth] Keep the two key/value pairs the old release saved.
   // Both keys still serve other members. Changing today's shared-menu key
   // encoder cannot change the spelling on an old profile's disk.
   if (
     (key === "candybar.tab" && value === "layout") ||
     (key === "menus._candybarZ00002epickers" && value === "toggles")
   )
-    return `the settings menu no longer has a "${value}" member on this key`;
+    return `the "${value}" settings menu was retired and now starts closed`;
   if (isMenuStateKey(key) && menuOfKey(key) === undefined)
     return "no menu is keyed that way in this build";
   if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
