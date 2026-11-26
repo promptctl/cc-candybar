@@ -122,19 +122,23 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // a reading calls near the limit once the rest of the process holding it is
 // reserved — so a share full at its charges, which a test holds real heap
 // under and so are the most the cache can cost, never puts that process past
-// that line, whatever the limit. The limit judges each process alone, and the
-// cache lives in its renderer's: a process of its own, or the host's for an
-// in-process renderer. The reserve is the ~60 MB one process doing the host's
-// work and a renderer's was charged serving one session, and a second
-// runtime's copy of the loaded bundle (a bare node is charged ~12 MB), so it
-// holds under either. The charges' own headroom over what entries hold is the
-// heap's growth room, so reserving more would starve the cache at a lowered
-// limit for nothing. At the default limit the share holds several times the
-// production daemon's working set of ~20 directories, each an entry and a view
-// on one compile. Measured, a full share costs less than its charges: serving
-// 100 sessions, the daemon is charged ~430 MB in all, less than the share
-// accounts for them.
+// that line while the rest of it fits the reserve. The limit judges each
+// process alone, and the cache lives in its renderer's: a process of its own,
+// or the host's for an in-process renderer. The reserve is the ~60 MB one
+// process doing the host's work and a renderer's was charged serving one
+// session, and a second runtime's copy of the loaded bundle (a bare node is
+// charged ~12 MB), so it holds under either. What each further session holds
+// outside the cache (its sources, folds and watchers) is assumed small beside
+// an entry and a view: nothing bounds it, so a source that grows per session
+// is what breaks the line. The charges' own headroom over what entries hold is
+// the heap's growth room, so reserving more would starve the cache at a
+// lowered limit for nothing.
 const RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
+// The sessions the share holds at the default limit, each an entry and a view
+// on one compile: five times the ~20 directories a production daemon renders
+// from, so sessions spread over many worktrees still hit. The default limit is
+// sized to it (limits.ts).
+export const SESSIONS_AT_DEFAULT_LIMIT = 100;
 // Never less than a quarter of the limit, which a small limit has always had:
 // there the reserve would leave the cache too little to hold two sessions.
 export function renderCacheBudget(memoryLimitBytes: number): number {
