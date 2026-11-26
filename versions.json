@@ -4,15 +4,22 @@
     {
       "version": "pr-975",
       "ref": "refs/pull/975/merge",
-      "sha": "96e2030614ebfaac352186133dd2cc98e016b663",
-      "timestamp": "2026-11-26T14:03:24.559Z",
+      "sha": "2092c58c1fe9a45ca40afa6d91103e95518bdffa",
+      "timestamp": "2026-11-26T14:04:43.230Z",
       "commits": [
         {
-          "sha": "96e2030614ebfaac352186133dd2cc98e016b663",
+          "sha": "2092c58c1fe9a45ca40afa6d91103e95518bdffa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:02:16-07:00",
-          "message": "Merge 709a427cbb883299cd05e3ed5ba59df5a27f3067 into c0afe8fdcd1688b9b0e5d533ba93d9cbc00b1009\n"
+          "timestamp": "2026-11-26T14:03:24Z",
+          "message": "Merge 443d39566a8ef1b68c46dc04d8605d357982608e into c0afe8fdcd1688b9b0e5d533ba93d9cbc00b1009\n"
+        },
+        {
+          "sha": "443d39566a8ef1b68c46dc04d8605d357982608e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:03:12-07:00",
+          "message": "test(window): verify repeated tmux hook edits preserve the reservation\n"
         },
         {
           "sha": "709a427cbb883299cd05e3ed5ba59df5a27f3067",
