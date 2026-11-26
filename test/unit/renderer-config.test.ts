@@ -502,25 +502,20 @@ test("a config turn whose text moved only by a comment keeps the state it serves
   ]);
 });
 
-test("a click on a session with no live context waits for the config of the origin the host's book holds, and runs in that config's turn", async () => {
+test("a click on a session with no live context uses its cold config in the click turn", async () => {
   const session = sessionIdOf("idle-one");
   const origin = contextOf("idle-one").requested;
   const r = rendererOf();
   answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   const palette = [...listResolvablePaletteNames()][0]!;
-  const parked = answered(
+  const landed = answered(
     await handIn(r, {
       kind: "click",
       click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER).click,
+      coldConfig: snapshotOf(CONFIG),
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },
     }),
-  );
-  expect(parked.effects).toEqual([]);
-  expect(parked.record).toContainEqual(["parked", "click"]);
-  expect(parked.subscriptions.configs).toEqual([origin]);
-  const landed = answered(
-    await handIn(r, { kind: "config", origin, config: snapshotOf(CONFIG) }),
   );
   expect(landed.effects).toEqual([
     expect.objectContaining({

@@ -152,6 +152,8 @@ export function recordingInputProblem({ event }: EventInput): string | null {
     case "request":
       return contextProblem(event.context);
     case "click": {
+      const problem = event.coldConfig && configProblem(event.coldConfig);
+      if (problem) return problem;
       const live = event.context?.live;
       return live == null ? null : contextProblem(live);
     }
