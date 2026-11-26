@@ -1,7 +1,10 @@
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import {
+  unscriptedLauncher,
+  unscriptedRuns,
+} from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -203,7 +206,11 @@ const nextOf = (
   const sessionState = new SessionState();
   recordRender(sessionState, session, dir);
   const { verb, value } = linkClick(url);
-  clickVerb(verb, value, testVerbContext(sessionState, undefined, state.config));
+  clickVerb(
+    verb,
+    value,
+    testVerbContext(sessionState, undefined, state.config),
+  );
   return sessionState.get(session, "k") ?? undefined;
 };
 
@@ -307,9 +314,14 @@ test("a load reports an action that claims a daemon-held key before its first cl
   const { cache, gates, originAt } = makeCache(Number.POSITIVE_INFINITY);
   const release = gates.state.register("daemon.example", []);
   try {
-    const config = file("held.json5", `{ actions: { page: { set: 'daemon.example', int: true } } }`);
+    const config = file(
+      "held.json5",
+      `{ actions: { page: { set: 'daemon.example', int: true } } }`,
+    );
     const entry = cache.getOrCreate(originAt(dir, dir, config));
-    expect(entry.lastError).toContain('key "daemon.example" is written by the daemon\'s own links');
+    expect(entry.lastError).toContain(
+      'key "daemon.example" is written by the daemon\'s own links',
+    );
   } finally {
     release();
   }
@@ -575,17 +587,18 @@ const walkMenu = async (
   }
 };
 
-// Every list the bundled menu hangs, then every tab, then the door closed.
+// Every tab, with the theme's and the preset's lists and the gear's opened
+// inside theirs, then the door closed.
 const MENU_WALK = [
   "🍫",
+  "🎨 look",
   "🎨 theme",
   "⚙",
   "◐ style ▀▀▀",
   "🎼 variation",
   "🔆 shade",
+  "📚 saves & presets",
   "▦ preset",
-  "🎨 look",
-  "📐 layout",
   "⚙ config",
   "⚡ session",
   "✖",

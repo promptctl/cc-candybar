@@ -3,10 +3,11 @@ import { HELP_GLYPH_CLOSED } from "./config/help";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./config/edit-glyphs";
 import { NODE_FLAGS } from "./cli-flags";
 import {
-  TABS,
+  tabsOnLine,
   TAB_LABEL,
   settingMenuPath,
   settingsByPlace,
+  type TabLine,
 } from "./config/menu-places";
 import { LANES, LANE_NAMES, type Lane } from "./config/lanes";
 import { SETTINGS } from "./config/setting-projections";
@@ -17,6 +18,12 @@ const LANE_PLACES = [
     Object.values(LANES).map((l) => settingMenuPath(l.switch.setting)),
   ),
 ].join(" or ");
+
+// The labels of the tabs one line of the menu leads, in order.
+const tabsOn = (line: TabLine): string =>
+  tabsOnLine(line)
+    .map((t) => t.label)
+    .join(", ");
 
 // The settings list's label column starts two spaces past the longest field.
 const FIELD_COLUMN =
@@ -88,11 +95,11 @@ Configuration:
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds ◁ back, ✎ arrange (edit mode)
-  and 💾 save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t) => t.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  the settings listed below, its first line holds ◁ back, the tabs
+  ${tabsOn("first")}, ✎ arrange (edit mode) and 💾 save, which appears while
+  you have unsaved changes and writes them to your config file. Under it are
+  the tabs ${tabsOn("strip")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.presets} the preset and a new preset.
   A change applies to this session at once.
   Where each setting is in the menu: the globals field that sets it in a
   config file, then the control's label.
