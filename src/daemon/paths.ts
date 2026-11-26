@@ -65,13 +65,40 @@ export function defaultSocketPath(): string {
 
 // [LAW:one-source-of-truth] Where a remote machine's daemon socket lands on
 // the machine the user sits at. A link names the key of the daemon that signed
-// it (link-signer.ts), and the URL handler app opens `<key id>.sock` in this
-// directory (under the home; the directory and the suffix are mirrored in
-// url-handler/main.swift) when a link of another machine's is clicked. An ssh
+// it (link-signer.ts), and the URL handler app opens the newest file named for
+// that key (`<key id>.<alias>.sock`) in this directory (under the home; the directory and the suffix are mirrored in
+// url-handler/wire.swift) when a link of another machine's is clicked. An ssh
 // `LocalForward` puts the socket there, named by the remote's key so two
-// remotes never share one, whatever they are called.
+// remotes never share one, whatever they are called. The file name carries the
+// alias the user's ssh config reaches that machine by too, after the key, which
+// is all a Mac's editor has to reach the machine's files with:
+// `<key id>.<alias>.sock`, the alias written by ssh's `%n`.
 export const REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote";
 export const REMOTE_SOCKET_SUFFIX = ".sock";
+export const REMOTE_SOCKET_HOST_SEPARATOR = ".";
+
+// [LAW:parse-dont-validate] A host alias: one word of ssh's config that names
+// one host, spelled so a file name and an editor's link can carry it, and
+// nothing wider. The only way to hold one is to parse it. Its first letter is
+// no `-` or `.`, so it can be no option and no hidden file. Its length is
+// bounded because it is part of a unix socket's path, which the platform limits
+// to about a hundred bytes: ssh cannot bind a forward past that, and the link
+// would then go to the Mac's own daemon and be refused for a reason that names
+// no length. Mirrored by url-handler/wire.swift.
+export const HOST_ALIAS_FIRST =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
+export const HOST_ALIAS_REST = `${HOST_ALIAS_FIRST}.-`;
+export const HOST_ALIAS_MAX_CHARS = 32;
+export type HostAlias = string & { readonly __hostAlias: true };
+
+export function hostAliasOf(word: string): HostAlias | null {
+  return word.length > 0 &&
+    word.length <= HOST_ALIAS_MAX_CHARS &&
+    HOST_ALIAS_FIRST.includes(word[0]!) &&
+    [...word.slice(1)].every((c) => HOST_ALIAS_REST.includes(c))
+    ? (word as HostAlias)
+    : null;
+}
 
 export function remoteSocketDir(home: string): string {
   return path.join(home, REMOTE_SOCKET_DIR_UNDER_HOME);

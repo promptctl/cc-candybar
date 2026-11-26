@@ -5,7 +5,10 @@ import {
 } from "./daemon/client-transport.js";
 import { fetchStats } from "./daemon/client-stats.js";
 import {
+  HOST_ALIAS_MAX_CHARS,
+  hostAliasOf,
   REMOTE_SOCKET_DIR_UNDER_HOME,
+  REMOTE_SOCKET_HOST_SEPARATOR,
   REMOTE_SOCKET_SUFFIX,
   socketPath,
 } from "./daemon/paths.js";
@@ -65,11 +68,20 @@ export function sshConfigPlan(
   args: readonly string[],
   asked: Asked<SshConfigFacts>,
 ): CliPlan {
-  const [alias, ...extra] = args;
-  // [LAW:parse-dont-validate] The alias is one word of ssh's config naming one
-  // host: no wildcard or negation (`*`, `?`, `!`), which would make a pattern.
-  if (alias === undefined || extra.length > 0 || !/^[^\s#*?!]+$/.test(alias)) {
+  const [word, ...extra] = args;
+  if (word === undefined || extra.length > 0) {
     return { stdout: "", stderr: USAGE, code: 2 };
+  }
+  // [LAW:parse-dont-validate] The alias is one word of ssh's config naming one
+  // host, in the spelling a forward's file name and an editor's link can carry:
+  // no wildcard or negation, which would make a pattern.
+  const alias = hostAliasOf(word);
+  if (alias === null) {
+    return {
+      stdout: "",
+      stderr: `ssh-config: ${JSON.stringify(word)} is not an alias this command can write: spell it with letters, digits, _, . and -, starting with a letter, digit or _, in at most ${HOST_ALIAS_MAX_CHARS} characters\n${USAGE}`,
+      code: 2,
+    };
   }
   if (asked.kind === "failed") {
     return { stdout: "", stderr: `ssh-config: ${asked.reason}\n`, code: 1 };
@@ -89,7 +101,9 @@ export function sshConfigPlan(
     "# it while an ssh connection to it is open.",
     `Host ${alias}`,
     "  StreamLocalBindUnlink yes",
-    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${facts.keyId}${REMOTE_SOCKET_SUFFIX} ${facts.socket}`,
+    // [LAW:one-source-of-truth] `%n` is the host as the user typed it, which is
+    // the `Host` line above: the alias is written once.
+    `  LocalForward %d/${REMOTE_SOCKET_DIR_UNDER_HOME}/${facts.keyId}${REMOTE_SOCKET_HOST_SEPARATOR}%n${REMOTE_SOCKET_SUFFIX} ${facts.socket}`,
     "",
   ].join("\n");
   return { stdout: stanza, stderr: "", code: 0 };

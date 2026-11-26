@@ -4,7 +4,6 @@
 // `replyTo`, the daemon's real click arm.
 
 import { RuntimeStats } from "../src/daemon/stats";
-import type { MenuIdle } from "../src/renderer/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { clickParts } from "./helpers/click-parts";
 import { signedClick } from "./helpers/link-signer";
@@ -32,7 +31,6 @@ import {
 } from "./helpers/click";
 import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { type Timekeeper } from "../src/time";
-import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS, undoOf } from "./helpers/history-step";
 import { heldClock } from "./helpers/held-clock";
@@ -40,10 +38,6 @@ import { FOREGROUND_BURST } from "../src/utils/keyed-serial-queue";
 
 const A = sessionIdOf("session-a");
 const S = sessionIdOf("s");
-
-// A's menu, shown a whole timeout ago: its close is due now.
-const shownLongAgo = (menuIdle: MenuIdle) =>
-  menuIdle.drew(A, (tickAt(systemTimekeeper) - 30) as Tick, true, 30);
 
 // A click reaches its turn some microtasks after it is sent, under real timers
 // and fake ones alike.
@@ -66,7 +60,7 @@ function setup(
     log: (_level, line) => logged.push(line),
   });
   const { context: _c, effects: _e, ...verbCtx } = ctx;
-  const clock = over.clock ?? systemTimekeeper;
+  const clock = over.clock ?? heldClock(new Date(0));
   const host = clickParts(verbCtx, over.collector, undefined, clock);
   const events: string[] = [];
   const parts = {
@@ -107,6 +101,8 @@ function setup(
     logged,
     events,
     menuIdle: host.menuIdle,
+    // A's menu was shown a whole timeout before this fixture clock's current turn.
+    shownLongAgo: () => host.menuIdle.drew(A, (tickAt(clock) - 30) as Tick, true, 30),
     park: host.park,
     // The teardown's first renderer step, as the daemon sends it: it takes
     // its place in the mailbox behind every input that arrived before it.
@@ -201,8 +197,8 @@ describe("the idle close decides as its turn comes", () => {
     logged.filter((line) => line.startsWith("menu-idle:"));
 
   test("a due closes the menus of a session idle past its timeout", async () => {
-    const { menuIdle, due, logged } = setup();
-    shownLongAgo(menuIdle);
+    const { shownLongAgo, due, logged } = setup();
+    shownLongAgo();
     expect(await due()).toMatchObject({ kind: "answered" });
     expect(closes(logged)).toEqual([
       expect.stringMatching(
@@ -240,8 +236,8 @@ describe("the idle close decides as its turn comes", () => {
   });
 
   test("a due waiting behind a click finds the period the click restarted, and closes nothing", async () => {
-    const { menuIdle, due, park, write, logged } = setup();
-    shownLongAgo(menuIdle);
+    const { menuIdle, shownLongAgo, due, park, write, logged } = setup();
+    shownLongAgo();
     const parked = park();
     const clicked = write("nord");
     const closing = due();
@@ -263,10 +259,10 @@ describe("close", () => {
       park,
       due,
       undoDepth,
-      menuIdle,
+      shownLongAgo,
       logged,
     } = setup();
-    shownLongAgo(menuIdle);
+    shownLongAgo();
     const before = sessionState.revision(A);
     const parked = park();
     const closed = closeJournal();
