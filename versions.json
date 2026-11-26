@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "fa1eeb9b93a826b08a71ce2eefe360f86ea343cc",
+      "timestamp": "2026-11-26T05:06:25.324Z",
+      "commits": [
+        {
+          "sha": "fa1eeb9b93a826b08a71ce2eefe360f86ea343cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:05:09-07:00",
+          "message": "fix(audits): the nightly colour audit holds the joiner rule's identity under every look, not the ΔE floor it deleted (candybar-later-fixes-nwu9.ic0) (#962)\n\n* test(audits): the seam sweep holds the joiner rule under every look, closed and hot and calm (candybar-later-fixes-nwu9.ic0)\n\nThe sweep takes a scope (looks, views, depths, payloads) instead of one\nvariation at today's dial, unstyled, on the sample payload. Its exemptions\nare computed on the palette the bar wears, transposed through rich-js by\nthe look's style. A payload names which listed cells it puts on alert, and\na calmed cell must wear its tint and is held. Any divider fails.\n\nThe audit keeps its frame case and adds the case the theme-identity seam\nfact walked: every variation x dial position x style, the closed bar, hot\nand calm, at truecolor.\n\n* fix(audits): theme-identity no longer asserts the seam ΔE floor the joiner rule deleted (candybar-later-fixes-nwu9.ic0)\n\nIts second fact failed every seam whose two grounds sit under\nSEAM_MIN_DELTA_E, the floor candybar-joiners-e5r4 replaced with identity\nafter rounding. The seam sweep now holds that rule over the same looks, so\nthe fact and its private seam reader go; the palette fact stays.\n\n* fix(colour): keep hue turns distinct at every supported depth"
+        }
+      ]
+    },
+    {
       "version": "pr-970",
       "ref": "refs/pull/970/merge",
       "sha": "70c5516db43fa4b818583643336e820dfb737623",
@@ -99,21 +114,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:29:00-07:00",
           "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "9a7b5049c643053f3405d7529836b8be87d57e28",
-      "timestamp": "2026-11-26T05:00:56.452Z",
-      "commits": [
-        {
-          "sha": "9a7b5049c643053f3405d7529836b8be87d57e28",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:58:16-07:00",
-          "message": "chore(tests): nothing the withdrawn test plan built or cited is left in the tree (candybar-testing-do00.c3a) (#961)\n\n* chore(tests): nothing caps end-to-end tests or scans the workflows for a daemon start (candybar-testing-do00.c3a)\n\nThe cap, the assertion limit and their sign-off policed a test/e2e/ that was\nnever created, and the workflow scanner failed CI on any step reaching a\nscript that starts a daemon, which laws:testing does not forbid. laws:testing's\ncap is a question a reviewer asks of a proposed test, not a hook.\n\n* docs(tests): the withdrawn test plan and the reports it commissioned are deleted (candybar-testing-do00.c3a)\n\nlaws:testing is the test plan. The design docs that cited the withdrawn one\nname what they meant instead, and no longer state its end-to-end cap.\n\n* chore(tests): no limit or comment rests on a load run, and the heap capture script goes (candybar-testing-do00.c3a)\n\nThe memory default and the render cache's share state their reason from the\nshare's own arithmetic and the working set it is sized for, the draw reserve\nfrom what it covers, and the shared bench helpers name the consumers they\nhave. The benchmark world loses the daemon environment only the heap capture\npassed.\n\n* docs(design): the gap doc's dependency paragraph points into neither the withdrawn plan nor its epic (candybar-testing-do00.c3a)\n\n* fix(tests): each restated reason claims only what the code shows, and what only the benchmark uses lives with it (candybar-testing-do00.c3a)\n\nFrom the plan review. The render cache's capacity target is one value the\nbudget test reads. The share states the reserve's assumption about what each\nsession holds outside it, and the default's comment places the thrash at a\nworking set larger than the share. The draw reserve names both turns it\ncovers and the budget it splits. The daemon argv names every start that reads\nit. The percentile, the session terminal and the transcript generator had one\nconsumer once the load gate went, so they move into the benchmark and their\nsharing markers go with the sharing.\n\n* test: remove the remaining assumptions of the withdrawn tier"
         }
       ]
     },
