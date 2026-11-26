@@ -1031,7 +1031,9 @@ function urlClick(
 // [LAW:no-silent-failure] A verdict its writer never took (it gave up waiting,
 // or the verdict could not be sent) takes its acts with it, and the daemon says
 // so.
-function landedReply(parts: DaemonParts, { desktop }: Clicked): Reply {
+function landedReply(parts: DaemonParts, { desktop, outcome }: Clicked): Reply {
+  if (desktop.length === 0 && outcome.kind !== "ok")
+    return stay(clickReply(outcome));
   const reply: Reply = replyOf(
     { ok: true, output: "", desktopActs: desktop },
     null,

@@ -267,6 +267,11 @@ const CHECKS = [
     ts: lit(TS_PROTOCOL, /export type DesktopAct =\s*\| \{ readonly (kind):/),
     swift: lit(SWIFT_WIRE, /^let ACT_KIND_KEY = "([^"]+)"$/m),
   },
+  {
+    label: "whether a remote editor target is a file",
+    ts: lit(TS_PROTOCOL, /readonly (file): boolean/),
+    swift: lit(SWIFT_WIRE, /^let ACT_OPEN_FILE_KEY = "([^"]+)"$/m),
+  },
   // How a forward's file name carries the alias an editor reaches the machine by.
   {
     label: "the separator before a forward's host alias, as the URL handler reads it",

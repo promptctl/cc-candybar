@@ -31,6 +31,7 @@ let ACT_KIND_COPY = "copy"
 let ACT_KIND_OPEN = "open"
 let ACT_COPY_TEXT_KEY = "text"
 let ACT_OPEN_TARGET_KEY = "target"
+let ACT_OPEN_FILE_KEY = "file"
 let ERROR_CODE_BAD_REQUEST = "BAD_REQUEST"
 
 // Mirrored: paths.ts REMOTE_SOCKET_DIR_UNDER_HOME, REMOTE_SOCKET_SUFFIX,
@@ -242,17 +243,20 @@ func routeOf(
 // The editor's link to `path` on the machine `host` names, or nil for a path
 // that is no absolute path (the daemon's target is one, so another is the
 // daemon's mistake to be told, not a link to guess at).
-func remoteEditorURL(host: HostAlias, path: String) -> String? {
+func remoteEditorURL(host: HostAlias, path: String, file: Bool) -> String? {
   guard path.hasPrefix("/"),
     let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
   else { return nil }
-  return REMOTE_EDITOR_PREFIX + host.word + encoded
+  // VS Code interprets a remote URI with a line number as a file.
+  // A trailing slash keeps a directory ending in ":1" unambiguous.
+  let suffix = file ? ":1" : (encoded.hasSuffix("/") ? "" : "/")
+  return REMOTE_EDITOR_PREFIX + host.word + encoded + suffix
 }
 
 // One act a click asked of this machine, read from the verdict.
 enum DesktopAct: Equatable {
   case copy(String)
-  case open(String)
+  case open(String, file: Bool)
   // A kind this app does not do: told, not dropped, because the click asked.
   case unknown(String)
   // An act that is not one the wire spells: what is wrong with it.
@@ -273,7 +277,10 @@ func desktopAct(of raw: Any) -> DesktopAct {
     guard let target = act[ACT_OPEN_TARGET_KEY] as? String else {
       return .malformed("an open with no \(ACT_OPEN_TARGET_KEY)")
     }
-    return .open(target)
+    guard let file = act[ACT_OPEN_FILE_KEY] as? Bool else {
+      return .malformed("an open with no file or directory indication")
+    }
+    return .open(target, file: file)
   default:
     return .unknown(kind)
   }
@@ -336,10 +343,10 @@ func steps(for acts: [DesktopAct]?, via route: Route) -> [Step] {
     switch act {
     case .copy(let text):
       return .copy(text)
-    case .open(let target):
+    case .open(let target, let file):
       switch entry.name.host {
       case .alias(let alias):
-        return remoteEditorURL(host: alias, path: target).map(Step.open)
+        return remoteEditorURL(host: alias, path: target, file: file).map(Step.open)
           ?? .tell("the daemon asked to open \(target), which is not an absolute path")
       case .unnamed:
         return .tell(

@@ -604,8 +604,8 @@ export function rendererHost(
     // act is the world's.
     // [LAW:nothing-unseen] An act handed to the desktop is said on its act line
     // as any act is.
-    const performed = (act: HostAct): Promise<HostOutcome> => {
-      const desktop = desktopActOf(act);
+    const performed = async (act: HostAct): Promise<HostOutcome> => {
+      const desktop = await desktopActOf(act);
       if (desktop === null) return world.perform(act);
       log("info", actLine(act, "desktop", "handed to the desktop"));
       return Promise.resolve({ kind: "desktop", act: desktop });
@@ -829,16 +829,18 @@ export function rendererHost(
   // holds as its slot comes up. One discovery no longer follows (the
   // renderer let it go before the slot) has nothing to hand in: its reason
   // left first.
-  const configMade = (origin: RenderOrigin) => (): Made<Notification> => {
-    const config = world.configs.snapshotOf(origin);
-    return config === null
-      ? {
-          kind: "abandoned",
-          message: "the renderer let the origin go",
-          detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`,
-        }
-      : { kind: "event", event: { kind: "config", origin, config } };
-  };
+  const configMade =
+    (origin: RenderOrigin) =>
+    (): Made<Extract<Notification, { kind: "config" }>> => {
+      const config = world.configs.snapshotOf(origin);
+      return config === null
+        ? {
+            kind: "abandoned",
+            message: "the renderer let the origin go",
+            detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`,
+          }
+        : { kind: "event", event: { kind: "config", origin, config } };
+    };
   // An origin's `config` turn in the slot of the turn that named it or moved
   // it: settled once that turn's own acts have.
   const configInSlot = async (
@@ -1040,6 +1042,30 @@ export function rendererHost(
                 follow(wanted);
               });
               made = { ...captured, event: ready };
+            } else if (
+              event.kind === "click" &&
+              event.context !== null &&
+              configs.get(originKey(event.context.durable.origin))?.kind !==
+                "received"
+            ) {
+              const origin = event.context.durable.origin;
+              // [LAW:effects-at-boundaries] Borrow discovery until this click lands.
+              // Its renderer then declares the config it retained, as on a draw.
+              if (
+                !followedOrigins.some(
+                  (held) => originKey(held) === originKey(origin),
+                )
+              ) {
+                restore = followedOrigins;
+                follow([...followedOrigins, origin]);
+              }
+              const config = configMade(origin)();
+              if (config.kind !== "event") made = config;
+              else
+                made = {
+                  ...captured,
+                  event: { ...event, coldConfig: config.event.config },
+                };
             } else made = { ...captured, event };
           } else made = captured;
         } catch (thrown) {
@@ -1062,13 +1088,15 @@ export function rendererHost(
           made.event.kind === "click" ? made.runEvidence : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
+        if (made.event.kind === "click" && restore !== undefined)
+          restore = origins ?? restore;
         return { event: made.event, slotted };
       } finally {
         // Config effects land inside the slot. Keep their discovery holds
         // until then, and restore previous demand before another input.
         if (restore !== undefined) {
           const previous = restore;
-          recordTaken("start config demand rollback", () => follow(previous));
+          recordTaken("restore config demand", () => follow(previous));
         }
         // [LAW:no-ambient-temporal-coupling] Release before the mailbox can
         // select another slot, including when this click was refused.

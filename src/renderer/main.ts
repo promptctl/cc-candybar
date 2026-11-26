@@ -43,12 +43,7 @@ import {
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import { createGates } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
-import {
-  heardContextOf,
-  type CheckedRenderRequest,
-  type DurableContext,
-  type SessionContext,
-} from "../renderer-interface/request-context.js";
+import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -92,23 +87,8 @@ import {
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
 import { Kept } from "../var-system/store.js";
-import {
-  compareStructural,
-  computed,
-  observable,
-  reaction,
-  runInAction,
-} from "mobx";
+import { compareStructural, computed, reaction, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-
-// A click waiting for config keeps its action and session identity.
-type ParkedClick = {
-  readonly session: SessionId;
-  readonly event: Omit<Extract<Event, { kind: "click" }>, "context">;
-} & (
-  | { readonly kind: "live" }
-  | { readonly kind: "cold"; readonly durable: DurableContext }
-);
 
 // How a turn ended, apart from what it returned.
 type Ended<T> = { readonly kind: "answered"; readonly value: T } | TurnFailure;
@@ -155,38 +135,6 @@ export function mainRenderer(
   // [LAW:no-ambient-temporal-coupling] Waiting work carries its intent and
   // session. Its origin and live request are read when it resumes.
   const opening = new Set<SessionId>();
-  const parked = observable.box<readonly ParkedClick[]>([], { deep: false });
-  const keepParked = (keep: (click: ParkedClick) => boolean): void => {
-    const prior = parked.get();
-    const next = prior.filter(keep);
-    if (next.length !== prior.length) runInAction(() => parked.set(next));
-  };
-
-  const parkedContext = (click: ParkedClick): SessionContext => {
-    const { session } = click;
-    if (click.kind === "live")
-      return heardContextOf(parts.worldStates.requestOf(session));
-    return (
-      parts.worldStates.contextOf(session) ?? {
-        session,
-        durable: click.durable,
-        live: null,
-      }
-    );
-  };
-
-  const takeClicks = (
-    matches: (click: ParkedClick) => boolean,
-  ): ParkedClick[] => {
-    const ready: ParkedClick[] = [];
-    keepParked((click) => {
-      if (!matches(click)) return true;
-      ready.push(click);
-      return false;
-    });
-    return ready;
-  };
-
   // [LAW:no-ambient-temporal-coupling] A session waits in `opening` until
   // its view opens, by this or by a request's answer: an opening that throws
   // keeps it there, so its origin's next `config` turn opens it again.
@@ -194,35 +142,6 @@ export function mainRenderer(
     openSession(parts, session);
     opening.delete(session);
   };
-
-  const resume = (
-    ready: readonly ParkedClick[],
-    effects: Effect[],
-    record: RequestFacts,
-  ): Array<() => void> =>
-    ready.map((click) => () => {
-      try {
-        clickTurn(
-          parts,
-          { ...click.event, context: parkedContext(click) },
-          effects,
-          record,
-        );
-      } catch (thrown) {
-        // [LAW:no-silent-failure] A deferred click can fail after its
-        // admission turn. Its session's bar reports that failure too.
-        holdClickError(
-          parts.sessionState,
-          click.session,
-          rendererFailureOf(thrown).message,
-          time.at,
-        );
-        throw thrown;
-      }
-    });
-
-  const parkedClickSessions = (): Set<SessionId> =>
-    new Set(parked.get().map((click) => click.session));
 
   // [LAW:types-are-the-program] Every command has a handler with its own
   // input and required reply. Notification handlers cannot answer a command.
@@ -237,7 +156,7 @@ export function mainRenderer(
         sessionState: parts.sessionStats(),
         menuIdle: menuIdle.stats(),
         rendererTurns: {
-          parked: opening.size + parked.get().length,
+          parked: opening.size,
           presents: deliveries.size,
           deferrals: time.deferrals(),
         },
@@ -361,8 +280,7 @@ export function mainRenderer(
             record.push(["parked", "context"]);
             return;
           }
-          const ready = takeClicks((click) => click.session === session);
-          runEach([openWaiting(session), ...resume(ready, effects, record)]);
+          openWaiting(session)();
         });
         return;
       }
@@ -372,15 +290,6 @@ export function mainRenderer(
           (session) =>
             originKey(parts.worldStates.requestOf(session).requested) === key,
         );
-        const ready = takeClicks(
-          (click) => originKey(parkedContext(click).durable.origin) === key,
-        );
-        // [LAW:no-ambient-temporal-coupling] Waiting clicks are detached
-        // before configuration, so none can requeue. Each step runs whatever
-        // another throws: configuring records the offer before it loads, and
-        // every later step offers it to the entry again, so a load that
-        // throws reports on each step that needed it and none waits on a
-        // resend.
         runEach([
           () => parts.renderCache.configure(event.origin, event.config),
           () =>
@@ -390,7 +299,6 @@ export function mainRenderer(
                 .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
             ),
           ...sessions.map(openWaiting),
-          ...resume(ready, effects, record),
         ]);
         return;
       }
@@ -434,7 +342,6 @@ export function mainRenderer(
         return;
       case "retire":
         opening.delete(event.session);
-        keepParked((click) => click.session !== event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -470,20 +377,20 @@ export function mainRenderer(
           click.scope === "session" ? (live ?? event.context) : null;
         if (context !== null) {
           const { origin } = context.durable;
-          if (!parts.renderCache.holdsConfig(origin)) {
-            const { context: _input, ...intent } = event;
-            const waiting = { session: context.session, event: intent };
-            runInAction(() =>
-              parked.set([
-                ...parked.get(),
-                live === null
-                  ? { ...waiting, kind: "cold", durable: context.durable }
-                  : { ...waiting, kind: "live" },
-              ]),
-            );
-            record.push(["parked", "click"]);
-            return;
+          // [LAW:no-ambient-temporal-coupling] The writer owns this turn's
+          // verdict. A click can never resume in another writer's turn.
+          if (event.coldConfig !== undefined) {
+            const offered = event.context?.durable.origin;
+            if (
+              offered !== undefined &&
+              originKey(offered) === originKey(origin)
+            )
+              parts.renderCache.configure(origin, event.coldConfig);
           }
+          if (!parts.renderCache.holdsConfig(origin))
+            throw new Error(
+              `no configuration for this click's origin ${originKey(origin)}`,
+            );
         }
         clickTurn(parts, { ...event, context }, effects, record);
         return;
@@ -492,8 +399,7 @@ export function mainRenderer(
         feeds.view(event.viewers, time.tick);
         return;
       case "due": {
-        const busy = parkedClickSessions();
-        for (const session of event.pendingClicks ?? []) busy.add(session);
+        const busy = new Set(event.pendingClicks);
         // [LAW:dataflow-not-control-flow] Every owner of a tick, in one
         // order: held work first (a walk's load, a settled write), so the
         // menus a close reads and the frames drawn after it see it landed;
@@ -566,7 +472,7 @@ export function mainRenderer(
       // [LAW:one-source-of-truth] The origins whose config the renderer holds:
       // each live session's, from its context until its retire, each a cache
       // entry loads from until its eviction, the one whose click's consequence
-      // waits on its landing, and each a parked event waits on, once each.
+      // waits on its landing, once each.
       const configs = new Map<string, RenderOrigin>();
       const landing = parts.verbs.landing();
       for (const origin of [
@@ -579,10 +485,6 @@ export function mainRenderer(
         configs.set(originKey(origin), origin);
       for (const origin of parts.renderCache.origins())
         configs.set(originKey(origin), origin);
-      for (const click of parked.get()) {
-        const origin = parkedContext(click).durable.origin;
-        configs.set(originKey(origin), origin);
-      }
       return [...configs]
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([, origin]) => origin);
@@ -666,18 +568,17 @@ export function mainRenderer(
 
     for (const store of storeOrder)
       collect(store, () => stored.push(...stores[store].drain()));
-    collect("subscriptions", () => declare(event.kind === "config"));
+    collect("subscriptions", () =>
+      declare(
+        event.kind === "config" ||
+          (event.kind === "click" && event.coldConfig !== undefined),
+      ),
+    );
     // [LAW:one-source-of-truth] The wake has its own collector. A failed
     // subscription declaration leaves the last one standing and the next
     // due turn still receives the current tick.
     collect("wake", () => {
-      wake = earliestOf([
-        time.next(),
-        menuIdle.next(
-          parked.get().length === 0 ? undefined : parkedClickSessions(),
-        ),
-        feeds.next(),
-      ]);
+      wake = earliestOf([time.next(), menuIdle.next(), feeds.next()]);
     });
     // [LAW:no-ambient-temporal-coupling] The declaration's lifetime ends in
     // the close-views turn even if an earlier finalizer failed.

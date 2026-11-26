@@ -4,6 +4,7 @@
 // what it did, or why it did not, said once on its act line and handed back as
 // the act's `effect-done`.
 
+import { stat } from "node:fs/promises";
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 import { ACTS_ON_DESKTOP, type DesktopAct } from "./foundations/protocol.js";
 import type { LaunchResult } from "../proc/launcher.js";
@@ -44,16 +45,23 @@ export type HostOutcome = EffectOutcome | ForDesktop;
 
 // The act the desktop carries out, when the act says it does; every other act
 // is only ever performed here.
-export function desktopActOf(act: HostAct): DesktopAct | null {
+export async function desktopActOf(act: HostAct): Promise<DesktopAct | null> {
   switch (act.kind) {
     case "copy":
       return act.actsOn === ACTS_ON_DESKTOP
         ? { kind: "copy", text: act.text }
         : null;
-    case "open":
-      return act.actsOn === ACTS_ON_DESKTOP
-        ? { kind: "open", target: act.target }
-        : null;
+    case "open": {
+      if (act.actsOn !== ACTS_ON_DESKTOP) return null;
+      // [LAW:effects-at-boundaries] Only the remote filesystem can tell the
+      // desktop whether this path should open as an editor or a workspace.
+      const entry = await stat(act.target);
+      if (!entry.isFile() && !entry.isDirectory())
+        throw new Error(
+          `cannot open ${act.target}: expected a file or directory`,
+        );
+      return { kind: "open", target: act.target, file: entry.isFile() };
+    }
     case "type-slash":
     case "run":
       return null;

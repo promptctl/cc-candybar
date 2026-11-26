@@ -115,15 +115,15 @@ do {
 
 // An editor reaches a path on the host, percent-encoded as a URL path.
 expect(
-  remoteEditorURL(host: alias, path: "/home/me/my dir/a#b.ts"),
-  "vscode://vscode-remote/ssh-remote+web.eu-1/home/me/my%20dir/a%23b.ts",
+  remoteEditorURL(host: alias, path: "/home/me/my dir/a#b.ts", file: true),
+  "vscode://vscode-remote/ssh-remote+web.eu-1/home/me/my%20dir/a%23b.ts:1",
   "a path with a space and a hash")
-expect(remoteEditorURL(host: alias, path: "relative/x"), nil, "a path that is not absolute")
+expect(remoteEditorURL(host: alias, path: "relative/x", file: false), nil, "a path that is not absolute")
 
 // The verdict: what the daemon said of the link, and the acts the click asked.
 expect(
-  verdictOf(json(#"{"ok":true,"output":"","desktopActs":[{"kind":"copy","text":"hi"},{"kind":"open","target":"/srv/x"}]}"#)),
-  .accepted(acts: [.copy("hi"), .open("/srv/x")]),
+  verdictOf(json(#"{"ok":true,"output":"","desktopActs":[{"kind":"copy","text":"hi"},{"kind":"open","target":"/srv/x","file":false}]}"#)),
+  .accepted(acts: [.copy("hi"), .open("/srv/x", file: false)]),
   "a verdict with acts, in order")
 expect(
   verdictOf(json(#"{"ok":true,"output":"","desktopActs":[]}"#)),
@@ -161,8 +161,8 @@ func forwardVia(_ file: String) -> Route {
 }
 let named = forwardVia("\(id).web.eu-1.sock")
 expect(
-  steps(for: [.copy("hi"), .open("/srv/x")], via: named),
-  [.copy("hi"), .open("vscode://vscode-remote/ssh-remote+web.eu-1/srv/x")],
+  steps(for: [.copy("hi"), .open("/srv/x", file: false)], via: named),
+  [.copy("hi"), .open("vscode://vscode-remote/ssh-remote+web.eu-1/srv/x/")],
   "a forwarded copy and open are carried out in order")
 expect(
   steps(for: [.copy("hi")], via: .own(socket: "/tmp/own")), [],
@@ -179,7 +179,7 @@ do {
   }
 }
 for file in ["\(id).sock", "\(id).-x.sock"] {
-  let said = steps(for: [.copy("hi"), .open("/srv/x")], via: forwardVia(file))
+  let said = steps(for: [.copy("hi"), .open("/srv/x", file: false)], via: forwardVia(file))
   expect(said.count, 2, "an open with no usable host still lets the copy through: \(file)")
   expect(said[0], .copy("hi"), "the copy is carried out: \(file)")
   if case .tell(let why) = said[1] {

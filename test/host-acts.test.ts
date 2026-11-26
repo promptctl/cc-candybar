@@ -378,7 +378,7 @@ describe("an act that says the desktop carries it out", () => {
       kind: "open",
       id: ++ids as EffectId,
       session: S,
-      target: "/srv/x",
+      target: file,
       actsOn: "daemon",
     });
     const { turn, did } = hostOver([copied, opened]);
@@ -386,7 +386,7 @@ describe("an act that says the desktop carries it out", () => {
     expect(did).toEqual([`done ${copied.id} ok`, `done ${opened.id} ok`]);
     expect(answered.settled).toEqual([
       { kind: "desktop", act: { kind: "copy", text: "x" } },
-      { kind: "desktop", act: { kind: "open", target: "/srv/x" } },
+      { kind: "desktop", act: { kind: "open", target: file, file: true } },
     ]);
   });
 

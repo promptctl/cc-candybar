@@ -201,7 +201,7 @@ test("a click whose act failed is answered as failed, and the failure is the dae
 // writer is told once the click landed, and its copy and open are handed to it
 // in the verdict, in the order asked, and this daemon runs neither.
 describe("a frame that asks for its acts on the desktop", () => {
-  const OPEN = effectsUrl([{ verb: VERB_OPEN_VSCODE, args: ["/work/repo"] }]);
+  const OPEN = effectsUrl([{ verb: VERB_OPEN_VSCODE, args: [__dirname] }]);
   const desktopFrame = (h: ReturnType<typeof host>, url: string) =>
     h.frame(url, URL_FRAME_VERSION, ACTS_ON_DESKTOP);
   // The verdict a writer that waits on the landing is sent.
@@ -236,7 +236,7 @@ describe("a frame that asks for its acts on the desktop", () => {
     expect((await landed(answered)).resp).toEqual({
       ok: true,
       output: "",
-      desktopActs: [{ kind: "open", target: "/work/repo" }],
+      desktopActs: [{ kind: "open", target: __dirname, file: false }],
     });
     expect(h.copied).toEqual([]);
   });

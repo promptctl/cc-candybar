@@ -429,7 +429,7 @@ export interface UrlFrame {
 // the text to copy, or a path on the daemon's machine to open.
 export type DesktopAct =
   | { readonly kind: "copy"; readonly text: string }
-  | { readonly kind: "open"; readonly target: string };
+  | { readonly kind: "open"; readonly target: string; readonly file: boolean };
 
 // [LAW:types-are-the-program] The verdict of a click whose acts leave for its
 // writer: the link was accepted, and always the acts, in the order asked, even

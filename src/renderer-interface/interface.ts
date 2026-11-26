@@ -271,6 +271,8 @@ export type Notification =
       // A click admitted by the host, with its decoded arguments.
       readonly kind: "click";
       readonly click: AdmittedClick;
+      // The host's snapshot when this origin has yet to be delivered.
+      readonly coldConfig?: ConfigSnapshot;
       readonly arrival: ClickArrival;
       // A scoped click's context, once the host has heard from its session.
       readonly context: SessionContext | null;
