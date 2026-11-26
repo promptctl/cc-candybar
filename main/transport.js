@@ -83785,7 +83785,11 @@ function detectTmuxHint(env2) {
 }
 
 // src/client-hints.ts
-var SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
+var SSH_ENV_VARS = [
+  "SSH_CONNECTION",
+  "SSH_CLIENT",
+  "SSH_TTY"
+];
 function terminalObservation(env2, tty) {
   return {
     termCols: detectTermExtent(env2.COLUMNS, tty.columns),
@@ -88437,6 +88441,10 @@ function shortHostname(hostname2) {
   const dot = hostname2.indexOf(".");
   return dot < 0 ? hostname2 : hostname2.slice(0, dot);
 }
+var MACHINE_HOST_READS = {
+  hostname: () => os_default.hostname(),
+  username: () => os_default.userInfo().username
+};
 function syscall(field, read3) {
   try {
     const value = read3();
@@ -88466,12 +88474,12 @@ var HostService = class {
     this.name = new KeyedSource({
       ...one,
       name: "host.name",
-      read: () => syscall("name", () => shortHostname(os_default.hostname()))
+      read: () => syscall("name", () => shortHostname(opts.reads.hostname()))
     });
     this.user = new KeyedSource({
       ...one,
       name: "host.user",
-      read: () => syscall("user", () => os_default.userInfo().username)
+      read: () => syscall("user", opts.reads.username)
     });
   }
   declareName(holds3) {
@@ -89288,7 +89296,12 @@ function createPayloadProviders(opts) {
     faults: new RefreshFaults()
   };
   const owners = {
-    hostService: new HostService({ clock, logger, ledger }),
+    hostService: new HostService({
+      clock,
+      logger,
+      ledger,
+      reads: MACHINE_HOST_READS
+    }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
       watchers: opts.watchers,
