@@ -283,6 +283,38 @@ describe("heap-analysis scripts", () => {
     expect(strong).toMatch(/held-->/);
   });
 
+  test("a WeakMap value is held only where both its key and its table are held", () => {
+    const snapshot = join(root, "weak-map.heapsnapshot");
+    execFileSync(process.execPath, ["-e", `
+      class KeyOnly {}
+      class TableOnly {}
+      class Both {}
+      class Value {}
+      function capture() {
+        const key = {};
+        const table = new WeakMap([[key, new Value()]]);
+        const holders = [
+          Object.assign(new KeyOnly(), { key }),
+          Object.assign(new TableOnly(), { table }),
+          Object.assign(new Both(), { key, table }),
+        ];
+        require("node:v8").writeHeapSnapshot(process.argv[1]);
+        return holders.length;
+      }
+      process.stdout.write(String(capture()));
+    `, snapshot]);
+    const pathsFrom = (name: string): string[][] => {
+      const result = execFileSync(process.execPath, [
+        join(scriptsDir, "heap-retainers.mjs"), snapshot, "^object / Value$",
+        "--from", `^object / ${name}$`, "--strong", "--json",
+      ], { encoding: "utf8" });
+      return (JSON.parse(result) as { paths: string[][] }).paths;
+    };
+    expect(pathsFrom("KeyOnly")).toEqual([]);
+    expect(pathsFrom("TableOnly")).toEqual([]);
+    expect(pathsFrom("Both")).toHaveLength(1);
+  });
+
   test("heap-retainers --strong --limit skips a target nothing strong holds, and it does not use up the limit", () => {
     // A live heap cannot hold such an object, since a snapshot collects first,
     // so the snapshot is written by hand: the root weakly holds one `Foo`,

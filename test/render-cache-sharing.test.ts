@@ -162,9 +162,9 @@ const render = (
 class ProbeStore extends VariableStore {}
 
 // Draw one frame of `compiled` from a store and registry of its own, as a
-// render-cache entry would, then dispose the registry and release the store
-// within this synchronous call.
-const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): void => {
+// render-cache entry would. The caller can hold that store independently
+// of the compile after the registry is disposed.
+const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): ProbeStore => {
   const store = new ProbeStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
@@ -184,6 +184,7 @@ const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): void => {
     },
   );
   registry.dispose();
+  return store;
 };
 
 const exposeGc = (): (() => void) => {
@@ -440,13 +441,16 @@ class CompileHolder {
 test("a compile keeps nothing of a render once it returns", () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const holder = new CompileHolder(compileDslConfig(compileInputOf(config)));
-  drawAlone(config, holder.compiled);
+  const drawnStore = drawAlone(config, holder.compiled);
   // The control is the one store strongly reachable from this holder. A
   // second path names precisely how the compile keeps the render's store.
   const paths = retainerPathsFrom("CompileHolder", "ProbeStore");
   expect(paths).toEqual([
     ["object / CompileHolder --control-->", "object / ProbeStore"],
   ]);
+  // This store is still live on the test stack. Only the control is held
+  // by the compile holder, regardless of when V8 collects.
+  expect(drawnStore).not.toBe(holder.control);
   expect(holder.compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
