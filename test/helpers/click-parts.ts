@@ -5,7 +5,7 @@
 // these in.
 
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { holdable, hostHeld, NOTHING_STORED } from "./renderers";
+import { holdable, hostHeld, NOTHING_STORED, NO_ACTS, NO_CONFIGS } from "./renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
@@ -24,13 +24,29 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "../../src/renderer/verbs/port";
-import { NO_CONFIGS } from "./renderers";
-import { bookedContext, discoveryNow } from "./click";
+import { bookedContext } from "./click";
+import { snapshotOf } from "./main-renderer";
+import { loadSnapshot } from "../../src/config/dsl-loader";
+import type { DslConfig } from "../../src/config/dsl-types";
+import { originKey } from "../../src/config-hint";
 import type { SessionBook } from "../../src/daemon/session-book";
 import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { HOST } from "../../scripts/lib/host";
-import { stateDir } from "../../src/daemon/paths";
-import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
+
+// A host with the fixture's empty user layer. It can lend its config to a
+// cold click only while that click's mailbox slot follows the origin.
+function clickWorld(): HostWorld {
+  const fixture = snapshotOf("{}");
+  let followed = new Set<string>();
+  return {
+    ...NO_ACTS,
+    configs: {
+      ...NO_CONFIGS,
+      follow: (origins) => { followed = new Set(origins.map(originKey)); },
+      snapshotOf: (origin) => followed.has(originKey(origin)) ? fixture : null,
+    },
+  };
+}
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
@@ -40,19 +56,7 @@ export function clickParts(
   },
   // What the host's turns act in: by default, an act it is handed fails by
   // name, so a test whose click asks one hands in its own performer.
-  world: HostWorld = {
-    authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
-    perform: async (act) => ({
-      kind: "failed",
-      reason: `${act.kind}: no host part in this rig`,
-    }),
-    stateDir: stateDir(HOST),
-    configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
-    closing: () => false,
-    acknowledgeDisplayed: () => {},
-    reported: () => {},
-    unheard: () => {},
-  },
+  world: HostWorld = clickWorld(),
   clock: Timekeeper = systemTimekeeper,
 ): Pick<DaemonParts, "renderer" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
@@ -66,6 +70,7 @@ export function clickParts(
   const time = new TurnTime();
   const turnLog = new TurnLog();
   const menuIdle = new MenuIdle();
+  const delivered = new Map<string, DslConfig>();
   // A click's turn reads the verbs and, for its output, the open views'
   // subscriptions: this rig opens none.
   const parts = {
@@ -73,22 +78,29 @@ export function clickParts(
     // renderer wires it.
     verbs: verbsOver({
       ...verbCtx,
+      configFor: (origin, editing) =>
+        delivered.get(originKey(origin)) ?? verbCtx.configFor(origin, editing),
       log: turnLog.add,
       clickLanded: (sessionId) => {
         verbCtx.clickLanded(sessionId);
         menuIdle.clicked(sessionId, time.tick);
       },
     }),
-    // [LAW:one-source-of-truth] The config is already held by the verb fixture.
-    // Admission and the verbs read its same snapshot source.
+    // Click admission and the verbs use the config the host delivered in the slot.
     renderCache: {
       subscriptions: () => ({ sources: {} }),
       origins: () => [],
       configSelections: () => [],
       managedFolders: () => [],
       holdView: () => null,
-      holdsConfig: () => true,
-      prune: () => {},
+      configure: (origin, snapshot) => {
+        const loaded = loadSnapshot(snapshot, HOST.home, verbCtx.configFor(origin), { warned: () => {} });
+        delivered.set(originKey(origin), loaded.config);
+      },
+      holdsConfig: (origin) => delivered.has(originKey(origin)),
+      prune: (keep) => {
+        for (const key of delivered.keys()) if (!keep.has(key)) delivered.delete(key);
+      },
     } satisfies Pick<
       MainRendererParts["renderCache"],
       | "subscriptions"
@@ -96,6 +108,7 @@ export function clickParts(
       | "configSelections"
       | "managedFolders"
       | "holdView"
+      | "configure"
       | "holdsConfig"
       | "prune"
     >,
