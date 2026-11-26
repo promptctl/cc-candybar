@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-968",
+      "ref": "refs/pull/968/merge",
+      "sha": "f221f85ad75c02dfc03ba73a60c83730c565c112",
+      "timestamp": "2026-11-26T05:46:56.997Z",
+      "commits": [
+        {
+          "sha": "f221f85ad75c02dfc03ba73a60c83730c565c112",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:45:39Z",
+          "message": "Merge aac5b009aa42e53a33a14345cb6182efad3b6b23 into 2ccd7d18d29936c29c3f7f7f09208c87d6c65270\n"
+        },
+        {
+          "sha": "aac5b009aa42e53a33a14345cb6182efad3b6b23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:45:25-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-ssh-links-16rz.6oi\n\n# Conflicts:\n#\tsrc/daemon/reply.ts\n#\tsrc/renderer-interface/click-arrival.ts\n#\tsrc/renderer-interface/interface.ts\n#\tsrc/renderer-interface/wire.ts\n#\ttest/helpers/click.ts\n#\ttest/unit/drawn-click-target.test.ts\n#\ttest/unit/link-signing.test.ts\n#\ttest/unit/renderer-config.test.ts\n"
+        },
+        {
+          "sha": "5bf6313fc45fba695dab17400dd6c0591351cde5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:33-07:00",
+          "message": "refactor(ssh): let the click connection own desktop act delivery\n"
+        },
+        {
+          "sha": "e79dd1149b50c1cbc96389a7dffb64b684573804",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:03:59-07:00",
+          "message": "fix(ssh): settle cold clicks in their own turn and distinguish remote files from folders\n"
+        },
+        {
+          "sha": "59e9972a7a38c5916ec622784d78463893059b96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T03:43:29-07:00",
+          "message": "fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n"
+        },
+        {
+          "sha": "ec6e772eb7c0de33cbb3005d84a8c36406a197d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T03:19:33-07:00",
+          "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-969",
       "ref": "refs/pull/969/merge",
       "sha": "d72156a2979eb6dcbc165409ef82464133d7316c",
@@ -277,49 +327,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:02:21-07:00",
           "message": "test: isolate terminal, filesystem and process observations from the host\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-968",
-      "ref": "refs/pull/968/merge",
-      "sha": "8fb4dc6555f1087cefc2d78f5205db8c34af830d",
-      "timestamp": "2026-11-26T05:12:03.155Z",
-      "commits": [
-        {
-          "sha": "8fb4dc6555f1087cefc2d78f5205db8c34af830d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:08:44Z",
-          "message": "Merge 5bf6313fc45fba695dab17400dd6c0591351cde5 into fa1eeb9b93a826b08a71ce2eefe360f86ea343cc\n"
-        },
-        {
-          "sha": "5bf6313fc45fba695dab17400dd6c0591351cde5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:08:33-07:00",
-          "message": "refactor(ssh): let the click connection own desktop act delivery\n"
-        },
-        {
-          "sha": "e79dd1149b50c1cbc96389a7dffb64b684573804",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:03:59-07:00",
-          "message": "fix(ssh): settle cold clicks in their own turn and distinguish remote files from folders\n"
-        },
-        {
-          "sha": "59e9972a7a38c5916ec622784d78463893059b96",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T03:43:29-07:00",
-          "message": "fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n"
-        },
-        {
-          "sha": "ec6e772eb7c0de33cbb3005d84a8c36406a197d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T03:19:33-07:00",
-          "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
         }
       ]
     }
