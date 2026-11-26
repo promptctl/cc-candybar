@@ -4,6 +4,7 @@ import { writeConfigFile } from "../daemon/file-rewrites.js";
 import {
   asError,
   publishByRename,
+  publishByLink,
   resolvedTarget,
   stagedName,
 } from "../utils/atomic-write.js";
@@ -166,7 +167,30 @@ function removing(staged: string, e: unknown): Error {
 // [LAW:no-silent-failure] An install whose step throws puts back every
 // change it made, and its error says so, naming each it could not put back.
 // One that stands removes the old copies, and names each that would not go.
-export function transacted<T>(install: (changes: InstallChanges) => T): T {
+export function transacted<T>(
+  lockDir: string,
+  install: (changes: InstallChanges) => T,
+): T {
+  // [LAW:no-ambient-temporal-coupling] A rollback only owns its own files.
+  // Give one installer the runtime and the handler together, until its last
+  // restore or cleanup. Even the URL-handler-only command stages the runtime.
+  const lock = path.join(lockDir, ".cc-candybar-install.lock");
+  const acquired = publishByLink(lock, String(process.pid), 0o600);
+  if (acquired.leftover !== null)
+    process.stderr.write(`install: ${acquired.leftover}\n`);
+  if (acquired.outcome === "taken") {
+    throw new Error(
+      `Another install holds ${lock}. Retry after it finishes. If it was interrupted, verify its process (PID in the lock file) has exited before removing the lock.`,
+    );
+  }
+  try {
+    return applyChanges(install);
+  } finally {
+    fs.unlinkSync(lock);
+  }
+}
+
+function applyChanges<T>(install: (changes: InstallChanges) => T): T {
   const changes = new InstallChanges();
   let done: T;
   try {

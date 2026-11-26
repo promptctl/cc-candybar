@@ -356,7 +356,9 @@ export function runStageRuntime(
   platform: NodeJS.Platform,
 ): StagedRuntime {
   const sources = runtimeSources(sourceDist, platform);
-  return transacted((changes) => stageRuntime(sources, dir, platform, changes));
+  return transacted(path.dirname(dir), (changes) =>
+    stageRuntime(sources, dir, platform, changes),
+  );
 }
 
 // The app's Info.plist, whole: a background-only app that claims the scheme.
@@ -423,7 +425,7 @@ function infoPlist(): string {
 // reinstall would leave the old forwarder delivering until logout.
 function installUrlHandlerFrom(sourceDist: string, world: InstallWorld): void {
   const forwarder = resolveForwarder(sourceDist, "darwin");
-  transacted((changes) => {
+  transacted(world.host.home, (changes) => {
     buildUrlHandler(forwarder, world, changes);
     registerUrlHandler(world);
   });
@@ -516,7 +518,7 @@ export function runInstallUrlHandler(
   ensureMacOS(platform);
   const forwarder = resolveForwarder(bundle, platform);
   const sources = runtimeSources(bundle, platform);
-  transacted((changes) => {
+  transacted(world.host.home, (changes) => {
     stageRuntime(sources, supportDir(world.host, platform), platform, changes);
     buildUrlHandler(forwarder, world, changes);
     registerUrlHandler(world);
@@ -675,7 +677,7 @@ export function install(
   const record = hostBundlePath(world.host);
   const recorded = readTextIfPresent(record);
 
-  transacted((changes) => {
+  transacted(world.host.home, (changes) => {
     const staged = stageRuntime(sources, dir, platform, changes);
     if (forwarder !== null) {
       buildUrlHandler(forwarder, world, changes);

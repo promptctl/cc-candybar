@@ -9,7 +9,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hostOf } from "../scripts/lib/host";
-import { install, type InstallWorld } from "../src/install/index";
+import {
+  install,
+  runInstallUrlHandler,
+  type InstallWorld,
+} from "../src/install/index";
 import { hostBundlePath, remoteSocketDir } from "../src/daemon/paths";
 import { readHostBundle } from "../src/daemon/host-bundle";
 import { shellWord } from "../src/shell-word";
@@ -279,6 +283,30 @@ describe("an install that fails", () => {
       /lsregister failed/,
     );
     expect(tree()).toEqual({});
+  });
+
+  test("a second install cannot land files in an install that may still roll back", () => {
+    const before = installedThenStale();
+    const other = checkout("v3");
+    const { world: w } = world(
+      { lsregister: { ok: false, reason: "non-zero", exitCode: 1 } },
+      {
+        lsregister: () => {
+          expect(() =>
+            runInstallUrlHandler(other, world().world, "darwin"),
+          ).toThrow(/Another install holds/);
+          expect(() => install([], other, world().world, "darwin")).toThrow(
+            /Another install holds/,
+          );
+        },
+      },
+    );
+    expect(() => install([], checkout("v2"), w, "darwin")).toThrow(
+      /lsregister failed/,
+    );
+    expect(tree()).toEqual(before);
+    install([], other, world().world, "darwin");
+    expect(fs.readFileSync(stagedDist(), "utf8")).toBe("// bundle v3\n");
   });
 
   test("a private directory that acquired an SSH forward during install survives rollback", () => {
