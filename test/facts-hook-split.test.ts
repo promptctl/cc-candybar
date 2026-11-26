@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
+import { settledPrices } from "./helpers/prices";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import { composePayload } from "../src/renderer/render-payload";
 import {
@@ -28,7 +29,7 @@ import type { CheckedHookData } from "../src/renderer-interface/request-context"
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
-import { HOST } from "../scripts/lib/host";
+import { hostOf } from "../scripts/lib/host";
 import {
   absentOwners,
   readTranscriptLanes,
@@ -121,8 +122,9 @@ afterEach(() => {
 // refresh stores cannot reach the other's document.
 function inputsOf(hookData: CheckedHookData) {
   const usageStore = new SessionUsageStore({
+    prices: settledPrices,
     clock: systemTimekeeper,
-    host: HOST,
+    host: hostOf({}, { home: dir }),
     sweepIntervalMs: 0,
   });
   stores.push(usageStore);

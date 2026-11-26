@@ -45,11 +45,13 @@ export async function publishByRenameAsync(
   file: string,
   bytes: string | Uint8Array,
   mode?: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   const staged = stagedName(file);
   try {
-    await fs.promises.writeFile(staged, bytes, { flag: "wx", mode });
+    await fs.promises.writeFile(staged, bytes, { flag: "wx", mode, signal });
     if (mode !== undefined) await fs.promises.chmod(staged, mode);
+    signal?.throwIfAborted();
     await fs.promises.rename(staged, file);
   } catch (e) {
     const removal = await fs.promises
