@@ -262,6 +262,30 @@ jobs:
       - name: Build universal binary
         run: ./url-handler/build.sh build/cc-candybar-url-handler
 
+      - name: Check terminal geometry
+        run: ./bar-window-native/check.sh
+
+      - name: Restore window helper built from these sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/cc-candybar-window
+            build/cc-candybar-window.source
+          key: window-helper-v1-${{ hashFiles('bar-window-native/*.swift', 'bar-window-native/build.sh') }}
+
+      - name: Build universal window helper when its source changes
+        run: ./bar-window-native/build.sh build/cc-candybar-window
+
+      - name: Upload window helper
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-candybar-window
+          path: |
+            build/cc-candybar-window
+            build/cc-candybar-window.source
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -335,6 +359,8 @@ jobs:
           # The URL handler app's binary, which `cc-candybar install` wraps in
           # an app bundle (src/install/index.ts FORWARDER_BIN names it).
           for platform in darwin-arm64 darwin-x64; do
+            install -m 0755 artifacts/cc-candybar-window/cc-candybar-window "npm/cc-candybar-${platform}/bin/"
+            install -m 0644 artifacts/cc-candybar-window/cc-candybar-window.source "npm/cc-candybar-${platform}/bin/"
             cp "artifacts/cc-candybar-url-handler/cc-candybar-url-handler" \
                "npm/cc-candybar-${platform}/bin/cc-candybar-url-handler"
             chmod 0755 "npm/cc-candybar-${platform}/bin/cc-candybar-url-handler"
