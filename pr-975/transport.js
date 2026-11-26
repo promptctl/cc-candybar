@@ -78620,8 +78620,16 @@ function mainRenderer(parts, stores) {
         retireSession(parts, event.session);
         return;
       case "effect-done": {
-        if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
-        if (parts.acts.done(event.of, event.session, event.outcome)) return;
+        if (parts.verbs.changeDone(event.of, event.outcome, effects)) {
+          if (event.session !== null && event.outcome.kind !== "closing")
+            feeds.wake(event.session, "interaction", time.tick);
+          return;
+        }
+        if (parts.acts.done(event.of, event.session, event.outcome)) {
+          if (event.session !== null && (event.outcome.kind === "failed" || event.outcome.kind === "refused"))
+            feeds.wake(event.session, "interaction", time.tick);
+          return;
+        }
         const delivery = deliveries.get(event.of);
         if (delivery === void 0)
           throw new Error(
@@ -89434,7 +89442,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.242.0";
+var PACKAGE_VERSION = "1.242.1";
 
 // src/daemon/stats.ts
 var ROLLING_WINDOW_MS = 6e4;
