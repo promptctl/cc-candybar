@@ -2,11 +2,10 @@
 // character with its ink and ground at the frame's depth, and every seam the
 // joiner drew between two cells.
 //
-// [LAW:one-source-of-truth] The one reader of a seam. The closing sweep, the
-// 256-colour and ansi checks and the nightly theme-identity audit all read a
-// join through here, so "the cell an arrow leaves" means one thing in all of
-// them: the ground of the column drawn just before it on its line, spaces
-// included, read through reverse video.
+// [LAW:one-source-of-truth] The one reader of a seam. The closing sweep and
+// the 256-colour and ansi checks read a join through here, so "the cell an
+// arrow leaves" means one thing in all of them: the ground of the column drawn
+// just before it on its line, spaces included, read through reverse video.
 
 import { ColorSpec } from "@promptctl/rich-js";
 import type { Frame } from "../../src/render/frame";
