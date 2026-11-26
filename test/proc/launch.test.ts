@@ -18,7 +18,17 @@ import { type LaunchCategory, type Launcher } from "../../src/proc/launcher";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
-import { nap, running, type Nap } from "../helpers/nap";
+import { heldGrandchild } from "../helpers/held-grandchild";
+
+function processEnded(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") return true;
+    throw err;
+  }
+}
 
 function makeSpyHandle(): {
   handle: LaunchStatsHandle;
@@ -194,14 +204,7 @@ describe("launch (async)", () => {
         );
         expect(r[stream]).toBe("a".repeat(MAX_CAPTURED_BYTES));
         const pid = Number(fs.readFileSync(pidFile, "utf8"));
-        await until(() => {
-          try {
-            process.kill(pid, 0);
-            return false;
-          } catch {
-            return true;
-          }
-        }, "the endless writer's end");
+        await until(() => processEnded(pid), "the endless writer's end");
       });
     },
   );
@@ -316,22 +319,20 @@ describe("launch (async)", () => {
   });
 
   it('aborting the signal terminates the child\'s whole group and reports "aborted" once it is reaped', async () => {
-    // `sh` waits on the `sleep` it started, so the sleep is a grandchild: only
-    // a process-group signal reaches it. The abort comes once the sleep runs.
-    const sleep = nap(scratch, 5);
+    await using child = await heldGrandchild();
     const controller = new AbortController();
     const pending = launch({
       bin: "/bin/sh",
-      args: ["-c", sleep.command],
+      args: ["-c", child.command],
       category: "user-shell",
       signal: controller.signal,
     });
-    const pid = await sleep.started();
+    await child.started();
     controller.abort();
     const r = await pending;
     // The outcome, not the ending signal: see the timeout test above.
     expect(r).toMatchObject({ ok: false, reason: "aborted" });
-    await until(() => !running(pid), "the grandchild sleep ending");
+    await child.ended();
   });
 
   it("with both triggers armed, the timeout that fired first owns the cause; a later abort is inert", async () => {
@@ -791,11 +792,9 @@ describe("launch — per-category rate-limit", () => {
 // launched it. Cutting the lifeline's pipe is the EOF that process's death
 // gives it, however the process died; the daemon e2e kills a real launcher.
 describe("the lifeline", () => {
-  // A `sleep` under `sh`, so the group holds a grandchild a signal to `sh`
-  // alone would orphan.
-  const grandchild = (sleep: Nap) => ({
+  const shell = (command: string) => ({
     bin: "/bin/sh",
-    args: ["-c", `${sleep.command}; echo late`],
+    args: ["-c", `${command}; echo late`],
     category: "user-shell" as const,
   });
 
@@ -811,18 +810,18 @@ describe("the lifeline", () => {
   });
 
   it("ends every group in flight when the launcher's pipe closes", async () => {
-    const sleep = nap(scratch, 30);
-    const pending = launch(grandchild(sleep));
-    const pid = await sleep.started();
+    await using child = await heldGrandchild();
+    const pending = launch(shell(child.command));
+    await child.started();
     lifeline().cut();
     const r = await pending;
     expect(r).toMatchObject({ ok: false, reason: "signal", stdout: "" });
-    await until(() => !running(pid), "the grandchild sleep ending");
+    await child.ended();
   });
 
   it("a lost lifeline stands as a warning, and the next launch replaces it holding every group in flight", async () => {
-    const firstSleep = nap(scratch, 30);
-    const first = launch(grandchild(firstSleep));
+    await using firstChild = await heldGrandchild();
+    const first = launch(shell(firstChild.command));
     const { pid: lostPid } = lifeline();
     process.kill(lostPid!, "SIGKILL");
     await until(
@@ -834,20 +833,17 @@ describe("the lifeline", () => {
       message:
         "programs launched now would outlive their launcher if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
     });
-    const secondSleep = nap(scratch, 30);
-    const second = launch(grandchild(secondSleep));
+    await using secondChild = await heldGrandchild();
+    const second = launch(shell(secondChild.command));
     const replacement = lifeline();
     expect(replacement.pid).not.toBe(lostPid);
-    const pids = [await firstSleep.started(), await secondSleep.started()];
+    await Promise.all([firstChild.started(), secondChild.started()]);
     await until(() => lifelineWarning() === null, "the replacement running");
     expect(heard.at(-1)).toBe(null);
     replacement.cut();
     expect(await first).toMatchObject({ ok: false, reason: "signal" });
     expect(await second).toMatchObject({ ok: false, reason: "signal" });
-    await until(
-      () => !pids.some(running),
-      "both grandchild sleeps ending",
-    );
+    await Promise.all([firstChild.ended(), secondChild.ended()]);
   });
 });
 
@@ -1073,7 +1069,7 @@ describe("a launcher's scope", () => {
     await launch({ bin: "/bin/echo", category: "user-shell" });
 
     expect(lifeline().pid).toBeUndefined();
-    await until(() => !running(pid!), "the lifeline exiting");
+    await until(() => processEnded(pid!), "the lifeline exiting");
     expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });
 });

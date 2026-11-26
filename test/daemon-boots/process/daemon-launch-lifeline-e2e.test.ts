@@ -10,13 +10,12 @@ import path from "node:path";
 
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { renderBody } from "../../helpers/daemon-e2e";
-import { nap, running } from "../../helpers/nap";
+import { heldGrandchild } from "../../helpers/held-grandchild";
 import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
 } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);
 
@@ -39,16 +38,15 @@ describe("a launch child in flight dies with the daemon that launched it", () =>
     ["its shutdown", "SIGTERM"],
     ["a SIGKILL", "SIGKILL"],
   ] as const)("ended by %s", async (_how, signal) => {
-    const sleep = nap(projectDir, 61);
+    await using child = await heldGrandchild();
     const config = path.join(projectDir, "waiting.json5");
     writeFileSync(
       config,
-      `{ variables: { doc: { kind: 'shell', command: ${JSON.stringify(sleep.command)}, cache: { never: true } } }, segments: { mark: { template: '{{ .doc }}' } }, root: { h: ['mark'] } }`,
+      `{ variables: { doc: { kind: 'shell', command: ${JSON.stringify(child.command)}, cache: { never: true } } }, segments: { mark: { template: '{{ .doc }}' } }, root: { h: ['mark'] } }`,
     );
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-lifeline-e2e");
     try {
       const daemon = await spawnDaemonWithEnv(prepared.env);
-      let pid: number;
       try {
         await sendDaemonRequest(prepared.sockPath, {
           v: PROTOCOL_VERSION,
@@ -59,14 +57,12 @@ describe("a launch child in flight dies with the daemon that launched it", () =>
             config,
           ]),
         });
-        pid = await sleep.started();
+        await child.started();
       } finally {
         await daemon.stop(signal);
       }
-      await until(() => !running(pid), "the sleep ending with its daemon");
+      await child.ended();
     } finally {
-      // A failed case leaves nothing behind either.
-      sleep.end();
       prepared.removeTmpDirs();
     }
   });

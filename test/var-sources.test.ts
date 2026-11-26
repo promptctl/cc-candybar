@@ -10,7 +10,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { EventEmitter } from "events";
-import { nap, running } from "./helpers/nap";
+import { heldGrandchild } from "./helpers/held-grandchild";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import type { Delivery } from "../src/daemon/foundations/stats-snapshot";
 import {
@@ -3724,26 +3724,21 @@ describe("SourceRegistry — in-flight runs", () => {
   });
 
   it("the owner's close aborts an in-flight shell run: the child tree dies and nothing is published", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-registry-abort-"));
-    try {
-      const sleep = nap(dir, 5);
-      const { store, registry } = make();
-      registry.declareShell("s", `${sleep.command}; echo done`, {
-        cwd: process.cwd(),
-        env: SHELL_ENV,
-        parse: text("pending"),
-        cache: { kind: "never" },
-      });
-      const pid = await sleep.started();
-      registry.dispose();
-      heldOf(registry).held.close();
-      heldOf(registry).runs.close();
-      await until(() => !running(pid), "the run's grandchild ending", 3000);
-      expect(store.stored("s")).toEqual(pendingOf("unread"));
-      expect(registry.getLastError("s")).toBeUndefined();
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+    await using child = await heldGrandchild();
+    const { store, registry } = make();
+    registry.declareShell("s", `${child.command}; echo done`, {
+      cwd: process.cwd(),
+      env: SHELL_ENV,
+      parse: text("pending"),
+      cache: { kind: "never" },
+    });
+    await child.started();
+    registry.dispose();
+    heldOf(registry).held.close();
+    heldOf(registry).runs.close();
+    await child.ended();
+    expect(store.stored("s")).toEqual(pendingOf("unread"));
+    expect(registry.getLastError("s")).toBeUndefined();
   });
 });
 
