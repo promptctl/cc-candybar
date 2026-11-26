@@ -2,6 +2,168 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-968",
+      "ref": "refs/pull/968/merge",
+      "sha": "fca485de42452ae2a788dbcd2b26d5a062277c15",
+      "timestamp": "2026-11-26T05:59:49.712Z",
+      "commits": [
+        {
+          "sha": "fca485de42452ae2a788dbcd2b26d5a062277c15",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:57:49Z",
+          "message": "Merge 1bd0a2de023cff0c81daf0e050acb8417199fb10 into bee4d68899303097cdf3530e031aa66ec1dc1f7c\n"
+        },
+        {
+          "sha": "1bd0a2de023cff0c81daf0e050acb8417199fb10",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:57:35-07:00",
+          "message": "test(ssh): pin click failures to the initiating turn\n"
+        },
+        {
+          "sha": "ef5803e4533121c1d715737c777e7a0ce32a8d05",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:56:28-07:00",
+          "message": "Merge commit '877f90b5b' into candybar-ssh-links-16rz.6oi\n"
+        },
+        {
+          "sha": "877f90b5bdd646c63080ae1da564c9f3a8cbd036",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:55:13-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-bar-window-hpro.akk\n\n# Conflicts:\n#\ttest/__snapshots__/default-menu-bytes.test.ts.snap\n#\ttest/daemon-boots/worker/daemon-lane-setup-e2e.test.ts\n"
+        },
+        {
+          "sha": "c448229a3b71ac120f9d9c156770b868b5d7add5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:54:20-07:00",
+          "message": "Merge window feed protocol and preserve connection-owned SSH verdicts\n"
+        },
+        {
+          "sha": "b5e3819ed784ba34974733c88d7f744fe401895f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:51:59-07:00",
+          "message": "fix(ssh): refuse an explicit null destination before running a click\n"
+        },
+        {
+          "sha": "5d8b7a8fa74a6e766482a50204c593d9cac51ed6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:51:04-07:00",
+          "message": "test(window): save every renderer switch through the menu\n"
+        },
+        {
+          "sha": "9ccaaf59675ddbd998a5106b63b0dc3fd35e03c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:50:13-07:00",
+          "message": "Merge renderer menu into window lane and verify its new toggle\n"
+        },
+        {
+          "sha": "aac5b009aa42e53a33a14345cb6182efad3b6b23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:45:25-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-ssh-links-16rz.6oi\n\n# Conflicts:\n#\tsrc/daemon/reply.ts\n#\tsrc/renderer-interface/click-arrival.ts\n#\tsrc/renderer-interface/interface.ts\n#\tsrc/renderer-interface/wire.ts\n#\ttest/helpers/click.ts\n#\ttest/unit/drawn-click-target.test.ts\n#\ttest/unit/link-signing.test.ts\n#\ttest/unit/renderer-config.test.ts\n"
+        },
+        {
+          "sha": "19585af5c82fca5a10948cf9a0a62b8899dd5ea7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:07-07:00",
+          "message": "fix(window): distinguish the window lane from renderer wire version 19\n"
+        },
+        {
+          "sha": "9f91b084bb5bc72e77d57519f8bc6f1ffa34157b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:42:43-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-bar-window-hpro.akk\n"
+        },
+        {
+          "sha": "074143686836e48fcc23412d39f5c072249b613b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:39:54-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
+        },
+        {
+          "sha": "595b71d14a02671706913efefe900e7dda8f03ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:38:32-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
+        },
+        {
+          "sha": "ba765379794a61525fec2b26ffb7c4e784da7a37",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:38:32-07:00",
+          "message": "fix(settings-menu): share row order and verify saved renderer switches\n"
+        },
+        {
+          "sha": "5bf6313fc45fba695dab17400dd6c0591351cde5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:33-07:00",
+          "message": "refactor(ssh): let the click connection own desktop act delivery\n"
+        },
+        {
+          "sha": "24f90b85823d0ea3187e278eb6074325ce20c86e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:06:44-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
+        },
+        {
+          "sha": "e79dd1149b50c1cbc96389a7dffb64b684573804",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:03:59-07:00",
+          "message": "fix(ssh): settle cold clicks in their own turn and distinguish remote files from folders\n"
+        },
+        {
+          "sha": "cf441f771e9880b2b6a4aa58b3a4de26e4360734",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:54:28-07:00",
+          "message": "test(follow): cover the window lane in the native client\n"
+        },
+        {
+          "sha": "59e9972a7a38c5916ec622784d78463893059b96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T03:43:29-07:00",
+          "message": "fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n"
+        },
+        {
+          "sha": "ec6e772eb7c0de33cbb3005d84a8c36406a197d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T03:19:33-07:00",
+          "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
+        },
+        {
+          "sha": "7791b2ce8c10b68a72118c4fb1954932ecb83ab5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T02:30:35-07:00",
+          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
+        },
+        {
+          "sha": "f383ef936de918f8ea459f998babc1ce8bf8646f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:38:17-07:00",
+          "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
       "sha": "a7b570da0f812b566134eec63571923c18a1dd07",
@@ -317,63 +479,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:54:38-07:00",
           "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets; lane switches under 📺 renderer (#964)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        }
-      ]
-    },
-    {
-      "version": "pr-968",
-      "ref": "refs/pull/968/merge",
-      "sha": "afd5d7447ceec05972be600961d3597ba13e31e8",
-      "timestamp": "2026-11-26T05:54:13.047Z",
-      "commits": [
-        {
-          "sha": "afd5d7447ceec05972be600961d3597ba13e31e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:52:13Z",
-          "message": "Merge b5e3819ed784ba34974733c88d7f744fe401895f into 9b01fa771aca2c9d48588a1646094f09f858199f\n"
-        },
-        {
-          "sha": "b5e3819ed784ba34974733c88d7f744fe401895f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:51:59-07:00",
-          "message": "fix(ssh): refuse an explicit null destination before running a click\n"
-        },
-        {
-          "sha": "aac5b009aa42e53a33a14345cb6182efad3b6b23",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:45:25-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-ssh-links-16rz.6oi\n\n# Conflicts:\n#\tsrc/daemon/reply.ts\n#\tsrc/renderer-interface/click-arrival.ts\n#\tsrc/renderer-interface/interface.ts\n#\tsrc/renderer-interface/wire.ts\n#\ttest/helpers/click.ts\n#\ttest/unit/drawn-click-target.test.ts\n#\ttest/unit/link-signing.test.ts\n#\ttest/unit/renderer-config.test.ts\n"
-        },
-        {
-          "sha": "5bf6313fc45fba695dab17400dd6c0591351cde5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:08:33-07:00",
-          "message": "refactor(ssh): let the click connection own desktop act delivery\n"
-        },
-        {
-          "sha": "e79dd1149b50c1cbc96389a7dffb64b684573804",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:03:59-07:00",
-          "message": "fix(ssh): settle cold clicks in their own turn and distinguish remote files from folders\n"
-        },
-        {
-          "sha": "59e9972a7a38c5916ec622784d78463893059b96",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T03:43:29-07:00",
-          "message": "fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n"
-        },
-        {
-          "sha": "ec6e772eb7c0de33cbb3005d84a8c36406a197d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T03:19:33-07:00",
-          "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
         }
       ]
     }

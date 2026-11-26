@@ -16613,12 +16613,12 @@ var require_util4 = __commonJS({
       AggregateError: AggregateError2,
       kEmptyObject: Object.freeze({}),
       once(callback) {
-        let called = false;
+        let called2 = false;
         return function(...args) {
-          if (called) {
+          if (called2) {
             return;
           }
-          called = true;
+          called2 = true;
           callback.apply(this, args);
         };
       },
@@ -17499,12 +17499,12 @@ var require_destroy = __commonJS({
       return this;
     }
     function _destroy(self2, err, cb) {
-      let called = false;
+      let called2 = false;
       function onDestroy(err2) {
-        if (called) {
+        if (called2) {
           return;
         }
-        called = true;
+        called2 = true;
         const r = self2._readableState;
         const w = self2._writableState;
         checkError(err2, w, r);
@@ -17630,13 +17630,13 @@ var require_destroy = __commonJS({
       process2.nextTick(constructNT, stream);
     }
     function constructNT(stream) {
-      let called = false;
+      let called2 = false;
       function onConstruct(err) {
-        if (called) {
+        if (called2) {
           errorOrDestroy(stream, err !== null && err !== void 0 ? err : new ERR_MULTIPLE_CALLBACK());
           return;
         }
-        called = true;
+        called2 = true;
         const r = stream._readableState;
         const w = stream._writableState;
         const s = w || r;
@@ -19817,13 +19817,13 @@ var require_writable = __commonJS({
       return state.ending && !state.destroyed && state.constructed && state.length === 0 && !state.errored && state.buffered.length === 0 && !state.finished && !state.writing && !state.errorEmitted && !state.closeEmitted;
     }
     function callFinal(stream, state) {
-      let called = false;
+      let called2 = false;
       function onFinish(err) {
-        if (called) {
+        if (called2) {
           errorOrDestroy(stream, err !== null && err !== void 0 ? err : ERR_MULTIPLE_CALLBACK());
           return;
         }
-        called = true;
+        called2 = true;
         state.pendingcb--;
         if (err) {
           const onfinishCallbacks = state[kOnFinished].splice(0);
@@ -28485,7 +28485,6 @@ var ENVIRONMENT_NEEDED = "environment";
 var UNKNOWN_REQUEST_KIND = "unknown kind";
 var CONNECT_TIMEOUT_MS = 50;
 var TOTAL_BUDGET_MS = 150;
-var RENDER_ENCODINGS = ["ansi", "frame"];
 var CLIENT_HINT_FIELDS = Object.keys({
   termCols: true,
   termRows: true,
@@ -43052,19 +43051,43 @@ function oneOfPresentJson(schema) {
 
 // src/config/lanes.ts
 init_globals();
+
+// src/render/encodings.ts
+init_globals();
+var RENDER_ENCODINGS = ["ansi", "frame"];
+var SAYS_WHERE_POINTER_ACTS = {
+  ansi: false,
+  "hit-mapped": true,
+  frame: true
+};
+
+// src/config/lanes.ts
 var IN_TMUX = 'ne .tmux.pane ""';
 var LANES = {
   statusline: {
     switch: { setting: "experimentalStatusline", on: true },
     label: "\u{1F9EA} statusline (B)",
-    handsOff: false
+    handsOff: false,
+    encoding: "ansi",
+    called: "the statusline"
   },
   pane: {
     switch: { setting: "experimentalPane", on: true },
     label: "\u{1F9EA} tmux pane (C)",
-    handsOff: true
+    handsOff: true,
+    encoding: "hit-mapped",
+    called: "the pane"
+  },
+  // The native window the bar floats in beside the session's terminal.
+  window: {
+    switch: { setting: "experimentalWindow", on: true },
+    label: "\u{1F9EA} window (D)",
+    handsOff: true,
+    encoding: "frame",
+    called: "the window"
   }
 };
+var ownsPointer = (lane) => SAYS_WHERE_POINTER_ACTS[LANES[lane].encoding];
 var LANE_NAMES = Object.keys(LANES);
 var TOGGLED_LANES = LANE_NAMES.filter(
   (lane) => LANES[lane].switch.on === true
@@ -43110,9 +43133,10 @@ var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
 // src/config/globals-fields.ts
 var control = (label2, place, {
+  line = 0,
   previews = [],
   shown = "true"
-} = {}) => ({ label: label2, place, previews, shown });
+} = {}) => ({ label: label2, place, line, previews, shown });
 var enumValues = (members, optionDomain, facets = {}) => ({
   spec: optionalEnumSpec(members),
   domain: { from: members },
@@ -43242,7 +43266,7 @@ var menuGlyphSpec = {
 var LANE_ROWS = Object.fromEntries(
   TOGGLED_LANES.map((lane) => [
     LANES[lane].switch.setting,
-    boolSetting(false, control(LANES[lane].label, "toggles"))
+    boolSetting(false, control(LANES[lane].label, "renderer"))
   ])
 );
 var GLOBAL_FIELDS = {
@@ -43253,20 +43277,19 @@ var GLOBAL_FIELDS = {
     "theme",
     paletteOrRuleSpec,
     { themes: "themes" },
-    control("\u{1F3A8} theme", "door")
+    control("\u{1F3A8} theme", "look")
   ),
   // The config default for the PRESET — a named fragment from `presets:`
   // whose globals and root the session renders. Membership in the merged
   // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
   // globals may NOT carry it: a
   // preset selecting a preset is a second, cyclic authority over which is
-  // active. Its control sits on the door's first line, one click away:
-  // switching arrangement is what people open the menu for.
+  // active.
   preset: selection(
     "preset",
     optionalStringSpec(),
     { from: "presets" },
-    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
+    control("\u25A6 preset", "presets", { previews: ["layout", "presetDelete"] })
   ),
   // The config default for the STYLE (a named theme adaptation from
   // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
@@ -43284,7 +43307,7 @@ var GLOBAL_FIELDS = {
     "effect",
     effectOrRuleSpec,
     { from: EFFECT_NAMES },
-    control("\u2728 effect", "look")
+    control("\u2728 effect", "look", { line: 1 })
   ),
   // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
   endcaps: enumSetting(
@@ -43330,7 +43353,7 @@ var GLOBAL_FIELDS = {
   // Whether a placement that appears mid-session fades in over 20 s
   // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
   // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
-  transitions: boolSetting(false, control("fade in/out", "look")),
+  transitions: boolSetting(false, control("fade in/out", "look", { line: 2 })),
   // How fast every decorative animation runs — the effects above, fades and
   // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
   // the rate the session's animation clock advances against the wall clock
@@ -43338,7 +43361,7 @@ var GLOBAL_FIELDS = {
   animationSpeed: enumSetting(
     ANIMATION_SPEED_NAMES,
     "1x",
-    control("speed", "look")
+    control("speed", "look", { line: 1 })
   ),
   // Whether a root row that exceeds the usable width soft-wraps, between
   // cells and through a cell wider than a line (the legacy display.autoWrap).
@@ -57580,20 +57603,20 @@ function bindsComputedAction(template, helpers) {
 }
 var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
 function templateFunctions(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
+  const called2 = /* @__PURE__ */ new Set();
   for (const { code: code2 } of callGraph(template, helpers)) {
     for (const [name] of code2.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
-      called.add(name);
+      called2.add(name);
     }
   }
-  return called;
+  return called2;
 }
 function templateHelperCalls(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
+  const called2 = /* @__PURE__ */ new Set();
   for (const { code: code2, dot, root } of callGraph(template, helpers)) {
-    for (const { name } of helperCalls(code2, dot, root)) called.add(name);
+    for (const { name } of helperCalls(code2, dot, root)) called2.add(name);
   }
-  return called;
+  return called2;
 }
 var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
 function bindSelf(template, self2, ns) {
@@ -57802,18 +57825,18 @@ var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${
 // src/config/menu-places.ts
 init_globals();
 var TABS = [
-  { member: "session", label: "\u26A1 session" },
-  { member: "look", label: "\u{1F3A8} look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "\u{1F4D0} layout" },
-  { member: "config", label: "\u2699 config" }
+  { member: "look", label: "\u{1F3A8} look", line: "first" },
+  { member: "presets", label: "\u{1F4DA} saves & presets", line: "first" },
+  { member: "session", label: "\u26A1 session", line: "strip" },
+  { member: "config", label: "\u2699 config", line: "strip" }
 ];
+var tabsOnLine = (line) => TABS.filter((tab) => tab.line === line);
 var TAB_LABEL = Object.fromEntries(
   TABS.map((t2) => [t2.member, t2.label])
 );
 var SUBMENUS = {
   gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "padding", trigger: "\u{1F9EA} toggles" }
+  renderer: { beside: "padding", trigger: "\u{1F4FA} renderer" }
 };
 var SUBMENU_NAMES = Object.keys(SUBMENUS);
 var PLACE = perSetting(
@@ -57821,14 +57844,19 @@ var PLACE = perSetting(
 );
 var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
 var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
-var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
+var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : TAB_LABEL[place];
 var settingMenuPath = (name) => placePath(PLACE[name]);
-var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
+function settingRows(place) {
+  const settings = SETTING_NAMES.filter((name) => PLACE[name] === place);
+  const lines2 = [...new Set(settings.map((name) => SETTINGS[name].line))];
+  return lines2.sort((a, b) => a - b).map((line) => settings.filter((name) => SETTINGS[name].line === line));
+}
+var settingsByPlace = () => TABS.map((t2) => t2.member).flatMap((top) => [
   top,
   ...SUBMENU_NAMES.filter((s) => within(s, top))
 ]).map((place) => ({
   path: placePath(place),
-  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
+  names: settingRows(place).flat()
 })).filter(({ names }) => names.length > 0);
 var laneOffReason = (lane) => {
   const { setting, on: on2 } = LANES[lane].switch;
@@ -57898,6 +57926,7 @@ var LANE_PLACES = [
     Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
   )
 ].join(" or ");
+var tabsOn = (line) => tabsOnLine(line).map((t2) => t2.label).join(", ");
 var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
 var EDIT_MODE_HELP = [
   `${ADD_GLYPH} inserts`,
@@ -57913,6 +57942,10 @@ var LANE_HELP = {
   pane: [
     "animates the bar in a tmux pane under this session's",
     "on: opens that pane \xB7 off: closes it"
+  ],
+  window: [
+    "animates the bar in a window that follows this session's terminal",
+    "on: a window following this session draws the bar \xB7 off: it stops"
   ]
 };
 var HELP_TEXT = `
@@ -57941,11 +57974,11 @@ Configuration:
   Every bar carries a settings menu, whatever your config says \u2014 no config
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
-  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t2) => t2.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  the settings listed below, its first line holds \u25C1 back, the tabs
+  ${tabsOn("first")}, \u270E arrange (edit mode) and \u{1F4BE} save, which appears while
+  you have unsaved changes and writes them to your config file. Under it are
+  the tabs ${tabsOn("strip")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.presets} the preset and a new preset.
   A change applies to this session at once.
   Where each setting is in the menu: the globals field that sets it in a
   config file, then the control's label.
@@ -58095,7 +58128,7 @@ var PREVIEWS = {
   palette: { template: "{{ themePreview }}" },
   // While the preset ring is on a preset the user made
   // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
+  // 📚 saves & presets tab makes one.
   presetDelete: {
     when: `{{ and ${USER_LAYER_WRITABLE} (not .preset.bundled) }}`,
     template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
@@ -58183,21 +58216,22 @@ var menuControl = (name) => {
     submenus: submenusBeside(name)
   };
 };
-var CONTROLS = Object.keys(SETTINGS).map(menuControl);
-var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
+var CONTROL_BY_NAME = perSetting(menuControl);
+var CONTROLS = Object.values(CONTROL_BY_NAME);
 var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
 var markedDisplay = (place) => (text5) => `(print ${templateLiteral(text5)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
   controlsUnder(place)
 )}))`;
-var controlsAt = (place) => controlsIn(place).flatMap(
-  (c) => [
+var nodesForControl = (name) => {
+  const c = CONTROL_BY_NAME[name];
+  return [
     controlNode(c),
     ...c.help,
     ...c.submenus.map(
       (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
     )
-  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
-);
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }));
+};
 var SETTINGS_WRITTEN_KEYS = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
 );
@@ -58315,13 +58349,6 @@ function anchorUnderGate(node, gated2 = false) {
   return node.children.some((child) => anchorUnderGate(child, here));
 }
 var PLACE_BODY = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
-  },
   // The quick actions, then the commands typed into Claude Code beside the
   // auto-compact window they would summarize at.
   session: {
@@ -58336,8 +58363,11 @@ var PLACE_BODY = {
     ],
     after: []
   },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  // The theme with its gear and the endcaps, then what moves — the effect and
+  // its speed — then the rest, each on its own row.
+  look: { direction: "vertical", content: [], after: [] },
+  // The preset, then the cell that saves the bar as a new one.
+  presets: { direction: "horizontal", content: [], after: [seg(PRESET_SAVE)] },
   config: { direction: "horizontal", content: [], after: [] },
   // The settings that adapt the theme, then — while the look they make
   // differs from the theme's own default — the cell that saves it as that
@@ -58347,14 +58377,25 @@ var PLACE_BODY = {
     content: [],
     after: [seg(THEME_DEFAULT_SEG)]
   },
-  toggles: { direction: "horizontal", content: [], after: [] }
+  renderer: { direction: "horizontal", content: [], after: [] }
 };
 function placeBody(place) {
   const { direction, content, after } = PLACE_BODY[place];
+  const lines2 = settingRows(place).map((row) => row.flatMap(nodesForControl));
   return {
     kind: "container",
     direction,
-    children: [...content, ...controlsAt(place), ...after]
+    children: [
+      ...content,
+      ...direction === "vertical" ? lines2.map(
+        (children2) => ({
+          kind: "container",
+          direction: "horizontal",
+          children: children2
+        })
+      ) : lines2.flat(),
+      ...after
+    ]
   };
 }
 function expandAnchor(node) {
@@ -58371,24 +58412,25 @@ function expandAnchor(node) {
   }
   return expandContainer(node);
 }
+var tabsOn2 = (line) => tabsOnLine(line).map(
+  ({ member }) => disclosureNode(tabSeg(member), tabRef(member), placeBody(member), "drop")
+);
 function doorBody() {
   return {
     kind: "container",
     direction: "vertical",
     children: [
-      placeBody("door"),
       {
         kind: "container",
         direction: "horizontal",
-        children: TABS.map(
-          ({ member }) => disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop"
-          )
-        )
-      }
+        children: [
+          seg(BACK_SEG),
+          ...tabsOn2("first"),
+          seg(EDIT_SEG),
+          seg(SAVE_SEG)
+        ]
+      },
+      { kind: "container", direction: "horizontal", children: tabsOn2("strip") }
     ]
   };
 }
@@ -65300,9 +65342,12 @@ function laneDefaultsAfterReset(config, bundled, project) {
     })
   );
 }
+var called = (lanes) => lanes.map((lane) => LANES[lane].called).join(" and ");
+var capitalized = (text5) => text5.charAt(0).toUpperCase() + text5.slice(1);
 function laneHandoff(sessionId2, writable2, lanes, remaining) {
   const personal = writable2.filter((role) => role !== "project");
-  const reason = personal.length === 0 ? "No writable personal config layer for the pane" : lanes.some((lane) => remaining[lane]) ? "The pane stays enabled by its config" : null;
+  const pinned = lanes.filter((lane) => remaining[lane]);
+  const reason = personal.length === 0 ? `No writable personal config layer for ${called(lanes)}` : pinned.length > 0 ? `${capitalized(called(pinned))} ${pinned.length === 1 ? "stays" : "stay"} enabled by ${pinned.length === 1 ? "its" : "their"} config` : null;
   const line = reason === null ? diagnosticSpan(
     HANDOFF_BUTTON,
     actionTarget(
@@ -73625,6 +73670,37 @@ function drawEvent(kind, facts, outcome) {
 
 // src/daemon/foundations/render-answers.ts
 init_globals();
+
+// src/render/hit-map.ts
+init_globals();
+var linksOf = (run2) => run2.link !== void 0 && isBarLink(run2.link) ? { [PLAIN_CLICK]: run2.link, ...run2.region?.gestures } : null;
+var sameRegion2 = (a, links, run2) => a.action === (run2.region?.name ?? null) && Object.keys(a.links).length === Object.keys(links).length && Object.entries(links).every(([gesture, link]) => a.links[gesture] === link);
+function hitMapOf(frame2) {
+  return frame2.rows.map(({ runs }) => {
+    const hits = [];
+    let column = 0;
+    for (const run2 of runs) {
+      const to = column + cellLen(run2.text);
+      const links = linksOf(run2);
+      const last2 = hits.at(-1);
+      if (links !== null) {
+        if (last2 !== void 0 && last2.to === column && sameRegion2(last2, links, run2))
+          hits[hits.length - 1] = { ...last2, to };
+        else
+          hits.push({
+            from: column,
+            to,
+            action: run2.region?.name ?? null,
+            links
+          });
+      }
+      column = to;
+    }
+    return hits;
+  });
+}
+
+// src/daemon/foundations/render-answers.ts
 function framed(value, encode, failure2) {
   try {
     return { sent: value, frame: encodeJsonFrame(encode(value)), unsent: null };
@@ -73649,6 +73725,14 @@ var renderFailure = (failure2) => failure2.kind === "bad-request" ? { ...failure
 var RENDER_ANSWERS = {
   ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
   frame: (frame2) => ({ ok: true, frame: frame2 })
+};
+var FEED_ANSWERS = {
+  ...RENDER_ANSWERS,
+  "hit-mapped": (frame2) => ({
+    ok: true,
+    output: composeBar(frame2),
+    hits: hitMapOf(frame2)
+  })
 };
 
 // src/renderer/draw-bar.ts
@@ -74511,11 +74595,11 @@ var Feeds = class {
   following(sessionId2) {
     return followingOf(this.feeds.get(sessionId2)?.viewers);
   }
-  // [LAW:one-source-of-truth] What the pane that owns the session's pointer
-  // last said of it, as the host handed it with who watches: none while no
-  // pane owns it.
+  // [LAW:one-source-of-truth] What the follower that owns the session's
+  // pointer last said of it, as the host handed it with who watches: none
+  // while no follower owns it.
   pointerOf(sessionId2) {
-    return this.feeds.get(sessionId2)?.viewers.lanes.pane?.pointer ?? null;
+    return this.feeds.get(sessionId2)?.viewers.pointer ?? null;
   }
   // [LAW:nothing-unseen] What each lane of the session's frames is doing at
   // `tick`: its subscribers, the frames that went out to it in the last
@@ -80425,7 +80509,7 @@ function linkSignerOver(key) {
 }
 
 // src/click/read.ts
-function linksOf({ rows }) {
+function linksOf2({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
     for (const { link, text: text5 } of runs.filter((run2) => run2.text !== "")) {
@@ -84576,10 +84660,10 @@ function subscription(req) {
     );
   if (req.owner === void 0)
     return { kind: "subscribe", sessionId: sessionId2.id, lane, owner: null };
-  if (lane !== "pane")
+  if (!ownsPointer(lane))
     return refuse2(
       "BAD_REQUEST",
-      `only the pane lane has an owner: got ${lane}`
+      `only a lane whose frames say where a pointer acts has an owner (${LANE_NAMES.filter(ownsPointer).join(", ")}): got ${lane}`
     );
   const owner = parseOwner(req.owner);
   if (owner.kind !== "ok")
@@ -85071,8 +85155,7 @@ function refusedClick(problem, signed) {
   return { kind: "refused", failure: badRequest(problem), signed };
 }
 function routeClick(parts, read3, actsOn) {
-  if (read3.kind === "refused")
-    return refusedClick(read3.problem, read3.signed);
+  if (read3.kind === "refused") return refusedClick(read3.problem, read3.signed);
   const { source } = read3;
   if (source === void 0) return { ...read3, target: parts.renderer, actsOn };
   const target = parts.rendererForClick(source.renderer);
@@ -90589,37 +90672,6 @@ var Collector = class {
 
 // src/daemon/frame-feed.ts
 init_globals();
-
-// src/render/hit-map.ts
-init_globals();
-var linksOf2 = (run2) => run2.link !== void 0 && isBarLink(run2.link) ? { [PLAIN_CLICK]: run2.link, ...run2.region?.gestures } : null;
-var sameRegion2 = (a, links, run2) => a.action === (run2.region?.name ?? null) && Object.keys(a.links).length === Object.keys(links).length && Object.entries(links).every(([gesture, link]) => a.links[gesture] === link);
-function hitMapOf(frame2) {
-  return frame2.rows.map(({ runs }) => {
-    const hits = [];
-    let column = 0;
-    for (const run2 of runs) {
-      const to = column + cellLen(run2.text);
-      const links = linksOf2(run2);
-      const last2 = hits.at(-1);
-      if (links !== null) {
-        if (last2 !== void 0 && last2.to === column && sameRegion2(last2, links, run2))
-          hits[hits.length - 1] = { ...last2, to };
-        else
-          hits.push({
-            from: column,
-            to,
-            action: run2.region?.name ?? null,
-            links
-          });
-      }
-      column = to;
-    }
-    return hits;
-  });
-}
-
-// src/daemon/frame-feed.ts
 var MAX_REQUESTS = 256;
 function ownerOf(watched) {
   let found2 = null;
@@ -90630,7 +90682,7 @@ function ownerOf(watched) {
 }
 var failedFeed = (refusal2) => {
   const encoded = { json: JSON.stringify(refusal2) };
-  return { resp: encoded, statusline: encoded };
+  return { answer: () => encoded, failure: encoded.json };
 };
 function covers(prior, offered) {
   if (prior.json !== offered.json) return false;
@@ -90645,24 +90697,27 @@ function settleWrite(write, delivered) {
 }
 function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
-  const answer2 = (published, hits) => ({
-    json: JSON.stringify({
-      ...RENDER_ANSWERS.ansi(published),
-      ...hits !== void 0 && { hits }
-    }),
-    displayedEvents: frame2.displayedEvents
-  });
   const bar = publish(frame2.bar, source);
-  const statusline = answer2(
-    frame2.handoff === null ? bar : publish(frame2.handoff, source),
-    void 0
-  );
-  let resp;
+  const shown = {
+    resp: bar,
+    statusline: frame2.handoff === null ? bar : publish(frame2.handoff, source)
+  };
+  const answers = /* @__PURE__ */ new Map();
   return {
-    statusline,
-    get resp() {
-      return resp ??= answer2(bar, hitMapOf(bar));
-    }
+    answer(lane) {
+      let answer2 = answers.get(lane);
+      if (answer2 === void 0) {
+        answer2 = {
+          json: JSON.stringify(
+            FEED_ANSWERS[LANES[lane].encoding](answerOf2(shown, lane))
+          ),
+          displayedEvents: frame2.displayedEvents
+        };
+        answers.set(lane, answer2);
+      }
+      return answer2;
+    },
+    failure: null
   };
 }
 var FrameFeeds = class {
@@ -90683,7 +90738,7 @@ var FrameFeeds = class {
   // what it holds is unknown (a delivery failed).
   handed = JSON.stringify({});
   frameDemands = 0;
-  panesSaid = 0;
+  ownersSaid = 0;
   pushed = 0;
   refused = 0;
   lookups = 0;
@@ -90772,26 +90827,26 @@ var FrameFeeds = class {
       }
     });
   }
-  // [LAW:single-enforcer] A pane's facts of its pointer, as a subscribe and
-  // each report admit them: its latest, and the latest word of any pane.
-  held(pane) {
-    return { ...pane, said: ++this.panesSaid };
+  // [LAW:single-enforcer] An owner's facts of its pointer, as a subscribe and
+  // each report admit them: its latest, and the latest word of any owner.
+  held(owner) {
+    return { ...owner, said: ++this.ownersSaid };
   }
-  // A pane's report of its pointer: held for the pane, which then owns the
+  // An owner's report of its pointer: held for the owner, which then owns the
   // session's pointer, and the renderer is handed the change like any change
-  // of who watches. A pane that does not follow the session is refused.
-  pointerOf(sessionId2, pane) {
+  // of who watches. An owner that does not follow the session is refused.
+  pointerOf(sessionId2, owner) {
     const watched = this.watched.get(sessionId2);
     const reporting = [...watched?.followers.values() ?? []].filter(
-      (follower) => follower.owner?.id === pane.id
+      (follower) => follower.owner?.id === owner.id
     );
     if (watched === void 0 || reporting.length === 0)
       return {
         kind: "refused",
-        reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId2)}`
+        reason: `no owner ${JSON.stringify(owner.id)} follows session ${JSON.stringify(sessionId2)}`
       };
     const owned = ownerOf(watched)?.id ?? null;
-    const admitted = this.held(pane);
+    const admitted = this.held(owner);
     for (const follower of reporting) follower.owner = admitted;
     this.ownerMoved(sessionId2, owned, watched);
     this.announce();
@@ -90830,16 +90885,12 @@ var FrameFeeds = class {
   }
   seen(sessionId2, watched) {
     const lanes = {};
-    const owner = ownerOf(watched);
-    for (const [sub2, follower] of watched.followers) {
+    for (const sub2 of watched.followers.keys()) {
       const seen = lanes[sub2.lane];
       lanes[sub2.lane] = {
         ...seen,
         subscribers: (seen?.subscribers ?? 0) + 1,
-        drawing: (seen?.drawing ?? false) || sub2.drawing(),
-        // [LAW:one-source-of-truth] The owner's facts ride on its own lane: the
-        // renderer reads the pointer where it reads who watches.
-        ...owner !== null && follower.owner === owner && { pointer: owner.pointer }
+        drawing: (seen?.drawing ?? false) || sub2.drawing()
       };
     }
     return {
@@ -90849,6 +90900,7 @@ var FrameFeeds = class {
           return viewed === void 0 ? [] : [[lane, viewed]];
         })
       ),
+      pointer: ownerOf(watched)?.pointer ?? null,
       shown: this.shown(sessionId2),
       joined: watched.frameDemand
     };
@@ -90917,12 +90969,11 @@ var FrameFeeds = class {
           renderer,
           session
         });
-        for (const { lane } of watched.followers.keys())
-          answerOf2(encoded, lane);
+        for (const { lane } of watched.followers.keys()) encoded.answer(lane);
       } catch (error) {
         const refused2 = renderFailed(error);
         encoded = failedFeed(refused2);
-        if (watched.last?.resp.json !== encoded.resp.json)
+        if (watched.last?.failure !== encoded.failure)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused2.error)}`
@@ -91030,7 +91081,7 @@ var FrameFeeds = class {
       done?.(false);
       return;
     }
-    const answer2 = answerOf2(encoded, sub2.lane);
+    const answer2 = encoded.answer(sub2.lane);
     let latest;
     for (const write2 of follower.writes) latest = write2;
     if (latest !== void 0 && covers(latest.answer, answer2)) {
@@ -96782,7 +96833,7 @@ async function render2(size) {
   const drawn = await frame(size);
   return {
     ansi: composeBar(drawn),
-    links: linksOf(drawn).map((l) => ({
+    links: linksOf2(drawn).map((l) => ({
       ...l,
       does: describeLink(l, sessionId)
     })),
