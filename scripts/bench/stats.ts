@@ -20,7 +20,7 @@ export interface Distribution {
 // an even count is the upper of the two middle samples, and p99 of fifty ticks
 // is the slowest tick. It returns a sample that was observed, never an
 // interpolation between two.
-export function percentile(sorted: readonly number[], p: number): number {
+function percentile(sorted: readonly number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!;
 }
 

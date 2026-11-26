@@ -29,7 +29,7 @@ async function listed(tier: Tier): Promise<string[]> {
     process.execPath,
     [JEST, "--config", `jest.${tier}.config.js`, "--listTests"],
     { cwd: ROOT, maxBuffer: 16 * 1024 * 1024 },
-  ).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? "" }));
+  );
   return stdout
     .split("\n")
     .filter((line) => line !== "")

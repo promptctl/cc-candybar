@@ -1,19 +1,16 @@
-import { distributionOf, percentile } from "../../scripts/bench/stats";
-
-describe("percentile", () => {
-  it("is a sample that was observed, never an interpolation", () => {
-    const sorted = [1, 2, 4, 8, 16];
-    for (const p of [0, 0.1, 0.5, 0.9, 0.99, 1]) {
-      expect(sorted).toContain(percentile(sorted, p));
-    }
-  });
-
-  it("is the one sample of a series of one", () => {
-    expect(percentile([7], 0.99)).toBe(7);
-  });
-});
+import { distributionOf } from "../../scripts/bench/stats";
 
 describe("distributionOf", () => {
+  it("reports observed samples as its quantiles", () => {
+    const samples = [1, 2, 4, 8, 16];
+    const { p50, p90, p99 } = distributionOf(samples);
+    expect([p50, p90, p99]).toEqual([4, 16, 16]);
+  });
+
+  it("reports the only sample at every quantile of a singleton", () => {
+    expect(distributionOf([7])).toMatchObject({ p50: 7, p90: 7, p99: 7 });
+  });
+
   it("reads the same series however it arrives", () => {
     const ascending = Array.from({ length: 200 }, (_, i) => i + 1);
     const shuffled = [...ascending].reverse();
