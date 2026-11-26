@@ -29,6 +29,8 @@ export const TABS = [
   readonly label: string;
   readonly line: TabLine;
 }>;
+export const tabsOnLine = (line: TabLine) =>
+  TABS.filter((tab) => tab.line === line);
 export type TabName = (typeof TABS)[number]["member"];
 // [LAW:types-are-the-program] Total over TABS: the one place the totality
 // `Object.fromEntries` cannot see is asserted.
@@ -93,6 +95,16 @@ const placePath = (place: Place): string =>
 export const settingMenuPath = (name: SettingName): string =>
   placePath(PLACE[name]);
 
+// Both the menu and CLI help traverse the same rows. Settings sharing a line
+// retain the order of their declarations.
+export function settingRows(place: Place): SettingName[][] {
+  const settings = SETTING_NAMES.filter((name) => PLACE[name] === place);
+  const lines = [...new Set(settings.map((name) => SETTINGS[name].line))];
+  return lines
+    .sort((a, b) => a - b)
+    .map((line) => settings.filter((name) => SETTINGS[name].line === line));
+}
+
 // Every place that holds a control, in the order the menu opens them — each
 // tab, followed by the submenus inside it — with
 // the settings whose controls it holds, in the order it draws them.
@@ -108,10 +120,7 @@ export const settingsByPlace = (): readonly PlaceSettings[] =>
     ])
     .map((place) => ({
       path: placePath(place),
-      // A stable sort: line by line, each line in row order.
-      names: SETTING_NAMES.filter((name) => PLACE[name] === place).sort(
-        (a, b) => SETTINGS[a].line - SETTINGS[b].line,
-      ),
+      names: settingRows(place).flat(),
     }))
     .filter(({ names }) => names.length > 0);
 

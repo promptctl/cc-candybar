@@ -15,6 +15,8 @@ pnpm bar --links 🍫                             # …and list what every link 
 
 **And since then (brandon-theme-swatch-8v9r, 2026-10-15):** the theme picker of the proposal is built. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background. The theme control is `🎨 theme ▀▀▀` with a `⚙` beside it; its label opens `◀ ? ▶ ← ▀▀▀ [▀▀▀] ▀▀▀ →` (previous, random, next, then pages of swatches with the one in force bracketed) over a two-row demo, and the gear opens the style, variation and shade controls. Configure mode's placement theme is the same picker. A list opens on the page holding the current value.
 
+The settings door now leads with 🎨 look, 📚 saves & presets and ✎ arrange. The drawings below record earlier menu locations. For the current rows, see the [settings menu map](SETTINGS-MENU-MAP.md).
+
 ## At a glance
 
 | Element | What it is for | Where it is used | Authored as |

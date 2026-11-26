@@ -94,6 +94,7 @@ import {
 } from "./door.js";
 import {
   SETTINGS,
+  perSetting,
   type SettingName,
   type SettingProjection,
 } from "./setting-projections.js";
@@ -102,6 +103,8 @@ import {
   SUBMENUS,
   SUBMENU_NAMES,
   TABS,
+  settingRows,
+  tabsOnLine,
   isSubmenu,
   within,
   type Place,
@@ -147,8 +150,8 @@ const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 
 // ─── The tabs (brandon-menu-tabs-wnu.qqz) ───────────────────────────────────
 //
-// [LAW:one-type-per-behavior] The door's second line is five tabs, one open at
-// a time, its body dropped below the strip. A tab strip is an accordion: every
+// [LAW:one-type-per-behavior] The door's two lines share one open tab, whose
+// body drops below the line of its trigger. Every
 // tab is a disclosure trigger on ONE key, which holds the open tab's name, so
 // opening one closes the rest and the open one wears its state colour like any
 // open trigger. The key starts closed, and closing the door returns it there, as
@@ -291,7 +294,7 @@ const PREVIEWS: Readonly<Record<PreviewName, SegmentDecl>> = {
   palette: { template: "{{ themePreview }}" },
   // While the preset ring is on a preset the user made
   // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
+  // 📚 saves & presets tab makes one.
   presetDelete: {
     when: `{{ and ${USER_LAYER_WRITABLE} (not .preset.bundled) }}`,
     template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
@@ -489,12 +492,8 @@ const menuControl = (name: SettingName): MenuControl => {
     submenus: submenusBeside(name),
   };
 };
-const CONTROLS: readonly MenuControl[] = (
-  Object.keys(SETTINGS) as SettingName[]
-).map(menuControl);
-
-const controlsIn = (place: Place): readonly MenuControl[] =>
-  CONTROLS.filter((c) => c.place === place);
+const CONTROL_BY_NAME = perSetting(menuControl);
+const CONTROLS = Object.values(CONTROL_BY_NAME);
 // What a place holds, the controls inside its submenus included.
 const controlsUnder = (place: Place): readonly MenuControl[] =>
   CONTROLS.filter((c) => within(c.place, place));
@@ -509,25 +508,17 @@ const markedDisplay =
     `(print ${templateLiteral(text)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
       controlsUnder(place),
     )}))`;
-// The controls on one line of `place`, each followed by the submenus laid
-// beside it, whose bodies are laid the same way.
-// [LAW:single-enforcer] Everything laid at a control — the control, its `(?)`,
-// its submenus — is offered where the control is, by the control's one gate.
-const controlsAt = (place: Place, line: number): LayoutNode[] =>
-  controlsIn(place)
-    .filter((c) => c.line === line)
-    .flatMap((c) =>
-      [
-        controlNode(c),
-        ...c.help,
-        ...c.submenus.map((s) =>
-          disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
-        ),
-      ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` })),
-    );
-// The lines `place`'s controls sit on, first to last.
-const linesOf = (place: Place): number[] =>
-  [...new Set(controlsIn(place).map((c) => c.line))].sort((a, b) => a - b);
+// [LAW:single-enforcer] A control, its help and its submenus share one gate.
+const nodesForControl = (name: SettingName): LayoutNode[] => {
+  const c = CONTROL_BY_NAME[name];
+  return [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map((s) =>
+      disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
+    ),
+  ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` }));
+};
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -544,7 +535,7 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
 
 // [LAW:single-enforcer] `⟲` resets the controls the session it is drawn in is
 // offered, by the same gate each control is drawn by and the `•` counts it by:
-// a control offered only to some sessions (the renderer, inside tmux) is reset
+// a control offered only to some sessions is reset
 // where it is drawn, and never by a reset-all clicked where it is not, since
 // the sessions share the setting.
 const RESET_ALL = confirmStep(
@@ -555,7 +546,7 @@ const RESET_ALL = confirmStep(
 
 // ─── The save cell ──────────────────────────────────────────────────────────
 //
-// [LAW:one-source-of-truth] `💾 save 3 ↶ ↷ ⟲` — one cell beside the preset,
+// [LAW:one-source-of-truth] `💾 save 3 ↶ ↷ ⟲` — one cell beside arrange,
 // each part present exactly while it has something to do, read from what the
 // daemon publishes every render: save while there are drafts, undo and redo
 // while their stack has a step, `⟲` while any control's reset would change
@@ -820,7 +811,7 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
 // lines: a vertical one stacks each as a row, a horizontal one runs them on.
 function placeBody(place: Place): ContainerNode {
   const { direction, content, after } = PLACE_BODY[place];
-  const lines = linesOf(place).map((line) => controlsAt(place, line));
+  const lines = settingRows(place).map((row) => row.flatMap(nodesForControl));
   return {
     kind: "container",
     direction,
@@ -877,7 +868,7 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
 // The tabs whose triggers lead from `line`, each with its body dropped below
 // that line.
 const tabsOn = (line: TabLine): LayoutNode[] =>
-  TABS.filter((tab) => tab.line === line).map(({ member }) =>
+  tabsOnLine(line).map(({ member }) =>
     disclosureNode(tabSeg(member), tabRef(member), placeBody(member), "drop"),
   );
 
@@ -1126,7 +1117,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
     const resetCell = `{{ if and ${USER_LAYER_WRITABLE} .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
-    // Whom a control is offered to gates where it is laid (`controlsAt`); its
+    // Whom a control is offered to gates where it is laid (`nodesForControl`); its
     // list hangs on it, so hiding it hides the list.
     artifacts.segments[controlSeg(c.name)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,

@@ -3,7 +3,7 @@ import { HELP_GLYPH_CLOSED } from "./config/help";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./config/edit-glyphs";
 import { NODE_FLAGS } from "./cli-flags";
 import {
-  TABS,
+  tabsOnLine,
   TAB_LABEL,
   settingMenuPath,
   settingsByPlace,
@@ -21,7 +21,7 @@ const LANE_PLACES = [
 
 // The labels of the tabs one line of the menu leads, in order.
 const tabsOn = (line: TabLine): string =>
-  TABS.filter((t) => t.line === line)
+  tabsOnLine(line)
     .map((t) => t.label)
     .join(", ");
 

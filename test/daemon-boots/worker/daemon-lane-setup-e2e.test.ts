@@ -19,6 +19,7 @@ import {
 } from "../../../src/click/wire";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../../src/config/door";
+import { sharedMenuStateKey } from "../../../src/config/menu-keys";
 import { linksOf } from "../../../src/click/read";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
@@ -27,6 +28,7 @@ import {
   click,
   render,
   drawnLink,
+  linkTo,
   urlWriting,
 } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../../scripts/lib/daemon/log";
@@ -129,15 +131,28 @@ esac
         ),
       ),
     );
-  test("an enabled tmux pane opens from config on the first render", async () => {
+  test("renderer switches saved through the menu reach a fresh session on its first render", async () => {
     const sid = "lane-pane-config";
     const file = path.join(projectDir, "pane.json5");
-    writeFileSync(file, "{ globals: { experimentalPane: true } }");
-    await render(daemon, sid, projectDir, inTmux(sid), [
-      "cc-candybar",
-      "--config",
-      file,
-    ]);
+    writeFileSync(file, CONFIG);
+    const bar = (session: string) =>
+      render(daemon, session, projectDir, inTmux(session), ["cc-candybar", "--config", file]);
+    const follow = async (session: string, label: string) =>
+      click(daemon, linkTo(await bar(session), label));
+    const openRenderer = async (session: string) => {
+      await click(daemon, urlWriting(await bar(session), SETTINGS_ANCHOR, SETTINGS_OPEN));
+      await click(daemon, urlWriting(await bar(session), "candybar.tab", "config"));
+      await click(daemon, urlWriting(await bar(session), sharedMenuStateKey("candybar.pickers"), "renderer"));
+    };
+
+    const editor = "lane-pane-editor";
+    await openRenderer(editor);
+    await follow(editor, `☐ ${LANES.statusline.label}`);
+    await follow(editor, `☐ ${LANES.pane.label}`);
+    expect(readFileSync(file, "utf8")).toBe(CONFIG);
+    await follow(editor, "💾 save 2");
+
+    await bar(sid);
     const opened = (): string[] =>
       logLines(env).filter((line) =>
         line.includes(`bar-pane sid=${JSON.stringify(sid)} pane="%7" desired=on — opened bar pane %9`),
@@ -146,11 +161,12 @@ esac
       () => opened().length > 0,
       () => `the configured bar pane (${logLines(env).filter((line) => line.includes("bar-pane")).join("; ")})`,
     );
-    await render(daemon, sid, projectDir, inTmux(sid), [
-      "cc-candybar",
-      "--config",
-      file,
-    ]);
+    await openRenderer(sid);
+    const fresh = textOf(await bar(sid));
+    for (const lane of ["statusline", "pane"] as const) {
+      expect(fresh).toContain(`☑ ${LANES[lane].label}`);
+    }
+    expect(fresh).not.toContain("💾 save");
     expect(opened()).toHaveLength(1);
     await render(daemon, "lane-pane-next", projectDir, inTmux(sid), args());
     await until(
