@@ -4,15 +4,22 @@
     {
       "version": "pr-973",
       "ref": "refs/pull/973/merge",
-      "sha": "38363aaf1a47e6c1ed40530ecc330f45db0a1819",
-      "timestamp": "2026-11-26T07:16:20.289Z",
+      "sha": "47b5f5d15be328ac653dc9559102f5b41133aa81",
+      "timestamp": "2026-11-26T07:22:00.798Z",
       "commits": [
         {
-          "sha": "38363aaf1a47e6c1ed40530ecc330f45db0a1819",
+          "sha": "47b5f5d15be328ac653dc9559102f5b41133aa81",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:15:20Z",
-          "message": "Merge f21ab929940c6c288b7666bb8f1d83e1506bc82f into 464af8b20e2735f30bb63189b976c0a20543e17e\n"
+          "timestamp": "2026-11-26T07:20:54Z",
+          "message": "Merge f7ecf57c19212cc15d6b18cb957ee5e40521aa44 into 464af8b20e2735f30bb63189b976c0a20543e17e\n"
+        },
+        {
+          "sha": "f7ecf57c19212cc15d6b18cb957ee5e40521aa44",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T00:20:42-07:00",
+          "message": "test(proc): prove escaped writes and settlement in one owned fixture\n"
         },
         {
           "sha": "f21ab929940c6c288b7666bb8f1d83e1506bc82f",
