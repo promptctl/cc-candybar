@@ -1067,8 +1067,7 @@ function routeClick(
   read: ReadClick,
   actsOn: ActsOn,
 ): RoutedClick {
-  if (read.kind === "refused")
-    return refusedClick(read.problem, read.signed);
+  if (read.kind === "refused") return refusedClick(read.problem, read.signed);
 
   const { source } = read;
   if (source === undefined) return { ...read, target: parts.renderer, actsOn };

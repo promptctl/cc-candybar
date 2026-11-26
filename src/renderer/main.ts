@@ -132,8 +132,7 @@ export function mainRenderer(
     configs: [],
   };
   let wake: Tick | null = null;
-  // [LAW:no-ambient-temporal-coupling] Waiting work carries its intent and
-  // session. Its origin and live request are read when it resumes.
+  // Read the current origin and live request when the session opens its view.
   const opening = new Set<SessionId>();
   // [LAW:no-ambient-temporal-coupling] A session waits in `opening` until
   // its view opens, by this or by a request's answer: an opening that throws

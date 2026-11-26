@@ -2099,7 +2099,7 @@ describe("a click", () => {
     context: live === null ? null : heardContextOf(live),
   });
 
-  test("a parked click waits for the current origin and reads its latest context", async () => {
+  test("a refused click never moves to a new origin, and a later click uses the latest context", async () => {
     const seen: Array<SessionContext | null> = [];
     const t = renderer({
       ...NO_VERBS,
@@ -2108,13 +2108,16 @@ describe("a click", () => {
     const first = checked("%1", "first.json5");
     const current = checked("%2");
     const firstWaiting = answered(await contextTurn(t, first));
-    const waiting = answered(await handIn(t.r, click("act")));
-    expect(waiting.record).toContainEqual(["parked", "click"]);
+    expect(threw(await handIn(t.r, click("act"))).failure.message).toContain(
+      "no configuration for this click",
+    );
 
     const currentWaiting = answered(await contextTurn(t, current));
     answered(await configsNamed(t, firstWaiting));
     expect(seen).toEqual([]);
     answered(await configsNamed(t, currentWaiting));
+    expect(seen).toEqual([]);
+    answered(await handIn(t.r, click("act", current)));
     expect(seen).toEqual([heardContextOf(current)]);
   });
 
@@ -2316,7 +2319,7 @@ describe("a click", () => {
     expect(t.rig.cache.holdsConfig(origin)).toBe(false);
   });
 
-  test("a session whose opening threw opens on its origin's next config, and a parked click resumes once", async () => {
+  test("a session whose opening threw can recover without replaying an earlier click", async () => {
     const acted = jest.fn();
     const home = unreadableHome();
     const t = renderer(
@@ -2326,7 +2329,9 @@ describe("a click", () => {
     );
     const context = checked();
     answered(await contextTurn(t, context));
-    answered(await handIn(t.r, click("act", context)));
+    expect(threw(await handIn(t.r, click("act", context))).failure.message).toContain(
+      "no configuration for this click",
+    );
     const { discovery } = t.rig.cache.configs;
     discovery.follow([context.requested]);
     const config = discovery.snapshotOf(context.requested);
@@ -2337,27 +2342,29 @@ describe("a click", () => {
       config,
     } as const;
 
-    // The opening's load throws. The click, which reads no config, still
-    // resumes in the same turn.
     home.unreadable = true;
     expect(threw(await handIn(t.r, configEvent)).failure.message).toContain(
       UNREADABLE_HOME,
     );
     expect(viewOf(t.rig)).toBeNull();
-    expect(acted).toHaveBeenCalledTimes(1);
+    expect(acted).not.toHaveBeenCalled();
 
     home.unreadable = false;
     answered(await handIn(t.r, configEvent));
     expect(viewOf(t.rig)?.facts()).toBe(context);
+    expect(acted).not.toHaveBeenCalled();
+    answered(await handIn(t.r, click("act", context)));
     expect(acted).toHaveBeenCalledTimes(1);
   });
 
-  test("retirement cancels a parked click and the late config runs no handler", async () => {
+  test("a late config after retirement runs no handler for an earlier refused click", async () => {
     const acted = jest.fn();
     const t = renderer({ ...NO_VERBS, click: acted });
     const context = checked();
     const waiting = answered(await contextTurn(t, context));
-    answered(await handIn(t.r, click("act", context)));
+    expect(threw(await handIn(t.r, click("act", context))).failure.message).toContain(
+      "no configuration for this click",
+    );
 
     const retired = answered(
       await handIn(t.r, { kind: "retire", session: SESSION }),
