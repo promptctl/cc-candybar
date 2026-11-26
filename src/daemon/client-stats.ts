@@ -173,6 +173,9 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  external      ${fmtBytes(s.externalBytes)}`);
   lines.push(`  arrayBuffers  ${fmtBytes(s.arrayBuffersBytes)}`);
   lines.push(`  memory        ${memoryWords(s.host)}`);
+  lines.push(
+    `  link key      ${s.linkKeyId.kind === "ok" ? s.linkKeyId.value : `unavailable: ${s.linkKeyId.reason}`}`,
+  );
   lines.push(``);
   lines.push(`requests`);
   lines.push(`  total         ${s.requests.total}`);

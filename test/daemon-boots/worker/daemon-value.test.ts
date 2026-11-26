@@ -702,6 +702,19 @@ describe("the daemon is a value", () => {
     await close(daemon);
   });
 
+  // `cc-candybar ssh-config` names the forwarded socket by this id, and the URL
+  // handler reads the same id from the links the daemon signs.
+  test("the key id its stats name is the one its links carry", async () => {
+    const daemon = construct();
+    const { linkKeyId } = await statsOf(daemon);
+    const link = drawnHere("cc-candybar://copy/x");
+    expect(linkKeyId).toEqual({
+      kind: "ok",
+      value: link.slice(link.lastIndexOf("#") + 1).split("/")[0],
+    });
+    await close(daemon);
+  });
+
   test("the clock it is given is the instant the bar is drawn at", async () => {
     writeConfig(
       `{ segments: { at: { template: 'EPOCH={{ unixEpoch now }}' } }, root: { h: ['at'] } }`,
