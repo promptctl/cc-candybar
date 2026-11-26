@@ -46,7 +46,11 @@ export class InstallChanges {
     while (created[0] !== made) created.unshift(path.dirname(created[0]!));
     for (const directory of created) {
       this.log.landed(directory, () => {
-        if (fs.readdirSync(directory).length === 0) fs.rmdirSync(directory);
+        if (fs.readdirSync(directory).length > 0)
+          throw new Error(
+            "kept the directory because it contains files added during installation",
+          );
+        fs.rmdirSync(directory);
       });
     }
   }

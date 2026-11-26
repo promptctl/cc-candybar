@@ -370,7 +370,7 @@ function stageRuntime(
 }
 
 // The runtime staged on its own, as one change that stands or is put back.
-export function runStageRuntime(
+function runStageRuntime(
   sourceDist: string,
   dir: string,
   platform: NodeJS.Platform,
@@ -889,6 +889,7 @@ function planSettings(
 
 // Exports for testing
 export const __test__ = {
+  runStageRuntime,
   infoPlist,
   planSettings,
   resolveRenderEntry,

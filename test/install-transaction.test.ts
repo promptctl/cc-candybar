@@ -363,7 +363,7 @@ describe("an install that fails", () => {
       { lsregister: () => fs.writeFileSync(forwarded, "forward in use") },
     );
     expect(() => install([], checkout("v1"), w, "darwin")).toThrow(
-      /lsregister failed/,
+      /could not put back:[^]*kept the directory because it contains files added during installation/,
     );
     expect(fs.readFileSync(forwarded, "utf8")).toBe("forward in use");
     expect(Object.keys(tree()).sort()).toEqual([

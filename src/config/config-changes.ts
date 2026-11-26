@@ -73,9 +73,9 @@ export type Applied =
 
 const ABSENT: Read = { kind: "absent" };
 
-// [LAW:types-are-the-program] An absent file holds none. Text the span editor
-// refuses, one that holds no value among it, is unparsed: a change can only
-// replace it whole.
+// [LAW:types-are-the-program] A missing file has no values. An existing file
+// the editor cannot parse, including one containing only comments or whitespace,
+// can only be replaced whole.
 type Parsed =
   | { readonly kind: "none" }
   | { readonly kind: "unparsed" }

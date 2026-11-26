@@ -5,7 +5,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runStageRuntime } from "../src/install/index";
+import { __test__ as installer } from "../src/install/index";
+const { runStageRuntime } = installer;
 import { attachLauncherOf, attachPreloadOf, ATTACH_DIR } from "../src/attach-launcher";
 
 describe("staging the runtime", () => {

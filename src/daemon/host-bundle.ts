@@ -7,12 +7,10 @@ import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import { hostBundlePath } from "./paths";
 
 // The host's bundle record: which `index.mjs` the install runs the host from.
-// [LAW:single-enforcer] In this runtime the record's text
-// (`hostBundleRecordText`), which the install and a checkout's record both
-// write, and a client's reader (`readHostBundle`) are the only code that
-// touch the file, so a client that finds no host has exactly one answer to
-// "which code starts it". The Rust client mirrors the read (rust-client/src/main.rs
-// read_host_bundle), and only the file's name is diffed by check-protocol.
+// [LAW:single-enforcer] Both install paths record hostBundleRecordText's
+// representation. A client resolves the record here before starting a host.
+// The Rust client mirrors the read (rust-client/src/main.rs read_host_bundle).
+// check-protocol verifies the record's filename across clients.
 
 // [LAW:parse-dont-validate] The crossing from the file's text to a bundle a
 // spawn can use. `ok` is a recorded path that exists; `absent` is no record
