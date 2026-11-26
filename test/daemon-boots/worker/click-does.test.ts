@@ -5,7 +5,6 @@
 // clicks on one screen never read alike, a click that acts on the world never
 // reads as a session write, and the words change nothing about the click.
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -19,6 +18,7 @@ import {
   type DrawnLink,
 } from "../../../scripts/lib/drive-bar";
 import { textOf, type Frame } from "../../../src/render/frame";
+import { checkoutAt } from "../../helpers/checkout";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { doesOf, longNumbersSaid } from "../../helpers/click-words";
 import { jestTmpDir } from "../../helpers/jest-tmp";
@@ -135,21 +135,15 @@ const scratchDir = (name: string): string =>
   fs.mkdtempSync(path.join(scratchRoot, name));
 afterAll(() => fs.rmSync(scratchRoot, { recursive: true, force: true }));
 
+const plainCheckout = (): string => checkoutAt(scratchDir("click-does-"));
 // A git checkout whose path holds a long run of digits, as an agent worktree's
 // name can: the bar runs from it, and the words that name it say so.
-const digitCheckout = (): string => {
-  const dir = scratchDir("click-does-12345678-");
-  execFileSync("git", ["init", "-q", dir], { stdio: "ignore" });
-  return dir;
-};
+const digitCheckout = (): string =>
+  checkoutAt(scratchDir("click-does-12345678-"));
 
 describe.each([
-  ["the default bar", () => null, () => process.cwd()],
-  [
-    "a bar with a plugin's long segment name",
-    pluginConfig,
-    () => process.cwd(),
-  ],
+  ["the default bar", () => null, plainCheckout],
+  ["a bar with a plugin's long segment name", pluginConfig, plainCheckout],
   [
     "a bar run from a checkout whose path holds digits",
     () => null,

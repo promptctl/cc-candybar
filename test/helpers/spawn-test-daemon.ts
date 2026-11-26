@@ -16,6 +16,7 @@ import {
   type DaemonPool,
 } from "./daemon-pool";
 import { processProbe } from "./host";
+import { untilTestEnds } from "./test-end";
 
 // The shared, machine-global pool every real-daemon-spawning test file uses,
 // read through this worker's own probe.
@@ -26,8 +27,11 @@ export const daemonPool: DaemonPool = createDaemonPool(
 );
 
 // [LAW:one-source-of-truth] How a daemon the suite starts takes its place
-// under the machine's ceiling.
-export const fromThePool: AcquireSlot = () => daemonPool.acquire();
+// under the machine's ceiling, waiting until a slot frees or `until` ends.
+export const fromThePool =
+  (until: AbortSignal): AcquireSlot =>
+  () =>
+    daemonPool.acquire({ until });
 
 // A daemon's slot is held in the jest worker's name, so while the worker lives
 // a daemon that is alive, stopped or not, counts against the machine's
@@ -41,5 +45,7 @@ export function spawnTestDaemon(
   pool: DaemonPool = daemonPool,
   entry: DaemonEntry = SOURCE_ENTRY,
 ): Promise<DaemonProcess> {
-  return spawnDaemonProcess(env, () => pool.acquire(), entry);
+  return untilTestEnds((ended) =>
+    spawnDaemonProcess(env, () => pool.acquire({ until: ended }), entry),
+  );
 }

@@ -522,7 +522,10 @@ function stepOf(
     : {
         kind: "moved",
         target: identity(change),
-        what: `${addressText(applied.at)} in the ${change.role} layer`,
+        what:
+          applied.kind === "incomplete"
+            ? `${file}: ${applied.reason}`
+            : `${addressText(applied.at)} in the ${change.role} layer`,
       };
 }
 

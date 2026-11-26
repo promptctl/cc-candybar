@@ -4,25 +4,20 @@
 // by its own shutdown, or by a SIGKILL that runs no cleanup at all. The
 // lifeline's own cases are held by test/proc/launch.test.ts.
 
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { renderBody } from "../../helpers/daemon-e2e";
+import { heldGrandchild } from "../../helpers/held-grandchild";
 import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
 } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);
-
-// A `sleep` no other process on the host runs, matched whole.
-const running = (seconds: string): boolean =>
-  spawnSync("pgrep", ["-f", `^sleep ${seconds}$`]).status === 0;
 
 describe("a launch child in flight dies with the daemon that launched it", () => {
   let projectDir: string;
@@ -40,13 +35,14 @@ describe("a launch child in flight dies with the daemon that launched it", () =>
   // The ticket's repro: a shell source whose command never answers while the
   // test runs, asked for once, so the daemon holds it in flight.
   test.each([
-    ["its shutdown", "SIGTERM", "61.861"],
-    ["a SIGKILL", "SIGKILL", "61.862"],
-  ] as const)("ended by %s", async (_how, signal, seconds) => {
+    ["its shutdown", "SIGTERM"],
+    ["a SIGKILL", "SIGKILL"],
+  ] as const)("ended by %s", async (_how, signal) => {
+    await using child = await heldGrandchild();
     const config = path.join(projectDir, "waiting.json5");
     writeFileSync(
       config,
-      `{ variables: { doc: { kind: 'shell', command: 'sleep ${seconds}', cache: { never: true } } }, segments: { mark: { template: '{{ .doc }}' } }, root: { h: ['mark'] } }`,
+      `{ variables: { doc: { kind: 'shell', command: ${JSON.stringify(child.command)}, cache: { never: true } } }, segments: { mark: { template: '{{ .doc }}' } }, root: { h: ['mark'] } }`,
     );
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-lifeline-e2e");
     try {
@@ -61,17 +57,12 @@ describe("a launch child in flight dies with the daemon that launched it", () =>
             config,
           ]),
         });
-        await until(() => running(seconds), `the daemon's sleep ${seconds}`);
+        await child.started();
       } finally {
         await daemon.stop(signal);
       }
-      await until(
-        () => !running(seconds),
-        `sleep ${seconds} ending with its daemon`,
-      );
+      await child.ended();
     } finally {
-      // A failed case leaves nothing behind either.
-      spawnSync("pkill", ["-f", `^sleep ${seconds}$`]);
       prepared.removeTmpDirs();
     }
   });

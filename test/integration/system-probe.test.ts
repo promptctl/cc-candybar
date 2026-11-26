@@ -16,11 +16,15 @@ processProbeContract("the system probe", () => ({
 }));
 
 describe("the system probe", () => {
-  // [LAW:behavior-not-structure] Covers the EPERM branch: a pid another user
-  // owns is no process of ours, since everything that names one of ours lives
-  // under a directory only we can read. pid 1 is root's, so kill(1,0) is EPERM
-  // for the non-root user this suite runs as; run as root, it is ours.
-  test("a pid another user owns (EPERM) is not ours", () => {
-    expect(probe.alive(1)).toBe(process.getuid?.() === 0);
+  test("a pid the kernel refuses to signal is not ours", () => {
+    const denied = jest.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("permission denied"), { code: "EPERM" });
+    });
+    try {
+      expect(probe.alive(123)).toBe(false);
+      expect(denied).toHaveBeenCalledWith(123, 0);
+    } finally {
+      denied.mockRestore();
+    }
   });
 });

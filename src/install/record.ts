@@ -2,9 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Host } from "../host";
 import { recordHostBundle } from "../daemon/host-bundle";
-import { isJsonObject } from "../claude-settings";
+import type { StatusLine } from "../claude-settings-read";
 import { firstShellWord } from "../shell-word";
-import type { JsonValue } from "../var-system/types.js";
 
 // [LAW:one-source-of-truth] What makes a bundle the install is the user's
 // statusline setting: it is the install when the setting runs it. The record
@@ -22,13 +21,13 @@ import type { JsonValue } from "../var-system/types.js";
 // resolves a symlinked entry before it imports the bundle beside it, and
 // reports the running bundle by its real path, so both are resolved here for a
 // symlinked entry or a checkout behind a symlinked directory to equal itself.
-// null for a setting that names no absolute entry: unset, another shape, or a
+// null for a setting that names no absolute entry: unset, no command, or a
 // command this cannot read without a shell.
 export function bundleNamedByStatusLine(
-  statusLine: JsonValue | undefined,
+  statusLine: StatusLine | null,
 ): string | null {
-  const command = isJsonObject(statusLine) ? statusLine.command : undefined;
-  const entry = typeof command === "string" ? firstShellWord(command) : null;
+  const command = statusLine?.command ?? null;
+  const entry = command === null ? null : firstShellWord(command);
   if (entry === null || !path.isAbsolute(entry)) return null;
   const named = path.resolve(
     path.dirname(realPathIfThere(entry)),
@@ -52,11 +51,11 @@ function realPathIfThere(file: string): string {
 // one: `<root>/bin/` is not inside `<root>-other/bin/` or a worktree nested in
 // `<root>`.
 function commandRunsEntryBeside(
-  statusLine: JsonValue | undefined,
+  statusLine: StatusLine | null,
   bundle: string,
 ): boolean {
-  const command = isJsonObject(statusLine) ? statusLine.command : undefined;
-  if (typeof command !== "string") return false;
+  const command = statusLine?.command ?? null;
+  if (command === null) return false;
   const bin = `${path.dirname(path.dirname(bundle))}${path.sep}bin${path.sep}`;
   const spelled = new RegExp(
     `(?<![\\w./-])${bin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
@@ -67,7 +66,7 @@ function commandRunsEntryBeside(
 // Whether the user's statusline setting runs `bundle`: its entry is the
 // command's first word, or the command spells the bundle's `bin/` directory.
 export function statusLineRunsBundle(
-  statusLine: JsonValue | undefined,
+  statusLine: StatusLine | null,
   bundle: string,
 ): boolean {
   return (
@@ -88,7 +87,7 @@ export interface NotTheInstall {
 
 export function recordIfInstall(
   bundle: string,
-  statusLine: JsonValue | undefined,
+  statusLine: StatusLine | null,
   host: Host,
 ): Recording | NotTheInstall {
   if (!statusLineRunsBundle(statusLine, bundle)) {

@@ -10,6 +10,7 @@ import {
   writeAtomic,
 } from "../utils/atomic-write.js";
 import type { SetAside, Unread } from "./foundations/stored-file.js";
+import { UndoLog, type UndoFailure } from "../utils/undo-log.js";
 
 export interface FileRewrite {
   readonly file: string;
@@ -50,11 +51,6 @@ export function setAside(file: string): FileRetirement {
   return { from, to };
 }
 
-interface RestoreFailure {
-  readonly file: string;
-  readonly error: Error;
-}
-
 // [LAW:types-are-the-program] A failed publication with failed restorations
 // carries the specific paths that need to be observed again.
 export type RevisionWrite =
@@ -68,7 +64,7 @@ export type RevisionWrite =
   | {
       readonly kind: "incomplete";
       readonly error: Error;
-      readonly unrestored: readonly [RestoreFailure, ...RestoreFailure[]];
+      readonly unrestored: readonly [UndoFailure, ...UndoFailure[]];
     };
 
 // One turn's batch: a state file that did not read, set aside before anything
@@ -83,34 +79,43 @@ export function writeRevisions(
   { setAside: unread, rewrites, retire }: Revisions,
   write: WriteConfigFile = writeConfigFile,
 ): RevisionWrite {
-  const written: Array<
-    FileRewrite & { readonly removedMode: number | undefined }
-  > = [];
+  const log = new UndoLog();
+  const files: string[] = [];
   // [LAW:no-ambient-temporal-coupling] The set-aside lands first, so no
   // rewrite can touch the bytes it keeps, and it is undone last.
   let aside: SetAside | null = null;
   try {
-    if (unread !== null)
-      aside = {
+    if (unread !== null) {
+      const kept: SetAside = {
         file: unread.file,
         reason: unread.reason,
         ...setAside(unread.file),
       };
-    for (const rewrite of rewrites) {
+      aside = kept;
+      files.push(kept.to);
+      log.landed(kept.from, () => {
+        try {
+          fs.renameSync(kept.to, kept.from);
+        } catch (rollback) {
+          // [LAW:no-silent-failure] The one path where the bytes stay aside:
+          // the failure says where they are.
+          const { message } = asError(rollback);
+          throw new Error(`${message} — its bytes are kept at ${kept.to}`);
+        }
+      });
+    }
+    for (const { file, was, will } of rewrites) {
       // [LAW:effects-at-boundaries] A removed file loses its mode with its
       // directory entry. Capture it before unlink so restoration can stage
       // the original permissions before making the file visible again.
       const removedMode =
-        rewrite.will === null && rewrite.was !== null
-          ? filePermissions(rewrite.file)
-          : undefined;
-      write(rewrite.file, rewrite.will);
-      written.push({ ...rewrite, removedMode });
+        will === null && was !== null ? filePermissions(file) : undefined;
+      write(file, will);
+      files.push(file);
+      // Removing a file already absent leaves no previous entry to restore.
+      if (will !== null || removedMode !== undefined)
+        log.landed(file, () => write(file, was, removedMode));
     }
-    const files = [
-      ...(aside === null ? [] : [aside.to]),
-      ...written.map(({ file }) => file),
-    ];
     if (retire !== null) {
       // [LAW:single-enforcer] Retire the directory entry itself, even a
       // symlink. Nothing else can fail after this entry goes away.
@@ -120,30 +125,7 @@ export function writeRevisions(
     return { kind: "ok", files, setAside: aside };
   } catch (cause) {
     const error = asError(cause);
-    // [LAW:no-silent-failure] Try every restore and name each failure.
-    const failed: RestoreFailure[] = [];
-    for (const { file, was, will, removedMode } of written.reverse()) {
-      // Removing a file already absent leaves no previous entry to restore.
-      if (will === null && removedMode === undefined) continue;
-      try {
-        write(file, was, removedMode);
-      } catch (rollback) {
-        failed.push({ file, error: asError(rollback) });
-      }
-    }
-    if (aside !== null)
-      try {
-        fs.renameSync(aside.to, aside.from);
-      } catch (rollback) {
-        // [LAW:no-silent-failure] The one path where the bytes stay aside:
-        // the failure says where they are.
-        const { message } = asError(rollback);
-        failed.push({
-          file: aside.from,
-          error: new Error(`${message} — its bytes are kept at ${aside.to}`),
-        });
-      }
-    const [first, ...remaining] = failed;
+    const [first, ...remaining] = log.undo();
     return first === undefined
       ? { kind: "failed", error }
       : { kind: "incomplete", error, unrestored: [first, ...remaining] };

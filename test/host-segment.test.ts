@@ -18,7 +18,6 @@ import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
-import os from "node:os";
 
 import {
   HostService,
@@ -50,6 +49,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  FIXTURE_HOST_READS,
   requestPayload,
   type FixtureOwners,
 } from "../scripts/lib/draw-fixtures/payload-owners";
@@ -113,7 +113,11 @@ describe("the host's sources", () => {
   // subcommand) builds the providers and renders nothing: it reads neither.
   test("nothing is read until a session declares it", async () => {
     const ledger = new RefreshLedger();
-    const host = new HostService({ clock: systemTimekeeper, ledger });
+    const host = new HostService({
+      clock: systemTimekeeper,
+      ledger,
+      reads: FIXTURE_HOST_READS,
+    });
     const counts = () =>
       ledger.snapshot().map((r) => [r.name, r.refreshes.first]);
     expect(counts()).toEqual([
@@ -137,9 +141,13 @@ describe("the host's sources", () => {
   // name it has now; a user lookup that failed is tried again.
   test("a held name and user are asked again on their period", async () => {
     jest.useFakeTimers();
-    const hostname = jest.spyOn(os, "hostname").mockReturnValue("before.lan");
+    let hostname = "before.lan";
     const ledger = new RefreshLedger();
-    const host = new HostService({ clock: systemTimekeeper, ledger });
+    const host = new HostService({
+      clock: systemTimekeeper,
+      ledger,
+      reads: { hostname: () => hostname, username: () => "u" },
+    });
     const holds = new Holds();
     try {
       const name = host.declareName(holds);
@@ -147,7 +155,7 @@ describe("the host's sources", () => {
       await jest.advanceTimersByTimeAsync(0);
       expect(name.current()).toEqual({ kind: "ok", value: "before" });
 
-      hostname.mockReturnValue("after.vpn");
+      hostname = "after.vpn";
       await jest.advanceTimersByTimeAsync(HOST_PERIOD_MS);
       expect(name.current()).toEqual({ kind: "ok", value: "after" });
       expect(ledger.snapshot().map((r) => [r.name, r.refreshes])).toEqual([
@@ -157,7 +165,6 @@ describe("the host's sources", () => {
     } finally {
       holds.close();
       host.close();
-      hostname.mockRestore();
       jest.useRealTimers();
     }
   });
@@ -166,8 +173,8 @@ describe("the host's sources", () => {
 describe("host identity in the render payload", () => {
   test("machine facts come from the daemon itself, no hint required", async () => {
     const payload = await payloadWith({});
-    expect(payload.host.name).toBe(shortHostname(os.hostname()));
-    expect(payload.host.user).toBe(os.userInfo().username);
+    expect(payload.host.name).toBe("fixture-box");
+    expect(payload.host.user).toBe("fixture-user");
   });
 
   test("a reported SSH session lands as ssh:true", async () => {

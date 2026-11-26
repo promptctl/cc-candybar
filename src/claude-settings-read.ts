@@ -3,44 +3,63 @@
 // (src/claude-settings.ts).
 
 import { types } from "node:util";
-import { JSON_DIALECT } from "./config/json5-edit.js";
+import { EMPTY_DOCUMENT, JSON_DIALECT } from "./config/json5-edit.js";
 import { failed, ok, type Failed, type Ok } from "./utils/outcome.js";
-import { readRegularTextSync } from "./utils/regular-text.js";
+import { readTextIfPresent } from "./utils/regular-text.js";
 import { type JsonObject, isJsonObject } from "./claude-settings";
-import type { JsonValue } from "./var-system/types.js";
 
 const cannotRead = (settingsPath: string, e: unknown): Error =>
   new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 
-// The settings file's bytes, for an editor that splices it. A missing file is
-// the one absence with a meaning — Claude Code has written nothing yet — so it
-// reads as the empty document.
-export function readClaudeSettingsText(settingsPath: string): string {
+// The settings file's bytes, or null when there is no file — the one absence
+// with a meaning: Claude Code has written nothing yet.
+export function readClaudeSettingsText(settingsPath: string): string | null {
   try {
-    return readRegularTextSync(settingsPath);
-  } catch (e) {
-    // [LAW:no-silent-failure] The install can create a missing settings file.
-    // A settings file it could not read is an error the user can act on.
-    if (
-      types.isNativeError(e) &&
-      "code" in e &&
-      (e.code === "ENOENT" || e.code === "ENOTDIR")
-    )
-      return "";
-    throw cannotRead(settingsPath, e);
+    return readTextIfPresent(settingsPath);
+  } catch (error) {
+    throw new Error(`cannot read ${messageOf(error)}`, { cause: error });
   }
 }
 
+// [LAW:types-are-the-program] A settings file as it was read.
+export interface ClaudeSettings {
+  // Its bytes, null when there is no file: what a write over it must find
+  // there still.
+  readonly text: string | null;
+  // The text an edit splices: the file's, or the empty document where Claude
+  // Code has written nothing yet.
+  readonly edited: string;
+  readonly document: JsonObject;
+}
+
 // [LAW:one-source-of-truth] The ONE reading of Claude Code's settings as a
-// document, shared by install and the auto-compact window.
-// Empty text — a missing file or a blank one — is the empty document; text
-// that does not parse, or parses to anything but an object, throws naming the
-// file ([LAW:no-silent-failure]: Claude Code is not running with whatever a
-// guess would say).
-export function readClaudeSettings(settingsPath: string): JsonObject {
-  const settings = readClaudeSettingsOutcome(settingsPath);
-  if (settings.kind === "failed") throw new Error(settings.reason);
-  return settings.value;
+// document, shared by install and the auto-compact window. A missing file
+// means Claude Code has written nothing yet. Existing text that does not
+// parse, or parses to anything but an object,
+// throws naming the file ([LAW:no-silent-failure]: Claude Code is not running
+// with whatever a guess would say).
+export function parseClaudeSettings(
+  settingsPath: string,
+  text: string | null,
+): ClaudeSettings {
+  if (text === null) return { text, edited: EMPTY_DOCUMENT, document: {} };
+  let parsed: unknown;
+  try {
+    parsed = JSON_DIALECT.parse(text);
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  }
+  if (!isJsonObject(parsed)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return { text, edited: text, document: parsed };
+}
+
+export function readClaudeSettings(settingsPath: string): ClaudeSettings {
+  return parseClaudeSettings(
+    settingsPath,
+    readClaudeSettingsText(settingsPath),
+  );
 }
 
 // The same reading as an outcome that says which phase failed: the file could
@@ -49,33 +68,52 @@ export function readClaudeSettings(settingsPath: string): JsonObject {
 export function readClaudeSettingsOutcome(
   settingsPath: string,
 ): Ok<JsonObject> | Failed {
-  let text: string;
+  let text: string | null;
   try {
     text = readClaudeSettingsText(settingsPath);
   } catch (e) {
     return failed(messageOf(e), "read");
   }
   try {
-    return ok(parseSettings(settingsPath, text));
+    return ok(parseClaudeSettings(settingsPath, text).document);
   } catch (e) {
     return failed(messageOf(e), "parse");
   }
 }
 
-function parseSettings(settingsPath: string, text: string): JsonObject {
-  let parsed: JsonValue;
-  try {
-    if (/^\s*$/.test(text)) return {};
-    // [LAW:parse-dont-validate] JSON text parses to JSON values.
-    parsed = JSON_DIALECT.parse(text) as JsonValue;
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed;
+// [LAW:types-are-the-program] The statusLine setting as cc-candybar reads it:
+// the command Claude Code runs from it, null when it names none.
+export interface StatusLine {
+  readonly command: string | null;
 }
+
+// [LAW:parse-dont-validate] The setting, or null when it is unset. Any other
+// shape is refused naming the file and the key, so nothing acts on a
+// malformed setting as though it were one.
+export function parseStatusLine(
+  settingsPath: string,
+  settings: JsonObject,
+): StatusLine | null {
+  const { statusLine } = settings;
+  if (statusLine === undefined) return null;
+  if (!isJsonObject(statusLine))
+    throw malformed(settingsPath, "statusLine", "an object", statusLine);
+  const { command } = statusLine;
+  if (command === undefined) return { command: null };
+  if (typeof command !== "string")
+    throw malformed(settingsPath, "statusLine.command", "a string", command);
+  return { command };
+}
+
+const malformed = (
+  settingsPath: string,
+  key: string,
+  wanted: string,
+  found: unknown,
+): Error =>
+  new Error(
+    `cannot read ${settingsPath}: ${key} is ${JSON.stringify(found)}, not ${wanted}`,
+  );
 
 const messageOf = (e: unknown): string =>
   types.isNativeError(e) ? e.message : String(e);

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { hostOf } from "../scripts/lib/host";
 import { worldOf } from "./helpers/host";
-import { __test__, runRecordHostBundle } from "../src/install";
+import { runRecordHostBundle } from "../src/install";
 import {
   readHostBundle,
   recordHostBundle,
@@ -122,7 +122,6 @@ describe("the statusline decides which bundle is recorded", () => {
   test("an entry names its bundle by adjacency", () => {
     expect(
       bundleNamedByStatusLine({
-        type: "command",
         command: "/opt/cc/bin/cc-candybar --config x",
       }),
     ).toBe("/opt/cc/dist/index.mjs");
@@ -137,9 +136,8 @@ describe("the statusline decides which bundle is recorded", () => {
   });
 
   test.each([
-    ["unset", undefined],
-    ["not an object", "cc-candybar"],
-    ["a command with no command", {}],
+    ["unset", null],
+    ["a statusLine with no command", { command: null }],
     ["the legacy pnpm form", { command: "pnpm dlx @promptctl/cc-candybar@1" }],
     ["a double-quoted word", { command: '"/opt/cc/bin/cc-candybar"' }],
   ])("%s names no bundle", (_name, statusLine) => {
@@ -181,19 +179,6 @@ describe("the statusline decides which bundle is recorded", () => {
     const bundle = bundleIn(root, "install");
     const command = template.replaceAll("ROOT", path.join(root, "install"));
     expect(statusLineRunsBundle({ command }, bundle)).toBe(false);
-  });
-
-  test("the install records the staged bundle when it owns the statusline, and says how to when it does not", () => {
-    const { root, host } = stateRoot();
-    const staged = bundleIn(root, "staged");
-
-    const skipped = __test__.recordStagedBundleIfRun(false, staged, host);
-    expect(skipped).toContain("--force");
-    expect(readHostBundle(host).kind).toBe("absent");
-
-    const owned = __test__.recordStagedBundleIfRun(true, staged, host);
-    expect(owned).toContain(staged);
-    expect(readHostBundle(host)).toEqual({ kind: "ok", value: staged });
   });
 
   test("a checkout behind a symlinked directory is the bundle the statusline names", () => {

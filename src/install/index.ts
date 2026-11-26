@@ -9,12 +9,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import {
-  ensureOwnedPrivateDir,
+  checkOwnedPrivateDir,
+  hostBundlePath,
   locations,
   remoteSocketDir,
 } from "../daemon/paths";
 import type { Host, World } from "../host";
-import { writeAtomic } from "../utils/atomic-write";
+import type { OneShotLauncher } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { BusyPhase, FailureOutcome } from "../daemon/client-transport";
 import type { PermanentOutcome } from "../daemon/foundations/protocol";
@@ -26,13 +27,20 @@ import {
   claudeConfigDir,
   claudeSettingsPath,
   detectClaudeConfigDir,
-  isJsonObject,
 } from "../claude-settings";
 import {
+  parseClaudeSettings,
+  parseStatusLine,
   readClaudeSettings,
   readClaudeSettingsText,
+  type StatusLine,
 } from "../claude-settings-read";
-import { JSON_DIALECT, setValue } from "../config/json5-edit";
+import {
+  JSON_DIALECT,
+  Json5EditError,
+  parseDocument,
+  setValue,
+} from "../config/json5-edit";
 import {
   assessCurrency,
   currencyReport,
@@ -40,38 +48,32 @@ import {
   PACKAGE_NAME,
   REGISTRY_URL,
 } from "./currency";
-import { PLATFORM_PACKAGES } from "./platforms";
-import { stageExecutable } from "./stage-executable.js";
+import { PLATFORM_PACKAGES, machinePlatform } from "./platforms";
 import { recordIfInstall, statusLineRunsBundle } from "./record";
-import { recordHostBundle } from "../daemon/host-bundle";
+import { hostBundleRecordText } from "../daemon/host-bundle";
+import { readTextIfPresent } from "../utils/regular-text";
+import { changeInstallation, type InstallChanges } from "./changes";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
 // .github/workflows/release.yml stages it.
 const FORWARDER_BIN = "cc-candybar-url-handler";
 
-// [LAW:one-source-of-truth] `install` writes no renderer flags into
-// ~/.claude/settings.json. All authoring lives in `.cc-candybar.json5` or
-// `.cc-candybar.json` (see searchConfig — both extensions accepted,
-// .json5 preferred); the install command's job is staging the runtime,
-// wiring the URL handler, and pointing settings at the staged entry.
-const DEFAULT_INSTALL_ARGS: readonly string[] = [];
-
-function buildStatusLineCommand(
-  binPath: string,
-  rendererArgs: readonly string[],
-): string {
-  return [binPath, ...rendererArgs].map(shellWord).join(" ");
+// What an install acts on: the machine's facts, and the commands it runs to
+// their end (codesign, killall, lsregister).
+export interface InstallWorld {
+  readonly host: Host;
+  readonly launcher: Pick<OneShotLauncher, "launchSync">;
 }
 
 function appBundlePath(host: Host): string {
   return path.join(host.home, "Applications", `${APP_NAME}.app`);
 }
 
-function ensureMacOS(): void {
-  if (process.platform !== "darwin") {
+function ensureMacOS(platform: NodeJS.Platform): void {
+  if (platform !== "darwin") {
     throw new Error(
-      `URL handler installation requires macOS (found platform: ${process.platform}).`,
+      `URL handler installation requires macOS (found platform: ${platform}).`,
     );
   }
 }
@@ -79,8 +81,9 @@ function ensureMacOS(): void {
 // [LAW:one-source-of-truth] The staged runtime lives at ONE stable path per
 // platform, outside any package manager's store — pnpm cache pruning or a
 // version bump can never yank the files the statusline and daemon run from.
-function supportDir(host: Host): string {
-  if (process.platform === "darwin") {
+// The platform is the machine's, handed down by the process main.
+function supportDir(host: Host, platform: NodeJS.Platform): string {
+  if (platform === "darwin") {
     return path.join(host.home, "Library", "Application Support", "CCCandybar");
   }
   return path.join(locations(host).dataHome, "cc-candybar");
@@ -97,11 +100,15 @@ function stagedDistPath(dir: string): string {
 // The attach preload a user can keep typing across upgrades: a checkout's
 // own build, else the staged runtime's — never a package manager's store
 // path, which an upgrade removes.
-export function stableAttachPreload(runningBundle: string, host: Host): string {
+export function stableAttachPreload(
+  runningBundle: string,
+  host: Host,
+  platform: NodeJS.Platform,
+): string {
   const checkout = sourceCheckoutOf(runningBundle);
   return attachPreloadOf(
     checkout === null
-      ? stagedDistPath(supportDir(host))
+      ? stagedDistPath(supportDir(host, platform))
       : path.join(checkout, "dist", "index.mjs"),
   );
 }
@@ -116,7 +123,11 @@ export function forwarderExecutable(app: string): string {
 // or the one the darwin platform package ships, by the running bundle's
 // provenance (sourceCheckoutOf). [LAW:no-silent-failure] Neither present is an error
 // naming the path and how to make it exist; no applet is built in its place.
-function resolveForwarder(sourceDist: string): string {
+function resolveForwarder(
+  sourceDist: string,
+  platform: NodeJS.Platform,
+  host: Host,
+): string {
   const checkout = sourceCheckoutOf(sourceDist);
   if (checkout !== null) {
     const built = path.join(checkout, "bin", "cc-candybar-url-handler-native");
@@ -127,7 +138,24 @@ function resolveForwarder(sourceDist: string): string {
     }
     return built;
   }
-  const shipped = platformPackageFile(sourceDist, `bin/${FORWARDER_BIN}`);
+  // A re-install from the fixed runtime has no package tree beside it.
+  // Its matching forwarder is the binary previously staged in the app.
+  const staged = stagedDistPath(supportDir(host, platform));
+  if (
+    fs.existsSync(staged) &&
+    fs.realpathSync(sourceDist) === fs.realpathSync(staged)
+  ) {
+    const executable = forwarderExecutable(appBundlePath(host));
+    if (fs.existsSync(executable)) return executable;
+    throw new Error(
+      `install: no installed forwarder at ${executable}. Reinstall from the package.`,
+    );
+  }
+  const shipped = platformPackageFile(
+    sourceDist,
+    `bin/${FORWARDER_BIN}`,
+    machinePlatform(platform),
+  );
   switch (shipped.kind) {
     case "found":
       return shipped.path;
@@ -156,8 +184,8 @@ type PlatformPackageFile =
 function platformPackageFile(
   sourceDist: string,
   file: string,
+  platform: string,
 ): PlatformPackageFile {
-  const platform = `${process.platform}-${process.arch}`;
   const pkgName = PLATFORM_PACKAGES[platform];
   if (pkgName === undefined) return { kind: "no-package", platform };
   try {
@@ -178,8 +206,8 @@ type RenderEntry =
   | { kind: "native"; sourcePath: string }
   | { kind: "node-shim"; sourcePath: string };
 
-function resolveRenderEntry(sourceDist: string): RenderEntry {
-  const shipped = platformPackageFile(sourceDist, "bin/cc-candybar");
+function resolveRenderEntry(sourceDist: string, platform: string): RenderEntry {
+  const shipped = platformPackageFile(sourceDist, "bin/cc-candybar", platform);
   if (shipped.kind === "found") {
     return { kind: "native", sourcePath: shipped.path };
   }
@@ -197,20 +225,16 @@ function resolveRenderEntry(sourceDist: string): RenderEntry {
   };
 }
 
-function stageFile(source: string, dest: string): void {
-  // Re-running install FROM the staged runtime makes source === dest;
-  // copyFileSync would truncate the file onto itself. Identity is "already
-  // staged", not an error.
-  if (path.resolve(source) === path.resolve(dest)) return;
-  fs.copyFileSync(source, dest);
-}
-
-// A directory staged whole: the previous stage's files are removed first, so
-// none of them outlives the launcher it belonged to.
-function stageDir(source: string, dest: string): void {
-  if (path.resolve(source) === path.resolve(dest)) return;
-  fs.rmSync(dest, { recursive: true, force: true });
-  fs.cpSync(source, dest, { recursive: true });
+// A file staged by a copy of its bytes and mode. The bytes are read before
+// anything is replaced, so staging from the staged runtime itself copies each
+// file onto a fresh one.
+function stageFile(
+  changes: InstallChanges,
+  source: string,
+  dest: string,
+  mode = fs.statSync(source).mode & 0o777,
+): void {
+  changes.replaceFile(dest, fs.readFileSync(source), mode);
 }
 
 // [LAW:one-source-of-truth] The staged file is the authority on what got
@@ -226,8 +250,8 @@ function stagedEntryKind(binPath: string): RenderEntry["kind"] {
     const magic = Buffer.alloc(2);
     const bytesRead = fs.readSync(fd, magic, 0, 2, 0);
     // [LAW:no-silent-failure] Under 2 bytes neither flavor exists — the file
-    // is a corrupt artifact (a crashed prior copy preserved by the identity
-    // path), not a native binary.
+    // is a corrupt artifact (a re-run from the staged runtime copies its own
+    // entry as it finds it), not a native binary.
     if (bytesRead < 2) {
       throw new Error(
         `install: staged render entry at ${binPath} is truncated ` +
@@ -246,25 +270,26 @@ export interface StagedRuntime {
   entryKind: RenderEntry["kind"];
 }
 
-// Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
-// bundle), dist/cc-extra (the attach launcher), dist/attach-preload.cjs (its
-// one-variable start) and bin/cc-candybar (render
-// entry) as adjacent files. Adjacency IS
-// the contract — every entry flavor locates the bundle via ../dist/index.mjs.
-// `sourceDist` is the bundle this process runs, as its entry names it; `dir`
-// is where it is staged — the user's stable path (`supportDir`), or a test's
-// own.
-export function runStageRuntime(
+// The package's runtime files, found before anything is staged, so a package
+// missing one fails with nothing changed.
+interface RuntimeSources {
+  readonly dist: string;
+  readonly entry: RenderEntry;
+  readonly attach: string;
+  readonly preload: string;
+}
+
+function runtimeSources(
   sourceDist: string,
-  dir: string,
-): StagedRuntime {
+  platform: NodeJS.Platform,
+): RuntimeSources {
   if (!fs.existsSync(sourceDist)) {
     throw new Error(
       `install: bundled dist not found at ${sourceDist}. Reinstall the package.`,
     );
   }
 
-  const entry = resolveRenderEntry(sourceDist);
+  const entry = resolveRenderEntry(sourceDist, machinePlatform(platform));
   if (!fs.existsSync(entry.sourcePath)) {
     throw new Error(
       `install: render entry not found at ${entry.sourcePath}. Reinstall the package.`,
@@ -284,33 +309,73 @@ export function runStageRuntime(
       `install: the attach preload was not found at ${preload}. Reinstall the package.`,
     );
   }
+  return { dist: sourceDist, entry, attach, preload };
+}
 
+// Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
+// bundle), dist/cc-extra (the attach launcher), dist/attach-preload.cjs (its
+// one-variable start) and bin/cc-candybar (render
+// entry) as adjacent files. Adjacency IS
+// the contract — every entry flavor locates the bundle via ../dist/index.mjs.
+// `dir` is where it is staged — the user's stable path (`supportDir`), or a
+// test's own.
+function stageRuntime(
+  sources: RuntimeSources,
+  dir: string,
+  platform: NodeJS.Platform,
+  changes: InstallChanges,
+): StagedRuntime {
   const distPath = stagedDistPath(dir);
   const binPath = stagedBinPath(dir);
-  fs.mkdirSync(path.dirname(distPath), { recursive: true });
-  fs.mkdirSync(path.dirname(binPath), { recursive: true });
-  stageFile(sourceDist, distPath);
-  stageDir(attach, path.join(path.dirname(distPath), ATTACH_DIR));
-  stageFile(preload, path.join(path.dirname(distPath), ATTACH_PRELOAD));
-  stageExecutable(entry.sourcePath, binPath);
+  changes.mkdir(path.dirname(distPath));
+  changes.mkdir(path.dirname(binPath));
+  stageFile(changes, sources.dist, distPath);
+  // A directory staged whole, so no file of an older launcher outlives it.
+  changes.replaceDir(path.join(path.dirname(distPath), ATTACH_DIR), (staging) =>
+    fs.cpSync(sources.attach, staging, { recursive: true }),
+  );
+  stageFile(
+    changes,
+    sources.preload,
+    path.join(path.dirname(distPath), ATTACH_PRELOAD),
+  );
+  // A fresh inode in one rename, as the deploy script's stageExecutable
+  // publishes it too: Darwin can keep the old inode's signature while an
+  // earlier exec still has it mapped.
+  stageFile(changes, sources.entry.sourcePath, binPath, 0o755);
 
   // The pre-1.21 layout kept a second copy of the bundle as url-handler.mjs;
   // dist/index.mjs is the one staged bundle now. Remove the stale copy so it
   // can't drift. [LAW:one-source-of-truth]
-  fs.rmSync(path.join(dir, "url-handler.mjs"), { force: true });
+  changes.remove(path.join(dir, "url-handler.mjs"));
 
-  const stagedKind = stagedEntryKind(binPath);
-  process.stdout.write(
+  const stagedKind = stagedEntryKind(sources.entry.sourcePath);
+  const machine = machinePlatform(platform);
+  changes.report(
     `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${dir}\n` +
       (stagedKind === "native"
-        ? `  render entry: native binary (${process.platform}-${process.arch})\n`
-        : `  render entry: node shim (no native binary for ${process.platform}-${process.arch}; renders are correct but pay node startup)\n`),
+        ? `  render entry: native binary (${machine})\n`
+        : `  render entry: node shim (no native binary for ${machine}; renders are correct but pay node startup)\n`),
   );
   return {
     binPath,
     distPath,
     entryKind: stagedKind,
   };
+}
+
+// The runtime staged on its own, as one change that stands or is put back.
+function runStageRuntime(
+  sourceDist: string,
+  dir: string,
+  platform: NodeJS.Platform,
+  launcher: InstallWorld["launcher"],
+): StagedRuntime {
+  const sources = runtimeSources(sourceDist, platform);
+  return changeInstallation(
+    { host: { home: path.dirname(dir) }, launcher },
+    (changes) => stageRuntime(sources, dir, platform, changes),
+  );
 }
 
 // The app's Info.plist, whole: a background-only app that claims the scheme.
@@ -364,46 +429,24 @@ function infoPlist(): string {
   ].join("\n");
 }
 
-// Callers establish the macOS precondition ([LAW:single-enforcer] — the
-// subcommand entry checks before any side effect; runInstall reaches here
-// only through its darwin dispatch).
-//
-// The app is assembled around the prebuilt forwarder: the bundle is written
-// fresh, ad-hoc signed (Launch Services registers a signed bundle; nothing
-// here passes through Gatekeeper, since no package manager quarantines what it
-// unpacks), the instance a previous install left resident is quit, and the
-// scheme is registered. [LAW:no-ambient-temporal-coupling] The quit is
-// install's: Launch Services never relaunches a running app, so without it a
-// reinstall would leave the old forwarder delivering until logout.
-function installUrlHandlerFrom(sourceDist: string, world: World): void {
-  installUrlHandler(urlHandlerPreconditions(sourceDist, world.host), world);
+function prepareForwardDirectory(host: Host, changes: InstallChanges): void {
+  // [LAW:single-enforcer] A refused forwarding directory must leave the
+  // installed app untouched. The daemon and installer share the trust check.
+  const socketDir = remoteSocketDir(host.home);
+  changes.mkdir(socketDir, 0o700);
+  checkOwnedPrivateDir(socketDir);
 }
 
-// What the URL handler's install needs true before anything is staged,
-// replaced or quit: the forwarder to assemble, and the directory an ssh forward
-// from a remote machine lands its socket in (`cc-candybar ssh-config` on that
-// machine; ssh makes none). The app writes every link to a socket found there,
-// so the directory is held to the trust every socket directory is
-// [LAW:single-enforcer], and one it refuses leaves the handler the user had.
-function urlHandlerPreconditions(sourceDist: string, host: Host): string {
-  ensureOwnedPrivateDir(remoteSocketDir(host.home));
-  return resolveForwarder(sourceDist);
-}
-
-// The app assembled around a forwarder binary already resolved: install
-// resolves it first, as a precondition, so a checkout with no build or a
-// package with no binary fails with nothing staged. [LAW:effects-at-boundaries]
-function installUrlHandler(forwarder: string, { host, launcher }: World): void {
+function buildUrlHandler(
+  forwarder: string,
+  { host, launcher }: InstallWorld,
+  changes: InstallChanges,
+): void {
   const bundle = appBundlePath(host);
-
-  // [LAW:effects-at-boundaries] The app is assembled and signed beside its
-  // place, then renamed over the old one: a copy or a sign that fails leaves
-  // the handler the user had, registered and whole, not a half bundle.
-  const staging = `${bundle}.installing`;
-  const executable = forwarderExecutable(staging);
   process.stdout.write(`Building ${bundle}\n`);
-  fs.rmSync(staging, { recursive: true, force: true });
-  try {
+  changes.mkdir(path.dirname(bundle));
+  changes.replaceDir(bundle, (staging) => {
+    const executable = forwarderExecutable(staging);
     fs.mkdirSync(path.dirname(executable), { recursive: true });
     fs.copyFileSync(forwarder, executable);
     fs.chmodSync(executable, 0o755);
@@ -418,13 +461,17 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
       process.stderr.write(signed.stderr);
       throw new Error(`codesign failed (${whyFailed(signed)})`);
     }
-    fs.rmSync(bundle, { recursive: true, force: true });
-    fs.renameSync(staging, bundle);
-  } catch (error) {
-    fs.rmSync(staging, { recursive: true, force: true });
-    throw error;
-  }
+  });
+}
 
+// The app in its place made the one that answers the scheme. These are the
+// install's effects outside the user's files, so they run after every file
+// is written: a failure here still puts the files back, and no file step
+// fails after them.
+function registerUrlHandler({ host, launcher }: InstallWorld): void {
+  const bundle = appBundlePath(host);
+  // [LAW:no-ambient-temporal-coupling] Launch Services reuses a running app,
+  // so upgrading must quit the resident forwarder before registering its replacement.
   // killall exits 1 when no process matches, which is the other legal state
   // here: the app is only ever ours, in our own home, so no other exit 1 cause
   // (another user's process) applies.
@@ -460,13 +507,45 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   );
 }
 
-export function runInstallUrlHandler(bundle: string, world: World): void {
-  // Precondition before any side effect: on a non-mac this fails with zero
+// Both installer commands prepare the same runtime and platform-owned app.
+function prepareInstallation(
+  bundle: string,
+  world: InstallWorld,
+  platform: NodeJS.Platform,
+  changes: InstallChanges,
+): StagedRuntime {
+  const forwarder =
+    platform === "darwin"
+      ? resolveForwarder(bundle, platform, world.host)
+      : null;
+  const sources = runtimeSources(bundle, platform);
+  if (forwarder !== null) prepareForwardDirectory(world.host, changes);
+  const staged = stageRuntime(
+    sources,
+    supportDir(world.host, platform),
+    platform,
+    changes,
+  );
+  if (forwarder !== null) {
+    buildUrlHandler(forwarder, world, changes);
+    changes.afterPublish(() => registerUrlHandler(world));
+  } else {
+    changes.report("Skipping URL handler (cmd-click verbs are macOS-only).\n");
+  }
+  return staged;
+}
+
+export function runInstallUrlHandler(
+  bundle: string,
+  world: InstallWorld,
+  platform: NodeJS.Platform,
+): void {
+  // Preconditions before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
-  ensureMacOS();
-  const forwarder = urlHandlerPreconditions(bundle, world.host);
-  runStageRuntime(bundle, supportDir(world.host));
-  installUrlHandler(forwarder, world);
+  ensureMacOS(platform);
+  changeInstallation(world, (changes) =>
+    prepareInstallation(bundle, world, platform, changes),
+  );
 }
 
 // [LAW:single-enforcer] The URL handler sends the raw link to the host and
@@ -584,48 +663,87 @@ function installSuccessMessage(): string {
   );
 }
 
-export async function runInstall(
-  rendererArgs: readonly string[],
-  bundle: string,
-  world: World,
-): Promise<void> {
-  const force = rendererArgs.includes("--force");
-  const filteredArgs = rendererArgs.filter((a) => a !== "--force");
-
-  const argsToInstall =
-    filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
-
-  // Preconditions before any side effect: the forwarder must exist before
-  // the runtime is staged, so a failed install leaves nothing half done.
-  const forwarder =
-    process.platform === "darwin"
-      ? urlHandlerPreconditions(bundle, world.host)
-      : null;
-  const staged = runStageRuntime(bundle, supportDir(world.host));
-
-  if (forwarder !== null) {
-    installUrlHandler(forwarder, world);
-  } else {
-    process.stdout.write(
-      "Skipping URL handler (cmd-click verbs are macOS-only).\n",
+// [LAW:effects-at-boundaries] The install's arguments, read before anything
+// changes: `--force` alone. Everything a bar shows is authored in the
+// cc-candybar config, so an argument meant for the bar has nowhere to go.
+function installOptions(args: readonly string[]): { readonly force: boolean } {
+  const unknown = args.filter((a) => a !== "--force");
+  if (unknown.length > 0) {
+    throw new Error(
+      `install: ${unknown.join(" ")}: install takes only --force. The bar is configured in its config file, not by flags on the statusLine command.`,
     );
   }
+  return { force: args.includes("--force") };
+}
 
-  // [LAW:one-source-of-truth] The install knows which bundle it staged, and
-  // whether it wrote the statusline command that runs it, so a command it wrote
-  // needs no reading back. A customized command it kept is read once, for
-  // whether it runs the staged entry: that setup is the install too, and
-  // `--force` would destroy the command that makes it so.
-  const statusLineRunsStaged =
-    updateClaudeSettings(staged.binPath, argsToInstall, force, world.host) ||
-    statusLineRunsBundle(
-      readClaudeSettings(userSettingsPath(world.host)).statusLine,
-      staged.distPath,
+// The install, whole or not at all: every precondition is read before the
+// first change, and a step that fails puts back each change before it
+// (src/install/changes.ts).
+export function install(
+  args: readonly string[],
+  bundle: string,
+  world: InstallWorld,
+  platform: NodeJS.Platform,
+): void {
+  const { force } = installOptions(args);
+  changeInstallation(world, (changes) => {
+    const dir = supportDir(world.host, platform);
+    const settingsPath = userSettingsPath(world.host);
+    const settings = planSettings(
+      settingsPath,
+      readClaudeSettingsText(settingsPath),
+      stagedBinPath(dir),
+      force,
     );
-  process.stdout.write(
-    recordStagedBundleIfRun(statusLineRunsStaged, staged.distPath, world.host),
-  );
+    const record = hostBundlePath(world.host);
+    const recorded = readTextIfPresent(record);
 
+    const staged = prepareInstallation(bundle, world, platform, changes);
+
+    const { change } = settings;
+    if (change.kind === "set") {
+      changes.writeText(settingsPath, settings.was, change.text);
+      changes.report(
+        `Set the statusLine command in ${settingsPath}: ${change.command}\n`,
+      );
+    } else {
+      changes.expectText(settingsPath, settings.was);
+      process.stderr.write(
+        `Skipping settings.json update: existing statusLine.command appears customized.\n` +
+          `  Current: ${change.command}\n` +
+          `  To overwrite, re-run with --force.\n`,
+      );
+    }
+
+    // [LAW:one-source-of-truth] The install knows which bundle it staged, and
+    // whether it set the statusline command that runs it. A customized command
+    // it kept is read for whether it runs the staged entry: that setup is the
+    // install too, and `--force` would destroy the command that makes it so.
+    if (
+      change.kind === "set" ||
+      statusLineRunsBundle(settings.statusLine, staged.distPath)
+    ) {
+      changes.writeText(
+        record,
+        recorded,
+        hostBundleRecordText(staged.distPath),
+      );
+      changes.report(recordedMessage(staged.distPath));
+    } else {
+      process.stdout.write(
+        `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
+      );
+    }
+  });
+}
+
+export async function runInstall(
+  args: readonly string[],
+  bundle: string,
+  world: World,
+  platform: NodeJS.Platform,
+): Promise<void> {
+  install(args, bundle, world, platform);
   process.stdout.write(installSuccessMessage());
 
   // Last: a stale-version warning is the final thing on screen, and the
@@ -656,27 +774,14 @@ function recordedMessage(bundle: string): string {
   return `Recorded ${bundle} as the host's bundle\n`;
 }
 
-// The install's record: the staged bundle, when the statusline command runs
-// it. Returns what the install says about it.
-function recordStagedBundleIfRun(
-  statusLineRunsIt: boolean,
-  stagedBundle: string,
-  host: Host,
-): string {
-  if (!statusLineRunsIt) {
-    return `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`;
-  }
-  recordHostBundle(host, stagedBundle);
-  return recordedMessage(stagedBundle);
-}
-
 // The checkout's install step: a build is complete without staging, so this
 // is what makes a checkout whose statusline command names it the host's code
 // (src/install/record.ts).
-export function runRecordHostBundle(bundle: string, world: World): void {
+export function runRecordHostBundle(bundle: string, world: InstallWorld): void {
+  const settingsPath = userSettingsPath(world.host);
   const recording = recordIfInstall(
     bundle,
-    readClaudeSettings(userSettingsPath(world.host)).statusLine,
+    parseStatusLine(settingsPath, readClaudeSettings(settingsPath).document),
     world.host,
   );
   process.stdout.write(
@@ -690,82 +795,102 @@ export function runRecordHostBundle(bundle: string, world: World): void {
   );
 }
 
+// [LAW:types-are-the-program] What the install does to Claude Code's
+// settings, decided from the one read of them before anything changes: the
+// bytes it read, the statusLine setting they hold, and whether it sets the
+// command or keeps the user's.
+interface SettingsPlan {
+  readonly was: string | null;
+  readonly statusLine: StatusLine | null;
+  readonly change:
+    | { readonly kind: "set"; readonly command: string; readonly text: string }
+    | { readonly kind: "kept"; readonly command: string };
+}
+
 // One value spliced at one key path of settings.json.
 type SettingsEdit = readonly [keyPath: readonly string[], value: unknown];
 
-function updateClaudeSettings(
+// [LAW:one-source-of-truth] The command install writes is the staged entry
+// alone. The config file holds the renderer settings. Install adopts the staged
+// entry in any spelling a version of install used (a version whose quoter
+// left fewer characters bare wrote the path quoted where shellWord leaves it
+// bare), or the legacy `pnpm dlx` form with a package version and no arguments.
+// Any other command is the user's, the entry with words of theirs after it
+// included, and is kept unless `--force`.
+function planSettings(
+  settingsPath: string,
+  text: string | null,
   binPath: string,
-  rendererArgs: readonly string[],
   force: boolean,
-  host: Host,
-  overridePath?: string,
-): boolean {
-  const target = overridePath ?? userSettingsPath(host);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-
-  const statusLine = readClaudeSettings(target).statusLine;
-  const existing = isJsonObject(statusLine) ? statusLine.command : undefined;
-  // [LAW:one-source-of-truth] Detection: a command we (or a prior version of
-  // us) wrote either starts with the legacy `pnpm dlx` form (an open prefix —
-  // a version suffix follows) or has the staged bin path — quoted or bare —
-  // as its entire first token. Any other value is a user customization we
-  // must not silently destroy.
-  // [LAW:types-are-the-program] Token, not prefix: a bare startsWith(binPath)
-  // would also claim `<binPath>-backup …` as ours and overwrite it.
-  // Any single-quoting of the path is ours too: a version whose quoter left
-  // fewer characters bare wrote the path quoted where shellWord leaves it bare.
-  const managedTokens = [binPath, shellWord(binPath), singleQuoted(binPath)];
-  const isOurs =
-    typeof existing === "string" &&
-    (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) ||
-      managedTokens.some(
-        (token) => existing === token || existing.startsWith(`${token} `),
-      ));
-
-  if (existing && !isOurs && !force) {
-    process.stderr.write(
-      `Skipping settings.json update: existing statusLine.command appears customized.\n` +
-        `  Current: ${existing}\n` +
-        `  To overwrite, re-run with --force.\n`,
-    );
-    return false;
+): SettingsPlan {
+  const settings = parseClaudeSettings(settingsPath, text);
+  try {
+    parseDocument(settings.edited);
+  } catch (error) {
+    if (!(error instanceof Json5EditError)) throw error;
+    throw new Error(`cannot edit ${settingsPath}: ${error.reason}`);
   }
+  const statusLine = parseStatusLine(settingsPath, settings.document);
+  const existing = statusLine?.command ?? null;
+  const ours =
+    existing === null ||
+    existing.trim() === "" ||
+    (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) &&
+      /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(
+        existing.slice(`pnpm dlx ${PACKAGE_NAME}@`.length),
+      )) ||
+    [binPath, shellWord(binPath), singleQuoted(binPath)].includes(existing);
+  if (!ours && !force)
+    return {
+      was: text,
+      statusLine,
+      change: { kind: "kept", command: existing },
+    };
 
   // [LAW:one-source-of-truth] Splices, not a rewrite, so every byte install
-  // does not own survives.
-  // [LAW:types-are-the-program] What it owns depends on the shape it finds: a
-  // statusLine object is amended — its other keys, such as a `refreshInterval`
-  // the user set, survive an upgrade — and anything else (none, or a
-  // value Claude Code runs nothing from) is replaced whole.
-  const command = buildStatusLineCommand(binPath, rendererArgs);
-  const edits: readonly SettingsEdit[] = isJsonObject(statusLine)
-    ? [
-        [["statusLine", "type"], "command"],
-        [["statusLine", "command"], command],
-      ]
-    : [[["statusLine"], { type: "command", command }]];
-  writeAtomic(
-    target,
-    edits.reduce(
-      (text, [keyPath, value]) =>
-        setValue(text, keyPath, JSON.stringify(value, null, 2), JSON_DIALECT),
-      readClaudeSettingsText(target),
-    ),
-  );
-  process.stdout.write(`Updated ${target}\n`);
-  return true;
+  // does not own survives: a statusLine object is amended, so its other keys
+  // (a `refreshInterval` the user set) survive an upgrade.
+  const command = shellWord(binPath);
+  const edits: readonly SettingsEdit[] =
+    statusLine === null
+      ? [[["statusLine"], { type: "command", command }]]
+      : [
+          [["statusLine", "type"], "command"],
+          [["statusLine", "command"], command],
+        ];
+  try {
+    return {
+      was: text,
+      statusLine,
+      change: {
+        kind: "set",
+        command,
+        text: edits.reduce(
+          (edited, [keyPath, value]) =>
+            setValue(
+              edited,
+              keyPath,
+              JSON.stringify(value, null, 2),
+              JSON_DIALECT,
+            ),
+          settings.edited,
+        ),
+      },
+    };
+  } catch (e) {
+    // [LAW:no-silent-failure] JSON reads a duplicate key as its last one; the
+    // splicer refuses a document whose meaning is ambiguous.
+    if (!(e instanceof Json5EditError)) throw e;
+    throw new Error(`cannot edit ${settingsPath}: ${e.reason}`);
+  }
 }
 
 // Exports for testing
 export const __test__ = {
-  buildStatusLineCommand,
+  runStageRuntime,
   infoPlist,
-  installUrlHandlerFrom,
-  DEFAULT_INSTALL_ARGS,
-  updateClaudeSettings,
+  planSettings,
   resolveRenderEntry,
-  stageFile,
   stagedEntryKind,
   installSuccessMessage,
-  recordStagedBundleIfRun,
 };

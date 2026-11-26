@@ -202,14 +202,22 @@ describe("readAutoCompactWindow", () => {
     return file;
   };
 
-  test("no settings file, a blank one, or no key: auto", async () => {
+  test("no settings file or an object without the key reads as auto", async () => {
     expect(readAutoCompactWindow(path.join(dir, "missing.json"))).toEqual(
       ok("auto"),
     );
-    expect(readAutoCompactWindow(settings(" \n"))).toEqual(ok("auto"));
     expect(readAutoCompactWindow(settings(`{ "model": "opus" }`))).toEqual(
       ok("auto"),
     );
+  });
+
+  test("a blank settings file reports a parse failure with the filename", () => {
+    const file = settings(" \n");
+    expect(readAutoCompactWindow(file)).toMatchObject({
+      kind: "failed",
+      failedAt: "parse",
+      reason: expect.stringContaining(file),
+    });
   });
 
   test("the window /autocompact wrote, on the grid or off it", async () => {

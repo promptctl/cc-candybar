@@ -24,6 +24,7 @@ import { fakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { TEST_ENV } from "../../helpers/session-environment";
 
 jest.setTimeout(30_000);
 
@@ -170,6 +171,7 @@ test("a click in either session uses its environment for desktop tools and both 
     const cwd = path.join(project, session);
     fs.mkdirSync(cwd, { recursive: true });
     const reported = {
+      ...TEST_ENV,
       SESSION_MARKER: marker,
       TMUX: paneOf(pane).socket + ",123,0",
       TMUX_PANE: pane,

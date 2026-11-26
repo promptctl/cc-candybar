@@ -123,11 +123,12 @@ Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
 ${LANE_NAMES.map((lane) => `  ${LANES[lane].label}\n${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
 
 Subcommands:
-  install                  One-shot setup: stages the runtime (native render
+  install [--force]        One-shot setup: stages the runtime (native render
                            binary + dist bundle) at a stable path, creates the
                            URL handler app + cc-candybar:// scheme (macOS), and
                            writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
+                           ~/.claude/settings.json. Keeps customized commands unless
+                           --force is set. Configure the bar in its config file.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
   record-host-bundle       Record this bundle as the one a cold host starts

@@ -34,7 +34,13 @@ That single command (re-run it any time to update to the latest release):
 
 1. Stages the runtime at a stable path independent of any package-manager cache — `~/Library/Application Support/CCCandybar/` on macOS, `$XDG_DATA_HOME/cc-candybar/` on Linux — as `bin/cc-candybar` (the prebuilt native render binary for your platform, or a node entry where none exists) beside `dist/index.mjs` (the daemon + CLI bundle).
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
-3. Writes the staged `bin/cc-candybar` path as the statusline command into `~/.claude/settings.json` (skipped with a notice if you've customized the command; `--force` overwrites).
+3. Writes the staged `bin/cc-candybar` path alone as the statusline command in `~/.claude/settings.json`. Install preserves a customized command, including arguments you added. Pass `install --force` to replace it. Configure the bar in its config file.
+
+On an upgrade, install prepares the new runtime and signs the macOS app while the previous installation remains available. A second installer reports which process is active. If that process is killed, the next installer recovers its filesystem changes before reading settings. It restores interrupted publications and cleans up backups from a completed publication.
+
+Install creates a missing settings file. If an existing settings file is blank, malformed, or has an invalid statusline declaration, install reports the path and leaves the file intact.
+
+If installation fails, it restores the files it changed and reports any path it could not restore.
 
 Restart Claude Code. The statusline appears with the bundled default layout — an identity row (host, directory, gitaculous) over a status row (model, context, autocompact, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
 
