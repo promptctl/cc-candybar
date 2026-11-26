@@ -4,15 +4,22 @@
     {
       "version": "pr-973",
       "ref": "refs/pull/973/merge",
-      "sha": "b9c80d4a6a05cdcae1b9ed1d60b0600f58c729f0",
-      "timestamp": "2026-11-26T07:07:10.770Z",
+      "sha": "81931a515c7c2016e5343c6d9f590f6c448fce19",
+      "timestamp": "2026-11-26T07:13:08.959Z",
       "commits": [
         {
-          "sha": "b9c80d4a6a05cdcae1b9ed1d60b0600f58c729f0",
+          "sha": "81931a515c7c2016e5343c6d9f590f6c448fce19",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:05:51Z",
-          "message": "Merge eb8f162d5c2f8ea0f53918f86f3480557e523913 into 464af8b20e2735f30bb63189b976c0a20543e17e\n"
+          "timestamp": "2026-11-26T07:11:59Z",
+          "message": "Merge 2c82d61df81d357b195760ad2e1ec1d0f2bf758f into 464af8b20e2735f30bb63189b976c0a20543e17e\n"
+        },
+        {
+          "sha": "2c82d61df81d357b195760ad2e1ec1d0f2bf758f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T00:11:47-07:00",
+          "message": "test(proc): give each escaped writer one fixture connection\n"
         },
         {
           "sha": "eb8f162d5c2f8ea0f53918f86f3480557e523913",
