@@ -63,6 +63,20 @@ export function defaultSocketPath(): string {
   return path.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 
+// [LAW:one-source-of-truth] Where a remote machine's daemon socket lands on
+// the machine the user sits at. A link names the key of the daemon that signed
+// it (link-signer.ts), and the URL handler app opens `<key id>.sock` in this
+// directory (under the home; the directory and the suffix are mirrored in
+// url-handler/main.swift) when a link of another machine's is clicked. An ssh
+// `LocalForward` puts the socket there, named by the remote's key so two
+// remotes never share one, whatever they are called.
+export const REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote";
+export const REMOTE_SOCKET_SUFFIX = ".sock";
+
+export function remoteSocketDir(home: string): string {
+  return path.join(home, REMOTE_SOCKET_DIR_UNDER_HOME);
+}
+
 // [LAW:single-enforcer] The daemon is the sole creator of the socket parent
 // directory. If we enforce "this dir is uid==me + mode 0700 + not a symlink"
 // at bind time, then by induction every successful bind happened under a

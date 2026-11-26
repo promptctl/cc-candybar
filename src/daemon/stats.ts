@@ -221,6 +221,7 @@ export class RuntimeStats {
     clients: readonly RenderSighting[];
     bundle: string;
     sourceDigest: string | null;
+    linkKeyId: StatsSnapshot["linkKeyId"];
     host: StatsSnapshot["host"];
     renderers: StatsSnapshot["renderers"];
   }): StatsSnapshot {
@@ -274,6 +275,7 @@ export class RuntimeStats {
       subprocesses: this.snapshotSubprocesses(),
       clients: extras.clients,
       bundle: extras.bundle,
+      linkKeyId: extras.linkKeyId,
       host: extras.host,
       renderers: extras.renderers,
     };

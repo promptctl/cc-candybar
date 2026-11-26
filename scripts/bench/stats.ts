@@ -6,8 +6,6 @@
 // series, so `percentile` has no empty case to guard: `distributionOf` is the
 // one checkpoint, and it fails loudly on a series that measured nothing.
 
-import { percentile } from "../lib/percentile.js";
-
 export interface Distribution {
   readonly n: number;
   readonly min: number;
@@ -16,6 +14,14 @@ export interface Distribution {
   readonly p99: number;
   readonly max: number;
   readonly mean: number;
+}
+
+// The sample at rank ⌊n·p⌋ of an ascending series, clamped to its last: p50 of
+// an even count is the upper of the two middle samples, and p99 of fifty ticks
+// is the slowest tick. It returns a sample that was observed, never an
+// interpolation between two.
+function percentile(sorted: readonly number[], p: number): number {
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!;
 }
 
 export function distributionOf(samples: readonly number[]): Distribution {

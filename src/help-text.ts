@@ -133,6 +133,10 @@ Subcommands:
                            after a build (\`just deploy\`).
   url-handle URL           Send a cc-candybar:// link to the daemon as a
                            click. Terminal links use the URL handler app.
+  ssh-config ALIAS         Print the ~/.ssh/config lines that make a click on
+                           this machine's bar reach this machine's daemon when
+                           the terminal is on another machine. ALIAS is the
+                           Host that machine's ssh config reaches this one by.
   plugin install SOURCE    Install a repository's plugins into
                            $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
                            local path, a GitHub slug (owner/repo) or a git URL,

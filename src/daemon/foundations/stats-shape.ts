@@ -309,6 +309,10 @@ export const STATS_SHAPE: Shape<StatsSnapshot> = object<StatsSnapshot>({
   }),
   clients: list(SIGHTING),
   bundle: text,
+  linkKeyId: tagged<Asked<string>>({
+    ok: { value: text },
+    failed: { reason: text },
+  }),
   host: PROCESS_MEMORY,
   renderers: list(PANEL),
 });

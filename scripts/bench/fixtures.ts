@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { transcriptTurn } from "../lib/transcript.js";
+import { transcriptTurn } from "./transcript.js";
 
 // A git that reads no configuration of the host's: its fsmonitor, untracked
 // cache and aliases are variables the benchmark does not mean to measure.
