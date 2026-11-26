@@ -70,10 +70,10 @@ describe("readinessFailure — what the socket did, what our process did", () =>
     expect(mute).not.toContain("never got as far as binding");
   });
 
-  test("a live process at the budget is named a slow boot, not a refusal", () => {
+  test("a process still live when its wait ended is named a slow or hung boot, not a refusal", () => {
     const m = message({ phase: "booting", exit: null });
-    expect(m).toMatch(/still running when the \d+ms budget expired/);
-    expect(m).toContain("a slow boot, not a refusal");
+    expect(m).toContain("still running when the wait for it ended");
+    expect(m).toContain("a slow or hung boot, not a refusal");
     expect(m).not.toContain("the process exited");
   });
 

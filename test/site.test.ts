@@ -25,6 +25,17 @@ function withoutLandscape(): NodeJS.ProcessEnv {
   return env;
 }
 
+// What a probe of the built bundle printed. What it said on stderr (the last
+// wait it began, for one its timeout ended) is in the failure, which a
+// timed-out run's own message leaves out.
+function probed(probe: string): string {
+  try {
+    return execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", stdio: "pipe", timeout: 30_000 });
+  } catch (e) {
+    throw new Error(`the probe failed: ${(e as Error).message}\n${(e as { stderr?: string }).stderr ?? ""}`, { cause: e });
+  }
+}
+
 // site/build.mjs as a command, with the deploy's environment unless a test names its own.
 function buildSite(args: string[], env: NodeJS.ProcessEnv = {}): void {
   execFileSync("node", [path.join(ROOT, "site/build.mjs"), ...args], { stdio: "pipe", env: { ...withoutLandscape(), ...env } });
@@ -33,24 +44,28 @@ function buildSite(args: string[], env: NodeJS.ProcessEnv = {}): void {
 test("the deploy's LANDSCAPE_DIR is the live bar's link to the explorer, and a path outside the page is refused", () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
   buildSite([out], { LANDSCAPE_DIR: "landscape" });
-  const printed = execFileSync("node", ["--input-type=module", "-e", `
+  const printed = probed(`
     const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
     console.log(JSON.stringify(transport.landscape));
     process.exit(0);
-  `], { encoding: "utf8", timeout: 30_000 });
+  `);
   expect(JSON.parse(printed.trim().split("\n").pop()!)).toBe("landscape/");
   for (const bad of ["/landscape", "./landscape", "../landscape", 'x" onclick="y'])
     expect(() => buildSite([out], { LANDSCAPE_DIR: bad })).toThrow(/LANDSCAPE_DIR must be folders/);
   fs.rmSync(out, { recursive: true, force: true });
 });
 
-test("the built site renders, clicks, and plays its scenario with no server", () => {
+test("the built site renders, clicks, and seeks its scenario with no server", () => {
   // Built into a directory of its own, so a test run never replaces the developer's site/dist.
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-site-"));
   buildSite([out]);
   const probe = `
     const { transport } = await import(${JSON.stringify(path.join(out, "transport.js"))});
     if (transport.landscape !== null) throw new Error("a build outside the deploy links to an explorer: " + transport.landscape);
+    // The scenario plays on the wall clock, so a moment the probe reads would
+    // last only as long as the machine lets it. Held, it moves only when the
+    // probe seeks it.
+    transport.scenario.pause();
     const size = { width: 120, rows: 40 };
     // The page's first render compiles the config in its arrival turn, which
     // can spend its whole deadline, so what has not answered draws pending;
@@ -58,10 +73,13 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     // A fact the daemon reads on its own clock (the branch, a seeked
     // transcript) reaches the page on the redraw after it lands, as it reaches
     // Claude Code on a later tick. So a draw waits on the fact it expects, never
-    // on a count of redraws, which only a fast machine keeps.
+    // on a count of redraws, which only a fast machine keeps, and for as long as
+    // the probe is let run: the timeout that ends it is the one bound. Its pipes
+    // close with the kill, so the wait is named before it starts.
     const redrawUntil = async (text) => {
+      console.error("waiting for a frame showing " + JSON.stringify(text));
       let frame = await transport.frame(size);
-      for (const end = Date.now() + 5_000; !JSON.stringify(frame).includes(text) && Date.now() < end; )
+      while (!JSON.stringify(frame).includes(text))
         frame = await new Promise((r) => setTimeout(r, 50)).then(() => transport.frame(size));
       return frame;
     };
@@ -80,7 +98,7 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     console.log(JSON.stringify({ frames: { cold, first, opened, working }, refused: clicked.refused, copied: copied.refused }));
     process.exit(0);
   `;
-  const printed = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
+  const printed = probed(probe);
   fs.rmSync(out, { recursive: true, force: true });
   const { frames, ...said } = JSON.parse(printed.trim().split("\n").pop()!) as {
     frames: Record<"cold" | "first" | "opened" | "working", Pick<Frame, "rows">>;

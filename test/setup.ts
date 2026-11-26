@@ -1,7 +1,10 @@
 import path from "node:path";
 import { createRequire } from "node:module";
 
+import { SSH_ENV_VARS } from "../src/client-hints";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
+import { TERMINAL_ENV_VARS } from "../src/terminal-hint";
+import { TMUX_ENV } from "../src/tmux-hint";
 import { jestTmpDir } from "./helpers/jest-tmp";
 
 // [LAW:single-enforcer] The one place that arms the parent-death watchdog for
@@ -47,6 +50,19 @@ process.env.CLAUDE_CONFIG_DIR = jestTmpDir("claude");
 const noPlugins = jestTmpDir("data");
 process.env.XDG_DATA_HOME = noPlugins;
 process.env.XDG_DATA_DIRS = noPlugins;
+
+// [LAW:single-enforcer] No test inherits the terminal the suite was started
+// in: a client reports its terminal, its tmux pane and its ssh connection by
+// these variables, and the worker's name the developer's own session (its live
+// tmux server among them), which a CI runner has none of. A test about a
+// session's terminal reports the variables it means. XDG_CONFIG_HOME is one of
+// them, and set again below.
+for (const name of [
+  ...TERMINAL_ENV_VARS,
+  ...Object.values(TMUX_ENV),
+  ...SSH_ENV_VARS,
+])
+  delete process.env[name];
 
 // [LAW:single-enforcer] No test load finds the host's own config: the XDG
 // location is the lowest layer of every chain (src/config/loader/chain-places.ts),

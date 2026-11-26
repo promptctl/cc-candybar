@@ -40,6 +40,7 @@ export function reportersFor(run) {
 export const TEST_MATCH = ["**/*.test.ts"];
 
 export default {
+  globalSetup: "<rootDir>/test/global-setup.ts",
   setupFiles: ["<rootDir>/test/setup.ts"],
   // [LAW:no-mode-explosion] A small fixed cap, not "cores-1" (the default),
   // on how many test files this ONE `pnpm test` invocation runs concurrently.

@@ -2,7 +2,6 @@
 // server names its owner from the moment it exists: a daemon closing during the open
 // leaves no pane `pane off` cannot find, and the user's pane keeps focus.
 
-import { spawnSync } from "node:child_process";
 import { processLauncher } from "./helpers/host";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
@@ -11,12 +10,11 @@ import path from "node:path";
 import { productionBarPaneEdge } from "../src/daemon/lane-edge";
 import { type Launcher } from "../src/proc/launcher";
 import type { TmuxHint } from "../src/tmux-hint";
-import { HAS_TMUX } from "./helpers/private-tmux";
+import { tmuxServer, type TmuxServer } from "./helpers/private-tmux";
 
-
-(HAS_TMUX ? describe : describe.skip)("a bar pane on a real tmux", () => {
+describe("a bar pane on a real tmux", () => {
   let dir: string;
-  let socket: string;
+  let server: TmuxServer;
   let hint: TmuxHint;
   // The argv's tail is a bar pane's own: `bar-pane <pane>`.
   const barPane = (): string[] => [
@@ -26,39 +24,19 @@ import { HAS_TMUX } from "./helpers/private-tmux";
     "bar-pane",
     hint.pane,
   ];
-  const tmux = (...args: string[]): string => {
-    const run = spawnSync("tmux", ["-S", socket, ...args], {
-      encoding: "utf8",
-    });
-    if (run.status !== 0) throw new Error(`tmux ${args[0]}: ${run.stderr}`);
-    return run.stdout;
-  };
   const panes = (): string[] =>
-    tmux("list-panes", "-a", "-F", "#{pane_id}").trim().split("\n");
+    server.run("list-panes", "-a", "-F", "#{pane_id}").trim().split("\n");
   const active = (): string =>
-    tmux("display-message", "-p", "-t", "bar", "#{pane_id}").trim();
+    server.run("display-message", "-p", "-t", "bar", "#{pane_id}").trim();
 
   beforeEach(() => {
     dir = mkdtempSync(path.join(os.tmpdir(), "ccb-bar-pane-"));
-    socket = path.join(dir, "tmux.sock");
-    tmux(
-      "-f",
-      "/dev/null",
-      "new-session",
-      "-d",
-      "-s",
-      "bar",
-      "-x",
-      "80",
-      "-y",
-      "20",
-    );
-    hint = { socket, pane: panes()[0]!, truecolor: null };
+    server = tmuxServer(dir, { cols: 80, rows: 20 });
+    hint = { socket: server.socket, pane: server.pane, truecolor: null };
   });
 
   afterEach(() => {
-    // The private server's one session: tmux exits with its last.
-    spawnSync("tmux", ["-S", socket, "kill-session", "-t", "bar"]);
+    server.kill();
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -89,7 +67,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
   });
 
   test("the pane the user is in keeps focus", async () => {
-    const theirs = tmux(
+    const theirs = server.run(
       "split-window",
       "-h",
       "-t",
@@ -109,7 +87,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
 
   test("a failed split is reported as the split, and tags nothing", async () => {
     // One row has no room for another pane.
-    tmux("resize-window", "-t", "bar", "-y", "1");
+    server.run("resize-window", "-t", "bar", "-y", "1");
     const edge = productionBarPaneEdge(processLauncher);
 
     await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(

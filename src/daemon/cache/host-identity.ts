@@ -31,6 +31,19 @@ export function shortHostname(hostname: string): string {
   return dot < 0 ? hostname : hostname.slice(0, dot);
 }
 
+// [LAW:effects-at-boundaries] The two syscalls the machine's identity is read
+// from, handed in by whoever builds the service: the daemon hands the machine's,
+// and a test states the machine it means.
+export interface HostReads {
+  readonly hostname: () => string;
+  readonly username: () => string;
+}
+
+export const MACHINE_HOST_READS: HostReads = {
+  hostname: () => os.hostname(),
+  username: () => os.userInfo().username,
+};
+
 // [LAW:effects-at-boundaries] One syscall, the whole of its source's read.
 // [LAW:no-silent-failure] A throwing syscall (a uid with no passwd entry is
 // the realistic case, in a stripped container) is that field's failed read,
@@ -58,6 +71,7 @@ export class HostService {
   constructor(opts: {
     // [LAW:effects-at-boundaries] Times each refresh and arms each period.
     readonly clock: Pick<Timekeeper, "monotonic" | "after" | "detach">;
+    readonly reads: HostReads;
     readonly logger?: DaemonLogger;
     readonly ledger?: RefreshLedger;
   }) {
@@ -78,12 +92,12 @@ export class HostService {
     this.name = new KeyedSource({
       ...one,
       name: "host.name",
-      read: () => syscall("name", () => shortHostname(os.hostname())),
+      read: () => syscall("name", () => shortHostname(opts.reads.hostname())),
     });
     this.user = new KeyedSource({
       ...one,
       name: "host.user",
-      read: () => syscall("user", () => os.userInfo().username),
+      read: () => syscall("user", opts.reads.username),
     });
   }
 

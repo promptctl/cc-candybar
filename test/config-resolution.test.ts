@@ -1,3 +1,4 @@
+import { refuseFile } from "./helpers/refuse-file";
 // [LAW:single-enforcer] Tests for dsl-loader's path resolution and
 // collision detection — the single enumerator (dslConfigCandidatePaths)
 // feeds the resolver, the watcher, and the collision detector. Behavior
@@ -9,7 +10,6 @@
 //   - chainPlaces names the file each writable role of the chain lands in
 
 import {
-  chmodSync,
   mkdtempSync,
   realpathSync,
   rmSync,
@@ -61,9 +61,6 @@ const NO_PROJECT_ACCESS = {
   unreadIdentity: null,
 };
 
-// Root bypasses directory permissions, so the unsearchable-directory fixtures
-// cannot exist for it.
-const asRoot = process.getuid?.() === 0;
 
 function mkdir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "cc-candybar-resolution-"));
@@ -396,9 +393,8 @@ describe("the config search", () => {
   // Only ENOENT is absence. An explicit file behind an unsearchable
   // directory stats EACCES — the search cannot tell whether it is there, so
   // the verdict is `unreadable` carrying that errno, never a "not found"
-  // notice about a path that may be right. Root bypasses directory
-  // permissions, so the fixture cannot exist for it.
-  (asRoot ? test.skip : test)(
+  // notice about a path that may be right.
+  test(
     "an explicit file behind an unsearchable directory is `unreadable`, not `missing`",
     () => {
       const { dir, cleanup } = mkdir();
@@ -407,7 +403,7 @@ describe("the config search", () => {
       mkdirSync(locked);
       const named = join(locked, "named.json5");
       writeFileSync(named, VALID_CFG);
-      chmodSync(locked, 0o000);
+      using _denied = refuseFile({ below: locked }, "statSync", "lstatSync");
       try {
         const resolved = resolutionOf(L, approving(), {
           projectDir: dir,
@@ -425,7 +421,6 @@ describe("the config search", () => {
         // The load names the file it could not read; the search adds none.
         expect(configResolutionNotice(resolved)).toBeNull();
       } finally {
-        chmodSync(locked, 0o755);
         cleanup();
       }
     },
@@ -436,7 +431,7 @@ describe("the config search", () => {
   // lower candidate still wins — and the notice names every skipped
   // location, one per line, so the user knows the project-local file (if
   // any) was not the one loaded.
-  (asRoot ? test.skip : test)(
+  test(
     "an unsearchable chain location is skipped and named, not fatal",
     () => {
       const { dir, cleanup } = mkdir();
@@ -449,7 +444,7 @@ describe("the config search", () => {
       mkdirSync(xdgCfgDir);
       const userFile = join(xdgCfgDir, "config.json5");
       writeFileSync(userFile, VALID_CFG);
-      chmodSync(locked, 0o000);
+      using _denied = refuseFile({ below: locked }, "statSync", "lstatSync");
       try {
         const resolved = resolutionOf(L, approving(), {
           projectDir: locked,
@@ -484,7 +479,6 @@ describe("the config search", () => {
         for (const path of skipped) expect(notice).toContain(path);
         expect(notice?.split("\n")).toHaveLength(skipped.length);
       } finally {
-        chmodSync(locked, 0o755);
         cleanup();
       }
     },
@@ -609,7 +603,7 @@ describe("config collisions", () => {
   // location is `Unchecked` for both spellings, and the resolver's notice is
   // what names the errno — a fabricated "shadows" warning beside it would
   // assert a fact nothing checked.
-  (asRoot ? test.skip : test)(
+  test(
     "reports nothing for a location it cannot search",
     () => {
       const { dir, cleanup } = mkdir();
@@ -618,11 +612,10 @@ describe("config collisions", () => {
       mkdirSync(locked);
       writeFileSync(join(locked, ".cc-candybar.json5"), VALID_CFG);
       writeFileSync(join(locked, ".cc-candybar.json"), VALID_CFG);
-      chmodSync(locked, 0o000);
+      using _denied = refuseFile({ below: locked }, "statSync", "lstatSync");
       try {
         expect(collisionsOf(L, locked)).toBeNull();
       } finally {
-        chmodSync(locked, 0o755);
         cleanup();
       }
     },

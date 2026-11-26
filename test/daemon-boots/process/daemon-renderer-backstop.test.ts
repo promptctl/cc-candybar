@@ -2,7 +2,8 @@
 // processes of the built bundle: a renderer past the memory limit is recorded
 // and ended alone, and started again, while the other keeps drawing; the stats
 // show one panel per renderer, alike whatever its name. What the platform
-// charges each process is the test's, so no process has to grow to breach.
+// charges and reports of each process is the test's, so no process has to
+// grow to breach.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -30,6 +31,7 @@ import {
   realLimitsDeps,
 } from "../../../src/daemon/limits";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
+import { detectClaudeConfigDir } from "../../../src/claude-settings";
 import { BYTES_PER_MB as MB } from "../../../src/daemon/foundations/memory-limit";
 import { systemLauncher } from "../../../src/proc/system-launcher";
 import { hostOf } from "../../../scripts/lib/host";
@@ -113,6 +115,9 @@ test("a renderer past its memory limit is ended alone and started again, and eve
             measure: "phys_footprint",
             bytes: process.pid === over ? limit + MB : 64 * MB,
           }),
+          // The platform's report of a process is the test's too: each
+          // platform's tools print their own, at their own pace.
+          captureMemoryReport: async (pid) => `the report of ${pid}`,
         },
       ),
   });
@@ -125,6 +130,9 @@ test("a renderer past its memory limit is ended alone and started again, and eve
     cwd: root,
     termCols: 200,
     termRows: 40,
+    // The Claude directory the env names, as the real client reports it, so
+    // the daemon reads the empty one test/setup.ts made, not the account's.
+    claudeConfigDir: detectClaudeConfigDir(process.env, root),
     env: plainEnvironment(
       named ? { ...process.env, CC_CANDYBAR_NAME: WORKTREE } : process.env,
     ),
@@ -250,8 +258,11 @@ test("a renderer past its memory limit is ended alone and started again, and eve
         ),
       },
     });
-    const heap = postMortems[0]!.artifacts.heapSnapshot!;
-    expect(fs.statSync(heap).size).toBeGreaterThan(0);
+    const { memoryReport, heapSnapshot } = postMortems[0]!.artifacts;
+    expect(fs.readFileSync(memoryReport!, "utf8")).toBe(
+      `the report of ${breached}`,
+    );
+    expect(fs.statSync(heapSnapshot!).size).toBeGreaterThan(0);
     daemonLog.writeNow();
     expect(fs.readFileSync(paths.log, "utf8")).toMatch(
       new RegExp(

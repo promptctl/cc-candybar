@@ -66,15 +66,23 @@ export const hookData = (sessionId: string, cwd: string): ClaudeHookData =>
   statusHook(sessionId, cwd, path.join(cwd, "transcript.jsonl"));
 
 // A request as the suite's clients send it: they report the environment
-// test/setup.ts made for the worker, unless a case states its own.
+// test/setup.ts made for the worker, unless a case states its own, and the
+// Claude directory that environment names, as the real client always does.
+// A request that names none has the daemon read the account's own, the
+// host's real one. A case's own report wins.
 // A relay's request names the environment by key, so it carries none.
 type SuiteAsk =
   | (Omit<RenderAsk, "env"> & Partial<Pick<RenderAsk, "env">>)
   | SessionRenderAsk;
-const asked = (request: SuiteAsk): RenderAsk | SessionRenderAsk =>
-  request.kind === "render-session"
-    ? request
-    : { ...request, env: request.env ?? TEST_ENV };
+const asked = (request: SuiteAsk): RenderAsk | SessionRenderAsk => {
+  if (request.kind === "render-session") return request;
+  const env = request.env ?? TEST_ENV;
+  return {
+    claudeConfigDir: detectClaudeConfigDir(env, request.cwd),
+    ...request,
+    env,
+  };
+};
 
 // The bytes of a render, as Claude Code's client reads them.
 export const renderRequest = (

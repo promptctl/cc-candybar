@@ -1,3 +1,4 @@
+import { refuseFile } from "./helpers/refuse-file";
 import fs, {
   mkdtempSync,
   rmSync,
@@ -637,18 +638,15 @@ describe("the session state's file", () => {
     expect(said).toContain(`it is kept as ${join(dir, "dotfiles", aside!)}`);
   });
 
-  const asRoot = process.getuid?.() === 0;
-  (asRoot ? it.skip : it)(
+  it(
     "a file the daemon may not read is kept beside itself, and the store saves on",
     async () => {
-      writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }), {
-        mode: 0o000,
-      });
+      writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
+      using _denied = refuseFile(file, "openSync");
       const { turn, said, stores } = daemonOver(storage());
       turn((s) => s.set(S2, "theme", "dracula"));
       await stores.close();
       const [aside] = fs.readdirSync(dir).filter((f) => f.includes(".unread-"));
-      fs.chmodSync(join(dir, aside!), 0o600);
       expect(JSON.parse(readFileSync(join(dir, aside!), "utf8"))).toEqual({
         s1: { theme: "nord" },
       });
@@ -659,21 +657,17 @@ describe("the session state's file", () => {
 
   // [LAW:no-silent-failure] A file that can be neither read nor set aside is
   // never saved to, and the bar says so for as long as the daemon runs.
-  (asRoot ? it.skip : it)(
+  it(
     "a file that can be neither read nor set aside is left as it was",
     async () => {
       writeFileSync(file, "{ not json");
-      fs.chmodSync(dir, 0o500);
-      try {
-        const { turn, said, stores } = daemonOver(storage());
-        turn((s) => s.set(S2, "theme", "dracula"));
-        await stores.close();
-        expect(readFileSync(file, "utf8")).toBe("{ not json");
-        expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
-        expect(said).toMatch(/setting it aside failed \(EACCES/);
-      } finally {
-        fs.chmodSync(dir, 0o700);
-      }
+      using _denied = refuseFile(file, "renameSync");
+      const { turn, said, stores } = daemonOver(storage());
+      turn((s) => s.set(S2, "theme", "dracula"));
+      await stores.close();
+      expect(readFileSync(file, "utf8")).toBe("{ not json");
+      expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
+      expect(said).toMatch(/setting it aside failed \(EACCES/);
     },
   );
 

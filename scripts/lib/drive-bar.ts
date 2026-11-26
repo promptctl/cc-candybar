@@ -140,6 +140,10 @@ export type StartBarDaemon = (isolated: IsolatedDaemonEnv) => Promise<BarDaemon>
 // per run, and it dies with the tool.
 const outsideThePool: AcquireSlot = async () => ({ release: () => {} });
 
+// The command-line tools give a live daemon twelve seconds to answer and then
+// report where the boot stopped. Each invocation owns its own deadline.
+const TOOL_BOOT_TIMEOUT_MS = 12_000;
+
 /** A real daemon that dies with this process: the one a hand-run tool draws on. */
 export const realBarDaemon: StartBarDaemon = async ({ env }) => {
   const daemon = await startDaemonWithEnv(
@@ -149,6 +153,7 @@ export const realBarDaemon: StartBarDaemon = async ({ env }) => {
       NODE_OPTIONS: withStamp(env.NODE_OPTIONS),
     },
     outsideThePool,
+    AbortSignal.timeout(TOOL_BOOT_TIMEOUT_MS),
   );
   return {
     target: daemon.sockPath,

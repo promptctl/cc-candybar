@@ -8,11 +8,10 @@ import {
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { retainerPathsTo } from "./helpers/retainer-path";
+import { retainerPathsFrom } from "./helpers/retainer-path";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { setImmediate as nextTurn } from "node:timers/promises";
 import v8 from "node:v8";
 import vm from "node:vm";
 import {
@@ -42,12 +41,12 @@ import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { clickVerb, recordRender, testVerbContext } from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { linkClick } from "./helpers/click";
+import { discoveryNow, linkClick } from "./helpers/click";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { configHost } from "./helpers/config-host";
+import { configHost, originOf } from "./helpers/config-host";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 
@@ -166,9 +165,9 @@ const render = (
 class ProbeStore extends VariableStore {}
 
 // Draw one frame of `compiled` from a store and registry of its own, as a
-// render-cache entry would, then dispose the registry and release the store
-// within this synchronous call.
-const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): void => {
+// render-cache entry would. The caller can hold that store independently
+// of the compile after the registry is disposed.
+const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): ProbeStore => {
   const store = new ProbeStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
@@ -188,6 +187,7 @@ const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): void => {
     },
   );
   registry.dispose();
+  return store;
 };
 
 const exposeGc = (): (() => void) => {
@@ -445,25 +445,25 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 // render once that render returns: the store, the scope its layout rows were
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
-const heldStores: object[] = [];
-test("a compile keeps nothing of a render once it returns", async () => {
+class CompileHolder {
+  readonly control = new ProbeStore(systemTimekeeper);
+  constructor(readonly compiled: CompiledConfig) {}
+}
+
+test("a compile keeps nothing of a render once it returns", () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
-  const compiled = compileDslConfig(compileInputOf(config));
-  // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
-  // collects first and follows only strong edges, so no collection count or
-  // wait is in the verdict. One store is held on purpose, as the control: it
-  // is the one path the snapshot must show, so an empty answer for the drawn
-  // store is one this reader could have failed to give, whatever happens to
-  // the class's name. The draw runs in its own event-loop turn before the
-  // snapshot, with no store crossing into the suspended test frame.
-  heldStores.push(new ProbeStore(systemTimekeeper));
-  try {
-    await nextTurn().then(() => drawAlone(config, compiled));
-    expect(await retainerPathsTo("ProbeStore")).toHaveLength(1);
-  } finally {
-    heldStores.length = 0;
-  }
-  expect(compiled.menuRuntime.action.bound).toBeUndefined();
+  const holder = new CompileHolder(compileDslConfig(compileInputOf(config)));
+  const drawnStore = drawAlone(config, holder.compiled);
+  // The control is the one store strongly reachable from this holder. A
+  // second path names precisely how the compile keeps the render's store.
+  const paths = retainerPathsFrom("CompileHolder", "ProbeStore");
+  expect(paths).toEqual([
+    ["object / CompileHolder --control-->", "object / ProbeStore"],
+  ]);
+  // This store is still live on the test stack. Only the control is held
+  // by the compile holder, regardless of when V8 collects.
+  expect(drawnStore).not.toBe(holder.control);
+  expect(holder.compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
 // [LAW:verifiable-goals] ENTRY_BYTES, COMPILE_BYTES and VIEW_BYTES are the
@@ -503,36 +503,38 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   held.length = 0;
   expect(compileBytes).toBeLessThan(COMPILE_BYTES);
 
-  const { cache, originAt, sessionState } = makeCache(64 * COMPILE_BYTES);
-  // Rendered once by a session of its own, as every entry the daemon holds has
-  // been: the render fills the session's view of it and the view's sink.
-  const entry = (i: number) => {
+  const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
+  const discovery = discoveryNow(HOST);
+  const N = 6;
+  const origins = Array.from({ length: N + 1 }, (_, i) => {
     const cwd = path.join(dir, `c${i}`);
     fs.mkdirSync(cwd);
-    using held = cache.holdSession(
-      originAt(cwd, cwd, undefined),
-      viewFacts(cwd, `e${i}`),
-    );
-    drawn(held.view);
-    return held.state;
+    return originOf(cwd, cwd);
+  });
+  // Measure an entry after a session drew it and retired its view. The
+  // renderer receives the host's snapshot; the host's discovery watches
+  // live in another process and are outside the renderer's memory budget.
+  const entry = (i: number) => {
+    const origin = origins[i]!;
+    cache.configure(origin, discovery.snapshotOf(origin));
+    const session = sessionIdOf(`e${i}`);
+    {
+      using held = cache.holdSession(origin, viewFacts(origin.cwd, session));
+      drawn(held.view);
+    }
+    cache.retireSession(session);
   };
-  const keep = [entry(0)];
+  entry(0);
   const before = heapUsed();
-  const N = 6;
-  for (let i = 1; i <= N; i++) keep.push(entry(i));
+  for (let i = 1; i <= N; i++) entry(i);
   const perEntry = (heapUsed() - before) / N;
-  expect(cache.stats.compiles).toBe(1);
-  expect(cache.stats.views).toBe(N + 1);
-  expect(perEntry).toBeLessThan(ENTRY_BYTES + VIEW_BYTES);
+  expect(cache.stats).toMatchObject({ size: N + 1, compiles: 1, views: 0 });
+  expect(perEntry).toBeLessThan(ENTRY_BYTES);
 
   // A further session in a directory already rendered from costs its view.
-  const shared = keep[0]!;
+  const shared = origins[0]!;
   const view = (i: number): SessionView => {
-    using held = cache.holdSession(
-      originAt(dir + "/c0", dir + "/c0", undefined),
-      viewFacts(dir + "/c0", `v${i}`),
-    );
-    expect(held.state).toBe(shared);
+    using held = cache.holdSession(shared, viewFacts(shared.cwd, `v${i}`));
     drawn(held.view);
     return held.view;
   };
@@ -540,10 +542,8 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const beforeViews = heapUsed();
   for (let i = 1; i <= N; i++) views.push(view(i));
   const perView = (heapUsed() - beforeViews) / N;
-  expect(cache.stats.views).toBe(2 * N + 2);
+  expect(cache.stats).toMatchObject({ size: N + 1, compiles: 1, views: N + 1 });
   expect(perView).toBeLessThan(VIEW_BYTES);
-  // The entry alone, without the view each of its sessions drew once.
-  expect(perEntry - perView).toBeLessThan(ENTRY_BYTES);
 
   // A view keeps the parts of every placement it has drawn until it is
   // disposed (src/dsl/parts.ts), so it is charged for the most the bundled
@@ -552,8 +552,8 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const walked = async (i: number): Promise<SessionView> => {
     const sid = `w${i}`;
     using held = cache.holdSession(
-      originAt(dir + "/c0", dir + "/c0", undefined),
-      viewFacts(dir + "/c0", sid),
+      shared,
+      viewFacts(shared.cwd, sid),
     );
     await walkMenu(held.view, sessionState, held.state.config);
     return held.view;

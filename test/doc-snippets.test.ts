@@ -198,7 +198,7 @@ beforeAll(() => {
   }
   process.env.PATH = `${bin}${path.delimiter}${SAVED_PATH ?? ""}`;
   // Built after the PATH write so the stubs reach the launcher's children.
-  world = worldOf(hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(os.tmpdir(), "cc-doc-xdg-empty") }));
+  world = worldOf(hostOf({ ...HOST.env, XDG_CONFIG_HOME: path.join(dir, "xdg-empty") }));
   for (const f of fences) {
     if (f.snippet.kind !== "file") continue;
     const target = path.join(dir, f.snippet.path);

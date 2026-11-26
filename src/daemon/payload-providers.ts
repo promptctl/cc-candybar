@@ -26,7 +26,7 @@ import { ContextProvider } from "./cache/context-provider.js";
 import { MetricsProvider } from "./cache/metrics-provider.js";
 import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "./cache/tmux.js";
-import { HostService } from "./cache/host-identity.js";
+import { HostService, MACHINE_HOST_READS } from "./cache/host-identity.js";
 import { AutoCompactProvider } from "./cache/autocompact.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
@@ -77,7 +77,12 @@ export function createPayloadProviders(opts: {
     faults: new RefreshFaults(),
   } satisfies LaneOwners;
   const owners = {
-    hostService: new HostService({ clock, logger, ledger }),
+    hostService: new HostService({
+      clock,
+      logger,
+      ledger,
+      reads: MACHINE_HOST_READS,
+    }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
       watchers: opts.watchers,

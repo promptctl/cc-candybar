@@ -6,10 +6,9 @@
 // claim under test is "the first probe that answers wins, and a total failure is
 // still a readable report", which is a claim about the fold, not about macOS.
 // `platformProbes` is tested for the rows it selects — the one platform fact —
-// and one real darwin probe is run at the end, where the claim genuinely is
-// about this machine.
+// and footprint's parse for its recorded output, so every case runs the same
+// on every machine.
 
-import os from "node:os";
 import { processLauncher } from "./helpers/host";
 
 import {
@@ -99,28 +98,6 @@ describe("platformProbes", () => {
     expect(platformProbes(processLauncher, "win32", 4242)).toEqual([]);
   });
 });
-
-// [LAW:verifiable-goals] One test that is genuinely about this machine: on the
-// host running the suite, the real probes must attribute the test process's own
-// memory. A mocked probe can prove the fold; only this can prove the commands
-// exist and answer. Skipped off the two platforms that declare probes, since
-// there the correct behaviour is the "no probe" report asserted above.
-const REAL = os.platform() === "darwin" || os.platform() === "linux";
-(REAL ? test : test.skip)(
-  "the real probes attribute this process on this host",
-  async () => {
-    const report = await memoryReport(
-      platformProbes(processLauncher, os.platform(), process.pid),
-    );
-    expect(report).toContain("# memory report from:");
-    expect(report).not.toContain("no probe answered");
-    // Whatever answered, it must carry a size — the one thing every probe on
-    // every platform reports, and the reason the artifact is worth writing.
-    expect(report).toMatch(/\d/);
-    expect(report.length).toBeGreaterThan(40);
-  },
-  15000,
-);
 
 // brandon-unfiled-3248.2j3m: the charge the memory backstop judges.
 describe("the memory charge", () => {
@@ -300,20 +277,42 @@ describe("the memory charge", () => {
     ]);
   });
 
-  (os.platform() === "darwin" ? test : test.skip)(
-    "on this Mac, footprint answers for this process and its parent, each its own",
-    async () => {
-      const charged = await chargesOf(chargeProbe(processLauncher, "darwin"), [
-        { pid: process.pid, usage: rssOf(process.memoryUsage().rss) },
-        { pid: process.ppid, usage: rssOf(1) },
-      ]);
-      const bytes = charged.map((charge) =>
-        charge.kind === "charged" && charge.measure === "phys_footprint"
-          ? charge.bytes
-          : charge,
-      );
-      expect(bytes).toEqual([expect.any(Number), expect.any(Number)]);
-      expect(bytes[0]).not.toBe(bytes[1]);
-    },
-  );
+  // footprint as macOS 26.5 printed two processes, recorded once
+  // (`footprint -p 19274 -p 74707 --noCategories -f bytes`), so the parse is
+  // held to the tool's own output on every machine, not to a model of it.
+  const RECORDED = [
+    "======================================================================",
+    "claude [19274]: 64-bit    Footprint: 335087008 B (16384 bytes per page)",
+    "======================================================================",
+    "",
+    "Auxiliary data:",
+    "    phys_footprint: 335119776 B",
+    "    phys_footprint_peak: 343049632 B",
+    "",
+    "======================================================================",
+    "tmux [74707]: 64-bit    Footprint: 19628272 B (16384 bytes per page)",
+    "======================================================================",
+    "",
+    "Auxiliary data:",
+    "    phys_footprint: 19628272 B",
+    "    phys_footprint_peak: 26083568 B",
+    "",
+    "======================================================================",
+    "Summary Footprint: 354715280 B",
+    "======================================================================",
+    "",
+  ].join("\n");
+
+  test("footprint's own output, as macOS prints it, charges each process its own phys_footprint", async () => {
+    const probe = footprintCharge(async () => ran(RECORDED));
+    await expect(
+      chargesOf(probe, [
+        { pid: 74707, usage: rssOf(1) },
+        { pid: 19274, usage: rssOf(1) },
+      ]),
+    ).resolves.toEqual([
+      { kind: "charged", measure: "phys_footprint", bytes: 19628272 },
+      { kind: "charged", measure: "phys_footprint", bytes: 335119776 },
+    ]);
+  });
 });

@@ -7,7 +7,6 @@
 // it did draw; a render fits the size it was asked for. These cases are about the bar, and draw on a daemon in this worker;
 // what `pnpm bar` itself runs is in test/daemon-boots/process/dev-tools.test.ts.
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -23,16 +22,25 @@ import {
 } from "../../../scripts/lib/drive-bar";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
 import { textOf } from "../../../src/render/frame";
+import { checkoutAt } from "../../helpers/checkout";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { WORKER_SHELL } from "../../helpers/session-environment";
 
 jest.setTimeout(30_000);
 
+let scratch: string;
+let checkout: string;
+beforeAll(() => {
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-drive-test-"));
+  checkout = checkoutAt(fs.mkdtempSync(path.join(scratch, "checkout-")));
+});
+afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
+
 const userConfig = (
   config = "{ root: { h: ['directory', 'model'] } }\n",
 ): string => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-drive-test-"));
-  const file = path.join(dir, "config.json5");
+  const configDir = fs.mkdtempSync(path.join(scratch, "config-"));
+  const file = path.join(configDir, "config.json5");
   fs.writeFileSync(file, config);
   return file;
 };
@@ -54,7 +62,7 @@ describe("drive-bar", () => {
         width: 120,
         rows: 40,
         config: original,
-        cwd: process.cwd(),
+        cwd: checkout,
         ssh: false,
         shell: WORKER_SHELL,
       },
@@ -79,7 +87,7 @@ describe("drive-bar", () => {
         width: 200,
         rows: 40,
         config: null,
-        cwd: process.cwd(),
+        cwd: checkout,
         ssh: false,
         shell: WORKER_SHELL,
       },
@@ -104,7 +112,7 @@ describe("drive-bar", () => {
         width: 200,
         rows: 40,
         config: userConfig(WIDE_BAR),
-        cwd: process.cwd(),
+        cwd: checkout,
         ssh: false,
         shell: WORKER_SHELL,
       },
@@ -121,22 +129,7 @@ describe("drive-bar", () => {
   // right end, and the default git cell ends in the control that expands it.
   test("a cell wider than the render wraps, and the control at its end still works", async () => {
     const BRANCH = "candybar-isolated-daemon-bfab.a-long-branch-name";
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-drive-wrap-"));
-    const git = (...args: string[]): void => {
-      execFileSync("git", args, { cwd, stdio: "pipe" });
-    };
-    git("init", "-q", "-b", BRANCH);
-    git(
-      "-c",
-      "user.email=a@b",
-      "-c",
-      "user.name=a",
-      "commit",
-      "-q",
-      "--allow-empty",
-      "-m",
-      "x",
-    );
+    const cwd = checkoutAt(fs.mkdtempSync(path.join(scratch, "wrap-")), BRANCH);
     const width = 30;
     bar = await startBar(
       { width, rows: 40, config: null, cwd, ssh: false, shell: WORKER_SHELL },
@@ -169,7 +162,7 @@ describe("drive-bar", () => {
         width: 20,
         rows: 40,
         config: null,
-        cwd: process.cwd(),
+        cwd: checkout,
         ssh: false,
         shell: WORKER_SHELL,
       },
@@ -193,7 +186,7 @@ describe("drive-bar", () => {
         width: 120,
         rows: 40,
         config: null,
-        cwd: process.cwd(),
+        cwd: checkout,
         ssh: false,
         shell: WORKER_SHELL,
       },

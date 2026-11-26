@@ -47,10 +47,10 @@ test("the refusal report names the phase and quotes the daemon's reason", async 
     expect(failure.message).toMatch(
       /refusing to boot: Error: directory has unsafe permissions/,
     );
-    // The budget-expiry arm is the one an exit excludes: seeing it here would
-    // mean the helper waited the whole budget out to learn what the process had
-    // already told it.
-    expect(failure.message).not.toContain("budget expired");
+    // The arm for a wait that ended first is the one an exit excludes: seeing
+    // it here would mean the helper waited out its test to learn what the
+    // process had already told it.
+    expect(failure.message).not.toContain("wait for it ended");
   } finally {
     iso.removeTmpDirs();
   }

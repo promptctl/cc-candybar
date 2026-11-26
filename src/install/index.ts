@@ -40,7 +40,7 @@ import {
   PACKAGE_NAME,
   REGISTRY_URL,
 } from "./currency";
-import { PLATFORM_PACKAGES } from "./platforms";
+import { PLATFORM_PACKAGES, machinePlatform } from "./platforms";
 import { stageExecutable } from "./stage-executable.js";
 import { recordIfInstall, statusLineRunsBundle } from "./record";
 import { recordHostBundle } from "../daemon/host-bundle";
@@ -127,7 +127,11 @@ function resolveForwarder(sourceDist: string): string {
     }
     return built;
   }
-  const shipped = platformPackageFile(sourceDist, `bin/${FORWARDER_BIN}`);
+  const shipped = platformPackageFile(
+    sourceDist,
+    `bin/${FORWARDER_BIN}`,
+    machinePlatform(),
+  );
   switch (shipped.kind) {
     case "found":
       return shipped.path;
@@ -142,9 +146,9 @@ function resolveForwarder(sourceDist: string): string {
   }
 }
 
-// [LAW:one-source-of-truth] One lookup of a file the running platform's
-// package ships, for everything install stages from it: the package is named
-// by platform and arch (PLATFORM_PACKAGES) and resolved from the installed
+// [LAW:one-source-of-truth] One lookup of a file a platform's package ships,
+// for everything install stages from it: the package is named by its
+// platform-arch key (PLATFORM_PACKAGES) and resolved from the installed
 // bundle's own node_modules, where the optional dependency lives — anchored
 // to the bundle's real location, not this module's compiled form (which
 // ts-jest loads as CJS where import.meta is illegal).
@@ -156,8 +160,8 @@ type PlatformPackageFile =
 function platformPackageFile(
   sourceDist: string,
   file: string,
+  platform: string,
 ): PlatformPackageFile {
-  const platform = `${process.platform}-${process.arch}`;
   const pkgName = PLATFORM_PACKAGES[platform];
   if (pkgName === undefined) return { kind: "no-package", platform };
   try {
@@ -178,8 +182,8 @@ type RenderEntry =
   | { kind: "native"; sourcePath: string }
   | { kind: "node-shim"; sourcePath: string };
 
-function resolveRenderEntry(sourceDist: string): RenderEntry {
-  const shipped = platformPackageFile(sourceDist, "bin/cc-candybar");
+function resolveRenderEntry(sourceDist: string, platform: string): RenderEntry {
+  const shipped = platformPackageFile(sourceDist, "bin/cc-candybar", platform);
   if (shipped.kind === "found") {
     return { kind: "native", sourcePath: shipped.path };
   }
@@ -264,7 +268,8 @@ export function runStageRuntime(
     );
   }
 
-  const entry = resolveRenderEntry(sourceDist);
+  const platform = machinePlatform();
+  const entry = resolveRenderEntry(sourceDist, platform);
   if (!fs.existsSync(entry.sourcePath)) {
     throw new Error(
       `install: render entry not found at ${entry.sourcePath}. Reinstall the package.`,
@@ -303,8 +308,8 @@ export function runStageRuntime(
   process.stdout.write(
     `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${dir}\n` +
       (stagedKind === "native"
-        ? `  render entry: native binary (${process.platform}-${process.arch})\n`
-        : `  render entry: node shim (no native binary for ${process.platform}-${process.arch}; renders are correct but pay node startup)\n`),
+        ? `  render entry: native binary (${platform})\n`
+        : `  render entry: node shim (no native binary for ${platform}; renders are correct but pay node startup)\n`),
   );
   return {
     binPath,

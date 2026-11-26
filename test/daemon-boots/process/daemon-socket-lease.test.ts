@@ -5,9 +5,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { readLease, writeLease } from "../../../src/daemon/socket-lease";
-import { waitForExit } from "../../../scripts/lib/daemon/wire";
+import { waitForExit, type ExitResult } from "../../../scripts/lib/daemon/wire";
 import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
+import { untilTestEnds } from "../../helpers/test-end";
 
 // The real kernel start-time of a live pid, read from this host's own source,
 // so a planted lease matches the identity the daemon's arbitration reads back.
@@ -24,8 +25,6 @@ async function realStartTime(pid: number): Promise<string> {
 // connect() to it returns exactly the ECONNREFUSED/ENOTSOCK the deleted probe
 // classified as "dead". So this is the bug's exact trigger; the lease is what
 // keeps the incumbent from being robbed.
-
-const BUDGET_MS = 8000;
 
 interface Fixture {
   sockPath: string;
@@ -67,16 +66,18 @@ function makeFixture(): Fixture {
   };
 }
 
-function raceExit(
-  child: ChildProcess,
-  budgetMs: number,
-): Promise<{ code: number | null; signal: NodeJS.Signals | null } | "timeout"> {
-  return Promise.race([
-    waitForExit(child),
-    new Promise<"timeout">((resolve) =>
-      setTimeout(() => resolve("timeout"), budgetMs).unref(),
-    ),
-  ]);
+// The daemon's own exit, however long its boot takes on this machine, or a
+// failure once its test has ended without one.
+function exitOf(child: ChildProcess): Promise<ExitResult> {
+  return untilTestEnds(
+    (ended) =>
+      new Promise((resolve, reject) => {
+        void waitForExit(child).then(resolve);
+        ended.addEventListener("abort", () =>
+          reject(new Error("the daemon was still running when its test ended")),
+        );
+      }),
+  );
 }
 
 // Does this pid name a live process? Signal 0 probes existence without
@@ -130,10 +131,8 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
 
       const { child: daemon, stop } = await spawnTestDaemon(fx.env);
       try {
-        const result = await raceExit(daemon, BUDGET_MS);
         // Exits cleanly (attach-and-exit), never SIGKILL/crash.
-        expect(result).not.toBe("timeout");
-        expect(result).toMatchObject({ code: 0 });
+        expect(await exitOf(daemon)).toMatchObject({ code: 0 });
         // The incumbent's socket file is untouched — no theft.
         expect(fs.readFileSync(fx.sockPath, "utf8")).toBe(MARKER);
       } finally {
