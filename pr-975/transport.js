@@ -43109,6 +43109,7 @@ var LANES = {
   }
 };
 var WINDOW_PLACEMENTS = ["docked", "inset"];
+var DEFAULT_WINDOW_PLACEMENT = "inset";
 var ownsPointer = (lane) => SAYS_WHERE_POINTER_ACTS[LANES[lane].encoding];
 var LANE_NAMES = Object.keys(LANES);
 var TOGGLED_LANES = LANE_NAMES.filter(
@@ -43410,7 +43411,7 @@ var GLOBAL_FIELDS = {
   ...LANE_ROWS,
   windowPlacement: enumSetting(
     WINDOW_PLACEMENTS,
-    "docked",
+    DEFAULT_WINDOW_PLACEMENT,
     control("window placement", "renderer")
   ),
   // The color depth rich-js downsamples output to (the legacy
@@ -92156,7 +92157,7 @@ var DeclaredSurfaces = class {
       if (!pane || next2.get(paneKey(pane))?.session === sid)
         windows2.set(sid, {
           pane,
-          placement: switches.windowPlacement ?? "docked"
+          placement: switches.windowPlacement ?? DEFAULT_WINDOW_PLACEMENT
         });
     }
     this.windows(windows2);

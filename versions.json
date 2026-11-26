@@ -4,15 +4,22 @@
     {
       "version": "pr-975",
       "ref": "refs/pull/975/merge",
-      "sha": "3ebbff819807151c11fddd7c727d7f424a50189b",
-      "timestamp": "2026-11-26T14:32:25.408Z",
+      "sha": "9fadc6cc96347e5af0252b1b8eb0bcbe7ad08432",
+      "timestamp": "2026-11-26T15:06:52.489Z",
       "commits": [
         {
-          "sha": "3ebbff819807151c11fddd7c727d7f424a50189b",
+          "sha": "9fadc6cc96347e5af0252b1b8eb0bcbe7ad08432",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T14:30:52Z",
-          "message": "Merge 50d29fc87e498f1ae42ef58bab94bb418820ed77 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+          "timestamp": "2026-11-26T15:05:44Z",
+          "message": "Merge 55ec1abed8e11039d06c9c51bc9449bac2ec7da8 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+        },
+        {
+          "sha": "55ec1abed8e11039d06c9c51bc9449bac2ec7da8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T08:05:32-07:00",
+          "message": "feat(window): default to inset and place padded terminal grids\n"
         },
         {
           "sha": "50d29fc87e498f1ae42ef58bab94bb418820ed77",
