@@ -2,32 +2,38 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "17339bc95bd7d8e527c9de56d2d06a3c029bf27c",
-      "timestamp": "2026-11-26T06:52:39.114Z",
-      "commits": [
-        {
-          "sha": "17339bc95bd7d8e527c9de56d2d06a3c029bf27c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:51:27-07:00",
-          "message": "fix(config): preserve comments and roll back failed installs (#969)\n\n* fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n\n* fix(install): plan settings edits and roll back incomplete installs\n\n* test(install): preserve active forwards during installation rollback\n\n* fix(install): exclude overlapping runtime and handler installs\n\n* fix(install): prepare replacements before publishing under a recoverable process claim\n\n* fix(install): name directories retained for concurrent SSH forwards\n\n* fix(install): recover interrupted publications before retrying an install\n\n* fix(install): preserve replaced directories during interrupted recovery\n\n* fix(config): guard incomplete history edits and preserve strict settings JSON\n\n* test(config): verify blank Claude settings fail at the shared read\n\n* style(install): format the integrated platform lookup signatures"
-        }
-      ]
-    },
-    {
       "version": "pr-972",
       "ref": "refs/pull/972/merge",
-      "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
-      "timestamp": "2026-11-26T06:29:32.635Z",
+      "sha": "1026597579a544add2ac6644ddd5c29e5617eedc",
+      "timestamp": "2026-11-26T06:53:50.244Z",
       "commits": [
         {
-          "sha": "1b95cbfe5e588bfd251ca07bb580ac95cb74ca5b",
+          "sha": "1026597579a544add2ac6644ddd5c29e5617eedc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:28:02Z",
-          "message": "Merge e3c10c2272e0485db5f6088cf659294f1d8c5ee9 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
+          "timestamp": "2026-11-26T06:52:44Z",
+          "message": "Merge a60423dbab82dcc236a138a839301303d5012684 into 17339bc95bd7d8e527c9de56d2d06a3c029bf27c\n"
+        },
+        {
+          "sha": "a60423dbab82dcc236a138a839301303d5012684",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:52:24-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into fix/menu-retired-picks-recording\n"
+        },
+        {
+          "sha": "ea152cb74a3a5e407333fd3913d2d21cad13ad99",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:52:23-07:00",
+          "message": "fix(recording): recognize the public state the bundled menu actually writes\n"
+        },
+        {
+          "sha": "2e65e6d08b417f2c15a0a354fd7da184e976af75",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:34:50-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into fix/menu-retired-picks-recording\n"
         },
         {
           "sha": "e3c10c2272e0485db5f6088cf659294f1d8c5ee9",
@@ -42,6 +48,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T23:11:40-07:00",
           "message": "fix(menu): retire saved selections that block recording after upgrade\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "17339bc95bd7d8e527c9de56d2d06a3c029bf27c",
+      "timestamp": "2026-11-26T06:52:39.114Z",
+      "commits": [
+        {
+          "sha": "17339bc95bd7d8e527c9de56d2d06a3c029bf27c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:51:27-07:00",
+          "message": "fix(config): preserve comments and roll back failed installs (#969)\n\n* fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n\n* fix(install): plan settings edits and roll back incomplete installs\n\n* test(install): preserve active forwards during installation rollback\n\n* fix(install): exclude overlapping runtime and handler installs\n\n* fix(install): prepare replacements before publishing under a recoverable process claim\n\n* fix(install): name directories retained for concurrent SSH forwards\n\n* fix(install): recover interrupted publications before retrying an install\n\n* fix(install): preserve replaced directories during interrupted recovery\n\n* fix(config): guard incomplete history edits and preserve strict settings JSON\n\n* test(config): verify blank Claude settings fail at the shared read\n\n* style(install): format the integrated platform lookup signatures"
         }
       ]
     }

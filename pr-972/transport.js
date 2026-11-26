@@ -5040,11 +5040,11 @@ var require_dist = __commonJS({
           return final;
         }
       };
-      var JSON56 = {
+      var JSON55 = {
         parse: parse3,
         stringify
       };
-      var lib = JSON56;
+      var lib = JSON55;
       var es5 = lib;
       return es5;
     }));
@@ -28577,6 +28577,8 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   URL_FRAME_VERSION
 ]);
 var awaitsVerdict = (urlV) => typeof urlV === "number" && urlV >= 2;
+var ACTS_ON_DAEMON = "daemon";
+var ACTS_ON_DESKTOP = "desktop";
 var ProtocolError = class extends Error {
   constructor(message) {
     super(message);
@@ -28638,6 +28640,7 @@ var IDENT_START = /[A-Za-z_$\p{L}]/u;
 var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
 var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
 var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var LINE_END = /\r\n|[\n\r\u2028\u2029]/g;
 var Scanner = class {
   constructor(text5) {
     this.text = text5;
@@ -28650,21 +28653,26 @@ var Scanner = class {
   fail(message) {
     throw new Json5EditError(message, this.pos);
   }
+  // Past whitespace and comments. Returns where the last comment it passed
+  // ends, or where it started when it passed none.
   skipTrivia() {
+    let commentEnd = this.pos;
     for (; ; ) {
       const c = this.peek();
-      if (c === "") return;
+      if (c === "") return commentEnd;
       if (WHITESPACE.test(c)) {
         this.pos++;
       } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
+        LINE_END.lastIndex = this.pos;
+        this.pos = LINE_END.exec(this.text)?.index ?? this.text.length;
+        commentEnd = this.pos;
       } else if (c === "/" && this.text[this.pos + 1] === "*") {
         const close = this.text.indexOf("*/", this.pos + 2);
         if (close === -1) this.fail("unterminated block comment");
         this.pos = close + 2;
+        commentEnd = this.pos;
       } else {
-        return;
+        return commentEnd;
       }
     }
   }
@@ -28788,7 +28796,20 @@ var Scanner = class {
     return { kind: "array", span: { start, end: this.pos }, elements };
   }
 };
+var HOLDS_NO_VALUE = "the file holds no value (a config that sets nothing is {})";
+function holdsNoValue(text5) {
+  const s = new Scanner(text5);
+  try {
+    s.skipTrivia();
+  } catch (e) {
+    if (e instanceof Json5EditError) return false;
+    throw e;
+  }
+  return s.pos === text5.length;
+}
+var EMPTY_DOCUMENT = "{}\n";
 function parseDocument(text5) {
+  if (holdsNoValue(text5)) throw new Json5EditError(HOLDS_NO_VALUE, 0);
   const s = new Scanner(text5);
   const root = s.value();
   s.skipTrivia();
@@ -28869,7 +28890,7 @@ ${items.join("\n")}
   return JSON.stringify(value);
 }
 function eolOf(text5) {
-  return text5.includes("\r\n") ? "\r\n" : "\n";
+  return /\r\n|[\r\n]/.exec(text5)?.[0] ?? "\n";
 }
 function reindent(valueText, indent2, eol) {
   return valueText.split("\n").join(`${eol}${indent2}`);
@@ -28885,7 +28906,9 @@ function splice(text5, start, end, insert) {
   return text5.slice(0, start) + insert + text5.slice(end);
 }
 function lineStartOf(text5, offset) {
-  return text5.lastIndexOf("\n", offset - 1) + 1;
+  let start = offset;
+  while (start > 0 && !/[\r\n\u2028\u2029]/.test(text5[start - 1])) start--;
+  return start;
 }
 function isBlank(s) {
   return /^[ \t]*$/.test(s);
@@ -28897,7 +28920,7 @@ function indentOfLine(text5, offset) {
 function startsLine(text5, offset) {
   return isBlank(text5.slice(lineStartOf(text5, offset), offset));
 }
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+var LINE_TRAILER = /(?:\/\/[^\r\n\u2028\u2029]*)?(\r\n|[\r\n\u2028\u2029]|$)/y;
 function trailerAfter(text5, end) {
   let i2 = end;
   while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
@@ -28935,6 +28958,11 @@ function insertLineAfter(text5, span, trailer, memberText, indent2) {
   const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
   return splice(withComma, at, at, line);
 }
+function commentsEnd(text5, from) {
+  const s = new Scanner(text5);
+  s.pos = from;
+  return s.skipTrivia();
+}
 function appendMember(text5, container, memberText, dialect) {
   const members = container.kind === "object" ? container.entries : container.elements;
   const last2 = members[members.length - 1];
@@ -28944,7 +28972,7 @@ function appendMember(text5, container, memberText, dialect) {
     const eol = eolOf(text5);
     return splice(
       text5,
-      container.span.start + 1,
+      commentsEnd(text5, container.span.start + 1),
       container.span.end - 1,
       `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
     );
@@ -28972,16 +29000,10 @@ function setValue(text5, path31, valueText, dialect) {
   if (path31.length === 0) {
     throw new Json5EditError("setValue needs a non-empty path", 0);
   }
-  if (/^\s*$/.test(text5)) {
-    const eol = eolOf(text5);
-    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
   return setBelow(text5, parseDocument(text5), path31, valueText, dialect);
 }
 function insertValue(text5, path31, valueText, dialect, precedes) {
   const parentPath = path31.slice(0, -1);
-  if (/^\s*$/.test(text5) && parentPath.length === 0)
-    return setValue(text5, path31, valueText, dialect);
   const leaf2 = path31[path31.length - 1];
   const parent = nodeAt(parseDocument(text5), parentPath);
   if (leaf2 === void 0 || parent?.kind !== "object")
@@ -29044,7 +29066,6 @@ function deleteValue(text5, path31, keep = 0) {
   if (path31.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
-  if (/^\s*$/.test(text5)) return text5;
   const parentPath = path31.slice(0, -1);
   const parent = nodeAt(parseDocument(text5), parentPath);
   const entry = parent === void 0 ? void 0 : entryOf(parent, path31[path31.length - 1]);
@@ -29154,6 +29175,8 @@ function setPlacementSetting(text5, rootPath, id2, setting, valueText) {
 
 // src/config/loader/diagnostics.ts
 function parseJson5Syntax(source) {
+  if (holdsNoValue(source))
+    return { kind: "invalid", issue: { path: "", message: HOLDS_NO_VALUE } };
   try {
     return { kind: "parsed", value: import_json52.default.parse(source) };
   } catch (e) {
@@ -57994,11 +58017,12 @@ ${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
 ${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
 
 Subcommands:
-  install                  One-shot setup: stages the runtime (native render
+  install [--force]        One-shot setup: stages the runtime (native render
                            binary + dist bundle) at a stable path, creates the
                            URL handler app + cc-candybar:// scheme (macOS), and
                            writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
+                           ~/.claude/settings.json. Keeps customized commands unless
+                           --force is set. Configure the bar in its config file.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
   record-host-bundle       Record this bundle as the one a cold host starts
@@ -74783,7 +74807,6 @@ var import_json54 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
 function parse2(text5) {
   if (text5 === null) return { kind: "none" };
-  if (/^\s*$/.test(text5)) return { kind: "empty" };
   try {
     return { kind: "document", root: parseDocument(text5) };
   } catch (e) {
@@ -74794,14 +74817,7 @@ function parse2(text5) {
 function readAt(text5, parsed2, at) {
   if (text5 === null) return ABSENT3;
   if (at.length === 0) return { kind: "file", text: text5 };
-  switch (parsed2.kind) {
-    case "empty":
-      return ABSENT3;
-    case "document":
-      return readOf(text5, nodeAt(parsed2.root, at));
-    default:
-      return { kind: "file", text: text5 };
-  }
+  return parsed2.kind === "document" ? readOf(text5, nodeAt(parsed2.root, at)) : { kind: "file", text: text5 };
 }
 function readOf(text5, node) {
   return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text5, node) };
@@ -74901,6 +74917,8 @@ function diffMembers(at, beforeText, was, afterText, will) {
 function applyChanges(text5, changes, dialect = JSON5_DIALECT) {
   let current = text5;
   for (const change of changes) {
+    if (change.at.length === 0 && (current !== null && holdsNoValue(current) || change.op !== "remove" && holdsNoValue(change.text)))
+      return { kind: "incomplete", at: [], reason: HOLDS_NO_VALUE };
     const parsed2 = parse2(current);
     const ancestor = movedAncestor(parsed2, change.at);
     if (ancestor !== null)
@@ -74920,7 +74938,6 @@ function applyChanges(text5, changes, dialect = JSON5_DIALECT) {
 }
 function movedAncestor(parsed2, at) {
   if (at.length === 0) return null;
-  if (parsed2.kind === "empty") return at.length === 1 ? null : at.slice(0, 1);
   if (parsed2.kind !== "document") return [];
   for (let depth = 0; depth < at.length; depth++) {
     const up = at.slice(0, depth);
@@ -75390,7 +75407,7 @@ function parseSessionPicks(value) {
 function retiredBecause(key, value) {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
   if (key === "candybar.tab" && value === "layout" || key === "menus._candybarZ00002epickers" && value === "toggles")
-    return `the settings menu no longer has a "${value}" member on this key`;
+    return `the "${value}" settings menu was retired and now starts closed`;
   if (isMenuStateKey(key) && menuOfKey(key) === void 0)
     return "no menu is keyed that way in this build";
   if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
@@ -75893,7 +75910,7 @@ function stepOf(click2, sessionId2, change, to) {
   return applied3.kind === "applied" ? { kind: "file", file, text: applied3.text } : {
     kind: "moved",
     target: identity(change),
-    what: `${addressText(applied3.at)} in the ${change.role} layer`
+    what: applied3.kind === "incomplete" ? `${file}: ${applied3.reason}` : `${addressText(applied3.at)} in the ${change.role} layer`
   };
 }
 function forgotten({ past, future }, gone) {
@@ -76102,6 +76119,8 @@ var EditDraft = class {
             requireLayerText(path31, target.content),
             diffChanges(requireLayerText(path31, source.content), after)
           );
+          if (applied3.kind === "incomplete")
+            throw new BadVerbArgs(`save: ${path31}: ${applied3.reason}`);
           if (applied3.kind !== "applied")
             throw new BadVerbArgs(
               `save: ${addressText(applied3.at)} in the ${source.role} layer changed while editing`
@@ -76434,7 +76453,6 @@ function closingView(store, nestOf2, log) {
 
 // src/renderer/config-file-store.ts
 init_globals();
-var import_json55 = __toESM(require_dist(), 1);
 function persistValueText(key, raw) {
   const lifted = persistedValueOf(requireValueTarget(key), raw);
   if ("reason" in lifted) {
@@ -76442,11 +76460,19 @@ function persistValueText(key, raw) {
   }
   return JSON.stringify(lifted.value);
 }
-function docOf(text5) {
-  return /^\s*$/.test(text5) ? null : parseDocument(text5);
+function editedText(file, before) {
+  const text5 = before ?? EMPTY_DOCUMENT;
+  try {
+    return { text: text5, doc: parseDocument(text5) };
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    throw new BadVerbArgs(
+      `refused: ${file}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`
+    );
+  }
 }
 function has2(doc, p2) {
-  return doc !== null && nodeAt(doc, p2) !== void 0;
+  return nodeAt(doc, p2) !== void 0;
 }
 function authoredLayout(node) {
   if (node.kind === "segment") {
@@ -76514,7 +76540,7 @@ function inheritedRowLayers(under2) {
   });
 }
 function fileLayer(doc, path31) {
-  const fragment = doc === null ? void 0 : nodeAt(doc, path31);
+  const fragment = nodeAt(doc, path31);
   return fragment === void 0 ? null : { path: path31, fragment, unit: null };
 }
 function inheritedRootLayer(path31, root) {
@@ -76755,12 +76781,12 @@ function refuseNewDrops(into, was, will) {
     );
   }
 }
-function readDeclared(text5, key) {
+function readDeclared(file, before, key) {
   const target = requireValueTarget(key);
-  const doc = docOf(text5 ?? "");
-  const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
+  const { text: text5, doc } = editedText(file, before);
+  const node = nodeAt(doc, persistPath(target));
   if (node === void 0) return { kind: "none" };
-  const source = textOf(text5 ?? "", node);
+  const source = textOf(text5, node);
   if (node.kind === "number" && Number.isInteger(node.value))
     return { kind: "integer", value: node.value };
   return node.kind === "string" ? { kind: "text", value: node.value, source } : { kind: "other", source };
@@ -76771,15 +76797,16 @@ function writeValues(store, into, pairs2) {
 function writeDrafts(store, layer, pairs2, placements) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
+  const { text: text5 } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const valued = pairs2.reduce(
-    (text5, [key, raw]) => setValue(
-      text5,
-      valuePathOf(docOf(text5), under2, requireValueTarget(key)),
+    (text6, [key, raw]) => setValue(
+      text6,
+      valuePathOf(parseDocument(text6), under2, requireValueTarget(key)),
       persistValueText(key, raw),
       JSON5_DIALECT
     ),
-    before ?? ""
+    text5
   );
   return commit2(
     store,
@@ -76787,7 +76814,7 @@ function writeDrafts(store, layer, pairs2, placements) {
     before,
     writtenOnly(
       into,
-      () => withPlacements(valued, under2, into.path, placements, (text5) => text5)
+      () => withPlacements(valued, under2, into.path, placements, (text6) => text6)
     ),
     refuseHidden
   );
@@ -76796,7 +76823,7 @@ function withPlacements(text5, under2, file, placements, own2) {
   const landed = /* @__PURE__ */ new Map();
   return placements.reduce((prior, { preset, id: id2, setting, value }) => {
     const acc = own2(prior, under2, preset, id2);
-    const placement = layoutPlacementOf(docOf(acc), under2, preset, id2);
+    const placement = layoutPlacementOf(parseDocument(acc), under2, preset, id2);
     const spelled3 = json5Text(value);
     const slot = `${placement.path.join(".")}\0${id2}\0${setting}`;
     const rival = landed.get(slot);
@@ -76822,7 +76849,7 @@ function withPlacements(text5, under2, file, placements, own2) {
   }, text5);
 }
 function ownRow(text5, under2, preset, id2) {
-  const doc = docOf(text5);
+  const doc = parseDocument(text5);
   const own2 = ["presets", preset, "root"];
   for (const [row, { path: path31, unit, node }] of cascadeOf(doc, under2, preset)) {
     if (!hasSegmentRef(node, id2)) continue;
@@ -76848,29 +76875,39 @@ function deleteValues(store, layer, keys2) {
   const into = seenBy(layer, (file) => store.read(file));
   const targets = keys2.map(requireTarget);
   const before = requireLayerText(into.path, store.read(into.path));
-  if (before === null) return;
+  const { text: text5 } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const after = targets.reduce(
-    (text5, target) => deleteAtPath(text5, under2, resetPathOf(docOf(text5), under2, target)),
-    before
+    (text6, target) => deleteAtPath(
+      text6,
+      under2,
+      resetPathOf(parseDocument(text6), under2, target)
+    ),
+    text5
   );
-  if (after === before) return;
+  if (after === text5) return;
   commit2(store, into, before, after, releases);
 }
 var SAVED_PRESET_PREFIX = "custom-";
 function presetKeys(doc) {
-  const declared = doc === null ? void 0 : nodeAt(doc, ["presets"]);
+  const declared = nodeAt(doc, ["presets"]);
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
 function freePresetName(doc, under2, into) {
   const taken2 = /* @__PURE__ */ new Set([
     ...Object.keys(under2.presets),
     ...presetKeys(doc),
-    // Each layer above as the loader reads it (JSON5, duplicate keys and
-    // all) — the editor refuses files the loader renders.
-    ...into.above.flatMap(
-      (l) => Object.keys(import_json55.default.parse(l.text).presets ?? {})
-    )
+    // Each layer above as the loader reads it (duplicate keys and all): the
+    // editor refuses files the loader renders.
+    ...into.above.flatMap((l) => {
+      const syntax = parseJson5Syntax(l.text);
+      if (syntax.kind === "invalid")
+        throw new BadVerbArgs(
+          `refused: ${l.path}, above ${into.path}, does not load \u2014 ${new ConfigError(l.path, [syntax.issue]).message}`
+        );
+      const presets = isPlainObject4(syntax.value) ? syntax.value.presets : void 0;
+      return isPlainObject4(presets) ? Object.keys(presets) : [];
+    })
   ]);
   return Array.from(
     { length: taken2.size + 1 },
@@ -76880,7 +76917,7 @@ function freePresetName(doc, under2, into) {
 function writePreset(store, layer, from, globals, picks, placements) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
-  const doc = docOf(before ?? "");
+  const { text: text5, doc } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const name = freePresetName(doc, under2, into);
   const own2 = ["presets", name];
@@ -76889,7 +76926,7 @@ function writePreset(store, layer, from, globals, picks, placements) {
     ...staged === null ? [] : [
       [
         [...own2, "root"],
-        staged.unit === null ? movableTextOf(before ?? "", staged.fragment) : json5Text(staged.unit.value)
+        staged.unit === null ? movableTextOf(text5, staged.fragment) : json5Text(staged.unit.value)
       ]
     ],
     ...Object.keys(globals).length === 0 ? [] : [[[...own2, "globals"], json5Text(globals)]]
@@ -76902,8 +76939,8 @@ function writePreset(store, layer, from, globals, picks, placements) {
     ];
   });
   const after = [...copied, ...pinned].reduce(
-    (text5, [at, value]) => setValue(text5, at, value, JSON5_DIALECT),
-    setValue(before ?? "", own2, "{}", JSON5_DIALECT)
+    (text6, [at, value]) => setValue(text6, at, value, JSON5_DIALECT),
+    setValue(text5, own2, "{}", JSON5_DIALECT)
   );
   const placed2 = writtenOnly(
     into,
@@ -76921,7 +76958,7 @@ function writeThemeDefault(store, layer, theme24, look) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
   const after = setValue(
-    before ?? "",
+    editedText(into.path, before).text,
     ["themeDefaults", theme24],
     json5Text(look),
     JSON5_DIALECT
@@ -76938,8 +76975,8 @@ function deletePreset(store, layer, name) {
   }
   const own2 = ["presets", name];
   const before = requireLayerText(into.path, store.read(into.path));
-  const doc = docOf(before ?? "");
-  if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
+  const { text: text5, doc } = editedText(into.path, before);
+  if (nodeAt(doc, own2) === void 0) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": ${into.path} declares no ${own2.join(".")} \u2014 the bar you clicked is stale; it reloads on the next render`
     );
@@ -76953,7 +76990,7 @@ function deletePreset(store, layer, name) {
     store,
     into,
     before,
-    paths2.reduce((text5, at) => deleteAtPath(text5, under2, at), before),
+    paths2.reduce((text6, at) => deleteAtPath(text6, under2, at), text5),
     releases
   );
 }
@@ -76964,13 +77001,14 @@ function applyLayoutOp(store, layer, key, op, suffix) {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
   const before = requireLayerText(into.path, store.read(into.path));
+  const { text: text5, doc } = editedText(into.path, before);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const under2 = inheritedOf(into);
   const placement = writtenOnly(
     into,
-    () => layoutPlacementOf(docOf(before ?? ""), under2, target.preset, subject)
+    () => layoutPlacementOf(doc, under2, target.preset, subject)
   );
-  const authored = ensureAuthored(before ?? "", placement);
+  const authored = ensureAuthored(text5, placement);
   const { after, placed: placed2 } = spliceOp(
     authored,
     placement.path,
@@ -77326,6 +77364,7 @@ var stepConfig = (args, ctx) => {
   );
   const store = editStore(ctx, sid);
   const declared = readDeclared(
+    into.path,
     requireLayerText(into.path, store.read(into.path)),
     landing2.key
   );
@@ -77447,8 +77486,8 @@ function landStateWrites(writes, ctx) {
     ctx
   );
 }
-function declaredName(text5, key) {
-  const declared = readDeclared(text5, key);
+function declaredName(file, text5, key) {
+  const declared = readDeclared(file, text5, key);
   return declared.kind === "text" ? declared.value : void 0;
 }
 var ringConfig = (args, ctx) => {
@@ -77476,6 +77515,7 @@ var ringConfig = (args, ctx) => {
         r.key
       ).key;
       const declared = declaredName(
+        into.path,
         requireLayerText(
           into.path,
           editStore(ctx, ctx.session).read(into.path)
@@ -78039,23 +78079,6 @@ function verbsOver(ctx) {
   };
 }
 
-// src/renderer-interface/request-context.ts
-init_globals();
-function durableOf(req) {
-  const { claudeConfigDir: claudeConfigDir2 } = req.hints;
-  return {
-    origin: req.requested,
-    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
-  };
-}
-function heardContextOf(req) {
-  return {
-    session: req.hookData.session_id,
-    durable: durableOf(req),
-    live: req
-  };
-}
-
 // src/renderer/acts.ts
 init_globals();
 var ActsOnTheirWay = class {
@@ -78083,6 +78106,25 @@ var ActsOnTheirWay = class {
 
 // src/renderer/world-states.ts
 init_globals();
+
+// src/renderer-interface/request-context.ts
+init_globals();
+function durableOf(req) {
+  const { claudeConfigDir: claudeConfigDir2 } = req.hints;
+  return {
+    origin: req.requested,
+    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+  };
+}
+function heardContextOf(req) {
+  return {
+    session: req.hookData.session_id,
+    durable: durableOf(req),
+    live: req
+  };
+}
+
+// src/renderer/world-states.ts
 var WorldStates = class {
   live = observable.map(void 0, {
     deep: false
@@ -78402,54 +78444,10 @@ function mainRenderer(parts, stores) {
   };
   let wake = null;
   const opening = /* @__PURE__ */ new Set();
-  const parked = observable.box([], { deep: false });
-  const keepParked = (keep) => {
-    const prior = parked.get();
-    const next2 = prior.filter(keep);
-    if (next2.length !== prior.length) runInAction(() => parked.set(next2));
-  };
-  const parkedContext = (click2) => {
-    const { session } = click2;
-    if (click2.kind === "live")
-      return heardContextOf(parts.worldStates.requestOf(session));
-    return parts.worldStates.contextOf(session) ?? {
-      session,
-      durable: click2.durable,
-      live: null
-    };
-  };
-  const takeClicks = (matches) => {
-    const ready = [];
-    keepParked((click2) => {
-      if (!matches(click2)) return true;
-      ready.push(click2);
-      return false;
-    });
-    return ready;
-  };
   const openWaiting = (session) => () => {
     openSession(parts, session);
     opening.delete(session);
   };
-  const resume = (ready, effects, record2) => ready.map((click2) => () => {
-    try {
-      clickTurn(
-        parts,
-        { ...click2.event, context: parkedContext(click2) },
-        effects,
-        record2
-      );
-    } catch (thrown2) {
-      holdClickError(
-        parts.sessionState,
-        click2.session,
-        rendererFailureOf(thrown2).message,
-        time.at
-      );
-      throw thrown2;
-    }
-  });
-  const parkedClickSessions = () => new Set(parked.get().map((click2) => click2.session));
   const commands = {
     stats: () => ({
       kind: "stats",
@@ -78459,7 +78457,7 @@ function mainRenderer(parts, stores) {
         sessionState: parts.sessionStats(),
         menuIdle: menuIdle.stats(),
         rendererTurns: {
-          parked: opening.size + parked.get().length,
+          parked: opening.size,
           presents: deliveries.size,
           deferrals: time.deferrals()
         },
@@ -78548,8 +78546,7 @@ function mainRenderer(parts, stores) {
             record2.push(["parked", "context"]);
             return;
           }
-          const ready = takeClicks((click2) => click2.session === session);
-          runEach([openWaiting(session), ...resume(ready, effects, record2)]);
+          openWaiting(session)();
         });
         return;
       }
@@ -78558,16 +78555,12 @@ function mainRenderer(parts, stores) {
         const sessions = [...opening].filter(
           (session) => originKey(parts.worldStates.requestOf(session).requested) === key
         );
-        const ready = takeClicks(
-          (click2) => originKey(parkedContext(click2).durable.origin) === key
-        );
         runEach([
           () => parts.renderCache.configure(event.origin, event.config),
           () => runEach(
             parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
           ),
-          ...sessions.map(openWaiting),
-          ...resume(ready, effects, record2)
+          ...sessions.map(openWaiting)
         ]);
         return;
       }
@@ -78604,7 +78597,6 @@ function mainRenderer(parts, stores) {
         return;
       case "retire":
         opening.delete(event.session);
-        keepParked((click2) => click2.session !== event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -78630,18 +78622,15 @@ function mainRenderer(parts, stores) {
         const context = click2.scope === "session" ? live ?? event.context : null;
         if (context !== null) {
           const { origin } = context.durable;
-          if (!parts.renderCache.holdsConfig(origin)) {
-            const { context: _input, ...intent } = event;
-            const waiting = { session: context.session, event: intent };
-            runInAction(
-              () => parked.set([
-                ...parked.get(),
-                live === null ? { ...waiting, kind: "cold", durable: context.durable } : { ...waiting, kind: "live" }
-              ])
-            );
-            record2.push(["parked", "click"]);
-            return;
+          if (event.coldConfig !== void 0) {
+            const offered = event.context?.durable.origin;
+            if (offered !== void 0 && originKey(offered) === originKey(origin))
+              parts.renderCache.configure(origin, event.coldConfig);
           }
+          if (!parts.renderCache.holdsConfig(origin))
+            throw new Error(
+              `no configuration for this click's origin ${originKey(origin)}`
+            );
         }
         clickTurn(parts, { ...event, context }, effects, record2);
         return;
@@ -78650,8 +78639,7 @@ function mainRenderer(parts, stores) {
         feeds.view(event.viewers, time.tick);
         return;
       case "due": {
-        const busy = parkedClickSessions();
-        for (const session of event.pendingClicks ?? []) busy.add(session);
+        const busy = new Set(event.pendingClicks);
         runEach([
           () => time.runDue(),
           () => closeIdleMenus2(parts, effects, busy),
@@ -78713,10 +78701,6 @@ function mainRenderer(parts, stores) {
         configs.set(originKey(origin), origin);
       for (const origin of parts.renderCache.origins())
         configs.set(originKey(origin), origin);
-      for (const click2 of parked.get()) {
-        const origin = parkedContext(click2).durable.origin;
-        configs.set(originKey(origin), origin);
-      }
       return [...configs].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, origin]) => origin);
     },
     { equals: compareStructural }
@@ -78777,15 +78761,14 @@ function mainRenderer(parts, stores) {
     };
     for (const store of storeOrder)
       collect(store, () => stored.push(...stores[store].drain()));
-    collect("subscriptions", () => declare(event.kind === "config"));
+    collect(
+      "subscriptions",
+      () => declare(
+        event.kind === "config" || event.kind === "click" && event.coldConfig !== void 0
+      )
+    );
     collect("wake", () => {
-      wake = earliestOf([
-        time.next(),
-        menuIdle.next(
-          parked.get().length === 0 ? void 0 : parkedClickSessions()
-        ),
-        feeds.next()
-      ]);
+      wake = earliestOf([time.next(), menuIdle.next(), feeds.next()]);
     });
     if (event.kind === "close-views")
       collect(
@@ -80795,6 +80778,31 @@ var import_node_path12 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/file-rewrites.ts
 init_globals();
+
+// src/utils/undo-log.ts
+init_globals();
+var UndoLog = class {
+  undos = [];
+  // A change to `file` landed; `undo` puts back what it replaced.
+  landed(file, undo2) {
+    this.undos.push({ file, undo: undo2 });
+  }
+  // [LAW:no-silent-failure] Every change put back, newest first: the undos that failed, in the order
+  // they ran.
+  undo() {
+    const failed3 = [];
+    for (const { file, undo: undo2 } of this.undos.splice(0).reverse()) {
+      try {
+        undo2();
+      } catch (e) {
+        failed3.push({ file, error: asError(e) });
+      }
+    }
+    return failed3;
+  }
+};
+
+// src/daemon/file-rewrites.ts
 var writeConfigFile = (file, text5, mode) => text5 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text5, mode);
 function setAside(file) {
   const from = resolvedTarget(file);
@@ -80803,24 +80811,34 @@ function setAside(file) {
   return { from, to };
 }
 function writeRevisions({ setAside: unread2, rewrites, retire }, write = writeConfigFile) {
-  const written2 = [];
+  const log = new UndoLog();
+  const files = [];
   let aside = null;
   try {
-    if (unread2 !== null)
-      aside = {
+    if (unread2 !== null) {
+      const kept2 = {
         file: unread2.file,
         reason: unread2.reason,
         ...setAside(unread2.file)
       };
-    for (const rewrite of rewrites) {
-      const removedMode = rewrite.will === null && rewrite.was !== null ? filePermissions(rewrite.file) : void 0;
-      write(rewrite.file, rewrite.will);
-      written2.push({ ...rewrite, removedMode });
+      aside = kept2;
+      files.push(kept2.to);
+      log.landed(kept2.from, () => {
+        try {
+          fs_default.renameSync(kept2.to, kept2.from);
+        } catch (rollback) {
+          const { message } = asError(rollback);
+          throw new Error(`${message} \u2014 its bytes are kept at ${kept2.to}`);
+        }
+      });
     }
-    const files = [
-      ...aside === null ? [] : [aside.to],
-      ...written2.map(({ file }) => file)
-    ];
+    for (const { file, was, will } of rewrites) {
+      const removedMode = will === null && was !== null ? filePermissions(file) : void 0;
+      write(file, will);
+      files.push(file);
+      if (will !== null || removedMode !== void 0)
+        log.landed(file, () => write(file, was, removedMode));
+    }
     if (retire !== null) {
       fs_default.renameSync(retire.from, retire.to);
       files.push(retire.from, retire.to);
@@ -80828,26 +80846,7 @@ function writeRevisions({ setAside: unread2, rewrites, retire }, write = writeCo
     return { kind: "ok", files, setAside: aside };
   } catch (cause) {
     const error = asError(cause);
-    const failed3 = [];
-    for (const { file, was, will, removedMode } of written2.reverse()) {
-      if (will === null && removedMode === void 0) continue;
-      try {
-        write(file, was, removedMode);
-      } catch (rollback) {
-        failed3.push({ file, error: asError(rollback) });
-      }
-    }
-    if (aside !== null)
-      try {
-        fs_default.renameSync(aside.to, aside.from);
-      } catch (rollback) {
-        const { message } = asError(rollback);
-        failed3.push({
-          file: aside.from,
-          error: new Error(`${message} \u2014 its bytes are kept at ${aside.to}`)
-        });
-      }
-    const [first2, ...remaining] = failed3;
+    const [first2, ...remaining] = log.undo();
     return first2 === void 0 ? { kind: "failed", error } : { kind: "incomplete", error, unrestored: [first2, ...remaining] };
   }
 }
@@ -81487,6 +81486,8 @@ function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
   return import_node_path15.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
+var HOST_ALIAS_FIRST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
+var HOST_ALIAS_REST = `${HOST_ALIAS_FIRST}.-`;
 function sessionStatePath(host) {
   return import_node_path15.default.join(stateDir(host), "session-state.json");
 }
@@ -83840,7 +83841,11 @@ function detectTmuxHint(env2) {
 }
 
 // src/client-hints.ts
-var SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
+var SSH_ENV_VARS = [
+  "SSH_CONNECTION",
+  "SSH_CLIENT",
+  "SSH_TTY"
+];
 function terminalObservation(env2, tty) {
   return {
     termCols: detectTermExtent(env2.COLUMNS, tty.columns),
@@ -84616,6 +84621,7 @@ function recordingCommandOf(value) {
 }
 
 // src/daemon/reply.ts
+var toldAtOnce = (urlV, verdict, land) => awaitsVerdict(urlV) ? { when: "at-once", verdict, land } : { when: "never", land };
 function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
   const { sent, frame: frame2, unsent } = framedResponse(resp);
   return { resp: sent, frame: frame2, unsent, exitAfterFlush, settled: settled3 };
@@ -84653,10 +84659,12 @@ function refuseClosingReply(parts, kind, accepted) {
 function refuseClosingInbound(parts, inbound, accepted) {
   return inbound.kind === "url" ? {
     kind: "url",
-    awaitsVerdict: awaitsVerdict(inbound.frame.urlV),
-    verdict: closingResponse(parts, "click", accepted),
-    land: async () => {
-    }
+    told: toldAtOnce(
+      inbound.frame.urlV,
+      closingResponse(parts, "click", accepted),
+      async () => {
+      }
+    )
   } : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
 }
 var REPLY_EVENTS = {
@@ -84977,15 +84985,14 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     return recorded2(await draw2());
   }
   if (req.kind === "click") {
-    return stay(
-      await clickEvent(
-        parts,
-        accepted,
-        timedOut,
-        clientLeft,
-        (facts, click2) => clickOutcome(parts, req, facts, click2)
-      )
+    const { outcome } = await clickEvent(
+      parts,
+      accepted,
+      timedOut,
+      clientLeft,
+      (facts, click2) => clickOutcome(parts, req, facts, click2)
     );
+    return stay(clickReply(outcome));
   }
   if (req.kind === "debug") {
     if (!isDebugWhat(req.what)) {
@@ -85109,7 +85116,9 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
   const click2 = {
     gone: () => timedOut() || clientLeft()
   };
-  const outcome = await run2(facts, click2).catch(failureOf);
+  const { outcome, desktop } = await run2(facts, click2).catch(
+    (thrown2) => nothingLeft(failureOf(thrown2))
+  );
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -85121,62 +85130,94 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
     elapsedMs(clock, t0)
   );
   parts.log(level, line);
-  return clickReply(outcome);
+  return { outcome, desktop };
 }
+var nothingLeft = (outcome) => ({
+  outcome,
+  desktop: []
+});
 async function clickOutcome(parts, req, facts, click2) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
-    return badRequest(`a click's url is a string, got ${typeof url}`);
+    return nothingLeft(
+      badRequest(`a click's url is a string, got ${typeof url}`)
+    );
   return ranClick(
     parts,
-    routeClick(parts, parseClick(url, parts.linkSigner)),
+    routeClick(parts, parseClick(url, parts.linkSigner), ACTS_ON_DAEMON),
     facts,
     click2
   );
 }
-function readUrlFrame(frame2, links) {
-  const { urlV, url } = frame2;
+function readUrlFrame(frame2, parts) {
+  const { urlV, url, actsOn = ACTS_ON_DAEMON } = frame2;
   if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
-    return {
-      kind: "refused",
-      problem: `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-    };
+    return refusedClick(
+      `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+    );
   if (typeof url !== "string")
-    return {
-      kind: "refused",
-      problem: "the URL handler's frame carries no url string"
-    };
-  return parseClick(url, links);
+    return refusedClick("the URL handler's frame carries no url string");
+  if (actsOn !== ACTS_ON_DAEMON && actsOn !== ACTS_ON_DESKTOP)
+    return refusedClick(
+      `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DAEMON}, ${ACTS_ON_DESKTOP})`
+    );
+  if (actsOn === ACTS_ON_DESKTOP && !awaitsVerdict(urlV))
+    return refusedClick(
+      `a version ${urlV} frame reads no verdict, so the acts it asks on the desktop cannot reach it`
+    );
+  return routeClick(parts, parseClick(url, parts.linkSigner), actsOn);
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  const read3 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
+  const read3 = readUrlFrame(frame2, parts);
+  const onDesktop = read3.kind === "link" && read3.actsOn === ACTS_ON_DESKTOP;
+  const land = () => clickEvent(parts, accepted, timedOut, clientLeft, async (facts, click2) => {
+    noteFacts(facts, {
+      via: "forwarder",
+      urlV: String(frame2.urlV),
+      ...read3.kind === "link" ? { actsOn: read3.actsOn } : {}
+    });
+    const clicked = await ranClick(parts, read3, facts, click2);
+    noteFacts(facts, { desktop: String(clicked.desktop.length) });
+    return clicked;
+  });
   return {
     kind: "url",
-    awaitsVerdict: awaitsVerdict(frame2.urlV),
-    verdict: read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" },
-    land: () => clickEvent(
-      parts,
-      accepted,
-      timedOut,
-      clientLeft,
-      async (facts, click2) => {
-        noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
-        return ranClick(parts, read3, facts, click2);
-      }
-    ).then(() => {
-    })
+    told: onDesktop ? { when: "landed", land: async () => landedReply(parts, await land()) } : toldAtOnce(
+      frame2.urlV,
+      read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" },
+      async () => void await land()
+    )
   };
 }
-function routeClick(parts, read3) {
-  if (read3.kind === "refused")
-    return {
-      kind: "refused",
-      failure: badRequest(read3.problem),
-      signed: read3.signed
-    };
+function landedReply(parts, { desktop, outcome }) {
+  if (desktop.length === 0 && outcome.kind !== "ok")
+    return stay(clickReply(outcome));
+  const reply = replyOf(
+    {
+      ok: true,
+      output: "",
+      desktopActs: desktop,
+      ...outcome.kind === "ok" ? {} : { desktopError: outcome.message }
+    },
+    null,
+    (taken2) => {
+      if (!taken2 && desktop.length > 0)
+        parts.log(
+          "warn",
+          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`
+        );
+    }
+  );
+  return reply;
+}
+function refusedClick(problem, signed) {
+  return { kind: "refused", failure: badRequest(problem), signed };
+}
+function routeClick(parts, read3, actsOn) {
+  if (read3.kind === "refused") return refusedClick(read3.problem, read3.signed);
   const { source } = read3;
-  if (source === void 0) return { ...read3, target: parts.renderer };
+  if (source === void 0) return { ...read3, target: parts.renderer, actsOn };
   const target = parts.rendererForClick(source.renderer);
   return target === void 0 ? {
     kind: "refused",
@@ -85186,13 +85227,13 @@ function routeClick(parts, read3) {
       )
     ),
     signed: { link: read3.link, verb: read3.click.verb }
-  } : { ...read3, target };
+  } : { ...read3, target, actsOn };
 }
 async function ranClick(parts, read3, facts, click2) {
   switch (read3.kind) {
     case "refused":
       if (read3.signed !== void 0) noteFacts(facts, read3.signed);
-      return read3.failure;
+      return nothingLeft(read3.failure);
     case "link":
       noteFacts(facts, { link: read3.link });
       return handleClick(parts, read3, facts, click2);
@@ -85201,6 +85242,7 @@ async function ranClick(parts, read3, facts, click2) {
 async function handleClick(parts, {
   click: admitted,
   runEvidence,
+  actsOn,
   target
 }, facts, click2) {
   const { verb } = admitted;
@@ -85212,6 +85254,7 @@ async function handleClick(parts, {
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
       runEvidence,
+      actsOn,
       event: {
         kind: "click",
         click: admitted,
@@ -85224,11 +85267,24 @@ async function handleClick(parts, {
   );
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
-  if (delivered.kind === "threw") return delivered.failure;
-  const missed = delivered.settled.find(
+  const { desktop, answered } = apartDesktop(delivered.settled);
+  if (delivered.kind === "threw")
+    return { outcome: delivered.failure, desktop };
+  const missed = answered.find(
     (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped"
   );
-  return missed === void 0 ? { kind: "ok" } : clickFailure(missed);
+  return {
+    outcome: missed === void 0 ? { kind: "ok" } : clickFailure(missed),
+    desktop
+  };
+}
+function apartDesktop(settled3) {
+  const desktop = [];
+  const answered = [];
+  for (const outcome of settled3)
+    if (outcome.kind === "desktop") desktop.push(outcome.act);
+    else answered.push(outcome);
+  return { desktop, answered };
 }
 function clickFailure(outcome) {
   const kind = CLICK_FAILURE[outcome.kind];
@@ -88441,6 +88497,10 @@ function shortHostname(hostname2) {
   const dot = hostname2.indexOf(".");
   return dot < 0 ? hostname2 : hostname2.slice(0, dot);
 }
+var MACHINE_HOST_READS = {
+  hostname: () => os_default.hostname(),
+  username: () => os_default.userInfo().username
+};
 function syscall(field, read3) {
   try {
     const value = read3();
@@ -88470,12 +88530,12 @@ var HostService = class {
     this.name = new KeyedSource({
       ...one,
       name: "host.name",
-      read: () => syscall("name", () => shortHostname(os_default.hostname()))
+      read: () => syscall("name", () => shortHostname(opts.reads.hostname()))
     });
     this.user = new KeyedSource({
       ...one,
       name: "host.user",
-      read: () => syscall("user", () => os_default.userInfo().username)
+      read: () => syscall("user", opts.reads.username)
     });
   }
   declareName(holds3) {
@@ -88502,12 +88562,23 @@ init_globals();
 var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 function readClaudeSettingsText(settingsPath) {
   try {
-    return readRegularTextSync(settingsPath);
+    return readTextIfPresent(settingsPath);
+  } catch (error) {
+    throw new Error(`cannot read ${messageOf(error)}`, { cause: error });
+  }
+}
+function parseClaudeSettings(settingsPath, text5) {
+  if (text5 === null) return { text: text5, edited: EMPTY_DOCUMENT, document: {} };
+  let parsed2;
+  try {
+    parsed2 = JSON_DIALECT.parse(text5);
   } catch (e) {
-    if (types.isNativeError(e) && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR"))
-      return "";
     throw cannotRead(settingsPath, e);
   }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return { text: text5, edited: text5, document: parsed2 };
 }
 function readClaudeSettingsOutcome(settingsPath) {
   let text5;
@@ -88517,23 +88588,10 @@ function readClaudeSettingsOutcome(settingsPath) {
     return failed(messageOf(e), "read");
   }
   try {
-    return ok(parseSettings(settingsPath, text5));
+    return ok(parseClaudeSettings(settingsPath, text5).document);
   } catch (e) {
     return failed(messageOf(e), "parse");
   }
-}
-function parseSettings(settingsPath, text5) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text5)) return {};
-    parsed2 = JSON_DIALECT.parse(text5);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
 }
 var messageOf = (e) => types.isNativeError(e) ? e.message : String(e);
 
@@ -89292,7 +89350,12 @@ function createPayloadProviders(opts) {
     faults: new RefreshFaults()
   };
   const owners = {
-    hostService: new HostService({ clock, logger, ledger }),
+    hostService: new HostService({
+      clock,
+      logger,
+      ledger,
+      reads: MACHINE_HOST_READS
+    }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
       watchers: opts.watchers,
@@ -89349,7 +89412,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.240.0";
+var PACKAGE_VERSION = "1.241.0";
 
 // src/daemon/stats.ts
 var ROLLING_WINDOW_MS = 6e4;
@@ -91626,6 +91689,23 @@ async function paneOff(tmux3, edge) {
 }
 
 // src/daemon/acts.ts
+async function desktopActOf(act) {
+  switch (act.kind) {
+    case "copy":
+      return { kind: "copy", text: act.text };
+    case "open": {
+      const entry = await stat(act.target);
+      if (!entry.isFile() && !entry.isDirectory())
+        throw new Error(
+          `cannot open ${act.target}: expected a file or directory`
+        );
+      return { kind: "open", target: act.target, file: entry.isFile() };
+    }
+    case "type-slash":
+    case "run":
+      return null;
+  }
+}
 var outlives = (act) => act.kind === "run";
 function nameOf2(act) {
   switch (act.kind) {
@@ -91643,6 +91723,7 @@ var not = (outcome) => ({
   outcome,
   said: outcome.reason
 });
+var actLine = (act, outcome, said3) => `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome} \u2014 ${nameOf2(act)}: ${said3}`;
 var Acts = class {
   constructor(deps) {
     this.deps = deps;
@@ -91714,7 +91795,7 @@ var Acts = class {
     const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} \u2014 ${nameOf2(act)}: ${said3}`
+      actLine(act, outcome.kind, said3)
     );
     return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act)}: ${outcome.reason}` };
   }
@@ -92434,6 +92515,8 @@ function performChanges(changes, book, files, write) {
         list3,
         JSON5_DIALECT
       );
+      if (applied3.kind === "incomplete")
+        return refused(`${file}: ${applied3.reason}`);
       if (applied3.kind === "moved")
         return refused(
           `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said2(applied3.read)}, it is ${said2(applied3.found)})`
@@ -92763,7 +92846,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const problem = inspectionPayloadProblem(reply);
     if (problem !== null) throw new Error(`${label2} returned ${problem}`);
   };
-  const inSlot = async (input, queuedMs, captures = []) => {
+  const inSlot = async (input, queuedMs, captures = [], actsOn = "daemon") => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
     const session = sessionOfEvent(input.event);
@@ -92833,7 +92916,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       input.event,
       output,
       captures,
-      receipt
+      receipt,
+      actsOn
     );
     return {
       received: true,
@@ -92843,7 +92927,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
-  const landInSlot = async (event, output, captures, receipt) => {
+  const landInSlot = async (event, output, captures, receipt, actsOn) => {
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
     );
@@ -92856,12 +92940,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
+    const retryOrigin = event.kind === "click" && event.coldConfig !== void 0 ? event.context?.durable.origin ?? null : requested;
     const followed = took(
       output.subscriptions,
       output.wake,
       output.frames,
       output.stored,
-      requested,
+      retryOrigin,
       receipt
     );
     let configFailure = null;
@@ -92910,9 +92995,15 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           );
       } else acts.push(effect);
     }
+    const performed = async (act) => {
+      const desktop = actsOn === "desktop" ? await desktopActOf(act) : null;
+      if (desktop === null) return world.perform(act);
+      log("info", actLine(act, "desktop", "handed to the desktop"));
+      return Promise.resolve({ kind: "desktop", act: desktop });
+    };
     let before = Promise.resolve();
     for (const act of acts) {
-      const acted = configOutcome.kind === "ok" ? before.then(() => world.perform(act)).catch(
+      const acted = configOutcome.kind === "ok" ? before.then(() => performed(act)).catch(
         (error) => ({
           kind: "failed",
           reason: failureOf(error).detail
@@ -93124,7 +93215,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     );
   };
-  const settle3 = async (effect, outcome) => {
+  const settle3 = async (effect, ended) => {
+    const outcome = ended.kind === "desktop" ? { kind: "ok" } : ended;
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
     const unheard = (reason) => {
       if (isEnvironmentOutput(outcome)) world.unheard(reason, true);
@@ -93137,7 +93229,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     );
     if (failed3 !== null && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
       unheard(failed3);
-    return outcome;
+    return ended;
   };
   const settleInSlot = async (effect, outcome) => {
     const input = stamped(doneOf(effect, outcome));
@@ -93193,6 +93285,21 @@ function rendererHost(name, clock, renderer, log, collector, world) {
                 follow(wanted);
               });
               made = { ...captured2, event: ready };
+            } else if (event.kind === "click" && event.context !== null && configs.get(originKey(event.context.durable.origin))?.kind !== "received") {
+              const origin = event.context.durable.origin;
+              if (!followedOrigins.some(
+                (held2) => originKey(held2) === originKey(origin)
+              )) {
+                restore = followedOrigins;
+                follow([...followedOrigins, origin]);
+              }
+              const config = configMade(origin)();
+              if (config.kind !== "event") made = config;
+              else
+                made = {
+                  ...captured2,
+                  event: { ...event, coldConfig: config.event.config }
+                };
             } else made = { ...captured2, event };
           } else made = captured2;
         } catch (thrown2) {
@@ -93208,14 +93315,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          made.event.kind === "click" ? made.runEvidence : void 0
+          made.event.kind === "click" ? made.runEvidence : void 0,
+          made.event.kind === "click" ? made.actsOn : void 0
         );
         if (starting && slotted.turn.kind === "answered") restore = void 0;
+        if (made.event.kind === "click" && restore !== void 0)
+          restore = origins ?? restore;
         return { event: made.event, slotted };
       } finally {
         if (restore !== void 0) {
           const previous2 = restore;
-          recordTaken("start config demand rollback", () => follow(previous2));
+          recordTaken("restore config demand", () => follow(previous2));
         }
         if (held !== null && --held.count === 0)
           pendingClicks.delete(held.session);
@@ -93410,7 +93520,7 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 20;
+var RENDERER_WIRE_VERSION = 21;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -93502,6 +93612,8 @@ function recordingInputProblem({ event }) {
     case "request":
       return contextProblem(event.context);
     case "click": {
+      const problem = event.coldConfig && configProblem(event.coldConfig);
+      if (problem) return problem;
       const live = event.context?.live;
       return live == null ? null : contextProblem(live);
     }
@@ -93531,24 +93643,29 @@ function recordingOutputProblem(output) {
     ({ frame: frame2 }) => frame2.kind === "drawn" && (frameHasActionEnvironment(frame2.bar) || frame2.handoff !== null && frameHasActionEnvironment(frame2.handoff))
   ) ? ACTION_ENVIRONMENT : null;
 }
-function knownPick(key, value) {
-  const kind = sessionKeyKind(key).kind;
-  if (kind === "plain") return false;
-  if (kind === "pointer")
-    return CLICK_MODES.some((mode) => mode === value) || value === NO_HOVER;
-  if (kind !== "setting") {
-    return value === DISCLOSURE_CLOSED || value === DISCLOSURE_OPEN || TABS.some(({ member }) => member === value) || SUBMENU_NAMES.some((member) => member === value);
+function knownPick(gate2, unrestricted, key, value) {
+  const { kind } = sessionKeyKind(key);
+  if (kind === "plain" || kind === "record" || kind === "edit") return false;
+  if (key === HOVER_KEY) return value === NO_HOVER;
+  if (unrestricted.has(key)) {
+    if (kind === "viewer") return value === DIAGNOSTICS_CLOSED;
+    return menuOfKey(key)?.page === true && (value === FIRST_PAGE || value === PAGE_HOLDING_CURRENT);
   }
-  const field = GLOBAL_FIELDS[SETTINGS[SESSION_KEY_TO_SETTING.get(key)].configKey];
-  if (field.kind === "session") return field.parse(value) !== null;
-  const { domain } = field;
-  if (typeof domain !== "object") return false;
-  if ("themes" in domain) return listResolvablePaletteNames().includes(value);
-  return "from" in domain && Array.isArray(domain.from) && domain.from.includes(value);
+  const result = gate2.validate(key, value);
+  return result.ok && result.value === value;
 }
 function recordingBootProblem({ stored }) {
+  const bundled = synthesizeSettingsMenu(DEFAULT_DSL_CONFIG);
+  const gate2 = makeStateKeyspace().gateFor(bundled);
+  const unrestricted = new Set(
+    Object.values(bundled.actions).flatMap(
+      (action2) => "set" in action2 && "int" in action2 ? [action2.set] : []
+    )
+  );
   for (const picks of Object.values(stored.sessions)) {
-    if (!Object.entries(picks).every(([key, value]) => knownPick(key, value)))
+    if (!Object.entries(picks).every(
+      ([key, value]) => knownPick(gate2, unrestricted, key, value)
+    ))
       return UNKNOWN_PROFILE;
   }
   for (const { past, future } of Object.values(stored.history)) {
@@ -93558,7 +93675,8 @@ function recordingBootProblem({ stored }) {
           for (const value of [change.before, change.after]) {
             if (value === null) continue;
             if (change.kind === "session") {
-              if (!knownPick(change.key, value)) return UNKNOWN_PROFILE;
+              if (!knownPick(gate2, unrestricted, change.key, value))
+                return UNKNOWN_PROFILE;
             } else {
               const problem = configTextProblem(value);
               if (problem !== null)
