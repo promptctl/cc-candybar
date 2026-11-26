@@ -19,6 +19,7 @@ function menu() {
   const raw = (): Frame => bar.render(instantOf(new Date())).frame;
   const open = (list: string): Frame => {
     bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    bar.pick(`${SETTINGS_NS}tab`, "look");
     bar.pick(sharedMenuStateKey(`${SETTINGS_NS}pickers`), "gear");
     bar.pick(sharedMenuStateKey(`${SETTINGS_NS}gearPickers`), list);
     return raw();
@@ -59,7 +60,12 @@ test("a value on trial is on its ring: ▶ steps on from it", async () => {
   const rig = buildRig({ base: DEFAULT_DSL_CONFIG });
   const { sessionState, sessionId } = rig;
   sessionState.set(sessionId, SETTINGS_ANCHOR, SETTINGS_OPEN);
-  sessionState.set(sessionId, sharedMenuStateKey(`${SETTINGS_NS}pickers`), "gear");
+  sessionState.set(sessionId, `${SETTINGS_NS}tab`, "look");
+  sessionState.set(
+    sessionId,
+    sharedMenuStateKey(`${SETTINGS_NS}pickers`),
+    "gear",
+  );
   sessionState.set(
     sessionId,
     sharedMenuStateKey(`${SETTINGS_NS}gearPickers`),

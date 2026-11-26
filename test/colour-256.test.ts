@@ -59,13 +59,7 @@ async function closedBars(): Promise<{
   dispose: () => void;
 }> {
   const at = instantOf(new Date());
-  const prepared = await prepareConfig(
-    WORLD,
-    [],
-    process.cwd(),
-    [],
-    at,
-  );
+  const prepared = await prepareConfig(WORLD, [], process.cwd(), [], at);
   return {
     render: async (theme, colorCompatibility) =>
       drawnChars(
@@ -89,18 +83,18 @@ async function closedBars(): Promise<{
   };
 }
 
-// The open states, reached by the clicks a user makes: the 🍫 door (its tray
-// and the preset picker's band items), each tab that holds controls (the 🎨 look
-// tab, then 📐 layout and ⚙ config), and the theme picker on the door's first
-// line, whose options wear the palette each would apply. Each stage is handed a render of the bar in
-// that state at any depth.
+// The open states, reached by the clicks a user makes: the 🍫 door (its tray),
+// each tab that holds controls (📚 saves & presets with the preset picker's
+// band items, 🎨 look with the theme picker, whose options wear the palette
+// each would apply, then ⚙ config). Each stage is handed a render of the bar
+// in that state at any depth.
 const STAGE_NAMES = [
   "closed",
   "door",
+  "presets tab",
   "preset picker",
   "look tab",
   "theme picker",
-  "layout tab",
   "config tab",
 ] as const;
 async function forEachStage(
@@ -155,6 +149,7 @@ async function forEachStage(
   > = {
     closed: () => null,
     door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
+    "presets tab": (r) => opener(r, "candybar.tab", (v) => v === "presets"),
     "preset picker": (r) =>
       opener(r, sharedMenuStateKey("candybar.pickers"), (v) =>
         v.endsWith("preset"),
@@ -164,7 +159,6 @@ async function forEachStage(
       opener(r, sharedMenuStateKey("candybar.pickers"), (v) =>
         v.endsWith("theme"),
       ),
-    "layout tab": (r) => opener(r, "candybar.tab", (v) => v === "layout"),
     "config tab": (r) => opener(r, "candybar.tab", (v) => v === "config"),
   };
   const rig = buildRig({

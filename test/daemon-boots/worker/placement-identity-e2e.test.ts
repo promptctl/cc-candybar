@@ -136,7 +136,7 @@ describe("a placement removed and added back is a new placement", () => {
     await other.click("▸");
     await enter(b);
     await b.click("🔧", 2);
-    expect(textOf((await b.click("▶", 2)).rendered)).toContain("n 2");
+    expect(textOf((await b.click("▶")).rendered)).toContain("n 2");
     await b.click("✖", 3);
     let frame = await addFromLibrary(b, "clock", 2);
     const [, fresh] = placementIds(frame);
@@ -189,7 +189,7 @@ describe("edit mode leaves nothing behind", () => {
       await enter(b);
       await b.click("☐ live");
       await b.click("🔧", 2);
-      await b.click("▶", 2);
+      await b.click("▶");
       await b.click("✚", 1);
       await b.click("→");
       await leave(b);
@@ -276,7 +276,7 @@ describe("one view of the session, in edit mode and out of it", () => {
     const b = await barOf(CONFIG);
     await enter(b);
     await b.click("🔧", 2);
-    expect(textOf((await b.click("▶", 2)).rendered)).toContain("n 2");
+    expect(textOf((await b.click("▶")).rendered)).toContain("n 2");
     await b.click("✖", 3);
     await b.click("✓ save");
     const frame = (await b.click("↶")).rendered;
@@ -330,7 +330,7 @@ describe("one view of the session, in edit mode and out of it", () => {
     const b = await barOf(CONFIG);
     await enter(b);
     await b.click("🔧", 2);
-    expect(textOf((await b.click("▶", 2)).rendered)).toContain("n 2");
+    expect(textOf((await b.click("▶")).rendered)).toContain("n 2");
     expect(textOf((await b.click("↶")).rendered)).toContain("n 1");
   });
 
@@ -338,7 +338,7 @@ describe("one view of the session, in edit mode and out of it", () => {
     const b = await barOf(CONFIG);
     await enter(b);
     await b.click("🔧", 2);
-    expect(textOf((await b.click("▶", 2)).rendered)).toContain("n 2");
+    expect(textOf((await b.click("▶")).rendered)).toContain("n 2");
     expect(textOf((await b.click("◁")).rendered)).not.toContain("n 2");
     expect(textOf((await b.click("🔧", 2)).rendered)).toContain("n 2");
   });

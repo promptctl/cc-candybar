@@ -21,7 +21,7 @@ import { sessionBar } from "../scripts/lib/draw-fixtures/session-bar";
 // U+E0B1, the thin divider: no join draws it, so any on a row fails.
 const DIVIDER = "\u{E0B1}";
 
-const TABS = ["session", "look", "layout", "config"] as const;
+const TABS = ["look", "presets", "session", "config"] as const;
 const COLS = 200;
 
 // The open menu's rows under every bundled theme, each tab and the theme's ⚙
@@ -33,8 +33,13 @@ function menuSeams(
   look: Readonly<Record<string, string>>,
   tabs: readonly (typeof TABS)[number][],
 ): { divided: string[]; arrows: number } {
-  const bar = sessionBar(`{ globals: { colorCompatibility: '${colorCompatibility}' } }`, COLS);
-  const render = () => ({ lines: textOf(bar.render(instantOf(new Date())).frame).split("\n") });
+  const bar = sessionBar(
+    `{ globals: { colorCompatibility: '${colorCompatibility}' } }`,
+    COLS,
+  );
+  const render = () => ({
+    lines: textOf(bar.render(instantOf(new Date())).frame).split("\n"),
+  });
 
   const divided: string[] = [];
   let arrows = 0;
@@ -53,7 +58,8 @@ function menuSeams(
       expect(menu.length).toBeGreaterThan(2);
       for (const row of menu) arrows += row.split(POWERLINE.glyph).length - 1;
       for (const row of rows)
-        if (row.includes(DIVIDER)) divided.push(`${theme} / ${tab}: ${row.trim()}`);
+        if (row.includes(DIVIDER))
+          divided.push(`${theme} / ${tab}: ${row.trim()}`);
     }
   }
   bar.dispose();
@@ -73,7 +79,11 @@ test("at ansi, the open first tab is a filled arrow off the ✕ beside it", () =
   // rounding drew in the ✕'s own colour, joined to it by the divider, on the
   // session tab of catppuccin-frappe, catppuccin-macchiato, dracula, monokai
   // and tokyo-night under this look.
-  const { divided, arrows } = menuSeams("ansi", { shade: "deepest", variation: "duo" }, ["session"]);
+  const { divided, arrows } = menuSeams(
+    "ansi",
+    { shade: "deepest", variation: "duo" },
+    ["session"],
+  );
   expect(divided).toEqual([]);
   expect(arrows).toBeGreaterThan(listThemePalettes().length * 10);
 });
