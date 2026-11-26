@@ -9,7 +9,9 @@ import { untilTestEnds } from "./test-end";
 // losing the test worker) also releases an orphan, without signalling a PID.
 export async function heldGrandchild() {
   let peer: net.Socket | undefined;
-  const server = net.createServer((child) => { peer = child; });
+  const server = net.createServer((child) => {
+    peer = child;
+  });
   const listening = once(server, "listening");
   server.listen(0, "127.0.0.1");
   await listening;
@@ -20,7 +22,10 @@ export async function heldGrandchild() {
     // the launcher's perspective, even on shells that exec a final command.
     command: `${shellWord(process.execPath)} -e ${shellWord(connect)} & wait`,
     started: () => untilTestEnds(async (signal) => {
-      if (!peer) await once(server, "connection", { signal });
+      const child: net.Socket =
+        peer ?? (await once(server, "connection", { signal }))[0];
+      // Opening the gate lets a shell resume from its wait and read its input.
+      return () => child.end();
     }),
     ended: () => untilTestEnds(async (signal) => {
       if (!peer) throw new Error("the grandchild has not connected");

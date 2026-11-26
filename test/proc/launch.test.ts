@@ -538,21 +538,26 @@ describe("launch (async)", () => {
   };
 
   it("holds and meters input still being written at settle, whole for its reader", async () => {
+    await using gate = await heldGrandchild();
+    const stop = new AbortController();
     const counted = path.join(scratch, "held-input-count");
     const drains = meteringDrains();
     scoped({ stats: drains.handle });
     const kill = refusingSignals();
     try {
-      const r = await launch({
+      const pending = launch({
         bin: "/bin/sh",
-        args: ["-c", 'sleep 0.3; wc -c > "$1"', "sh", counted],
+        args: ["-c", `${gate.command}; wc -c > "$1"`, "sh", counted],
         stdinInput: "x".repeat(1024 * 1024),
-        timeoutMs: 50,
+        signal: stop.signal,
         category: "user-shell",
       });
-      expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      const read = await gate.started();
+      stop.abort();
+      expect(await pending).toMatchObject({ ok: false, reason: "signal-refused" });
       // stdout, stderr and the input.
       expect(drains.opened).toHaveLength(3);
+      read();
       await until(
         () => fs.existsSync(counted) && fs.readFileSync(counted, "utf8") !== "",
         "the reader's count",
@@ -568,20 +573,24 @@ describe("launch (async)", () => {
   });
 
   it("a closed launcher frees the input it holds", async () => {
+    await using child = await heldGrandchild();
+    const stop = new AbortController();
     const closing = new AbortController();
     const drains = meteringDrains();
     scoped({ stats: drains.handle, signal: closing.signal });
     const kill = refusingSignals();
     try {
-      const r = await launch({
+      const pending = launch({
         bin: "/bin/sh",
         // Holds its input unread, so only the close can free it.
-        args: ["-c", "sleep 0.3; exec sleep 30"],
+        args: ["-c", child.command],
         stdinInput: "x".repeat(1024 * 1024),
-        timeoutMs: 50,
+        signal: stop.signal,
         category: "user-shell",
       });
-      expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      await child.started();
+      stop.abort();
+      expect(await pending).toMatchObject({ ok: false, reason: "signal-refused" });
       // stdout, stderr and the input.
       const held = drains.opened.length;
       expect(held).toBe(3);
