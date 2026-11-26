@@ -1,15 +1,20 @@
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
-import { CLICK_MODES, NO_HOVER } from "../config/click-mode.js";
-import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
-import { GLOBAL_FIELDS } from "../config/globals-fields.js";
+import { HOVER_KEY, NO_HOVER } from "../config/click-mode.js";
+import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
+import { DIAGNOSTICS_CLOSED } from "../config/door.js";
+import {
+  FIRST_PAGE,
+  menuOfKey,
+  PAGE_HOLDING_CURRENT,
+} from "../config/menu-keys.js";
 import { entryOf, parseDocument } from "../config/json5-edit.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
-import { SUBMENU_NAMES, TABS } from "../config/menu-places.js";
+import { synthesizeSettingsMenu } from "../config/settings-menu.js";
 import { sessionKeyKind } from "../config/session-key.js";
 import {
-  SESSION_KEY_TO_SETTING,
-  SETTINGS,
-} from "../config/setting-projections.js";
+  makeStateKeyspace,
+  type Gate,
+} from "./foundations/state-validators.js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WireFrame } from "../render/frame.js";
 import type {
@@ -18,7 +23,6 @@ import type {
   RendererOutput,
 } from "../renderer-interface/interface.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import { listResolvablePaletteNames } from "../themes/policy.js";
 import { validateHookData } from "../utils/schema-validator.js";
 import { refusedHints } from "./foundations/protocol.js";
 import { isEnvironmentOutput } from "./environment-output.js";
@@ -200,47 +204,49 @@ export function recordingOutputProblem(output: RendererOutput): string | null {
     : null;
 }
 
-// Saved session picks do not carry provenance. Admit existing built-in
-// vocabulary, whose fields cannot disclose arbitrary historical text.
-// [LAW:one-source-of-truth] Use the menu members and each builtin setting's
-// own parser or closed domain instead of spelling their values again.
-// [LAW:single-enforcer] What a key is comes from the one classifier: a setting
-// reads by its field, an authored key by nothing, and every key the bar mints
-// by the disclosure vocabulary.
-function knownPick(key: string, value: string): boolean {
-  const kind = sessionKeyKind(key).kind;
-  if (kind === "plain") return false;
-  // The pointer keys hold a mode, or the action a click made hovered: a
-  // region's name is config text, so only the modes and "no hover" are known.
-  if (kind === "pointer")
-    return CLICK_MODES.some((mode) => mode === value) || value === NO_HOVER;
-  if (kind !== "setting") {
+// [LAW:one-source-of-truth] The bundled actions are a public vocabulary of
+// concrete key/value pairs. A session's own config can add private names to
+// that vocabulary, so it cannot establish what is safe to export at boot.
+function knownPick(
+  gate: Gate,
+  unrestricted: ReadonlySet<string>,
+  key: string,
+  value: string,
+): boolean {
+  const { kind } = sessionKeyKind(key);
+  if (kind === "plain" || kind === "record" || kind === "edit") return false;
+  if (key === HOVER_KEY) return value === NO_HOVER;
+  // An integer action accepts arbitrary strings of digits. Admit only the
+  // fixed public markers of its owner. A newly introduced integer action
+  // otherwise remains private until its recording domain is known.
+  if (unrestricted.has(key)) {
+    if (kind === "viewer") return value === DIAGNOSTICS_CLOSED;
     return (
-      value === DISCLOSURE_CLOSED ||
-      value === DISCLOSURE_OPEN ||
-      TABS.some(({ member }) => member === value) ||
-      SUBMENU_NAMES.some((member) => member === value)
+      menuOfKey(key)?.page === true &&
+      (value === FIRST_PAGE || value === PAGE_HOLDING_CURRENT)
     );
   }
-  const field =
-    GLOBAL_FIELDS[SETTINGS[SESSION_KEY_TO_SETTING.get(key)!].configKey];
-  if (field.kind === "session") return field.parse(value) !== null;
-  const { domain } = field;
-  if (typeof domain !== "object") return false;
-  if ("themes" in domain) return listResolvablePaletteNames().includes(value);
-  return (
-    "from" in domain &&
-    Array.isArray(domain.from) &&
-    domain.from.includes(value)
-  );
+  const result = gate.validate(key, value);
+  return result.ok && result.value === value;
 }
 
 // [LAW:effects-at-boundaries] Refuse unproven historical values at export,
 // when all their original text is still private. Replay needs the whole boot
 // profile, including untouched sessions and both sides of history changes.
 export function recordingBootProblem({ stored }: RendererBoot): string | null {
+  const bundled = synthesizeSettingsMenu(DEFAULT_DSL_CONFIG);
+  const gate = makeStateKeyspace().gateFor(bundled);
+  const unrestricted = new Set(
+    Object.values(bundled.actions).flatMap((action) =>
+      "set" in action && "int" in action ? [action.set] : [],
+    ),
+  );
   for (const picks of Object.values(stored.sessions)) {
-    if (!Object.entries(picks).every(([key, value]) => knownPick(key, value)))
+    if (
+      !Object.entries(picks).every(([key, value]) =>
+        knownPick(gate, unrestricted, key, value),
+      )
+    )
       return UNKNOWN_PROFILE;
   }
   for (const { past, future } of Object.values(stored.history)) {
@@ -250,7 +256,8 @@ export function recordingBootProblem({ stored }: RendererBoot): string | null {
           for (const value of [change.before, change.after]) {
             if (value === null) continue;
             if (change.kind === "session") {
-              if (!knownPick(change.key, value)) return UNKNOWN_PROFILE;
+              if (!knownPick(gate, unrestricted, change.key, value))
+                return UNKNOWN_PROFILE;
             } else {
               const problem = configTextProblem(value);
               if (problem !== null)

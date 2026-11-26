@@ -49,6 +49,14 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
 // does not parse would throw in every render of its session.
 function retiredBecause(key: string, value: string): string | undefined {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
+  // [LAW:one-source-of-truth] Keep the two key/value pairs the old release saved.
+  // Both keys still serve other members. Changing today's shared-menu key
+  // encoder cannot change the spelling on an old profile's disk.
+  if (
+    (key === "candybar.tab" && value === "layout") ||
+    (key === "menus._candybarZ00002epickers" && value === "toggles")
+  )
+    return `the "${value}" settings menu was retired and now starts closed`;
   if (isMenuStateKey(key) && menuOfKey(key) === undefined)
     return "no menu is keyed that way in this build";
   if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
@@ -59,8 +67,8 @@ function retiredBecause(key: string, value: string): string | undefined {
 // [LAW:no-silent-failure] A session's picks load without the ones nothing in
 // this build reads (edit mode's own, which would reopen a panel or a library
 // on a bar with no edit, a menu key this build does not mint, a click error
-// it cannot read), each named in what the load dropped. A session left
-// holding nothing is refused, so it takes no slot.
+// it cannot read, or a retired settings menu selection), each named in what
+// the load dropped. A session left holding nothing takes no slot.
 export function withoutRetiredKeys(
   picks: SessionPicks,
 ): Asked<Kept<SessionPicks>> {
