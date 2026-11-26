@@ -506,6 +506,17 @@ function registerUrlHandler({ host, launcher }: InstallWorld): void {
   );
 }
 
+// Only the holder of this home's claim may recover the previous install or
+// start its own journal, across both installer commands.
+function changeInstallation(
+  world: InstallWorld,
+  prepare: (changes: InstallChanges) => void,
+): void {
+  withInstallClaim(world.host.home, world.launcher, () =>
+    transacted(prepare, world.host.home),
+  );
+}
+
 export function runInstallUrlHandler(
   bundle: string,
   world: InstallWorld,
@@ -514,21 +525,14 @@ export function runInstallUrlHandler(
   // Preconditions before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS(platform);
-  withInstallClaim(world.host.home, world.launcher, () =>
-    transacted((changes) => {
-      const forwarder = resolveForwarder(bundle, platform, world.host);
-      const sources = runtimeSources(bundle, platform);
-      prepareForwardDirectory(world.host, changes);
-      stageRuntime(
-        sources,
-        supportDir(world.host, platform),
-        platform,
-        changes,
-      );
-      buildUrlHandler(forwarder, world, changes);
-      changes.afterPublish(() => registerUrlHandler(world));
-    }),
-  );
+  changeInstallation(world, (changes) => {
+    const forwarder = resolveForwarder(bundle, platform, world.host);
+    const sources = runtimeSources(bundle, platform);
+    prepareForwardDirectory(world.host, changes);
+    stageRuntime(sources, supportDir(world.host, platform), platform, changes);
+    buildUrlHandler(forwarder, world, changes);
+    changes.afterPublish(() => registerUrlHandler(world));
+  });
 }
 
 // [LAW:single-enforcer] The URL handler sends the raw link to the host and
@@ -669,73 +673,71 @@ export function install(
   platform: NodeJS.Platform,
 ): void {
   const { force } = installOptions(args);
-  withInstallClaim(world.host.home, world.launcher, () =>
-    transacted((changes) => {
-      const forwarder =
-        platform === "darwin"
-          ? resolveForwarder(bundle, platform, world.host)
-          : null;
-      const sources = runtimeSources(bundle, platform);
-      const dir = supportDir(world.host, platform);
-      const settingsPath = userSettingsPath(world.host);
-      const settings = planSettings(
-        settingsPath,
-        readClaudeSettingsText(settingsPath),
-        stagedBinPath(dir),
-        force,
+  changeInstallation(world, (changes) => {
+    const forwarder =
+      platform === "darwin"
+        ? resolveForwarder(bundle, platform, world.host)
+        : null;
+    const sources = runtimeSources(bundle, platform);
+    const dir = supportDir(world.host, platform);
+    const settingsPath = userSettingsPath(world.host);
+    const settings = planSettings(
+      settingsPath,
+      readClaudeSettingsText(settingsPath),
+      stagedBinPath(dir),
+      force,
+    );
+    const record = hostBundlePath(world.host);
+    const recorded = readTextIfPresent(record);
+
+    if (forwarder !== null) prepareForwardDirectory(world.host, changes);
+    const staged = stageRuntime(sources, dir, platform, changes);
+    if (forwarder !== null) {
+      buildUrlHandler(forwarder, world, changes);
+    } else {
+      process.stdout.write(
+        "Skipping URL handler (cmd-click verbs are macOS-only).\n",
       );
-      const record = hostBundlePath(world.host);
-      const recorded = readTextIfPresent(record);
+    }
 
-      if (forwarder !== null) prepareForwardDirectory(world.host, changes);
-      const staged = stageRuntime(sources, dir, platform, changes);
-      if (forwarder !== null) {
-        buildUrlHandler(forwarder, world, changes);
-      } else {
-        process.stdout.write(
-          "Skipping URL handler (cmd-click verbs are macOS-only).\n",
-        );
-      }
+    const { change } = settings;
+    if (change.kind === "set") {
+      changes.writeText(settingsPath, settings.was, change.text);
+      changes.report(
+        `Set the statusLine command in ${settingsPath}: ${change.command}\n`,
+      );
+    } else {
+      changes.expectText(settingsPath, settings.was);
+      process.stderr.write(
+        `Skipping settings.json update: existing statusLine.command appears customized.\n` +
+          `  Current: ${change.command}\n` +
+          `  To overwrite, re-run with --force.\n`,
+      );
+    }
 
-      const { change } = settings;
-      if (change.kind === "set") {
-        changes.writeText(settingsPath, settings.was, change.text);
-        changes.report(
-          `Set the statusLine command in ${settingsPath}: ${change.command}\n`,
-        );
-      } else {
-        changes.expectText(settingsPath, settings.was);
-        process.stderr.write(
-          `Skipping settings.json update: existing statusLine.command appears customized.\n` +
-            `  Current: ${change.command}\n` +
-            `  To overwrite, re-run with --force.\n`,
-        );
-      }
+    // [LAW:one-source-of-truth] The install knows which bundle it staged, and
+    // whether it set the statusline command that runs it. A customized command
+    // it kept is read for whether it runs the staged entry: that setup is the
+    // install too, and `--force` would destroy the command that makes it so.
+    if (
+      change.kind === "set" ||
+      statusLineRunsBundle(settings.statusLine, staged.distPath)
+    ) {
+      changes.writeText(
+        record,
+        recorded,
+        hostBundleRecordText(staged.distPath),
+      );
+      changes.report(recordedMessage(staged.distPath));
+    } else {
+      process.stdout.write(
+        `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
+      );
+    }
 
-      // [LAW:one-source-of-truth] The install knows which bundle it staged, and
-      // whether it set the statusline command that runs it. A customized command
-      // it kept is read for whether it runs the staged entry: that setup is the
-      // install too, and `--force` would destroy the command that makes it so.
-      if (
-        change.kind === "set" ||
-        statusLineRunsBundle(settings.statusLine, staged.distPath)
-      ) {
-        changes.writeText(
-          record,
-          recorded,
-          hostBundleRecordText(staged.distPath),
-        );
-        changes.report(recordedMessage(staged.distPath));
-      } else {
-        process.stdout.write(
-          `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`,
-        );
-      }
-
-      if (forwarder !== null)
-        changes.afterPublish(() => registerUrlHandler(world));
-    }),
-  );
+    if (forwarder !== null)
+      changes.afterPublish(() => registerUrlHandler(world));
+  });
 }
 
 export async function runInstall(

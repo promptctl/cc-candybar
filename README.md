@@ -36,7 +36,7 @@ That single command (re-run it any time to update to the latest release):
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
 3. Writes the staged `bin/cc-candybar` path alone as the statusline command in `~/.claude/settings.json`. Install preserves a customized command, including arguments you added. Pass `install --force` to replace it. Configure the bar in its config file.
 
-On an upgrade, install prepares the new runtime and signs the macOS app while the previous installation remains available. A second installer reports which process is active. Rerunning install after that process exits acquires a fresh claim.
+On an upgrade, install prepares the new runtime and signs the macOS app while the previous installation remains available. A second installer reports which process is active. If that process is killed, the next installer recovers its filesystem changes before reading settings. It restores interrupted publications and cleans up backups from a completed publication.
 
 If installation fails, it restores the files it changed and reports any path it could not restore.
 
