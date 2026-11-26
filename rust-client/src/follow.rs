@@ -451,18 +451,20 @@ mod tests {
 
     #[test]
     fn a_well_formed_subscription_parses_in_either_spelling() {
-        for args in [
-            argv(&["--lane", "statusline", "--session", "s-1"]),
-            argv(&["--lane=statusline", "--session=s-1"]),
-        ] {
-            let parsed = parse_args(&args).unwrap();
-            assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), ("statusline", "s-1"));
+        for lane in LANE_NAMES {
+            for args in [
+                argv(&["--lane", lane, "--session", "s-1"]),
+                argv(&[&format!("--lane={lane}"), "--session=s-1"]),
+            ] {
+                let parsed = parse_args(&args).unwrap();
+                assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), (lane, "s-1"));
+            }
         }
     }
 
     #[test]
     fn a_subscription_this_client_could_not_send_well_formed_is_refused() {
-        let lanes = "--lane needs one of statusline, pane";
+        let lanes = "--lane needs one of statusline, pane, window";
         for (args, why) in [
             (argv(&["--session", "s"]), lanes),
             (argv(&["--lane", "everywhere", "--session", "s"]), lanes),
@@ -476,6 +478,6 @@ mod tests {
 
     #[test]
     fn usage_names_every_lane() {
-        assert!(usage().starts_with(&format!("{USAGE_HEAD} <statusline|pane> --session <id>")));
+        assert!(usage().starts_with(&format!("{USAGE_HEAD} <statusline|pane|window> --session <id>")));
     }
 }
