@@ -23,7 +23,7 @@ use serde::Deserialize;
 use crate::{read_frame, socket_path, write_frame, PROTOCOL_VERSION};
 
 // [LAW:one-source-of-truth] Mirrors LANES in src/config/lanes.ts.
-const LANE_NAMES: [&str; 2] = ["statusline", "pane"];
+const LANE_NAMES: [&str; 3] = ["statusline", "pane", "window"];
 // [LAW:one-source-of-truth] Mirror src/daemon/frame-follow.ts.
 const RECONNECT_FIRST_MS: u64 = 250;
 const RECONNECT_MAX_MS: u64 = 2000;
@@ -40,9 +40,9 @@ sends the lane's subscriber, one JSON line on stdout, until stdout closes or the
 process that started it exits. The frames are drawn from the data the session's
 own statusline client sends.
 
-The stream outlives the daemon: one that ends is reconnected, starting a daemon
-when none answers. While the lane's toggle is off the daemon's refusal is
-written once, and asked again every {}s. What goes wrong is said on stderr.
+If the daemon stops, the follower retries until a statusline client starts it
+again. While the lane is off, the follower prints the refusal once and checks
+again every {}s. Errors go to stderr.
 
 Exit 2: bad arguments. Exit 1: a daemon that refuses for good (it speaks a newer
 protocol than this client). Exit 0: stdout closed, or the process that started
@@ -451,18 +451,20 @@ mod tests {
 
     #[test]
     fn a_well_formed_subscription_parses_in_either_spelling() {
-        for args in [
-            argv(&["--lane", "statusline", "--session", "s-1"]),
-            argv(&["--lane=statusline", "--session=s-1"]),
-        ] {
-            let parsed = parse_args(&args).unwrap();
-            assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), ("statusline", "s-1"));
+        for lane in LANE_NAMES {
+            for args in [
+                argv(&["--lane", lane, "--session", "s-1"]),
+                argv(&[&format!("--lane={lane}"), "--session=s-1"]),
+            ] {
+                let parsed = parse_args(&args).unwrap();
+                assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), (lane, "s-1"));
+            }
         }
     }
 
     #[test]
     fn a_subscription_this_client_could_not_send_well_formed_is_refused() {
-        let lanes = "--lane needs one of statusline, pane";
+        let lanes = "--lane needs one of statusline, pane, window";
         for (args, why) in [
             (argv(&["--session", "s"]), lanes),
             (argv(&["--lane", "everywhere", "--session", "s"]), lanes),
@@ -476,6 +478,6 @@ mod tests {
 
     #[test]
     fn usage_names_every_lane() {
-        assert!(usage().starts_with(&format!("{USAGE_HEAD} <statusline|pane> --session <id>")));
+        assert!(usage().starts_with(&format!("{USAGE_HEAD} <statusline|pane|window> --session <id>")));
     }
 }

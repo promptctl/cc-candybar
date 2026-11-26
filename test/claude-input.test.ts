@@ -38,6 +38,7 @@ import { lastClickError } from "../src/daemon/foundations/click-error";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TABS } from "../src/config/menu-places";
 
 // The host's typing, over the real tmux edge on the test's fake tmux: one
 // edge per rig, since an edge remembers what it typed moments ago.
@@ -594,7 +595,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     // A tab click hides or shows the tray: arming /clear on ⚡ session, then
     // leaving it, must not come back to an armed confirm. `⟲` sits on the
     // door's first line, in view whichever tab is open, so a tab leaves it armed.
-    for (const tab of ["session", "look", "layout", "config"]) {
+    for (const { member: tab } of TABS) {
       expect(rt.config.actions[`candybar.tab.${tab}`]).toEqual({
         do: [`candybar.tab.${tab}.toggle`, "candybar.commands.clear.disarm"],
       });

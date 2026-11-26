@@ -14,7 +14,7 @@ import {
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
-const OFF = { pane: false, statusline: false };
+const OFF = { pane: false, statusline: false, window: false };
 
 const effective = (
   globals: Partial<Record<string, unknown>>,
@@ -92,5 +92,25 @@ describe("laneHandoff", () => {
       text: "No writable personal config layer for the pane",
       link: null,
     });
+  });
+});
+
+describe("laneHandoff names the lanes it hands off", () => {
+  test("the window, when the window draws the bar", () => {
+    const row = laneHandoff(S1, ["project"], ["window"], OFF);
+    expect(row.lines[0]![0]!.text).toBe(
+      "No writable personal config layer for the window",
+    );
+  });
+
+  test("every lane its config keeps on, together", () => {
+    const row = laneHandoff(S1, ["user"], ["pane", "window"], {
+      ...OFF,
+      pane: true,
+      window: true,
+    });
+    expect(row.lines[0]![0]!.text).toBe(
+      "The pane and the window stay enabled by their config",
+    );
   });
 });

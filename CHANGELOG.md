@@ -1,3 +1,19 @@
+## [1.240.0](https://github.com/promptctl/cc-candybar/compare/v1.239.0...v1.240.0) (2026-11-26)
+
+### Features
+
+* **lanes:** a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) ([#967](https://github.com/promptctl/cc-candybar/issues/967)) ([9882701](https://github.com/promptctl/cc-candybar/commit/98827016846125701459a4fd629a6ffbba742261))
+
+## [1.239.0](https://github.com/promptctl/cc-candybar/compare/v1.238.6...v1.239.0) (2026-11-26)
+
+### Features
+
+* **settings-menu:** the menu leads with 🎨 look and 📚 saves & presets; lane switches under 📺 renderer ([#964](https://github.com/promptctl/cc-candybar/issues/964)) ([bee4d68](https://github.com/promptctl/cc-candybar/commit/bee4d68899303097cdf3530e031aa66ec1dc1f7c))
+
+### Bug Fixes
+
+* **pricing:** refresh the daemon price table and abort loads on close ([#970](https://github.com/promptctl/cc-candybar/issues/970)) ([9b01fa7](https://github.com/promptctl/cc-candybar/commit/9b01fa771aca2c9d48588a1646094f09f858199f))
+
 ## [1.238.6](https://github.com/promptctl/cc-candybar/compare/v1.238.5...v1.238.6) (2026-11-26)
 
 ### Bug Fixes

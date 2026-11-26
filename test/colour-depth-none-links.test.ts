@@ -10,6 +10,7 @@ import { ansiOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { TABS } from "../src/config/menu-places";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SessionState } from "../src/renderer/session-state";
@@ -121,8 +122,8 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
     const none = render();
     expect(ansiOf(none).match(SGR)).toBeNull();
     // With no colour, the open tab is still marked: it alone leads with ▾.
-    expect(textOf(none)).toContain("▾ ⚙ config");
-    expect(textOf(none).match(/▾ (⚡ session|🎨 look|📐 layout)/)).toBeNull();
+    const markedTabs = TABS.filter(({ label }) => textOf(none).includes(`▾ ${label}`));
+    expect(markedTabs.map(({ member }) => member)).toEqual(["config"]);
     // The same state drawn in colour carries exactly the same links.
     expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
 
