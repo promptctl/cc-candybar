@@ -38,14 +38,12 @@ const CLOCK_PROPERTIES = [
 ];
 // [LAW:single-enforcer] A signal sent to a pid or its group, or signal 0 asking
 // whether it is there, is read of the process table: src/proc/spawner.ts owns
-// it for a launch's groups and the ProcessProbe for a pid. The three files
+// it for a launch's groups and the ProcessProbe for a pid. The two files
 // below are exceptions, each owned by the ticket that gives its program a port;
 // the list may shrink and no other file joins it.
-//   src/utils/cache.ts       pricing's lock holder (candybar-testing-ihvy.89p)
 //   src/daemon/lane-edge.ts  SIGTERM to Claude Code (candybar-testing-ihvy.dcv)
 //   src/daemon/server.ts     the daemon's own SIGKILL (the Lifetime piece)
 const KILL_EXCEPTIONS = [
-  "src/utils/cache.ts",
   "src/daemon/lane-edge.ts",
   "src/daemon/server.ts",
 ];
@@ -171,6 +169,11 @@ const OWNED_IMPORTS = {
     owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
+  fetchPricing: {
+    group: ["**/pricing-fetch", "**/pricing-fetch.js"],
+    owners: ["src/daemon/production-adapters.ts"],
+    message: "A daemon is handed its adapters (production-adapters.ts).",
+  },
   linkSignerFromKeyFile: {
     group: ["**/link-key", "**/link-key.js"],
     owners: ["src/daemon/production-adapters.ts"],
@@ -220,15 +223,9 @@ const OWNED_IMPORTS = {
       ],
     ),
   ),
-  // The pricing disk cache is read ahead of its port
-  // (candybar-testing-ihvy.89p), which takes its directory as an input.
-  cacheDir: {
-    group: PATHS,
-    owners: ["src/daemon/cache/session-usage-store.ts"],
-    message: "A daemon is handed its paths: take the value you are given.",
-  },
   ...Object.fromEntries(
     [
+      "cacheDir",
       "logPath",
       "leasePath",
       "sessionStatePath",

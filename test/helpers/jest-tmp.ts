@@ -13,6 +13,7 @@ type JestTmpKind =
   | "data"
   | "config"
   | "state"
+  | "cache"
   | "fixtures";
 
 // [LAW:one-source-of-truth] A jest worker's own directory, unique per test file

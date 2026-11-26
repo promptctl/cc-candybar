@@ -265,6 +265,8 @@ export interface DaemonPaths {
   readonly sessionBook: string;
   readonly watchProbe: string;
   readonly spawnBackoff: string;
+  // The pricing disk cache: the last fetched price table.
+  readonly pricingCache: string;
 }
 
 export function daemonPaths(host: Host): DaemonPaths {
@@ -278,6 +280,7 @@ export function daemonPaths(host: Host): DaemonPaths {
     sessionBook: path.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host),
+    pricingCache: path.join(cacheDir(host), "usage", "pricing.json"),
   };
 }
 
