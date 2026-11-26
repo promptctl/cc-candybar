@@ -75406,6 +75406,8 @@ function parseSessionPicks(value) {
 }
 function retiredBecause(key, value) {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
+  if (key === "candybar.tab" && value === "layout" || key === "menus._candybarZ00002epickers" && value === "toggles")
+    return `the "${value}" settings menu was retired and now starts closed`;
   if (isMenuStateKey(key) && menuOfKey(key) === void 0)
     return "no menu is keyed that way in this build";
   if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
@@ -93641,24 +93643,29 @@ function recordingOutputProblem(output) {
     ({ frame: frame2 }) => frame2.kind === "drawn" && (frameHasActionEnvironment(frame2.bar) || frame2.handoff !== null && frameHasActionEnvironment(frame2.handoff))
   ) ? ACTION_ENVIRONMENT : null;
 }
-function knownPick(key, value) {
-  const kind = sessionKeyKind(key).kind;
-  if (kind === "plain") return false;
-  if (kind === "pointer")
-    return CLICK_MODES.some((mode) => mode === value) || value === NO_HOVER;
-  if (kind !== "setting") {
-    return value === DISCLOSURE_CLOSED || value === DISCLOSURE_OPEN || TABS.some(({ member }) => member === value) || SUBMENU_NAMES.some((member) => member === value);
+function knownPick(gate2, unrestricted, key, value) {
+  const { kind } = sessionKeyKind(key);
+  if (kind === "plain" || kind === "record" || kind === "edit") return false;
+  if (key === HOVER_KEY) return value === NO_HOVER;
+  if (unrestricted.has(key)) {
+    if (kind === "viewer") return value === DIAGNOSTICS_CLOSED;
+    return menuOfKey(key)?.page === true && (value === FIRST_PAGE || value === PAGE_HOLDING_CURRENT);
   }
-  const field = GLOBAL_FIELDS[SETTINGS[SESSION_KEY_TO_SETTING.get(key)].configKey];
-  if (field.kind === "session") return field.parse(value) !== null;
-  const { domain } = field;
-  if (typeof domain !== "object") return false;
-  if ("themes" in domain) return listResolvablePaletteNames().includes(value);
-  return "from" in domain && Array.isArray(domain.from) && domain.from.includes(value);
+  const result = gate2.validate(key, value);
+  return result.ok && result.value === value;
 }
 function recordingBootProblem({ stored }) {
+  const bundled = synthesizeSettingsMenu(DEFAULT_DSL_CONFIG);
+  const gate2 = makeStateKeyspace().gateFor(bundled);
+  const unrestricted = new Set(
+    Object.values(bundled.actions).flatMap(
+      (action2) => "set" in action2 && "int" in action2 ? [action2.set] : []
+    )
+  );
   for (const picks of Object.values(stored.sessions)) {
-    if (!Object.entries(picks).every(([key, value]) => knownPick(key, value)))
+    if (!Object.entries(picks).every(
+      ([key, value]) => knownPick(gate2, unrestricted, key, value)
+    ))
       return UNKNOWN_PROFILE;
   }
   for (const { past, future } of Object.values(stored.history)) {
@@ -93668,7 +93675,8 @@ function recordingBootProblem({ stored }) {
           for (const value of [change.before, change.after]) {
             if (value === null) continue;
             if (change.kind === "session") {
-              if (!knownPick(change.key, value)) return UNKNOWN_PROFILE;
+              if (!knownPick(gate2, unrestricted, change.key, value))
+                return UNKNOWN_PROFILE;
             } else {
               const problem = configTextProblem(value);
               if (problem !== null)

@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-972",
-      "ref": "refs/pull/972/merge",
-      "sha": "e919dae944e45ff6046d4d80c14646940c277dd3",
-      "timestamp": "2026-11-26T06:59:59.311Z",
-      "commits": [
-        {
-          "sha": "e919dae944e45ff6046d4d80c14646940c277dd3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:58:15Z",
-          "message": "Merge 804b3e426a7d01ac51cffddb51b9a2a9cc5516d5 into bb7cbb8fc4780c7e81a4e1a3d968c5f38e0674fb\n"
-        },
-        {
-          "sha": "804b3e426a7d01ac51cffddb51b9a2a9cc5516d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:58:02-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into fix/menu-retired-picks-recording\n"
-        },
-        {
-          "sha": "a60423dbab82dcc236a138a839301303d5012684",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:52:24-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into fix/menu-retired-picks-recording\n"
-        },
-        {
-          "sha": "ea152cb74a3a5e407333fd3913d2d21cad13ad99",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:52:23-07:00",
-          "message": "fix(recording): recognize the public state the bundled menu actually writes\n"
-        },
-        {
-          "sha": "2e65e6d08b417f2c15a0a354fd7da184e976af75",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:34:50-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into fix/menu-retired-picks-recording\n"
-        },
-        {
-          "sha": "e3c10c2272e0485db5f6088cf659294f1d8c5ee9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:27:50-07:00",
-          "message": "fix(menu): pin former wire pairs and verify their load diagnostics\n"
-        },
-        {
-          "sha": "30eb8be64c757e606f332e5a4ba1d2be6fa54345",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:11:40-07:00",
-          "message": "fix(menu): retire saved selections that block recording after upgrade\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "bb7cbb8fc4780c7e81a4e1a3d968c5f38e0674fb",
-      "timestamp": "2026-11-26T06:59:00.304Z",
+      "sha": "333bc50181d36554bd91ea53febb5c13ff862863",
+      "timestamp": "2026-11-26T07:03:13.268Z",
       "commits": [
         {
-          "sha": "bb7cbb8fc4780c7e81a4e1a3d968c5f38e0674fb",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-26T06:57:21Z",
-          "message": "chore(release): set `package.json` to 1.241.1\n\n## [1.241.1](https://github.com/promptctl/cc-candybar/compare/v1.241.0...v1.241.1) (2026-11-26)\n\n### Bug Fixes\n\n* **config:** preserve comments and roll back failed installs ([#969](https://github.com/promptctl/cc-candybar/issues/969)) ([17339bc](https://github.com/promptctl/cc-candybar/commit/17339bc95bd7d8e527c9de56d2d06a3c029bf27c))\n"
+          "sha": "333bc50181d36554bd91ea53febb5c13ff862863",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T00:01:41-07:00",
+          "message": "fix(menu): retire saved selections that block recording after upgrade (#972)\n\n* fix(menu): retire saved selections that block recording after upgrade\n\n* fix(menu): pin former wire pairs and verify their load diagnostics\n\n* fix(recording): recognize the public state the bundled menu actually writes"
         }
       ]
     }
