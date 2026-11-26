@@ -159,7 +159,7 @@ export async function startDaemonWithEnv(
   env: NodeJS.ProcessEnv,
   acquire: AcquireSlot,
   // When the caller stops waiting for the daemon's first answer: a test at
-  // its end, a hand-run tool at the end of its user's patience.
+  // its end, a command-line tool at its startup deadline.
   until: AbortSignal,
   entry?: DaemonEntry,
 ): Promise<RunningDaemon> {
