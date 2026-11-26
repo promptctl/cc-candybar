@@ -25,8 +25,8 @@ import {
   type RendererPanel,
 } from "../../../src/daemon/foundations/stats-snapshot";
 import {
-  listPostMortems,
   memoryLimitBytes,
+  postMortemsOf,
   realLimitsDeps,
 } from "../../../src/daemon/limits";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
@@ -235,10 +235,11 @@ test("a renderer past its memory limit is ended alone and started again, and eve
     );
     expect(warned).toContain("drawn");
 
-    const postMortems = listPostMortems(paths.state);
-    if (postMortems.kind !== "ok") throw new Error(postMortems.reason);
-    expect(postMortems.value).toHaveLength(1);
-    expect(postMortems.value[0]).toMatchObject({
+    const postMortems = postMortemsOf(
+      fs.readdirSync(paths.state).map((f) => path.join(paths.state, f)),
+    );
+    expect(postMortems).toHaveLength(1);
+    expect(postMortems[0]).toMatchObject({
       process: { kind: "renderer", name: WORKTREE },
       artifacts: {
         memoryReport: expect.stringContaining(
@@ -249,7 +250,7 @@ test("a renderer past its memory limit is ended alone and started again, and eve
         ),
       },
     });
-    const heap = postMortems.value[0]!.artifacts.heapSnapshot!;
+    const heap = postMortems[0]!.artifacts.heapSnapshot!;
     expect(fs.statSync(heap).size).toBeGreaterThan(0);
     daemonLog.writeNow();
     expect(fs.readFileSync(paths.log, "utf8")).toMatch(

@@ -34,7 +34,6 @@ import { parsedRendererName } from "./foundations/renderer-name";
 import type { Launcher } from "../proc/launcher";
 import type { RendererProcess } from "./renderer-process";
 import type { Timekeeper } from "../time";
-import type { Asked } from "../utils/outcome";
 
 // [LAW:single-enforcer] One module judges each of the daemon's processes
 // against its memory limit and records a breach before the process ends;
@@ -613,16 +612,6 @@ function breachArtifacts(dir: string): string[] {
     .map((f) => path.join(dir, f));
 }
 
-// [LAW:one-source-of-truth] The post-mortems the daemons' breaches left in
-// the state directory, read as rotation reads them.
-export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
-  try {
-    return { kind: "ok", value: postMortemsOf(breachArtifacts(dir)) };
-  } catch (e) {
-    return { kind: "failed", reason: (e as Error).message };
-  }
-}
-
 // [LAW:types-are-the-program] A post-mortem's unit is the BREACH, not the
 // file. A breach leaves a heap snapshot AND a memory report sharing one
 // identity, so rotation counting files would keep one and a half post-mortems
@@ -631,8 +620,7 @@ export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
 // lexically, what follows only tiebreaks same-instant writes. A file no breach
 // wrote is not ours, so it is no post-mortem; one whose affixes are a
 // breach's is, though its identity names no process this build reads.
-// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, and a
-// listing reads it whole.
+// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail.
 export function postMortemsOf(files: readonly string[]): PostMortem[] {
   const byIdentity = new Map<string, Partial<Record<BreachArtifact, string>>>();
   for (const file of files) {

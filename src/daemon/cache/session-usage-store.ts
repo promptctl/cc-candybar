@@ -66,6 +66,10 @@ import type {
   SpeedObservation,
   SpeedSample,
 } from "../../facts/world-state";
+import {
+  transcriptLossText,
+  type TranscriptLoss,
+} from "../../utils/transcript-loss";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -116,9 +120,14 @@ function speedSampleOf(
 
 interface SessionRecord {
   // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
-  // sidechains, each its own incremental FileFold); `usage`/`days` are
-  // derived from mergeFolds and re-synced on every ingest — the single writer.
+  // sidechains, each its own incremental FileFold); `usage`/`days`/`losses`
+  // are derived beside mergeFolds and re-synced on every ingest — the single
+  // writer.
   files: Map<string, Folded<FileFold>>;
+  // What `files` folded without: each file's dropped lines, and each sidechain
+  // whose first line cannot say whose it is, which no file in `files` stands
+  // for.
+  losses: readonly TranscriptLoss[];
   usage: TranscriptUsage;
   days: DayLedgers;
   turnOpen: boolean;
@@ -327,11 +336,23 @@ async function foldFile(
 // transcript's stamp they were read at.
 type Refolded = {
   readonly files: Map<string, Folded<FileFold>>;
+  readonly losses: readonly TranscriptLoss[];
   readonly mainStamp: string;
   // Whether the session's turn is open: the main transcript's fold alone,
   // since a sidechain's entries move no turn (turnOpenAfter).
   readonly turnOpen: boolean;
 } & ReturnType<typeof mergeFolds>;
+
+// Which loss this is, whatever its count: its file, and for dropped lines the
+// first of them, so a file read again from its start drops anew as another.
+function lossIdentity(loss: TranscriptLoss): string {
+  switch (loss.kind) {
+    case "dropped-lines":
+      return `${loss.kind}\0${loss.path}\0${loss.firstLine}`;
+    case "unowned-sidechain":
+      return `${loss.kind}\0${loss.path}`;
+  }
+}
 
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
 // derived record shape the read path serves. `entries === 0` across all files is
@@ -600,6 +621,14 @@ export class SessionUsageStore {
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
     return ok(slot.record?.usage ?? EMPTY_USAGE);
+  }
+
+  // [LAW:no-silent-failure] What the session's transcripts gave its folds
+  // less of, as its last refresh left them. A loss qualifies a fold, so a
+  // session with none folded yet has none; whether its usage is pending or
+  // failed is its usage reading's to say (usageOf).
+  lossesOf(sessionId: SessionId): readonly TranscriptLoss[] {
+    return this.sessions.get(sessionId)?.record?.losses ?? [];
   }
 
   // A refresh's ingest of its session, whose outcome the session's slot keeps
@@ -898,9 +927,10 @@ export class SessionUsageStore {
   // prior record — the transcript (and each agent sidechain) is append-only, so
   // per-render work is O(new bytes), not O(file). The whole-file case (cold
   // record, or a first-ever read) is the same path with an empty prior: the
-  // reader yields the whole file from offset 0. A `failed` read on any file
-  // fails the fold (the boundary logs it); an `absent` file (not yet written /
-  // agent removed) keeps its prior fold and contributes nothing new.
+  // reader yields the whole file from offset 0. A `failed` read of any file,
+  // or of the sidechains' directory or a new sidechain's first line, fails the
+  // fold (the boundary logs it), so nothing short is stored and the next
+  // render retries.
   private async refold(
     sessionId: SessionId,
     transcriptPath: string,
@@ -911,11 +941,13 @@ export class SessionUsageStore {
     // out of `newFiles`, so a rewritten/renamed file cannot linger in the merge.
     // Pass the prior file set so already-verified agent sidechains skip their
     // first-line re-read — per-render agent discovery is O(new sidechains).
-    const agents = await findAgentTranscripts(
+    const found = await findAgentTranscripts(
       sessionId,
       dirname(transcriptPath),
       prior === undefined ? undefined : new Set(prior.files.keys()),
     );
+    if (found.kind === "failed") return found;
+    const agents = found.value;
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
     // [LAW:effects-at-boundaries] A refold shares one table across its files
     // and windows, and asks only if a usage entry needs a calculated cost.
@@ -924,21 +956,25 @@ export class SessionUsageStore {
     const keep = dayKey(new Date(seedCutoffMs(this.clock.now())));
     const newFiles = new Map<string, Folded<FileFold>>();
     let mainStamp = "";
-    for (const filePath of [transcriptPath, ...agents.paths]) {
-      const priorFold = prior?.files.get(filePath);
+    // [LAW:no-ambient-temporal-coupling] What each file is when it reads
+    // absent. The main transcript with no bytes yet keeps its prior fold, and
+    // its absence leaves mainStamp empty, so the next render's stamp gate
+    // re-attempts rather than caching an empty read. A sidechain gone is out
+    // of the session whether it went before the listing or after it.
+    const files = [
+      { path: transcriptPath, keptIfAbsent: prior?.files.get(transcriptPath) },
+      ...agents.paths.map((path) => ({ path, keptIfAbsent: undefined })),
+    ];
+    for (const { path: filePath, keptIfAbsent } of files) {
       const read = await foldAppended(
         filePath,
-        priorFold,
+        prior?.files.get(filePath),
         EMPTY_FILE_FOLD,
         (state, entries) => foldFile(state, entries, prices, keep),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {
-        // The file has no bytes yet (fresh main) or vanished (removed agent
-        // sidechain). Carry a prior fold forward; otherwise it contributes
-        // nothing. The main transcript's absence leaves mainStamp empty, so the
-        // next render's stamp gate re-attempts rather than caching an empty read.
-        if (priorFold) newFiles.set(filePath, priorFold);
+        if (keptIfAbsent) newFiles.set(filePath, keptIfAbsent);
         continue;
       }
       const { folded, longLines } = read.value;
@@ -946,8 +982,22 @@ export class SessionUsageStore {
       newFiles.set(filePath, folded);
       if (filePath === transcriptPath) mainStamp = folded.cursor.stamp;
     }
+    const losses = [
+      ...[...newFiles].flatMap(([path, { dropped }]): TranscriptLoss[] =>
+        dropped === null ? [] : [{ kind: "dropped-lines", path, ...dropped }],
+      ),
+      ...agents.unowned,
+    ];
+    // [LAW:nothing-unseen] A loss this fold meets that the prior did not is
+    // logged once, in the words the bar shows it in. More lines dropped after
+    // the first are the same loss, which the bar counts as they come.
+    const known = new Set(prior?.losses.map(lossIdentity));
+    for (const loss of losses)
+      if (!known.has(lossIdentity(loss)))
+        this.log("warn", transcriptLossText(loss));
     return ok({
       files: newFiles,
+      losses,
       ...mergeFolds(newFiles),
       mainStamp,
       turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false,

@@ -44,6 +44,7 @@ import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
 import { awaitingOf, type Awaiting } from "../facts/awaited.js";
 import type { WorldState } from "../facts/world-state.js";
+import { transcriptLossText } from "../utils/transcript-loss.js";
 import type { PendingRead } from "../var-system/types.js";
 import { isPending } from "../utils/outcome.js";
 import {
@@ -589,6 +590,16 @@ export function drawRender(
             message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`,
           }),
         ]),
+    // [LAW:no-silent-failure] What the session's transcripts gave its folds
+    // less of is missing from the bar's figures for it, so the bar says so
+    // for as long as the folds that lack it hold the figures. Each file is
+    // one message.
+    ...document.transcriptLosses.map(
+      (loss): Standing => ({
+        warning: { kind: "transcript", message: transcriptLossText(loss) },
+        about: aboutSubject("transcript", loss.path),
+      }),
+    ),
   ];
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
   // indicator reads it as the `diagnostics` projection and the viewer pages
@@ -907,22 +918,14 @@ const faultAbout = (
     about.rule === "subject" ? about.subject : undefined,
   );
 
-// The warning a load carried, beside what a draw could not honour.
-interface LoadWarning {
-  readonly kind: "load";
-  readonly message: string;
-}
-
-// What the config's watch cannot hear, so an edit may not reload.
-interface ConfigWatchWarning {
-  readonly kind: "config-watch";
-  readonly message: string;
-}
-
-// The facts the bar is drawn from are behind: the latest turn could not be
-// stamped.
-interface FactsWarning {
-  readonly kind: "facts";
+// [LAW:one-type-per-behavior] A standing warning that is its message alone:
+// the warning a load carried, beside what a draw could not honour
+// (`load`); what the config's watch cannot hear, so an edit may not reload
+// (`config-watch`); the facts the bar is drawn from being behind, the latest
+// turn not stamped (`facts`); and what a transcript gave the session's folds
+// less of (`transcript`).
+interface MessageWarning {
+  readonly kind: "load" | "config-watch" | "facts" | "transcript";
   readonly message: string;
 }
 
@@ -974,9 +977,7 @@ type StandingWarning =
   | LifelineWarning
   | StoreUnsavedWarning
   | DaemonEventWarning
-  | ConfigWatchWarning
-  | LoadWarning
-  | FactsWarning;
+  | MessageWarning;
 
 // A standing warning and what it is about: a kind that recurs (a pipe event's
 // count, a load's file) is about its subject, so its words change while it

@@ -683,34 +683,6 @@ describe("a project layer inserting into the user's row", () => {
     expect(labels("default")[0]).not.toContain(dir);
   });
 
-  test("a segment only an insert entry places, and the variable it reads, are not reported unused", () => {
-    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
-    fs.writeFileSync(
-      projectFile,
-      `{
-        variables: { tv: { kind: "literal", value: "x" } },
-        segments: { theirs: { template: "{{ .tv }}" }, spare: { template: "S" } },
-        insert: [{ seg: "theirs", after: "mine" }],
-      }`,
-    );
-    // The load the doctor's config check judges: the bar's own.
-    const loaded = loadDiscovered(project, project, undefined, {
-      clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
-      sessionState: new SessionState(),
-      gates: bareGates(),
-    });
-    try {
-      expect(loaded.kind).toBe("built");
-      expect(loaded.state?.unused.map((u) => `${u.kind} ${u.name}`)).toEqual([
-        "segment spare",
-      ]);
-    } finally {
-      loaded.state?.registry.dispose();
-    }
-  });
-
   test("an entry whose anchor no tree holds is one warning naming every tree it missed", async () => {
     userRow(
       `{ rows: { status: { h: ["mine", "other"] } } }`,

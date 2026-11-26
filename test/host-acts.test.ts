@@ -173,7 +173,6 @@ function hostOver(
                   capture,
                 })),
               },
-              arrival: { via: "link", delivery: { kind: "cli" } },
               context: null,
             },
           },

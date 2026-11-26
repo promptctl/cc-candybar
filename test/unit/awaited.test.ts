@@ -5,7 +5,7 @@
 import { awaitingOf, awaits, spelled } from "../../src/facts/awaited";
 import { ok, pendingOf } from "../../src/utils/outcome";
 
-const DOCUMENT = { seq: 4, diagnostics: [] } as const;
+const DOCUMENT = { seq: 4, stampFailure: null } as const;
 
 describe("what a request waits for", () => {
   test("is a first answer, never one the daemon superseded or one deferred by design", () => {
@@ -53,7 +53,7 @@ describe("what a draw owes", () => {
     expect(
       awaitingOf([{ variable: "doc", why: "unread" }], {
         seq: 5,
-        diagnostics: [{ kind: "stamp", reason: "reading the owners: boom" }],
+        stampFailure: "reading the owners: boom",
       }),
     ).toEqual({
       kind: "stalled",
@@ -67,7 +67,7 @@ describe("what a draw owes", () => {
     expect(
       awaitingOf([], {
         seq: 5,
-        diagnostics: [{ kind: "stamp", reason: "boom" }],
+        stampFailure: "boom",
       }),
     ).toEqual({ kind: "settled", seq: 5 });
   });

@@ -23,7 +23,7 @@ import type { Readings } from "../src/daemon/readings";
 import { readTranscriptLanes } from "../scripts/lib/draw-fixtures/payload-owners";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
+import { ok, pendingOf } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import type { DaemonFacts } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
@@ -289,7 +289,7 @@ describe("the all-pending document", () => {
       env: new Map(),
     },
     today: waiting,
-    faults: [],
+    losses: [],
   };
 
   test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
