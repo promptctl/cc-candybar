@@ -79193,28 +79193,6 @@ var systemTimers = {
     return () => clearImmediate(turn);
   }
 };
-function sleep(clock, task, ms, signal) {
-  return new Promise((resolve2, reject2) => {
-    const aborted = () => Object.assign(new Error("The operation was aborted"), {
-      name: "AbortError",
-      code: "ABORT_ERR",
-      cause: signal?.reason
-    });
-    if (signal?.aborted) {
-      reject2(aborted());
-      return;
-    }
-    const onAbort = () => {
-      cancel();
-      reject2(aborted());
-    };
-    const cancel = clock.after(task, ms, () => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve2();
-    });
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
 
 // src/utils/atomic-write.ts
 init_globals();
@@ -79233,11 +79211,12 @@ function publishByRename(file, bytes, mode) {
     );
   }
 }
-async function publishByRenameAsync(file, bytes, mode) {
+async function publishByRenameAsync(file, bytes, mode, signal) {
   const staged = stagedName(file);
   try {
-    await fs_default.promises.writeFile(staged, bytes, { flag: "wx", mode });
+    await fs_default.promises.writeFile(staged, bytes, { flag: "wx", mode, signal });
     if (mode !== void 0) await fs_default.promises.chmod(staged, mode);
+    signal?.throwIfAborted();
     await fs_default.promises.rename(staged, file);
   } catch (e) {
     const removal = await fs_default.promises.rm(staged, { force: true }).then(() => null, asError);
@@ -81454,7 +81433,8 @@ function daemonPaths(host) {
     settingsHistory: settingsHistoryPath(host),
     sessionBook: import_node_path15.default.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
-    spawnBackoff: spawnBackoffPath(host)
+    spawnBackoff: spawnBackoffPath(host),
+    pricingCache: import_node_path15.default.join(cacheDir(host), "usage", "pricing.json")
   };
 }
 function profilePaths(paths2, name) {
@@ -85815,574 +85795,376 @@ var import_node_path23 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/cache/pricing.ts
 init_globals();
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse3 = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse3("net.connect");
-var createServer = refuse3("net.createServer");
-var createConnection = refuse3("net.createConnection");
-var get2 = refuse3("https.get");
-var request = refuse3("https.request");
-var createInterface = refuse3("readline.createInterface");
-var createRequire = refuse3("module.createRequire");
-var json = refuse3("stream/consumers.json");
-var text3 = refuse3("stream/consumers.text");
-var writeHeapSnapshot = refuse3("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
-
-// src/daemon/cache/pricing.ts
-init_url();
-
-// src/utils/cache.ts
-init_globals();
 var import_node_path21 = __toESM(require_path_browserify(), 1);
-var CacheManager = class {
-  // [LAW:one-source-of-truth] Every method takes the cache's root directory
-  // (the host's `cacheDir`), so the layout under it is derived here alone.
-  static usageDir(root) {
-    return import_node_path21.default.join(root, "usage");
+
+// src/utils/wire-shape.ts
+init_globals();
+function read(shape, value) {
+  const at = shape.misses(value, "");
+  return at.length === 0 ? { kind: "read", value } : { kind: "missed", at };
+}
+var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var below = (at, key) => at === "" ? key : `${at}.${key}`;
+var leaf = (is2) => ({
+  misses: (value, at) => is2(value) ? [] : [at]
+});
+var number = leaf(
+  (value) => typeof value === "number" && Number.isFinite(value)
+);
+var text3 = leaf((value) => typeof value === "string");
+var flag = leaf((value) => typeof value === "boolean");
+var word = (members) => leaf((value) => typeof value === "string" && Object.hasOwn(members, value));
+var oneOf2 = (members) => leaf(
+  (value) => typeof value === "string" && members.includes(value)
+);
+var parsedText = (parse3) => leaf((value) => typeof value === "string" && parse3(value) !== null);
+var nullable = (of) => ({
+  misses: (value, at) => value === null ? [] : of.misses(value, at)
+});
+var list2 = (of) => ({
+  misses: (value, at) => Array.isArray(value) ? value.flatMap((item, i2) => of.misses(item, `${at}[${i2}]`)) : [at]
+});
+var entries = (key, of) => ({
+  misses: (value, at) => isRecord2(value) ? Object.entries(value).flatMap(([k, v]) => [
+    ...key.misses(k, below(at, k)),
+    ...of.misses(v, below(at, k))
+  ]) : [at]
+});
+function fieldMisses(fields2, value, at) {
+  return Object.entries(fields2).flatMap(
+    ([key, shape]) => shape.misses(value[key], below(at, key))
+  );
+}
+var object = (fields2) => ({
+  misses: (value, at) => isRecord2(value) ? fieldMisses(fields2, value, at) : [at]
+});
+var tagged = (arms) => ({
+  misses: (value, at) => {
+    if (!isRecord2(value)) return [at];
+    const tag = value.kind;
+    const arm2 = typeof tag === "string" && Object.hasOwn(arms, tag) ? arms[tag] : void 0;
+    return arm2 === void 0 ? [below(at, "kind")] : fieldMisses(arm2, value, at);
   }
-  static locksDir(root) {
-    return import_node_path21.default.join(root, "locks");
-  }
-  static isLocked(root, name) {
-    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
-    if (!fs_default.existsSync(lockFile)) {
-      return false;
-    }
-    try {
-      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
-      const pid2 = parseInt(lockContent.trim(), 10);
-      if (isNaN(pid2)) {
-        debug(`Invalid PID in lock file ${name}, removing stale lock`);
-        fs_default.unlinkSync(lockFile);
-        return false;
-      }
-      try {
-        process.kill(pid2, 0);
-        return true;
-      } catch (error) {
-        if (error.code === "ESRCH") {
-          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
-          fs_default.unlinkSync(lockFile);
-          return false;
-        }
-        debug(`Error checking process ${pid2} for lock ${name}:`, error);
-        return true;
-      }
-    } catch (error) {
-      debug(`Error reading lock file ${name}:`, error);
-      return true;
-    }
-  }
-  static async acquireLock(root, clock, name, timeout = 5e3) {
-    const RETRY_DELAY_MS = 50;
-    const FILE_CREATE_FLAG = "wx";
-    await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
-    const startTime = clock.monotonic();
-    const lockContent = String(process.pid);
-    while (clock.monotonic() - startTime < timeout) {
-      try {
-        await fs_default.promises.writeFile(lockFile, lockContent, {
-          flag: FILE_CREATE_FLAG
-        });
-        debug(`Lock acquired for ${name}`);
-        return true;
-      } catch (error) {
-        if (error.code === "EEXIST") {
-          await sleep(clock, `cache lock wait ${name}`, RETRY_DELAY_MS);
-        } else {
-          throw error;
-        }
-      }
-    }
-    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
-    return false;
-  }
-  static async releaseLock(root, name) {
-    const lockFile = import_node_path21.default.join(this.locksDir(root), name);
-    try {
-      await fs_default.promises.unlink(lockFile);
-      debug(`Lock released for ${name}`);
-    } catch (error) {
-      if (error.code !== "ENOENT") {
-        debug(`Error releasing lock for ${name}:`, error);
-      }
-    }
-  }
-  static async ensureCacheDirectories(root) {
-    try {
-      await Promise.all([
-        fs_default.promises.mkdir(root, { recursive: true }),
-        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
-        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
-      ]);
-    } catch (error) {
-      debug("Failed to create cache directories:", error);
-    }
-  }
-  static createProjectHash(projectPath) {
-    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
-  }
-  static async getUsageCache(root, clock, cacheType, latestMtime) {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 75;
-    const FILE_ENCODING = "utf-8";
-    await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path21.default.join(this.usageDir(root), `${cacheType}.json`);
-    const lockName = `${cacheType}.usage.lock`;
-    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
-      const isCurrentlyLocked = this.isLocked(root, lockName);
-      if (isCurrentlyLocked) {
-        debug(`Cache for ${cacheType} is locked, waiting...`);
-        await sleep(clock, `${cacheType} cache wait`, RETRY_DELAY_MS);
-        continue;
-      }
-      try {
-        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
-        const cached = JSON.parse(content);
-        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
-        if (cacheIsValid) {
-          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
-          return this.deserializeDates(cached.data);
-        } else {
-          debug(
-            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
-          );
-          return null;
-        }
-      } catch (error) {
-        if (error.code === "ENOENT") {
-          debug(`No shared ${cacheType} usage cache found`);
-          return null;
-        }
-        const attemptNumber = attempt4 + 1;
-        debug(
-          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
-        );
-        await sleep(clock, `${cacheType} cache read retry`, RETRY_DELAY_MS);
-      }
-    }
-    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
-    return null;
-  }
-  static deserializeDates(data) {
-    if (Array.isArray(data)) {
-      return data.map((entry) => ({
-        ...entry,
-        timestamp: new Date(entry.timestamp)
-      }));
-    }
-    return data;
-  }
-  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
-    const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(root, clock, lockName);
-    if (!lockAcquired) {
-      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
-      return;
-    }
-    try {
-      await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path21.default.join(this.usageDir(root), `${cacheType}.json`);
-      const cacheTimestamp = latestMtime || clock.now();
-      const cacheEntry = {
-        data,
-        timestamp: cacheTimestamp
-      };
-      const cacheContent = JSON.stringify(cacheEntry);
-      await publishByRenameAsync(cachePath, cacheContent);
-      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
-    } catch (error) {
-      debug(`Failed to save ${cacheType} usage cache:`, error);
-    } finally {
-      await this.releaseLock(root, lockName);
-    }
-  }
-};
+});
 
 // src/daemon/cache/pricing.ts
-var OFFLINE_PRICING_DATA = {
-  "claude-haiku-4-5-20251001": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
+var RATES = object({
+  input: number,
+  output: number,
+  cache_read: number,
+  cache_write_5m: number
+});
+var MODELS = entries(text3, RATES);
+var CACHE_FILE = object({
+  data: MODELS,
+  timestamp: number
+});
+var HAIKU_4_5 = {
+  input: 1,
+  output: 5,
+  cache_write_5m: 1.25,
+  cache_read: 0.1
+};
+var SONNET_4 = {
+  input: 3,
+  output: 15,
+  cache_write_5m: 3.75,
+  cache_read: 0.3
+};
+var OPUS_4 = {
+  input: 15,
+  output: 75,
+  cache_write_5m: 18.75,
+  cache_read: 1.5
+};
+var OPUS_4_5 = {
+  input: 5,
+  output: 25,
+  cache_write_5m: 6.25,
+  cache_read: 0.5
+};
+var BUNDLED = {
+  "claude-haiku-4-5-20251001": HAIKU_4_5,
+  "claude-haiku-4-5": HAIKU_4_5,
+  "claude-opus-4-20250514": OPUS_4,
+  "claude-opus-4-1": OPUS_4,
+  "claude-opus-4-1-20250805": OPUS_4,
+  "claude-sonnet-4-20250514": SONNET_4,
+  "claude-4-opus-20250514": OPUS_4,
+  "claude-4-sonnet-20250514": SONNET_4,
+  "claude-sonnet-4-5": SONNET_4,
+  "claude-sonnet-4-5-20250929": SONNET_4,
+  "claude-opus-4-5": OPUS_4_5,
+  "claude-opus-4-5-20251101": OPUS_4_5,
+  "claude-opus-4-6": OPUS_4_5,
+  "claude-opus-4-6-20260205": OPUS_4_5,
+  "claude-sonnet-4-6": SONNET_4
+};
+var DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+var FAMILIES = [
+  { names: ["opus-4-6"], model: "claude-opus-4-6-20260205" },
+  { names: ["opus-4-5"], model: "claude-opus-4-5-20251101" },
+  { names: ["opus-4-1"], model: "claude-opus-4-1-20250805" },
+  { names: ["opus-4"], model: "claude-opus-4-20250514" },
+  { names: ["sonnet-4-6", "sonnet-4.6"], model: "claude-sonnet-4-6" },
+  {
+    names: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
+    model: "claude-sonnet-4-5-20250929"
   },
-  "claude-haiku-4-5": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
+  { names: ["sonnet-4"], model: "claude-sonnet-4-20250514" },
+  {
+    names: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
+    model: "claude-haiku-4-5-20251001"
   },
-  "claude-opus-4-20250514": {
-    name: "Claude Opus 4",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1-20250805": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-sonnet-4-20250514": {
-    name: "Claude Sonnet 4",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-4-opus-20250514": {
-    name: "Claude 4 Opus",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-4-sonnet-20250514": {
-    name: "Claude 4 Sonnet",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5-20250929": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-opus-4-5": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-5-20251101": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6-20260205": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-sonnet-4-6": {
-    name: "Claude Sonnet 4.6",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
+  { names: ["haiku"], model: "claude-haiku-4-5-20251001" },
+  { names: ["opus"], model: "claude-opus-4-20250514" },
+  { names: ["sonnet"], model: "claude-sonnet-4-5-20250929" }
+];
+var PriceTable = class {
+  constructor(models) {
+    this.models = models;
+  }
+  models;
+  resolved = /* @__PURE__ */ new Map();
+  ratesOf(model) {
+    const known = this.resolved.get(model);
+    if (known !== void 0) return known;
+    const rates = this.resolve(model);
+    this.resolved.set(model, rates);
+    return rates;
+  }
+  resolve(model) {
+    const exact = this.models.get(model);
+    if (exact !== void 0) return exact;
+    const lower2 = model.toLowerCase();
+    for (const [name, rates] of this.models) {
+      if (name.toLowerCase() === lower2) return rates;
+    }
+    for (const { names, model: family } of FAMILIES) {
+      const rates = this.models.get(family);
+      if (rates !== void 0 && names.some((n) => lower2.includes(n))) {
+        return rates;
+      }
+    }
+    return this.models.get(DEFAULT_MODEL) ?? SONNET_4;
   }
 };
-var PricingService = class {
-  static executionCache = null;
-  static modelPricingCache = /* @__PURE__ */ new Map();
-  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
-  static async loadDiskCache(cacheRoot, clock) {
-    const TTL_24H = 24 * 60 * 60 * 1e3;
-    const minValidTime = clock.now() - TTL_24H;
-    return await CacheManager.getUsageCache(
-      cacheRoot,
-      clock,
-      "pricing",
-      minValidTime
+function bundledTable() {
+  return new PriceTable(new Map(Object.entries(BUNDLED)));
+}
+function costOf(table, raw) {
+  const usage = raw.message?.usage;
+  if (usage === void 0) return 0;
+  const rates = table.ratesOf(raw.model ?? raw.message?.model ?? DEFAULT_MODEL);
+  return ((usage.input_tokens ?? 0) * rates.input + (usage.output_tokens ?? 0) * rates.output + (usage.cache_creation_input_tokens ?? 0) * rates.cache_write_5m + (usage.cache_read_input_tokens ?? 0) * rates.cache_read) / 1e6;
+}
+function parsedJson(body) {
+  try {
+    return ok(JSON.parse(body));
+  } catch (e) {
+    return failed(`not JSON: ${String(e)}`, "parse");
+  }
+}
+function tableOf(models) {
+  const parsed2 = read(MODELS, models);
+  if (parsed2.kind === "missed") {
+    return failed(
+      `no rate at ${parsed2.at.map((at) => at || "<table>").join(", ")}`,
+      "parse"
     );
   }
-  static async saveDiskCache(cacheRoot, clock, data) {
-    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
+  return checkedTable(parsed2.value);
+}
+function checkedTable(models) {
+  const table = new Map(Object.entries(models));
+  return table.size === 0 ? failed("the table names no model", "parse") : ok(new PriceTable(table));
+}
+function fetchedTable(body) {
+  const json2 = parsedJson(body);
+  if (json2.kind === "failed") return json2;
+  if (typeof json2.value !== "object" || json2.value === null || Array.isArray(json2.value)) {
+    return tableOf(json2.value);
   }
-  static async fetchPricingData() {
-    return new Promise((resolve2) => {
-      const parsedUrl = new U(this.GITHUB_PRICING_URL);
-      const request2 = get2(
-        {
-          hostname: parsedUrl.hostname,
-          path: parsedUrl.pathname,
-          headers: {
-            "User-Agent": "cc-candybar",
-            "Cache-Control": "no-cache"
-          },
-          timeout: 5e3
-        },
-        (response) => {
-          if (response.statusCode !== 200) {
-            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
-            resolve2(null);
-            return;
-          }
-          let data = "";
-          let size = 0;
-          const MAX_SIZE = 1024 * 1024;
-          response.setEncoding("utf8");
-          response.on("data", (chunk3) => {
-            size += import_buffer.Buffer.byteLength(chunk3);
-            if (size > MAX_SIZE) {
-              debug("Response too large");
-              request2.destroy();
-              resolve2(null);
-              return;
-            }
-            data += chunk3;
-          });
-          response.on("end", () => {
-            try {
-              const json2 = JSON.parse(data);
-              const dataObj = json2;
-              const meta = dataObj._meta;
-              const pricingData = {};
-              for (const [key, value] of Object.entries(dataObj)) {
-                if (key !== "_meta") {
-                  pricingData[key] = value;
-                }
-              }
-              if (this.validatePricingData(pricingData)) {
-                debug(
-                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
-                );
-                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-                resolve2(pricingData);
-              } else {
-                debug("Invalid pricing data structure");
-                resolve2(null);
-              }
-            } catch (error) {
-              debug("Failed to parse JSON:", error);
-              resolve2(null);
-            }
-          });
-          response.on("error", (error) => {
-            debug("Response error:", error);
-            resolve2(null);
-          });
-        }
-      );
-      request2.on("error", (error) => {
-        debug("Request error:", error);
-        resolve2(null);
-      });
-      request2.on("timeout", () => {
-        debug("Request timeout");
-        request2.destroy();
-        resolve2(null);
-      });
-      request2.end();
+  const { _meta: _, ...models } = json2.value;
+  return tableOf(models);
+}
+function cachedTable(body) {
+  const json2 = parsedJson(body);
+  if (json2.kind === "failed") return json2;
+  const file = read(CACHE_FILE, json2.value);
+  if (file.kind === "missed") {
+    return failed(
+      `not a cache file: ${file.at.map((at) => at || "<file>").join(", ")}`,
+      "parse"
+    );
+  }
+  const table = checkedTable(file.value.data);
+  return table.kind === "failed" ? table : ok({ table: table.value, timestamp: file.value.timestamp });
+}
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
+var EVERY = { okMs: DAY_MS2, failedMs: 6e4 };
+var BACKOFF_CEILING_MS = 60 * 6e4;
+var errorText2 = (e) => e instanceof Error ? e.message : String(e);
+var Pricing = class {
+  constructor(opts) {
+    this.opts = opts;
+    this.refreshes = opts.ledger.declare({
+      name: "pricing",
+      scope: "daemon",
+      refresh: ["first", "period"],
+      lines: ["first", "period"]
     });
   }
-  static async getCurrentPricing(cacheRoot, clock) {
-    if (this.executionCache !== null) {
-      debug(
-        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
-      );
-      return this.executionCache;
+  opts;
+  standing = null;
+  loading = null;
+  closing = new AbortController();
+  refreshes;
+  // The table that prices now. Only an ask before any table stands waits, for
+  // the first load; every later ask is answered by the standing table at once.
+  table() {
+    const standing2 = this.standing;
+    if (standing2 === null) return this.load("first");
+    if (this.opts.clock.monotonic() >= standing2.dueAt) {
+      this.opts.clock.detach("pricing refresh", () => this.load("period"));
     }
-    const diskCached = await this.loadDiskCache(cacheRoot, clock);
-    if (diskCached) {
-      debug(
-        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
-      );
-      this.executionCache = diskCached;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
-      );
-      return diskCached;
+    return Promise.resolve(standing2.table);
+  }
+  // [LAW:no-ambient-temporal-coupling] Ends the load in flight and settles
+  // once it has, so a settled close leaves no fetch, read or write of
+  // pricing's running.
+  async close() {
+    this.closing.abort();
+    await this.loading;
+  }
+  load(by) {
+    this.loading ??= this.loaded(by).finally(() => {
+      this.loading = null;
+    });
+    return this.loading;
+  }
+  async loaded(by) {
+    const { signal } = this.closing;
+    const prior = this.standing;
+    if (signal.aborted) return prior?.table ?? bundledTable();
+    const started2 = this.opts.clock.monotonic();
+    const { standing: standing2, outcome } = await this.attempt(prior, signal);
+    const ms = elapsedMs(this.opts.clock, started2);
+    if (signal.aborted) {
+      this.refreshes.abandoned("-", by, ms);
+      return prior?.table ?? bundledTable();
     }
-    const freshData = await this.fetchPricingData();
-    if (freshData) {
-      await this.saveDiskCache(cacheRoot, clock, freshData);
-      debug(
-        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
-      );
-      this.executionCache = freshData;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
-      );
-      return freshData;
-    }
-    debug(
-      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    this.standing = standing2;
+    this.refreshes.recorded(
+      `prices=${standing2.source} dueInMs=${standing2.dueAt - this.opts.clock.monotonic()}`,
+      by,
+      outcome,
+      ms
     );
-    this.executionCache = OFFLINE_PRICING_DATA;
-    debug(
-      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    return OFFLINE_PRICING_DATA;
+    return standing2.table;
   }
-  static validatePricingData(data) {
-    if (!data || typeof data !== "object") return false;
-    for (const [, value] of Object.entries(data)) {
-      if (!value || typeof value !== "object") return false;
-      const pricing = value;
-      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
-        return false;
+  // A fresh cache file is the table; otherwise the remote file, written to
+  // the cache once parsed. A fetch that fails leaves the table that stood,
+  // else a stale cache file, else the bundled rates.
+  async attempt(prior, signal) {
+    let cached = null;
+    try {
+      cached = prior === null ? await this.readCache(signal) : null;
+      const now2 = this.opts.clock.now();
+      if (cached !== null && cached.timestamp <= now2 && now2 < cached.timestamp + DAY_MS2) {
+        return {
+          standing: {
+            table: cached.table,
+            source: "cache",
+            dueAt: this.opts.clock.monotonic() + (DAY_MS2 - (now2 - cached.timestamp)),
+            failures: 0
+          },
+          outcome: ok(null)
+        };
       }
+      if (signal.aborted) {
+        return {
+          standing: this.fellBack(prior, cached),
+          outcome: failed("closed", "read")
+        };
+      }
+      const body = await this.opts.fetch(signal);
+      const fetched = body.kind === "ok" ? fetchedTable(body.value) : body;
+      if (fetched.kind === "ok") {
+        await this.writeCache(fetched.value, signal);
+        return {
+          standing: {
+            table: fetched.value,
+            source: "fetched",
+            dueAt: this.opts.clock.monotonic() + DAY_MS2,
+            failures: 0
+          },
+          outcome: fetched
+        };
+      }
+      return { standing: this.fellBack(prior, cached), outcome: fetched };
+    } catch (e) {
+      return {
+        standing: this.fellBack(prior, cached),
+        outcome: failed(`pricing load threw: ${errorText2(e)}`, "read")
+      };
     }
-    return true;
   }
-  static async getModelPricing(modelId, cacheRoot, clock) {
-    if (this.modelPricingCache.has(modelId)) {
-      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
-      return this.modelPricingCache.get(modelId);
-    }
-    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
-    let pricing;
-    if (allPricing[modelId]) {
-      pricing = allPricing[modelId];
-    } else {
-      pricing = this.fuzzyMatchModel(modelId, allPricing);
-    }
-    this.modelPricingCache.set(modelId, pricing);
-    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
-    return pricing;
-  }
-  static fuzzyMatchModel(modelId, allPricing) {
-    const lowerModelId = modelId.toLowerCase();
-    for (const [key, pricing] of Object.entries(allPricing)) {
-      if (key.toLowerCase() === lowerModelId) {
-        return pricing;
-      }
-    }
-    const patterns = [
-      {
-        pattern: ["opus-4-6", "claude-opus-4-6"],
-        fallback: "claude-opus-4-6-20260205"
-      },
-      {
-        pattern: ["opus-4-5", "claude-opus-4-5"],
-        fallback: "claude-opus-4-5-20251101"
-      },
-      {
-        pattern: ["opus-4-1", "claude-opus-4-1"],
-        fallback: "claude-opus-4-1-20250805"
-      },
-      {
-        pattern: ["opus-4", "claude-opus-4"],
-        fallback: "claude-opus-4-20250514"
-      },
-      {
-        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
-        fallback: "claude-sonnet-4-6"
-      },
-      {
-        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
-        fallback: "claude-sonnet-4-5-20250929"
-      },
-      {
-        pattern: ["sonnet-4", "claude-sonnet-4"],
-        fallback: "claude-sonnet-4-20250514"
-      },
-      {
-        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
-        fallback: "claude-haiku-4-5-20251001"
-      },
-      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
-      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
-      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
-    ];
-    for (const { pattern: pattern2, fallback } of patterns) {
-      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
-        if (allPricing[fallback]) {
-          return allPricing[fallback];
-        }
-      }
-    }
-    return allPricing["claude-sonnet-4-5-20250929"] || {
-      name: `${modelId} (Unknown Model)`,
-      input: 3,
-      cache_write_5m: 3.75,
-      cache_write_1h: 6,
-      cache_read: 0.3,
-      output: 15
+  fellBack(prior, cached) {
+    const failures = (prior?.failures ?? 0) + 1;
+    const kept2 = prior ?? (cached === null ? { table: bundledTable(), source: "bundled" } : { table: cached.table, source: "cache" });
+    return {
+      table: kept2.table,
+      source: kept2.source,
+      dueAt: this.opts.clock.monotonic() + backedOffMs(EVERY, failures, BACKOFF_CEILING_MS),
+      failures
     };
   }
-  static async calculateCostForEntry(entry, cacheRoot, clock) {
-    const usage = entry.message?.usage;
-    if (!usage) {
-      return 0;
+  // The cache file's table and when it was fetched, or null for a file that
+  // is not there or could not be read; a refused one is logged.
+  async readCache(signal) {
+    const file = this.opts.cache;
+    let body;
+    try {
+      body = await fs_default.promises.readFile(file, { encoding: "utf8", signal });
+    } catch (e) {
+      const missing = e.code === "ENOENT";
+      if (!missing && !signal.aborted) this.warn("unreadable", file, e);
+      return null;
     }
-    const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
-    const inputTokens = usage.input_tokens || 0;
-    const outputTokens = usage.output_tokens || 0;
-    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-    const cacheReadTokens = usage.cache_read_input_tokens || 0;
-    const inputCost = inputTokens / 1e6 * pricing.input;
-    const outputCost = outputTokens / 1e6 * pricing.output;
-    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
-    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
-    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+    const cached = cachedTable(body);
+    if (cached.kind === "ok") return cached.value;
+    this.warn("refused", file, cached.reason);
+    return null;
   }
-  static extractModelId(entry) {
-    if (entry.model && typeof entry.model === "string") {
-      return entry.model;
+  // [LAW:no-ambient-temporal-coupling] The close's signal is read before the
+  // directory is made and before the file is published, so a table that
+  // lands after the close writes nothing.
+  async writeCache(table, signal) {
+    const file = this.opts.cache;
+    try {
+      if (signal.aborted) return;
+      await fs_default.promises.mkdir(import_node_path21.default.dirname(file), { recursive: true });
+      if (signal.aborted) return;
+      const written2 = {
+        data: Object.fromEntries(table.models),
+        timestamp: this.opts.clock.now()
+      };
+      await publishByRenameAsync(
+        file,
+        JSON.stringify(written2),
+        void 0,
+        signal
+      );
+    } catch (e) {
+      if (!signal.aborted) this.warn("unwritable", file, e);
     }
-    const message = entry.message;
-    if (message?.model) {
-      const model = message.model;
-      if (typeof model === "string") {
-        return model;
-      }
-      const modelObj = model;
-      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
-    }
-    if (entry.model_id && typeof entry.model_id === "string") {
-      return entry.model_id;
-    }
-    return "claude-sonnet-4-5-20250929";
+  }
+  warn(state, file, why) {
+    this.opts.logger(
+      "warn",
+      `pricing cache ${state} path=${valueOf(file)} reason=${valueOf(errorText2(why))}`
+    );
   }
 };
 
@@ -86839,8 +86621,8 @@ function responseOf(entry) {
   const id2 = entry.message?.id;
   return id2 === void 0 ? void 0 : `${id2}:${entry.raw.requestId ?? ""}`;
 }
-async function foldFile(state, entries2, cacheRoot, clock) {
-  const keep = dayKey(new Date(seedCutoffMs(clock.now())));
+async function foldFile(state, entries2, prices, keep) {
+  let table;
   let count = state.entries;
   let cost = state.cost;
   let turnOpen = state.turnOpen;
@@ -86855,7 +86637,7 @@ async function foldFile(state, entries2, cacheRoot, clock) {
     if (response !== void 0 && response === last2) continue;
     last2 = response;
     count++;
-    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
+    const priced = entry.costUSD ?? costOf(table ??= await prices(), entry.raw);
     cost += priced;
     breakdown.input += u.input_tokens || 0;
     breakdown.output += u.output_tokens || 0;
@@ -86977,9 +86759,9 @@ var SessionUsageStore = class {
   // speed) share it, so it records and logs once.
   refreshFlight = new SingleFlight();
   staleAgeMs;
-  // The machine the store reads: where transcripts live, and where the
-  // pricing table is cached.
+  // The machine the store reads: where transcripts live.
   host;
+  prices;
   log;
   refreshTally = { hits: 0, misses: 0 };
   ledger;
@@ -86992,6 +86774,7 @@ var SessionUsageStore = class {
   clock;
   constructor(opts) {
     this.host = opts.host;
+    this.prices = opts.prices;
     this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
@@ -87304,6 +87087,9 @@ var SessionUsageStore = class {
     if (found2.kind === "failed") return found2;
     const agents = found2.value;
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
+    let table;
+    const prices = () => table ??= this.prices.table();
+    const keep = dayKey(new Date(seedCutoffMs(this.clock.now())));
     const newFiles = /* @__PURE__ */ new Map();
     let mainStamp = "";
     const files = [
@@ -87315,7 +87101,7 @@ var SessionUsageStore = class {
         filePath2,
         prior?.files.get(filePath2),
         EMPTY_FILE_FOLD,
-        (state, entries2) => foldFile(state, entries2, cacheDir(this.host), this.clock)
+        (state, entries2) => foldFile(state, entries2, prices, keep)
       );
       if (read3.kind === "failed") return read3;
       if (read3.kind === "absent") {
@@ -88867,9 +88653,9 @@ var jsonParser = (text5) => {
 var jsonDocumentParser = (text5) => text5.trim() === "" ? ABSENT2 : jsonParser(text5);
 
 // src/daemon/cache/managed-storage.ts
-var DAY_MS2 = 24 * 60 * 60 * 1e3;
-var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS2;
-var STORAGE_SWEEP_EVERY_MS = DAY_MS2;
+var DAY_MS3 = 24 * 60 * 60 * 1e3;
+var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS3;
+var STORAGE_SWEEP_EVERY_MS = DAY_MS3;
 var MAX_ENTRIES3 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
 var fileOf = (f) => import_node_path26.default.join(f.folder, fileName(f.sessionId));
@@ -89407,6 +89193,7 @@ function createPayloadProviders(opts) {
   const lanes = {
     usageStore: new SessionUsageStore({
       host: opts.host,
+      prices: opts.prices,
       clock,
       logger,
       ledger
@@ -89686,6 +89473,24 @@ var RuntimeStats = class {
 // src/daemon/limits.ts
 init_globals();
 var import_node_path27 = __toESM(require_path_browserify(), 1);
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse3 = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse3("net.connect");
+var createServer = refuse3("net.createServer");
+var createConnection = refuse3("net.createConnection");
+var get2 = refuse3("https.get");
+var request = refuse3("https.request");
+var createInterface = refuse3("readline.createInterface");
+var createRequire = refuse3("module.createRequire");
+var json = refuse3("stream/consumers.json");
+var text4 = refuse3("stream/consumers.text");
+var writeHeapSnapshot = refuse3("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text4, writeHeapSnapshot, getHeapStatistics };
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -92087,56 +91892,6 @@ init_globals();
 // src/daemon/foundations/inspection-reply.ts
 init_globals();
 
-// src/utils/wire-shape.ts
-init_globals();
-function read(shape, value) {
-  const at = shape.misses(value, "");
-  return at.length === 0 ? { kind: "read", value } : { kind: "missed", at };
-}
-var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var below = (at, key) => at === "" ? key : `${at}.${key}`;
-var leaf = (is2) => ({
-  misses: (value, at) => is2(value) ? [] : [at]
-});
-var number = leaf(
-  (value) => typeof value === "number" && Number.isFinite(value)
-);
-var text4 = leaf((value) => typeof value === "string");
-var flag = leaf((value) => typeof value === "boolean");
-var word = (members) => leaf((value) => typeof value === "string" && Object.hasOwn(members, value));
-var oneOf2 = (members) => leaf(
-  (value) => typeof value === "string" && members.includes(value)
-);
-var parsedText = (parse3) => leaf((value) => typeof value === "string" && parse3(value) !== null);
-var nullable = (of) => ({
-  misses: (value, at) => value === null ? [] : of.misses(value, at)
-});
-var list2 = (of) => ({
-  misses: (value, at) => Array.isArray(value) ? value.flatMap((item, i2) => of.misses(item, `${at}[${i2}]`)) : [at]
-});
-var entries = (key, of) => ({
-  misses: (value, at) => isRecord2(value) ? Object.entries(value).flatMap(([k, v]) => [
-    ...key.misses(k, below(at, k)),
-    ...of.misses(v, below(at, k))
-  ]) : [at]
-});
-function fieldMisses(fields2, value, at) {
-  return Object.entries(fields2).flatMap(
-    ([key, shape]) => shape.misses(value[key], below(at, key))
-  );
-}
-var object = (fields2) => ({
-  misses: (value, at) => isRecord2(value) ? fieldMisses(fields2, value, at) : [at]
-});
-var tagged = (arms) => ({
-  misses: (value, at) => {
-    if (!isRecord2(value)) return [at];
-    const tag = value.kind;
-    const arm2 = typeof tag === "string" && Object.hasOwn(arms, tag) ? arms[tag] : void 0;
-    return arm2 === void 0 ? [below(at, "kind")] : fieldMisses(arm2, value, at);
-  }
-});
-
 // src/daemon/foundations/stats-shape.ts
 init_globals();
 var DURATIONS = object({
@@ -92173,20 +91928,20 @@ var SCOPE = word({
 var DELIVERY = tagged({
   delivering: { unreported: list2(number), missedSince: nullable(number) },
   stalled: { missedSince: number },
-  unmeasured: { since: number, reason: text4, missedSince: nullable(number) }
+  unmeasured: { since: number, reason: text3, missedSince: nullable(number) }
 });
 var CLIENT_HINT = object({
   kind: oneOf2(CLIENT_KINDS),
-  bundle: text4,
-  source: nullable(text4)
+  bundle: text3,
+  source: nullable(text3)
 });
 var SIGHTING = object({
   client: nullable(CLIENT_HINT),
   termCols: nullable(number),
   rateLimits: oneOf2(RATE_LIMITS_SEEN),
-  claudeConfigDir: text4,
-  projectDir: text4,
-  transcript: object({ path: text4, answered: flag }),
+  claudeConfigDir: text3,
+  projectDir: text3,
+  transcript: object({ path: text3, answered: flag }),
   frame: oneOf2(FRAMES_SEEN),
   role: oneOf2(SIGHTING_ROLES),
   sessionId: parsedText((raw) => {
@@ -92197,15 +91952,15 @@ var SIGHTING = object({
 });
 var USAGE = tagged({
   read: { sizes: object({ rss: number, heapTotal: number }) },
-  unread: { why: text4 }
+  unread: { why: text3 }
 });
 var CHARGE = tagged({
   charged: {
     measure: word({ phys_footprint: true, rss: true }),
     bytes: number
   },
-  "stand-in": { rss: number, gap: number, unread: text4 },
-  unread: { gap: number, unread: text4 }
+  "stand-in": { rss: number, gap: number, unread: text3 },
+  unread: { gap: number, unread: text3 }
 });
 var READING = tagged({
   unmeasured: {},
@@ -92248,21 +92003,21 @@ var PANEL = object({
   name: parsedText(parsedRendererName),
   process: tagged({
     "in-host": {},
-    "not-running": { why: text4 },
+    "not-running": { why: text3 },
     process: { memory: PROCESS_MEMORY }
   }),
-  mailbox: object({ holder: nullable(text4), heldMs: number, queued: number }),
+  mailbox: object({ holder: nullable(text3), heldMs: number, queued: number }),
   stats: tagged({
     ok: { value: RENDERER_STATS_SHAPE },
-    failed: { reason: text4 }
+    failed: { reason: text3 }
   })
 });
 var STATS_SHAPE = object({
   pid: number,
-  version: text4,
-  sourceDigest: nullable(text4),
+  version: text3,
+  sourceDigest: nullable(text3),
   protocolVersion: number,
-  startedAt: text4,
+  startedAt: text3,
   uptimeSec: number,
   rssBytes: number,
   heapUsedBytes: number,
@@ -92278,7 +92033,7 @@ var STATS_SHAPE = object({
     took: DURATIONS
   }),
   tasksThrew: number,
-  unknownHookFields: list2(text4),
+  unknownHookFields: list2(text3),
   gitCache: object({
     size: number,
     held: number,
@@ -92296,7 +92051,7 @@ var STATS_SHAPE = object({
   sources: object({
     records: list2(
       object({
-        name: text4,
+        name: text3,
         scope: SCOPE,
         refreshes: REFRESHES,
         failures: number,
@@ -92377,19 +92132,19 @@ var STATS_SHAPE = object({
     total: number,
     inFlight: number,
     lastMinute: number,
-    byCategory: entries(text4, number),
-    refused: entries(text4, number),
+    byCategory: entries(text3, number),
+    refused: entries(text3, number),
     draining: number,
     drainedBytes: number,
     drainsCut: number,
     pipeErrors: number,
-    durations: entries(text4, DURATIONS)
+    durations: entries(text3, DURATIONS)
   }),
   clients: list2(SIGHTING),
-  bundle: text4,
+  bundle: text3,
   linkKeyId: tagged({
-    ok: { value: text4 },
-    failed: { reason: text4 }
+    ok: { value: text3 },
+    failed: { reason: text3 }
   }),
   host: PROCESS_MEMORY,
   renderers: list2(PANEL)
@@ -95235,9 +94990,17 @@ function createDaemon(inputs) {
     watchers: watcherRegistry,
     fileEvents
   });
+  const pricing = new Pricing({
+    fetch: inputs.fetchPricing,
+    cache: paths2.pricingCache,
+    clock,
+    ledger: refreshLedger,
+    logger: log
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
+    prices: pricing,
     watchers: watcherRegistry,
     fileEvents,
     clock,
@@ -95768,6 +95531,9 @@ function createDaemon(inputs) {
       // let go, and hands the closed cache nothing.
       ["configDiscovery close", () => configDiscovery.close()],
       ...rendererSteps("close-views"),
+      // Settles once its load in flight has ended, so a fold waiting on it
+      // goes on before the stores close.
+      ["pricing close", () => pricing.close()],
       ...payloadProviders.closes,
       ["runs close", () => runs.close()],
       // After the collector, which holds every session's runs: its close
@@ -96336,6 +96102,70 @@ function create(file, log) {
   if (leftover !== null) log("warn", `link key: ${leftover}`);
 }
 
+// src/daemon/cache/pricing-fetch.ts
+init_globals();
+var TIMEOUT_MS = 5e3;
+var MAX_BYTES4 = 1024 * 1024;
+var PRICING_URL = new URL(
+  "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json"
+);
+function fetchPricing(clock, get3 = get2, url = PRICING_URL) {
+  return (signal) => new Promise((resolve2) => {
+    let result;
+    const finish = (answer2) => {
+      result ??= answer2;
+    };
+    const request2 = get3(
+      url,
+      {
+        agent: false,
+        signal,
+        headers: { "User-Agent": "cc-candybar", "Cache-Control": "no-cache" }
+      },
+      (response) => {
+        response.on("error", (e) => finish(failed(e.message, "read")));
+        if (response.statusCode !== 200) {
+          finish(
+            failed(
+              `HTTP ${response.statusCode} ${response.statusMessage}`,
+              "read"
+            )
+          );
+          request2.destroy();
+          return;
+        }
+        let body = "";
+        let bytes = 0;
+        response.setEncoding("utf8");
+        response.on("data", (chunk3) => {
+          bytes += import_buffer.Buffer.byteLength(chunk3);
+          if (bytes > MAX_BYTES4) {
+            finish(failed(`the body passed ${MAX_BYTES4} bytes`, "read"));
+            request2.destroy();
+            return;
+          }
+          body += chunk3;
+        });
+        response.on("end", () => finish(ok(body)));
+      }
+    );
+    const cancelDeadline = clock.after(
+      "pricing request deadline",
+      TIMEOUT_MS,
+      () => {
+        request2.destroy(new Error(`no answer in ${TIMEOUT_MS} ms`));
+      }
+    );
+    request2.once("close", () => {
+      cancelDeadline();
+      resolve2(
+        result ?? failed("request closed before its response ended", "read")
+      );
+    });
+    request2.on("error", (e) => finish(failed(e.message, "read")));
+  });
+}
+
 // src/daemon/production-adapters.ts
 function productionAdapters(paths2, daemonLog, machine) {
   let accountHome;
@@ -96365,7 +96195,8 @@ function productionAdapters(paths2, daemonLog, machine) {
     },
     stat: fs_default.statSync,
     checkoutFiles,
-    writeConfigFile
+    writeConfigFile,
+    fetchPricing: fetchPricing(machine)
   };
 }
 
