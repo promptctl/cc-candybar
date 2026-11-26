@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1969cd19c238271c7dd5591ed3904b49984a8863",
+      "timestamp": "2026-11-26T06:02:03.489Z",
+      "commits": [
+        {
+          "sha": "1969cd19c238271c7dd5591ed3904b49984a8863",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T05:59:14Z",
+          "message": "chore(release): set `package.json` to 1.239.0\n\n## [1.239.0](https://github.com/promptctl/cc-candybar/compare/v1.238.6...v1.239.0) (2026-11-26)\n\n### Features\n\n* **settings-menu:** the menu leads with 🎨 look and 📚 saves & presets; lane switches under 📺 renderer ([#964](https://github.com/promptctl/cc-candybar/issues/964)) ([bee4d68](https://github.com/promptctl/cc-candybar/commit/bee4d68899303097cdf3530e031aa66ec1dc1f7c))\n\n### Bug Fixes\n\n* **pricing:** refresh the daemon price table and abort loads on close ([#970](https://github.com/promptctl/cc-candybar/issues/970)) ([9b01fa7](https://github.com/promptctl/cc-candybar/commit/9b01fa771aca2c9d48588a1646094f09f858199f))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-969",
       "ref": "refs/pull/969/merge",
       "sha": "8040cf8a9261bc61b1d0503472b1a89b1d7d1597",
@@ -471,21 +486,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:38:17-07:00",
           "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "bee4d68899303097cdf3530e031aa66ec1dc1f7c",
-      "timestamp": "2026-11-26T05:55:59.932Z",
-      "commits": [
-        {
-          "sha": "bee4d68899303097cdf3530e031aa66ec1dc1f7c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:54:38-07:00",
-          "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets; lane switches under 📺 renderer (#964)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     }
