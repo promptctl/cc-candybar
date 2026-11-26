@@ -2,46 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-974",
-      "ref": "refs/pull/974/merge",
-      "sha": "31aed9a060e80f051cc695ef95fed68ef6d11c7d",
-      "timestamp": "2026-11-26T12:59:46.385Z",
-      "commits": [
-        {
-          "sha": "31aed9a060e80f051cc695ef95fed68ef6d11c7d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:58:40-07:00",
-          "message": "Merge 5a1d0184ecacf138b9d752d4548924ad030b41f8 into 6c2058f83a4fe8d5ce52102e496d7038dcd10e5d\n"
-        },
-        {
-          "sha": "5a1d0184ecacf138b9d752d4548924ad030b41f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:58:16-07:00",
-          "message": "fix(window): bind observations to the owning app and text viewport\n"
-        },
-        {
-          "sha": "4ce3076f809aa319f92f82bd5472e62fd37f4bb3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:57:02-07:00",
-          "message": "feat(window): locate the attaching terminal and its live cell grid\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "6c2058f83a4fe8d5ce52102e496d7038dcd10e5d",
-      "timestamp": "2026-11-26T07:24:55.919Z",
+      "sha": "cd0c40bf77869132bbaa1a7851d4005a16c5ed5a",
+      "timestamp": "2026-11-26T13:02:59.548Z",
       "commits": [
         {
-          "sha": "6c2058f83a4fe8d5ce52102e496d7038dcd10e5d",
+          "sha": "cd0c40bf77869132bbaa1a7851d4005a16c5ed5a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T00:23:55-07:00",
-          "message": "test(proc): verify closed pipes from the escaped writer (#973)\n\n* test(proc): verify closed pipes from the escaped writer\n\n* test(proc): give each escaped writer one fixture connection\n\n* test(renderer): observe orphan exit through its own socket\n\n* test(proc): prove escaped writes and settlement in one owned fixture"
+          "timestamp": "2026-11-26T06:01:49-07:00",
+          "message": "feat(window): locate the attaching terminal and its live cell grid (#974)\n\n* feat(window): locate the attaching terminal and its live cell grid\n\n* fix(window): bind observations to the owning app and text viewport"
         }
       ]
     }
