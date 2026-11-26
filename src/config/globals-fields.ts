@@ -75,6 +75,9 @@ import type { Place, PreviewName } from "./menu-places.js";
 export interface Control {
   readonly label: string;
   readonly place: Place;
+  // Which of its place's lines the control sits on, from 0. A place laid
+  // vertically draws each line as a row; one laid across runs them together.
+  readonly line: number;
   readonly previews: readonly PreviewName[];
   // A template expression, true in the sessions the control is offered to:
   // `true` for one every session may turn, or a session fact such as being
@@ -162,10 +165,11 @@ const control = (
   label: string,
   place: Place,
   {
+    line = 0,
     previews = [],
     shown = "true",
-  }: Partial<Pick<Control, "previews" | "shown">> = {},
-): Control => ({ label, place, previews, shown });
+  }: Partial<Pick<Control, "line" | "previews" | "shown">> = {},
+): Control => ({ label, place, line, previews, shown });
 
 const enumValues = <T extends string>(
   members: readonly T[],
@@ -377,11 +381,11 @@ const menuGlyphSpec: FieldSpec<string> = {
 
 // The experimental lanes' toggles (LANES, src/config/lanes.ts): each such
 // lane's setting is a flag, off until a config or a session turns it on,
-// behind the `🧪 toggles` submenu.
+// behind the `📺 renderer` submenu.
 const LANE_ROWS = Object.fromEntries(
   TOGGLED_LANES.map((lane: ToggledLane) => [
     LANES[lane].switch.setting,
-    boolSetting(false, control(LANES[lane].label, "toggles")),
+    boolSetting(false, control(LANES[lane].label, "renderer")),
   ]),
 ) as { readonly [K in LaneSetting]: SessionRow<boolean, false> };
 
@@ -395,20 +399,19 @@ export const GLOBAL_FIELDS = {
     "theme",
     paletteOrRuleSpec,
     { themes: "themes" },
-    control("🎨 theme", "door"),
+    control("🎨 theme", "look"),
   ),
   // The config default for the PRESET — a named fragment from `presets:`
   // whose globals and root the session renders. Membership in the merged
   // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
   // globals may NOT carry it: a
   // preset selecting a preset is a second, cyclic authority over which is
-  // active. Its control sits on the door's first line, one click away:
-  // switching arrangement is what people open the menu for.
+  // active.
   preset: selection(
     "preset",
     optionalStringSpec(),
     { from: "presets" },
-    control("▦ preset", "door", { previews: ["layout", "presetDelete"] }),
+    control("▦ preset", "presets", { previews: ["layout", "presetDelete"] }),
   ),
   // The config default for the STYLE (a named theme adaptation from
   // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
@@ -426,7 +429,7 @@ export const GLOBAL_FIELDS = {
     "effect",
     effectOrRuleSpec,
     { from: EFFECT_NAMES },
-    control("✨ effect", "look"),
+    control("✨ effect", "look", { line: 1 }),
   ),
   // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
   endcaps: enumSetting(
@@ -472,7 +475,7 @@ export const GLOBAL_FIELDS = {
   // Whether a placement that appears mid-session fades in over 20 s
   // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
   // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
-  transitions: boolSetting(false, control("fade in/out", "look")),
+  transitions: boolSetting(false, control("fade in/out", "look", { line: 2 })),
   // How fast every decorative animation runs — the effects above, fades and
   // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
   // the rate the session's animation clock advances against the wall clock
@@ -480,7 +483,7 @@ export const GLOBAL_FIELDS = {
   animationSpeed: enumSetting(
     ANIMATION_SPEED_NAMES,
     "1x",
-    control("speed", "look"),
+    control("speed", "look", { line: 1 }),
   ),
   // Whether a root row that exceeds the usable width soft-wraps, between
   // cells and through a cell wider than a line (the legacy display.autoWrap).

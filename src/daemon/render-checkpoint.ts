@@ -14,12 +14,11 @@ import {
   parseClientHints,
   ENVIRONMENT_NEEDED,
   refusedHints,
-  RENDER_ENCODINGS,
   type ReaderRenderRequest,
   type SessionRenderRequest,
   type RefusedArg,
-  type RenderEncoding,
 } from "./foundations/protocol";
+import { RENDER_ENCODINGS, type RenderEncoding } from "../render/encodings";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import type { RuntimeStats } from "./stats";
 import type { DaemonLogger } from "../utils/logger";

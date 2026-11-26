@@ -167,16 +167,16 @@ describe("every {{ menu }} the bundled default renders", () => {
     expect(ansiOf(out)).toMatchSnapshot("closed");
   });
 
-  // brandon-menus-sjhy.5zy: ⚙ config's 🧪 toggles opens onto the three lane
-  // toggles, each a session draft like every control in the menu.
-  test("the config menu with 🧪 toggles open: exact bytes", async () => {
+  // ⚙ config's 📺 renderer opens onto the lane switches, each a session draft
+  // like every control in the menu.
+  test("the config menu with 📺 renderer open: exact bytes", async () => {
     const rig = await openConfigMenu();
-    await rig.clickLabel(rig.render(), "🧪 toggles");
+    await rig.clickLabel(rig.render(), "📺 renderer");
     const out = rig.render();
     for (const label of ["🧪 statusline (B)", "🧪 tmux pane (C)"]) {
       expect(textOf(out)).toContain(`☐ ${label}`);
     }
-    expect(ansiOf(out)).toMatchSnapshot("toggles open");
+    expect(ansiOf(out)).toMatchSnapshot("renderer open");
     await rig.clickLabel(out, "🧪 statusline (B)");
     expect(rig.sessionState.get(SID, "experimentalStatusline")).toBe("true");
   });

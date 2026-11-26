@@ -402,7 +402,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     kind: "viewers",
     viewers: {
       [session]: {
-        lanes: { pane: { subscribers: 1, drawing: true } },
+        lanes: { pane: { subscribers: 1, drawing: true } }, pointer: null,
         shown: true,
         joined: 1,
       },

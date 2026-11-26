@@ -152,6 +152,7 @@ const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   transitions: { pin: "true", pick: "false" },
   experimentalStatusline: { pin: "false", pick: "true" },
   experimentalPane: { pin: "true", pick: "false" },
+  experimentalWindow: { pin: "true", pick: "false" },
 };
 
 describe("a save under a preset that pins the field lands where it renders", () => {

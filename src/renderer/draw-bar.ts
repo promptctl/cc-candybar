@@ -65,7 +65,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
-import type { PanePointer } from "../click/gesture.js";
+import type { Pointer } from "../click/gesture.js";
 import { pointerFacts, surfaceOf } from "../render/pointer-facts.js";
 import { inClickMode } from "../render/click-mode-frame.js";
 import {
@@ -154,8 +154,8 @@ export function renderFrame(
   // of late, as the feed knows them.
   following: ReadonlySet<Lane>,
   feeds: LaneFeeds,
-  // What the pane that owns the session's pointer says of it, if one does.
-  pointer: PanePointer | null,
+  // What the follower that owns the session's pointer says of it, if one does.
+  pointer: Pointer | null,
   prepare: PrepareDelivery,
 ): FeedDraw | null {
   const facts: RequestFacts = [];
@@ -422,9 +422,9 @@ export function drawRender(
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
-  // The pointer of the pane that owns the session's, which only a fed bar has:
+  // The pointer of the follower that owns the session's, which only a fed bar has:
   // the request path draws for no pointer of its own.
-  pointer: PanePointer | null,
+  pointer: Pointer | null,
 ): {
   drawn: DrawnBar;
   evaluated: number;
@@ -630,7 +630,7 @@ export function drawRender(
     ],
   );
   // [LAW:one-source-of-truth] The mode this draw is in, once: the session's,
-  // unless the surface of the pane that owns the pointer (a link's, with none)
+  // unless the surface of the follower that owns the pointer (a link's, with none)
   // delivers its gesture itself. Hover, the frame's links and whether the idle
   // clock runs all read this one value; the idle close resets the session's
   // own, which is what a lane that does not deliver the gesture reads.

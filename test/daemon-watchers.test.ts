@@ -601,8 +601,8 @@ describe("WatcherRegistry", () => {
             },
           ]);
           expect(reg.dirWatches()).toBe(3);
-          fs.writeFileSync(path.join(root, "team", "open", "ref"), "x");
-          await until(() => seen.length > 0, "the sibling's event");
+          // A single write made before the watch is live is never reported.
+          await live(seen, path.join(root, "team", "open"));
         } finally {
           fs.chmodSync(locked, 0o700);
         }

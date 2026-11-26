@@ -40,9 +40,9 @@ A lane's switch is read where the config is, in the renderer, and every output d
 
 While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one small row instead of a second bar: a button that draws it back there, and the diagnostics indicator, so an error is seen even where the lane's bar isn't. Turning the switch on alone draws nothing.
 
-## A pane's pointer
+## A follower's pointer
 
-The pane that draws a session reports what it delivers (the gestures its tmux `mouse` setting lets through, and hover) and the region under the pointer, and the host keeps those per subscription. A report is not an input of the session's frames: the renderer draws from it as it draws from the viewers, and a pane that stops drawing takes its facts with it. tmux's `mouse` is read per pane, since a session's value overrides the global one, from the same `list-panes` call that places the pane (a format spells it 1 or 0), so it costs the tick no process of its own, and the pane turns the mouse modes on when it starts drawing and restores them on exit.
+A follower that draws a session reports what it delivers (for the pane, the gestures its tmux `mouse` setting lets through, and hover) and the region under the pointer, and the host keeps those per subscription. Only a lane whose frames say where a pointer acts (the pane's hit map, the window's runs) may own the pointer, because the hover it reports is the region it found there. A report is not an input of the session's frames: the renderer draws from it as it draws from the viewers, and a follower that stops drawing takes its facts with it. tmux's `mouse` is read per pane, since a session's value overrides the global one, from the same `list-panes` call that places the pane (a format spells it 1 or 0), so it costs the tick no process of its own, and the pane turns the mouse modes on when it starts drawing and restores them on exit.
 
 ## The attach launcher
 

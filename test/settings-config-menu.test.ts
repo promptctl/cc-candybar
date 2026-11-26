@@ -297,13 +297,14 @@ async function showTab(
 }
 
 // The theme picker's gear (brandon-theme-swatch-8v9r): the style, variation
-// and shade controls are behind it, beside the theme on the door's first line.
+// and shade controls are behind it, beside the theme in 🎨 look.
 async function showGear(r: {
   render: () => Frame;
   click: (url: string) => Promise<void>;
   sessionState: SessionState;
   config: ValidatedConfig;
 }): Promise<void> {
+  await showTab(r, "look");
   if (r.sessionState.get(SID, PICKERS_KEY) === "gear") return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some((e) => landsAt(r.config, e, PICKERS_KEY, "gear")),
@@ -319,10 +320,11 @@ async function showThemePicker(r: {
   sessionState: SessionState;
   config: ValidatedConfig;
 }): Promise<void> {
+  await showTab(r, "look");
   if (r.sessionState.get(SID, PICKERS_KEY) === "candybar.apply.theme") return;
   const url = urlsOf(r.render()).find((u) =>
-    effectsOf(u).some(
-      (e) => landsAt(r.config, e, PICKERS_KEY, "candybar.apply.theme"),
+    effectsOf(u).some((e) =>
+      landsAt(r.config, e, PICKERS_KEY, "candybar.apply.theme"),
     ),
   );
   if (url === undefined) throw new Error("no link opens the theme picker");
@@ -419,7 +421,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
   test("every setting the menu owns is one control, reachable from that root", async () => {
     const tabs: string[] = [];
-    for (const tab of ["look", "layout", "config"]) {
+    for (const tab of ["look", "presets", "config"]) {
       await showTab(r, tab);
       tabs.push(textOf(r.render()));
     }
@@ -442,32 +444,47 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(saveUrl()).toBeUndefined();
   });
 
-  // brandon-menus-sjhy.ek7: "Make theme and arrange top-level menus, next to
-  // preset. Move padding and wrap from the layout menu to config."
-  test("theme and arrange sit beside preset on the first line; wrap and padding are in ⚙ config", async () => {
-    const firstLine = textOf(r.render()).split("\n")[0]!;
-    for (const cell of ["🎨 theme ▀▀▀", "⚙", "◀ ▦ preset ▶", "✎ arrange"]) {
-      expect(firstLine).toContain(cell);
-    }
-    const tab = async (name: string): Promise<string> => (
-      await showTab(r, name),
-      textOf(r.render())
-    );
-    expect(await tab("config")).toMatch(/☑ wrap[\s\S]*padding 1/);
-    for (const name of ["look", "layout"]) {
-      const body = (await tab(name)).split("\n").slice(2).join("\n");
-      for (const moved of ["🎨 theme", "✎ arrange", "wrap", "padding"]) {
-        expect(body).not.toContain(moved);
-      }
-    }
+  // 🎨 look and 📚 saves & presets lead the first line, before ✎ arrange;
+  // look opens onto theme, its gear and the endcaps, then the effect and its
+  // speed, then the rest; saves & presets holds the preset; wrap and padding
+  // are in ⚙ config.
+  test("look and saves & presets lead the first line; each holds its own controls", async () => {
+    const lines = (): string[] => textOf(r.render()).split("\n");
+    // The cells of `line`, left to right, are `cells` in that order.
+    const inOrder = (line: string | undefined, cells: readonly string[]) =>
+      expect(cells.map((c) => line?.indexOf(c) ?? -1)).toEqual(
+        cells
+          .map((c) => line?.indexOf(c) ?? -1)
+          .sort((a, b) => a - b)
+          .filter((i) => i >= 0),
+      );
+    inOrder(lines()[0], ["◁", "🎨 look", "📚 saves & presets", "✎ arrange"]);
+    expect(lines()[1]).not.toMatch(/look|presets|layout/);
+    await showTab(r, "look");
+    const look = lines();
+    inOrder(look[1], ["🎨 theme ▀▀▀", "⚙", "◀ ✦ endcaps ▶"]);
+    inOrder(look[2], ["◀ ✨ effect ▶", "◀ speed ▶"]);
+    expect(look[3]).toContain("☐ fade in/out");
+    expect(look.join("\n")).not.toMatch(/▦ preset|wrap|padding/);
+    await showTab(r, "presets");
+    const presets = lines();
+    expect(presets[1]).toContain("◀ ▦ preset ▶");
+    expect(presets.join("\n")).not.toMatch(/🎨 theme|endcaps|wrap/);
+    await showTab(r, "config");
+    expect(textOf(r.render())).toMatch(/☑ wrap[\s\S]*padding 1/);
   });
 
   test("every control writes the session key; the only durable links are the ↺ resets", async () => {
     // Open the theme ring so its option cells render too.
-    const themeMenu = writesTo(r.config, r.render(),
+    await showTab(r, "look");
+    const themeMenu = writesTo(
+      r.config,
+      r.render(),
       sharedMenuStateKey("candybar.pickers"),
     ).find((u) =>
-      effectsOf(u).some((e) => landsAt(r.config, e, PICKERS_KEY, "candybar.apply.theme")),
+      effectsOf(u).some((e) =>
+        landsAt(r.config, e, PICKERS_KEY, "candybar.apply.theme"),
+      ),
     );
     await r.click(themeMenu!);
     const open = r.render();
@@ -646,17 +663,21 @@ describe("save under a preset that pins the setting", () => {
   ): Promise<string> => {
     await showTab(r, "look");
     await r.click(
-      writesTo(r.config, r.render(), sharedMenuStateKey("candybar.pickers")).find((u) =>
-        effectsOf(u).some((e) => landsAt(r.config, e, PICKERS_KEY, "candybar.apply.endcaps")),
+      writesTo(
+        r.config,
+        r.render(),
+        sharedMenuStateKey("candybar.pickers"),
+      ).find((u) =>
+        effectsOf(u).some((e) =>
+          landsAt(r.config, e, PICKERS_KEY, "candybar.apply.endcaps"),
+        ),
       )!,
     );
     const capsule = textOf(r.render());
     expect(capsule).toContain("◀ ✦ endcaps ▶");
     expect(capsule).not.toContain(PLAIN_SEAM);
     const pickPlain = writesTo(r.config, r.render(), "endcaps").find((u) =>
-      effectsOf(u).some(
-        (e) => landsAt(r.config, e, "endcaps", "plain"),
-      ),
+      effectsOf(u).some((e) => landsAt(r.config, e, "endcaps", "plain")),
     );
     await r.click(pickPlain!);
     const save = linksOf(r.render()).find((l) =>
@@ -693,16 +714,21 @@ describe("save under a preset that pins the setting", () => {
     const r = rig(PINNING_PRESET, durable);
     try {
       await r.click(writesTo(r.config, r.render(), "candybar.menu")[0]!);
+      await showTab(r, "presets");
       await r.click(
-        writesTo(r.config, r.render(), sharedMenuStateKey("candybar.pickers")).find((u) =>
-          effectsOf(u).some((e) => landsAt(r.config, e, PICKERS_KEY, "candybar.apply.preset")),
+        writesTo(
+          r.config,
+          r.render(),
+          sharedMenuStateKey("candybar.pickers"),
+        ).find((u) =>
+          effectsOf(u).some((e) =>
+            landsAt(r.config, e, PICKERS_KEY, "candybar.apply.preset"),
+          ),
         )!,
       );
       await r.click(
         writesTo(r.config, r.render(), "preset").find((u) =>
-          effectsOf(u).some(
-            (e) => landsAt(r.config, e, "preset", "narrow"),
-          ),
+          effectsOf(u).some((e) => landsAt(r.config, e, "preset", "narrow")),
         )!,
       );
       const after = await pickPlainAndSave(r);
@@ -876,9 +902,9 @@ describe("reset returns settings to the bundled default", () => {
 
   // brandon-menu-ia-q30.4oj: `⟲` shows whenever a reset would change
   // something — here the file's own values, with no draft to save.
-  test("⟲ shows beside the preset with no drafts while the file holds a resettable value", () => {
+  test("⟲ shows on the first line with no drafts while the file holds a resettable value", () => {
     const [line1 = ""] = textOf(r.render()).split("\n");
-    expect(line1).toContain("▦");
+    expect(line1).toContain("✎ arrange");
     expect(line1).toContain("⟲");
     expect(line1).not.toContain("💾");
   });
@@ -938,10 +964,10 @@ describe("the drift marker", () => {
   afterEach(() => durable.dispose());
 
   // Every setting whose ↺ the bar draws, read tab by tab (a control renders
-  // only while its tab is open; the preset's sits on the door's own line).
+  // only while its tab is open).
   const marked = async (r: ReturnType<typeof rig>): Promise<string[]> => {
     const keys = new Set<string>();
-    for (const tab of ["look", "layout", "config"]) {
+    for (const tab of ["look", "presets", "config"]) {
       await showTab(r, tab);
       linksOf(r.render())
         .filter((l) => l.text === "↺")
@@ -953,7 +979,7 @@ describe("the drift marker", () => {
   };
   // The tabs the strip marks, read off what a reader sees.
   const markedTabs = (r: ReturnType<typeof rig>): string[] =>
-    ["session", "look", "layout", "config"].filter((tab) =>
+    ["look", "presets", "session", "config"].filter((tab) =>
       new RegExp(`${tab} •`).test(textOf(r.render())),
     );
   const open = async (source: string): Promise<ReturnType<typeof rig>> => {
@@ -988,15 +1014,16 @@ describe("the drift marker", () => {
     }
   });
 
-  // brandon-menus-sjhy.ek7: the ⚙ gear sits on the door's first line, which
-  // no tab encloses, so the gear's own trigger carries the mark.
-  test("a gear setting's draft marks the closed ⚙ gear and no tab", async () => {
+  // The ⚙ gear sits inside 🎨 look: a draft behind it marks the closed gear
+  // and the tab that encloses it.
+  test("a gear setting's draft marks the closed ⚙ gear and 🎨 look", async () => {
     const r = await open(TWO_SEGMENT_ROOT);
     try {
+      await showTab(r, "look");
       expect(textOf(r.render())).not.toContain("⚙ •");
       r.sessionState.set(SID, "shade", "deepest");
       expect(textOf(r.render())).toContain("⚙ •");
-      expect(markedTabs(r)).toEqual([]);
+      expect(markedTabs(r)).toEqual(["look"]);
     } finally {
       r.dispose();
     }
@@ -1004,13 +1031,13 @@ describe("the drift marker", () => {
 
   // brandon-menus-sjhy.5zy: a control inside a submenu still marks its tab,
   // with the submenu closed.
-  test("a lane toggle's draft marks ⚙ config while 🧪 toggles is closed", async () => {
+  test("a lane toggle's draft marks ⚙ config while 📺 renderer is closed", async () => {
     const r = await open(TWO_SEGMENT_ROOT);
     try {
       r.sessionState.set(SID, "experimentalPane", "true");
       expect(markedTabs(r)).toEqual(["config"]);
       await showTab(r, "config");
-      expect(textOf(r.render())).toContain("🧪 toggles");
+      expect(textOf(r.render())).toContain("📺 renderer");
       expect(textOf(r.render())).not.toContain("tmux pane (C)");
     } finally {
       r.dispose();
@@ -1030,11 +1057,12 @@ describe("the drift marker", () => {
   });
 
   test("a value the active preset pins is not marked: a reset could not move it", async () => {
-    // The user's preset pins endcaps; the file's own preset pick is marked.
+    // The user's preset pins endcaps; the file's own preset pick is marked,
+    // and so is the tab holding the preset.
     const pinned = await open(PINNING_PRESET_NAMED);
     try {
       expect(await marked(pinned)).toEqual(["preset"]);
-      expect(markedTabs(pinned)).toEqual([]);
+      expect(markedTabs(pinned)).toEqual(["presets"]);
     } finally {
       pinned.dispose();
     }
@@ -1047,7 +1075,7 @@ describe("the drift marker", () => {
       await showTab(r, "config");
       expect(textOf(r.render())).toContain("padding 0");
       expect(await marked(r)).toEqual(["preset"]);
-      expect(markedTabs(r)).toEqual([]);
+      expect(markedTabs(r)).toEqual(["presets"]);
     } finally {
       r.dispose();
     }
@@ -1066,9 +1094,16 @@ describe("a pick leaves the picker open", () => {
   beforeEach(async () => {
     r = rig(TWO_SEGMENT_ROOT, undefined, 80);
     await r.click(writesTo(r.config, r.render(), "candybar.menu")[0]!);
+    await showTab(r, "look");
     await r.click(
-      writesTo(r.config, r.render(), sharedMenuStateKey("candybar.pickers")).find((u) =>
-        effectsOf(u).some((e) => landsAt(r.config, e, PICKERS_KEY, "candybar.apply.theme")),
+      writesTo(
+        r.config,
+        r.render(),
+        sharedMenuStateKey("candybar.pickers"),
+      ).find((u) =>
+        effectsOf(u).some((e) =>
+          landsAt(r.config, e, PICKERS_KEY, "candybar.apply.theme"),
+        ),
       )!,
     );
   });
@@ -1161,9 +1196,9 @@ describe("save as preset", () => {
 
   const link = (text: string): string | undefined =>
     linksOf(r.render()).find((l) => l.text === text)?.url;
-  // `+ preset`, in the 📐 layout tab.
+  // `+ preset`, in the 📚 saves & presets tab.
   const savePreset = async (): Promise<string> => {
-    await showTab(r, "layout");
+    await showTab(r, "presets");
     return link("+ preset")!;
   };
   const effective = () =>
@@ -1172,12 +1207,16 @@ describe("save as preset", () => {
       (key) => r.sessionState.get(SID, key),
       () => false,
     );
-  // The door, then the preset control's ▸: the ring and the rows beneath it.
+  // The door, 📚 saves & presets, then the preset control's ▸: the ring and
+  // the rows beneath it.
   const openPresets = async () => {
     await r.click(writesTo(r.config, r.render(), "candybar.menu")[0]!);
+    await showTab(r, "presets");
     await r.click(
       linksOf(r.render()).find((l) =>
-        effectsOf(l.url).some((e) => landsAt(r.config, e, PICKERS_KEY, "candybar.apply.preset")),
+        effectsOf(l.url).some((e) =>
+          landsAt(r.config, e, PICKERS_KEY, "candybar.apply.preset"),
+        ),
       )!.url,
     );
   };
@@ -1503,7 +1542,7 @@ describe("a theme's default look, set from the bar", () => {
       e.style.kind === "decided" ? e.style.name : "(rule)",
     ];
   };
-  // The door, then the theme's ⚙ gear, where the cell sits beside the
+  // The door, 🎨 look, then the theme's ⚙ gear, where the cell sits beside the
   // settings it saves.
   async function start(source: string): Promise<void> {
     durable = durableConfig("cc-candybar-theme-default-");
@@ -1698,17 +1737,15 @@ describe("the themeDefault action", () => {
 // Each toggle also needs to do all of the work needed to turn its lane on, not
 // just part of it."
 describe("the animation lanes' toggles", () => {
-  // The settings menu open on ⚙ config with 🧪 toggles open.
+  // The settings menu open on ⚙ config with 📺 renderer open.
   const openToggles = async () => {
     const r = rig(TWO_SEGMENT_ROOT);
     await r.click(writesTo(r.config, r.render(), "candybar.menu")[0]!);
     await showTab(r, "config");
     const url = urlsOf(r.render()).find((u) =>
-      effectsOf(u).some(
-        (e) => landsAt(r.config, e, PICKERS_KEY, "toggles"),
-      ),
+      effectsOf(u).some((e) => landsAt(r.config, e, PICKERS_KEY, "renderer")),
     );
-    if (url === undefined) throw new Error("no link opens 🧪 toggles");
+    if (url === undefined) throw new Error("no link opens 📺 renderer");
     await r.click(url);
     return { r };
   };
@@ -1721,12 +1758,20 @@ describe("the animation lanes' toggles", () => {
     async (lane) => {
       const { r } = await openToggles();
       try {
-        const [url, ...others] = writesTo(r.config, r.render(),
+        const [url, ...others] = writesTo(
+          r.config,
+          r.render(),
           LANES[lane].switch.setting,
         );
         expect(others).toEqual([]);
         expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
-          ["ring-state", SID, `candybar.apply.${LANES[lane].switch.setting}`, "1", ""],
+          [
+            "ring-state",
+            SID,
+            `candybar.apply.${LANES[lane].switch.setting}`,
+            "1",
+            "",
+          ],
         ]);
         await r.click(url!);
         expect(textOf(r.render())).toContain(`☑ ${LANES[lane].label}`);
@@ -1764,17 +1809,15 @@ describe("the animation lanes' toggles", () => {
 
 describe("a lane toggle's readout", () => {
   const SPINNER = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/u;
-  // The 🧪 toggles submenu open in the ⚙ config tab, statusline (B) on.
+  // The 📺 renderer submenu open in the ⚙ config tab, statusline (B) on.
   const showToggles = async (): Promise<ReturnType<typeof rig>> => {
     const r = rig(TWO_SEGMENT_ROOT);
     await r.click(writesTo(r.config, r.render(), "candybar.menu")[0]!);
     await showTab(r, "config");
     const url = urlsOf(r.render()).find((u) =>
-      effectsOf(u).some(
-        (e) => landsAt(r.config, e, PICKERS_KEY, "toggles"),
-      ),
+      effectsOf(u).some((e) => landsAt(r.config, e, PICKERS_KEY, "renderer")),
     );
-    if (url === undefined) throw new Error("no link opens 🧪 toggles");
+    if (url === undefined) throw new Error("no link opens 📺 renderer");
     await r.click(url);
     r.sessionState.set(SID, "experimentalStatusline", "true");
     return r;

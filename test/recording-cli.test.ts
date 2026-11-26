@@ -24,7 +24,7 @@ const frame = (text: string): WireFrame => ({
 });
 
 const present = frame("request");
-const pane = frame("pane");
+const bar = frame("bar");
 const handoff = frame("handoff");
 const input: EventInput = {
   kind: "event",
@@ -58,7 +58,7 @@ const output: RendererOutput = {
   frames: [
     {
       session,
-      frame: { kind: "drawn", receipt: 2 as EffectId, bar: pane, handoff },
+      frame: { kind: "drawn", receipt: 2 as EffectId, bar, handoff },
     },
     { session, frame: { kind: "failed", message: "no draw" } },
   ],
@@ -105,7 +105,7 @@ test("replay delivers the verified frames and summary on separate streams", () =
         .map((line) => JSON.parse(line)),
     ).toEqual([
       { session, surface: "statusline", frame: present },
-      { session, surface: "pane", frame: pane },
+      { session, surface: "bar", frame: bar },
       { session, surface: "statusline", frame: handoff },
     ]);
   }));

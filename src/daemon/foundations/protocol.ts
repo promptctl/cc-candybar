@@ -15,6 +15,7 @@ import {
 } from "../../client-hint";
 import type { Lane } from "../../config/lanes";
 import type { WireFrame } from "../../render/frame";
+import type { RenderEncoding } from "../../render/encodings";
 import type { Timekeeper } from "../../time";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
@@ -97,13 +98,6 @@ export interface RenderRequest {
   terminalEnv?: TerminalEnvHint;
   client?: ClientHint;
 }
-
-// [LAW:no-mode-explosion] How a render is answered: the bytes a terminal
-// prints, or the Frame. The cap is these two, and the second has no exit, since
-// a reader holding one render's answer has no other way to read the bar once
-// decoding is ruled out. Subscriptions push the ANSI answer for their display.
-export const RENDER_ENCODINGS = ["ansi", "frame"] as const;
-export type RenderEncoding = (typeof RENDER_ENCODINGS)[number];
 
 // [LAW:types-are-the-program] A render as a script or harness asks for it.
 // `RenderRequest` stays what the shipped clients send, key for key, which
@@ -500,16 +494,16 @@ export interface SubscribeRequest {
   kind: "subscribe";
   sessionId: string;
   lane: Lane;
-  // The pane lane's pane, which draws the bar and sees the pointer over it
-  // (`PointerRequest`): the pane that spoke last, by subscribing or reporting,
-  // holds the session's pointer.
+  // A follower that draws the bar and sees the pointer over it, on a lane
+  // whose frames say where a pointer acts (`PointerRequest`): the owner that
+  // spoke last, by subscribing or reporting, holds the session's pointer.
   owner?: OwnerFacts;
 }
 
-// [LAW:one-source-of-truth] What a bar pane says of its pointer, whole: who it
-// is (an id it made), the gestures its terminal delivers (`hover` among them),
+// [LAW:one-source-of-truth] What a follower says of its pointer, whole: who it
+// is (an id it made), the gestures its surface delivers (`hover` among them),
 // and the action the pointer last stood on. Sent with the subscribe and
-// again, whole, whenever one changes, so the host holds exactly the pane's
+// again, whole, whenever one changes, so the host holds exactly the owner's
 // latest and a stream that reconnects restates it.
 export interface OwnerFacts {
   id: string;
@@ -517,8 +511,8 @@ export interface OwnerFacts {
   hover: string | null;
 }
 
-// A change of a pane's facts. The host accepts it from any pane following the
-// session, which then holds the session's pointer: a pane that has ended
+// A change of an owner's facts. The host accepts it from any owner following
+// the session, which then holds the session's pointer: an owner that has ended
 // follows nothing, and is refused.
 export interface PointerRequest {
   v: number;
@@ -551,8 +545,11 @@ export type Request =
   | DebugRequest;
 
 export type Response =
-  // A frame pushed to the pane lane also carries where a pointer can act on it.
-  | { ok: true; output: string; hits?: HitMap; desktopActs?: undefined }
+  // A render's ANSI, and a lane's frame in the `ansi` encoding.
+  | { ok: true; output: string; desktopActs?: never }
+  // A lane's frame in the `hit-mapped` encoding: the ANSI and where a pointer
+  // can act on it (src/render/encodings.ts).
+  | { ok: true; output: string; hits: HitMap; desktopActs?: never }
   | ClickVerdict
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.

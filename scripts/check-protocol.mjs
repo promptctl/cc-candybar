@@ -384,7 +384,7 @@ const CHECKS = [
   },
   {
     label: "animation lane names",
-    ts: memberSet(TS_LANES, /export const LANES = \{[\s\S]*?\} as const;/, /^ {2}([A-Za-z]+): \{/gm),
+    ts: memberSet(TS_LANES, /export const LANES = \{[\s\S]*?\} as const\b/, /^ {2}([A-Za-z]+): \{/gm),
     rust: memberSet(RS_FOLLOW, /const LANE_NAMES: \[&str; \d+\] = \[[^\]]+\]/, /"([A-Za-z]+)"/g),
   },
   {

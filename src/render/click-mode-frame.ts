@@ -1,10 +1,10 @@
 // The one step that gives a drawn frame the links its lane's click mode means
 // (src/config/click-mode.ts). A cell is drawn once, and the mode is the draw's:
-// the session's, unless the surface of the pane that owns the pointer (a link's
-// surface, with none) delivers the mode's gesture itself. So no cell reads the
-// mode: each region carries what a click means in every mode, and the frame's
-// links are picked here, after the draw. Only one lane shows a frame that has
-// regions: while a pane draws the bar, the statusline shows the handoff line.
+// the session's, unless the surface of the follower that owns the pointer (a
+// link's surface, with none) delivers the mode's gesture itself. So no cell reads
+// the mode: each region carries what a click means in every mode, and the frame's
+// links are picked here, after the draw. While a lane draws the bar elsewhere,
+// the statusline shows the handoff line, which has no regions.
 
 import { MODE_GESTURE, type ClickMode } from "../config/click-mode.js";
 import type { DrawnAction, DrawnEffect } from "./drawn-link.js";
@@ -47,7 +47,7 @@ function runIn(run: Run, mode: ClickMode): Run {
     return bare;
   }
   // The hover binding has done its work: what a lane publishes of a region is
-  // its name and the gestures a pane delivers.
+  // its name and the gestures a follower delivers.
   return {
     ...run,
     link: actionTarget(effects, link.description, {

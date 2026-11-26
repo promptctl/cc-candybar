@@ -1,4 +1,4 @@
-// While the tmux pane draws the bar, Claude Code shows a handoff row: a button
+// While a lane draws the bar elsewhere, Claude Code shows a handoff row: a button
 // that draws the bar back in Claude Code's statusline, in case the place the
 // lane draws it has broken, and the diagnostics indicator beside it, so an
 // error is seen even where the lane's bar is not.
@@ -73,6 +73,13 @@ export function laneDefaultsAfterReset(
   );
 }
 
+// [LAW:one-source-of-truth] The lanes as prose names them, from the lane table.
+const called = (lanes: readonly Lane[]): string =>
+  lanes.map((lane) => LANES[lane].called).join(" and ");
+
+const capitalized = (text: string): string =>
+  text.charAt(0).toUpperCase() + text.slice(1);
+
 // The handoff resets writable personal settings when that returns the bar.
 // The project file keeps its settings.
 export function laneHandoff(
@@ -82,11 +89,12 @@ export function laneHandoff(
   remaining: LaneSwitches,
 ): ChannelMessage {
   const personal = writable.filter((role) => role !== "project");
+  const pinned = lanes.filter((lane) => remaining[lane]);
   const reason =
     personal.length === 0
-      ? "No writable personal config layer for the pane"
-      : lanes.some((lane) => remaining[lane])
-        ? "The pane stays enabled by its config"
+      ? `No writable personal config layer for ${called(lanes)}`
+      : pinned.length > 0
+        ? `${capitalized(called(pinned))} ${pinned.length === 1 ? "stays" : "stay"} enabled by ${pinned.length === 1 ? "its" : "their"} config`
         : null;
   const line =
     reason === null

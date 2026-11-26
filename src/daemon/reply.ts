@@ -34,7 +34,7 @@ import {
   type SubscribeRequest,
 } from "./foundations/protocol";
 import { parseDelivered } from "../click/gesture.js";
-import type { PaneOwner } from "./frame-feed.js";
+import type { PointerOwner } from "./frame-feed.js";
 import type { Asked } from "../utils/outcome.js";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import type {
@@ -64,7 +64,12 @@ import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
 import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
 import { recordingCommandOf } from "./foundations/recording-command.js";
-import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
+import {
+  LANE_NAMES,
+  ownsPointer,
+  parseLane,
+  type Lane,
+} from "../config/lanes.js";
 import { instantAt, instantOf } from "../utils/instant.js";
 import {
   renderDeadlines,
@@ -117,8 +122,8 @@ export type HandledRequest =
       kind: "subscribe";
       sessionId: SessionId;
       lane: Lane;
-      // Set when the subscriber is the pane that owns the session's pointer.
-      owner: PaneOwner | null;
+      // Set when the subscriber is a follower that owns the session's pointer.
+      owner: PointerOwner | null;
     }
   | { kind: "url"; told: Told };
 
@@ -265,12 +270,12 @@ const refuse = (
   error: string,
 ): HandledRequest => replied(refusal(code, error));
 
-// [LAW:parse-dont-validate] A pane's report of its pointer, read once into
-// what the feed holds. The report is untrusted JSON: the id names the pane, the
+// [LAW:parse-dont-validate] An owner's report of its pointer, read once into
+// what the feed holds. The report is untrusted JSON: the id names the owner, the
 // gestures are what it delivers, and `hover` is the action under the pointer
 // or null.
-function parseOwner(raw: unknown): Asked<PaneOwner> {
-  const bad = (reason: string): Asked<PaneOwner> => ({
+function parseOwner(raw: unknown): Asked<PointerOwner> {
+  const bad = (reason: string): Asked<PointerOwner> => ({
     kind: "failed",
     reason,
   });
@@ -319,11 +324,10 @@ function subscription(req: SubscribeRequest): HandledRequest {
     );
   if (req.owner === undefined)
     return { kind: "subscribe", sessionId: sessionId.id, lane, owner: null };
-  // Only the pane lane has a pointer to own.
-  if (lane !== "pane")
+  if (!ownsPointer(lane))
     return refuse(
       "BAD_REQUEST",
-      `only the pane lane has an owner: got ${lane}`,
+      `only a lane whose frames say where a pointer acts has an owner (${LANE_NAMES.filter(ownsPointer).join(", ")}): got ${lane}`,
     );
   const owner = parseOwner(req.owner);
   if (owner.kind !== "ok")

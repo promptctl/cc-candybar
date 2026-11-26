@@ -59,7 +59,14 @@ import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { linksOf } from "../../../src/click/read";
 import { decodeAnsi, Style } from "@promptctl/rich-js";
-import { composeBar, textOf, type Frame, type Run } from "../../../src/render/frame";
+import {
+  composeBar,
+  parseFrame,
+  textOf,
+  type Frame,
+  type Run,
+} from "../../../src/render/frame";
+import type { Lane } from "../../../src/config/lanes";
 import { pageOf, viewerLink } from "../../helpers/diagnostics-viewer";
 import { barOf } from "../../helpers/drawn-frame";
 import { untilHeard } from "../../helpers/reload-signal";
@@ -116,8 +123,11 @@ const CONFIGS = {
   clock: `{ globals: { experimentalStatusline: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
   // Reads the draw's pointer: what the surface delivers and the action the
   // pointer is on.
-  pointed: `{ globals: { experimentalPane: true }, segments: { mark: { template: '{{ if eq .hover "" }}no hover{{ else }}over {{ .hover }}{{ end }} on {{ .surface }}' } }, root: { h: ['mark'] } }`,
+  pointed: `{ globals: { experimentalPane: true, experimentalWindow: true }, segments: { mark: { template: '{{ if eq .hover "" }}no hover{{ else }}over {{ .hover }}{{ end }} on {{ .surface }}' } }, root: { h: ['mark'] } }`,
   toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+  // The same door drawn in a window that follows the session. Its own file,
+  // since the handoff's reset button rewrites the file it names.
+  windowed: `{ globals: { experimentalWindow: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
 // The `toggle` config as the daemon loads it, to tell which link steps `face`.
@@ -226,6 +236,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   const decoded = (response: Response) =>
     response.ok && "output" in response ? decodeAnsi(response.output) : null;
+
+  // A window's pushed frame, as its follower reads it.
+  const frameOf = (response: Response): Frame | null =>
+    response.ok && "frame" in response ? parseFrame(response.frame) : null;
+
+  // The text a pushed frame shows, in whichever encoding its lane takes.
+  const plainOf = (response: Response): string | null => {
+    const frame = frameOf(response);
+    return frame === null ? (decoded(response)?.plain ?? null) : textOf(frame);
+  };
 
   const barText = (response: Response): unknown =>
     decoded(response)?.plain.replace(/\n$/, "") ?? response;
@@ -707,11 +727,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(frames).toEqual([]);
   });
 
-  // [LAW:verifiable-goals] The pane that owns a session's pointer says what its
-  // terminal delivers and where the pointer is, and the bar is drawn from it:
+  // [LAW:verifiable-goals] The follower that owns a session's pointer says what
+  // its surface delivers and where the pointer is, and the bar is drawn from it:
   // a request path (no owner) draws for a link's surface.
-  test("a pane's pointer reaches the draw as `surface` and `hover`, and ends with its stream", async () => {
-    const sid = "feed-pointer";
+  test.each(["pane", "window"] as const)("a %s's pointer reaches the draw as `surface` and `hover`, and ends with its stream", async (lane) => {
+    const sid = `feed-pointer-${lane}`;
     const answered = await render(sockPath, sid, projectDir, {}, args("pointed"));
     // A request is answered for a link: the plain click, nothing hovered.
     expect(textOf(answered)).toContain("no hover on left");
@@ -724,16 +744,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const stream = openFrameStream(
       sockPath,
       sid,
-      "pane",
+      lane,
       (resp) => frames.push(resp),
       () => {},
       owner(null),
     );
     try {
       const shown = (text: string) => () =>
-        frames.some(
-          (resp) => decoded(resp)?.plain.includes(text) === true,
-        );
+        frames.some((resp) => plainOf(resp)?.includes(text) === true);
       await until(shown("no hover on left ctrl+right hover"), "the owner's surface");
       const refused = await sendDaemonRequest(
         sockPath,
@@ -748,7 +766,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       expect(refused).toMatchObject({
         ok: false,
         code: "BAD_REQUEST",
-        error: expect.stringMatching(/no pane "another-pane" follows session/),
+        error: expect.stringMatching(/no owner "another-pane" follows session/),
       });
       const reported = await sendDaemonRequest(
         sockPath,
@@ -785,7 +803,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     );
   });
 
-  test("a subscribe that declares an owner is refused unless it is for the pane lane and names a pointer", async () => {
+  test("a subscribe that declares an owner is refused unless its lane's frames say where a pointer acts and it names a pointer", async () => {
     await render(sockPath, "feed-badowner", projectDir, {}, args("pointed"));
     const subscribe = (lane: string, owner: unknown) =>
       sendDaemonRequest(
@@ -803,7 +821,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(await subscribe("statusline", whole)).toMatchObject({
       ok: false,
       code: "BAD_REQUEST",
-      error: expect.stringMatching(/only the pane lane has an owner/),
+      error: expect.stringMatching(/only a lane whose frames say where a pointer acts has an owner \(pane, window\): got statusline/),
     });
     for (const [owner, why] of [
       [{ ...whole, id: "" }, /owner\.id/],
@@ -820,7 +838,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   // The lane toggles (candybar-animation-wbxz.81o.azo).
-  const subscribeUntilEnd = (sessionId: string, lane: "statusline" | "pane") => {
+  const subscribeUntilEnd = (sessionId: string, lane: Lane) => {
     const frames: Response[] = [];
     let end: StreamEnd | null = null;
     const ended = new Promise<StreamEnd>((resolve) =>
@@ -952,6 +970,52 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     ).toContain("a handed-off mark");
     // The pane subscription ends once its preference is off.
     expect(await stream.ended).toMatchObject({ kind: "refused" });
+  });
+
+  // [LAW:verifiable-goals] The window replaces the statusline as the pane
+  // does, from the Frame: its follower clicks a link read off a run, and the
+  // handoff row's button turns the window off and brings the bar back.
+  test("a window follower clicks the links its frames carry, and while it follows, the statusline's handoff button ends it switched off", async () => {
+    const sid = "feed-window";
+    // With no window following, the statusline keeps the bar.
+    expect(
+      textOf(await render(sockPath, sid, projectDir, {}, args("windowed"))),
+    ).toContain("door shut");
+    const stream = subscribeUntilEnd(sid, "window");
+    await until(() => stream.live().length > 0, "the window's frame");
+    // A window is pushed the Frame, not the ANSI.
+    expect(stream.frames[0]).not.toHaveProperty("output");
+    const first = frameOf(stream.frames[0]!)!;
+    expect(textOf(first)).toContain("door shut");
+    // The windowed door's actions are the toggle's.
+    await click(sockPath, urlWriting(first, "face", "open", TOGGLE_CONFIG));
+    await until(
+      () => stream.live().some((resp) => plainOf(resp)?.includes("door open")),
+      "the clicked window",
+    );
+    const handedOff = await render(sockPath, sid, projectDir, {}, args("windowed"));
+    expect(textOf(handedOff).trim().split("\n")).toEqual([
+      `🧪 ${HANDOFF_BUTTON}`,
+    ]);
+    await loggedLines(
+      env,
+      (lines) => keptRenders(lines, sid),
+      (found) => / handoff=window /.test(found.at(-1) ?? ""),
+      "the handoff render's event",
+    );
+    const button = linksOf(handedOff).find((l) => l.text.includes("⟲"));
+    await click(sockPath, button!.url);
+    expect(
+      readFileSync(path.join(projectDir, "windowed.json5"), "utf8"),
+    ).not.toContain("experimentalWindow");
+    // The statusline draws the bar again, as the click left it.
+    expect(
+      textOf(await render(sockPath, sid, projectDir, {}, args("windowed"))),
+    ).toContain("door open");
+    expect(await stream.ended).toMatchObject({
+      kind: "refused",
+      resp: { code: "SWITCHED_OFF" },
+    });
   });
 
   // The bar is handed off whole: the lane drawing it carries the indicator,

@@ -8,8 +8,8 @@ import type {
   ClientHints,
   ReaderRenderRequest,
   RefusedArg,
-  RenderEncoding,
 } from "../daemon/foundations/protocol";
+import type { RenderEncoding } from "../render/encodings";
 import type { ClientDeadline } from "../daemon/foundations/request-deadline";
 import type { RateLimitsSeen } from "../daemon/foundations/sightings";
 import type { SessionId } from "../daemon/foundations/session-id";

@@ -94,22 +94,24 @@ describe("case 1: a tab's lists and submenus close with the tab", () => {
     expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("🧪 toggles, closing ⚙ config by opening ⚡ session", async () => {
+  test("📺 renderer, closing ⚙ config by opening ⚡ session", async () => {
     const rt = nestBar(BUNDLED);
     await openDoor(rt);
     await rt.clickWriting(TAB, "config");
-    await rt.clickWriting(PICKERS, "toggles");
+    await rt.clickWriting(PICKERS, "renderer");
     await rt.clickWriting(TAB, "session");
     expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
   });
 
-  test("a list on the door's own line stays open when a tab closes: one key, held outside the tab", async () => {
+  // The theme sits inside 🎨 look, so its list is a tab's list like any other.
+  test("the theme list, closing 🎨 look by opening 📚 saves & presets", async () => {
     const rt = nestBar(BUNDLED);
     await openDoor(rt);
     await rt.clickWriting(TAB, "look");
     await rt.clickWriting(PICKERS, "candybar.apply.theme");
-    await rt.clickWriting(TAB, "config");
-    expect(rt.held(PICKERS)).toBe("candybar.apply.theme");
+    await rt.clickWriting(TAB, "presets");
+    await rt.clickWriting(TAB, "look");
+    expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
   });
 });
 
@@ -120,6 +122,7 @@ describe("case 2: the gear's lists close with the gear", () => {
   ])("closing ⚙ by %s closes the style list", async (_how, closeWith) => {
     const rt = nestBar(BUNDLED);
     await openDoor(rt);
+    await rt.clickWriting(TAB, "look");
     await rt.clickWriting(PICKERS, "gear");
     await rt.clickWriting(GEAR_PICKERS, "candybar.apply.style");
     await rt.clickWriting(PICKERS, closeWith);
@@ -127,14 +130,14 @@ describe("case 2: the gear's lists close with the gear", () => {
   });
 });
 
-test("case 3: a lane's (?) closes with 🧪 toggles", async () => {
+test("case 3: a lane's (?) closes with 📺 renderer", async () => {
   const rt = nestBar(BUNDLED);
   await openDoor(rt);
   await rt.clickWriting(TAB, "config");
-  await rt.clickWriting(PICKERS, "toggles");
+  await rt.clickWriting(PICKERS, "renderer");
   await rt.clickWriting("candybar.help.experimentalStatusline", "open");
   await rt.clickWriting(PICKERS, DISCLOSURE_CLOSED);
-  await rt.clickWriting(PICKERS, "toggles");
+  await rt.clickWriting(PICKERS, "renderer");
   expect(rt.held("candybar.help.experimentalStatusline")).toBe(
     DISCLOSURE_CLOSED,
   );

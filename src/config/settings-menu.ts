@@ -94,6 +94,7 @@ import {
 } from "./door.js";
 import {
   SETTINGS,
+  perSetting,
   type SettingName,
   type SettingProjection,
 } from "./setting-projections.js";
@@ -102,11 +103,14 @@ import {
   SUBMENUS,
   SUBMENU_NAMES,
   TABS,
+  settingRows,
+  tabsOnLine,
   isSubmenu,
   within,
   type Place,
   type PreviewName,
   type SubmenuName,
+  type TabLine,
   type TabName,
 } from "./menu-places.js";
 import { settingControlDomain } from "./globals-fields.js";
@@ -146,8 +150,8 @@ const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 
 // ─── The tabs (brandon-menu-tabs-wnu.qqz) ───────────────────────────────────
 //
-// [LAW:one-type-per-behavior] The door's second line is five tabs, one open at
-// a time, its body dropped below the strip. A tab strip is an accordion: every
+// [LAW:one-type-per-behavior] The door's two lines share one open tab, whose
+// body drops below the line of its trigger. Every
 // tab is a disclosure trigger on ONE key, which holds the open tab's name, so
 // opening one closes the rest and the open one wears its state colour like any
 // open trigger. The key starts closed, and closing the door returns it there, as
@@ -290,7 +294,7 @@ const PREVIEWS: Readonly<Record<PreviewName, SegmentDecl>> = {
   palette: { template: "{{ themePreview }}" },
   // While the preset ring is on a preset the user made
   // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
+  // 📚 saves & presets tab makes one.
   presetDelete: {
     when: `{{ and ${USER_LAYER_WRITABLE} (not .preset.bundled) }}`,
     template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
@@ -322,10 +326,10 @@ const anyResettable = (
 //
 // Brandon: "Each toggle should explain what it does. Each toggle also needs to
 // do all of the work needed to turn its lane on, not just part of it." A
-// lane's switch only lets its subscriber's frames through; the subscriber
-// itself — a mod, Claude Code under cc-attach, a tmux pane — is started by
-// the daemon when the switch the session renders by moves
-// (src/daemon/lane-setup.ts), so the toggle is a plain setting. Beside it, a
+// lane's switch only lets its subscriber's frames through, and the toggle is
+// a plain setting: the daemon opens or closes the tmux pane from the value
+// each session renders by (src/daemon/declared-bar-panes.ts), and lane B's
+// subscriber is a Claude Code started under the attach launcher. Beside it, a
 // `(?)` says what the lane is and what turning it on does, from the help
 // corpus `--help` prints.
 const laneSettings = LANE_NAMES.map(
@@ -488,12 +492,8 @@ const menuControl = (name: SettingName): MenuControl => {
     submenus: submenusBeside(name),
   };
 };
-const CONTROLS: readonly MenuControl[] = (
-  Object.keys(SETTINGS) as SettingName[]
-).map(menuControl);
-
-const controlsIn = (place: Place): readonly MenuControl[] =>
-  CONTROLS.filter((c) => c.place === place);
+const CONTROL_BY_NAME = perSetting(menuControl);
+const CONTROLS = Object.values(CONTROL_BY_NAME);
 // What a place holds, the controls inside its submenus included.
 const controlsUnder = (place: Place): readonly MenuControl[] =>
   CONTROLS.filter((c) => within(c.place, place));
@@ -508,20 +508,17 @@ const markedDisplay =
     `(print ${templateLiteral(text)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
       controlsUnder(place),
     )}))`;
-// The controls in `place`, each followed by the submenus laid beside it, whose
-// bodies are laid the same way.
-// [LAW:single-enforcer] Everything laid at a control — the control, its `(?)`,
-// its submenus — is offered where the control is, by the control's one gate.
-const controlsAt = (place: Place): LayoutNode[] =>
-  controlsIn(place).flatMap((c) =>
-    [
-      controlNode(c),
-      ...c.help,
-      ...c.submenus.map((s) =>
-        disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
-      ),
-    ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` })),
-  );
+// [LAW:single-enforcer] A control, its help and its submenus share one gate.
+const nodesForControl = (name: SettingName): LayoutNode[] => {
+  const c = CONTROL_BY_NAME[name];
+  return [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map((s) =>
+      disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
+    ),
+  ].map((node): LayoutNode => ({ ...node, when: `{{ ${c.shown} }}` }));
+};
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -538,7 +535,7 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
 
 // [LAW:single-enforcer] `⟲` resets the controls the session it is drawn in is
 // offered, by the same gate each control is drawn by and the `•` counts it by:
-// a control offered only to some sessions (the renderer, inside tmux) is reset
+// a control offered only to some sessions is reset
 // where it is drawn, and never by a reset-all clicked where it is not, since
 // the sessions share the setting.
 const RESET_ALL = confirmStep(
@@ -549,7 +546,7 @@ const RESET_ALL = confirmStep(
 
 // ─── The save cell ──────────────────────────────────────────────────────────
 //
-// [LAW:one-source-of-truth] `💾 save 3 ↶ ↷ ⟲` — one cell beside the preset,
+// [LAW:one-source-of-truth] `💾 save 3 ↶ ↷ ⟲` — one cell beside arrange,
 // each part present exactly while it has something to do, read from what the
 // daemon publishes every render: save while there are drafts, undo and redo
 // while their stack has a step, `⟲` while any control's reset would change
@@ -767,9 +764,9 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 }
 
 // [LAW:one-source-of-truth] What each place holds (design-docs/SETTINGS-MENU-MAP.md,
-// "Structure") — the door's first line, each tab, each submenu — keyed by every
-// place so none can be left without a body: its own segments, then the
-// controls `PLACE` puts in it, then what follows them. Every body takes the
+// "Structure") — each tab, each submenu — keyed by every place so none can be
+// left without a body: its own segments, then the controls `PLACE` puts in
+// it, line by line, then what follows them. Every body takes the
 // controls, so `PLACE` naming any place is a placement the bar renders. A
 // body's own cell whose width changes — one that comes and goes, or relabels
 // itself — sits `after` the controls, so it moves none of them; a control's
@@ -780,13 +777,6 @@ interface PlaceBody {
   readonly after: readonly LayoutNode[];
 }
 const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)],
-  },
   // The quick actions, then the commands typed into Claude Code beside the
   // auto-compact window they would summarize at.
   session: {
@@ -801,8 +791,11 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
     ],
     after: [],
   },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  // The theme with its gear and the endcaps, then what moves — the effect and
+  // its speed — then the rest, each on its own row.
+  look: { direction: "vertical", content: [], after: [] },
+  // The preset, then the cell that saves the bar as a new one.
+  presets: { direction: "horizontal", content: [], after: [seg(PRESET_SAVE)] },
   config: { direction: "horizontal", content: [], after: [] },
   // The settings that adapt the theme, then — while the look they make
   // differs from the theme's own default — the cell that saves it as that
@@ -812,14 +805,29 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
     content: [],
     after: [seg(THEME_DEFAULT_SEG)],
   },
-  toggles: { direction: "horizontal", content: [], after: [] },
+  renderer: { direction: "horizontal", content: [], after: [] },
 };
+// [LAW:dataflow-not-control-flow] A body's direction is how it lays its
+// lines: a vertical one stacks each as a row, a horizontal one runs them on.
 function placeBody(place: Place): ContainerNode {
   const { direction, content, after } = PLACE_BODY[place];
+  const lines = settingRows(place).map((row) => row.flatMap(nodesForControl));
   return {
     kind: "container",
     direction,
-    children: [...content, ...controlsAt(place), ...after],
+    children: [
+      ...content,
+      ...(direction === "vertical"
+        ? lines.map(
+            (children): ContainerNode => ({
+              kind: "container",
+              direction: "horizontal",
+              children,
+            }),
+          )
+        : lines.flat()),
+      ...after,
+    ],
   };
 }
 
@@ -857,28 +865,33 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   return expandContainer(node);
 }
 
-// Two lines stacked over the bar, then the open tab's body. The first line
-// holds what the menu is most often opened for — the theme, the preset,
-// arranging the bar — and the save cell (PLACE_BODY.door). The second is the
-// tab strip.
+// The tabs whose triggers lead from `line`, each with its body dropped below
+// that line.
+const tabsOn = (line: TabLine): LayoutNode[] =>
+  tabsOnLine(line).map(({ member }) =>
+    disclosureNode(tabSeg(member), tabRef(member), placeBody(member), "drop"),
+  );
+
+// Two lines stacked over the bar, each with its open tab's body below it. The
+// first line holds `◁ back`, the tabs the menu is most often opened for,
+// arranging the bar, and the save cell whenever it has something to do. The
+// second is the tab strip.
 function doorBody(): ContainerNode {
   return {
     kind: "container",
     direction: "vertical",
     children: [
-      placeBody("door"),
       {
         kind: "container",
         direction: "horizontal",
-        children: TABS.map(({ member }) =>
-          disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop",
-          ),
-        ),
+        children: [
+          seg(BACK_SEG),
+          ...tabsOn("first"),
+          seg(EDIT_SEG),
+          seg(SAVE_SEG),
+        ],
       },
+      { kind: "container", direction: "horizontal", children: tabsOn("strip") },
     ],
   };
 }
@@ -1104,7 +1117,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
     const resetCell = `{{ if and ${USER_LAYER_WRITABLE} .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
-    // Whom a control is offered to gates where it is laid (`controlsAt`); its
+    // Whom a control is offered to gates where it is laid (`nodesForControl`); its
     // list hangs on it, so hiding it hides the list.
     artifacts.segments[controlSeg(c.name)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,

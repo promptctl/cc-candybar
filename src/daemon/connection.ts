@@ -19,7 +19,7 @@ import {
 } from "./foundations/protocol";
 import { replyOf, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
-import type { PaneOwner } from "./frame-feed.js";
+import type { PointerOwner } from "./frame-feed.js";
 import { newestWins } from "../utils/newest-wins.js";
 import {
   REQUEST_TIMEOUT_MS,
@@ -79,7 +79,7 @@ type Event =
       readonly kind: "subscribe";
       readonly sessionId: SessionId;
       readonly lane: Lane;
-      readonly owner: PaneOwner | null;
+      readonly owner: PointerOwner | null;
     }
   | { readonly kind: "attached"; readonly unsubscribe: () => void }
   | { readonly kind: "close" };
@@ -98,7 +98,7 @@ type Act =
       readonly kind: "attach";
       readonly sessionId: SessionId;
       readonly lane: Lane;
-      readonly owner: PaneOwner | null;
+      readonly owner: PointerOwner | null;
     }
   | { readonly kind: "unsubscribe"; readonly unsubscribe: () => void };
 
@@ -530,7 +530,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   function attach(
     sessionId: SessionId,
     lane: Lane,
-    owner: PaneOwner | null,
+    owner: PointerOwner | null,
   ): void {
     const push = newestWins(sock);
     const unsubscribe = daemon.subscribe(sessionId, {

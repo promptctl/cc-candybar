@@ -37,7 +37,7 @@ import type {
 } from "../daemon/foundations/debug-types";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
-import type { PanePointer } from "../click/gesture";
+import type { Pointer } from "../click/gesture";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
@@ -296,6 +296,9 @@ export type Notification =
 // whether the session's pane is on a screen.
 export interface SessionViewers {
   readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
+  // [LAW:one-source-of-truth] Where the follower that owns the session's
+  // pointer last said it is, whichever lane it follows: null while none does.
+  readonly pointer: Pointer | null;
   readonly shown: boolean;
   // The host's draw demand revision. A new viewer the host could not hand a
   // frame still needs one when the counts read as they did. The v8 wire name
@@ -306,8 +309,6 @@ export interface SessionViewers {
 export interface LaneViewers {
   readonly subscribers: number;
   readonly drawing: boolean;
-  // Only the pane lane has an owner, and only while one is subscribed.
-  readonly pointer?: PanePointer;
 }
 
 // Every session someone watches, whole: a session absent has no viewer.

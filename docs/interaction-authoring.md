@@ -365,7 +365,7 @@ drops the picks it now holds, so the only draft left is the switch itself.
 Each click is one undo step. Neither click writes a file that would not load:
 copying a preset that holds a `kind: "group"` (group names are config-wide),
 or deleting one an action still targets, is refused with the loader's own
-message and changes nothing. The settings menu puts save in its `📐 layout`
+message and changes nothing. The settings menu puts save in its `📚 saves & presets`
 tab as `+ preset` and delete under the preset control; this is the same pair
 on a bar of your own:
 
@@ -1535,20 +1535,23 @@ stays on the bar while the menu is open. Beside it sits the click-mode toggle
 ```
 
 Opening it shows the always-available functionality. The menu opens
-**above** the bar: two lines stacked over the bar's rows, then the open tab's
-body. The door rises with it — now `✖`, it leads the menu's first line and
-closes the menu, and the bar's row closes up where it was.
-The second line is five tabs, one open at a time; the open one wears its state
-colour, and its body drops below the strip. Closing the menu folds it back to
-`⚡ session`, so the menu always reopens there. Here the theme and style are
-picked in this session and not yet saved, and the theme's `⚙` is open:
+**above** the bar: two lines stacked over the bar's rows, each with the body
+of its open tab below it. The door rises with it — now `✖`, it leads the
+menu's first line and closes the menu, and the bar's row closes up where it
+was. The first line holds the `🎨 look` and `📚 saves & presets` tabs, the
+second the `⚡ session` and `⚙ config` tabs; one tab is open at a time,
+whichever line it sits on, and the open one wears its state colour. Closing
+the menu closes its tab, so the menu always reopens with none open. Here the
+theme and style are picked in this session and not yet saved, and the
+theme's `⚙` is open:
 
 ```
-✖ ◁ 🎨 theme ▀▀▀ ↺   ⚙ •   ◀ ▦ preset ▶   ✎ arrange   💾 save 2 ↶ ⟲
+✖ ◁ ▾ 🎨 look •   📚 saves & presets   ✎ arrange   💾 save 2 ↶ ⟲
+✕ 🎨 theme ▀▀▀ ↺   ⚙ •   ◀ ✦ endcaps ▶
 ✕ ◀ ◐ style ▀▀▀ ▶ ↺   ◀ 🎼 variation ▶   ◀ 🔆 shade ▶   ⤓ default for tokyo-night ▀▀▀
-  ▾ ⚡ session   🎨 look   📐 layout   ⚙ config   🧰 tools
-✕ ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
-  …
+  ◀ ✨ effect ▶   ◀ speed ▶
+  ☐ fade in/out
+  ⚡ session   ⚙ config
 polled   host   directory   gitaculous    ← the bar, less the door
 ```
 
@@ -1571,22 +1574,23 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   so overriding one of those actions changes `toolbar`, not the menu. Its
   second row is `/compact /model /clear`, typed into this session's prompt.
 - **Every setting in the menu changes this session only**, at once. While any
-  of them differs from your config file, `💾 save N` sits beside the preset
-  switcher, counting them; clicking it writes them all to the config file and
+  of them differs from your config file, `💾 save N` sits at the end of the
+  menu's first line, counting them; clicking it writes them all to the config file and
   the part disappears (see "Drafts and `save`" above). Beside it, `↶` and `↷`
   undo and redo every one of those changes, saves included, and `⟲` resets
   every setting to the bundled default — a second click, `⟲ reset all?`,
   confirms. Each part shows only while it has something to do: `⟲` whenever a
   setting holds a draft or your config file holds a value for it.
-- **The first line** holds what you most often open this menu for, one click
-  from the door: the theme picker and its `⚙` (style, variation, shade, and
-  `⤓ default for <theme>` while the look differs from the theme's default),
-  the preset switcher, and `✎ arrange`. Under the preset control,
+- **`🎨 look`** holds, row by row, the theme picker with its `⚙` (style,
+  variation, shade, and `⤓ default for <theme>` while the look differs from
+  the theme's default) and the endcaps; then the effect and the animation
+  speed; then fade in/out.
+- **`📚 saves & presets`** holds the preset switcher and `+ preset`, which
+  keeps the bar as a new preset and switches to it. Under the preset control,
   `🚮 delete <name>` removes the preset you are in when you made it (see
   "Save as preset" above).
-- **`🎨 look`** holds effect, endcaps, fade in/out and the animation speed; **`📐 layout`** holds
-  `+ preset`, which keeps the bar as a new preset and switches to it;
-  **`⚙ config`** holds wrap, padding and `🧪 toggles`.
+- **`⚙ config`** holds wrap, padding, `📺 renderer` (the lane switches) and
+  the menu timeout.
   Every setting is ONE control, in
   exactly one place. A control shows `↺` while resetting it would change
   something — it holds a draft, or your config file holds a value for it —
@@ -2561,7 +2565,7 @@ Give the second its own id and each copy's menu opens on its own:
 A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
 `variation`, `shade`, `autoWrap`, `padding`, `menuTimeout`,
 `transitions`, `animationSpeed`, `experimentalStatusline`,
-`experimentalPane`) may only write members of
+`experimentalPane`, `experimentalWindow`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a
 `from`'s options and a stepper's ends, and refuses an `int` cursor, which
