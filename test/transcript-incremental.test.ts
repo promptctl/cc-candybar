@@ -757,6 +757,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
 
     const logged: string[] = [];
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -822,6 +823,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       JSON.stringify({ sessionId: sid }) + "\n" + line(new Date(), 0.1),
     );
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
