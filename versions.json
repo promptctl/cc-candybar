@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "84f2f6f784c98c23b64d5eb6f7db8c0fc84d6fac",
-      "timestamp": "2026-11-26T14:10:31.922Z",
+      "sha": "da4a9f02ee553c2281358391119e354c9ea6f1b9",
+      "timestamp": "2026-11-26T14:14:11.652Z",
       "commits": [
         {
-          "sha": "84f2f6f784c98c23b64d5eb6f7db8c0fc84d6fac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:09:17-07:00",
-          "message": "fix(renderer): publish interaction feedback immediately on visible surfaces\n"
+          "sha": "da4a9f02ee553c2281358391119e354c9ea6f1b9",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T14:12:42Z",
+          "message": "chore(release): set `package.json` to 1.242.1\n\n## [1.242.1](https://github.com/promptctl/cc-candybar/compare/v1.242.0...v1.242.1) (2026-11-26)\n\n### Bug Fixes\n\n* **renderer:** publish interaction feedback immediately on visible surfaces ([84f2f6f](https://github.com/promptctl/cc-candybar/commit/84f2f6f784c98c23b64d5eb6f7db8c0fc84d6fac))\n"
         }
       ]
     },
