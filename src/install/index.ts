@@ -8,7 +8,12 @@ import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { checkOwnedPrivateDir, hostBundlePath, locations, remoteSocketDir } from "../daemon/paths";
+import {
+  checkOwnedPrivateDir,
+  hostBundlePath,
+  locations,
+  remoteSocketDir,
+} from "../daemon/paths";
 import type { Host, World } from "../host";
 import type { OneShotLauncher } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";

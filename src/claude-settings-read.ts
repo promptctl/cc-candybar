@@ -3,7 +3,11 @@
 // (src/claude-settings.ts).
 
 import { types } from "node:util";
-import { EMPTY_DOCUMENT, JSON_DIALECT, parseDocument } from "./config/json5-edit.js";
+import {
+  EMPTY_DOCUMENT,
+  JSON_DIALECT,
+  parseDocument,
+} from "./config/json5-edit.js";
 import { failed, ok, type Failed, type Ok } from "./utils/outcome.js";
 import { readRegularTextSync } from "./utils/regular-text.js";
 import { type JsonObject, isJsonObject } from "./claude-settings";

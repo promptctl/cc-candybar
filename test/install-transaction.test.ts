@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { hostOf } from "../scripts/lib/host";
 import { install, type InstallWorld } from "../src/install/index";
-import { hostBundlePath } from "../src/daemon/paths";
+import { hostBundlePath, remoteSocketDir } from "../src/daemon/paths";
 import { readHostBundle } from "../src/daemon/host-bundle";
 import { shellWord } from "../src/shell-word";
 import type { LaunchOpts, LaunchResult } from "../src/proc/launcher";
@@ -147,6 +147,7 @@ describe("an install that lands", () => {
     expect(fs.readFileSync(stagedDist(), "utf8")).toBe("// bundle v1\n");
     expect(fs.statSync(stagedBin()).mode & 0o777).toBe(0o755);
     expect(readHostBundle(w.host)).toEqual({ kind: "ok", value: stagedDist() });
+    expect(fs.statSync(remoteSocketDir(home)).mode & 0o777).toBe(0o700);
     expect(ran).toEqual(["codesign", "killall", "lsregister"]);
     expect(out.join("")).toContain(
       `Set the statusLine command in ${settingsFile()}: ${shellWord(stagedBin())}`,
@@ -278,6 +279,35 @@ describe("an install that fails", () => {
       /lsregister failed/,
     );
     expect(tree()).toEqual({});
+  });
+
+  test("a private directory that acquired an SSH forward during install survives rollback", () => {
+    const socketDir = remoteSocketDir(home);
+    const forwarded = path.join(socketDir, "other.sock");
+    const { world: w } = world(
+      { lsregister: { ok: false, reason: "non-zero", exitCode: 1 } },
+      { lsregister: () => fs.writeFileSync(forwarded, "forward in use") },
+    );
+    expect(() => install([], checkout("v1"), w, "darwin")).toThrow(
+      /lsregister failed/,
+    );
+    expect(fs.readFileSync(forwarded, "utf8")).toBe("forward in use");
+    expect(Object.keys(tree()).sort()).toEqual([
+      path.relative(home, path.dirname(socketDir)),
+      path.relative(home, socketDir),
+      path.relative(home, forwarded),
+    ]);
+  });
+
+  test("an existing unsafe SSH directory refuses the install and keeps the previous runtime", () => {
+    installedThenStale();
+    fs.chmodSync(remoteSocketDir(home), 0o755);
+    const before = tree();
+    expect(() => install([], checkout("v2"), world().world, "darwin")).toThrow(
+      /unsafe permissions/,
+    );
+    expect(tree()).toEqual(before);
+    expect(fs.statSync(remoteSocketDir(home)).mode & 0o777).toBe(0o755);
   });
 
   // The settings file is written while the install runs (Claude Code's own

@@ -25,9 +25,10 @@ export class InstallChanges {
   // Roll back only directories this call created. A file another application
   // put in one while installation ran survives a later failure.
   mkdir(dir: string, mode?: number): void {
-    const made = fs.mkdirSync(dir, { recursive: true, mode });
+    const target = path.resolve(dir);
+    const made = fs.mkdirSync(target, { recursive: true, mode });
     if (made === undefined) return;
-    const created = [dir];
+    const created = [target];
     while (created[0] !== made) created.unshift(path.dirname(created[0]!));
     for (const directory of created) {
       this.log.landed(directory, () => {
