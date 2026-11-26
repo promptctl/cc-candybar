@@ -78056,23 +78056,6 @@ function verbsOver(ctx) {
   };
 }
 
-// src/renderer-interface/request-context.ts
-init_globals();
-function durableOf(req) {
-  const { claudeConfigDir: claudeConfigDir2 } = req.hints;
-  return {
-    origin: req.requested,
-    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
-  };
-}
-function heardContextOf(req) {
-  return {
-    session: req.hookData.session_id,
-    durable: durableOf(req),
-    live: req
-  };
-}
-
 // src/renderer/acts.ts
 init_globals();
 var ActsOnTheirWay = class {
@@ -78100,6 +78083,25 @@ var ActsOnTheirWay = class {
 
 // src/renderer/world-states.ts
 init_globals();
+
+// src/renderer-interface/request-context.ts
+init_globals();
+function durableOf(req) {
+  const { claudeConfigDir: claudeConfigDir2 } = req.hints;
+  return {
+    origin: req.requested,
+    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+  };
+}
+function heardContextOf(req) {
+  return {
+    session: req.hookData.session_id,
+    durable: durableOf(req),
+    live: req
+  };
+}
+
+// src/renderer/world-states.ts
 var WorldStates = class {
   live = observable.map(void 0, {
     deep: false
@@ -78419,54 +78421,10 @@ function mainRenderer(parts, stores) {
   };
   let wake = null;
   const opening = /* @__PURE__ */ new Set();
-  const parked = observable.box([], { deep: false });
-  const keepParked = (keep) => {
-    const prior = parked.get();
-    const next2 = prior.filter(keep);
-    if (next2.length !== prior.length) runInAction(() => parked.set(next2));
-  };
-  const parkedContext = (click2) => {
-    const { session } = click2;
-    if (click2.kind === "live")
-      return heardContextOf(parts.worldStates.requestOf(session));
-    return parts.worldStates.contextOf(session) ?? {
-      session,
-      durable: click2.durable,
-      live: null
-    };
-  };
-  const takeClicks = (matches) => {
-    const ready = [];
-    keepParked((click2) => {
-      if (!matches(click2)) return true;
-      ready.push(click2);
-      return false;
-    });
-    return ready;
-  };
   const openWaiting = (session) => () => {
     openSession(parts, session);
     opening.delete(session);
   };
-  const resume = (ready, effects, record2) => ready.map((click2) => () => {
-    try {
-      clickTurn(
-        parts,
-        { ...click2.event, context: parkedContext(click2) },
-        effects,
-        record2
-      );
-    } catch (thrown2) {
-      holdClickError(
-        parts.sessionState,
-        click2.session,
-        rendererFailureOf(thrown2).message,
-        time.at
-      );
-      throw thrown2;
-    }
-  });
-  const parkedClickSessions = () => new Set(parked.get().map((click2) => click2.session));
   const commands = {
     stats: () => ({
       kind: "stats",
@@ -78476,7 +78434,7 @@ function mainRenderer(parts, stores) {
         sessionState: parts.sessionStats(),
         menuIdle: menuIdle.stats(),
         rendererTurns: {
-          parked: opening.size + parked.get().length,
+          parked: opening.size,
           presents: deliveries.size,
           deferrals: time.deferrals()
         },
@@ -78565,8 +78523,7 @@ function mainRenderer(parts, stores) {
             record2.push(["parked", "context"]);
             return;
           }
-          const ready = takeClicks((click2) => click2.session === session);
-          runEach([openWaiting(session), ...resume(ready, effects, record2)]);
+          openWaiting(session)();
         });
         return;
       }
@@ -78575,16 +78532,12 @@ function mainRenderer(parts, stores) {
         const sessions = [...opening].filter(
           (session) => originKey(parts.worldStates.requestOf(session).requested) === key
         );
-        const ready = takeClicks(
-          (click2) => originKey(parkedContext(click2).durable.origin) === key
-        );
         runEach([
           () => parts.renderCache.configure(event.origin, event.config),
           () => runEach(
             parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
           ),
-          ...sessions.map(openWaiting),
-          ...resume(ready, effects, record2)
+          ...sessions.map(openWaiting)
         ]);
         return;
       }
@@ -78621,7 +78574,6 @@ function mainRenderer(parts, stores) {
         return;
       case "retire":
         opening.delete(event.session);
-        keepParked((click2) => click2.session !== event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -78647,18 +78599,15 @@ function mainRenderer(parts, stores) {
         const context = click2.scope === "session" ? live ?? event.context : null;
         if (context !== null) {
           const { origin } = context.durable;
-          if (!parts.renderCache.holdsConfig(origin)) {
-            const { context: _input, ...intent } = event;
-            const waiting = { session: context.session, event: intent };
-            runInAction(
-              () => parked.set([
-                ...parked.get(),
-                live === null ? { ...waiting, kind: "cold", durable: context.durable } : { ...waiting, kind: "live" }
-              ])
-            );
-            record2.push(["parked", "click"]);
-            return;
+          if (event.coldConfig !== void 0) {
+            const offered = event.context?.durable.origin;
+            if (offered !== void 0 && originKey(offered) === originKey(origin))
+              parts.renderCache.configure(origin, event.coldConfig);
           }
+          if (!parts.renderCache.holdsConfig(origin))
+            throw new Error(
+              `no configuration for this click's origin ${originKey(origin)}`
+            );
         }
         clickTurn(parts, { ...event, context }, effects, record2);
         return;
@@ -78667,8 +78616,7 @@ function mainRenderer(parts, stores) {
         feeds.view(event.viewers, time.tick);
         return;
       case "due": {
-        const busy = parkedClickSessions();
-        for (const session of event.pendingClicks ?? []) busy.add(session);
+        const busy = new Set(event.pendingClicks);
         runEach([
           () => time.runDue(),
           () => closeIdleMenus2(parts, effects, busy),
@@ -78730,10 +78678,6 @@ function mainRenderer(parts, stores) {
         configs.set(originKey(origin), origin);
       for (const origin of parts.renderCache.origins())
         configs.set(originKey(origin), origin);
-      for (const click2 of parked.get()) {
-        const origin = parkedContext(click2).durable.origin;
-        configs.set(originKey(origin), origin);
-      }
       return [...configs].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, origin]) => origin);
     },
     { equals: compareStructural }
@@ -78794,15 +78738,14 @@ function mainRenderer(parts, stores) {
     };
     for (const store of storeOrder)
       collect(store, () => stored.push(...stores[store].drain()));
-    collect("subscriptions", () => declare(event.kind === "config"));
+    collect(
+      "subscriptions",
+      () => declare(
+        event.kind === "config" || event.kind === "click" && event.coldConfig !== void 0
+      )
+    );
     collect("wake", () => {
-      wake = earliestOf([
-        time.next(),
-        menuIdle.next(
-          parked.get().length === 0 ? void 0 : parkedClickSessions()
-        ),
-        feeds.next()
-      ]);
+      wake = earliestOf([time.next(), menuIdle.next(), feeds.next()]);
     });
     if (event.kind === "close-views")
       collect(
@@ -85231,7 +85174,9 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     )
   };
 }
-function landedReply(parts, { desktop }) {
+function landedReply(parts, { desktop, outcome }) {
+  if (desktop.length === 0 && outcome.kind !== "ok")
+    return stay(clickReply(outcome));
   const reply = replyOf(
     { ok: true, output: "", desktopActs: desktop },
     null,
@@ -91815,12 +91760,19 @@ async function paneOff(tmux3, edge) {
 }
 
 // src/daemon/acts.ts
-function desktopActOf(act) {
+async function desktopActOf(act) {
   switch (act.kind) {
     case "copy":
       return act.actsOn === ACTS_ON_DESKTOP ? { kind: "copy", text: act.text } : null;
-    case "open":
-      return act.actsOn === ACTS_ON_DESKTOP ? { kind: "open", target: act.target } : null;
+    case "open": {
+      if (act.actsOn !== ACTS_ON_DESKTOP) return null;
+      const entry = await stat(act.target);
+      if (!entry.isFile() && !entry.isDirectory())
+        throw new Error(
+          `cannot open ${act.target}: expected a file or directory`
+        );
+      return { kind: "open", target: act.target, file: entry.isFile() };
+    }
     case "type-slash":
     case "run":
       return null;
@@ -93161,8 +93113,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           );
       } else acts.push(effect);
     }
-    const performed = (act) => {
-      const desktop = desktopActOf(act);
+    const performed = async (act) => {
+      const desktop = await desktopActOf(act);
       if (desktop === null) return world.perform(act);
       log("info", actLine(act, "desktop", "handed to the desktop"));
       return Promise.resolve({ kind: "desktop", act: desktop });
@@ -93451,6 +93403,21 @@ function rendererHost(name, clock, renderer, log, collector, world) {
                 follow(wanted);
               });
               made = { ...captured2, event: ready };
+            } else if (event.kind === "click" && event.context !== null && configs.get(originKey(event.context.durable.origin))?.kind !== "received") {
+              const origin = event.context.durable.origin;
+              if (!followedOrigins.some(
+                (held2) => originKey(held2) === originKey(origin)
+              )) {
+                restore = followedOrigins;
+                follow([...followedOrigins, origin]);
+              }
+              const config = configMade(origin)();
+              if (config.kind !== "event") made = config;
+              else
+                made = {
+                  ...captured2,
+                  event: { ...event, coldConfig: config.event.config }
+                };
             } else made = { ...captured2, event };
           } else made = captured2;
         } catch (thrown2) {
@@ -93469,11 +93436,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           made.event.kind === "click" ? made.runEvidence : void 0
         );
         if (starting && slotted.turn.kind === "answered") restore = void 0;
+        if (made.event.kind === "click" && restore !== void 0)
+          restore = origins ?? restore;
         return { event: made.event, slotted };
       } finally {
         if (restore !== void 0) {
           const previous2 = restore;
-          recordTaken("start config demand rollback", () => follow(previous2));
+          recordTaken("restore config demand", () => follow(previous2));
         }
         if (held !== null && --held.count === 0)
           pendingClicks.delete(held.session);
@@ -93668,7 +93637,7 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 18;
+var RENDERER_WIRE_VERSION = 21;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -93760,6 +93729,8 @@ function recordingInputProblem({ event }) {
     case "request":
       return contextProblem(event.context);
     case "click": {
+      const problem = event.coldConfig && configProblem(event.coldConfig);
+      if (problem) return problem;
       const live = event.context?.live;
       return live == null ? null : contextProblem(live);
     }

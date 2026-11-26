@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-968",
+      "ref": "refs/pull/968/merge",
+      "sha": "d471291ce323f057e7f68330f99da4c278855468",
+      "timestamp": "2026-11-26T05:07:34.531Z",
+      "commits": [
+        {
+          "sha": "d471291ce323f057e7f68330f99da4c278855468",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:04:11Z",
+          "message": "Merge e79dd1149b50c1cbc96389a7dffb64b684573804 into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
+        },
+        {
+          "sha": "e79dd1149b50c1cbc96389a7dffb64b684573804",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:03:59-07:00",
+          "message": "fix(ssh): settle cold clicks in their own turn and distinguish remote files from folders\n"
+        },
+        {
+          "sha": "59e9972a7a38c5916ec622784d78463893059b96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T03:43:29-07:00",
+          "message": "fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n"
+        },
+        {
+          "sha": "ec6e772eb7c0de33cbb3005d84a8c36406a197d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T03:19:33-07:00",
+          "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "fa1eeb9b93a826b08a71ce2eefe360f86ea343cc",
@@ -193,35 +229,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T02:30:35-07:00",
           "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-968",
-      "ref": "refs/pull/968/merge",
-      "sha": "44c1b30c285cc6251ecb75478abf14f1118ab1d3",
-      "timestamp": "2026-11-25T10:46:40.845Z",
-      "commits": [
-        {
-          "sha": "44c1b30c285cc6251ecb75478abf14f1118ab1d3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T10:45:41Z",
-          "message": "Merge 59e9972a7a38c5916ec622784d78463893059b96 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
-        },
-        {
-          "sha": "59e9972a7a38c5916ec622784d78463893059b96",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T03:43:29-07:00",
-          "message": "fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n"
-        },
-        {
-          "sha": "ec6e772eb7c0de33cbb3005d84a8c36406a197d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T03:19:33-07:00",
-          "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
         }
       ]
     },
