@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { READINESS_BUDGET_MS, type IsolatedDaemonEnv, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { type IsolatedDaemonEnv, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import {
   listRegistryFiles,
@@ -26,7 +26,7 @@ import { until } from "../../../scripts/lib/until";
 // acceptance asks for ("a regression that lets the count run away fails CI").
 //
 // [LAW:one-source-of-truth] Every daemon boots through the suite's one
-// isolated-daemon helper, so its readiness budget, its safe socket parent,
+// isolated-daemon helper, so its readiness wait, its safe socket parent,
 // and its diagnosis of a refusal (how far the socket got, how the process
 // ended, the daemon's own log and stderr), are the suite's. How long a boot
 // takes measures the machine's load, not the breaker, so nothing here times
@@ -80,10 +80,9 @@ const registered = (): ProcessIdentity[] =>
   });
 
 describe("daemon-side fork-bomb circuit breaker (integration)", () => {
-  // Four boots, each bounded by the helper's readiness budget, and the
-  // reap's wait (until's own budget), so a step
-  // that hangs fails by name before the test's timeout.
-  jest.setTimeout(4 * READINESS_BUDGET_MS + 5_000);
+  // Four boots and a reap, each waiting until it is answered or the test ends:
+  // four times a one-boot case's work, so the runner's bound on it is longer.
+  jest.setTimeout(60_000);
 
   test("refuses the (ceiling+1)th isolated daemon; a dead sibling's slot is reclaimed", async () => {
     // Each entry names the process the test holds: the daemon is its child.

@@ -8,7 +8,9 @@
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import {
-  chmodSync,
+  renameSync,
+  symlinkSync,
+  unlinkSync,
   mkdirSync,
   mkdtempSync,
   writeFileSync,
@@ -127,8 +129,7 @@ test("a session with no transcript is a real zero, never a failure", async () =>
 // cannot stat is not "no transcript". The stamp is empty, so nothing is
 // believed; the read answers with the reason, cold and warm alike, and a
 // warm fold's prior value is not served as current.
-// Root ignores directory permissions, so the condition cannot be built.
-(process.getuid?.() === 0 ? test.skip : test)(
+test(
   "a transcript whose stat fails is a failure with its reason, never an empty fold",
   async () => {
     const sub = join(dir, "locked");
@@ -150,19 +151,22 @@ test("a session with no transcript is a real zero, never a failure", async () =>
     expect(await valueOf(warm, "s", path)).toBe(1);
     expect(steps).toBe(1);
     expect(warm.answer(sessionIdOf("s")).kind).toBe("ok");
-    chmodSync(sub, 0o000);
+    const saved = path + ".saved";
+    renameSync(path, saved);
+    symlinkSync(path, path);
     try {
       for (const fold of [warm, counting()]) {
         const out = await fold.read(sessionIdOf("s"), path, "change");
         expect(out.kind).toBe("failed");
         // The open is what classifies, so the reason names it.
         if (out.kind === "failed")
-          expect(out.reason).toMatch(/EACCES: permission denied, open /);
+          expect(out.reason).toMatch(/ELOOP: .*open /);
         // What a draw reads is the failure too, not the prior ok.
         expect(fold.answer(sessionIdOf("s")).kind).toBe("failed");
       }
     } finally {
-      chmodSync(sub, 0o755);
+      unlinkSync(path);
+      renameSync(saved, path);
     }
     // Readable again: the warm fold's cursor still stands, nothing re-folded.
     expect(await valueOf(warm, "s", path)).toBe(1);

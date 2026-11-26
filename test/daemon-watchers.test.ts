@@ -1,3 +1,4 @@
+import { refuseFile } from "./helpers/refuse-file";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
 import { processLauncher } from "./helpers/host";
@@ -474,7 +475,9 @@ describe("WatcherRegistry", () => {
       counters,
       logger: () => {},
     });
-    const missing = path.join(os.tmpdir(), "watch-refused-no-such-folder");
+    // A name no other run holds, gone before the watch asks for it.
+    const missing = fs.mkdtempSync(path.join(os.tmpdir(), "watch-refused-"));
+    rmrf(missing);
     const handle = reg.acquire(
       "k",
       { dirs: [{ path: missing }], polled: [] },
@@ -507,13 +510,12 @@ describe("WatcherRegistry", () => {
 
   // fs.watch refuses a folder it cannot read, except Linux's recursive watch
   // on Node 20 and 22, which swallows the error and never fires. The registry
-  // refuses it on every platform and Node, as a tree or not. Root ignores
-  // directory permissions, so the condition cannot be built.
-  (process.getuid?.() === 0 ? test.skip : test)(
+  // refuses it on every platform and Node, as a tree or not.
+  test(
     "a folder the daemon cannot open is refused, watched as a tree or not",
     () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
-      fs.chmodSync(dir, 0o000);
+      using _denied = refuseFile(dir, "opendirSync", "readdirSync");
       const reg = new WatcherRegistry({
         clock: systemTimekeeper,
         logger: () => {},
@@ -538,7 +540,6 @@ describe("WatcherRegistry", () => {
         expect(reg.dirWatches()).toBe(0);
       } finally {
         reg.closeAll();
-        fs.chmodSync(dir, 0o700);
         rmrf(dir);
       }
     },
@@ -546,7 +547,7 @@ describe("WatcherRegistry", () => {
 
   // Where the recursive watch is Node's own walk (Linux), a tree is a plain
   // watch on each directory under its root. Forced on here, so it runs on
-  // every platform; root ignores permissions.
+  // every platform.
   describe("a tree heard directory by directory", () => {
     let root: string;
     let reg: WatcherRegistry;
@@ -582,30 +583,25 @@ describe("WatcherRegistry", () => {
       );
     };
 
-    (process.getuid?.() === 0 ? test.skip : test)(
+    test(
       "a directory below the root it cannot open is refused on its own, and its siblings are heard",
       async () => {
         const locked = path.join(root, "team", "locked");
         fs.mkdirSync(locked, { recursive: true });
         fs.mkdirSync(path.join(root, "team", "open"));
         fs.symlinkSync(root, path.join(root, "loop"));
-        fs.chmodSync(locked, 0o000);
-        try {
-          const seen: Invalidation[] = [];
-          const handle = acquired(seen);
-          expect(handle.deaf).toEqual([
-            {
-              kind: "refused",
-              path: locked,
-              reason: expect.stringContaining("EACCES"),
-            },
-          ]);
-          expect(reg.dirWatches()).toBe(3);
-          fs.writeFileSync(path.join(root, "team", "open", "ref"), "x");
-          await until(() => seen.length > 0, "the sibling's event");
-        } finally {
-          fs.chmodSync(locked, 0o700);
-        }
+        using _denied = refuseFile(locked, "opendirSync", "readdirSync");
+        const seen: Invalidation[] = [];
+        const handle = acquired(seen);
+        expect(handle.deaf).toEqual([
+          {
+            kind: "refused",
+            path: locked,
+            reason: expect.stringContaining("EACCES"),
+          },
+        ]);
+        expect(reg.dirWatches()).toBe(3);
+        await live(seen, path.join(root, "team", "open"));
       },
     );
 
@@ -625,31 +621,28 @@ describe("WatcherRegistry", () => {
 
     // [LAW:no-ambient-temporal-coupling] The period is the backstop for an
     // event a filesystem drops, so it is driven here before any event lands.
-    (process.getuid?.() === 0 ? test.skip : test)(
+    test(
       "the period joins a directory no event told of, and one refused there reaches the holders",
       async () => {
         const seen: Invalidation[] = [];
         const handle = acquired(seen);
         fs.mkdirSync(path.join(root, "found"));
         const locked = path.join(root, "locked");
-        fs.mkdirSync(locked, { mode: 0o000 });
-        try {
-          reg.judge();
-          expect(reg.dirWatches()).toBe(2);
-          expect(handle.deaf).toEqual([
-            expect.objectContaining({ kind: "refused", path: locked }),
-          ]);
-          await until(
-            () => seen.some((inv) => inv.kind === "failed"),
-            "the refusal's window",
-          );
-        } finally {
-          fs.chmodSync(locked, 0o700);
-        }
+        fs.mkdirSync(locked);
+        using _denied = refuseFile(locked, "opendirSync", "readdirSync");
+        reg.judge();
+        expect(reg.dirWatches()).toBe(2);
+        expect(handle.deaf).toEqual([
+          expect.objectContaining({ kind: "refused", path: locked }),
+        ]);
+        await until(
+          () => seen.some((inv) => inv.kind === "failed"),
+          "the refusal's window",
+        );
       },
     );
 
-    (process.getuid?.() === 0 ? test.skip : test)(
+    test(
       "a held directory that cannot be listed is refused, and the watches below it stay",
       async () => {
         const team = path.join(root, "team");
@@ -657,20 +650,16 @@ describe("WatcherRegistry", () => {
         const seen: Invalidation[] = [];
         const handle = acquired(seen);
         expect(reg.dirWatches()).toBe(3);
-        fs.chmodSync(team, 0o300);
-        try {
-          reg.judge();
-          expect(handle.deaf).toEqual([
-            expect.objectContaining({ kind: "refused", path: team }),
-          ]);
-          expect(reg.dirWatches()).toBe(2);
-          await until(
-            () => seen.some((inv) => inv.kind === "failed"),
-            "the refusal's window",
-          );
-        } finally {
-          fs.chmodSync(team, 0o700);
-        }
+        using _denied = refuseFile(team, "opendirSync", "readdirSync");
+        reg.judge();
+        expect(handle.deaf).toEqual([
+          expect.objectContaining({ kind: "refused", path: team }),
+        ]);
+        expect(reg.dirWatches()).toBe(2);
+        await until(
+          () => seen.some((inv) => inv.kind === "failed"),
+          "the refusal's window",
+        );
       },
     );
 
@@ -690,9 +679,15 @@ describe("WatcherRegistry", () => {
       // Gone is not refused: nothing at the path is no fault to show.
       expect(handle.deaf).toEqual([]);
       expect(seen.filter((inv) => inv.kind === "failed")).toEqual([]);
-      seen.length = 0;
-      fs.writeFileSync(path.join(root, "main"), "ref");
-      await until(() => seen.length > 0, "the root's next event");
+      // On macOS every watch shares one FSEvents stream, rebuilt when a watch
+      // closes, and a write landing in the rebuild is never reported, so the
+      // write is made again until the root's watch hears it.
+      const main = path.join(root, "main");
+      await untilHeard(
+        () => fs.writeFileSync(main, "ref"),
+        () => changedPaths(seen).includes(main),
+        "the root's next event",
+      );
     });
 
     test("where the recursive watch is native, a tree is one watch", () => {
@@ -715,8 +710,7 @@ describe("WatcherRegistry", () => {
     });
   });
 
-  // Root ignores directory permissions, so the second refusal cannot be built.
-  (process.getuid?.() === 0 ? test.skip : test)(
+  test(
     "a deaf directory refused again for another reason tells its slot the new fault",
     async () => {
       const parent = fs.mkdtempSync(path.join(os.tmpdir(), "watch-redeaf-"));
@@ -734,7 +728,7 @@ describe("WatcherRegistry", () => {
         );
         expect(handle.deaf[0]?.reason).toContain("ENOENT");
         fs.mkdirSync(dir);
-        fs.chmodSync(dir, 0o000);
+        using _denied = refuseFile(dir, "opendirSync", "readdirSync");
         reg.judge();
         await until(() => heard.length === 1, "the new refusal's window");
         expect(handle.deaf[0]?.reason).toContain("EACCES");
@@ -743,7 +737,6 @@ describe("WatcherRegistry", () => {
         ]);
       } finally {
         reg.closeAll();
-        fs.chmodSync(dir, 0o700);
         rmrf(parent);
       }
     },

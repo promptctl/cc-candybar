@@ -4,12 +4,17 @@
 // and bar-web.test.ts's; here, that each tool starts and answers.
 
 import { execFile, spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { promisify } from "node:util";
 
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
 import { shellEnvironment } from "../../../scripts/lib/shell";
 import { until } from "../../../scripts/lib/until";
+import { checkoutAt } from "../../helpers/checkout";
 import { daemonPool } from "../../helpers/spawn-test-daemon";
+import { untilTestEnds } from "../../helpers/test-end";
 
 jest.setTimeout(30_000);
 
@@ -18,6 +23,13 @@ jest.setTimeout(30_000);
 const SHELL = shellEnvironment(process.env);
 // Under the case's own budget, so a tool that hangs fails with what it said.
 const TOOL_BUDGET_MS = 20_000;
+
+// Where each tool draws its bar from, named as a developer can name it.
+let checkout: string;
+beforeAll(() => {
+  checkout = checkoutAt(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-dev-tools-")));
+});
+afterAll(() => fs.rmSync(checkout, { recursive: true, force: true }));
 
 const run = (args: string[]) =>
   promisify(execFile)("pnpm", ["-s", ...args], {
@@ -29,7 +41,9 @@ const run = (args: string[]) =>
 // A tool that starts a daemon starts it outside the pool, so the case holds a
 // slot for it: the suite's ceiling still counts every daemon it starts.
 async function holdingASlot(body: () => Promise<void>): Promise<void> {
-  const slot = await daemonPool.acquire();
+  const slot = await untilTestEnds((ended) =>
+    daemonPool.acquire({ until: ended }),
+  );
   try {
     await body();
   } finally {
@@ -39,7 +53,7 @@ async function holdingASlot(body: () => Promise<void>): Promise<void> {
 
 test("pnpm bar draws the bar and follows a click on the door to the menu", () =>
   holdingASlot(async () => {
-    const { stdout } = await run(["bar", DOOR_GLYPH]);
+    const { stdout } = await run(["bar", "--cwd", checkout, DOOR_GLYPH]);
     const [closed, opened] = stdout.split(`--- ${DOOR_GLYPH}\n`);
     expect(closed).toContain("--- closed");
     expect(closed).not.toContain("🎨 look");
@@ -51,7 +65,7 @@ test("pnpm bar:web serves the bar, and ctrl-c stops it", () =>
   holdingASlot(async () => {
     // Its own process group, as a terminal's foreground job is, so the
     // interrupt reaches pnpm and the server under it alike.
-    const server = spawn("pnpm", ["-s", "bar:web", "--port", "0"], {
+    const server = spawn("pnpm", ["-s", "bar:web", "--port", "0", "--cwd", checkout], {
       cwd: process.cwd(),
       env: SHELL,
       detached: true,

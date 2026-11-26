@@ -5,11 +5,10 @@ import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { retainerPathsTo } from "./helpers/retainer-path";
+import { retainerPathsFrom } from "./helpers/retainer-path";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { setImmediate as nextTurn } from "node:timers/promises";
 import v8 from "node:v8";
 import vm from "node:vm";
 import {
@@ -433,25 +432,22 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 // render once that render returns: the store, the scope its layout rows were
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
-const heldStores: object[] = [];
-test("a compile keeps nothing of a render once it returns", async () => {
+class CompileHolder {
+  readonly control = new ProbeStore(systemTimekeeper);
+  constructor(readonly compiled: CompiledConfig) {}
+}
+
+test("a compile keeps nothing of a render once it returns", () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
-  const compiled = compileDslConfig(compileInputOf(config));
-  // [LAW:verifiable-goals] Reachability is read off a heap snapshot, which
-  // collects first and follows only strong edges, so no collection count or
-  // wait is in the verdict. One store is held on purpose, as the control: it
-  // is the one path the snapshot must show, so an empty answer for the drawn
-  // store is one this reader could have failed to give, whatever happens to
-  // the class's name. The draw runs in its own event-loop turn before the
-  // snapshot, with no store crossing into the suspended test frame.
-  heldStores.push(new ProbeStore(systemTimekeeper));
-  try {
-    await nextTurn().then(() => drawAlone(config, compiled));
-    expect(await retainerPathsTo("ProbeStore")).toHaveLength(1);
-  } finally {
-    heldStores.length = 0;
-  }
-  expect(compiled.menuRuntime.action.bound).toBeUndefined();
+  const holder = new CompileHolder(compileDslConfig(compileInputOf(config)));
+  drawAlone(config, holder.compiled);
+  // The control is the one store strongly reachable from this holder. A
+  // second path names precisely how the compile keeps the render's store.
+  const paths = retainerPathsFrom("CompileHolder", "ProbeStore");
+  expect(paths).toEqual([
+    ["object / CompileHolder --control-->", "object / ProbeStore"],
+  ]);
+  expect(holder.compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
 // [LAW:verifiable-goals] ENTRY_BYTES, COMPILE_BYTES and VIEW_BYTES are the

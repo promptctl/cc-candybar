@@ -13,13 +13,14 @@
 // reproducible: `node scripts/heap-retainers.mjs snap.heapsnapshot FSReqPromise`.
 //
 // USAGE
-//   node scripts/heap-retainers.mjs <snapshot.heapsnapshot> <match-RE> [--limit N] [--json] [--strong]
+//   node scripts/heap-retainers.mjs <snapshot.heapsnapshot> <match-RE> [--limit N] [--json] [--strong] [--from root-RE]
 //
 //   <match-RE>   JS regexp matched against "<type> / <name>"; instances of
 //                matching nodes are the BFS targets.
 //   --limit N    trace at most N target instances (default 5). The cap is
 //                LOUD, not silent: a "(N more matching nodes not traced)" line
 //                is printed so truncation is never mistaken for completeness.
+//   --from RE    trace from a matching holder instead of the synthetic GC root.
 //   --json       emit { paths: [[ "<root>", ..., "<target>" ], ...] }.
 //   --strong     follow only edges that keep their target alive. A weak edge
 //                (a WeakRef's) holds nothing, so a path through one names the
@@ -69,14 +70,14 @@ function buildReverse(s, strong) {
 
 // Shortest retaining path (root-first list of labels) from any GC root to
 // `target`, found by BFS over reverse edges. Ordinal 0 is V8's synthetic root.
-function pathToRoot(s, reverse, target) {
+function pathToRoot(s, reverse, target, fromRoot) {
   const parent = new Map();
   parent.set(target, null);
   const queue = [target];
   let root = null;
   while (queue.length) {
     const node = queue.shift();
-    if (node === 0) {
+    if (fromRoot ? fromRoot.test(nodeLabel(s, node)) : node === 0) {
       root = node;
       break;
     }
@@ -90,7 +91,7 @@ function pathToRoot(s, reverse, target) {
   if (root === null) return null;
 
   const chain = [];
-  let cur = 0;
+  let cur = root;
   while (cur !== target) {
     const step = parent.get(cur);
     chain.push(`${nodeLabel(s, cur)} --${edgeLabel(s, step.rec)}-->`);
@@ -100,7 +101,7 @@ function pathToRoot(s, reverse, target) {
   return chain;
 }
 
-export function retainerPaths(s, re, limit, { strong = false } = {}) {
+export function retainerPaths(s, re, limit, { strong = false, fromRoot } = {}) {
   const reverse = buildReverse(s, strong);
   const targets = [];
   for (let i = 0; i < s.nodeCount; i++) {
@@ -114,7 +115,7 @@ export function retainerPaths(s, re, limit, { strong = false } = {}) {
   for (const t of targets) {
     if (paths.length === limit) break;
     traced++;
-    const path = pathToRoot(s, reverse, t);
+    const path = pathToRoot(s, reverse, t, fromRoot);
     if (path) paths.push(path);
   }
   return { paths, totalTargets: targets.length, traced };
@@ -126,7 +127,11 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--limit") opts.limit = Number(argv[++i]);
-    else if (a === "--json") opts.json = true;
+    else if (a === "--from") {
+      const pattern = argv[++i];
+      if (!pattern) throw new Error("--from requires a holder pattern");
+      opts.fromRoot = new RegExp(pattern);
+    } else if (a === "--json") opts.json = true;
     else if (a === "--strong") opts.strong = true;
     else positional.push(a);
   }
@@ -137,7 +142,7 @@ function main() {
   const { positional, opts } = parseArgs(process.argv.slice(2));
   if (positional.length !== 2) {
     process.stderr.write(
-      "usage: heap-retainers.mjs <snapshot> <match-RE> [--limit N] [--json] [--strong]\n",
+      "usage: heap-retainers.mjs <snapshot> <match-RE> [--limit N] [--json] [--strong] [--from root-RE]\n",
     );
     process.exit(2);
   }

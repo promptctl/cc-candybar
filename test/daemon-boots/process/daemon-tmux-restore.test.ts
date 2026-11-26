@@ -13,14 +13,14 @@ import {
 } from "../../../src/daemon/retired-tmux-status";
 import { textOf } from "../../../src/render/frame";
 import { configFlag, render } from "../../helpers/daemon-e2e";
-import { HAS_TMUX, privateTmux } from "../../helpers/private-tmux";
+import { privateTmux } from "../../helpers/private-tmux";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
 } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../../scripts/lib/until";
 
-(HAS_TMUX ? test : test.skip)(
+test(
   "an upgraded host restores its old status layout while drawing the ordinary statusline",
   async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "ccb-tmux-restore-"));

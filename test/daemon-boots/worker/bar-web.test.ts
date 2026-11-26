@@ -5,11 +5,14 @@
 // a link the last render no longer draws is refused, naming it; a size that is
 // not whole cells is refused; only the page drives it (JSON, to its own host).
 
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 
 import { serveBar, type BarWeb, type View } from "../../../scripts/bar-web/server";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
+import { checkoutAt } from "../../helpers/checkout";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { WORKER_SHELL } from "../../helpers/session-environment";
 
@@ -20,10 +23,15 @@ const ASSETS = path.join(process.cwd(), "scripts/bar-web");
 describe("bar-web", () => {
   let web: BarWeb | undefined;
   afterEach(async () => await web?.close());
+  let checkout: string;
+  beforeAll(() => {
+    checkout = checkoutAt(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bar-web-")));
+  });
+  afterAll(() => fs.rmSync(checkout, { recursive: true, force: true }));
 
   const serve = (): Promise<BarWeb> =>
     serveBar(
-      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false, shell: WORKER_SHELL },
+      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: checkout, ssh: false, shell: WORKER_SHELL },
       startBarDaemon,
     );
 

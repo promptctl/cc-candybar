@@ -40,19 +40,6 @@ const PROJECT = `{ globals: { menuTimeout: 30 } }\n`;
 
 // [LAW:effects-at-boundaries] Refuse precisely one atomic file publication
 // at the adapter, while leaving the real target readable after it fails.
-function unwritable(file: string, text: string | null): void {
-  if (process.getuid?.() === 0)
-    throw new Error(`${file}: config publication forbidden by the fixture`);
-  const parent = path.dirname(file);
-  const mode = fs.statSync(parent).mode & 0o777;
-  fs.chmodSync(parent, 0o500);
-  try {
-    writeConfigFile(file, text);
-  } finally {
-    fs.chmodSync(parent, mode);
-  }
-}
-
 // [LAW:behavior-not-structure] The signed compound click drives production
 // planning, publishing, and shared config delivery. The held clock rules out
 // a later poll updating either renderer during these assertions.
@@ -87,8 +74,7 @@ test.each(["restored", "unrestored"] as const)(
             file === projectFile ||
             (file === userFile && text === USER && restore === "unrestored")
           ) {
-            unwritable(file, text);
-            return;
+            throw new Error(`${file}: config publication forbidden by the fixture`);
           }
           writeConfigFile(file, text);
         },

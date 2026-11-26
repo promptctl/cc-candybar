@@ -140,6 +140,10 @@ export type StartBarDaemon = (isolated: IsolatedDaemonEnv) => Promise<BarDaemon>
 // per run, and it dies with the tool.
 const outsideThePool: AcquireSlot = async () => ({ release: () => {} });
 
+// A hand-run tool waits on its daemon's first answer for as long as the boot
+// takes: its user is watching, and an interrupt ends the tool and its daemon.
+const UNTIL_INTERRUPTED = new AbortController().signal;
+
 /** A real daemon that dies with this process: the one a hand-run tool draws on. */
 export const realBarDaemon: StartBarDaemon = async ({ env }) => {
   const daemon = await startDaemonWithEnv(
@@ -149,6 +153,7 @@ export const realBarDaemon: StartBarDaemon = async ({ env }) => {
       NODE_OPTIONS: withStamp(env.NODE_OPTIONS),
     },
     outsideThePool,
+    UNTIL_INTERRUPTED,
   );
   return {
     target: daemon.sockPath,

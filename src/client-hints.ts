@@ -25,7 +25,11 @@ import { detectTmuxHint } from "./tmux-hint";
 // sshd builds (and the user's git-taculous zsh theme) key on, and SSH_TTY is
 // the one that survives some `sudo` env_keep policies. Extra names can only
 // widen recall of a fact that is otherwise reported as a plain `false`.
-const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
+export const SSH_ENV_VARS = [
+  "SSH_CONNECTION",
+  "SSH_CLIENT",
+  "SSH_TTY",
+] as const;
 
 export function terminalObservation(
   env: Readonly<NodeJS.ProcessEnv>,

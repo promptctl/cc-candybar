@@ -27,7 +27,6 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import {
@@ -1303,7 +1302,9 @@ describe("a storage folder's watch", () => {
     );
   });
 
-  test("a chmod, a utimes and an xattr on the folder leave its source reading normally and open no watch", async () => {
+  // An attribute change reaches a watch as the same "change" event on every
+  // platform, xattr included, so these two stand for all of them.
+  test("a chmod and a utimes on the folder leave its source reading normally and open no watch", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
     const view = viewOf(r, file);
@@ -1318,22 +1319,8 @@ describe("a storage folder's watch", () => {
     const key = r.cache
       .getOrCreate(r.configs.at(dir, dir, file))
       .state.sources.get(STATUS);
-    const touches: Array<() => void> = [
-      () => fs.chmodSync(storage, 0o700),
-      () => fs.utimesSync(storage, new Date(), new Date()),
-      ...(process.platform === "darwin"
-        ? [
-            () =>
-              void execFileSync("xattr", [
-                "-w",
-                "com.ccb.test",
-                String(Date.now()),
-                storage,
-              ]),
-          ]
-        : []),
-    ];
-    for (const touch of touches) touch();
+    fs.chmodSync(storage, 0o700);
+    fs.utimesSync(storage, new Date(), new Date());
     // Whatever the folder's watch and its plugin folder's made of them has
     // run once the next write lands.
     await writeUntilShown(

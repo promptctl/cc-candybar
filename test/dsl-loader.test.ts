@@ -2521,8 +2521,10 @@ describe("a file's load — editability advisory", () => {
   });
 
   test("a search that finds no user file leaves the bundled config ready without an advisory", () => {
+    // Every place but the shared data folders is under the home; their
+    // default is the machine's own, which a plugin installed there would join.
     const { snapshot } = discoverFixture(
-      worldOf(hostOf({}, { home: dir })),
+      worldOf(hostOf({ XDG_DATA_DIRS: path.join(dir, "share") }, { home: dir })),
       undefined,
       dir,
     );

@@ -158,6 +158,9 @@ export interface RunningDaemon {
 export async function startDaemonWithEnv(
   env: NodeJS.ProcessEnv,
   acquire: AcquireSlot,
+  // When the caller stops waiting for the daemon's first answer: a test at
+  // its end, a hand-run tool at the end of its user's patience.
+  until: AbortSignal,
   entry?: DaemonEntry,
 ): Promise<RunningDaemon> {
   const sockPath = env.CC_CANDYBAR_SOCKET;
@@ -173,7 +176,7 @@ export async function startDaemonWithEnv(
     entry,
   );
 
-  const readiness = await awaitReadiness(child, sockPath);
+  const readiness = await awaitReadiness(child, sockPath, until);
   if (readiness.phase !== "serving") {
     // Gone before the throw, since the caller's next step is removing the
     // directories it writes into.
@@ -186,31 +189,8 @@ export async function startDaemonWithEnv(
   return { child, sockPath, signalDaemon, stop };
 }
 
-// [LAW:one-source-of-truth] ONE readiness budget for every call site of this
-// helper — the PR #226 review's point stands: no per-caller knob, so a number
-// that moves moves in one place.
-//
-// MEASURED, not inherited (brandon-ci-flakes-630.c7o). `tsx` compiling and
-// loading src/index.ts is the entire cost; the daemon's own bind-to-serving step
-// is noise beside it. Spawn to answered `stats`, on a 12-core Mac with a warm
-// tsx cache:
-//
-//   machine state                             boot to serving
-//   load ~17 / 12 cores (1.4x oversubscribed)   0.49 - 0.59 s
-//   4 spawns at once (the maxWorkers: 4 shape)  0.63 - 0.95 s
-//   load ~40 (3.3x)                             2.31 - 2.85 s
-//   load ~116 (9.7x)                            over 5 s — the reported failure
-//
-// Boot cost tracks CPU oversubscription almost linearly, so this number is a
-// statement about how starved a machine may be before the suite calls a healthy
-// daemon broken. 12 s buys ~24x oversubscription — 2.4x the load that broke the
-// inherited 5 s — and two of them still fit inside jest.config.js's 30 s
-// testTimeout, which is what a cold-restart test spends it on.
-export const READINESS_BUDGET_MS = 12_000;
-
-// A bound socket answered in 2-65 ms across every row above, so this bounds a
-// round trip that has already been accepted, not a boot. It stays far below the
-// budget on purpose: one unanswered attempt must not consume the boot's wait.
+// This bounds a round trip that has already been accepted, not a boot, so an
+// unanswered attempt is retried rather than consuming the boot's wait.
 const STATS_REPLY_BUDGET_MS = 1000;
 
 const READINESS_POLL_MS = 25;
@@ -246,21 +226,18 @@ export type ReadinessFailure =
 type Readiness = { readonly phase: "serving" } | ReadinessFailure;
 
 // [LAW:no-ambient-temporal-coupling] Every failure this helper can diagnose is
-// awaited as a named fact; the budget bounds the one state that publishes none.
-// The daemon writes nothing before it binds — its first log line is `daemon up`,
-// AFTER the bind — so there is no earlier milestone to wait on inside the
-// source's compile, which is exactly the phase that times out. But a daemon that
-// refuses to boot EXITS, and it is the child this helper holds, so every refusal the
-// daemon diagnoses about itself (`refusing to boot`, the fork-bomb breaker,
-// `EADDRINUSE ... exiting`) is readable the instant it happens instead of at the
-// end of a budget. That is what lets the budget above be generous: it is no
-// longer the detector for anything the daemon can tell us itself, only the last
-// bound on a live process that has not answered yet.
+// awaited as a named fact. A daemon that refuses to boot EXITS, and it is the
+// child this helper holds, so every refusal the daemon diagnoses about itself
+// (`refusing to boot`, the fork-bomb breaker, `EADDRINUSE ... exiting`) is
+// readable the instant it happens. A live process that has not answered yet
+// publishes nothing (the daemon writes nothing before it binds), and a boot
+// takes as long as the machine gives it, so the wait for one ends only when its
+// caller stops waiting.
 async function awaitReadiness(
   child: ChildProcess,
   sockPath: string,
+  until: AbortSignal,
 ): Promise<Readiness> {
-  const deadline = Date.now() + READINESS_BUDGET_MS;
   // Why the last probe of the bound socket was not served, or `null` while
   // there is no socket to probe.
   let lastProbe: string | null = null;
@@ -276,7 +253,7 @@ async function awaitReadiness(
     }
     const exit = exitedAlready(child);
     if (exit !== null) return failed(exit);
-    if (Date.now() >= deadline) return failed(null);
+    if (until.aborted) return failed(null);
     await new Promise((r) => setTimeout(r, READINESS_POLL_MS));
   }
 }
@@ -345,8 +322,8 @@ function socketDid(readiness: ReadinessFailure, sockPath: string): string {
 function processDid(exit: ExitResult | null): string {
   if (exit === null) {
     return (
-      `the process was still running when the ${READINESS_BUDGET_MS}ms budget ` +
-      `expired, so this is a slow boot, not a refusal`
+      `the process was still running when the wait for it ended, so this is ` +
+      `a slow or hung boot, not a refusal`
     );
   }
   const how =
@@ -382,6 +359,7 @@ export async function startIsolatedDaemon(
   tmpPrefix: string,
   base: NodeJS.ProcessEnv,
   acquire: AcquireSlot,
+  until: AbortSignal,
   entry?: DaemonEntry,
 ): Promise<IsolatedDaemonHandle> {
   const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
@@ -390,7 +368,7 @@ export async function startIsolatedDaemon(
   );
   let daemon: RunningDaemon;
   try {
-    daemon = await startDaemonWithEnv(env, acquire, entry);
+    daemon = await startDaemonWithEnv(env, acquire, until, entry);
   } catch (e) {
     failAfter(e, removeTmpDirs);
   }
