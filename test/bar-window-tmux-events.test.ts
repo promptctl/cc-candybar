@@ -104,15 +104,15 @@ test("window geometry observes a private server and releases just its own hooks 
       },
       (reason) => failure.resolve(reason),
     );
-    const untilChanged = () =>
+    const observed = (event: Promise<void>) =>
       Promise.race([
-        change.promise,
+        event,
         failure.promise.then((reason) => {
           throw new Error(reason);
         }),
       ]);
     if (events) {
-      await untilChanged();
+      await observed(change.promise);
       expect(tmux.run("list-clients")).toBe("");
       expect(
         tmux
@@ -121,23 +121,21 @@ test("window geometry observes a private server and releases just its own hooks 
       ).toBe("0");
       change = Promise.withResolvers<void>();
       const reserved = split(title, "");
-      await untilChanged();
+      await observed(change.promise);
       initial = pid;
       const firstLease = held();
       expect(firstLease).toMatch(/^ccb_window_/);
-      tmux.run(
+      const edit = [
         "set-hook",
         "-t",
         "bar",
         "client-resized[another_user]",
         "set-hook -E @another",
-      );
-      await Promise.race([
-        successor.promise,
-        failure.promise.then((reason) => {
-          throw new Error(reason);
-        }),
-      ]);
+      ];
+      // A reload can edit several hooks before its replacement is ready.
+      // Repeated edits must succeed and preserve the same reserved pane.
+      tmux.run(...edit, ";", ...edit);
+      await observed(successor.promise);
       expect(held()).not.toBe(firstLease);
       expect(held()).toMatch(/^ccb_window_/);
       expect(ids()).toEqual([...survivors, reserved].sort());
