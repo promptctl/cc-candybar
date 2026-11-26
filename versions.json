@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1fbf11c6aa369490e0e161f6a43230fe30e77989",
+      "timestamp": "2026-11-26T06:34:55.645Z",
+      "commits": [
+        {
+          "sha": "1fbf11c6aa369490e0e161f6a43230fe30e77989",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T06:33:28Z",
+          "message": "chore(release): set `package.json` to 1.241.0\n\n## [1.241.0](https://github.com/promptctl/cc-candybar/compare/v1.240.0...v1.241.0) (2026-11-26)\n\n### Features\n\n* **url-handler:** copy and open links clicked over ssh act on the Mac ([#968](https://github.com/promptctl/cc-candybar/issues/968)) ([c9c14f8](https://github.com/promptctl/cc-candybar/commit/c9c14f8880bc75e20723dcac164e8fbe8191d480))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
       "sha": "01f451895e503749088fbb6cc59f1172bff5684f",
@@ -174,21 +189,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:02:21-07:00",
           "message": "test: isolate terminal, filesystem and process observations from the host\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c9c14f8880bc75e20723dcac164e8fbe8191d480",
-      "timestamp": "2026-11-26T06:30:58.971Z",
-      "commits": [
-        {
-          "sha": "c9c14f8880bc75e20723dcac164e8fbe8191d480",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T23:29:46-07:00",
-          "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (#968)\n\n* feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n\n* feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n\n* fix(url-handler): one place says where a click's copy and open act, and the app routes by one route (candybar-ssh-links-16rz.6oi)\n\nReview pass 1 of #968: the fact that a copy or open acts on the desktop was spelled in a delivery arm, an optional flag, a predicate and a synthetic arrival; it is now one required actsOn on the act and on the forwarder, read in one place. The app's decisions on routing and verdicts move into wire.swift with expectations; the verdict is one enum.\n\n* test(follow): cover the window lane in the native client\n\n* fix(ssh): settle cold clicks in their own turn and distinguish remote files from folders\n\n* refactor(ssh): let the click connection own desktop act delivery\n\n* fix(settings-menu): share row order and verify saved renderer switches\n\n* fix(window): distinguish the window lane from renderer wire version 19\n\n* test(window): save every renderer switch through the menu\n\n* fix(ssh): refuse an explicit null destination before running a click\n\n* test(ssh): pin click failures to the initiating turn\n\n* test(ssh): hand cold configs through the real click mailbox\n\n* fix(ssh): retain ordinary config delivery after a cold click\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },
