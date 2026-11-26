@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-967",
+      "ref": "refs/pull/967/merge",
+      "sha": "9daf91fa636116338216775befc8892f08d236ba",
+      "timestamp": "2026-11-26T05:44:30.085Z",
+      "commits": [
+        {
+          "sha": "9daf91fa636116338216775befc8892f08d236ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:43:15Z",
+          "message": "Merge 19585af5c82fca5a10948cf9a0a62b8899dd5ea7 into 2ccd7d18d29936c29c3f7f7f09208c87d6c65270\n"
+        },
+        {
+          "sha": "19585af5c82fca5a10948cf9a0a62b8899dd5ea7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:07-07:00",
+          "message": "fix(window): distinguish the window lane from renderer wire version 19\n"
+        },
+        {
+          "sha": "9f91b084bb5bc72e77d57519f8bc6f1ffa34157b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:42:43-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-bar-window-hpro.akk\n"
+        },
+        {
+          "sha": "cf441f771e9880b2b6a4aa58b3a4de26e4360734",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:54:28-07:00",
+          "message": "test(follow): cover the window lane in the native client\n"
+        },
+        {
+          "sha": "7791b2ce8c10b68a72118c4fb1954932ecb83ab5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T02:30:35-07:00",
+          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-964",
       "ref": "refs/pull/964/merge",
       "sha": "c6f1df0d76a45351a09481909ef0b5dfd1c1cfd6",
@@ -249,35 +292,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:29:00-07:00",
           "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-967",
-      "ref": "refs/pull/967/merge",
-      "sha": "30da1d7113de3422661150c73a655cef8d46bf0b",
-      "timestamp": "2026-11-26T04:56:00.189Z",
-      "commits": [
-        {
-          "sha": "30da1d7113de3422661150c73a655cef8d46bf0b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T04:54:39Z",
-          "message": "Merge cf441f771e9880b2b6a4aa58b3a4de26e4360734 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
-        },
-        {
-          "sha": "cf441f771e9880b2b6a4aa58b3a4de26e4360734",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:54:28-07:00",
-          "message": "test(follow): cover the window lane in the native client\n"
-        },
-        {
-          "sha": "7791b2ce8c10b68a72118c4fb1954932ecb83ab5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T02:30:35-07:00",
-          "message": "feat(lanes): a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk)\n\nThe window lane (🧪 window (D), `experimentalWindow`) replaces Claude Code's\nstatusline the way the tmux pane does: while a window follower is attached,\nthe statusline answers the one-row handoff, and its `[⟲ claude]` button turns\nthe lane off, ending the follower's subscription SWITCHED_OFF.\n\nEach lane names its feed encoding in the lane table: the statusline the ANSI,\nthe pane the ANSI with its hit map, the window the Frame, whose runs carry\ntheir signed links. Pointer ownership is derived from the encoding, so the\nwindow may own the session's pointer as the pane does; the pointer now rides\non the session's viewers rather than on one lane.\n\nAlong the way: the protocol check's lane-table anchor reads the table's new\n`satisfies` clause, and a watcher test that wrote once before its watch was\nlive now proves the watch live first.\n"
         }
       ]
     }
