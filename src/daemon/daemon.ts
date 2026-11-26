@@ -36,6 +36,7 @@ import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { createPayloadProviders } from "./payload-providers";
+import { Pricing, type FetchPricing } from "./cache/pricing";
 import { runTeardown, type TeardownStep } from "../utils/teardown";
 import { FileEventDelivery } from "./cache/file-events";
 import type { Timekeeper } from "../time";
@@ -165,6 +166,8 @@ export interface DaemonAdapters {
   readonly stat: BundleStat;
   readonly checkoutFiles: CheckoutFiles;
   readonly writeConfigFile: WriteConfigFile;
+  // The remote price table's body.
+  readonly fetchPricing: FetchPricing;
 }
 
 // What a daemon takes from the process that runs it: where its files are, what
@@ -185,7 +188,10 @@ export interface DaemonInputs extends DaemonAdapters {
   // The paths the daemon itself reads or writes. The files an adapter owns are
   // aimed by the same value at the adapter (production-adapters.ts), so a daemon
   // aimed at a temporary directory writes nowhere else.
-  readonly paths: Pick<DaemonPaths, "socket" | "state" | "watchProbe">;
+  readonly paths: Pick<
+    DaemonPaths,
+    "socket" | "state" | "watchProbe" | "pricingCache"
+  >;
   readonly memoryLimitBytes: number;
   // [LAW:effects-at-boundaries] The daemon's clock: what it draws and times
   // requests by, and every timer its pieces set. A test holds it by hand.
@@ -547,9 +553,19 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     watchers: watcherRegistry,
     fileEvents,
   });
+  // [LAW:single-enforcer] The daemon's one price table, which every fold
+  // prices by, closed with it.
+  const pricing = new Pricing({
+    fetch: inputs.fetchPricing,
+    cache: paths.pricingCache,
+    clock,
+    ledger: refreshLedger,
+    logger: log,
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
+    prices: pricing,
     watchers: watcherRegistry,
     fileEvents,
     clock,
@@ -1206,6 +1222,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       // let go, and hands the closed cache nothing.
       ["configDiscovery close", () => configDiscovery.close()],
       ...rendererSteps("close-views"),
+      // Settles once its load in flight has ended, so a fold waiting on it
+      // goes on before the stores close.
+      ["pricing close", () => pricing.close()],
       ...payloadProviders.closes,
       ["runs close", () => runs.close()],
       // After the collector, which holds every session's runs: its close

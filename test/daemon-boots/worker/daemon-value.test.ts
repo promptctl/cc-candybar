@@ -77,6 +77,8 @@ import { until } from "../../../scripts/lib/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
 import { heldClock } from "../../helpers/held-clock";
+import type { FetchPricing } from "../../../src/daemon/cache/pricing";
+import { failed } from "../../../src/utils/outcome";
 
 const VALUE_REFUSED = sessionIdOf("value-refused");
 const VALUE_CLOSE = sessionIdOf("value-close");
@@ -180,7 +182,14 @@ describe("the daemon is a value", () => {
   // The machine a case runs on, read when asked: the worker's environment as it
   // stands (a case may have put a stub on PATH), with its state under `root`.
   const hostNow = (): Host =>
-    hostOf({ ...process.env, XDG_STATE_HOME: path.join(root, "state") });
+    hostOf(
+      {
+        ...process.env,
+        XDG_STATE_HOME: path.join(root, "state"),
+        XDG_CACHE_HOME: path.join(root, "cache"),
+      },
+      { home: root },
+    );
   // A link as this test's daemon draws it: signed with the key in its state
   // directory.
   const drawnHere = (link: string): string =>
@@ -196,6 +205,7 @@ describe("the daemon is a value", () => {
       profile?: () => never;
       renderer?: RendererPort;
       claudeInput?: () => ClaudeInputEdge;
+      fetchPricing?: FetchPricing;
     } = {},
   ): ServedDaemon => {
     const { profile } = inputs;
@@ -210,6 +220,7 @@ describe("the daemon is a value", () => {
       ...(profile && { profile }),
       ...(inputs.renderer && { renderer: inputs.renderer }),
       ...(inputs.claudeInput && { claudeInput: inputs.claudeInput }),
+      ...(inputs.fetchPricing && { fetchPricing: inputs.fetchPricing }),
     });
     open = daemon;
     openLogs.push(daemonLog);
@@ -330,6 +341,9 @@ describe("the daemon is a value", () => {
     // time, so what is left here is the case's own.
     rmSync(sessionStatePath(hostNow()), { force: true });
     rmSync(settingsHistoryPath(hostNow()), { force: true });
+    // A case's daemon that priced an entry left a fresh table here, which the
+    // next case's would read in place of its own fetch.
+    rmSync(daemonPaths(hostNow()).pricingCache, { force: true });
   });
 
   afterAll(() => {
@@ -843,5 +857,78 @@ describe("the daemon is a value", () => {
         category: "user-shell",
       }),
     ).toMatchObject({ ok: false, reason: "aborted" });
+  });
+
+  test("close ends a pricing load in flight: its fetch is aborted, nothing is written, and nothing of it is left armed", async () => {
+    writeConfig(`{
+      segments: { mark: { template: 'priced {{ .session.cost }}' } },
+      root: { h: ['mark'] },
+    }`);
+    // A usage entry with no cost, which the session's fold prices.
+    writeFileSync(
+      path.join(projectDir, "transcript.jsonl"),
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        requestId: "req-priced",
+        message: {
+          id: "msg-priced",
+          model: "claude-opus-4-8",
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      }) + "\n",
+    );
+    let asked!: AbortSignal;
+    let fetching!: () => void;
+    const fetchAsked = new Promise<void>((resolve) => (fetching = resolve));
+    // [LAW:verifiable-goals] The response held: a machine timer stands in for
+    // the socket a real fetch holds open, and only the abort clears it, so a
+    // close that left the fetch running leaves it in the record.
+    const fetchPricing: FetchPricing = (signal) =>
+      new Promise((resolve) => {
+        asked = signal;
+        const socket = setTimeout(
+          () => resolve(failed("never answered", "read")),
+          10 * 60_000,
+        );
+        signal.addEventListener("abort", () => {
+          clearTimeout(socket);
+          resolve(failed("aborted", "read"));
+        });
+        fetching();
+      });
+
+    const settled = [...live.keys()];
+    baseline = new Set(settled);
+    const daemon = construct({ fetchPricing });
+    const render = daemon.handle(
+      classifyInbound(
+        renderRequest("value-pricing", systemTimekeeper.now() + 20_000),
+      ),
+      () => false,
+      daemon.stats.accept(),
+      () => false,
+    );
+    await fetchAsked;
+
+    const { settled: closing } = await daemon.close();
+    open = null;
+    afterClose = { armed: [], fired: [] };
+    expect(asked.aborted).toBe(true);
+    expect(await closing).toEqual({ unreaped: [] });
+    await render;
+
+    // Turns, not timers: a wait of this test's own would be in the record.
+    const leftover = () =>
+      [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
+    const quietBy = Date.now() + 5_000;
+    while (leftover().length > 0 && Date.now() < quietBy) {
+      await new Promise((turn) => setImmediate(turn));
+    }
+    const { armed } = afterClose;
+    afterClose = null;
+    const origins = (held: Error[]) => held.map(({ stack }) => stack);
+    expect(origins(leftover())).toEqual([]);
+    expect(origins(armed)).toEqual([]);
+    expect(existsSync(daemonPaths(hostNow()).pricingCache)).toBe(false);
   });
 });

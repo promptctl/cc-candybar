@@ -25,6 +25,7 @@ import {
   speedPayloadOf,
 } from "../src/renderer/render-payload";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
+import { settledPrices } from "./helpers/prices";
 import { turnOpenAfter, type ParsedEntry } from "../src/utils/claude";
 import type { SpeedSample } from "../src/facts/world-state";
 import { validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
@@ -144,6 +145,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -175,6 +177,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
   test("a sample says whether its turn is open: a prompt opens it, a tool call keeps it, a final message closes it", async () => {
     const t = join(dir, "T.jsonl");
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -208,6 +211,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -228,6 +232,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -259,6 +264,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
   test("the ring accumulates recent samples oldest→newest", async () => {
     const t = join(dir, "R.jsonl");
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,
@@ -296,6 +302,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     // order the samples were inserted.
     const t = join(dir, "O.jsonl");
     const store = new SessionUsageStore({
+      prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
       sweepIntervalMs: 0,

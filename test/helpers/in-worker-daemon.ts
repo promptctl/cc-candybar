@@ -47,6 +47,17 @@ import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "../../scripts/lib/daemon/wire";
 import type { StartBarDaemon } from "../../scripts/lib/drive-bar";
 import { memoryConnection } from "./memory-connection";
+import type { FetchPricing } from "../../src/daemon/cache/pricing";
+import { ok } from "../../src/utils/outcome";
+
+// [LAW:effects-at-boundaries] No daemon a case builds reaches the network: its
+// price fetch answers the repository's pricing.json, the file the remote one
+// is published from. A case about the fetch passes its own.
+const REPO_PRICES = fs.readFileSync(
+  path.join(__dirname, "..", "..", "pricing.json"),
+  "utf8",
+);
+const repoPricing: FetchPricing = () => Promise.resolve(ok(REPO_PRICES));
 
 export type DaemonOverrides = Partial<
   Omit<DaemonInputs, "profile" | "paths">
@@ -113,6 +124,7 @@ export function prepareDaemon(
     const daemon = createDaemon({
       region: systemRegion(),
       ...productionAdapters(paths, daemonLog, clock),
+      fetchPricing: repoPricing,
       renderer: inProcessRenderer(),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
