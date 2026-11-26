@@ -78,10 +78,9 @@ export const TOGGLED_LANES = LANE_NAMES.filter(
 // Which lanes a session's settings switch on.
 export type LaneSwitches = Readonly<Record<Lane, boolean>>;
 
-// [LAW:one-source-of-truth] The most frames a second a lane is drawn at, while
-// its pane is on a screen: the closest the daemon's feed spaces two frames,
-// and the rate each lane's toggle turns its spinner at, so the spinner is
-// smooth exactly when frames arrive as fast as the feed draws them.
+// [LAW:one-source-of-truth] The animation rate for a visible surface. The feed and
+// the spinner share this cadence. A click that changes the session view can
+// publish an additional frame immediately.
 export const MOVING_FPS = 30;
 
 // [LAW:nothing-unseen] What one lane of a session's frames is doing, as the

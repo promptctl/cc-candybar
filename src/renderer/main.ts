@@ -345,8 +345,23 @@ export function mainRenderer(
         retireSession(parts, event.session);
         return;
       case "effect-done": {
-        if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
-        if (parts.acts.done(event.of, event.session, event.outcome)) return;
+        if (parts.verbs.changeDone(event.of, event.outcome, effects)) {
+          // A click's file changes settle in its own host slot, after the
+          // renderer receives the committed configuration. Its next draw can
+          // now show that configuration and the click's consequence together.
+          if (event.session !== null && event.outcome.kind !== "closing")
+            feeds.wake(event.session, "interaction", time.tick);
+          return;
+        }
+        if (parts.acts.done(event.of, event.session, event.outcome)) {
+          if (
+            event.session !== null &&
+            (event.outcome.kind === "failed" ||
+              event.outcome.kind === "refused")
+          )
+            feeds.wake(event.session, "interaction", time.tick);
+          return;
+        }
         const delivery = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
@@ -391,7 +406,16 @@ export function mainRenderer(
               `no configuration for this click's origin ${originKey(origin)}`,
             );
         }
+        const prior =
+          click.scope === "session"
+            ? parts.edits.view.revision(click.session)
+            : undefined;
         clickTurn(parts, { ...event, context }, effects, record);
+        if (
+          click.scope === "session" &&
+          prior !== parts.edits.view.revision(click.session)
+        )
+          feeds.wake(click.session, "interaction", time.tick);
         return;
       }
       case "viewers":

@@ -367,7 +367,17 @@ describe("a wake", () => {
     expect(r.feeds.next()).toBe(0.5);
   });
 
-  test("wakes of every cause at 1 ms intervals draw a shown feed at most once a moving period, and an unseen one once a still period", () => {
+  test("a click that changed a visible control is due immediately; an unseen surface keeps its budget", () => {
+    for (const shown of [true, false]) {
+      const r = rig();
+      view({ [S]: watched(shown) })(r.feeds);
+      r.turn(0);
+      r.feeds.wake(S, "interaction", tick(0.001));
+      expect(r.feeds.next()).toBe(shown ? 0.001 : 1);
+    }
+  });
+
+  test("background wakes at 1 ms intervals draw a shown feed at most once a moving period, and an unseen one once a still period", () => {
     for (const [shown, spacing] of [
       [true, 0.1],
       [false, 1],
@@ -391,7 +401,7 @@ describe("a wake", () => {
         );
       r.feeds.closeAll(tick(2));
       expect(r.logged.at(-1)).toMatch(
-        / woke=data:\d+,state:\d+,reload:\d+,visibility:0,viewers:0 coalesced=[1-9]/,
+        / woke=data:\d+,state:\d+,reload:\d+,visibility:0,viewers:0,interaction:0 coalesced=[1-9]/,
       );
     }
   });
