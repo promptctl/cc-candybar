@@ -71,32 +71,7 @@ describe("a launcher settles", () => {
       reason: "aborted",
       stderr: expect.stringContaining("LAST"),
     });
-  });
-
-  test("past a descendant that left the group holding the launch's stdout", async () => {
-    const { closing, launcher } = scope();
-    const pidFile = path.join(dir, "escaped");
-    const run = launcher.launch({
-      bin: process.execPath,
-      args: [
-        "-e",
-        `const c = require("node:child_process").spawn("sleep", ["5"], { detached: true, stdio: "inherit" });
-         process.on("SIGTERM", () => {});
-         require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid));
-         setInterval(() => {}, 1000);`,
-      ],
-      category: "user-shell",
-    });
-    await until(
-      () => existsSync(pidFile) && readFileSync(pidFile, "utf8") !== "",
-      "the descendant started",
-    );
-    const escaped = Number(readFileSync(pidFile, "utf8"));
-    closing.abort(new Error("closed"));
     await launcher.settled();
-    await expect(run).resolves.toMatchObject({ reason: "aborted" });
-    expect(processProbe.alive(escaped)).toBe(true);
-    process.kill(escaped, "SIGKILL");
   });
 
   test("naming a launch the OS would not let it end, until that child exits, whatever holds its pipes", async () => {

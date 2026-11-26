@@ -15,21 +15,31 @@ import type { DaemonEntry } from "../../scripts/lib/daemon/process";
 import { fromThePool } from "./spawn-test-daemon";
 import { untilTestEnds } from "./test-end";
 
-export const prepareIsolatedDaemonEnv = (tmpPrefix: string): IsolatedDaemonEnv =>
-  prepareOver(tmpPrefix, process.env);
+export const prepareIsolatedDaemonEnv = (
+  tmpPrefix: string,
+): IsolatedDaemonEnv => prepareOver(tmpPrefix, process.env);
 
 export const spawnDaemonWithEnv = (
   env: NodeJS.ProcessEnv,
   entry?: DaemonEntry,
 ): Promise<RunningDaemon> =>
-  untilTestEnds((ended) =>
-    startDaemonWithEnv(env, fromThePool(ended), ended, entry),
+  untilTestEnds(
+    (ended) => startDaemonWithEnv(env, fromThePool(ended), ended, entry),
+    "the isolated daemon to start",
   );
 
 export const spawnIsolatedDaemon = (
   tmpPrefix: string,
   entry?: DaemonEntry,
 ): Promise<IsolatedDaemonHandle> =>
-  untilTestEnds((ended) =>
-    startIsolatedDaemon(tmpPrefix, process.env, fromThePool(ended), ended, entry),
+  untilTestEnds(
+    (ended) =>
+      startIsolatedDaemon(
+        tmpPrefix,
+        process.env,
+        fromThePool(ended),
+        ended,
+        entry,
+      ),
+    "the isolated daemon to start",
   );

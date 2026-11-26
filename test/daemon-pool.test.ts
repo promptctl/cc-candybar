@@ -27,7 +27,10 @@ function tmpPoolDir(): string {
 
 // A slot, waited for until the test ends.
 const slotOf = (pool: DaemonPool) =>
-  untilTestEnds((ended) => pool.acquire({ until: ended, retryIntervalMs: 50 }));
+  untilTestEnds(
+    (ended) => pool.acquire({ until: ended, retryIntervalMs: 50 }),
+    "a daemon pool slot",
+  );
 
 // An ask whose wait has already ended: one pass over every slot, so it takes
 // a free one and refuses a full pool, on no clock.

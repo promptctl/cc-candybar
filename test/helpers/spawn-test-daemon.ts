@@ -45,7 +45,9 @@ export function spawnTestDaemon(
   pool: DaemonPool = daemonPool,
   entry: DaemonEntry = SOURCE_ENTRY,
 ): Promise<DaemonProcess> {
-  return untilTestEnds((ended) =>
-    spawnDaemonProcess(env, () => pool.acquire({ until: ended }), entry),
+  return untilTestEnds(
+    (ended) =>
+      spawnDaemonProcess(env, () => pool.acquire({ until: ended }), entry),
+    "the isolated daemon to start",
   );
 }

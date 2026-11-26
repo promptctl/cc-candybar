@@ -41,8 +41,9 @@ const run = (args: string[]) =>
 // A tool that starts a daemon starts it outside the pool, so the case holds a
 // slot for it: the suite's ceiling still counts every daemon it starts.
 async function holdingASlot(body: () => Promise<void>): Promise<void> {
-  const slot = await untilTestEnds((ended) =>
-    daemonPool.acquire({ until: ended }),
+  const slot = await untilTestEnds(
+    (ended) => daemonPool.acquire({ until: ended }),
+    "a daemon pool slot",
   );
   try {
     await body();

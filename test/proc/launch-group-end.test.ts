@@ -1,8 +1,6 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addAbortSignal } from "node:stream";
-import { text } from "node:stream/consumers";
 
 import { systemLauncher } from "../../src/proc/system-launcher";
 import { systemSpawner } from "../../src/proc/spawner";
@@ -18,11 +16,9 @@ import {
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
 import { heldGrandchild } from "../helpers/held-grandchild";
-import { untilTestEnds } from "../helpers/test-end";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
-// What these cases launch leaves its process group with setsid, which only
-// python reaches portably: macOS has no setsid command.
+// The fork fixtures call setsid directly on both Linux and macOS.
 const python = (code: string) => ({ bin: "python3", args: ["-c", code] });
 
 const SET = "import os,sys,time\n";
@@ -320,32 +316,12 @@ describe("the pipes a descendant holds past its launch", () => {
     await using holder = await heldGrandchild();
     // [LAW:behavior-not-structure] The escaped writer reports what the kernel
     // did to each write. An unreaped PID stays visible even after exit.
-    const pending = launch(
-      python(`
-import os, socket
-if os.fork():
-    os.wait()
-else:
-    os.setsid()
-    with socket.create_connection((${JSON.stringify(holder.address)}, ${holder.port})) as peer:
-        if peer.recv(1) == b"?":
-            for fd in (1, 2):
-                try:
-                    os.write(fd, b"x")
-                except BrokenPipeError:
-                    peer.sendall(b"broken\\n")
-                else:
-                    peer.sendall(b"writable\\n")
-`),
-    );
-    const peer = await holder.connected();
+    const pending = launch(holder.escapedWriter);
+    await holder.connected();
     ending.abort();
+    await expect(launcher.settled()).resolves.toEqual({ unreaped: [] });
     expect(await pending).toMatchObject({ ok: false, reason: "aborted" });
     expect(drainsOpened).toEqual([]);
-    const writes = untilTestEnds((signal) =>
-      text(addAbortSignal(signal, peer)),
-    );
-    peer.end("?");
-    expect(await writes).toBe("broken\nbroken\n");
+    expect(await holder.writes()).toBe("EPIPE EPIPE");
   });
 });
