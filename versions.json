@@ -4,15 +4,22 @@
     {
       "version": "pr-969",
       "ref": "refs/pull/969/merge",
-      "sha": "fddf7c792cd4d51b8b02b03ca55a2022114369c4",
-      "timestamp": "2026-11-26T05:02:25.300Z",
+      "sha": "a65b43095ba60643c2811dd35a2cc3fcc09308cf",
+      "timestamp": "2026-11-26T05:04:29.037Z",
       "commits": [
         {
-          "sha": "fddf7c792cd4d51b8b02b03ca55a2022114369c4",
+          "sha": "a65b43095ba60643c2811dd35a2cc3fcc09308cf",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:59:52-07:00",
-          "message": "Merge 88d61b8e61362d703448d7158c6582dc5a42bc78 into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
+          "timestamp": "2026-11-26T05:03:06Z",
+          "message": "Merge f0aace7b83ca835ecd7a4251b049ac18defff325 into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
+        },
+        {
+          "sha": "f0aace7b83ca835ecd7a4251b049ac18defff325",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:55-07:00",
+          "message": "fix(install): exclude overlapping runtime and handler installs\n"
         },
         {
           "sha": "88d61b8e61362d703448d7158c6582dc5a42bc78",
