@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1fbf11c6aa369490e0e161f6a43230fe30e77989",
-      "timestamp": "2026-11-26T06:34:55.645Z",
-      "commits": [
-        {
-          "sha": "1fbf11c6aa369490e0e161f6a43230fe30e77989",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-26T06:33:28Z",
-          "message": "chore(release): set `package.json` to 1.241.0\n\n## [1.241.0](https://github.com/promptctl/cc-candybar/compare/v1.240.0...v1.241.0) (2026-11-26)\n\n### Features\n\n* **url-handler:** copy and open links clicked over ssh act on the Mac ([#968](https://github.com/promptctl/cc-candybar/issues/968)) ([c9c14f8](https://github.com/promptctl/cc-candybar/commit/c9c14f8880bc75e20723dcac164e8fbe8191d480))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
-      "sha": "01f451895e503749088fbb6cc59f1172bff5684f",
-      "timestamp": "2026-11-26T06:32:37.276Z",
+      "sha": "148915faa183b4531b38d6f10ea63bf93078fa98",
+      "timestamp": "2026-11-26T06:35:46.730Z",
       "commits": [
         {
-          "sha": "01f451895e503749088fbb6cc59f1172bff5684f",
+          "sha": "148915faa183b4531b38d6f10ea63bf93078fa98",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T06:31:22Z",
-          "message": "Merge bd6ffa48fe5142343825f397688710029fe2bae2 into c9c14f8880bc75e20723dcac164e8fbe8191d480\n"
+          "timestamp": "2026-11-26T06:34:17Z",
+          "message": "Merge 29ba4d0cf053bdac7a0f7b22e9357a4a710d044b into 1fbf11c6aa369490e0e161f6a43230fe30e77989\n"
+        },
+        {
+          "sha": "29ba4d0cf053bdac7a0f7b22e9357a4a710d044b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:34:06-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
         },
         {
           "sha": "bd6ffa48fe5142343825f397688710029fe2bae2",
@@ -189,6 +181,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:02:21-07:00",
           "message": "test: isolate terminal, filesystem and process observations from the host\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1fbf11c6aa369490e0e161f6a43230fe30e77989",
+      "timestamp": "2026-11-26T06:34:55.645Z",
+      "commits": [
+        {
+          "sha": "1fbf11c6aa369490e0e161f6a43230fe30e77989",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T06:33:28Z",
+          "message": "chore(release): set `package.json` to 1.241.0\n\n## [1.241.0](https://github.com/promptctl/cc-candybar/compare/v1.240.0...v1.241.0) (2026-11-26)\n\n### Features\n\n* **url-handler:** copy and open links clicked over ssh act on the Mac ([#968](https://github.com/promptctl/cc-candybar/issues/968)) ([c9c14f8](https://github.com/promptctl/cc-candybar/commit/c9c14f8880bc75e20723dcac164e8fbe8191d480))\n"
         }
       ]
     },
