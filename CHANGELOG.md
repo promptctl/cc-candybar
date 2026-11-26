@@ -1,3 +1,9 @@
+## [1.240.0](https://github.com/promptctl/cc-candybar/compare/v1.239.0...v1.240.0) (2026-11-26)
+
+### Features
+
+* **lanes:** a window lane hands off the statusline and is pushed the Frame, whose links its follower clicks (candybar-bar-window-hpro.akk) ([#967](https://github.com/promptctl/cc-candybar/issues/967)) ([9882701](https://github.com/promptctl/cc-candybar/commit/98827016846125701459a4fd629a6ffbba742261))
+
 ## [1.239.0](https://github.com/promptctl/cc-candybar/compare/v1.238.6...v1.239.0) (2026-11-26)
 
 ### Features
