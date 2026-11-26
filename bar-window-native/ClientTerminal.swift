@@ -19,6 +19,7 @@ struct AttachedClient {
     private let device: dev_t
     private let start: timeval
     let terminal: ScriptableTerminal
+    let terminalPID: pid_t
 
     init(pid: pid_t, tty: String) throws {
         var terminalDevice = stat()
@@ -32,7 +33,7 @@ struct AttachedClient {
         let info = try processInfo(pid)
         self.start = info.kp_proc.p_starttime
         guard info.kp_eproc.e_tdev == device else { throw LocationFailure("Client \(pid) does not own \(tty)") }
-        self.terminal = try terminalAncestor(pid: pid, tty: tty)
+        (self.terminal, self.terminalPID) = try terminalAncestor(pid: pid, tty: tty)
     }
 
     func verify() throws {
@@ -44,7 +45,7 @@ struct AttachedClient {
     }
 }
 
-private func terminalAncestor(pid: pid_t, tty: String) throws -> ScriptableTerminal {
+private func terminalAncestor(pid: pid_t, tty: String) throws -> (ScriptableTerminal, pid_t) {
     var current = pid
     var visited = Set<pid_t>()
     while current > 1, visited.insert(current).inserted {
@@ -67,7 +68,9 @@ private func terminalAncestor(pid: pid_t, tty: String) throws -> ScriptableTermi
                     guard let terminal = ScriptableTerminal(rawValue: bundle) else {
                         throw LocationFailure("Unsupported terminal: \(URL(fileURLWithPath: path).lastPathComponent) (\(bundle))")
                     }
-                    return terminal
+                    if let app = NSRunningApplication(processIdentifier: current), app.bundleIdentifier == bundle {
+                        return (terminal, current)
+                    }
                 }
             }
         }

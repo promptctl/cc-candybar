@@ -164,12 +164,14 @@ final class WindowObserver {
         }
     }
 
-    private func observeScroll(_ element: AXUIElement) {
-        guard let ax, scrollBar.map({ CFEqual($0, element) }) != true else { return }
+    private func observeScroll(_ element: AXUIElement) -> Bool {
+        guard let ax else { return false }
+        if scrollBar.map({ CFEqual($0, element) }) == true { return true }
         if let scrollBar { AXObserverRemoveNotification(ax, scrollBar, kAXValueChangedNotification as CFString) }
         let result = AXObserverAddNotification(ax, element, kAXValueChangedNotification as CFString,
                                                Unmanaged.passUnretained(self).toOpaque())
         scrollBar = result == .success ? element : nil
+        return scrollBar != nil
     }
 
     private func invalidateIdentity() {
@@ -203,7 +205,7 @@ final class WindowObserver {
             return .hidden("Screen locked")
         }
         guard AXIsProcessTrusted() else { throw LocationFailure("Accessibility permission required for the bar window") }
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: terminal.rawValue).first else {
+        guard let app = NSRunningApplication(processIdentifier: client.terminalPID), app.bundleIdentifier == terminal.rawValue else {
             detachAX()
             throw LocationFailure("\(terminal.name) is not running")
         }

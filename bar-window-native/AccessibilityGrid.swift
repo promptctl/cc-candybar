@@ -32,6 +32,9 @@ private func parameter(_ node: AXUIElement, _ name: String, _ input: CFTypeRef) 
 struct TextViewport {
     let text: AXUIElement
     let viewport: CGRect
+    let scrollBar: AXUIElement?
+    let showingHistory: Bool
+    let scrollable: Bool
 
     func measure(_ tty: TTYGrid) -> CellGrid? {
         // iTerm updates its accessibility index here. AXValue would return the
@@ -59,38 +62,51 @@ func accessibleWindow(app: AXUIElement, frame: CGRect) -> AXUIElement? {
     return matches.count == 1 ? matches.first : nil
 }
 
-func measureGrid(window: AXUIElement, frame: CGRect, session: TerminalSession, tty: TTYGrid, watchScroll: (AXUIElement) -> Void) -> GridMeasurement {
+func measureGrid(window: AXUIElement, frame: CGRect, session: TerminalSession, tty: TTYGrid, watchScroll: (AXUIElement) -> Bool) -> GridMeasurement {
     guard session.nativeSplits == 1 else {
         return .unavailable("Several native terminal splits share this tab; the cell grid is ambiguous")
     }
-    var inHistory = false
     var viewports = [TextViewport]()
-    func walk(_ node: AXUIElement, clip: CGRect) {
+    func walk(_ node: AXUIElement, clip: CGRect, scrollBar: AXUIElement?) {
         let role = attribute(node, kAXRoleAttribute) as? String
         if role == kAXTextAreaRole {
             if let box = frameOf(node) {
                 let viewport = clip.intersection(box)
-                if !viewport.isEmpty { viewports.append(TextViewport(text: node, viewport: viewport)) }
+                if !viewport.isEmpty {
+                    viewports.append(TextViewport(text: node, viewport: viewport, scrollBar: scrollBar,
+                                                  showingHistory: box.maxY > clip.maxY + 1,
+                                                  scrollable: box.height > clip.height + 1))
+                }
             }
             return
         }
-        if role == kAXScrollAreaRole, let bar = attribute(node, kAXVerticalScrollBarAttribute),
-           CFGetTypeID(bar) == AXUIElementGetTypeID() {
-            let scroll = unsafeBitCast(bar, to: AXUIElement.self)
-            watchScroll(scroll)
-            if let value = attribute(scroll, kAXValueAttribute) as? NSNumber, value.doubleValue < 1 {
-                inHistory = true
-            }
+        var bar = scrollBar
+        var bounds = clip
+        if role == kAXScrollAreaRole {
+            bounds = clip.intersection(frameOf(node) ?? clip)
+            if let value = attribute(node, kAXVerticalScrollBarAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() {
+                bar = unsafeBitCast(value, to: AXUIElement.self)
+            } else { bar = nil }
         }
-        let childClip = role == kAXScrollAreaRole ? clip.intersection(frameOf(node) ?? clip) : clip
-        guard !childClip.isEmpty else { return }
+        guard !bounds.isEmpty else { return }
         for child in attribute(node, kAXChildrenAttribute) as? [AXUIElement] ?? [] {
-            walk(child, clip: childClip)
+            walk(child, clip: bounds, scrollBar: bar)
         }
     }
-    walk(window, clip: frame)
-    guard !inHistory else { return .unavailable("Terminal is showing scrollback") }
-    guard viewports.count == 1, let grid = viewports.first?.measure(tty) else {
+    walk(window, clip: frame, scrollBar: nil)
+    guard viewports.count == 1, let viewport = viewports.first else {
+        return .unavailable("Cannot identify the terminal text viewport")
+    }
+    // A toolbelt's scroll view may be beside the terminal. Only the scrollbar
+    // enclosing the identified terminal text can invalidate its grid.
+    if let bar = viewport.scrollBar {
+        guard watchScroll(bar), let position = attribute(bar, kAXValueAttribute) as? NSNumber else {
+            return .unavailable("Cannot observe the terminal scroll position")
+        }
+        if position.doubleValue < 1 { return .unavailable("Terminal is showing scrollback") }
+    } else if viewport.scrollable { return .unavailable("Cannot observe the terminal scroll position") }
+    guard !viewport.showingHistory else { return .unavailable("Terminal is showing scrollback") }
+    guard let grid = viewport.measure(tty) else {
         return .unavailable("Could not measure an unambiguous terminal cell grid")
     }
     return .measured(grid)
