@@ -1,3 +1,9 @@
+## [1.243.0](https://github.com/promptctl/cc-candybar/compare/v1.242.1...v1.243.0) (2026-11-26)
+
+### Features
+
+* **window:** show an interactive session bar beside its terminal ([#975](https://github.com/promptctl/cc-candybar/issues/975)) ([f1dc2ba](https://github.com/promptctl/cc-candybar/commit/f1dc2bae0c6e4047a6adaa456317fbf08fabfdb0))
+
 ## [1.242.1](https://github.com/promptctl/cc-candybar/compare/v1.242.0...v1.242.1) (2026-11-26)
 
 ### Bug Fixes
