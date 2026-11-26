@@ -5,7 +5,8 @@
 import http from "node:http";
 import type { AddressInfo, Socket } from "node:net";
 
-import { remotePricing } from "../src/daemon/cache/pricing-fetch";
+import { heldClock } from "./helpers/held-clock";
+import { fetchPricing } from "../src/daemon/cache/pricing-fetch";
 import { failed, ok } from "../src/utils/outcome";
 
 const servers: http.Server[] = [];
@@ -25,12 +26,21 @@ async function serve(respond: http.RequestListener) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   servers.push(server);
   const { port } = server.address() as AddressInfo;
+  const connections: Socket[] = [];
+  const clock = heldClock(new Date(0));
   return {
-    fetch: remotePricing(
-      http.get,
+    clock,
+    fetch: fetchPricing(
+      clock,
+      (url, options, onResponse) => {
+        const req = http.get(url, options, onResponse);
+        req.once("socket", (socket: Socket) => connections.push(socket));
+        return req;
+      },
       new URL(`http://127.0.0.1:${port}/pricing.json`),
     ),
     closed,
+    connections,
   };
 }
 
@@ -46,9 +56,12 @@ afterEach(async () => {
 describe("the pricing fetch", () => {
   test("answers the body whole, and its connection closes once it has", async () => {
     const body = JSON.stringify({ model: { input: 1 } });
-    const { fetch, closed } = await serve((_, res) => res.end(body));
+    const { fetch, closed, connections } = await serve((_, res) =>
+      res.end(body),
+    );
 
     expect(await fetch(signal())).toEqual(ok(body));
+    expect(connections.map((socket) => socket.closed)).toEqual([true]);
     await Promise.all(closed);
   });
 
@@ -68,7 +81,9 @@ describe("the pricing fetch", () => {
   test("a body past the byte limit is refused and its connection ended", async () => {
     // Under the limit in characters, over it in bytes.
     const body = JSON.stringify({ name: "é".repeat(600 * 1024) });
-    const { fetch, closed } = await serve((_, res) => res.end(body));
+    const { fetch, closed, connections } = await serve((_, res) =>
+      res.end(body),
+    );
 
     expect(await fetch(signal())).toEqual(
       failed("the body passed 1048576 bytes", "read"),
@@ -103,6 +118,38 @@ describe("the pricing fetch", () => {
 
     expect(await fetching).toMatchObject({ kind: "failed", failedAt: "read" });
     await Promise.all(closed);
+  });
+
+  test("the deadline ends a request before its name has resolved", async () => {
+    const clock = heldClock(new Date(0));
+    let began!: () => void;
+    const resolving = new Promise<void>((resolve) => (began = resolve));
+    const fetch = fetchPricing(
+      clock,
+      (url, opts, receive) =>
+        http.get(url, { ...opts, lookup: () => began() }, receive),
+      new URL("http://pricing.invalid/table"),
+    );
+    const result = fetch(signal());
+    await resolving;
+    clock.advance(5_000);
+    expect(await result).toEqual(failed("no answer in 5000 ms", "read"));
+    expect(clock.pending()).toBe(0);
+  });
+
+  test("the same deadline ends a stalled body and releases its socket", async () => {
+    let began!: () => void;
+    const receiving = new Promise<void>((resolve) => (began = resolve));
+    const { clock, fetch, connections } = await serve((_, res) => {
+      res.write("{");
+      began();
+    });
+    const result = fetch(signal());
+    await receiving;
+    clock.advance(5_000);
+    expect(await result).toEqual(failed("no answer in 5000 ms", "read"));
+    expect(connections.map((socket) => socket.closed)).toEqual([true]);
+    expect(clock.pending()).toBe(0);
   });
 
   test("a server that is not there is a failure, not a throw", async () => {

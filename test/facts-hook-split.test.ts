@@ -29,7 +29,7 @@ import type { CheckedHookData } from "../src/renderer-interface/request-context"
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
-import { HOST } from "../scripts/lib/host";
+import { hostOf } from "../scripts/lib/host";
 import {
   absentOwners,
   readTranscriptLanes,
@@ -124,7 +124,7 @@ function inputsOf(hookData: CheckedHookData) {
   const usageStore = new SessionUsageStore({
     prices: settledPrices,
     clock: systemTimekeeper,
-    host: HOST,
+    host: hostOf({}, { home: dir }),
     sweepIntervalMs: 0,
   });
   stores.push(usageStore);

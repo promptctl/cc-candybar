@@ -63,6 +63,6 @@ export function productionAdapters(
     stat: fs.statSync,
     checkoutFiles,
     writeConfigFile,
-    fetchPricing,
+    fetchPricing: fetchPricing(machine),
   };
 }

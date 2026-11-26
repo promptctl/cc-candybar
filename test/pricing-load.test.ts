@@ -210,6 +210,13 @@ describe("the cache file", () => {
     expect(await line).toContain(`prices=cache dueInMs=${DAY - HOUR}`);
   });
 
+  test("a cache timestamp ahead of the clock cannot postpone a fetch", async () => {
+    const r = rig();
+    writeCache(r.cache, { [FETCHED_ONLY]: rates(4) }, START.getTime() + DAY);
+    const { table } = await firstLoad(r, ok(REMOTE_7));
+    expect(perMillion(table, FETCHED_ONLY)).toBe(7);
+  });
+
   test("a stale one is fetched over, and stands while the fetch fails", async () => {
     const r = rig();
     writeCache(r.cache, { [FETCHED_ONLY]: rates(7) }, START.getTime() - DAY);
@@ -287,13 +294,13 @@ describe("a failed load is tried again", () => {
 
     r.clock.advance(MINUTE - 1);
     await r.pricing.table();
-    expect(r.reads()).toBe(1);
+    expect(r.net.asked).toHaveLength(1);
 
     r.clock.advance(1);
     const fetched = r.net.next();
     const landed = r.nextLoad();
     const meanwhile = await r.pricing.table();
-    expect(r.reads()).toBe(2);
+    expect(r.net.asked).toHaveLength(2);
     expect(perMillion(meanwhile, FETCHED_ONLY)).toBe(3);
 
     (await fetched).answer(ok(REMOTE_7));
@@ -314,10 +321,10 @@ describe("a failed load is tried again", () => {
 
     r.clock.advance(2 * MINUTE - 1);
     await r.pricing.table();
-    expect(r.reads()).toBe(2);
+    expect(r.net.asked).toHaveLength(2);
     r.clock.advance(1);
     await r.pricing.table();
-    expect(r.reads()).toBe(3);
+    expect(r.net.asked).toHaveLength(3);
   });
 });
 
@@ -327,9 +334,11 @@ describe("a loaded table is refreshed once its day is up", () => {
     const { table: old } = await firstLoad(r, ok(REMOTE_7));
     expect(perMillion(old, FETCHED_ONLY)).toBe(7);
 
+    // A wall clock stepped back cannot extend a running table’s lifetime.
+    jest.spyOn(r.clock, "now").mockReturnValue(START.getTime() - DAY);
     r.clock.advance(DAY - 1);
     expect(await r.pricing.table()).toBe(old);
-    expect(r.reads()).toBe(1);
+    expect(r.net.asked).toHaveLength(1);
 
     r.clock.advance(1);
     const fetched = r.net.next();
@@ -343,7 +352,7 @@ describe("a loaded table is refreshed once its day is up", () => {
     for (const table of asks) expect(table).toBe(old);
     const call = await fetched;
     expect(await r.pricing.table()).toBe(old);
-    expect(r.reads()).toBe(2);
+    expect(r.net.asked).toHaveLength(2);
 
     call.answer(ok(remote({ [FETCHED_ONLY]: rates(9) })));
     expect(await landed).toContain("by=period outcome=ok");
@@ -407,7 +416,7 @@ describe("closing", () => {
     const closing = r.pricing.close();
     call.answer(ok(REMOTE_7));
     await closing;
-    await ask;
+    expect(perMillion(await ask, FETCHED_ONLY)).toBe(3);
 
     expect(fs.existsSync(r.cache)).toBe(false);
     expect(perMillion(await r.pricing.table(), FETCHED_ONLY)).toBe(3);

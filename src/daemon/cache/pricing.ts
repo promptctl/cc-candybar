@@ -260,7 +260,7 @@ type TableSource = "fetched" | "cache" | "bundled";
 interface Standing {
   readonly table: PriceTable;
   readonly source: TableSource;
-  // The wall time the next load is due at: a loaded table's day, or a failed
+  // The monotonic time the next load is due at: a loaded table's day, or a failed
   // load's backoff.
   readonly dueAt: number;
   // Loads in a row that ended without a table.
@@ -317,7 +317,7 @@ export class Pricing {
     // finds it due, not on a period of its own. Only folds ask, and they run
     // only on the periods and watches of entries a session holds, so a
     // daemon no session holds fetches nothing and arms nothing.
-    if (this.opts.clock.now() >= standing.dueAt) {
+    if (this.opts.clock.monotonic() >= standing.dueAt) {
       this.opts.clock.detach("pricing refresh", () => this.load("period"));
     }
     return Promise.resolve(standing.table);
@@ -349,11 +349,11 @@ export class Pricing {
     // a failure of the table, and what it answered stands for nothing.
     if (signal.aborted) {
       this.refreshes.abandoned("-", by, ms);
-      return standing.table;
+      return prior?.table ?? bundledTable();
     }
     this.standing = standing;
     this.refreshes.recorded(
-      `prices=${standing.source} dueInMs=${standing.dueAt - this.opts.clock.now()}`,
+      `prices=${standing.source} dueInMs=${standing.dueAt - this.opts.clock.monotonic()}`,
       by,
       outcome,
       ms,
@@ -373,16 +373,21 @@ export class Pricing {
   }> {
     let cached: Cached | null = null;
     try {
-      cached = await this.readCache(signal);
+      // The disk copy seeds a new owner. Once this owner has a table, its
+      // monotonic deadline decides when to fetch, even after a wall-clock change.
+      cached = prior === null ? await this.readCache(signal) : null;
+      const now = this.opts.clock.now();
       if (
         cached !== null &&
-        this.opts.clock.now() < cached.timestamp + DAY_MS
+        cached.timestamp <= now &&
+        now < cached.timestamp + DAY_MS
       ) {
         return {
           standing: {
             table: cached.table,
             source: "cache",
-            dueAt: cached.timestamp + DAY_MS,
+            dueAt:
+              this.opts.clock.monotonic() + (DAY_MS - (now - cached.timestamp)),
             failures: 0,
           },
           outcome: ok(null),
@@ -403,7 +408,7 @@ export class Pricing {
           standing: {
             table: fetched.value,
             source: "fetched",
-            dueAt: this.opts.clock.now() + DAY_MS,
+            dueAt: this.opts.clock.monotonic() + DAY_MS,
             failures: 0,
           },
           outcome: fetched,
@@ -431,7 +436,7 @@ export class Pricing {
       table: kept.table,
       source: kept.source,
       dueAt:
-        this.opts.clock.now() +
+        this.opts.clock.monotonic() +
         backedOffMs(EVERY, failures, BACKOFF_CEILING_MS),
       failures,
     };
