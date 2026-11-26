@@ -4,15 +4,22 @@
     {
       "version": "pr-975",
       "ref": "refs/pull/975/merge",
-      "sha": "6157a73a059655f41da190049d2ae18cd8d76cda",
-      "timestamp": "2026-11-26T14:31:02.998Z",
+      "sha": "3ebbff819807151c11fddd7c727d7f424a50189b",
+      "timestamp": "2026-11-26T14:32:25.408Z",
       "commits": [
         {
-          "sha": "6157a73a059655f41da190049d2ae18cd8d76cda",
+          "sha": "3ebbff819807151c11fddd7c727d7f424a50189b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T14:29:47Z",
-          "message": "Merge beba2dfe9e204876cf9c5974a9207110ef47c8d5 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+          "timestamp": "2026-11-26T14:30:52Z",
+          "message": "Merge 50d29fc87e498f1ae42ef58bab94bb418820ed77 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+        },
+        {
+          "sha": "50d29fc87e498f1ae42ef58bab94bb418820ed77",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:30:41-07:00",
+          "message": "style(window): format subscription interest types\n"
         },
         {
           "sha": "beba2dfe9e204876cf9c5974a9207110ef47c8d5",
