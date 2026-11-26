@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-972",
+      "ref": "refs/pull/972/merge",
+      "sha": "b43607acbb959ac4219b2fafd0630058747dfd94",
+      "timestamp": "2026-11-26T06:13:54.391Z",
+      "commits": [
+        {
+          "sha": "b43607acbb959ac4219b2fafd0630058747dfd94",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:12:05-07:00",
+          "message": "Merge 30eb8be64c757e606f332e5a4ba1d2be6fa54345 into 3d41a203e6668a403f56f409957220a1dbacf79e\n"
+        },
+        {
+          "sha": "30eb8be64c757e606f332e5a4ba1d2be6fa54345",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T23:11:40-07:00",
+          "message": "fix(menu): retire saved selections that block recording after upgrade\n"
+        }
+      ]
+    },
+    {
       "version": "pr-971",
       "ref": "refs/pull/971/merge",
       "sha": "4cc78eeff8421c169256258c147487115ffb168e",
