@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { getEventListeners } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
@@ -19,6 +18,17 @@ import { type LaunchCategory, type Launcher } from "../../src/proc/launcher";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
+import { heldGrandchild } from "../helpers/held-grandchild";
+
+function processEnded(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") return true;
+    throw err;
+  }
+}
 
 function makeSpyHandle(): {
   handle: LaunchStatsHandle;
@@ -194,14 +204,7 @@ describe("launch (async)", () => {
         );
         expect(r[stream]).toBe("a".repeat(MAX_CAPTURED_BYTES));
         const pid = Number(fs.readFileSync(pidFile, "utf8"));
-        await until(() => {
-          try {
-            process.kill(pid, 0);
-            return false;
-          } catch {
-            return true;
-          }
-        }, "the endless writer's end");
+        await until(() => processEnded(pid), "the endless writer's end");
       });
     },
   );
@@ -316,30 +319,20 @@ describe("launch (async)", () => {
   });
 
   it('aborting the signal terminates the child\'s whole group and reports "aborted" once it is reaped', async () => {
-    // `sh` stays the parent of a two-statement command, so the `sleep` is a
-    // grandchild: only a process-group signal reaches it. The marker names
-    // the sh; the per-run duration names the sleep (both computed here, so
-    // no enclosing shell's argv can ever match them).
-    const stamp = `${process.pid}${Date.now()}`;
-    const marker = `ccb-launch-abort-${stamp}`;
-    const nap = `sleep 5.${stamp}`;
-    const alive = (pattern: string) =>
-      spawnSync("pgrep", ["-f", pattern]).status === 0;
+    await using child = await heldGrandchild();
     const controller = new AbortController();
     const pending = launch({
       bin: "/bin/sh",
-      args: ["-c", `${nap}; echo ${marker}`],
+      args: ["-c", child.command],
       category: "user-shell",
       signal: controller.signal,
     });
-    expect(alive(marker)).toBe(true);
-    expect(alive(nap)).toBe(true);
+    await child.started();
     controller.abort();
     const r = await pending;
     // The outcome, not the ending signal: see the timeout test above.
     expect(r).toMatchObject({ ok: false, reason: "aborted" });
-    expect(alive(marker)).toBe(false);
-    expect(alive(nap)).toBe(false);
+    await child.ended();
   });
 
   it("with both triggers armed, the timeout that fired first owns the cause; a later abort is inert", async () => {
@@ -545,21 +538,26 @@ describe("launch (async)", () => {
   };
 
   it("holds and meters input still being written at settle, whole for its reader", async () => {
+    await using gate = await heldGrandchild();
+    const stop = new AbortController();
     const counted = path.join(scratch, "held-input-count");
     const drains = meteringDrains();
     scoped({ stats: drains.handle });
     const kill = refusingSignals();
     try {
-      const r = await launch({
+      const pending = launch({
         bin: "/bin/sh",
-        args: ["-c", 'sleep 0.3; wc -c > "$1"', "sh", counted],
+        args: ["-c", `${gate.command}; wc -c > "$1"`, "sh", counted],
         stdinInput: "x".repeat(1024 * 1024),
-        timeoutMs: 50,
+        signal: stop.signal,
         category: "user-shell",
       });
-      expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      const read = await gate.started();
+      stop.abort();
+      expect(await pending).toMatchObject({ ok: false, reason: "signal-refused" });
       // stdout, stderr and the input.
       expect(drains.opened).toHaveLength(3);
+      read();
       await until(
         () => fs.existsSync(counted) && fs.readFileSync(counted, "utf8") !== "",
         "the reader's count",
@@ -575,20 +573,24 @@ describe("launch (async)", () => {
   });
 
   it("a closed launcher frees the input it holds", async () => {
+    await using child = await heldGrandchild();
+    const stop = new AbortController();
     const closing = new AbortController();
     const drains = meteringDrains();
     scoped({ stats: drains.handle, signal: closing.signal });
     const kill = refusingSignals();
     try {
-      const r = await launch({
+      const pending = launch({
         bin: "/bin/sh",
         // Holds its input unread, so only the close can free it.
-        args: ["-c", "sleep 0.3; exec sleep 30"],
+        args: ["-c", child.command],
         stdinInput: "x".repeat(1024 * 1024),
-        timeoutMs: 50,
+        signal: stop.signal,
         category: "user-shell",
       });
-      expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
+      await child.started();
+      stop.abort();
+      expect(await pending).toMatchObject({ ok: false, reason: "signal-refused" });
       // stdout, stderr and the input.
       const held = drains.opened.length;
       expect(held).toBe(3);
@@ -799,15 +801,11 @@ describe("launch — per-category rate-limit", () => {
 // launched it. Cutting the lifeline's pipe is the EOF that process's death
 // gives it, however the process died; the daemon e2e kills a real launcher.
 describe("the lifeline", () => {
-  // A `sleep` under `sh`, so the group holds a grandchild a signal to `sh`
-  // alone would orphan, with a duration no other process on the host has.
-  const grandchild = (seconds: string) => ({
+  const shell = (command: string) => ({
     bin: "/bin/sh",
-    args: ["-c", `sleep ${seconds}; echo late`],
+    args: ["-c", `${command}; echo late`],
     category: "user-shell" as const,
   });
-  const running = (seconds: string) =>
-    spawnSync("pgrep", ["-f", `^sleep ${seconds}$`]).status === 0;
 
   // Each fault the lifeline's observer hears; null is a lifeline running again.
   let heard: Array<string | null>;
@@ -821,16 +819,18 @@ describe("the lifeline", () => {
   });
 
   it("ends every group in flight when the launcher's pipe closes", async () => {
-    const pending = launch(grandchild("30.861"));
-    await until(() => running("30.861"), "the launched sleep");
+    await using child = await heldGrandchild();
+    const pending = launch(shell(child.command));
+    await child.started();
     lifeline().cut();
     const r = await pending;
     expect(r).toMatchObject({ ok: false, reason: "signal", stdout: "" });
-    await until(() => !running("30.861"), "the grandchild sleep ending");
+    await child.ended();
   });
 
   it("a lost lifeline stands as a warning, and the next launch replaces it holding every group in flight", async () => {
-    const first = launch(grandchild("30.862"));
+    await using firstChild = await heldGrandchild();
+    const first = launch(shell(firstChild.command));
     const { pid: lostPid } = lifeline();
     process.kill(lostPid!, "SIGKILL");
     await until(
@@ -842,22 +842,17 @@ describe("the lifeline", () => {
       message:
         "programs launched now would outlive their launcher if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
     });
-    const second = launch(grandchild("30.863"));
+    await using secondChild = await heldGrandchild();
+    const second = launch(shell(secondChild.command));
     const replacement = lifeline();
     expect(replacement.pid).not.toBe(lostPid);
-    await until(
-      () => running("30.862") && running("30.863"),
-      "both launched sleeps",
-    );
+    await Promise.all([firstChild.started(), secondChild.started()]);
     await until(() => lifelineWarning() === null, "the replacement running");
     expect(heard.at(-1)).toBe(null);
     replacement.cut();
     expect(await first).toMatchObject({ ok: false, reason: "signal" });
     expect(await second).toMatchObject({ ok: false, reason: "signal" });
-    await until(
-      () => !running("30.862") && !running("30.863"),
-      "both grandchild sleeps ending",
-    );
+    await Promise.all([firstChild.ended(), secondChild.ended()]);
   });
 });
 
@@ -1083,10 +1078,7 @@ describe("a launcher's scope", () => {
     await launch({ bin: "/bin/echo", category: "user-shell" });
 
     expect(lifeline().pid).toBeUndefined();
-    await until(
-      () => spawnSync("kill", ["-0", String(pid)]).status !== 0,
-      "the lifeline exiting",
-    );
+    await until(() => processEnded(pid!), "the lifeline exiting");
     expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });
 });

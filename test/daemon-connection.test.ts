@@ -74,9 +74,25 @@ const urlAnswer = (
   awaitsVerdict = false,
 ): HandledRequest => ({
   kind: "url",
-  awaitsVerdict,
-  verdict: { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
-  land: () => landed,
+  told: awaitsVerdict
+    ? {
+        when: "at-once",
+        verdict: {
+          ok: false,
+          error: "forged",
+          code: "BAD_REQUEST",
+          daemonV: 3,
+        },
+        land: () => landed,
+      }
+    : { when: "never", land: () => landed },
+});
+
+// A url frame told once its click has landed: the verdict is what landing
+// returns.
+const landedAnswer = (landing: Promise<Reply>): HandledRequest => ({
+  kind: "url",
+  told: { when: "landed", land: () => landing },
 });
 
 // A memory stream runs on process ticks and microtasks, which all drain before
@@ -359,6 +375,38 @@ describe("a connection over a stream", () => {
     expect(daemon.stats.inFlight).toBe(0);
   });
 
+  // [LAW:no-ambient-temporal-coupling] A writer that asked its acts is told
+  // once its click landed, never before: what the click came to is the verdict.
+  test("a url frame told when its click has landed is written nothing until then, and then its verdict", async () => {
+    let land!: (reply: Reply) => void;
+    const landing = new Promise<Reply>((done) => (land = done));
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { client, received } = open(daemon);
+    client.allowHalfOpen = true;
+    client.write(
+      encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }),
+    );
+    await settled();
+    request.answer(landedAnswer(landing));
+    await settled();
+    expect(received).toEqual([]);
+    expect(daemon.stats.inFlight).toBe(1);
+
+    land(
+      replyOf({
+        ok: true,
+        output: "",
+        desktopActs: [{ kind: "copy", text: "text" }],
+      }),
+    );
+    await settled();
+    expect(received).toEqual([
+      { ok: true, output: "", desktopActs: [{ kind: "copy", text: "text" }] },
+    ]);
+    expect(daemon.stats.inFlight).toBe(0);
+  });
+
   // A frame that reaches the daemon only after the backstop answered finds
   // TIMEOUT as the socket's one answer, so a writer that reads a verdict is
   // written nothing more.
@@ -406,10 +454,19 @@ describe("a connection over a stream", () => {
     const log = jest.fn();
     const threw: Array<{ task: string; thrown: unknown }> = [];
     const daemon = standIn({
-      handle: async () => ({
-        ...urlAnswer(Promise.resolve(), true),
-        land: () => {
-          throw new Error("the click broke as it began");
+      handle: async (): Promise<HandledRequest> => ({
+        kind: "url",
+        told: {
+          when: "at-once",
+          verdict: {
+            ok: false,
+            error: "forged",
+            code: "BAD_REQUEST",
+            daemonV: 3,
+          },
+          land: () => {
+            throw new Error("the click broke as it began");
+          },
         },
       }),
       clock: clockOver(systemTimers, (task, thrown) =>

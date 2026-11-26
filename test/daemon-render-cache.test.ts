@@ -1,3 +1,4 @@
+import { refuseFile } from "./helpers/refuse-file";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
 // changed: cache identity (projectDir+cwd, args ignored), last-known-good
 // preservation across failed reloads, candidate-dir watcher firing when a
@@ -9,7 +10,6 @@ import { HOST, hostOf } from "../scripts/lib/host";
 import { WORLD, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import {
-  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -197,9 +197,8 @@ describe("RenderCache", () => {
   // the file and the stat's own EACCES, and the bar draws its last good
   // config, the bundled default before any loaded (liveness — the watcher
   // recovers when the directory opens). Never the `missing` notice claiming
-  // a correct path was not found. Root bypasses directory permissions.
-  const asRoot = process.getuid?.() === 0;
-  (asRoot ? test.skip : test)(
+  // a correct path was not found.
+  test(
     "an explicit path behind an unsearchable directory fails its load naming the file, over the default",
     () => {
       const { cache, originAt, cleanups } = makeCache();
@@ -214,7 +213,7 @@ describe("RenderCache", () => {
           root: { h: ["t"] },
         }),
       );
-      chmodSync(locked, 0o000);
+      using _denied = refuseFile({ below: locked }, "statSync", "lstatSync");
       try {
         const entry = cache.getOrCreate(originAt(dir, dir, cfg));
         expect(entry.configLayers).toEqual([]);
@@ -225,7 +224,6 @@ describe("RenderCache", () => {
           "Config file not found",
         );
       } finally {
-        chmodSync(locked, 0o755);
         for (const c of cleanups) c();
         cleanup();
       }

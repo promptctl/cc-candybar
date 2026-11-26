@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// heap-retainers.mjs — reverse-BFS retaining paths from a class to a GC root.
+// heap-retainers.mjs — retaining paths from a root to instances of a class.
 //
 // WHY THIS EXISTS
 // ---------------
@@ -13,13 +13,14 @@
 // reproducible: `node scripts/heap-retainers.mjs snap.heapsnapshot FSReqPromise`.
 //
 // USAGE
-//   node scripts/heap-retainers.mjs <snapshot.heapsnapshot> <match-RE> [--limit N] [--json] [--strong]
+//   node scripts/heap-retainers.mjs <snapshot.heapsnapshot> <match-RE> [--limit N] [--json] [--strong] [--from root-RE]
 //
 //   <match-RE>   JS regexp matched against "<type> / <name>"; instances of
 //                matching nodes are the BFS targets.
 //   --limit N    trace at most N target instances (default 5). The cap is
 //                LOUD, not silent: a "(N more matching nodes not traced)" line
 //                is printed so truncation is never mistaken for completeness.
+//   --from RE    trace from a matching holder instead of the synthetic GC root.
 //   --json       emit { paths: [[ "<root>", ..., "<target>" ], ...] }.
 //   --strong     follow only edges that keep their target alive. A weak edge
 //                (a WeakRef's) holds nothing, so a path through one names the
@@ -42,80 +43,66 @@ function edgeLabel(s, rec) {
   return s.strings[nameOrIndex] ?? `#${nameOrIndex}`;
 }
 
-// Whether edge record `rec` keeps its target alive: V8 marks a weak edge, and
-// a shortcut is a view the snapshot adds for the UI, not a reference.
-function holds(s, rec) {
-  const type = s.edgeTypes[s.edges[rec * s.edgeStride + s.edgeTypeIdx]];
-  return type !== "weak" && type !== "shortcut";
-}
-
-// Build reverse adjacency: for every directed edge from→to, record (from, edgeRec)
-// under `to`, so BFS can walk from a target up toward its retainers.
-function buildReverse(s, strong) {
-  const firstEdge = new Int32Array(s.nodeCount + 1);
-  for (let i = 0; i < s.nodeCount; i++) {
-    firstEdge[i + 1] = firstEdge[i] + s.nodes[i * s.nodeStride + s.edgeCountIdx];
-  }
-  const reverse = Array.from({ length: s.nodeCount }, () => []);
-  for (let from = 0; from < s.nodeCount; from++) {
-    for (let rec = firstEdge[from]; rec < firstEdge[from + 1]; rec++) {
-      if (strong && !holds(s, rec)) continue;
-      const to = s.edges[rec * s.edgeStride + s.edgeToIdx] / s.nodeStride;
-      reverse[to].push({ from, rec });
-    }
-  }
-  return reverse;
-}
-
-// Shortest retaining path (root-first list of labels) from any GC root to
-// `target`, found by BFS over reverse edges. Ordinal 0 is V8's synthetic root.
-function pathToRoot(s, reverse, target) {
-  const parent = new Map();
-  parent.set(target, null);
-  const queue = [target];
-  let root = null;
-  while (queue.length) {
-    const node = queue.shift();
-    if (node === 0) {
-      root = node;
-      break;
-    }
-    for (const { from, rec } of reverse[node]) {
-      if (!parent.has(from)) {
-        parent.set(from, { from: node, rec });
-        queue.push(from);
-      }
-    }
-  }
-  if (root === null) return null;
-
-  const chain = [];
-  let cur = 0;
-  while (cur !== target) {
-    const step = parent.get(cur);
-    chain.push(`${nodeLabel(s, cur)} --${edgeLabel(s, step.rec)}-->`);
-    cur = step.from;
-  }
-  chain.push(nodeLabel(s, target));
-  return chain;
-}
-
-export function retainerPaths(s, re, limit, { strong = false } = {}) {
-  const reverse = buildReverse(s, strong);
+// A breadth-first walk from the requested holders. V8 stores each node's
+// outgoing edges contiguously; the incoming edge recorded at discovery is
+// enough to reconstruct the first path, with no reverse graph per instance.
+export function retainerPaths(s, re, limit, { strong = false, fromRoot } = {}) {
+  const first = new Uint32Array(s.nodeCount + 1);
+  const parent = new Int32Array(s.nodeCount).fill(-1);
+  const via = new Uint32Array(s.nodeCount);
+  const queue = [];
   const targets = [];
   for (let i = 0; i < s.nodeCount; i++) {
-    if (re.test(nodeLabel(s, i))) targets.push(i);
+    const label = nodeLabel(s, i);
+    first[i + 1] = first[i] + s.nodes[i * s.nodeStride + s.edgeCountIdx];
+    if (re.test(label)) targets.push(i);
+    if (fromRoot ? fromRoot.test(label) : i === 0) {
+      parent[i] = i;
+      queue.push(i);
+    }
   }
-  // A target no path reaches (under --strong, one only weak edges hold) has no
-  // path to give, so it is skipped and does not use up the limit: an empty
-  // `paths` means no target is held, not that the first few were not.
+
+  // [LAW:types-are-the-program] WeakMap values have two prerequisites:
+  // reachability of the table AND its key. V8 gives both internal edges
+  // the same pair name. An owner of the table alone cannot keep its key
+  // alive via a value that points back at that key.
+  const awaitingOtherHalf = new Map();
+  for (let i = 0; i < queue.length; i++) {
+    const from = queue[i];
+    for (let rec = first[from]; rec < first[from + 1]; rec++) {
+      const off = rec * s.edgeStride;
+      const to = s.edges[off + s.edgeToIdx] / s.nodeStride;
+      if (parent[to] !== -1) continue;
+      if (strong) {
+        const type = s.edgeTypes[s.edges[off + s.edgeTypeIdx]];
+        if (type === "weak" || type === "shortcut") continue;
+        const name = s.strings[s.edges[off + s.edgeNameIdx]];
+        if (type === "internal" && name?.includes(" pair in WeakMap (table @")) {
+          const prior = awaitingOtherHalf.get(name);
+          if (prior === undefined || prior === from) {
+            awaitingOtherHalf.set(name, from);
+            continue;
+          }
+          awaitingOtherHalf.delete(name);
+        }
+      }
+      parent[to] = from;
+      via[to] = rec;
+      queue.push(to);
+    }
+  }
+
   const paths = [];
   let traced = 0;
-  for (const t of targets) {
+  for (const target of targets) {
     if (paths.length === limit) break;
     traced++;
-    const path = pathToRoot(s, reverse, t);
-    if (path) paths.push(path);
+    if (parent[target] === -1) continue;
+    const chain = [nodeLabel(s, target)];
+    for (let to = target; parent[to] !== to; to = parent[to]) {
+      chain.push(`${nodeLabel(s, parent[to])} --${edgeLabel(s, via[to])}-->`);
+    }
+    paths.push(chain.reverse());
   }
   return { paths, totalTargets: targets.length, traced };
 }
@@ -126,7 +113,11 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--limit") opts.limit = Number(argv[++i]);
-    else if (a === "--json") opts.json = true;
+    else if (a === "--from") {
+      const pattern = argv[++i];
+      if (!pattern) throw new Error("--from requires a holder pattern");
+      opts.fromRoot = new RegExp(pattern);
+    } else if (a === "--json") opts.json = true;
     else if (a === "--strong") opts.strong = true;
     else positional.push(a);
   }
@@ -137,7 +128,7 @@ function main() {
   const { positional, opts } = parseArgs(process.argv.slice(2));
   if (positional.length !== 2) {
     process.stderr.write(
-      "usage: heap-retainers.mjs <snapshot> <match-RE> [--limit N] [--json] [--strong]\n",
+      "usage: heap-retainers.mjs <snapshot> <match-RE> [--limit N] [--json] [--strong] [--from root-RE]\n",
     );
     process.exit(2);
   }

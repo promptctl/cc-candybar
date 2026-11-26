@@ -63,7 +63,17 @@ import {
   sessionRig,
   type SessionRig,
 } from "./helpers/session-rig";
-import { answered, handIn, presentOf, READ } from "./helpers/main-renderer";
+import {
+  answered,
+  handIn,
+  presentOf,
+  READ,
+  rendererOf,
+  snapshotOf,
+  worldStateOf,
+} from "./helpers/main-renderer";
+import { heardRequest } from "./helpers/click";
+import { heldClock } from "./helpers/held-clock";
 import { ok } from "../src/utils/outcome";
 import { locs } from "./helpers/host";
 import type { Locations } from "../src/config/loader/chain-places";
@@ -78,7 +88,12 @@ import { answerStatusline } from "../src/daemon/statusline-answer";
 import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
-import { isBarLink } from "../src/click/wire";
+import {
+  admitClick,
+  encodeSegments,
+  isBarLink,
+  VERB_UNDO,
+} from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import { DAEMON_EVENT_HOLD_S, joinedEvent } from "../src/utils/event-hold";
 import {
@@ -1744,6 +1759,83 @@ describe("the session's config, ahead of its request", () => {
     expect(t.recorded).toHaveLength(1);
   });
 
+  test.each(["a cold session", "a session already open elsewhere"])(
+    "a cold click for %s preserves its own error and delivers the retained config to a waiting session",
+    async (target) => {
+      const waiting = heardRequest("waiting", "/nowhere/waiting", {
+        encoding: "frame",
+      });
+      const clicked = heardRequest("clicked", waiting.requested.cwd);
+      const session = clicked.hookData.session_id;
+      const time = heldClock(new Date(0));
+      let refuseFirstSnapshot = true;
+      const host = rendererHost(
+        MAIN_RENDERER,
+        time,
+        hostHeld(rendererOf(), time.monotonic),
+        () => {},
+        unfollowedCollector({ subscribed() {}, holding: () => () => {} }),
+        {
+          ...NO_ACTS,
+          configs: {
+            ...NO_ACTS.configs,
+            follow() {},
+            snapshotOf(origin) {
+              if (origin.cwd === waiting.requested.cwd && refuseFirstSnapshot) {
+                refuseFirstSnapshot = false;
+                throw new Error("first snapshot unavailable");
+              }
+              return snapshotOf("{}");
+            },
+          },
+        },
+      );
+      cleanups.push(() => host.closeWake());
+      const open = (context: CheckedRenderRequest) =>
+        host.answer(() => ({
+          kind: "event",
+          event: {
+            kind: "context",
+            context,
+            worldState: worldStateOf(context.hookData.session_id),
+          },
+        }));
+      if (target === "a session already open elsewhere")
+        expect(
+          await open(heardRequest(session, "/nowhere/elsewhere")),
+        ).toMatchObject({ kind: "answered" });
+      expect(await open(waiting)).toMatchObject({
+        configFailure: { message: "first snapshot unavailable" },
+      });
+
+      const click = admitClick(
+        VERB_UNDO,
+        encodeSegments([session]),
+        TEST_SIGNER,
+      ).click;
+      const result = await host.answerClick(session, () => ({
+        kind: "event",
+        actsOn: "desktop",
+        event: { kind: "click", click, context: heardContextOf(clicked) },
+      }));
+      expect(result).toMatchObject({
+        kind: "threw",
+        failure: { message: expect.stringContaining("nothing to undo") },
+      });
+      expect(await host.command({ kind: "stats" })).toMatchObject({
+        stats: { rendererTurns: { parked: 0 } },
+      });
+      const drawn = await host.answer(() => ({
+        kind: "event",
+        event: { kind: "request", id: REQUEST, context: waiting },
+      }));
+      expect(drawn).toMatchObject({ kind: "answered" });
+      const present = presentOf(drawn.effects);
+      expect(present.request).toBe(REQUEST);
+      drawn.settlePresentation(present, null);
+    },
+  );
+
   test("a request with no config before it is refused, naming the session", async () => {
     const t = renderer();
     const answering = await t.r.answer({
@@ -2099,7 +2191,7 @@ describe("a click", () => {
     context: live === null ? null : heardContextOf(live),
   });
 
-  test("a parked click waits for the current origin and reads its latest context", async () => {
+  test("a refused click never moves to a new origin, and a later click uses the latest context", async () => {
     const seen: Array<SessionContext | null> = [];
     const t = renderer({
       ...NO_VERBS,
@@ -2108,13 +2200,16 @@ describe("a click", () => {
     const first = checked("%1", "first.json5");
     const current = checked("%2");
     const firstWaiting = answered(await contextTurn(t, first));
-    const waiting = answered(await handIn(t.r, click("act")));
-    expect(waiting.record).toContainEqual(["parked", "click"]);
+    expect(threw(await handIn(t.r, click("act"))).failure.message).toContain(
+      "no configuration for this click",
+    );
 
     const currentWaiting = answered(await contextTurn(t, current));
     answered(await configsNamed(t, firstWaiting));
     expect(seen).toEqual([]);
     answered(await configsNamed(t, currentWaiting));
+    expect(seen).toEqual([]);
+    answered(await handIn(t.r, click("act", current)));
     expect(seen).toEqual([heardContextOf(current)]);
   });
 
@@ -2316,7 +2411,7 @@ describe("a click", () => {
     expect(t.rig.cache.holdsConfig(origin)).toBe(false);
   });
 
-  test("a session whose opening threw opens on its origin's next config, and a parked click resumes once", async () => {
+  test("a session whose opening threw can recover without replaying an earlier click", async () => {
     const acted = jest.fn();
     const home = unreadableHome();
     const t = renderer(
@@ -2326,7 +2421,9 @@ describe("a click", () => {
     );
     const context = checked();
     answered(await contextTurn(t, context));
-    answered(await handIn(t.r, click("act", context)));
+    expect(threw(await handIn(t.r, click("act", context))).failure.message).toContain(
+      "no configuration for this click",
+    );
     const { discovery } = t.rig.cache.configs;
     discovery.follow([context.requested]);
     const config = discovery.snapshotOf(context.requested);
@@ -2337,27 +2434,29 @@ describe("a click", () => {
       config,
     } as const;
 
-    // The opening's load throws. The click, which reads no config, still
-    // resumes in the same turn.
     home.unreadable = true;
     expect(threw(await handIn(t.r, configEvent)).failure.message).toContain(
       UNREADABLE_HOME,
     );
     expect(viewOf(t.rig)).toBeNull();
-    expect(acted).toHaveBeenCalledTimes(1);
+    expect(acted).not.toHaveBeenCalled();
 
     home.unreadable = false;
     answered(await handIn(t.r, configEvent));
     expect(viewOf(t.rig)?.facts()).toBe(context);
+    expect(acted).not.toHaveBeenCalled();
+    answered(await handIn(t.r, click("act", context)));
     expect(acted).toHaveBeenCalledTimes(1);
   });
 
-  test("retirement cancels a parked click and the late config runs no handler", async () => {
+  test("a late config after retirement runs no handler for an earlier refused click", async () => {
     const acted = jest.fn();
     const t = renderer({ ...NO_VERBS, click: acted });
     const context = checked();
     const waiting = answered(await contextTurn(t, context));
-    answered(await handIn(t.r, click("act", context)));
+    expect(threw(await handIn(t.r, click("act", context))).failure.message).toContain(
+      "no configuration for this click",
+    );
 
     const retired = answered(
       await handIn(t.r, { kind: "retire", session: SESSION }),

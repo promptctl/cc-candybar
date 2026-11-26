@@ -17,6 +17,7 @@ import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../../scripts/lib/until";
 import { readProbe, readsOf } from "../../helpers/daemon-read-probe";
+import { untilHeard } from "../../helpers/reload-signal";
 
 // [LAW:no-ambient-temporal-coupling] Hold the next named child before the
 // actual renderer takes its boot. The host's restart delay cannot race the
@@ -178,7 +179,6 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
         () => fs.existsSync(folder),
         "the host to provision plugin storage",
       );
-      write(session, `initial ${session}`);
     }
 
     // From here on both views are driven by real subscriptions and writes.
@@ -211,7 +211,14 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
     };
     const mainFeed = follow(primary);
     const namedFeed = follow(worktree);
-    await until(
+    // The folder's watch has no ready signal, and a write landing before it
+    // is live is never reported, so the first values are written again until
+    // both feeds show them. From then on one write is heard.
+    await untilHeard(
+      () => {
+        for (const session of [primary, worktree])
+          write(session, `initial ${session}`);
+      },
       () => {
         const initial = log();
         return (
@@ -223,7 +230,6 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
         );
       },
       "both feeds reading managed sources",
-      8_000,
     );
     if (configAtRestart === "invalid") {
       const since = log().length;

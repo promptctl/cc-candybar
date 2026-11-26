@@ -28,14 +28,7 @@ function mkTmpDir(prefix: string): string {
 
 // A realistic staged path — the space in "Application Support" exercises the
 // quoting the real darwin path needs.
-const BIN = path.join(
-  "/Users/u",
-  "Library",
-  "Application Support",
-  "CCCandybar",
-  "bin",
-  "cc-candybar",
-);
+const BIN = "/Users/x/Library/Application Support/CCCandybar/bin/cc-candybar";
 
 // The plan is pure over the text it is handed: the file is only named.
 const FILE = "/Users/u/.claude/settings.json";
@@ -205,42 +198,46 @@ describe("installSuccessMessage", () => {
 });
 
 describe("resolveRenderEntry", () => {
-  test("resolves the native binary from node_modules beside the dist", () => {
-    // The platform package is staged here, not read from the checkout: the
-    // repository's package.json names no platform package, because publishing
-    // writes those optionalDependencies (scripts/publish.mjs).
-    const dir = mkTmpDir("cpwl-entry-test-");
-    fs.mkdirSync(path.join(dir, "dist"));
-    const platform = `${process.platform}-${process.arch}`;
-    const pkgName = PLATFORM_PACKAGES[platform];
-    if (pkgName === undefined) throw new Error(`no package for ${platform}`);
-    const pkgDir = path.join(dir, "node_modules", ...pkgName.split("/"));
-    fs.mkdirSync(path.join(pkgDir, "bin"), { recursive: true });
-    fs.writeFileSync(
-      path.join(pkgDir, "package.json"),
-      JSON.stringify({ name: pkgName }),
-    );
-    fs.writeFileSync(path.join(pkgDir, "bin", "cc-candybar"), "");
-    const entry = resolveRenderEntry(
-      path.join(dir, "dist", "index.mjs"),
-      process.platform,
-    );
-    expect(entry).toEqual({
-      kind: "native",
-      sourcePath: fs.realpathSync(path.join(pkgDir, "bin", "cc-candybar")),
-    });
-  });
+  test.each(Object.entries(PLATFORM_PACKAGES))(
+    "on %s, resolves %s's native binary from node_modules beside the dist",
+    (platform, pkgName) => {
+      // The platform package is staged here, not read from the checkout: the
+      // repository's package.json names no platform package, because
+      // publishing writes those optionalDependencies (scripts/publish.mjs).
+      const dir = mkTmpDir("cpwl-entry-test-");
+      fs.mkdirSync(path.join(dir, "dist"));
+      const pkgDir = path.join(dir, "node_modules", ...pkgName.split("/"));
+      fs.mkdirSync(path.join(pkgDir, "bin"), { recursive: true });
+      fs.writeFileSync(
+        path.join(pkgDir, "package.json"),
+        JSON.stringify({ name: pkgName }),
+      );
+      fs.writeFileSync(path.join(pkgDir, "bin", "cc-candybar"), "");
+      const entry = resolveRenderEntry(
+        path.join(dir, "dist", "index.mjs"),
+        platform,
+      );
+      expect(entry).toEqual({
+        kind: "native",
+        sourcePath: fs.realpathSync(path.join(pkgDir, "bin", "cc-candybar")),
+      });
+    },
+  );
 
-  test("falls back to the sibling node shim when no platform package resolves", () => {
-    const dir = mkTmpDir("cpwl-entry-test-");
-    fs.mkdirSync(path.join(dir, "dist"));
-    const entry = resolveRenderEntry(
-      path.join(dir, "dist", "index.mjs"),
-      process.platform,
-    );
-    expect(entry.kind).toBe("node-shim");
-    expect(entry.sourcePath).toBe(path.join(dir, "bin", "cc-candybar"));
-  });
+  // A platform whose package is not installed, and one no package ships for.
+  test.each(["linux-x64", "win32-x64"])(
+    "on %s with no platform package beside the dist, falls back to the sibling node shim",
+    (platform) => {
+      const dir = mkTmpDir("cpwl-entry-test-");
+      fs.mkdirSync(path.join(dir, "dist"));
+      const entry = resolveRenderEntry(
+        path.join(dir, "dist", "index.mjs"),
+        platform,
+      );
+      expect(entry.kind).toBe("node-shim");
+      expect(entry.sourcePath).toBe(path.join(dir, "bin", "cc-candybar"));
+    },
+  );
 });
 
 describe("stagedEntryKind", () => {

@@ -4,8 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { createDaemonPool } from "./helpers/daemon-pool";
+import { createDaemonPool, type DaemonPool } from "./helpers/daemon-pool";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { untilTestEnds } from "./helpers/test-end";
 import { type DaemonProcess } from "../scripts/lib/daemon/process";
 import { throughout, until } from "../scripts/lib/until";
 
@@ -24,6 +25,15 @@ function tmpPoolDir(): string {
   return dir;
 }
 
+// A slot, waited for until the test ends.
+const slotOf = (pool: DaemonPool) =>
+  untilTestEnds((ended) => pool.acquire({ until: ended, retryIntervalMs: 50 }));
+
+// An ask whose wait has already ended: one pass over every slot, so it takes
+// a free one and refuses a full pool, on no clock.
+const passOver = (pool: DaemonPool) =>
+  pool.acquire({ until: AbortSignal.abort(new Error("asked once")) });
+
 afterAll(() => {
   for (const dir of createdPoolDirs) {
     try {
@@ -38,21 +48,19 @@ afterAll(() => {
 describe("daemon pool", () => {
   test("acquires up to `size` slots concurrently, then blocks", async () => {
     const pool = createDaemonPool(tmpPoolDir(), 2, processProbe);
-    const a = await pool.acquire();
-    const b = await pool.acquire();
+    const a = await passOver(pool);
+    const b = await passOver(pool);
     // Both live (this process's own pid), so the pool is genuinely full — a
     // third acquire must not proceed until one is released.
-    await expect(
-      pool.acquire({ timeoutMs: 300, retryIntervalMs: 50 }),
-    ).rejects.toThrow(/no free slot/);
+    await expect(passOver(pool)).rejects.toThrow(/no free slot/);
     a.release();
     b.release();
   });
 
   test("releasing a slot unblocks a pending acquire", async () => {
     const pool = createDaemonPool(tmpPoolDir(), 1, processProbe);
-    const a = await pool.acquire();
-    const pending = pool.acquire({ timeoutMs: 5000, retryIntervalMs: 50 });
+    const a = await passOver(pool);
+    const pending = slotOf(pool);
     // Give the pending acquire a moment to actually be polling before we free
     // the slot, so this exercises the retry path rather than a lucky win.
     await new Promise((r) => setTimeout(r, 100));
@@ -70,7 +78,7 @@ describe("daemon pool", () => {
     // Kept alive briefly so its start-time can actually be read before it
     // exits — a null startTime (as if unfingerprinted) would make isSlotLive
     // fall back to bare kill(pid,0), which a recycled pid could satisfy
-    // within the 2000ms acquire budget on a host with aggressive pid reuse
+    // while the acquire waits on a host with aggressive pid reuse
     // (low pid_max containers) and flake this test. Recording the real
     // fingerprint exercises the same start-time-mismatch path production
     // code relies on to distinguish a recycled pid from the true owner.
@@ -91,13 +99,13 @@ describe("daemon pool", () => {
       JSON.stringify({ pid: deadPid, startTime: deadStartTime }),
     );
 
-    const slot = await pool.acquire({ timeoutMs: 2000, retryIntervalMs: 50 });
+    const slot = await slotOf(pool);
     slot.release();
   });
 
   test("release is a no-op if the slot was already reclaimed by someone else", async () => {
     const pool = createDaemonPool(tmpPoolDir(), 1, processProbe);
-    const a = await pool.acquire();
+    const a = await passOver(pool);
     // Simulate another process reclaiming this slot after we lost ownership
     // some other way (e.g. a sweep) — release() must not blow away the new
     // owner's record.
@@ -188,13 +196,12 @@ describe("the pool holds a spawn to its ceiling", () => {
       bin: "/bin/sh",
       args: ["-c", "exec sleep 60"],
     }));
-    const full = { timeoutMs: 200, retryIntervalMs: 50 };
     try {
       proc.signalDaemon("SIGSTOP");
       proc.signalDaemon("SIGCONT");
-      await expect(pool.acquire(full)).rejects.toThrow(/no free slot/);
+      await expect(passOver(pool)).rejects.toThrow(/no free slot/);
       await proc.stop();
-      (await pool.acquire(full)).release();
+      (await passOver(pool)).release();
     } finally {
       await proc.stop();
     }

@@ -315,7 +315,8 @@ describe("the pipes a descendant holds past its launch", () => {
   it("are destroyed on the spot when the launcher closed while the launch ran", async () => {
     // The holder writes without end once the launch is over: only a destroyed
     // pipe ends it, since an open one nobody reads blocks it for good.
-    const pidFile = join(tmpdir(), `drain-abort-${process.pid}`);
+    const dir = mkdtempSync(join(tmpdir(), "drain-abort-"));
+    const pidFile = join(dir, "pid");
     const pending = launch(
       python(
         `${SET}if os.fork()==0:\n  os.setsid()\n  open(${JSON.stringify(pidFile)},'w').write(str(os.getpid()))\n  time.sleep(0.5)\n  while True: os.write(1,b'x'*65536)\ntime.sleep(0.3)\nos._exit(0)\n`,
@@ -326,7 +327,7 @@ describe("the pipes a descendant holds past its launch", () => {
     await pending;
     expect(drainsOpened).toEqual([]);
     const pid = Number(readFileSync(pidFile, "utf8"));
-    rmSync(pidFile);
+    rmSync(dir, { recursive: true });
     await until(() => {
       try {
         process.kill(pid, 0);

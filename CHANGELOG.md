@@ -1,3 +1,9 @@
+## [1.241.0](https://github.com/promptctl/cc-candybar/compare/v1.240.0...v1.241.0) (2026-11-26)
+
+### Features
+
+* **url-handler:** copy and open links clicked over ssh act on the Mac ([#968](https://github.com/promptctl/cc-candybar/issues/968)) ([c9c14f8](https://github.com/promptctl/cc-candybar/commit/c9c14f8880bc75e20723dcac164e8fbe8191d480))
+
 ## [1.240.0](https://github.com/promptctl/cc-candybar/compare/v1.239.0...v1.240.0) (2026-11-26)
 
 ### Features

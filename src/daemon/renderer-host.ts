@@ -71,7 +71,13 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
-import { outlives, type HostAct } from "./acts.js";
+import {
+  actLine,
+  desktopActOf,
+  outlives,
+  type HostAct,
+  type HostOutcome,
+} from "./acts.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
@@ -81,6 +87,7 @@ import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
+import type { ActsOn } from "./foundations/protocol.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 
 // A turn as the host took it: how it ended, how long it waited in the
@@ -89,7 +96,7 @@ import type { RendererName } from "./foundations/renderer-name.js";
 // it returned: its changes, and the acts over in the turn, in the order they
 // were returned.
 export type HostTurn = TakenTurn & {
-  readonly settled: readonly EffectOutcome[];
+  readonly settled: readonly HostOutcome[];
 };
 type SettlePresentation = (
   effect: Pick<Present, "id" | "session" | "displayedEvents">,
@@ -128,8 +135,14 @@ interface MadeEvent<E = Event> {
   readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
+  readonly actsOn?: ActsOn;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
+type MadeClick =
+  | (MadeEvent<Extract<Notification, { kind: "click" }>> & {
+      readonly actsOn: ActsOn;
+    })
+  | Failure;
 
 // What the host's turns act in: the performer of acts, the trust book's
 // directory, what config discovery found at each origin it follows, whether
@@ -162,7 +175,10 @@ export interface RendererHost {
   // which is the turn's failure.
   answer(make: () => Made): Promise<HostTurn>;
   // A click keeps its session busy until its mailbox slot lands.
-  answerClick(session: SessionId | null, make: () => Made): Promise<HostTurn>;
+  answerClick(
+    session: SessionId | null,
+    make: () => MadeClick,
+  ): Promise<HostTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
   deliver(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
@@ -209,7 +225,7 @@ const THREW_AS = {
 interface Slotted {
   readonly received: boolean;
   readonly turn: TakenTurn;
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 }
 
 type ConfigDelivery =
@@ -223,7 +239,7 @@ type ConfigFollowing =
   | { readonly kind: "failed"; readonly failure: Failure };
 
 type ConfigTurn = {
-  readonly settled: Promise<readonly EffectOutcome[]>;
+  readonly settled: Promise<readonly HostOutcome[]>;
 } & (
   | { readonly kind: "received"; readonly failure: Failure | null }
   | { readonly kind: "unreceived"; readonly failure: Failure }
@@ -413,6 +429,7 @@ export function rendererHost(
     input: EventInput,
     queuedMs: number,
     captures: readonly RunEvidence[] = [],
+    actsOn: ActsOn = "daemon",
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -491,6 +508,7 @@ export function rendererHost(
       output,
       captures,
       receipt,
+      actsOn,
     );
     return {
       received: true,
@@ -509,8 +527,9 @@ export function rendererHost(
     output: RendererOutput,
     captures: readonly RunEvidence[],
     receipt: SettlePresentation,
+    actsOn: ActsOn,
   ): Promise<{
-    readonly settled: Promise<readonly EffectOutcome[]>;
+    readonly settled: Promise<readonly HostOutcome[]>;
     readonly configFailure: Failure | null;
   }> => {
     const changes = output.effects.filter(
@@ -525,16 +544,23 @@ export function rendererHost(
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
+    // A cold snapshot belongs to one click. If the renderer also wants this
+    // origin after the click, its normal config turn opens waiting sessions
+    // and updates their edits. Only that delivery earns a receipt.
+    const retryOrigin =
+      event.kind === "click" && event.coldConfig !== undefined
+        ? (event.context?.durable.origin ?? null)
+        : requested;
     const followed = took(
       output.subscriptions,
       output.wake,
       output.frames,
       output.stored,
-      requested,
+      retryOrigin,
       receipt,
     );
     let configFailure: Failure | null = null;
-    const waited: Array<Promise<readonly EffectOutcome[]>> = [];
+    const waited: Array<Promise<readonly HostOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
     if (followed.kind === "failed") {
       if (
@@ -558,11 +584,11 @@ export function rendererHost(
             world.configs.landed(landed.files),
           ) ?? [])
         : [];
-    const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];
+    const reloaded: Array<Promise<readonly HostOutcome[]>> = [];
     for (const origin of moved)
       reloaded.push((await configInSlot(origin, "config-landed")).settled);
 
-    const owed: Array<Promise<EffectOutcome>> = [];
+    const owed: Array<Promise<HostOutcome>> = [];
     const acts: HostAct[] = [];
     for (const effect of output.effects) {
       if (effect.kind === "present") {
@@ -592,19 +618,29 @@ export function rendererHost(
       } else acts.push(effect);
     }
 
+    // [LAW:single-enforcer] The connection owns the destination. Only the
+    // acts of this writer's click can leave in its reply.
+    // [LAW:nothing-unseen] An act handed to the desktop is said on its act line
+    // as any act is.
+    const performed = async (act: HostAct): Promise<HostOutcome> => {
+      const desktop = actsOn === "desktop" ? await desktopActOf(act) : null;
+      if (desktop === null) return world.perform(act);
+      log("info", actLine(act, "desktop", "handed to the desktop"));
+      return Promise.resolve({ kind: "desktop", act: desktop });
+    };
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
       const acted =
         configOutcome.kind === "ok"
           ? before
-              .then(() => world.perform(act))
+              .then(() => performed(act))
               .catch(
                 (error: unknown): EffectOutcome => ({
                   kind: "failed",
                   reason: failureOf(error).detail,
                 }),
               )
-          : Promise.resolve<EffectOutcome>(
+          : Promise.resolve<HostOutcome>(
               configOutcome.kind === "closing"
                 ? configOutcome
                 : {
@@ -750,8 +786,8 @@ export function rendererHost(
       configs = next;
       origins = subscriptions.configs;
     }
-    // [LAW:no-ambient-temporal-coupling] A new context retries just its
-    // undelivered config, even if the complete declaration stayed the same.
+    // [LAW:no-ambient-temporal-coupling] A context or cold click retries its
+    // undelivered config while the renderer still asks for that origin.
     // A feed tick cannot poll a failed follow or delivery.
     if (requested !== null) {
       const key = originKey(requested);
@@ -811,16 +847,18 @@ export function rendererHost(
   // holds as its slot comes up. One discovery no longer follows (the
   // renderer let it go before the slot) has nothing to hand in: its reason
   // left first.
-  const configMade = (origin: RenderOrigin) => (): Made<Notification> => {
-    const config = world.configs.snapshotOf(origin);
-    return config === null
-      ? {
-          kind: "abandoned",
-          message: "the renderer let the origin go",
-          detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`,
-        }
-      : { kind: "event", event: { kind: "config", origin, config } };
-  };
+  const configMade =
+    (origin: RenderOrigin) =>
+    (): Made<Extract<Notification, { kind: "config" }>> => {
+      const config = world.configs.snapshotOf(origin);
+      return config === null
+        ? {
+            kind: "abandoned",
+            message: "the renderer let the origin go",
+            detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`,
+          }
+        : { kind: "event", event: { kind: "config", origin, config } };
+    };
   // An origin's `config` turn in the slot of the turn that named it or moved
   // it: settled once that turn's own acts have.
   const configInSlot = async (
@@ -845,8 +883,7 @@ export function rendererHost(
     const input = stamped(made);
     const { received, turn, settled } = await inSlot(input, 0);
     record(input.event, [["why", why]], turn);
-    // A `config` turn that threw failed whatever waited on it, as its own
-    // turn would have: a waiting click's bad request is still the user's.
+    // A config failure belongs to the turn that requested its delivery.
     const threw: readonly EffectOutcome[] =
       turn.kind === "threw"
         ? [
@@ -911,8 +948,12 @@ export function rendererHost(
   // An act's, once it ended: its `effect-done` joins the mailbox.
   const settle = async (
     effect: HostAct,
-    outcome: EffectOutcome,
-  ): Promise<EffectOutcome> => {
+    ended: HostOutcome,
+  ): Promise<HostOutcome> => {
+    // The renderer is told `ok` of an act handed to the desktop: the daemon's
+    // part of it is done. What the desktop then does is its own to tell.
+    const outcome: EffectOutcome =
+      ended.kind === "desktop" ? { kind: "ok" } : ended;
     const failed =
       outcome.kind === "failed" || outcome.kind === "refused"
         ? outcome.reason
@@ -933,7 +974,7 @@ export function rendererHost(
       delivered.failure.kind === "down"
     )
       unheard(failed);
-    return outcome;
+    return ended;
   };
   // A change's or a refused present's, in the slot of the turn that
   // returned it: settled once that `effect-done` turn's own acts have.
@@ -1018,6 +1059,30 @@ export function rendererHost(
                 follow(wanted);
               });
               made = { ...captured, event: ready };
+            } else if (
+              event.kind === "click" &&
+              event.context !== null &&
+              configs.get(originKey(event.context.durable.origin))?.kind !==
+                "received"
+            ) {
+              const origin = event.context.durable.origin;
+              // [LAW:effects-at-boundaries] Borrow discovery until this click lands.
+              // Its renderer then declares the config it retained, as on a draw.
+              if (
+                !followedOrigins.some(
+                  (held) => originKey(held) === originKey(origin),
+                )
+              ) {
+                restore = followedOrigins;
+                follow([...followedOrigins, origin]);
+              }
+              const config = configMade(origin)();
+              if (config.kind !== "event") made = config;
+              else
+                made = {
+                  ...captured,
+                  event: { ...event, coldConfig: config.event.config },
+                };
             } else made = { ...captured, event };
           } else made = captured;
         } catch (thrown) {
@@ -1038,15 +1103,18 @@ export function rendererHost(
           stamped(made),
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : undefined,
+          made.event.kind === "click" ? made.actsOn : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
+        if (made.event.kind === "click" && restore !== undefined)
+          restore = origins ?? restore;
         return { event: made.event, slotted };
       } finally {
         // Config effects land inside the slot. Keep their discovery holds
         // until then, and restore previous demand before another input.
         if (restore !== undefined) {
           const previous = restore;
-          recordTaken("start config demand rollback", () => follow(previous));
+          recordTaken("restore config demand", () => follow(previous));
         }
         // [LAW:no-ambient-temporal-coupling] Release before the mailbox can
         // select another slot, including when this click was refused.
@@ -1072,7 +1140,7 @@ export function rendererHost(
     (await taken(make)).turn;
   const answerClick = async (
     session: SessionId | null,
-    make: () => Made,
+    make: () => MadeClick,
   ): Promise<HostTurn> => (await taken(make, "last", session)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.

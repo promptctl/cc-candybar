@@ -1,8 +1,8 @@
+import { refuseFile } from "./helpers/refuse-file";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import {
   ManagedStorage,
   STORAGE_FILE_MAX_AGE_MS,
@@ -25,6 +25,7 @@ import { ABSENT, ok } from "../src/utils/outcome";
 import type { Current } from "../src/utils/reading";
 import { until } from "../scripts/lib/until";
 import { fakeWatches } from "./helpers/fake-watches";
+import { untilHeard } from "./helpers/reload-signal";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import { SourceFiles } from "../src/daemon/source-files";
 
@@ -241,13 +242,16 @@ describe("ManagedStorage reads", () => {
     r.write(A, '"a1"');
     const a = r.storage.declare(new Holds(), r.folder, A);
     await answered(a);
-    // FSEvents drops what lands before its stream is armed.
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    r.write(A, '"a2"');
-    await until(() => {
-      const now = a.current();
-      return now.kind === "ok" && now.value === "a2";
-    }, "A's write");
+    // FSEvents drops what lands before its stream is armed, so the write is
+    // made again until the lane reads it.
+    await untilHeard(
+      () => r.write(A, '"a2"'),
+      () => {
+        const now = a.current();
+        return now.kind === "ok" && now.value === "a2";
+      },
+      "A's write",
+    );
   });
 
   test("a write to session A's file re-reads A only", async () => {
@@ -399,20 +403,30 @@ describe("ManagedStorage watches", () => {
     expect(fs.existsSync(r.folder)).toBe(false);
   });
 
-  test("chmod, utimes and xattr on the folder leave its sources reading and open no watch", async () => {
+  // An attribute change reaches a watch as the same "change" event on every
+  // platform, xattr included, so these two stand for all of them.
+  test("chmod and utimes on the folder leave its sources reading and open no watch", async () => {
     const r = rig();
     r.follow();
     r.write(A, '"a"');
     const lane = r.storage.declare(new Holds(), r.folder, A);
     await answered(lane);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const reads = (value: string) => () => {
+      const now = lane.current();
+      return now.kind === "ok" && now.value === value;
+    };
+    // FSEvents drops what lands before its stream is armed.
+    await untilHeard(
+      () => r.write(A, '"live"'),
+      reads("live"),
+      "the folder's watch live",
+    );
     fs.chmodSync(r.folder, 0o700);
     fs.utimesSync(r.folder, new Date(), new Date());
-    if (process.platform === "darwin") {
-      execFileSync("xattr", ["-w", "candybar.test", "1", r.folder]);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(lane.current()).toEqual(ok("a"));
+    // The watch's events arrive in order, so whatever it made of the touches
+    // has run once it reads the write after them.
+    r.write(A, '"after"');
+    await until(reads("after"), "the write after the touches");
     r.recheck();
     expect(r.generation()).toBe(0);
     expect(r.storage.stats()).toMatchObject({
@@ -680,32 +694,25 @@ describe("ManagedStorage watches", () => {
     await until(() => lane.current().kind === "ok", "the re-read");
   });
 
-  // The disk's own answer, not an injected one: a folder there whose stat
-  // fails is one that cannot be read, never one mkdir could not make. Root
-  // ignores directory permissions, so the condition cannot be built.
-  (process.getuid?.() === 0 ? test.skip : test)(
+  // A refusal at stat reaches the owner as unreadable, before any mkdir.
+  test(
     "a folder there whose stat fails is unreadable, not unmade",
     async () => {
       const r = rig();
       fs.mkdirSync(r.folder, { recursive: true });
-      const parent = path.dirname(r.folder);
-      fs.chmodSync(parent, 0o600);
-      try {
-        r.follow();
-        const lane = r.storage.declare(new Holds(), r.folder, A);
-        expect(await answered(lane)).toMatchObject({
-          kind: "failed",
-          reason: expect.stringContaining(
-            `${r.folder} could not be read: EACCES`,
-          ),
-        });
-        expect(r.storage.stats().faults).toMatchObject({
-          unreadable: 1,
-          unusable: 0,
-        });
-      } finally {
-        fs.chmodSync(parent, 0o700);
-      }
+      using _denied = refuseFile(r.folder, "statSync");
+      r.follow();
+      const lane = r.storage.declare(new Holds(), r.folder, A);
+      expect(await answered(lane)).toMatchObject({
+        kind: "failed",
+        reason: expect.stringContaining(
+          `${r.folder} could not be read: EACCES`,
+        ),
+      });
+      expect(r.storage.stats().faults).toMatchObject({
+        unreadable: 1,
+        unusable: 0,
+      });
     },
   );
 

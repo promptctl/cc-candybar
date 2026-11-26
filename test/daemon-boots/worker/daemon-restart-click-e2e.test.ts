@@ -18,12 +18,13 @@ import { answeredEvents, saidOf, sendClick } from "../../../scripts/lib/daemon/r
 import { click, frameRequest, hookData, linkTo, render } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { environmentKey } from "../../../src/daemon/foundations/session-env";
-import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
+import { PROTOCOL_VERSION, URL_FRAME_VERSION } from "../../../src/daemon/foundations/protocol";
 import type { AsyncLaunchOpts } from "../../../src/proc/launcher";
 import { fakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { TEST_ENV } from "../../helpers/session-environment";
 
 jest.setTimeout(30_000);
 
@@ -49,9 +50,11 @@ test("a click after a restart writes the session's own config, and types into no
       actions: {
         pin: { persist: "palette", to: "${PALETTE}" },
         compact: { slash: "/compact" },
+        copyPath: { copy: "copied on desktop" },
+        pinAndCopy: { do: ["pin", "copyPath"] },
       },
       segments: {
-        pin: { template: '{{ action "pin" "PIN" }}' },
+        pin: { template: '{{ action "pinAndCopy" "PIN" }}' },
         compact: { template: '{{ action "compact" "COMPACT" }}' },
       },
       root: { h: ["pin", "compact"] },
@@ -78,7 +81,14 @@ test("a click after a restart writes the session's own config, and types into no
   }
   const second = startDaemon(env, { claudeInput });
   try {
-    await click(second, linkTo(bar, "PIN"));
+    // The Mac that sent the first click after restart receives its copy
+    // only after the session's own config edit lands.
+    const verdict = await sendDaemonRequest(second, {
+      kind: "url", urlV: URL_FRAME_VERSION, url: linkTo(bar, "PIN"), actsOn: "desktop",
+    });
+    expect(verdict).toEqual({
+      ok: true, output: "", desktopActs: [{ kind: "copy", text: "copied on desktop" }],
+    });
     const palette = (
       JSON5.parse(fs.readFileSync(file, "utf8")) as {
         globals?: { palette?: unknown };
@@ -161,6 +171,7 @@ test("a click in either session uses its environment for desktop tools and both 
     const cwd = path.join(project, session);
     fs.mkdirSync(cwd, { recursive: true });
     const reported = {
+      ...TEST_ENV,
       SESSION_MARKER: marker,
       TMUX: paneOf(pane).socket + ",123,0",
       TMUX_PANE: pane,

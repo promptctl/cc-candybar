@@ -114,7 +114,7 @@ describe("sourceDigest", () => {
   // digest over part of the source would be a lie.
   test("a missing tree throws", () => {
     expect(() =>
-      sourceDigest(path.join(os.tmpdir(), "ccb-digest-absent")),
+      sourceDigest(path.join(scratch({}), "absent")),
     ).toThrow(/ENOENT/);
   });
 });
@@ -150,7 +150,7 @@ describe("crateDigest", () => {
 
   test("a missing crate throws", () => {
     expect(() =>
-      crateDigest(path.join(os.tmpdir(), "ccb-crate-absent")),
+      crateDigest(path.join(scratch({}), "absent")),
     ).toThrow(/ENOENT/);
   });
 });

@@ -48,7 +48,7 @@ import {
   PACKAGE_NAME,
   REGISTRY_URL,
 } from "./currency";
-import { PLATFORM_PACKAGES } from "./platforms";
+import { PLATFORM_PACKAGES, machinePlatform } from "./platforms";
 import { recordIfInstall, statusLineRunsBundle } from "./record";
 import { hostBundleRecordText } from "../daemon/host-bundle";
 import { readTextIfPresent } from "../utils/regular-text";
@@ -154,7 +154,7 @@ function resolveForwarder(
   const shipped = platformPackageFile(
     sourceDist,
     `bin/${FORWARDER_BIN}`,
-    platform,
+    machinePlatform(platform),
   );
   switch (shipped.kind) {
     case "found":
@@ -184,9 +184,8 @@ type PlatformPackageFile =
 function platformPackageFile(
   sourceDist: string,
   file: string,
-  os: NodeJS.Platform,
+  platform: string,
 ): PlatformPackageFile {
-  const platform = `${os}-${process.arch}`;
   const pkgName = PLATFORM_PACKAGES[platform];
   if (pkgName === undefined) return { kind: "no-package", platform };
   try {
@@ -209,7 +208,7 @@ type RenderEntry =
 
 function resolveRenderEntry(
   sourceDist: string,
-  platform: NodeJS.Platform,
+  platform: string,
 ): RenderEntry {
   const shipped = platformPackageFile(sourceDist, "bin/cc-candybar", platform);
   if (shipped.kind === "found") {
@@ -293,7 +292,7 @@ function runtimeSources(
     );
   }
 
-  const entry = resolveRenderEntry(sourceDist, platform);
+  const entry = resolveRenderEntry(sourceDist, machinePlatform(platform));
   if (!fs.existsSync(entry.sourcePath)) {
     throw new Error(
       `install: render entry not found at ${entry.sourcePath}. Reinstall the package.`,
@@ -354,7 +353,7 @@ function stageRuntime(
   changes.remove(path.join(dir, "url-handler.mjs"));
 
   const stagedKind = stagedEntryKind(sources.entry.sourcePath);
-  const machine = `${platform}-${process.arch}`;
+  const machine = machinePlatform(platform);
   changes.report(
     `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${dir}\n` +
       (stagedKind === "native"

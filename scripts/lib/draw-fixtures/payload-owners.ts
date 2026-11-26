@@ -51,7 +51,10 @@ import {
   type Reading,
 } from "../../../src/utils/outcome";
 import type { Current, Lane } from "../../../src/utils/reading";
-import { HostService } from "../../../src/daemon/cache/host-identity";
+import {
+  HostService,
+  type HostReads,
+} from "../../../src/daemon/cache/host-identity";
 import { assembleFacts } from "../../../src/daemon/facts-assembly";
 import { instantOf } from "../../../src/utils/instant";
 import { settledWorld } from "./settled";
@@ -86,6 +89,12 @@ import {
 } from "../../../src/daemon/cache/transcript-lanes";
 import { RefreshLedger } from "../../../src/utils/refresh-ledger";
 import type { DaemonLogger } from "../../../src/utils/logger";
+
+// The machine a fixture's payload says it was drawn on.
+export const FIXTURE_HOST_READS: HostReads = {
+  hostname: () => "fixture-box.local",
+  username: () => "fixture-user",
+};
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -410,8 +419,12 @@ export function absentOwners(environment: SessionEnvironment) {
     sourceRuns: unscriptedRuns(),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
-    // The machine's identity, read as the daemon reads it.
-    hostService: new HostService({ clock: systemTimekeeper }),
+    // A machine's identity, read as the daemon reads it, over the one stated
+    // here rather than the host's.
+    hostService: new HostService({
+      clock: systemTimekeeper,
+      reads: FIXTURE_HOST_READS,
+    }),
   };
 }
 
