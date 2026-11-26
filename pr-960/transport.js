@@ -57968,6 +57968,10 @@ Subcommands:
                            after a build (\`just deploy\`).
   url-handle URL           Send a cc-candybar:// link to the daemon as a
                            click. Terminal links use the URL handler app.
+  ssh-config ALIAS         Print the ~/.ssh/config lines that make a click on
+                           this machine's bar reach this machine's daemon when
+                           the terminal is on another machine. ALIAS is the
+                           Host that machine's ssh config reaches this one by.
   plugin install SOURCE    Install a repository's plugins into
                            $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
                            local path, a GitHub slug (owner/repo) or a git URL,
@@ -80339,7 +80343,19 @@ var MAC_SPELLING = /^[0-9a-f]{64}$/;
 var LINK_MAC_BYTES = 16;
 var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 var LINK_MAC_MARK = "#";
+var LINK_PROOF_SEPARATOR = "/";
 var SOURCE_VERSION = "v1";
+var LINK_KEY_ID_CHARS = 8;
+var LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+var LINK_KEY_ID_DOMAIN = "cc-candybar link key id";
+var isLinkKeyId = (text5) => text5.length === LINK_KEY_ID_CHARS && [...text5].every((c) => LINK_KEY_ID_ALPHABET.includes(c));
+function base64url(bytes) {
+  return import_buffer.Buffer.from(bytes).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+function linkKeyId(key) {
+  const digest2 = createHmac("sha256", key).update(LINK_KEY_ID_DOMAIN).digest();
+  return base64url(digest2.subarray(0, LINK_KEY_ID_CHARS * 3 / 4));
+}
 function transitForm(link) {
   return link.toWellFormed().replace(
     /%(?![0-9A-Fa-f]{2})|[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu,
@@ -80351,41 +80367,54 @@ function unprovenLink(signed) {
   return mark === -1 ? signed : signed.slice(0, mark);
 }
 function linkMac(key, link) {
-  return import_buffer.Buffer.from(
+  return base64url(
     createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES)
-  ).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  );
 }
-function signLinkWith(key, link, source) {
-  const sent = transitForm(link);
-  if (source === void 0)
-    return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
-  const session = encodeURIComponent(JSON.stringify(source.session));
-  const issued = `${sent}${LINK_MAC_MARK}${SOURCE_VERSION}/${source.renderer}/${session}`;
-  return `${issued}/${linkMac(key, issued)}`;
+function signLinkWith(key, id2, link, source) {
+  const signer = `${transitForm(link)}${LINK_MAC_MARK}${id2}`;
+  const issued = source === void 0 ? signer : [
+    signer,
+    SOURCE_VERSION,
+    source.renderer,
+    encodeURIComponent(JSON.stringify(source.session))
+  ].join(LINK_PROOF_SEPARATOR);
+  return `${issued}${LINK_PROOF_SEPARATOR}${linkMac(key, issued)}`;
 }
-function openLinkWith(key, signed) {
+function openLinkWith(key, own2, signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
   if (mark === -1)
     return {
       kind: "failed",
       reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
     };
-  const proofAt = Math.max(mark, signed.lastIndexOf("/"));
-  const mac = signed.slice(proofAt + 1);
+  const [signer, ...source] = signed.slice(mark + 1).split(LINK_PROOF_SEPARATOR);
+  const mac = source.pop();
+  if (signer === void 0 || mac === void 0 || !isLinkKeyId(signer))
+    return {
+      kind: "failed",
+      reason: "the link's proof does not begin with the key id of the daemon that signed it: the bar drew it before its links named their signer, and its next redraw does, or it was changed after the bar drew it"
+    };
+  if (signer !== own2)
+    return {
+      kind: "failed",
+      reason: `the link names key ${signer}, not this daemon's (${own2}): if a bar on another machine drew it, no ssh forward for that key is open here (\`cc-candybar ssh-config ALIAS\` run on that machine prints one); if this machine's bar drew it, its link key has been replaced since`
+    };
   const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(
     import_buffer.Buffer.from(mac),
-    import_buffer.Buffer.from(linkMac(key, signed.slice(0, proofAt)))
+    import_buffer.Buffer.from(
+      linkMac(key, signed.slice(0, signed.length - mac.length - 1))
+    )
   );
   if (!proven)
     return {
       kind: "failed",
-      reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
+      reason: "the link's signature does not match what it carries: it was changed after the bar drew it"
     };
   const href = signed.slice(0, mark);
-  if (proofAt === mark) return { kind: "ok", value: { href } };
-  const fields2 = signed.slice(mark + 1, proofAt).split("/");
-  const [version, name, encoded] = fields2;
-  if (fields2.length !== 3 || version !== SOURCE_VERSION || name === void 0 || encoded === void 0)
+  if (source.length === 0) return { kind: "ok", value: { href } };
+  const [version, name, encoded] = source;
+  if (source.length !== 3 || version !== SOURCE_VERSION || name === void 0 || encoded === void 0)
     return { kind: "failed", reason: "the link has an unknown frame source" };
   try {
     const renderer = rendererNameOf(name);
@@ -80416,7 +80445,9 @@ function linkSigner(key) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
   const signed = /* @__PURE__ */ new Map();
+  const id2 = linkKeyId(key);
   return {
+    keyId: () => ({ kind: "ok", value: id2 }),
     sign: (fields2) => digest(key, fields2).toString("hex"),
     verify: (fields2, mac) => {
       if (!MAC_SPELLING.test(mac)) return false;
@@ -80427,12 +80458,12 @@ function linkSigner(key) {
       let done = signed.get(cacheKey);
       if (done === void 0) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
-        done = signLinkWith(key, link, source);
+        done = signLinkWith(key, id2, link, source);
         signed.set(cacheKey, done);
       }
       return done;
     },
-    openLink: (link) => openLinkWith(key, link)
+    openLink: (link) => openLinkWith(key, id2, link)
   };
 }
 var SIGNED_LINKS_HELD = 1024;
@@ -80448,6 +80479,10 @@ function linkSignerOver(key) {
     return asked.value;
   };
   return {
+    keyId: () => {
+      const asked = loaded();
+      return asked.kind === "ok" ? asked.value.keyId() : asked;
+    },
     sign: (fields2) => held().sign(fields2),
     verify: (fields2, mac) => held().verify(fields2, mac),
     signLink: (link, source) => held().signLink(link, source),
@@ -84739,6 +84774,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
+        linkKeyId: parts.linkSigner.keyId(),
         host: limits.host(),
         renderers
       })
@@ -89433,7 +89469,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/lib/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.238.3";
+var PACKAGE_VERSION = "1.238.4";
 
 // src/daemon/stats.ts
 var ROLLING_WINDOW_MS = 6e4;
@@ -89633,6 +89669,7 @@ var RuntimeStats = class {
       subprocesses: this.snapshotSubprocesses(),
       clients: extras.clients,
       bundle: extras.bundle,
+      linkKeyId: extras.linkKeyId,
       host: extras.host,
       renderers: extras.renderers
     };
@@ -92343,6 +92380,10 @@ var STATS_SHAPE = object({
   }),
   clients: list2(SIGHTING),
   bundle: text4,
+  linkKeyId: tagged({
+    ok: { value: text4 },
+    failed: { reason: text4 }
+  }),
   host: PROCESS_MEMORY,
   renderers: list2(PANEL)
 });
