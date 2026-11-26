@@ -124,9 +124,16 @@ function programFor(
   const renewing = `${key}_renewing`;
   const holding = `#{||:#{==:#{${lease}},${key}},#{==:#{${lease}},${renewing}}}`;
   const releaseLease = `if-shell -F '${holding}' { set-option -su ${lease} ; ${command(["run-shell", "-C", panes])} }`;
-  const cleanup = remove.map(command).join(" ; ");
+  // A fresh local client-closed array may be created by the user's config
+  // after discovery. Only remove our indexed member of such an array.
+  const closed = named("client-closed");
+  const localGuard = `#{O/s:#{?#{&&:#{==:#{option_name},client-closed},#{==:#{option_array_key},${key}}},1,}}`;
+  const clearGuards = `#{S:#{?${localGuard},set-option -qu -t '#{session_id}' '${closed}' ; ,}}`;
+  const cleanup = [...remove, ["run-shell", "-C", clearGuards]]
+    .map(command)
+    .join(" ; ");
   const owner = "client-WATCHER_PID";
-  const died = `if-shell -F '#{==:#{hook_client},${owner}}' { ${cleanup} ; ${releaseLease} }`;
+  const died = `if-shell -F '#{==:#{hook_client},${owner}}' { ${releaseLease} ; ${cleanup} }`;
   const dirty = `set-hook -E ${event}`;
   const geometryOption =
     "#{m/r:^(status|status-position|window-size|pane-border-status)$,#{hook_argument_0}}";
@@ -134,7 +141,15 @@ function programFor(
   // A config edit can create a new local override. Wake our waiter so this
   // follower can start a successor while this client still guards its lease.
   const wake = `if-shell -F '#{==:#{${lease}},${key}}' { set-option -s ${lease} ${renewing} ; wait-for -E -w ${owner} ${event} }`;
-  const edited = `if-shell -F '${userHook}' { ${wake} } { if-shell -F '${geometryOption}' { ${dirty} } }`;
+  // The first local client-closed hook immediately shadows the global
+  // guard. Mirror it in the edit's own scope before handing back to that
+  // user command, including while a successor is still discovering scopes.
+  const closedEdit = `#{&&:${holding},#{m/r:^client-closed(\\[|$),#{hook_argument_0}}}`;
+  const localClosed = "#{O/s:#{?#{==:#{option_name},client-closed},1,}}";
+  const arm = (scope: string[]) =>
+    command(["set-hook", ...scope, closed, died]);
+  const guard = `if-shell -F '${closedEdit}' { if-shell -F '#{hook_flag_g}' { ${arm(["-g"])} } { if-shell -F '${localClosed}' { ${arm([])} } } }`;
+  const edited = `if-shell -F '${userHook}' { ${guard} ; ${wake} } { if-shell -F '${geometryOption}' { ${dirty} } }`;
   const action = (name: string) => {
     if (name === "client-closed") return died;
     if (name === "after-refresh-client") {

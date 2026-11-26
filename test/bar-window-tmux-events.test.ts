@@ -134,7 +134,28 @@ test("window geometry observes a private server and releases just its own hooks 
       ];
       // A reload can edit several hooks before its replacement is ready.
       // Repeated edits must succeed and preserve the same reserved pane.
-      tmux.run(...edit, ";", ...edit);
+      tmux.run(
+        ...edit,
+        ";",
+        ...edit,
+        ";",
+        "set-hook",
+        "-u",
+        "-t",
+        "bar",
+        "client-closed",
+        ";",
+        "set-hook",
+        "-t",
+        "bar",
+        "client-closed[user]",
+        "set-hook -E @user",
+      );
+      // A new local client-closed array shadows every global entry. Our
+      // original guard must already be installed before JS starts a successor.
+      expect(tmux.run("show-hooks", "-t", "bar", "client-closed")).toContain(
+        `client-closed[${firstLease}]`,
+      );
       await observed(successor.promise);
       expect(held()).not.toBe(firstLease);
       expect(held()).toMatch(/^ccb_window_/);
