@@ -26,11 +26,10 @@ import type {
 import {
   type SpeedObservation,
   type TodayFacts,
-  REFRESH_LANES,
   type RefreshLane,
-  type LaneDiagnostic,
   shortDigest,
 } from "../facts/world-state.js";
+import type { TranscriptLoss } from "../utils/transcript-loss.js";
 import type { ContextProvider } from "./cache/context-provider.js";
 import type { MetricsFold } from "../segments/metrics.js";
 import type { MetricsProvider } from "./cache/metrics-provider.js";
@@ -82,7 +81,7 @@ export interface RenderPayloadDeps {
   // independent providers that could disagree.
   readonly usageStore: Pick<
     SessionUsageStore,
-    "usageOf" | "speedOf" | "declareToday" | "daysOutside"
+    "usageOf" | "speedOf" | "declareToday" | "daysOutside" | "lossesOf"
   >;
   readonly contextProvider: Pick<ContextProvider, "tokensOf">;
   readonly metricsProvider: Pick<MetricsProvider, "foldOf">;
@@ -175,12 +174,13 @@ export interface RunReading {
 
 // [LAW:one-source-of-truth] Everything a session's readers read of its owners
 // in one turn: the lanes as the payload folds them (every source the config
-// declares among them), today's day sums, and the session's faults. The
-// payload and the facts document are both folds of this one record.
+// declares among them, each lane whose refresh threw as that failure),
+// today's day sums, and what the session's transcripts gave its folds less
+// of. The payload and the facts document are both folds of this one record.
 export interface Readings {
   readonly lanes: Lanes;
   readonly today: Current<TodayFacts>;
-  readonly faults: readonly LaneDiagnostic[];
+  readonly losses: readonly TranscriptLoss[];
 }
 
 // The owners of the keyed lanes, which a declaration takes its holds in.
@@ -435,12 +435,12 @@ export function readingsOf(
       () => todayReading(lanes.today, deps.usageStore, sessionId),
       "today",
     ),
-    faults: REFRESH_LANES.flatMap((lane) => {
-      const fault = deps.faults.of(sessionId, lane);
-      return fault === undefined
-        ? []
-        : [{ kind: "lane" as const, lane, reason: fault.reason }];
-    }),
+    // [LAW:single-enforcer] The usage store's folds alone report what a
+    // transcript could not give: every fold reads a line through the one line
+    // reading, so the context, metrics and activity folds of the main
+    // transcript drop the lines its fold drops, and only the usage store
+    // folds the sidechains.
+    losses: deps.usageStore.lossesOf(sessionId),
   };
 }
 

@@ -26,7 +26,6 @@ import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import {
   type WorldState,
-  stampFailureOf,
   UNREAD_ENV,
   UNREAD_RUN,
 } from "../facts/world-state.js";
@@ -139,7 +138,7 @@ export function sessionSource(
       // handed in for this session yet.
       env: (name) => ownValue(document().env, name) ?? UNREAD_ENV,
       hints: () => compose.read().hints,
-      failure: () => stampFailureOf(document()),
+      failure: () => document().stampFailure,
       selections: () => draw.read().effective,
     };
   };

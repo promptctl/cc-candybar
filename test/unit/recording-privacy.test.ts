@@ -128,7 +128,7 @@ function facts(
         env,
       },
       today: ABSENT,
-      faults: [],
+      losses: [],
     },
     daemonFactsOf(),
     AT,
@@ -318,7 +318,6 @@ test("capture refuses raw hook extensions and the raw hint payload the renderer 
     const asClick = input({
       kind: "click",
       click,
-      arrival: { via: "link", delivery: { kind: "cli" } },
       context: heardContextOf(req),
     });
     expect(JSON.stringify(asRequest)).toContain(UNREQUESTED);

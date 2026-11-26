@@ -395,21 +395,6 @@ export function templateFunctions(
   return called;
 }
 
-// [LAW:single-enforcer] Every declared helper a template CALLS — directly, or
-// through a helper it calls — as one more fold over the call-graph walk. Read
-// off the calls rather than off the blocks a helper yields, so a helper with
-// an empty body is still called.
-export function templateHelperRefs(
-  template: string,
-  helpers: Readonly<Record<string, string>>,
-): ReadonlySet<string> {
-  return new Set(
-    [...templateHelperCalls(template, helpers)].filter((name) =>
-      Object.hasOwn(helpers, name),
-    ),
-  );
-}
-
 // Every helper name a template calls, declared or not — a call to a dropped
 // plugin's helper names nothing until it stands in.
 export function templateHelperCalls(

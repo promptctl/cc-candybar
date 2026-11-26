@@ -1012,8 +1012,8 @@ export function compileDslConfig({
   // `config.helpers` alone, so a segment's `{{ template "name" ctx }}` that
   // dispatches to one of ITS OWN `partials` is walked no further than the
   // dispatch — the partial's own clock/projection reads are invisible to it,
-  // the same gap b72c93e5 closed in cross-ref.ts/unused.ts
-  // for reachability and unused-declaration checks. A template this misses
+  // the same gap b72c93e5 closed in cross-ref.ts for reachability checks.
+  // A template this misses
   // throws at its first draw (template-engine/engine.ts, drawInProgress), so
   // this ADDS to `instant` (merging partials into helpers only grows what a
   // dispatch can reach, never shrinks it — a collision with a helper name is

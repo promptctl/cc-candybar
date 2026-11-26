@@ -4,7 +4,7 @@
 // the renderer says so with every frame it draws (`Awaiting`).
 
 import { pendingOf, type PendingWhy, type Reading } from "../utils/outcome.js";
-import { stampFailureOf, type WorldState } from "./world-state.js";
+import type { WorldState } from "./world-state.js";
 
 // Whether a request waits for a pending: a first answer nothing defers. A
 // `superseded` value the daemon itself made stale (a click's move) draws its
@@ -54,14 +54,14 @@ export function awaitingOf(
     readonly variable: string;
     readonly why: PendingWhy;
   }>,
-  document: Pick<WorldState, "seq" | "diagnostics">,
+  document: Pick<WorldState, "seq" | "stampFailure">,
 ): Awaiting {
   const { seq } = document;
   const names = pending
     .filter(({ why }) => awaits(why))
     .map(({ variable }) => variable);
   if (names.length === 0) return { kind: "settled", seq };
-  const reason = stampFailureOf(document);
+  const reason = document.stampFailure;
   return reason === null
     ? { kind: "owed", seq, names }
     : { kind: "stalled", seq, names, reason };

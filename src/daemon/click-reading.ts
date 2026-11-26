@@ -9,14 +9,12 @@ import {
   URL_SCHEME,
   type ClickAdmission,
 } from "../click/wire.js";
-import type { Delivery } from "../renderer-interface/click-arrival.js";
 import { BadVerbArgs } from "./foundations/verb-error.js";
 
 export type ReadClick =
   | ({
       readonly kind: "link";
       readonly link: string;
-      readonly delivery: Delivery;
       readonly source?: FrameSource;
     } & ClickAdmission)
   | {
@@ -25,11 +23,7 @@ export type ReadClick =
       readonly signed?: { readonly link: string; readonly verb: string };
     };
 
-export function parseClick(
-  url: string,
-  delivery: Delivery,
-  links: LinkSigner,
-): ReadClick {
+export function parseClick(url: string, links: LinkSigner): ReadClick {
   if (!isBarLink(url))
     return {
       kind: "refused",
@@ -62,7 +56,6 @@ export function parseClick(
           : click,
       runEvidence,
       link: href,
-      delivery,
       ...(source === undefined ? {} : { source }),
     };
   } catch (e) {

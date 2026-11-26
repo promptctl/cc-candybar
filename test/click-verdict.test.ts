@@ -30,7 +30,6 @@ function host(
   const copied: string[] = [];
   const unheard: string[] = [];
   const {
-    arrival: _a,
     context: _c,
     effects: _e,
     ...verbCtx
