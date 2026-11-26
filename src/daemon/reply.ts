@@ -1035,7 +1035,12 @@ function landedReply(parts: DaemonParts, { desktop, outcome }: Clicked): Reply {
   if (desktop.length === 0 && outcome.kind !== "ok")
     return stay(clickReply(outcome));
   const reply: Reply = replyOf(
-    { ok: true, output: "", desktopActs: desktop },
+    {
+      ok: true,
+      output: "",
+      desktopActs: desktop,
+      ...(outcome.kind === "ok" ? {} : { desktopError: outcome.message }),
+    },
     null,
     (taken) => {
       if (!taken && desktop.length > 0)
@@ -1139,6 +1144,7 @@ async function handleClick(
       : {
           kind: "event",
           runEvidence,
+          actsOn: deliveredActsOn(arrival.delivery),
           event: {
             kind: "click",
             click: admitted,

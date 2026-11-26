@@ -26,6 +26,7 @@ let ACTS_ON_DESKTOP = "desktop"
 // acts a click asked of this machine and the shape of each, and the code the
 // daemon refuses a link with.
 let DESKTOP_ACTS_KEY = "desktopActs"
+let DESKTOP_ERROR_KEY = "desktopError"
 let ACT_KIND_KEY = "kind"
 let ACT_KIND_COPY = "copy"
 let ACT_KIND_OPEN = "open"
@@ -259,6 +260,7 @@ enum DesktopAct: Equatable {
   case open(String, file: Bool)
   // A kind this app does not do: told, not dropped, because the click asked.
   case unknown(String)
+  case failed(String)
   // An act that is not one the wire spells: what is wrong with it.
   case malformed(String)
 }
@@ -313,7 +315,9 @@ func verdictOf(_ body: Data) -> Verdict? {
   guard let list = raw as? [Any] else {
     return .accepted(acts: [.malformed("\(DESKTOP_ACTS_KEY) is not a list")])
   }
-  return .accepted(acts: list.map(desktopAct))
+  var acts = list.map(desktopAct)
+  if let reason = said[DESKTOP_ERROR_KEY] as? String { acts.append(.failed(reason)) }
+  return .accepted(acts: acts)
 }
 
 // What this app does once the daemon has accepted the click: each act in the
@@ -357,6 +361,7 @@ func steps(for acts: [DesktopAct]?, via route: Route) -> [Step] {
           "cannot open \(target): this ssh forward names its host \"\(word)\", which is no host alias this app can hand an editor"
         )
       }
+    case .failed(let why): return .tell(why)
     case .unknown(let kind):
       return .tell("the daemon asked for \"\(kind)\", which this app does not do")
     case .malformed(let why):

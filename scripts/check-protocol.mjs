@@ -242,6 +242,11 @@ const CHECKS = [
     swift: memberSet(SWIFT_WIRE, /^let DESKTOP_ACTS_KEY = "[^"]+"$/m, /"(\w+)"/g),
   },
   {
+    label: "the reason a forwarded click only partially succeeded",
+    ts: lit(TS_PROTOCOL, /  (desktopError)\?: string;/),
+    swift: lit(SWIFT_WIRE, /^let DESKTOP_ERROR_KEY = "([^"]+)"$/m),
+  },
+  {
     label: "the acts a click asks of the URL handler's machine, and their fields",
     ts: memberSet(
       TS_PROTOCOL,

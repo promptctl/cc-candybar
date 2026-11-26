@@ -809,7 +809,6 @@ describe("ids a renderer mints", () => {
     id: 2 as EffectId,
     session: SESSION,
     text: "copy",
-    actsOn: "daemon" as const,
   };
 
   test("an effect and a drawn frame each settle by their own id despite colliding numbers", async () => {
@@ -972,13 +971,7 @@ describe("ids a renderer mints", () => {
         stored: [],
         record: [],
         effects: [
-          {
-            kind: "copy",
-            id: 1 as EffectId,
-            session: SESSION,
-            text: "x",
-            actsOn: "daemon",
-          },
+          { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
         ],
         subscriptions: {
           sources: {},

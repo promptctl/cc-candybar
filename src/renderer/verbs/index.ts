@@ -172,10 +172,7 @@ import {
   type ActionDecl,
   type SlashAction,
 } from "../../config/action";
-import {
-  actsOnOf,
-  type ClickArrival,
-} from "../../renderer-interface/click-arrival";
+import type { ClickArrival } from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
 import { BadVerbArgs, failureOf } from "../../daemon/foundations/verb-error";
@@ -273,25 +270,13 @@ export type VerbHandler = (args: readonly string[], ctx: ClickContext) => void;
 
 export { BadVerbArgs };
 
-// An act as a handler asks it: where a copy or open is carried out is its
-// click's to say, not the handler's.
-type Asked<A> = A extends unknown ? Omit<A, "actsOn"> : never;
-
 // [LAW:single-enforcer] What a handler asks of the host: an act in its
-// click's turn, performed once the click's changes have landed. The one place
-// a click's arrival is carried onto the acts it asks, so a copy or open says
-// where it is carried out in whichever turn the host lands it, a parked click's
-// replay included.
+// click's turn, performed once the click's changes have landed.
 function ask(
-  ctx: Pick<VerbContext, "acts" | "arrival" | "effects">,
-  act: Asked<ActRequest>,
+  ctx: Pick<VerbContext, "acts" | "effects">,
+  act: ActRequest,
 ): void {
-  ctx.acts.ask(
-    ctx.effects,
-    act.kind === "copy" || act.kind === "open"
-      ? { ...act, actsOn: actsOnOf(ctx.arrival) }
-      : act,
-  );
+  ctx.acts.ask(ctx.effects, act);
 }
 
 function globalAct(

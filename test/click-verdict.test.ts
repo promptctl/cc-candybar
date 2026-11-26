@@ -307,6 +307,7 @@ describe("a frame that asks for its acts on the desktop", () => {
       ok: true,
       output: "",
       desktopActs: [{ kind: "copy", text: "kept" }],
+      desktopError: expect.stringMatching(/copy-diagnostic: unknown renderer/),
     });
     expect(h.events).toEqual([expect.not.stringContaining("outcome=ok")]);
     expect(h.copied).toEqual([]);

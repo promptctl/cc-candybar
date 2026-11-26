@@ -6,7 +6,7 @@
 
 import { stat } from "node:fs/promises";
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
-import { ACTS_ON_DESKTOP, type DesktopAct } from "./foundations/protocol.js";
+import type { DesktopAct } from "./foundations/protocol.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -48,11 +48,8 @@ export type HostOutcome = EffectOutcome | ForDesktop;
 export async function desktopActOf(act: HostAct): Promise<DesktopAct | null> {
   switch (act.kind) {
     case "copy":
-      return act.actsOn === ACTS_ON_DESKTOP
-        ? { kind: "copy", text: act.text }
-        : null;
+      return { kind: "copy", text: act.text };
     case "open": {
-      if (act.actsOn !== ACTS_ON_DESKTOP) return null;
       // [LAW:effects-at-boundaries] Only the remote filesystem can tell the
       // desktop whether this path should open as an editor or a workspace.
       const entry = await stat(act.target);

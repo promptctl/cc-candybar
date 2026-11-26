@@ -160,6 +160,11 @@ func forwardVia(_ file: String) -> Route {
     socket: "/fwd/\(file)")
 }
 let named = forwardVia("\(id).web.eu-1.sock")
+let partial = verdictOf(json(#"{"ok":true,"output":"","desktopActs":[{"kind":"copy","text":"hi"}],"desktopError":"cannot open the remote file"}"#))
+if case .accepted(let acts) = partial {
+  expect(steps(for: acts, via: named), [.copy("hi"), .tell("cannot open the remote file")], "successful acts and a partial failure both reach the writer")
+} else { expect(false, true, "expected the partial result") }
+
 expect(
   steps(for: [.copy("hi"), .open("/srv/x", file: false)], via: named),
   [.copy("hi"), .open("vscode://vscode-remote/ssh-remote+web.eu-1/srv/x/")],

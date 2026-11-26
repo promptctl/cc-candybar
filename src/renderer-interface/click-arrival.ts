@@ -28,5 +28,3 @@ export type ClickArrival =
 // click arrives acts on the daemon's machine.
 export const deliveredActsOn = (delivery: Delivery): ActsOn =>
   delivery.kind === "forwarder" ? delivery.actsOn : "daemon";
-export const actsOnOf = (arrival: ClickArrival): ActsOn =>
-  arrival.via === "link" ? deliveredActsOn(arrival.delivery) : "daemon";

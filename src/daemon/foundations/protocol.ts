@@ -443,6 +443,8 @@ export interface ClickVerdict {
   ok: true;
   output: string;
   desktopActs: readonly DesktopAct[];
+  // A partial result: the writer still performs the acts that succeeded.
+  desktopError?: string;
 }
 
 // [LAW:parse-dont-validate] What came in over the wire, classified once, by

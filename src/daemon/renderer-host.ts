@@ -87,6 +87,7 @@ import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
+import type { ActsOn } from "./foundations/protocol.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 
 // A turn as the host took it: how it ended, how long it waited in the
@@ -134,6 +135,7 @@ interface MadeEvent<E = Event> {
   readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
+  readonly actsOn?: ActsOn;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
 
@@ -419,6 +421,7 @@ export function rendererHost(
     input: EventInput,
     queuedMs: number,
     captures: readonly RunEvidence[] = [],
+    actsOn: ActsOn = "daemon",
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -460,6 +463,19 @@ export function rendererHost(
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
     }
+    if (
+      input.event.kind === "click" &&
+      input.event.coldConfig !== undefined &&
+      input.event.context !== null
+    ) {
+      const key = originKey(input.event.context.durable.origin);
+      // [LAW:one-source-of-truth] The declaration tells us whether the
+      // renderer retained the snapshot supplied in this turn.
+      if (
+        output.subscriptions.configs.some((origin) => originKey(origin) === key)
+      )
+        configs.set(key, { kind: "received", config: input.event.coldConfig });
+    }
     const {
       subscriptions,
       wake,
@@ -497,6 +513,7 @@ export function rendererHost(
       output,
       captures,
       receipt,
+      actsOn,
     );
     return {
       received: true,
@@ -515,6 +532,7 @@ export function rendererHost(
     output: RendererOutput,
     captures: readonly RunEvidence[],
     receipt: SettlePresentation,
+    actsOn: ActsOn,
   ): Promise<{
     readonly settled: Promise<readonly HostOutcome[]>;
     readonly configFailure: Failure | null;
@@ -598,14 +616,12 @@ export function rendererHost(
       } else acts.push(effect);
     }
 
-    // [LAW:single-enforcer] An act is carried out here, where the turn that
-    // asked it is landed: one that says the desktop carries it out is handed to
-    // the desktop, as the outcome its click's answer is made of, and every other
-    // act is the world's.
+    // [LAW:single-enforcer] The connection owns the destination. Only the
+    // acts of this writer's click can leave in its reply.
     // [LAW:nothing-unseen] An act handed to the desktop is said on its act line
     // as any act is.
     const performed = async (act: HostAct): Promise<HostOutcome> => {
-      const desktop = await desktopActOf(act);
+      const desktop = actsOn === "desktop" ? await desktopActOf(act) : null;
       if (desktop === null) return world.perform(act);
       log("info", actLine(act, "desktop", "handed to the desktop"));
       return Promise.resolve({ kind: "desktop", act: desktop });
@@ -1086,6 +1102,7 @@ export function rendererHost(
           stamped(made),
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : undefined,
+          made.event.kind === "click" ? made.actsOn : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         if (made.event.kind === "click" && restore !== undefined)
