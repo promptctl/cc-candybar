@@ -8,7 +8,12 @@ import { readRegularTextSync } from "../utils/regular-text.js";
 // operation. A later installer holding the same home claim can finish a
 // rollback even if the previous process died between two directory renames.
 type Entry =
-  | { readonly op: "mkdir" | "stage"; readonly file: string }
+  | {
+      readonly op: "mkdir";
+      readonly file: string;
+      readonly installed: string | null;
+    }
+  | { readonly op: "stage"; readonly file: string }
   | { readonly op: "remove"; readonly file: string; readonly old: string }
   | {
       readonly op: "replace";
@@ -25,7 +30,9 @@ type Pending = Exclude<Entry, { op: "commit" }>;
 
 export function fileIdentity(file: string): string | null {
   const stat = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
-  return stat === undefined ? null : `${stat.dev}:${stat.ino}`;
+  return stat === undefined
+    ? null
+    : `${stat.dev}:${stat.ino}:${stat.birthtimeNs}`;
 }
 
 // A directory's own timestamps do not change when a program edits a file
@@ -55,13 +62,19 @@ const absolute = (v: unknown): v is string =>
 const temp = (v: unknown): v is string => absolute(v) && tempName.test(v);
 const beside = (v: unknown, file: string): v is string =>
   temp(v) && v.startsWith(file + ".") && path.dirname(v) === path.dirname(file);
-const identity = (v: unknown) => typeof v === "string" && /^\d+:\d+$/.test(v);
+const identity = (v: unknown): v is string =>
+  typeof v === "string" && /^\d+:\d+:-?\d+$/.test(v);
 
 function entryOf(raw: unknown): Entry {
   if (raw !== null && typeof raw === "object" && "op" in raw) {
     if (raw.op === "commit") return { op: "commit" };
     if ("file" in raw && absolute(raw.file)) {
-      if (raw.op === "mkdir") return { op: "mkdir", file: raw.file };
+      if (
+        raw.op === "mkdir" &&
+        "installed" in raw &&
+        (raw.installed === null || identity(raw.installed))
+      )
+        return { op: "mkdir", file: raw.file, installed: raw.installed };
       if (raw.op === "stage" && temp(raw.file))
         return { op: "stage", file: raw.file };
       if (raw.op === "remove" && "old" in raw && beside(raw.old, raw.file))
@@ -182,7 +195,19 @@ export class InstallJournal {
     if (this.committed)
       throw new Error("installer journal has an entry after commit");
     if (entry.op === "commit") this.committed = true;
-    else this.entries.push(entry);
+    else {
+      // A mkdir confirms its intent immediately after the kernel creates the
+      // directory. If the process died in between, that path's owner is unknown.
+      const last = this.entries.at(-1);
+      if (
+        entry.op === "mkdir" &&
+        last?.op === "mkdir" &&
+        last.file === entry.file &&
+        last.installed === null
+      )
+        this.entries.pop();
+      this.entries.push(entry);
+    }
   }
 
   record(entry: Entry): void {
@@ -195,8 +220,27 @@ export class InstallJournal {
     const kept: string[] = [];
     const failures: string[] = [];
     const pendingStages = new Set<string>();
+    // Parents were created first. A replaced parent may now be a link into
+    // an unrelated tree; never follow it to clean up a recorded child.
+    const replaced: string[] = [];
+    const underReplacement = (file: string) =>
+      replaced.some((dir) => file === dir || file.startsWith(dir + path.sep));
+    for (const entry of this.entries) {
+      if (entry.op !== "mkdir" || underReplacement(entry.file)) continue;
+      const current = fileIdentity(entry.file);
+      if (current !== null && current !== entry.installed) {
+        replaced.push(entry.file);
+        kept.push(
+          `${entry.file}: kept the current path and its contents because the installer cannot establish ownership`,
+        );
+      }
+    }
     for (const entry of [...this.entries].reverse()) {
-      if (entry.op === "stage" && pendingStages.has(entry.file)) continue;
+      if (
+        underReplacement(entry.file) ||
+        (entry.op === "stage" && pendingStages.has(entry.file))
+      )
+        continue;
       try {
         if (this.committed) {
           if (entry.op === "stage") remove(entry.file);

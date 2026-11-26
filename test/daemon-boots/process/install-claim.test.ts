@@ -177,3 +177,66 @@ test.each([
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test.each(["file", "link", "directory"] as const)(
+  "recovery preserves an installer-created directory replaced by a %s",
+  (replacement) => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "install-directory-"));
+    const dir = path.join(home, "parent");
+    const keep = path.join(home, "other");
+    const run = (script: string) =>
+      spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "-e",
+          `
+      import fs from "node:fs";
+      import path from "node:path";
+      import {transacted} from "./src/install/changes.ts";
+      const [home,dir]=process.argv.slice(1);
+      transacted(changes=>{ ${script} },home);
+    `,
+          home,
+          dir,
+        ],
+        { encoding: "utf8" },
+      );
+    try {
+      expect(
+        run(
+          `changes.mkdir(path.join(dir,"child")); process.kill(process.pid,"SIGKILL");`,
+        ).signal,
+      ).toBe("SIGKILL");
+      fs.renameSync(dir, path.join(home, "moved-by-user"));
+      fs.mkdirSync(keep);
+      switch (replacement) {
+        case "file":
+          fs.writeFileSync(dir, "the user's file");
+          break;
+        case "link":
+          fs.symlinkSync(keep, dir);
+          break;
+        case "directory":
+          fs.mkdirSync(dir);
+          break;
+      }
+      const external = fs.lstatSync(dir, { bigint: true });
+      const first = run("");
+      expect(first.stderr).toContain(`${dir}: kept the current path`);
+      expect(first.status).toBe(0);
+      expect(run("").status).toBe(0);
+      expect(fs.lstatSync(dir, { bigint: true }).ino).toBe(external.ino);
+      expect(fs.existsSync(path.join(home, "moved-by-user", "child"))).toBe(
+        true,
+      );
+      expect(
+        fs.readdirSync(home).filter((name) => name.includes("install-v1")),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  },
+);

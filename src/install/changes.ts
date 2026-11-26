@@ -42,8 +42,14 @@ export class InstallChanges {
     )
       missing.unshift(target);
     for (const file of missing) {
-      this.journal.record({ op: "mkdir", file });
-      fs.mkdirSync(file, { mode, recursive: true });
+      this.journal.record({ op: "mkdir", file, installed: null });
+      const made = fs.mkdirSync(file, { mode, recursive: true });
+      if (made !== undefined)
+        this.journal.record({
+          op: "mkdir",
+          file,
+          installed: fileIdentity(file),
+        });
     }
   }
 
@@ -161,7 +167,8 @@ export function transacted<T>(
       { cause: error },
     );
   }
-  journal.settle();
+  for (const note of journal.settle())
+    process.stderr.write(`install: ${note}\n`);
   changes.reportSuccess();
   return done;
 }
