@@ -100,6 +100,10 @@ export function ensureOwnedPrivateDir(dir: string): void {
   // post-hoc — we verify it next).
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
+  checkOwnedPrivateDir(dir);
+}
+
+export function checkOwnedPrivateDir(dir: string): void {
   const st = fs.lstatSync(dir);
   if (st.isSymbolicLink()) {
     throw new Error(`directory is a symlink: ${dir}`);

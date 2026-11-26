@@ -7,10 +7,11 @@ import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import { hostBundlePath } from "./paths";
 
 // The host's bundle record: which `index.mjs` the install runs the host from.
-// [LAW:single-enforcer] In this runtime the install's writer (`recordHostBundle`)
-// and a client's reader (`readHostBundle`) are the only code that touch the
-// file, so a client that finds no host has exactly one answer to "which code
-// starts it". The Rust client mirrors the read (rust-client/src/main.rs
+// [LAW:single-enforcer] In this runtime the record's text
+// (`hostBundleRecordText`), which the install and a checkout's record both
+// write, and a client's reader (`readHostBundle`) are the only code that
+// touch the file, so a client that finds no host has exactly one answer to
+// "which code starts it". The Rust client mirrors the read (rust-client/src/main.rs
 // read_host_bundle), and only the file's name is diffed by check-protocol.
 
 // [LAW:parse-dont-validate] The crossing from the file's text to a bundle a
@@ -72,9 +73,13 @@ export function whyUnusable(record: UnusableRecord): string {
 
 // [LAW:no-silent-failure] Only an absolute path is a record: a relative one
 // would name a different file for every client that read it.
-export function recordHostBundle(host: Host, bundle: string): void {
+export function hostBundleRecordText(bundle: string): string {
   if (!path.isAbsolute(bundle)) {
     throw new Error(`host bundle must be an absolute path: ${bundle}`);
   }
-  writeAtomic(hostBundlePath(host), `${bundle}\n`);
+  return `${bundle}\n`;
+}
+
+export function recordHostBundle(host: Host, bundle: string): void {
+  writeAtomic(hostBundlePath(host), hostBundleRecordText(bundle));
 }

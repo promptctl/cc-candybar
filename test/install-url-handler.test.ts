@@ -7,10 +7,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { __test__ as install, forwarderExecutable } from "../src/install/index";
-import type { OneShotLauncher } from "../src/proc/launch";
+import {
+  __test__ as install,
+  forwarderExecutable,
+  type InstallWorld,
+} from "../src/install/index";
 import type { LaunchOpts, LaunchResult } from "../src/proc/launcher";
-import type { World } from "../src/host";
 import { URL_SCHEME } from "../src/click/wire";
 
 describe("assembling the URL handler app", () => {
@@ -54,7 +56,7 @@ describe("assembling the URL handler app", () => {
     answers: Partial<Record<string, Partial<LaunchResult>>> = {},
   ) => {
     const ran: string[] = [];
-    const fake = {
+    const fake: InstallWorld["launcher"] = {
       launchSync: (opts: LaunchOpts): LaunchResult => {
         ran.push(`${path.basename(opts.bin)} ${(opts.args ?? []).join(" ")}`);
         return {
@@ -65,14 +67,19 @@ describe("assembling the URL handler app", () => {
           ...answers[path.basename(opts.bin)],
         } as LaunchResult;
       },
-    } as unknown as OneShotLauncher;
+    };
     return { ran, launcher: fake };
   };
 
-  const world = (l: OneShotLauncher): World =>
-    ({ host: { home, env: {}, tmp: home }, launcher: l }) as unknown as World;
+  const world = (l: InstallWorld["launcher"]): InstallWorld => ({
+    host: { home, env: {}, tmp: home },
+    launcher: l,
+  });
 
   const app = () => path.join(home, "Applications", "CCCandybarURLHandler.app");
+  // What ~/Applications holds: the app, and no name an install staged or
+  // kept aside.
+  const applications = () => fs.readdirSync(path.dirname(app()));
 
   test("the app is the forwarder binary, an Info.plist claiming the scheme, signed, then the old instance quit, then registered", () => {
     const { ran, launcher: l } = launcher({
@@ -98,11 +105,15 @@ describe("assembling the URL handler app", () => {
       "<key>CFBundleDisplayName</key>\n  <string>cc-candybar</string>",
     );
     expect(ran).toEqual([
-      `codesign --force --sign - ${app()}.installing`,
+      expect.stringMatching(
+        new RegExp(
+          `^codesign --force --sign - ${app()}\\.\\d+\\.[0-9a-f]+\\.tmp$`,
+        ),
+      ),
       "killall CCCandybarURLHandler",
       `lsregister -f ${app()}`,
     ]);
-    expect(fs.existsSync(`${app()}.installing`)).toBe(false);
+    expect(applications()).toEqual(["CCCandybarURLHandler.app"]);
     expect(out.join("")).toContain("CCCandybarURLHandler was not running");
   });
 
@@ -119,7 +130,7 @@ describe("assembling the URL handler app", () => {
       install.installUrlHandlerFrom(checkout("NEW"), world(failing)),
     ).toThrow(/codesign failed/);
     expect(fs.readFileSync(forwarderExecutable(app()), "utf8")).toBe("OLD");
-    expect(fs.existsSync(`${app()}.installing`)).toBe(false);
+    expect(applications()).toEqual(["CCCandybarURLHandler.app"]);
   });
 
   // [LAW:no-ambient-temporal-coupling] Launch Services never relaunches a
@@ -147,6 +158,7 @@ describe("assembling the URL handler app", () => {
     const { launcher: l } = launcher();
     install.installUrlHandlerFrom(checkout("MACHO"), world(l));
     expect(fs.existsSync(stale)).toBe(false);
+    expect(applications()).toEqual(["CCCandybarURLHandler.app"]);
   });
 
   // [LAW:no-silent-failure] No applet is built in the forwarder's place.
@@ -157,7 +169,7 @@ describe("assembling the URL handler app", () => {
     ).toThrow(
       /not built at .*bin\/cc-candybar-url-handler-native\. Run `just install-url-handler`/,
     );
-    expect(fs.existsSync(app())).toBe(false);
+    expect(fs.existsSync(path.dirname(app()))).toBe(false);
     expect(ran).toEqual([]);
   });
 

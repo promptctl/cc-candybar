@@ -66,7 +66,7 @@ const hasFlag = (flags: readonly string[]): boolean =>
 function showHelpText(host: Host): void {
   console.log(HELP_TEXT);
   // The one line of help that names this install: where its preload sits.
-  const preload = stableAttachPreload(RUNNING_BUNDLE, host);
+  const preload = stableAttachPreload(RUNNING_BUNDLE, host, process.platform);
   const missing = fs.existsSync(preload)
     ? ""
     : "  (nothing is there yet: run `cc-candybar install` first — in a checkout, `pnpm build`)\n";
@@ -90,7 +90,7 @@ function showHelpText(host: Host): void {
 type Subcommand = (args: readonly string[]) => Promise<void>;
 const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   install: async (args) => {
-    await runInstall(args, RUNNING_BUNDLE, commandWorld());
+    await runInstall(args, RUNNING_BUNDLE, commandWorld(), process.platform);
     process.exit(0);
   },
   "record-host-bundle": async () => {
@@ -98,7 +98,7 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     process.exit(0);
   },
   "install-url-handler": async () => {
-    runInstallUrlHandler(RUNNING_BUNDLE, commandWorld());
+    runInstallUrlHandler(RUNNING_BUNDLE, commandWorld(), process.platform);
     process.exit(0);
   },
   "ssh-config": async (args) => {
