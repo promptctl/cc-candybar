@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-962",
+      "ref": "refs/pull/962/merge",
+      "sha": "b8b9bc8f7249a562186199c671eb3c29ad245d28",
+      "timestamp": "2026-11-26T04:54:59.581Z",
+      "commits": [
+        {
+          "sha": "b8b9bc8f7249a562186199c671eb3c29ad245d28",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T04:53:34Z",
+          "message": "Merge 1ad0087046382d88a18d2bc26893831daacda660 into 56989bba0d3078f7c2e2c76efa384cbe0197fa8a\n"
+        },
+        {
+          "sha": "1ad0087046382d88a18d2bc26893831daacda660",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:53:31-07:00",
+          "message": "Merge branch 'main' into candybar-later-fixes-nwu9.ic0"
+        },
+        {
+          "sha": "2a21374ac1c2ed39eac58f16750a248ce0c1c75e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:14:35-07:00",
+          "message": "fix(audits): theme-identity no longer asserts the seam ΔE floor the joiner rule deleted (candybar-later-fixes-nwu9.ic0)\n\nIts second fact failed every seam whose two grounds sit under\nSEAM_MIN_DELTA_E, the floor candybar-joiners-e5r4 replaced with identity\nafter rounding. The seam sweep now holds that rule over the same looks, so\nthe fact and its private seam reader go; the palette fact stays.\n"
+        },
+        {
+          "sha": "e21f4d6e39b6d276681fad85c783137da8b12bbb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:14:30-07:00",
+          "message": "test(audits): the seam sweep holds the joiner rule under every look, closed and hot and calm (candybar-later-fixes-nwu9.ic0)\n\nThe sweep takes a scope (looks, views, depths, payloads) instead of one\nvariation at today's dial, unstyled, on the sample payload. Its exemptions\nare computed on the palette the bar wears, transposed through rich-js by\nthe look's style. A payload names which listed cells it puts on alert, and\na calmed cell must wear its tint and is held. Any divider fails.\n\nThe audit keeps its frame case and adds the case the theme-identity seam\nfact walked: every variation x dial position x style, the closed bar, hot\nand calm, at truecolor.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-968",
       "ref": "refs/pull/968/merge",
       "sha": "44c1b30c285cc6251ecb75478abf14f1118ab1d3",
@@ -129,35 +165,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T17:55:41-07:00",
           "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-962",
-      "ref": "refs/pull/962/merge",
-      "sha": "5656b5944617d00b4a7396518d4d223ddeca570a",
-      "timestamp": "2026-11-25T05:16:22.581Z",
-      "commits": [
-        {
-          "sha": "5656b5944617d00b4a7396518d4d223ddeca570a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:15:19-07:00",
-          "message": "Merge 2a21374ac1c2ed39eac58f16750a248ce0c1c75e into ae289b8811082ae57acad8a4bc94a2bb31007a8e\n"
-        },
-        {
-          "sha": "2a21374ac1c2ed39eac58f16750a248ce0c1c75e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:14:35-07:00",
-          "message": "fix(audits): theme-identity no longer asserts the seam ΔE floor the joiner rule deleted (candybar-later-fixes-nwu9.ic0)\n\nIts second fact failed every seam whose two grounds sit under\nSEAM_MIN_DELTA_E, the floor candybar-joiners-e5r4 replaced with identity\nafter rounding. The seam sweep now holds that rule over the same looks, so\nthe fact and its private seam reader go; the palette fact stays.\n"
-        },
-        {
-          "sha": "e21f4d6e39b6d276681fad85c783137da8b12bbb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:14:30-07:00",
-          "message": "test(audits): the seam sweep holds the joiner rule under every look, closed and hot and calm (candybar-later-fixes-nwu9.ic0)\n\nThe sweep takes a scope (looks, views, depths, payloads) instead of one\nvariation at today's dial, unstyled, on the sample payload. Its exemptions\nare computed on the palette the bar wears, transposed through rich-js by\nthe look's style. A payload names which listed cells it puts on alert, and\na calmed cell must wear its tint and is held. Any divider fails.\n\nThe audit keeps its frame case and adds the case the theme-identity seam\nfact walked: every variation x dial position x style, the closed bar, hot\nand calm, at truecolor.\n"
         }
       ]
     },
