@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-969",
+      "ref": "refs/pull/969/merge",
+      "sha": "fddf7c792cd4d51b8b02b03ca55a2022114369c4",
+      "timestamp": "2026-11-26T05:02:25.300Z",
+      "commits": [
+        {
+          "sha": "fddf7c792cd4d51b8b02b03ca55a2022114369c4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:52-07:00",
+          "message": "Merge 88d61b8e61362d703448d7158c6582dc5a42bc78 into 9a7b5049c643053f3405d7529836b8be87d57e28\n"
+        },
+        {
+          "sha": "88d61b8e61362d703448d7158c6582dc5a42bc78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:40-07:00",
+          "message": "test(install): preserve active forwards during installation rollback\n"
+        },
+        {
+          "sha": "ac6bd4979d1f322664fed1525c70761b1c417d97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:57:07-07:00",
+          "message": "fix(install): plan settings edits and roll back incomplete installs\n"
+        },
+        {
+          "sha": "a956081a51d8bfdcf2c604591fdebd9a2f12ac82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:29:00-07:00",
+          "message": "fix(config): the editor and the loader read a config file by one rule, so an edit reads back as written (candybar-law-review-ibyq.562)\n\nA text that holds nothing but whitespace and comments is no document to\neither reader, refused in one set of words: read as an empty object, it is\nwhat an editor's in-place rewrite shows between its truncate and its write,\nand a click landing there would replace the file the editor is still\nwriting. A layer with no file starts from the empty document, and a click on\na file the editor refuses is refused naming the file.\n\nAn insert into an object holding only a comment keeps the comment. A `//`\ncomment ends at every line terminator JSON5 ends it at. Save-as-preset reads\nthe layers above through the loader's syntax stage.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-970",
       "ref": "refs/pull/970/merge",
       "sha": "906e28ce6eb1debef220db4ec887e2d09cabc129",
