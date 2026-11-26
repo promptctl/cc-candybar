@@ -4,10 +4,9 @@ import net from "node:net";
 import { shellWord } from "../../src/shell-word";
 import { untilTestEnds } from "./test-end";
 
-// A shell grandchild holds a connection to this test until its process group
-// dies. Its connection proves both startup and exit. Disposing the fixture (or
-// losing the test worker) also releases an orphan, without signalling a PID.
-export async function heldGrandchild() {
+// [LAW:no-ambient-temporal-coupling] The grandchild owns the peer. Its
+// connection proves readiness, and EOF releases it if the test worker exits.
+export async function grandchildConnection() {
   let peer: net.Socket | undefined;
   const server = net.createServer((child) => {
     peer = child;
@@ -16,24 +15,36 @@ export async function heldGrandchild() {
   server.listen(0, "127.0.0.1");
   await listening;
   const { port } = server.address() as net.AddressInfo;
-  const connect = `require("node:net").connect(${port}, "127.0.0.1").resume()`;
   return {
-    // Waiting in the shell makes the connected process its grandchild from
-    // the launcher's perspective, even on shells that exec a final command.
-    command: `${shellWord(process.execPath)} -e ${shellWord(connect)} & wait`,
-    started: () => untilTestEnds(async (signal) => {
-      const child: net.Socket =
-        peer ?? (await once(server, "connection", { signal }))[0];
-      // Opening the gate lets a shell resume from its wait and read its input.
-      return () => child.end();
-    }),
-    ended: () => untilTestEnds(async (signal) => {
-      if (!peer) throw new Error("the grandchild has not connected");
-      if (!peer.closed) await once(peer, "close", { signal });
-    }),
+    port,
+    connected: () =>
+      untilTestEnds(
+        async (signal): Promise<net.Socket> =>
+          peer ?? (await once(server, "connection", { signal }))[0],
+      ),
+    ended: () =>
+      untilTestEnds(async (signal) => {
+        if (!peer) throw new Error("the grandchild has not connected");
+        if (!peer.closed) await once(peer, "close", { signal });
+      }),
     async [Symbol.asyncDispose]() {
       peer?.destroy();
       await server[Symbol.asyncDispose]();
     },
+  };
+}
+
+export async function heldGrandchild() {
+  const connection = await grandchildConnection();
+  const connect = `require("node:net").connect(${connection.port}, "127.0.0.1").resume()`;
+  return {
+    // The shell waits even if it would otherwise exec a final command.
+    command: `${shellWord(process.execPath)} -e ${shellWord(connect)} & wait`,
+    started: async () => {
+      const peer = await connection.connected();
+      return () => peer.end();
+    },
+    ended: connection.ended,
+    [Symbol.asyncDispose]: connection[Symbol.asyncDispose],
   };
 }

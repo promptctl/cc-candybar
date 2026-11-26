@@ -1,6 +1,8 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { addAbortSignal } from "node:stream";
+import { text } from "node:stream/consumers";
 
 import { systemLauncher } from "../../src/proc/system-launcher";
 import { systemSpawner } from "../../src/proc/spawner";
@@ -15,6 +17,8 @@ import {
 } from "../../src/proc/launcher";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
+import { grandchildConnection } from "../helpers/held-grandchild";
+import { untilTestEnds } from "../helpers/test-end";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
 // What these cases launch leaves its process group with setsid, which only
@@ -313,28 +317,35 @@ describe("the pipes a descendant holds past its launch", () => {
   });
 
   it("are destroyed on the spot when the launcher closed while the launch ran", async () => {
-    // The holder writes without end once the launch is over: only a destroyed
-    // pipe ends it, since an open one nobody reads blocks it for good.
-    const dir = mkdtempSync(join(tmpdir(), "drain-abort-"));
-    const pidFile = join(dir, "pid");
+    await using holder = await grandchildConnection();
+    // [LAW:behavior-not-structure] The escaped writer reports what the kernel
+    // did to each write. Its PID can remain visible after both pipes broke.
     const pending = launch(
-      python(
-        `${SET}if os.fork()==0:\n  os.setsid()\n  open(${JSON.stringify(pidFile)},'w').write(str(os.getpid()))\n  time.sleep(0.5)\n  while True: os.write(1,b'x'*65536)\ntime.sleep(0.3)\nos._exit(0)\n`,
-      ),
+      python(`
+import os, signal, socket
+if os.fork():
+    signal.pause()
+    os._exit(1)
+os.setsid()
+with socket.create_connection(("127.0.0.1", ${holder.port})) as peer:
+    if peer.recv(1) == b"?":
+        for fd in (1, 2):
+            try:
+                os.write(fd, b"x")
+            except BrokenPipeError:
+                peer.sendall(b"broken\\n")
+            else:
+                peer.sendall(b"writable\\n")
+`),
     );
-    await until(() => existsSync(pidFile), "the holder's start");
+    const peer = await holder.connected();
     ending.abort();
-    await pending;
+    expect(await pending).toMatchObject({ ok: false, reason: "aborted" });
     expect(drainsOpened).toEqual([]);
-    const pid = Number(readFileSync(pidFile, "utf8"));
-    rmSync(dir, { recursive: true });
-    await until(() => {
-      try {
-        process.kill(pid, 0);
-        return false;
-      } catch {
-        return true;
-      }
-    }, "the holder's end at its cut pipe");
+    const writes = untilTestEnds((signal) =>
+      text(addAbortSignal(signal, peer)),
+    );
+    peer.end("?");
+    expect(await writes).toBe("broken\nbroken\n");
   });
 });
