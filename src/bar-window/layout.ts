@@ -2,15 +2,19 @@ import { reservationLease, reservationPredicate } from "./reservation.js";
 import type { Launcher } from "../proc/launcher.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { Message } from "./presentation.js";
+import { clientKey, type Client, type Availability } from "./availability.js";
 
 import type { WindowPlacement } from "../config/lanes.js";
 export interface TmuxTarget {
   socket: string;
   pane: string;
 }
-export interface Client {
-  tty: string;
-  pid: number;
+interface LayoutResult {
+  clients: Client[];
+  selected?: Client;
+  layout: Message;
+  issue?: string;
+  closed?: boolean;
 }
 
 // A reserved pane has no process. tmux sets its title in the same operation
@@ -35,7 +39,7 @@ function fields(output: string): string[][] {
 
 export class WindowLayout {
   constructor(
-    private readonly launcher: Launcher,
+    private readonly launcher: Pick<Launcher, "launch">,
     readonly target: TmuxTarget,
     readonly reservationTitle: string,
   ) {}
@@ -80,129 +84,183 @@ export class WindowLayout {
     ]);
   }
 
-  async clear(): Promise<void> {
+  private async remove(panes: string[][]): Promise<void> {
     for (const id of new Set(
-      (await this.panes())
-        .filter((row) => this.mine(row))
-        .map((row) => row[0]!),
+      panes.filter((row) => this.mine(row)).map((row) => row[0]!),
     )) {
       await this.changeReservation(id, "kill-pane");
     }
+  }
+
+  async clear(): Promise<void> {
+    await this.remove(await this.panes());
   }
 
   async locate(
     placement: WindowPlacement,
     height: number,
     preferred: Client | undefined,
-    measured: boolean,
-    refused: ReadonlySet<number>,
-  ): Promise<{ clients: Client[]; layout: Message }> {
+    observations: ReadonlyMap<string, Availability>,
+  ): Promise<LayoutResult> {
     const [panes, clientRows] = await Promise.all([
       this.panes(),
       this.tmux(["list-clients", "-F", CLIENTS]).then(fields),
     ]);
     const source = panes.filter((row) => row[0] === this.target.pane);
-    if (!source.length) throw new Error("Claude's tmux pane closed");
-    const attached = clientRows.filter(
-      (row) =>
-        row[4] === "0" &&
-        row[0]?.startsWith("/dev/") &&
-        source.some(
-          (pane) =>
-            pane[1] === row[2] &&
-            pane[2] === row[3] &&
-            (pane[7] !== "1" || pane[8] === "1"),
-        ),
-    );
+    const owned = panes.filter((row) => this.mine(row));
+    const hidden = { kind: "layout", placement: "hidden" };
+    if (!source[0]) {
+      await this.remove(owned);
+      return {
+        clients: [],
+        layout: hidden,
+        closed: true,
+        issue: "Claude's tmux pane closed",
+      };
+    }
+    const attached = clientRows
+      .filter(
+        (row) =>
+          row[4] === "0" &&
+          row[0]?.startsWith("/dev/") &&
+          source.some((pane) => pane[1] === row[2] && pane[2] === row[3]),
+      )
+      .map((row) => {
+        const client = { tty: row[0]!, pid: count(row[1]) };
+        return {
+          row,
+          client,
+          key: clientKey(client),
+          observation: observations.get(clientKey(client)),
+        };
+      });
+    const preferredKey = preferred && clientKey(preferred);
     attached.sort(
       (a, b) =>
-        Number(refused.has(count(a[1]))) - Number(refused.has(count(b[1]))) ||
-        Number(b[0] === preferred?.tty) - Number(a[0] === preferred?.tty) ||
-        count(b[5]) - count(a[5]),
+        Number(b.key === preferredKey) - Number(a.key === preferredKey) ||
+        count(b.row[5]) - count(a.row[5]),
     );
-    const clients = attached.map((row) => ({
-      tty: row[0]!,
-      pid: count(row[1]),
-    }));
-    const hidden = { clients, layout: { kind: "layout", placement: "hidden" } };
-    const owned = panes.filter((row) => this.mine(row));
-    const reservation = owned.find((row) => row[2] === source[0]![2]);
-    for (const row of new Map(owned.map((pane) => [pane[0]!, pane])).values()) {
-      if (placement === "docked" || row[0] !== reservation?.[0])
-        await this.changeReservation(row[0]!, "kill-pane");
-    }
-    if (!clients.length) return hidden;
-    if (placement === "docked")
-      return { clients, layout: { kind: "layout", placement } };
-    const client = clients[0]!;
-    if (
-      !(
-        client.pid === preferred?.pid &&
-        client.tty === preferred.tty &&
-        measured
+    const clients = attached.map((a) => a.client);
+    const original = source[0];
+    const reservation = owned.find((row) => row[2] === original[2]);
+    const zoomed = original[7] === "1";
+    const sourceVisible = !zoomed || original[8] === "1";
+    let keep = placement === "inset" ? reservation : undefined;
+    await this.remove(owned.filter((row) => !keep || row[0] !== keep[0]));
+    // [LAW:single-enforcer] The same client that supplies the viewport
+    // supplies its pan offsets and status rows. Neither is portable to peers.
+    let issue: string | undefined;
+    for (const { row, client, observation } of attached) {
+      if (
+        !observation ||
+        observation.state === "locating" ||
+        observation.state === "hidden"
       )
-    )
-      return {
-        clients,
-        layout: { kind: "layout", placement: "waiting-inset" },
-      };
-    if (!reservation) {
-      if (source[0]![7] === "1") return hidden;
-      // [LAW:no-ambient-temporal-coupling] The server tests the watcher's
-      // lease and creates its empty pane in one command queue. If the owner
-      // has exited, its cleanup cannot be followed by a late split.
-      const created = (
-        await this.tmux([
-          "if-shell",
-          "-F",
-          "-t",
-          this.target.pane,
-          `#{${reservationLease(this.reservationTitle)}}`,
-          `split-window -d -v -l ${height} -T ${this.reservationTitle} -t ${this.target.pane} -P -F '#{pane_id}' ''`,
-        ])
-      ).trim();
-      if (!created)
+        continue;
+      if (observation.state === "unavailable") {
+        issue ??= observation.reason;
+        continue;
+      }
+      if (!sourceVisible) continue;
+      if (placement === "docked")
         return {
           clients,
-          layout: { kind: "layout", placement: "waiting-inset" },
+          selected: client,
+          layout: { kind: "layout", placement, ...client },
         };
-      if (!/^%\d+$/.test(created))
-        throw new Error("tmux did not return the reserved pane's id");
-      const after = (await this.panes()).find(
-        (row) => row[0] === created && this.mine(row),
-      );
-      if (!after)
-        throw new Error("tmux did not retain the identified reservation");
-      return this.inset(clients, attached[0]!, after);
-    }
-    if (reservation[7] === "1" && reservation[8] !== "1") return hidden;
-    if (count(reservation[6]) !== height) {
-      await this.changeReservation(reservation[0]!, `resize-pane -y ${height}`);
-      const after = (await this.panes()).find(
-        (row) => row[0] === reservation[0] && this.mine(row),
-      );
-      if (!after) return hidden;
-      return this.inset(clients, attached[0]!, after);
-    }
-    return this.inset(clients, attached[0]!, reservation);
-  }
-
-  private inset(clients: Client[], client: string[], pane: string[]) {
-    const status =
-      client[9] === "on" ? 1 : client[9] === "off" ? 0 : count(client[9]);
-    return {
-      clients,
-      layout: {
-        kind: "layout",
-        placement: "inset",
-        column: count(pane[3]) - count(client[6] || "0"),
-        row:
-          count(pane[4]) -
-          count(client[7] || "0") +
-          (client[8] === "top" ? status : 0),
+      if (!("columns" in observation)) {
+        issue ??= observation.reason;
+        continue;
+      }
+      if (zoomed) continue;
+      const status = row[9] === "on" ? 1 : row[9] === "off" ? 0 : count(row[9]);
+      const xOffset = count(row[6] || "0");
+      const yOffset = count(row[7] || "0") - (row[8] === "top" ? status : 0);
+      const bounds = (pane: string[], top: number, rows: number) => ({
+        column: count(pane[3]) - xOffset,
+        row: top - yOffset,
         width: count(pane[5]),
-        height: count(pane[6]),
-      },
-    };
+        height: rows,
+      });
+      const fits = (box: ReturnType<typeof bounds>) =>
+        box.column >= 0 &&
+        box.row >= 0 &&
+        box.column + box.width <= observation.columns &&
+        box.row + box.height <= observation.rows;
+      const prospective = keep
+        ? bounds(keep, count(keep[4]) + count(keep[6]) - height, height)
+        : bounds(
+            original,
+            count(original[4]) + count(original[6]) - height,
+            height,
+          );
+      if (!keep && count(original[6]) < height + 2) {
+        issue ??= "Claude's tmux pane is too small for the inset reservation";
+        continue;
+      }
+      if (!fits(prospective)) {
+        issue ??= "Reserved pane is outside the terminal viewport";
+        continue;
+      }
+      let actual = keep;
+      if (!actual || count(actual[6]) !== height) {
+        let id = actual?.[0];
+        if (!id) {
+          // The server checks the watcher's lease and splits atomically.
+          id = (
+            await this.tmux([
+              "if-shell",
+              "-F",
+              "-t",
+              this.target.pane,
+              `#{${reservationLease(this.reservationTitle)}}`,
+              `split-window -d -v -l ${height} -T ${this.reservationTitle} -t ${this.target.pane} -P -F '#{pane_id}' ''`,
+            ])
+          ).trim();
+          if (!id) return { clients, layout: hidden };
+          if (!/^%\d+$/.test(id))
+            throw new Error("tmux did not return the reserved pane's id");
+        } else {
+          try {
+            await this.changeReservation(id, `resize-pane -y ${height}`);
+          } catch (error) {
+            if (keep) await this.remove([keep]);
+            throw error;
+          }
+        }
+        // Only the post-mutation pane bounds may be sent to the native view.
+        actual = (await this.panes()).find(
+          (pane) => pane[0] === id && this.mine(pane),
+        );
+        if (!actual || count(actual[6]) !== height) {
+          if (actual) await this.remove([actual]);
+          throw new Error("tmux could not reserve the requested inset height");
+        }
+        keep = actual;
+      }
+      const box = bounds(actual, count(actual[4]), count(actual[6]));
+      if (fits(box))
+        return {
+          clients,
+          selected: client,
+          layout: { kind: "layout", placement, ...client, ...box },
+        };
+      issue ??= "Reserved pane is outside the terminal viewport";
+    }
+    if (keep) {
+      const pending = attached.some(
+        (a) =>
+          a.key === preferredKey &&
+          (!a.observation || a.observation.state === "locating"),
+      );
+      const zoom =
+        zoomed &&
+        attached.some(
+          (a) =>
+            a.observation?.state === "visible" && "columns" in a.observation,
+        );
+      if (!pending && !zoom) await this.remove([keep]);
+    }
+    return { clients, layout: hidden, issue };
   }
 }

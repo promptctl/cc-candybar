@@ -6,6 +6,7 @@ func writeObservation(_ observation: TerminalObservation) {
     }
     let output: [String: Any]
     switch observation {
+    case .locating: output = ["kind": "hidden", "reason": "Locating terminal tab"]
     case let .visible(window, frame, measurement):
         let grid: [String: Any]
         switch measurement {

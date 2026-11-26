@@ -1,3 +1,4 @@
+import { readAvailability, type Availability } from "./availability.js";
 import { ColorSpec } from "@promptctl/rich-js";
 import {
   BUTTONS,
@@ -22,6 +23,71 @@ export function readMessage(line: string): Message {
   if (!object(data) || typeof data.kind !== "string")
     throw new Error("Expected a window message with a kind");
   return data;
+}
+
+interface Cell {
+  row: number;
+  run: number;
+}
+export type NativeEvent =
+  | Availability
+  | { kind: "owned" | "ready" }
+  | { kind: "hidden" | "unavailable"; reason: string }
+  | { kind: "presented"; revision: number }
+  | { kind: "hover"; revision: number; at: Cell | null }
+  | {
+      kind: "press";
+      revision: number;
+      at: Cell;
+      button: number;
+      ctrl: boolean;
+      alt: boolean;
+      shift: boolean;
+    };
+
+const index = (n: unknown): n is number =>
+  typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
+
+// [LAW:parse-dont-validate] The native panel's observations and WebKit's
+// gestures cross the same pipe. Parse each at entry before changing the
+// subscription, advertising a diagnostic, or dispatching a link.
+export function readNativeMessage(line: string): NativeEvent {
+  const event = readMessage(line);
+  const { kind, reason, revision, button, ctrl, alt, shift } = event;
+  switch (kind) {
+    case "availability":
+      return readAvailability(event);
+    case "owned":
+    case "ready":
+      return { kind };
+    case "hidden":
+    case "unavailable":
+      if (typeof reason === "string" && reason.length > 0)
+        return { kind, reason };
+      break;
+    case "presented":
+      if (index(revision) && revision > 0) return { kind, revision };
+      break;
+    case "press":
+    case "hover": {
+      if (!index(revision)) break;
+      if (kind === "hover" && event.at === null)
+        return { kind, revision, at: null };
+      if (!object(event.at) || !index(event.at.row) || !index(event.at.run))
+        break;
+      const at = { row: event.at.row, run: event.at.run };
+      if (kind === "hover") return { kind, revision, at };
+      if (
+        index(button) &&
+        typeof ctrl === "boolean" &&
+        typeof alt === "boolean" &&
+        typeof shift === "boolean"
+      )
+        return { kind, at, revision, button, ctrl, alt, shift };
+      break;
+    }
+  }
+  throw new Error(`Invalid native window event: ${String(kind)}`);
 }
 
 function color(

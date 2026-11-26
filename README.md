@@ -98,6 +98,8 @@ In a local tmux session with named event support (tested on tmux 3.8a), open **�
 
 **Window placement** defaults to **docked**, just below the terminal or along its bottom edge when it reaches the edge of the display. Choose **inset** to reserve a tmux pane under Claude sized to the bar’s rows. Switching back releases that pane. The helper needs macOS Accessibility access to follow the terminal. When the window cannot be placed, Claude Code keeps the bar and reports the reason in diagnostics.
 
+Docked placement was exercised in iTerm2, Terminal.app, Ghostty, kitty and WezTerm. Inset needs both the first cell’s position and the current viewport. iTerm2 and Terminal.app expose these through Accessibility. Kitty needs an explicitly authorized local remote-control socket for its geometry reporter. Ghostty can supply the grid with zero padding when the viewport matches the tty extent. With stock Ghostty padding or the tested stable WezTerm build (20240203), choose docked to keep the floating window visible.
+
 ## Record and replay a renderer
 
 With the daemon running, start a capture, reproduce the bar behavior, and stop the capture to save it.

@@ -236,7 +236,7 @@ final class WindowObserver {
         guard let identity else {
             try client.verify()
             lookup(pid: app.processIdentifier)
-            return .hidden("Locating terminal tab")
+            return .locating
         }
         let session: TerminalSession
         switch try identity.get() {

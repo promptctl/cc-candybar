@@ -7,10 +7,29 @@ private final class BarPanel: NSPanel {
 }
 
 private enum Placement {
-    case waitingInset
     case docked
     case inset(column: Int, row: Int, width: Int, height: Int)
     case hidden
+}
+
+private struct Viewer: Hashable {
+    let pid: Int32
+    let tty: String
+
+    init(_ fields: [String: Any]) throws {
+        guard let tty = fields["tty"] as? String, tty.hasPrefix("/dev/"),
+              let pid = fields["pid"] as? Int32, pid > 1 else {
+            throw LocationFailure("Invalid attaching tty or pid")
+        }
+        self.tty = tty
+        self.pid = pid
+    }
+}
+
+private final class WatchedViewer {
+    var observer: WindowObserver?
+    var observation: TerminalObservation = .locating
+    var announced: NSDictionary?
 }
 
 final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -18,16 +37,26 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
     private let page: URL
     private let web: WKWebView
     private let lock: Int32
-    private var observer: WindowObserver?
-    private var observation: TerminalObservation = .hidden("Waiting for an attaching client")
+    private var viewers = [Viewer: WatchedViewer]()
+    private var selected: Viewer?
+    private var observation: TerminalObservation {
+        guard let selected else { return .hidden("Claude's tmux pane is not on screen") }
+        return viewers[selected]?.observation ?? .locating
+    }
     private var placement: Placement = .hidden
     private var loaded = false
     private var rowCount = 1
     private var revision = 0
     private var hasPresentedFrame = false
-    private var measured: Bool?
     private var lastState = ""
     private var metrics = CGSize.zero
+    // Docked windows use their own font when the terminal supplies no grid.
+    // Inset placement always requires actual measured terminal cells.
+    private let dockFontSize: CGSize = {
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        return CGSize(width: ("0" as NSString).size(withAttributes: [.font: font]).width,
+                      height: NSLayoutManager().defaultLineHeight(for: font))
+    }()
 
     init(page: URL, lockPath: String) throws {
         self.page = page.standardizedFileURL
@@ -105,42 +134,27 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
             state(kind, reason)
         }
         guard loaded else { return }
-        let available: Bool
-        if case .visible(_, _, .measured) = observation { available = true } else { available = false }
-        if measured != available {
-            measured = available
-            writeMessage(["kind": "measured", "value": available])
-        }
         switch observation {
+        case .locating: hide("hidden", "Locating terminal tab")
         case let .hidden(reason): hide("hidden", reason)
         case let .unavailable(reason): hide("unavailable", reason)
         case let .visible(id, window, grid):
             let cell: CGSize
             if case let .measured(cells) = grid { cell = cells.firstCell.size }
-            else { cell = CGSize(width: 9, height: 18) }
+            else { cell = dockFontSize }
             let frame: CGRect
             switch placement {
             case .hidden: hide("hidden", "Claude's tmux pane is not on screen"); return
-            case .waitingInset:
-                if case let .unavailable(reason) = grid { hide("unavailable", reason) }
-                else { hide("hidden", "Waiting for the reserved tmux pane") }
-                return
             case .docked:
                 guard let primary = NSScreen.screens.first else { hide("unavailable", "No active display"); return }
                 let screens = NSScreen.screens.map {
                     CGRect(x: $0.frame.minX, y: primary.frame.maxY - $0.frame.maxY, width: $0.frame.width, height: $0.frame.height)
                 }
-                let height = cell.height * CGFloat(rowCount)
-                let below = CGRect(x: window.minX, y: window.maxY, width: window.width, height: height)
-                // When the terminal reaches the display edge, keep the footer
-                // visible against its bottom edge, including in full screen.
-                let screen = screens.max { a, b in
-                    let x = a.intersection(window), y = b.intersection(window)
-                    return x.width * x.height < y.width * y.height
+                guard let dock = dockedFrame(window: window, height: cell.height * CGFloat(rowCount), screens: screens) else {
+                    hide("hidden", "Terminal is outside the active displays")
+                    return
                 }
-                guard let screen, screen.intersects(window) else { hide("hidden", "Terminal is outside the active displays"); return }
-                frame = screens.contains(where: { $0.contains(below) }) ? below :
-                    CGRect(x: window.minX, y: min(window.maxY, screen.maxY) - height, width: window.width, height: height)
+                frame = dock
             case let .inset(x, y, width, height):
                 switch grid {
                 case let .unavailable(reason): hide("unavailable", reason); return
@@ -166,31 +180,60 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
         }
     }
 
+    private func observe(_ requested: [Viewer]) {
+        let current = Set(requested)
+        viewers = viewers.filter { current.contains($0.key) }
+        for viewer in requested where viewers[viewer] == nil {
+            let watched = WatchedViewer()
+            viewers[viewer] = watched
+            do {
+                let owner = try AttachedClient(pid: viewer.pid, tty: viewer.tty)
+                let observer = WindowObserver(client: owner) { [weak self, weak watched] value in
+                    guard let self, let watched, self.viewers[viewer] === watched else { return }
+                    self.update(viewer, watched, value)
+                }
+                watched.observer = observer
+                observer.start { [weak watched] in watched?.observer = nil }
+            } catch { update(viewer, watched, .unavailable(error.localizedDescription)) }
+        }
+        align()
+    }
+
+    private func update(_ viewer: Viewer, _ watched: WatchedViewer, _ value: TerminalObservation) {
+        watched.observation = value
+        var message: [String: Any] = ["kind": "availability", "tty": viewer.tty, "pid": viewer.pid]
+        switch value {
+        case .locating: message["state"] = "locating"
+        case let .hidden(reason): message["state"] = "hidden"; message["reason"] = reason
+        case let .unavailable(reason): message["state"] = "unavailable"; message["reason"] = reason
+        case let .visible(_, _, grid):
+            message["state"] = "visible"
+            switch grid {
+            case let .measured(cells): message["columns"] = cells.columns; message["rows"] = cells.rows
+            case let .unavailable(reason): message["reason"] = reason
+            }
+        }
+        // Moving a window updates the panel in-process. Only a change in
+        // candidate eligibility or grid dimensions wakes the tmux reconciler.
+        let summary = message as NSDictionary
+        if watched.announced != summary {
+            watched.announced = summary
+            writeMessage(message)
+        }
+        if selected == viewer { align() }
+    }
+
     func receive(_ command: [String: Any]) throws {
         switch command["kind"] as? String {
-        case "target":
-            guard let tty = command["tty"] as? String, let pid = command["pid"] as? Int32 else {
-                throw LocationFailure("Invalid attaching tty or pid")
-            }
-            observer = nil
-            observation = .hidden("Locating new attaching client")
-            align()
-            do {
-                let owner = try AttachedClient(pid: pid, tty: tty)
-                let next = WindowObserver(client: owner) { [weak self] value in self?.observation = value; self?.align() }
-                observer = next
-                next.start { [weak self] in
-                    self?.observer = nil
-                    self?.observation = .hidden("Attaching client exited")
-                    self?.align()
-                    writeMessage(["kind": "client-exit"])
-                }
-            } catch { observation = .unavailable(error.localizedDescription); align() }
+        case "clients":
+            guard let clients = command["clients"] as? [[String: Any]] else { throw LocationFailure("Missing attaching clients") }
+            try observe(clients.map(Viewer.init))
         case "layout":
-            switch command["placement"] as? String {
+            let mode = command["placement"] as? String
+            selected = mode == "hidden" ? nil : try Viewer(command)
+            switch mode {
             case "hidden": placement = .hidden
             case "docked": placement = .docked
-            case "waiting-inset": placement = .waitingInset
             case "inset":
                 guard let x = command["column"] as? Int, let y = command["row"] as? Int,
                       let width = command["width"] as? Int, let height = command["height"] as? Int else {

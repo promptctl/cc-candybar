@@ -14,8 +14,16 @@ import { followFrames, type FrameFollower } from "../daemon/frame-follow.js";
 import { parseSessionId } from "../daemon/foundations/session-id.js";
 import { lineSplitter } from "../renderer-interface/wire.js";
 import { whyFailed } from "../proc/launcher.js";
-import { WindowLayout, type Client } from "./layout.js";
-import { Presentation, readMessage, type Message } from "./presentation.js";
+import { WindowLayout } from "./layout.js";
+import { clientKey, type Availability, type Client } from "./availability.js";
+import { renderFailedFrame } from "../render/frame.js";
+import {
+  Presentation,
+  readMessage,
+  readNativeMessage,
+  type NativeEvent,
+  type Message,
+} from "./presentation.js";
 import { watchTmuxEvents } from "./tmux-events.js";
 
 export async function runBarWindow(
@@ -59,8 +67,12 @@ export async function runBarWindow(
   let feed: FrameFollower | undefined;
   let hover: string | null = null;
   const wire = { attached: false };
-  let measured = false;
-  const refused = new Set<number>();
+  const observations = new Map<string, Availability>();
+  let watching = new Set<string>();
+  let observedClients = "";
+  let layoutIssue = "";
+  let surfaceIssue = "";
+  let sourceRetired = false;
   let appliedLayout = "";
   let refreshPending = false;
   let refreshing: Promise<void> | undefined;
@@ -75,10 +87,15 @@ export async function runBarWindow(
     gestures: [...ALL_GESTURES, HOVER],
     hover,
   });
-  const writeStatus = (reason: string) => {
+  function publishStatus() {
+    const reason = layoutIssue || surfaceIssue;
     if (status === reason) return;
     status = reason;
     process.stdout.write(JSON.stringify({ kind: "issue", reason }) + "\n");
+  }
+  const writeStatus = (reason: string) => {
+    surfaceIssue = reason;
+    publishStatus();
   };
   function stop() {
     if (!closed) {
@@ -94,7 +111,7 @@ export async function runBarWindow(
   }
   const out = lineSplitter((line) => {
     try {
-      native(readMessage(line));
+      native(readNativeMessage(line));
     } catch (error) {
       writeStatus(String(error));
       stop();
@@ -129,15 +146,20 @@ export async function runBarWindow(
           wire.attached = true;
           report();
         }
-        if (response.ok && "frame" in response) {
-          writeStatus("");
-          displaying.offer(response.frame);
-          const next = Math.max(1, response.frame.rows.length);
-          if (height !== next) {
-            height = next;
-            if (placement === "inset") refresh();
-          }
-        } else if (!response.ok) writeStatus(response.error);
+        const frame = !response.ok
+          ? renderFailedFrame(response.error)
+          : "frame" in response
+            ? response.frame
+            : undefined;
+        if (!frame)
+          throw new Error("Window subscription received a non-frame response");
+        writeStatus(response.ok ? "" : response.error);
+        displaying.offer(frame);
+        const next = Math.max(1, frame.rows.length);
+        if (height !== next) {
+          height = next;
+          if (placement === "inset") refresh();
+        }
       },
       off: () => stop(),
       fault: (reason) => {
@@ -164,7 +186,7 @@ export async function runBarWindow(
       stop();
     },
   );
-  function native(message: Message) {
+  function native(message: NativeEvent) {
     if (closed) return;
     switch (message.kind) {
       case "owned":
@@ -180,19 +202,20 @@ export async function runBarWindow(
           },
         );
         break;
-      case "measured":
-        measured = message.value === true;
-        refresh();
+      case "availability": {
+        const observation = message;
+        const key = clientKey(observation);
+        if (watching.has(key)) {
+          observations.set(key, observation);
+          refresh();
+        }
         break;
-      case "client-exit":
-        measured = false;
-        target = undefined;
-        refresh();
-        break;
+      }
       case "ready":
-        if (target) refused.delete(target.pid);
-        writeStatus("");
-        subscribe();
+        if (!layoutIssue) {
+          writeStatus("");
+          subscribe();
+        }
         break;
       case "hidden":
         unsubscribe();
@@ -201,10 +224,6 @@ export async function runBarWindow(
       case "unavailable":
         unsubscribe();
         writeStatus(String(message.reason));
-        if (target && !refused.has(target.pid)) {
-          refused.add(target.pid);
-          refresh();
-        }
         break;
       case "presented":
         displaying.presented(message.revision);
@@ -226,13 +245,9 @@ export async function runBarWindow(
               if (result.kind !== "ok") writeStatus(describeFailure(result));
             } else {
               const url = new URL(link);
-              if (!["https:", "http:", "mailto:"].includes(url.protocol))
-                throw new Error(
-                  "Unsupported external link scheme " + url.protocol,
-                );
               const result = await world.launcher.launch({
                 bin: "/usr/bin/open",
-                args: [url.href],
+                args: ["-u", url.href],
                 category: "click.open",
                 timeoutMs: 2000,
               });
@@ -258,32 +273,39 @@ export async function runBarWindow(
             requested,
             height,
             target,
-            measured,
-            refused,
+            observations,
           );
-          if (requested !== placement) continue;
-          if (closed) return;
-          const client = next.clients[0];
-          for (const pid of refused)
-            if (!next.clients.some((item) => item.pid === pid))
-              refused.delete(pid);
-          if (
-            client &&
-            (client.pid !== target?.pid || client.tty !== target?.tty)
-          ) {
-            target = client;
-            measured = false;
-            send({ kind: "target", ...client });
+          if (requested !== placement || closed) continue;
+          watching = new Set(next.clients.map(clientKey));
+          for (const key of observations.keys())
+            if (!watching.has(key)) observations.delete(key);
+          const clients = JSON.stringify(next.clients);
+          if (clients !== observedClients) {
+            observedClients = clients;
+            send({ kind: "clients", clients: next.clients });
           }
+          if (next.selected) target = next.selected;
+          else if (target && !watching.has(clientKey(target)))
+            target = undefined;
+          layoutIssue = next.issue ?? "";
+          publishStatus();
           const encoded = JSON.stringify(next.layout);
           if (encoded !== appliedLayout) {
             send(next.layout);
             appliedLayout = encoded;
           }
+          if (next.closed) {
+            sourceRetired = true;
+            stop();
+          }
         } catch (error) {
-          send({ kind: "layout", placement: "hidden" });
-          appliedLayout = "";
-          writeStatus(String(error));
+          layoutIssue = String(error);
+          publishStatus();
+          unsubscribe();
+          const hidden = { kind: "layout", placement: "hidden" };
+          const encoded = JSON.stringify(hidden);
+          if (encoded !== appliedLayout) send(hidden);
+          appliedLayout = encoded;
         }
       }
     })().finally(() => {
@@ -318,7 +340,7 @@ export async function runBarWindow(
     try {
       await watcher?.close();
       await refreshing;
-      if (owned) await layout.clear();
+      if (owned && !sourceRetired) await layout.clear();
     } finally {
       panel.end();
       await panelEnd;

@@ -107,7 +107,10 @@ export function standIn(frame: Frame, rows: readonly Row[]): Frame {
 // Its colours are hex, so it is truecolor whatever the view's depth, and it has
 // no attributes, so no lane encoder can refuse it. The text is sanitized here,
 // so its one run holds no newline or escape, whoever built the text.
-export function diagnosticFrame(text: string, colors: DiagnosticColors): Frame {
+export function diagnosticFrame(
+  text: string,
+  colors: DiagnosticColors,
+): Frame<never> {
   return {
     depth: "truecolor",
     rows: [
@@ -121,7 +124,7 @@ export function diagnosticFrame(text: string, colors: DiagnosticColors): Frame {
 
 // [LAW:one-source-of-truth] A render that failed, in the words of the glyph the
 // statusline's client draws for it, so every lane says what the statusline says.
-export function renderFailedFrame(message: string): Frame {
+export function renderFailedFrame(message: string): Frame<never> {
   return diagnosticFrame(
     permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
     DIAGNOSTIC_ERROR_COLORS,
