@@ -1,3 +1,9 @@
+## [1.241.2](https://github.com/promptctl/cc-candybar/compare/v1.241.1...v1.241.2) (2026-11-26)
+
+### Bug Fixes
+
+* **menu:** retire saved selections that block recording after upgrade ([#972](https://github.com/promptctl/cc-candybar/issues/972)) ([333bc50](https://github.com/promptctl/cc-candybar/commit/333bc50181d36554bd91ea53febb5c13ff862863))
+
 ## [1.241.1](https://github.com/promptctl/cc-candybar/compare/v1.241.0...v1.241.1) (2026-11-26)
 
 ### Bug Fixes
