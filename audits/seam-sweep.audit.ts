@@ -5,7 +5,7 @@
 // either side of it (candybar-joiners-e5r4.5x1). Two scopes, since what decides
 // which two colours meet differs: every frame at every depth under each
 // variation at the dial's and style's floors; and the closed bar, hot and calm,
-// at truecolor under each variation × dial position × style. Walking them is
+// at each depth under each variation × dial position × style. Walking them is
 // the minutes this directory is for.
 
 import { floorOf } from "../src/config/globals-fields";
@@ -42,13 +42,13 @@ test.each(VARIATION_NAMES)(
 );
 
 test.each(VARIATION_NAMES)(
-  "under %s, at every position of the shade dial and every style, no seam of the closed bar joins two grounds drawn as one colour, hot and calm, under every theme at truecolor",
+  "under %s, at every position of the shade dial and every style, no seam of the closed bar joins two grounds drawn as one colour, hot and calm, under every theme at all three depths",
   (variation) => {
     expectEverySeamHeld(rigs, {
       looks: SHADE_NAMES.flatMap((shade) =>
         STYLE_NAMES.map((style) => ({ variation, shade, style })),
       ),
-      depths: ["truecolor"],
+      depths: DEPTH_NAMES,
       views: [CLOSED],
       payloads: [HOT, CALM],
     });

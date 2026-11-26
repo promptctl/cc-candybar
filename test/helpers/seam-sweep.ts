@@ -51,6 +51,7 @@ import {
 } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { unauthored } from "../../src/config/dsl-loader";
+import { TABS } from "../../src/config/menu-places";
 import { sharedMenuStateKey } from "../../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../src/config/settings-menu";
 import { SETTINGS_NS } from "../../src/config/reserved-names";
@@ -95,7 +96,6 @@ const DEPTHS = {
 } as const;
 export type DepthName = keyof typeof DEPTHS;
 export const DEPTH_NAMES = Object.keys(DEPTHS) as DepthName[];
-const TABS = ["session", "look", "layout", "config", "tools"] as const;
 const COLS = 200;
 const AT = instantOf(new Date("2026-10-30T12:00:00Z"));
 
@@ -180,7 +180,7 @@ export const CLOSED: View = {
 /** The views a user sees: the closed bar, and the settings menu open on each tab with the theme's ⚙ open in it. */
 export const VIEWS: readonly View[] = [
   CLOSED,
-  ...TABS.map((tab) => ({
+  ...TABS.map(({ member: tab }) => ({
     name: `${tab} tab`,
     show: (bar: SessionBar) => {
       bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
@@ -285,6 +285,7 @@ export function sweepRigs(): SweepRigs {
 export interface SweepReport {
   /** Every seam the rule holds whose two grounds draw as one colour. */
   readonly alike: readonly string[];
+  readonly withoutSeams: readonly string[];
   readonly dividers: readonly string[];
   /** Every listed cell that wears other than its payload puts it in: an alert, or its tint. */
   readonly misworn: readonly string[];
@@ -305,6 +306,7 @@ export function sweepSeams(
   { looks, depths, views, payloads }: SweepScope,
 ): SweepReport {
   const alike: string[] = [];
+  const withoutSeams: string[] = [];
   const dividers: string[] = [];
   const misworn: string[] = [];
   const authoredSeen = new Set<string>();
@@ -390,6 +392,7 @@ export function sweepSeams(
               if (ch === DIVIDER)
                 dividers.push(`${where}: after "${cellBefore(chars, at)}"`);
             });
+            const previousSeams = counts.seams;
             for (const { left, right, at } of seams(chars)) {
               // A tail enters the terminal's own ground: no neighbour.
               if (right === undefined) continue;
@@ -422,6 +425,7 @@ export function sweepSeams(
                 `${where}: "${before}" | "${after}" both on ${ground}`,
               );
             }
+            if (counts.seams === previousSeams) withoutSeams.push(where);
           }
         }
       }
@@ -429,6 +433,7 @@ export function sweepSeams(
   }
   return {
     alike,
+    withoutSeams,
     dividers,
     misworn,
     authoredSeen: [...authoredSeen].sort(),
@@ -442,10 +447,8 @@ export function sweepSeams(
  * list names exactly the cells that wear what their payload puts them in.
  */
 export function expectEverySeamHeld(rigs: SweepRigs, scope: SweepScope): void {
-  const { alike, dividers, misworn, authoredSeen, counts } = sweepSeams(
-    rigs,
-    scope,
-  );
+  const { alike, withoutSeams, dividers, misworn, authoredSeen, counts } =
+    sweepSeams(rigs, scope);
   expect(alike).toEqual([]);
   expect(dividers).toEqual([]);
   // Every listed cell is drawn, so the list names nothing that is not there,
@@ -455,6 +458,7 @@ export function expectEverySeamHeld(rigs: SweepRigs, scope: SweepScope): void {
   expect(misworn).toEqual([]);
   // Non-vacuous: every view of every theme at every depth draws seams, and
   // the flat ladders the rule reads are textual-ansi's.
-  expect(counts.seams).toBeGreaterThan(counts.renders * 5);
+  expect(counts.renders).toBeGreaterThan(0);
+  expect(withoutSeams).toEqual([]);
   expect(counts.flat).toBeGreaterThan(0);
 }
