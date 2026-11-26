@@ -4,7 +4,9 @@
 // what it did, or why it did not, said once on its act line and handed back as
 // the act's `effect-done`.
 
+import { stat } from "node:fs/promises";
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
+import type { DesktopAct } from "./foundations/protocol.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -30,6 +32,38 @@ import type { Timekeeper } from "../time.js";
 // An act the landing performs with the config files, not here.
 export type HostAct = Exclude<Act, { kind: "approve-repo" | "run" }> | RunAct;
 type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
+
+// [LAW:types-are-the-program] How an act ended as the host holds it: what its
+// renderer is told, or that the act is the desktop's to carry out, which is the
+// act itself, to be handed to the URL handler that forwarded its click. Its
+// renderer is told `ok`: the daemon's part is done.
+export interface ForDesktop {
+  readonly kind: "desktop";
+  readonly act: DesktopAct;
+}
+export type HostOutcome = EffectOutcome | ForDesktop;
+
+// The act the desktop carries out, when the act says it does; every other act
+// is only ever performed here.
+export async function desktopActOf(act: HostAct): Promise<DesktopAct | null> {
+  switch (act.kind) {
+    case "copy":
+      return { kind: "copy", text: act.text };
+    case "open": {
+      // [LAW:effects-at-boundaries] Only the remote filesystem can tell the
+      // desktop whether this path should open as an editor or a workspace.
+      const entry = await stat(act.target);
+      if (!entry.isFile() && !entry.isDirectory())
+        throw new Error(
+          `cannot open ${act.target}: expected a file or directory`,
+        );
+      return { kind: "open", target: act.target, file: entry.isFile() };
+    }
+    case "type-slash":
+    case "run":
+      return null;
+  }
+}
 
 export interface ActPrograms {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
@@ -75,6 +109,15 @@ const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
   outcome,
   said: outcome.reason,
 });
+
+// [LAW:single-enforcer] An act's line, in the one format, whoever says it: what
+// it did or why it did not, or that it was handed to the desktop.
+export const actLine = (
+  act: HostAct,
+  outcome: HostOutcome["kind"],
+  said: string,
+): string =>
+  `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome} — ${nameOf(act)}: ${said}`;
 
 export class Acts {
   // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
@@ -159,7 +202,7 @@ export class Acts {
       : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${nameOf(act)}: ${said}`,
+      actLine(act, outcome.kind, said),
     );
     return outcome.kind === "ok"
       ? outcome

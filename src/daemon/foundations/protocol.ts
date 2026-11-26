@@ -401,10 +401,44 @@ export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
 export const awaitsVerdict = (urlV: unknown): boolean =>
   typeof urlV === "number" && urlV >= 2;
 
+// [LAW:types-are-the-program] Where the frame's click copies and opens, which
+// the frame says of itself: on the daemon's machine, or on the `desktop`, the
+// machine its writer runs on, which is not the daemon's when the link was drawn
+// over ssh. A writer says it on every frame; absent reads as the daemon's, for
+// a writer older than the field. An older daemon ignores the field, and the
+// writer learns that from a verdict with no `desktopActs`. Mirrored by
+// url-handler/wire.swift.
+export const ACTS_ON_DAEMON = "daemon";
+export const ACTS_ON_DESKTOP = "desktop";
+export type ActsOn = typeof ACTS_ON_DAEMON | typeof ACTS_ON_DESKTOP;
+
 export interface UrlFrame {
   kind: typeof URL_FRAME_KIND;
   urlV: number;
   url: string;
+  actsOn?: ActsOn;
+}
+
+// What a click asks of the machine its writer runs on, in the order it asked:
+// the text to copy, or a path on the daemon's machine to open.
+export type DesktopAct =
+  | { readonly kind: "copy"; readonly text: string }
+  | { readonly kind: "open"; readonly target: string; readonly file: boolean };
+
+// [LAW:types-are-the-program] The verdict of a click whose acts leave for its
+// writer: the link was accepted, and always the acts, in the order asked, even
+// when the click then failed, because a click that fails after asking one still
+// asked it. The click's own failure is held where any click's is (its bar, or
+// the daemon's warning), not said twice. A link refused is answered by the
+// ordinary refusal, at once, with no acts. No other response carries them: the
+// plain ok says so in its type.
+// Mirrored by url-handler/wire.swift.
+export interface ClickVerdict {
+  ok: true;
+  output: string;
+  desktopActs: readonly DesktopAct[];
+  // A partial result: the writer still performs the acts that succeeded.
+  desktopError?: string;
 }
 
 // [LAW:parse-dont-validate] What came in over the wire, classified once, by
@@ -512,10 +546,11 @@ export type Request =
 
 export type Response =
   // A render's ANSI, and a lane's frame in the `ansi` encoding.
-  | { ok: true; output: string }
+  | { ok: true; output: string; desktopActs?: never }
   // A lane's frame in the `hit-mapped` encoding: the ANSI and where a pointer
   // can act on it (src/render/encodings.ts).
-  | { ok: true; output: string; hits: HitMap }
+  | { ok: true; output: string; hits: HitMap; desktopActs?: never }
+  | ClickVerdict
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }

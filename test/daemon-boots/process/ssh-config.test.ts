@@ -39,7 +39,7 @@ test("the stanza names the daemon's own socket and the id its key's links carry"
     if (key.kind !== "ok") throw new Error(key.reason);
     expect(stdout).toContain("Host devbox\n");
     expect(stdout).toContain(
-      `  LocalForward %d/.cc-candybar/remote/${linkKeyId(key.value)}.sock ${isolated.sockPath}\n`,
+      `  LocalForward %d/.cc-candybar/remote/${linkKeyId(key.value)}.%n.sock ${isolated.sockPath}\n`,
     );
   } finally {
     await daemon.stop();

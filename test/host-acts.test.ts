@@ -153,13 +153,14 @@ function hostOver(
     },
     world,
   );
-  const turn = (runEvidence?: readonly RunEvidence[]) =>
+  const turn = (runEvidence?: readonly RunEvidence[], actsOn: "daemon" | "desktop" = "daemon") =>
     host.answer(() =>
       runEvidence === undefined
         ? { kind: "event", event: { kind: "due" } }
         : {
             kind: "event",
             runEvidence,
+            actsOn,
             event: {
               kind: "click",
               click: {
@@ -359,4 +360,24 @@ test("a session's failed act its renderer heard is its renderer's to show", asyn
   });
   await turn();
   expect(unheard).toEqual([]);
+});
+
+// [LAW:verifiable-goals] The click's connection decides where its acts go.
+describe("a click forwarded from the desktop", () => {
+  test("hands copies and remote files to its own writer in order", async () => {
+    const copied = copy();
+    const opened: Act = { kind: "open", id: ++ids as EffectId, session: S, target: file };
+    const { turn, did } = hostOver([copied, opened]);
+    const answered = await turn([], "desktop");
+    expect(did).toEqual([`done ${copied.id} ok`, `done ${opened.id} ok`]);
+    expect(answered.settled).toEqual([
+      { kind: "desktop", act: { kind: "copy", text: "x" } },
+      { kind: "desktop", act: { kind: "open", target: file, file: true } },
+    ]);
+  });
+
+  test("closes without handing over an act after shutdown begins", async () => {
+    const { turn } = hostOver([copy()], { closing: () => true });
+    expect((await turn([], "desktop")).settled.map((o) => o.kind)).toEqual(["closing"]);
+  });
 });
