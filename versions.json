@@ -4,15 +4,22 @@
     {
       "version": "pr-975",
       "ref": "refs/pull/975/merge",
-      "sha": "5e7a7312dd511a107761ed2ab66fbdd9e049a03f",
-      "timestamp": "2026-11-26T14:20:41.475Z",
+      "sha": "9a939638fbc9829ad05d6dc871c4c3af400aa2c9",
+      "timestamp": "2026-11-26T14:28:43.273Z",
       "commits": [
         {
-          "sha": "5e7a7312dd511a107761ed2ab66fbdd9e049a03f",
+          "sha": "9a939638fbc9829ad05d6dc871c4c3af400aa2c9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T14:19:31Z",
-          "message": "Merge b0e46f9cbd0f97abc0fb6824d1ab3227786058da into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+          "timestamp": "2026-11-26T14:27:37Z",
+          "message": "Merge 824b97a521bc8e46da069e60e5b161787a9125e6 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+        },
+        {
+          "sha": "824b97a521bc8e46da069e60e5b161787a9125e6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:27:24-07:00",
+          "message": "fix(window): recover inset when its menu fits again without taking over the statusline\n"
         },
         {
           "sha": "b0e46f9cbd0f97abc0fb6824d1ab3227786058da",

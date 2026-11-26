@@ -83552,6 +83552,7 @@ var BACKSTOP_BOUNDS_READ = {
   render: true,
   [SESSION_RENDER_KIND]: true,
   subscribe: true,
+  "measure-window": true,
   "pane-session": true,
   pointer: true,
   shutdown: true,
@@ -84748,8 +84749,28 @@ function subscription(req) {
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`
     );
+  if (req.kind === "measure-window") {
+    if (lane !== "window" || req.owner !== void 0)
+      return refuse2(
+        "BAD_REQUEST",
+        "A window measurement cannot own a pointer or another lane"
+      );
+    return {
+      kind: "subscribe",
+      sessionId: sessionId2.id,
+      lane,
+      owner: null,
+      drawing: false
+    };
+  }
   if (req.owner === void 0)
-    return { kind: "subscribe", sessionId: sessionId2.id, lane, owner: null };
+    return {
+      kind: "subscribe",
+      sessionId: sessionId2.id,
+      lane,
+      owner: null,
+      drawing: true
+    };
   if (!ownsPointer(lane))
     return refuse2(
       "BAD_REQUEST",
@@ -84762,7 +84783,8 @@ function subscription(req) {
     kind: "subscribe",
     sessionId: sessionId2.id,
     lane,
-    owner: owner.value
+    owner: owner.value,
+    drawing: true
   };
 }
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
@@ -84786,7 +84808,8 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
       })
     );
   }
-  if (req.kind === "subscribe") return subscription(req);
+  if (req.kind === "subscribe" || req.kind === "measure-window")
+    return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_EVENTS, req.kind))
     return refuse2("BAD_REQUEST", UNKNOWN_REQUEST_KIND);
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
@@ -91206,7 +91229,7 @@ var FrameFeeds = class {
       return;
     }
     if (latest === void 0 && follower.confirmed !== null && covers(follower.confirmed, answer2)) {
-      done?.(true);
+      done?.(sub2.drawing());
       return;
     }
     const write = { answer: answer2, done };
@@ -91214,11 +91237,12 @@ var FrameFeeds = class {
     this.pushed++;
     watched.pushed++;
     const finished = (delivered) => {
-      if (delivered && answer2.displayedEvents !== void 0)
+      const displayed = delivered && sub2.drawing();
+      if (displayed && answer2.displayedEvents !== void 0)
         this.deps.acknowledgeDisplayed(answer2.displayedEvents);
       if (!follower.writes.delete(write)) return;
       if (delivered) follower.confirmed = answer2;
-      settleWrite(write, delivered);
+      settleWrite(write, displayed);
     };
     try {
       sub2.frame(answer2.json, finished);
