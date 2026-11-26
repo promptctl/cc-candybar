@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "84f2f6f784c98c23b64d5eb6f7db8c0fc84d6fac",
+      "timestamp": "2026-11-26T14:10:31.922Z",
+      "commits": [
+        {
+          "sha": "84f2f6f784c98c23b64d5eb6f7db8c0fc84d6fac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:09:17-07:00",
+          "message": "fix(renderer): publish interaction feedback immediately on visible surfaces\n"
+        }
+      ]
+    },
+    {
       "version": "pr-975",
       "ref": "refs/pull/975/merge",
       "sha": "2092c58c1fe9a45ca40afa6d91103e95518bdffa",
@@ -27,21 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-26T07:01:37-07:00",
           "message": "feat(window): show an interactive session bar docked or inset beside its terminal\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c0afe8fdcd1688b9b0e5d533ba93d9cbc00b1009",
-      "timestamp": "2026-11-26T13:06:42.375Z",
-      "commits": [
-        {
-          "sha": "c0afe8fdcd1688b9b0e5d533ba93d9cbc00b1009",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-26T13:05:17Z",
-          "message": "chore(release): set `package.json` to 1.242.0\n\n## [1.242.0](https://github.com/promptctl/cc-candybar/compare/v1.241.2...v1.242.0) (2026-11-26)\n\n### Features\n\n* **window:** locate the attaching terminal and its live cell grid ([#974](https://github.com/promptctl/cc-candybar/issues/974)) ([cd0c40b](https://github.com/promptctl/cc-candybar/commit/cd0c40bf77869132bbaa1a7851d4005a16c5ed5a))\n"
         }
       ]
     }

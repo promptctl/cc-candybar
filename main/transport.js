@@ -74512,7 +74512,8 @@ var WAKE_CAUSES = [
   "state",
   "reload",
   "visibility",
-  "viewers"
+  "viewers",
+  "interaction"
 ];
 var RATE_WINDOW_S = 1;
 var TIMER_RESOLUTION_S = 2e-3;
@@ -74571,7 +74572,7 @@ var Feeds = class {
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
     const { kind, next: next2 } = feed2.schedule;
-    const soonest = Math.max(tick, feed2.last + this.spacingOf(feed2));
+    const soonest = cause === "interaction" && feed2.viewers.shown ? tick : Math.max(tick, feed2.last + this.spacingOf(feed2));
     if (kind === "retry" || next2 !== null && next2 <= soonest) {
       feed2.coalesced++;
       return;
@@ -74664,7 +74665,14 @@ var Feeds = class {
       failed: 0,
       evaluated: 0,
       cellBreaks: 0,
-      woke: { data: 0, state: 0, reload: 0, visibility: 0, viewers: 0 },
+      woke: {
+        data: 0,
+        state: 0,
+        reload: 0,
+        visibility: 0,
+        viewers: 0,
+        interaction: 0
+      },
       coalesced: 0,
       lateness: durationHistogram(),
       unpin: this.deps.pin(sessionId2)
@@ -74690,9 +74698,9 @@ var Feeds = class {
     for (const lane of Object.keys(lanes))
       if (!feed2.rates.has(lane)) feed2.rates.set(lane, []);
   }
-  // [LAW:single-enforcer] The one bound on how close a feed's frames are, in
+  // [LAW:single-enforcer] The interval between scheduled frames, in
   // seconds: the moving period while its bar is on a screen, the still period
-  // while it is not. No cause of a wake sets the rate, so an unseen feed draws
+  // while it is not. Interaction can wake a visible feed immediately. An unseen feed draws
   // at most once a still period however often it is woken.
   spacingOf(feed2) {
     const { moving, still } = this.deps.periods;
@@ -78601,8 +78609,16 @@ function mainRenderer(parts, stores) {
         retireSession(parts, event.session);
         return;
       case "effect-done": {
-        if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
-        if (parts.acts.done(event.of, event.session, event.outcome)) return;
+        if (parts.verbs.changeDone(event.of, event.outcome, effects)) {
+          if (event.session !== null && event.outcome.kind !== "closing")
+            feeds.wake(event.session, "interaction", time.tick);
+          return;
+        }
+        if (parts.acts.done(event.of, event.session, event.outcome)) {
+          if (event.session !== null && (event.outcome.kind === "failed" || event.outcome.kind === "refused"))
+            feeds.wake(event.session, "interaction", time.tick);
+          return;
+        }
         const delivery = deliveries.get(event.of);
         if (delivery === void 0)
           throw new Error(
@@ -78632,7 +78648,10 @@ function mainRenderer(parts, stores) {
               `no configuration for this click's origin ${originKey(origin)}`
             );
         }
+        const prior = click2.scope === "session" ? parts.edits.view.revision(click2.session) : void 0;
         clickTurn(parts, { ...event, context }, effects, record2);
+        if (click2.scope === "session" && prior !== parts.edits.view.revision(click2.session))
+          feeds.wake(click2.session, "interaction", time.tick);
         return;
       }
       case "viewers":
