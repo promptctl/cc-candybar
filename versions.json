@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "464af8b20e2735f30bb63189b976c0a20543e17e",
+      "timestamp": "2026-11-26T07:06:06.651Z",
+      "commits": [
+        {
+          "sha": "464af8b20e2735f30bb63189b976c0a20543e17e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T07:04:51Z",
+          "message": "chore(release): set `package.json` to 1.241.2\n\n## [1.241.2](https://github.com/promptctl/cc-candybar/compare/v1.241.1...v1.241.2) (2026-11-26)\n\n### Bug Fixes\n\n* **menu:** retire saved selections that block recording after upgrade ([#972](https://github.com/promptctl/cc-candybar/issues/972)) ([333bc50](https://github.com/promptctl/cc-candybar/commit/333bc50181d36554bd91ea53febb5c13ff862863))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-973",
       "ref": "refs/pull/973/merge",
       "sha": "266dfb20ab1bf00a50cebbed4a85ee4db236a793",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-26T00:01:36-07:00",
           "message": "test(proc): verify closed pipes from the escaped writer\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "333bc50181d36554bd91ea53febb5c13ff862863",
-      "timestamp": "2026-11-26T07:03:13.268Z",
-      "commits": [
-        {
-          "sha": "333bc50181d36554bd91ea53febb5c13ff862863",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T00:01:41-07:00",
-          "message": "fix(menu): retire saved selections that block recording after upgrade (#972)\n\n* fix(menu): retire saved selections that block recording after upgrade\n\n* fix(menu): pin former wire pairs and verify their load diagnostics\n\n* fix(recording): recognize the public state the bundled menu actually writes"
         }
       ]
     }
