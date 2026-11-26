@@ -1,6 +1,7 @@
 import path from "node:path";
 import { createRequire } from "node:module";
 
+import { isolateGit } from "./helpers/checkout";
 import { SSH_ENV_VARS } from "../src/client-hints";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
 import { TERMINAL_ENV_VARS } from "../src/terminal-hint";
@@ -64,13 +65,8 @@ for (const name of [
 ])
   delete process.env[name];
 
-// [LAW:single-enforcer] No git a test starts reads the machine's git config:
-// a developer's names an identity, a default branch and credential helpers
-// that a CI runner's has none of, so a commit that borrows them passes on one
-// machine alone. Its XDG config is the empty directory set below. A test about
-// git config builds its own.
-process.env.GIT_CONFIG_GLOBAL = "/dev/null";
-process.env.GIT_CONFIG_NOSYSTEM = "1";
+// Every subprocess started by the suite also inherits the test's Git settings.
+isolateGit(process.env);
 
 // [LAW:single-enforcer] No test load finds the host's own config: the XDG
 // location is the lowest layer of every chain (src/config/loader/chain-places.ts),
