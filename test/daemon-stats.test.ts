@@ -119,6 +119,7 @@ const SOURCE_RUNS = {
 // What the daemon's parts report beside the counters RuntimeStats owns.
 const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
   sourceDigest: null,
+  linkKeyId: { kind: "ok", value: "AbCd-_12" },
   gitCache: {
     size: 4,
     held: 1,
@@ -548,6 +549,7 @@ describe("formatStats", () => {
       pid: 1234,
       version: "1.41.2",
       sourceDigest: null,
+      linkKeyId: { kind: "ok", value: "AbCd-_12" },
       protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 125,
@@ -855,6 +857,7 @@ describe("formatStats", () => {
       pid: 1,
       version: "1.41.2",
       sourceDigest: null,
+      linkKeyId: { kind: "failed", reason: "no key" },
       protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 0,

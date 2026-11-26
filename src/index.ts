@@ -28,6 +28,7 @@ import { daemonStatsPlan } from "./daemon/client-stats";
 import { debugCommandPlan } from "./daemon/client-debug";
 import { DEBUG_WHATS } from "./daemon/foundations/debug-types";
 import { schemaPlan } from "./config-cli";
+import { sshConfigFacts, sshConfigPlan } from "./ssh-cli";
 import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planAfterKick, planOutcome } from "./outcome-plan";
@@ -99,6 +100,9 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   "install-url-handler": async () => {
     runInstallUrlHandler(RUNNING_BUNDLE, commandWorld());
     process.exit(0);
+  },
+  "ssh-config": async (args) => {
+    await exitWith(sshConfigPlan(args, await sshConfigFacts(commandWorld())));
   },
   "url-handle": async (args) => {
     await runUrlHandle(args[0], commandWorld());

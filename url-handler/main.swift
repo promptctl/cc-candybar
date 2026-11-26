@@ -1,17 +1,20 @@
 // The cc-candybar URL handler: a resident macOS background-only app that
 // forwards every `cc-candybar://` link Launch Services hands it to the daemon,
 // as one frame, and reads back the daemon's verdict on it. The daemon parses
-// the link and opens its signature; this app never reads it. Background-only (the Info.plist install writes) is what
+// the link and opens its signature; this app reads only which daemon signed it.
+// Background-only (the Info.plist install writes) is what
 // keeps a click from taking the terminal's keyboard focus: Launch Services
 // never activates such an app.
 //
-// [LAW:one-source-of-truth] The app knows two wire facts, both mirrored from
-// src/daemon/foundations/protocol.ts and src/daemon/paths.ts and pinned by
-// scripts/check-protocol.mjs: the frame (a 4-byte big-endian length, then the
-// JSON `{"kind":"url","urlV":2,"url":…}`) and the socket path, derived from
-// the uid because Launch Services starts the app with no shell's environment.
-// A handler goes stale through what it knows, and this one knows nothing a
-// release changes: not a bundle path, not a node binary, not a verb.
+// [LAW:one-source-of-truth] The app knows a few wire facts, all mirrored from
+// src/daemon/foundations/protocol.ts, src/daemon/paths.ts and
+// src/click/link-signer.ts and pinned by scripts/check-protocol.mjs: the frame
+// (a 4-byte big-endian length, then the JSON `{"kind":"url","urlV":2,"url":…}`),
+// the socket path, derived from the uid because Launch Services starts the app
+// with no shell's environment, and where a link names its signer and where an
+// ssh forward puts that signer's socket. A handler goes stale through what it
+// knows, and this one knows nothing a release changes: not a bundle path, not
+// a node binary, not a verb.
 //
 // [LAW:carrying-cost] No thread, no retry. The socket is non-blocking: a
 // connect either completes at once (a unix socket with room in its backlog
@@ -67,6 +70,16 @@ func socketPath() -> String {
   return "/tmp/cc-candybar-\(uid)/socket"
 }
 
+// Mirrored: src/daemon/paths.ts REMOTE_SOCKET_DIR_UNDER_HOME and
+// REMOTE_SOCKET_SUFFIX, and src/click/link-signer.ts LINK_KEY_ID_CHARS,
+// LINK_KEY_ID_ALPHABET, LINK_MAC_MARK and LINK_PROOF_SEPARATOR.
+let REMOTE_SOCKET_DIR_UNDER_HOME = ".cc-candybar/remote"
+let REMOTE_SOCKET_SUFFIX = ".sock"
+let LINK_KEY_ID_CHARS = 8
+let LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+let LINK_MAC_MARK: Character = "#"
+let LINK_PROOF_SEPARATOR: Character = "/"
+
 let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
 enum Forward {
@@ -93,8 +106,7 @@ func errnoText(_ what: String) -> String {
 }
 
 // One frame to the daemon's socket, non-blocking throughout.
-func forward(_ url: String) -> Forward {
-  let path = socketPath()
+func forward(_ url: String, to path: String) -> Forward {
   let fd = socket(AF_UNIX, SOCK_STREAM, 0)
   if fd < 0 { return .failed(errnoText("socket")) }
   defer { close(fd) }
@@ -150,6 +162,64 @@ func forward(_ url: String) -> Forward {
   }
   if let why = written { return .failed(why) }
   return verdict(fd)
+}
+
+// A bar drawn by a daemon on another machine (the terminal is an ssh session)
+// is signed by that daemon, and the click opens here. Only the daemon that
+// signed a link opens it, and a link names its signer: the first field of its
+// proof, `#<key id>/…`. The user's ssh forwards that daemon's socket to
+// `<key id>.sock` in REMOTE_SOCKET_DIR_UNDER_HOME (`cc-candybar ssh-config` on
+// that machine prints the lines), so the link goes to the one daemon it names:
+// no host name, no route and no key is learned, nothing is tried in turn, and
+// no daemon sees a link that is not its own. A link that names no forward on
+// this Mac, its own or one whose ssh connection is not set up, goes to this
+// Mac's daemon, which says which daemon signed it. [LAW:single-enforcer]
+// The id a link names, or nil for a link that names none (a proof that does not
+// begin with one, as links drawn before they named a signer do not). The link
+// comes from any web page, and the id becomes part of a path, so it is the
+// spelling the signer writes and nothing else.
+func signerId(of link: String) -> String? {
+  guard let mark = link.lastIndex(of: LINK_MAC_MARK) else { return nil }
+  let proof = link[link.index(after: mark)...]
+  guard let slash = proof.firstIndex(of: LINK_PROOF_SEPARATOR) else { return nil }
+  let id = proof[..<slash]
+  guard id.utf8.count == LINK_KEY_ID_CHARS, id.allSatisfy({ LINK_KEY_ID_ALPHABET.contains($0) })
+  else { return nil }
+  return String(id)
+}
+
+// Where a link goes: this Mac's own daemon, or the forward a link's id names.
+enum Route {
+  case own(socket: String)
+  case forward(id: String, socket: String)
+
+  var socket: String {
+    switch self {
+    case .own(let socket), .forward(_, let socket): return socket
+    }
+  }
+}
+
+func route(of link: String) -> Route {
+  guard let id = signerId(of: link) else { return .own(socket: socketPath()) }
+  // NSHomeDirectory, not $HOME: it is the account's home, which is what ssh's
+  // `%d` spells in the stanza.
+  let forwarded =
+    NSHomeDirectory() + "/" + REMOTE_SOCKET_DIR_UNDER_HOME + "/" + id + REMOTE_SOCKET_SUFFIX
+  return FileManager.default.fileExists(atPath: forwarded)
+    ? .forward(id: id, socket: forwarded) : .own(socket: socketPath())
+}
+
+// A forward file can outlive the ssh connection that made it (ssh killed), and
+// a daemon on the far end can be gone behind a live one, so a forward a link
+// names that does not take the link says whose it is and what to look at,
+// before the cause. [LAW:no-silent-failure]
+func deliver(_ url: String, via route: Route) -> Forward {
+  let sent = forward(url, to: route.socket)
+  guard case .forward(let id, _) = route, case .failed(let why) = sent else { return sent }
+  return .failed(
+    "the ssh forward for key \(id) did not take the link; is the ssh connection to the machine that drew it open? \(why)"
+  )
 }
 
 // Exactly `count` bytes from the socket by `deadline` (a monotonic ms count),
@@ -257,7 +327,9 @@ final class Handler: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       let link = url.absoluteString
-      switch forward(link) {
+      let routed = route(of: link)
+      let socket = routed.socket
+      switch deliver(link, via: routed) {
       // Notice, not info: the unified log persists notice and above, so
       // `log show` can answer "did the click reach the socket" after the fact.
       // The link itself is private: a copy link carries the text being copied,
@@ -265,15 +337,15 @@ final class Handler: NSObject, NSApplicationDelegate {
       // daemon's own click event records the link, in the user's own log.
       // [LAW:nothing-unseen]
       case .delivered:
-        log.notice("forwarded \(link, privacy: .private)")
+        log.notice("forwarded \(link, privacy: .private) to \(socket, privacy: .public)")
       case .refused(let why):
-        log.error("refused \(link, privacy: .private): \(why, privacy: .public)")
+        log.error("refused \(link, privacy: .private) by \(socket, privacy: .public): \(why, privacy: .public)")
         notify("Click refused", why, refusedClickNotice)
       case .unconfirmed(let why):
-        log.error("unconfirmed \(link, privacy: .private): \(why, privacy: .public)")
+        log.error("unconfirmed \(link, privacy: .private) at \(socket, privacy: .public): \(why, privacy: .public)")
         notify("Click unconfirmed", why, lostClickNotice)
       case .failed(let why):
-        log.error("lost \(link, privacy: .private): \(why, privacy: .public)")
+        log.error("lost \(link, privacy: .private) to \(socket, privacy: .public): \(why, privacy: .public)")
         notify("Click not delivered", why, lostClickNotice)
       }
     }
