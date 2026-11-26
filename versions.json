@@ -2,6 +2,77 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-971",
+      "ref": "refs/pull/971/merge",
+      "sha": "6879e02332b3ab31e565b91aa9b761b0a66df67f",
+      "timestamp": "2026-11-26T05:47:41.515Z",
+      "commits": [
+        {
+          "sha": "6879e02332b3ab31e565b91aa9b761b0a66df67f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T05:44:44Z",
+          "message": "Merge f1658748c97dd0e30ef43949d335668d7e73513e into 2ccd7d18d29936c29c3f7f7f09208c87d6c65270\n"
+        },
+        {
+          "sha": "f1658748c97dd0e30ef43949d335668d7e73513e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:00-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\tscripts/lib/draw-fixtures/payload-owners.ts\n#\ttest/daemon-boots/process/daemon-renderer-backstop.test.ts\n"
+        },
+        {
+          "sha": "dab3aace49fa65ef6536e46e1e412531b11d079b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:42:44-07:00",
+          "message": "test: observe a held grandchild through its owned connection\n"
+        },
+        {
+          "sha": "a2148ea36d3468a71987bfbfacb160b50d005999",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:36:50-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
+        },
+        {
+          "sha": "0c981736f95ed5bc34789696b943c75007c1c247",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:33-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
+        },
+        {
+          "sha": "8273f12d451f7b785236c2a016f3477278dd9a31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:08:31-07:00",
+          "message": "test(cache): measure renderer entries after retiring their views\n"
+        },
+        {
+          "sha": "b7108dc95d2711709728160552ce3b284f7ce972",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:06:55-07:00",
+          "message": "test(heap): distinguish compile-owned stores from live WeakMap keys\n"
+        },
+        {
+          "sha": "3559a6ccbfdc96ff22e7c602311acff9ee1b4874",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:45-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
+        },
+        {
+          "sha": "d773a10147554d29bf14e469179274b07f6e03ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:02:21-07:00",
+          "message": "test: isolate terminal, filesystem and process observations from the host\n"
+        }
+      ]
+    },
+    {
       "version": "pr-968",
       "ref": "refs/pull/968/merge",
       "sha": "f221f85ad75c02dfc03ba73a60c83730c565c112",
@@ -270,63 +341,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:38:17-07:00",
           "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-971",
-      "ref": "refs/pull/971/merge",
-      "sha": "7bca46413f0528472d09b0bb5ffe1c2a46b229af",
-      "timestamp": "2026-11-26T05:38:10.479Z",
-      "commits": [
-        {
-          "sha": "7bca46413f0528472d09b0bb5ffe1c2a46b229af",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:37:02Z",
-          "message": "Merge a2148ea36d3468a71987bfbfacb160b50d005999 into 7b3c063cc9a84b9c7c7abb11d8ef71b3fcf7fdb1\n"
-        },
-        {
-          "sha": "a2148ea36d3468a71987bfbfacb160b50d005999",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:36:50-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
-        },
-        {
-          "sha": "0c981736f95ed5bc34789696b943c75007c1c247",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:08:33-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n"
-        },
-        {
-          "sha": "8273f12d451f7b785236c2a016f3477278dd9a31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:08:31-07:00",
-          "message": "test(cache): measure renderer entries after retiring their views\n"
-        },
-        {
-          "sha": "b7108dc95d2711709728160552ce3b284f7ce972",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:06:55-07:00",
-          "message": "test(heap): distinguish compile-owned stores from live WeakMap keys\n"
-        },
-        {
-          "sha": "3559a6ccbfdc96ff22e7c602311acff9ee1b4874",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:45-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into candybar-later-fixes-nwu9.j8e\n\n# Conflicts:\n#\t.claude/memory/testing.md\n"
-        },
-        {
-          "sha": "d773a10147554d29bf14e469179274b07f6e03ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:02:21-07:00",
-          "message": "test: isolate terminal, filesystem and process observations from the host\n"
         }
       ]
     }
