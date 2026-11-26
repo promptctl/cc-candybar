@@ -145,8 +145,7 @@ export async function runBarWindow(
     unsubscribe();
     feedMode = mode;
     feed = followFrames(world, hostSocket, session, "window", {
-      measureWindow: mode === "measure",
-      owner: mode === "draw" ? facts : undefined,
+      ...(mode === "measure" ? { measureWindow: true } : { owner: facts }),
       frame(response) {
         if (feedMode !== mode) return;
         if (mode === "measure") {
@@ -348,7 +347,8 @@ export async function runBarWindow(
     try {
       await watcher?.close();
       await refreshing;
-      if (owned && !sourceRetired) await layout.clear();
+      if (owned && !sourceRetired)
+        sourceRetired = (await layout.clear()) === "server-ended";
     } finally {
       panel.end();
       await panelEnd;

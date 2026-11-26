@@ -982,15 +982,25 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(opened.rows.length).toBeGreaterThan(closed.rows.length);
     const heights: number[] = [];
     let end: StreamEnd | undefined;
-    const measure = openFrameStream(sockPath, sid, "window", (response) => {
-      const frame = frameOf(response);
-      if (frame) heights.push(frame.rows.length);
-    }, (reason) => { end = reason; }, undefined, true);
+    const measure = openFrameStream(
+      sockPath,
+      sid,
+      "window",
+      (response) => {
+        const frame = frameOf(response);
+        if (frame) heights.push(frame.rows.length);
+      },
+      (reason) => {
+        end = reason;
+      },
+      "measure-window",
+    );
     try {
-      const waitForHeight = (height: number) => until(() => {
-        if (end) throw new Error(JSON.stringify(end));
-        return heights.at(-1) === height;
-      }, `the window to receive ${height} rows`);
+      const waitForHeight = (height: number) =>
+        until(() => {
+          if (end) throw new Error(JSON.stringify(end));
+          return heights.at(-1) === height;
+        }, `the window to receive ${height} rows`);
       await waitForHeight(opened.rows.length);
       const fallback = await draw();
       expect(textOf(fallback)).toContain("door shut");
@@ -1001,11 +1011,21 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     } finally {
       measure.close();
     }
-    for (const invalid of [{ lane: "pane" }, { lane: "window", owner: { id: "hidden" } }]) {
+    for (const invalid of [
+      { lane: "pane" },
+      { lane: "window", owner: { id: "hidden" } },
+    ]) {
       const refusal = await sendDaemonRequest(sockPath, {
-        v: PROTOCOL_VERSION, kind: "measure-window", sessionId: sid, ...invalid,
+        v: PROTOCOL_VERSION,
+        kind: "measure-window",
+        sessionId: sid,
+        ...invalid,
       });
-      expect(refusal).toMatchObject({ ok: false, code: "BAD_REQUEST", error: expect.stringContaining("cannot own") });
+      expect(refusal).toMatchObject({
+        ok: false,
+        code: "BAD_REQUEST",
+        error: expect.stringContaining("cannot own"),
+      });
     }
   });
 

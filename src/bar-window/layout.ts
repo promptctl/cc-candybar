@@ -19,6 +19,7 @@ interface LayoutResult {
 }
 
 class InsetHeightError extends Error {}
+class ServerEnded extends Error {}
 
 // A reserved pane has no process. tmux sets its title in the same operation
 // as the split. Require both the session-specific title and the empty command
@@ -54,6 +55,8 @@ export class WindowLayout {
       "bar-window.tmux",
       args,
     );
+    if (result.kind === "failed" && result.serverGone)
+      throw new ServerEnded(result.reason);
     if (result.kind !== "ok") throw new Error(result.reason);
     return result.stdout;
   }
@@ -148,8 +151,14 @@ export class WindowLayout {
     return actual;
   }
 
-  async clear(): Promise<void> {
-    await this.remove(await this.panes());
+  async clear(): Promise<"cleared" | "server-ended"> {
+    try {
+      await this.remove(await this.panes());
+      return "cleared";
+    } catch (error) {
+      if (error instanceof ServerEnded) return "server-ended";
+      throw error;
+    }
   }
 
   async locate(

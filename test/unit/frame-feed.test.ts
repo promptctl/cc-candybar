@@ -1025,7 +1025,11 @@ test("measuring a window receives changed frames while display receipts and even
   const unchanged = frame(S, "menu closed", null, 3, [event]);
   took([first, second, unchanged]);
   expect(measure.sent).toHaveLength(2);
-  expect(settled).toEqual([[first, false], [second, false], [unchanged, false]]);
+  expect(settled).toEqual([
+    [first, false],
+    [second, false],
+    [unchanged, false],
+  ]);
   expect(acknowledged).toEqual([]);
   leave();
   feeds.subscribe(S, subscriber("window").sub);

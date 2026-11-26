@@ -17,6 +17,7 @@ test("one panel follows a visible attachment and retires only its unusable reser
   const title = "cc-candybar-window-selection";
   const observations = new Map<string, Availability>();
   let attached = [a, b];
+  let reservationCommands = 0;
   let survivor = false;
   try {
     const [session, window] = tmux
@@ -32,6 +33,7 @@ test("one panel follows a visible attachment and retires only its unusable reser
     const layout = new WindowLayout(
       {
         launch: async (spec) => {
+          if (spec.args?.[2] === "if-shell") reservationCommands++;
           if (spec.args?.[2] !== "list-clients")
             return WORLD.launcher.launch(spec);
           const stdout = attached
@@ -139,9 +141,25 @@ test("one panel follows a visible attachment and retires only its unusable reser
       issue: expect.stringMatching(/too small/),
       measureHeight: true,
     });
+    const before = reservationCommands;
+    expect((await locate("inset", b, 50)).measureHeight).toBe(true);
+    expect(reservationCommands).toBe(before);
+    observations.set(clientKey(b), {
+      kind: "availability",
+      ...b,
+      state: "visible",
+      columns: 79,
+      rows: 24,
+    });
+    expect((await locate("inset", b, 50)).measureHeight).toBe(false);
     hidden(b);
     expect((await locate("inset", b, 50)).measureHeight).toBe(false);
     visible(b);
+    expect(reserved()).toHaveLength(0);
+    expect((await locate("inset", b)).selected).toEqual(b);
+    // With 24 source rows, the divider and Claude each need one row.
+    // A resize clamped by the real server releases its old reservation.
+    expect((await locate("inset", b, 23)).measureHeight).toBe(true);
     expect(reserved()).toHaveLength(0);
     expect((await locate("inset", b)).selected).toEqual(b);
     tmux.run("new-session", "-d", "-s", "survivor");
@@ -155,6 +173,23 @@ test("one panel follows a visible attachment and retires only its unusable reser
   } finally {
     if (survivor) tmux.run("kill-session", "-t", "survivor");
     tmux.kill();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("closing the last docked source retires the follower when the tmux server exits", async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "ccb-last-pane-"));
+  const server = tmuxServer(dir, { cols: 80, rows: 24 });
+  try {
+    const layout = new WindowLayout(
+      WORLD.launcher,
+      server,
+      "cc-candybar-window-last",
+    );
+    server.run("kill-pane", "-t", server.pane);
+    expect(await layout.clear()).toBe("server-ended");
+  } finally {
+    server.kill();
     rmSync(dir, { recursive: true, force: true });
   }
 });

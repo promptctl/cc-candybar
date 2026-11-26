@@ -316,9 +316,7 @@ export function watchTmuxEvents(
           // requested release must be heard by the caller.
           if (
             release.kind !== "ok" &&
-            !/no server running|No such file or directory|Connection refused/.test(
-              release.reason,
-            )
+            !(release.kind === "failed" && release.serverGone)
           )
             throw new Error(
               `could not release tmux geometry hooks: ${release.reason}`,

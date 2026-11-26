@@ -103,18 +103,18 @@ export function afterStreamEnd(
 // when the next is opened; and the end of the follower, for a daemon this
 // client is too old for. `beforeReconnect` runs before each reopening — the
 // statusline client hands the daemon its session's data again there.
-export interface FrameFollow {
+export type FrameFollow = {
   readonly frame: (resp: Response) => void;
   readonly off: (resp: Refusal) => void;
   readonly fault: (reason: string, retryMs: number) => void;
   readonly exit: (reason: string) => void;
   readonly beforeReconnect?: () => Promise<void>;
-  // The pointer a follower that owns the session's declares at each opening, as
-  // it stands then: a stream that reconnects restates it, so the host never holds
-  // what the follower no longer says.
-  readonly owner?: () => OwnerFacts;
-  readonly measureWindow?: boolean;
-}
+} & (
+  // A drawing follower restates its current pointer at each opening. A
+  // measuring window never owns that pointer, including across reconnects.
+  | { readonly owner?: () => OwnerFacts; readonly measureWindow?: false }
+  | { readonly owner?: never; readonly measureWindow: true }
+);
 
 export interface FrameFollower {
   close(): void;
@@ -176,8 +176,7 @@ export function followFrames(
           }
         }
       },
-      follow.owner?.(),
-      follow.measureWindow,
+      follow.measureWindow ? "measure-window" : follow.owner?.(),
     );
   };
 

@@ -19,7 +19,11 @@ import type { TmuxHint } from "../tmux-hint.js";
 export type TmuxRun =
   | { readonly kind: "ok"; readonly stdout: string }
   | { readonly kind: "rate-limited"; readonly reason: string }
-  | { readonly kind: "failed"; readonly reason: string };
+  | {
+      readonly kind: "failed";
+      readonly reason: string;
+      readonly serverGone?: true;
+    };
 
 function invocation(
   hint: Pick<TmuxHint, "socket">,
@@ -36,13 +40,26 @@ function invocation(
   };
 }
 
-function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
+function tmuxRun(
+  result: LaunchResult,
+  args: readonly string[],
+  socket: string,
+): TmuxRun {
   if (result.ok) return { kind: "ok", stdout: result.stdout };
   if (result.reason === "rate-limited") {
     return { kind: "rate-limited", reason: failureText(result) };
   }
+  // Only tmux reporting this exact socket absent proves that its panes and
+  // hooks are gone. Spawn errors and permission failures need recovery.
+  const detail = result.stderr.trim();
+  const serverGone =
+    result.reason === "non-zero" &&
+    (detail === `no server running on ${socket}` ||
+      detail === `error connecting to ${socket} (No such file or directory)` ||
+      detail === `error connecting to ${socket} (Connection refused)`);
   return {
     kind: "failed",
+    ...(serverGone && { serverGone: true }),
     reason: `tmux ${args[0]} failed (${failureText(result)})`,
   };
 }
@@ -58,5 +75,6 @@ export async function runTmuxAsync(
   return tmuxRun(
     await launcher.launch(invocation(hint, category, args, stdinInput)),
     args,
+    hint.socket,
   );
 }
