@@ -4,15 +4,22 @@
     {
       "version": "pr-973",
       "ref": "refs/pull/973/merge",
-      "sha": "81931a515c7c2016e5343c6d9f590f6c448fce19",
-      "timestamp": "2026-11-26T07:13:08.959Z",
+      "sha": "38363aaf1a47e6c1ed40530ecc330f45db0a1819",
+      "timestamp": "2026-11-26T07:16:20.289Z",
       "commits": [
         {
-          "sha": "81931a515c7c2016e5343c6d9f590f6c448fce19",
+          "sha": "38363aaf1a47e6c1ed40530ecc330f45db0a1819",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T07:11:59Z",
-          "message": "Merge 2c82d61df81d357b195760ad2e1ec1d0f2bf758f into 464af8b20e2735f30bb63189b976c0a20543e17e\n"
+          "timestamp": "2026-11-26T07:15:20Z",
+          "message": "Merge f21ab929940c6c288b7666bb8f1d83e1506bc82f into 464af8b20e2735f30bb63189b976c0a20543e17e\n"
+        },
+        {
+          "sha": "f21ab929940c6c288b7666bb8f1d83e1506bc82f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T00:15:09-07:00",
+          "message": "test(renderer): observe orphan exit through its own socket\n"
         },
         {
           "sha": "2c82d61df81d357b195760ad2e1ec1d0f2bf758f",
