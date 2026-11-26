@@ -1,3 +1,9 @@
+## [1.238.6](https://github.com/promptctl/cc-candybar/compare/v1.238.5...v1.238.6) (2026-11-26)
+
+### Bug Fixes
+
+* **transcript:** a transcript line or sidechain the fold cannot read shows as ⚠, and code only a removed feature read is deleted (candybar-later-fixes-nwu9.3fy) ([#960](https://github.com/promptctl/cc-candybar/issues/960)) ([7138496](https://github.com/promptctl/cc-candybar/commit/7138496ca34979f4494658136320889c7360fe00))
+
 ## [1.238.5](https://github.com/promptctl/cc-candybar/compare/v1.238.4...v1.238.5) (2026-11-26)
 
 ### Bug Fixes

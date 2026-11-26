@@ -84,3 +84,8 @@ process.env.XDG_CONFIG_HOME = jestTmpDir("config");
 // in a test that means to see it wait. A test answering for a repository
 // writes into this one (test/helpers/repo-approval.ts).
 process.env.XDG_STATE_HOME = jestTmpDir("state");
+
+// [LAW:single-enforcer] No test reads or writes the host's pricing cache
+// (src/daemon/paths.ts), so a table a test fetches never prices the host's
+// bar, and one the host fetched never prices a test's.
+process.env.XDG_CACHE_HOME = jestTmpDir("cache");
