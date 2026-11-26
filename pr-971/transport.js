@@ -28577,6 +28577,8 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   URL_FRAME_VERSION
 ]);
 var awaitsVerdict = (urlV) => typeof urlV === "number" && urlV >= 2;
+var ACTS_ON_DAEMON = "daemon";
+var ACTS_ON_DESKTOP = "desktop";
 var ProtocolError = class extends Error {
   constructor(message) {
     super(message);
@@ -78037,23 +78039,6 @@ function verbsOver(ctx) {
   };
 }
 
-// src/renderer-interface/request-context.ts
-init_globals();
-function durableOf(req) {
-  const { claudeConfigDir: claudeConfigDir2 } = req.hints;
-  return {
-    origin: req.requested,
-    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
-  };
-}
-function heardContextOf(req) {
-  return {
-    session: req.hookData.session_id,
-    durable: durableOf(req),
-    live: req
-  };
-}
-
 // src/renderer/acts.ts
 init_globals();
 var ActsOnTheirWay = class {
@@ -78081,6 +78066,25 @@ var ActsOnTheirWay = class {
 
 // src/renderer/world-states.ts
 init_globals();
+
+// src/renderer-interface/request-context.ts
+init_globals();
+function durableOf(req) {
+  const { claudeConfigDir: claudeConfigDir2 } = req.hints;
+  return {
+    origin: req.requested,
+    ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+  };
+}
+function heardContextOf(req) {
+  return {
+    session: req.hookData.session_id,
+    durable: durableOf(req),
+    live: req
+  };
+}
+
+// src/renderer/world-states.ts
 var WorldStates = class {
   live = observable.map(void 0, {
     deep: false
@@ -78400,54 +78404,10 @@ function mainRenderer(parts, stores) {
   };
   let wake = null;
   const opening = /* @__PURE__ */ new Set();
-  const parked = observable.box([], { deep: false });
-  const keepParked = (keep) => {
-    const prior = parked.get();
-    const next2 = prior.filter(keep);
-    if (next2.length !== prior.length) runInAction(() => parked.set(next2));
-  };
-  const parkedContext = (click2) => {
-    const { session } = click2;
-    if (click2.kind === "live")
-      return heardContextOf(parts.worldStates.requestOf(session));
-    return parts.worldStates.contextOf(session) ?? {
-      session,
-      durable: click2.durable,
-      live: null
-    };
-  };
-  const takeClicks = (matches) => {
-    const ready = [];
-    keepParked((click2) => {
-      if (!matches(click2)) return true;
-      ready.push(click2);
-      return false;
-    });
-    return ready;
-  };
   const openWaiting = (session) => () => {
     openSession(parts, session);
     opening.delete(session);
   };
-  const resume = (ready, effects, record2) => ready.map((click2) => () => {
-    try {
-      clickTurn(
-        parts,
-        { ...click2.event, context: parkedContext(click2) },
-        effects,
-        record2
-      );
-    } catch (thrown2) {
-      holdClickError(
-        parts.sessionState,
-        click2.session,
-        rendererFailureOf(thrown2).message,
-        time.at
-      );
-      throw thrown2;
-    }
-  });
-  const parkedClickSessions = () => new Set(parked.get().map((click2) => click2.session));
   const commands = {
     stats: () => ({
       kind: "stats",
@@ -78457,7 +78417,7 @@ function mainRenderer(parts, stores) {
         sessionState: parts.sessionStats(),
         menuIdle: menuIdle.stats(),
         rendererTurns: {
-          parked: opening.size + parked.get().length,
+          parked: opening.size,
           presents: deliveries.size,
           deferrals: time.deferrals()
         },
@@ -78546,8 +78506,7 @@ function mainRenderer(parts, stores) {
             record2.push(["parked", "context"]);
             return;
           }
-          const ready = takeClicks((click2) => click2.session === session);
-          runEach([openWaiting(session), ...resume(ready, effects, record2)]);
+          openWaiting(session)();
         });
         return;
       }
@@ -78556,16 +78515,12 @@ function mainRenderer(parts, stores) {
         const sessions = [...opening].filter(
           (session) => originKey(parts.worldStates.requestOf(session).requested) === key
         );
-        const ready = takeClicks(
-          (click2) => originKey(parkedContext(click2).durable.origin) === key
-        );
         runEach([
           () => parts.renderCache.configure(event.origin, event.config),
           () => runEach(
             parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
           ),
-          ...sessions.map(openWaiting),
-          ...resume(ready, effects, record2)
+          ...sessions.map(openWaiting)
         ]);
         return;
       }
@@ -78602,7 +78557,6 @@ function mainRenderer(parts, stores) {
         return;
       case "retire":
         opening.delete(event.session);
-        keepParked((click2) => click2.session !== event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -78628,18 +78582,15 @@ function mainRenderer(parts, stores) {
         const context = click2.scope === "session" ? live ?? event.context : null;
         if (context !== null) {
           const { origin } = context.durable;
-          if (!parts.renderCache.holdsConfig(origin)) {
-            const { context: _input, ...intent } = event;
-            const waiting = { session: context.session, event: intent };
-            runInAction(
-              () => parked.set([
-                ...parked.get(),
-                live === null ? { ...waiting, kind: "cold", durable: context.durable } : { ...waiting, kind: "live" }
-              ])
-            );
-            record2.push(["parked", "click"]);
-            return;
+          if (event.coldConfig !== void 0) {
+            const offered = event.context?.durable.origin;
+            if (offered !== void 0 && originKey(offered) === originKey(origin))
+              parts.renderCache.configure(origin, event.coldConfig);
           }
+          if (!parts.renderCache.holdsConfig(origin))
+            throw new Error(
+              `no configuration for this click's origin ${originKey(origin)}`
+            );
         }
         clickTurn(parts, { ...event, context }, effects, record2);
         return;
@@ -78648,8 +78599,7 @@ function mainRenderer(parts, stores) {
         feeds.view(event.viewers, time.tick);
         return;
       case "due": {
-        const busy = parkedClickSessions();
-        for (const session of event.pendingClicks ?? []) busy.add(session);
+        const busy = new Set(event.pendingClicks);
         runEach([
           () => time.runDue(),
           () => closeIdleMenus2(parts, effects, busy),
@@ -78711,10 +78661,6 @@ function mainRenderer(parts, stores) {
         configs.set(originKey(origin), origin);
       for (const origin of parts.renderCache.origins())
         configs.set(originKey(origin), origin);
-      for (const click2 of parked.get()) {
-        const origin = parkedContext(click2).durable.origin;
-        configs.set(originKey(origin), origin);
-      }
       return [...configs].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, origin]) => origin);
     },
     { equals: compareStructural }
@@ -78775,15 +78721,14 @@ function mainRenderer(parts, stores) {
     };
     for (const store of storeOrder)
       collect(store, () => stored.push(...stores[store].drain()));
-    collect("subscriptions", () => declare(event.kind === "config"));
+    collect(
+      "subscriptions",
+      () => declare(
+        event.kind === "config" || event.kind === "click" && event.coldConfig !== void 0
+      )
+    );
     collect("wake", () => {
-      wake = earliestOf([
-        time.next(),
-        menuIdle.next(
-          parked.get().length === 0 ? void 0 : parkedClickSessions()
-        ),
-        feeds.next()
-      ]);
+      wake = earliestOf([time.next(), menuIdle.next(), feeds.next()]);
     });
     if (event.kind === "close-views")
       collect(
@@ -81485,6 +81430,8 @@ function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
   return import_node_path15.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
+var HOST_ALIAS_FIRST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
+var HOST_ALIAS_REST = `${HOST_ALIAS_FIRST}.-`;
 function sessionStatePath(host) {
   return import_node_path15.default.join(stateDir(host), "session-state.json");
 }
@@ -84618,6 +84565,7 @@ function recordingCommandOf(value) {
 }
 
 // src/daemon/reply.ts
+var toldAtOnce = (urlV, verdict, land) => awaitsVerdict(urlV) ? { when: "at-once", verdict, land } : { when: "never", land };
 function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
   const { sent, frame: frame2, unsent } = framedResponse(resp);
   return { resp: sent, frame: frame2, unsent, exitAfterFlush, settled: settled3 };
@@ -84655,10 +84603,12 @@ function refuseClosingReply(parts, kind, accepted) {
 function refuseClosingInbound(parts, inbound, accepted) {
   return inbound.kind === "url" ? {
     kind: "url",
-    awaitsVerdict: awaitsVerdict(inbound.frame.urlV),
-    verdict: closingResponse(parts, "click", accepted),
-    land: async () => {
-    }
+    told: toldAtOnce(
+      inbound.frame.urlV,
+      closingResponse(parts, "click", accepted),
+      async () => {
+      }
+    )
   } : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
 }
 var REPLY_EVENTS = {
@@ -84979,15 +84929,14 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     return recorded2(await draw2());
   }
   if (req.kind === "click") {
-    return stay(
-      await clickEvent(
-        parts,
-        accepted,
-        timedOut,
-        clientLeft,
-        (facts, click2) => clickOutcome(parts, req, facts, click2)
-      )
+    const { outcome } = await clickEvent(
+      parts,
+      accepted,
+      timedOut,
+      clientLeft,
+      (facts, click2) => clickOutcome(parts, req, facts, click2)
     );
+    return stay(clickReply(outcome));
   }
   if (req.kind === "debug") {
     if (!isDebugWhat(req.what)) {
@@ -85111,7 +85060,9 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
   const click2 = {
     gone: () => timedOut() || clientLeft()
   };
-  const outcome = await run2(facts, click2).catch(failureOf);
+  const { outcome, desktop } = await run2(facts, click2).catch(
+    (thrown2) => nothingLeft(failureOf(thrown2))
+  );
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -85123,62 +85074,94 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
     elapsedMs(clock, t0)
   );
   parts.log(level, line);
-  return clickReply(outcome);
+  return { outcome, desktop };
 }
+var nothingLeft = (outcome) => ({
+  outcome,
+  desktop: []
+});
 async function clickOutcome(parts, req, facts, click2) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
-    return badRequest(`a click's url is a string, got ${typeof url}`);
+    return nothingLeft(
+      badRequest(`a click's url is a string, got ${typeof url}`)
+    );
   return ranClick(
     parts,
-    routeClick(parts, parseClick(url, parts.linkSigner)),
+    routeClick(parts, parseClick(url, parts.linkSigner), ACTS_ON_DAEMON),
     facts,
     click2
   );
 }
-function readUrlFrame(frame2, links) {
-  const { urlV, url } = frame2;
+function readUrlFrame(frame2, parts) {
+  const { urlV, url, actsOn = ACTS_ON_DAEMON } = frame2;
   if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
-    return {
-      kind: "refused",
-      problem: `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-    };
+    return refusedClick(
+      `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+    );
   if (typeof url !== "string")
-    return {
-      kind: "refused",
-      problem: "the URL handler's frame carries no url string"
-    };
-  return parseClick(url, links);
+    return refusedClick("the URL handler's frame carries no url string");
+  if (actsOn !== ACTS_ON_DAEMON && actsOn !== ACTS_ON_DESKTOP)
+    return refusedClick(
+      `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DAEMON}, ${ACTS_ON_DESKTOP})`
+    );
+  if (actsOn === ACTS_ON_DESKTOP && !awaitsVerdict(urlV))
+    return refusedClick(
+      `a version ${urlV} frame reads no verdict, so the acts it asks on the desktop cannot reach it`
+    );
+  return routeClick(parts, parseClick(url, parts.linkSigner), actsOn);
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  const read3 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
+  const read3 = readUrlFrame(frame2, parts);
+  const onDesktop = read3.kind === "link" && read3.actsOn === ACTS_ON_DESKTOP;
+  const land = () => clickEvent(parts, accepted, timedOut, clientLeft, async (facts, click2) => {
+    noteFacts(facts, {
+      via: "forwarder",
+      urlV: String(frame2.urlV),
+      ...read3.kind === "link" ? { actsOn: read3.actsOn } : {}
+    });
+    const clicked = await ranClick(parts, read3, facts, click2);
+    noteFacts(facts, { desktop: String(clicked.desktop.length) });
+    return clicked;
+  });
   return {
     kind: "url",
-    awaitsVerdict: awaitsVerdict(frame2.urlV),
-    verdict: read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" },
-    land: () => clickEvent(
-      parts,
-      accepted,
-      timedOut,
-      clientLeft,
-      async (facts, click2) => {
-        noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
-        return ranClick(parts, read3, facts, click2);
-      }
-    ).then(() => {
-    })
+    told: onDesktop ? { when: "landed", land: async () => landedReply(parts, await land()) } : toldAtOnce(
+      frame2.urlV,
+      read3.kind === "refused" ? clickReply(read3.failure) : { ok: true, output: "" },
+      async () => void await land()
+    )
   };
 }
-function routeClick(parts, read3) {
-  if (read3.kind === "refused")
-    return {
-      kind: "refused",
-      failure: badRequest(read3.problem),
-      signed: read3.signed
-    };
+function landedReply(parts, { desktop, outcome }) {
+  if (desktop.length === 0 && outcome.kind !== "ok")
+    return stay(clickReply(outcome));
+  const reply = replyOf(
+    {
+      ok: true,
+      output: "",
+      desktopActs: desktop,
+      ...outcome.kind === "ok" ? {} : { desktopError: outcome.message }
+    },
+    null,
+    (taken2) => {
+      if (!taken2 && desktop.length > 0)
+        parts.log(
+          "warn",
+          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`
+        );
+    }
+  );
+  return reply;
+}
+function refusedClick(problem, signed) {
+  return { kind: "refused", failure: badRequest(problem), signed };
+}
+function routeClick(parts, read3, actsOn) {
+  if (read3.kind === "refused") return refusedClick(read3.problem, read3.signed);
   const { source } = read3;
-  if (source === void 0) return { ...read3, target: parts.renderer };
+  if (source === void 0) return { ...read3, target: parts.renderer, actsOn };
   const target = parts.rendererForClick(source.renderer);
   return target === void 0 ? {
     kind: "refused",
@@ -85188,13 +85171,13 @@ function routeClick(parts, read3) {
       )
     ),
     signed: { link: read3.link, verb: read3.click.verb }
-  } : { ...read3, target };
+  } : { ...read3, target, actsOn };
 }
 async function ranClick(parts, read3, facts, click2) {
   switch (read3.kind) {
     case "refused":
       if (read3.signed !== void 0) noteFacts(facts, read3.signed);
-      return read3.failure;
+      return nothingLeft(read3.failure);
     case "link":
       noteFacts(facts, { link: read3.link });
       return handleClick(parts, read3, facts, click2);
@@ -85203,6 +85186,7 @@ async function ranClick(parts, read3, facts, click2) {
 async function handleClick(parts, {
   click: admitted,
   runEvidence,
+  actsOn,
   target
 }, facts, click2) {
   const { verb } = admitted;
@@ -85214,6 +85198,7 @@ async function handleClick(parts, {
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
       runEvidence,
+      actsOn,
       event: {
         kind: "click",
         click: admitted,
@@ -85226,11 +85211,24 @@ async function handleClick(parts, {
   );
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
-  if (delivered.kind === "threw") return delivered.failure;
-  const missed = delivered.settled.find(
+  const { desktop, answered } = apartDesktop(delivered.settled);
+  if (delivered.kind === "threw")
+    return { outcome: delivered.failure, desktop };
+  const missed = answered.find(
     (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped"
   );
-  return missed === void 0 ? { kind: "ok" } : clickFailure(missed);
+  return {
+    outcome: missed === void 0 ? { kind: "ok" } : clickFailure(missed),
+    desktop
+  };
+}
+function apartDesktop(settled3) {
+  const desktop = [];
+  const answered = [];
+  for (const outcome of settled3)
+    if (outcome.kind === "desktop") desktop.push(outcome.act);
+    else answered.push(outcome);
+  return { desktop, answered };
 }
 function clickFailure(outcome) {
   const kind = CLICK_FAILURE[outcome.kind];
@@ -91637,6 +91635,23 @@ async function paneOff(tmux3, edge) {
 }
 
 // src/daemon/acts.ts
+async function desktopActOf(act) {
+  switch (act.kind) {
+    case "copy":
+      return { kind: "copy", text: act.text };
+    case "open": {
+      const entry = await stat(act.target);
+      if (!entry.isFile() && !entry.isDirectory())
+        throw new Error(
+          `cannot open ${act.target}: expected a file or directory`
+        );
+      return { kind: "open", target: act.target, file: entry.isFile() };
+    }
+    case "type-slash":
+    case "run":
+      return null;
+  }
+}
 var outlives = (act) => act.kind === "run";
 function nameOf2(act) {
   switch (act.kind) {
@@ -91654,6 +91669,7 @@ var not = (outcome) => ({
   outcome,
   said: outcome.reason
 });
+var actLine = (act, outcome, said3) => `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome} \u2014 ${nameOf2(act)}: ${said3}`;
 var Acts = class {
   constructor(deps) {
     this.deps = deps;
@@ -91725,7 +91741,7 @@ var Acts = class {
     const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} \u2014 ${nameOf2(act)}: ${said3}`
+      actLine(act, outcome.kind, said3)
     );
     return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act)}: ${outcome.reason}` };
   }
@@ -92774,7 +92790,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const problem = inspectionPayloadProblem(reply);
     if (problem !== null) throw new Error(`${label2} returned ${problem}`);
   };
-  const inSlot = async (input, queuedMs, captures = []) => {
+  const inSlot = async (input, queuedMs, captures = [], actsOn = "daemon") => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
     const session = sessionOfEvent(input.event);
@@ -92844,7 +92860,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       input.event,
       output,
       captures,
-      receipt
+      receipt,
+      actsOn
     );
     return {
       received: true,
@@ -92854,7 +92871,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
-  const landInSlot = async (event, output, captures, receipt) => {
+  const landInSlot = async (event, output, captures, receipt, actsOn) => {
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
     );
@@ -92867,12 +92884,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
+    const retryOrigin = event.kind === "click" && event.coldConfig !== void 0 ? event.context?.durable.origin ?? null : requested;
     const followed = took(
       output.subscriptions,
       output.wake,
       output.frames,
       output.stored,
-      requested,
+      retryOrigin,
       receipt
     );
     let configFailure = null;
@@ -92921,9 +92939,15 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           );
       } else acts.push(effect);
     }
+    const performed = async (act) => {
+      const desktop = actsOn === "desktop" ? await desktopActOf(act) : null;
+      if (desktop === null) return world.perform(act);
+      log("info", actLine(act, "desktop", "handed to the desktop"));
+      return Promise.resolve({ kind: "desktop", act: desktop });
+    };
     let before = Promise.resolve();
     for (const act of acts) {
-      const acted = configOutcome.kind === "ok" ? before.then(() => world.perform(act)).catch(
+      const acted = configOutcome.kind === "ok" ? before.then(() => performed(act)).catch(
         (error) => ({
           kind: "failed",
           reason: failureOf(error).detail
@@ -93135,7 +93159,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     );
   };
-  const settle3 = async (effect, outcome) => {
+  const settle3 = async (effect, ended) => {
+    const outcome = ended.kind === "desktop" ? { kind: "ok" } : ended;
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
     const unheard = (reason) => {
       if (isEnvironmentOutput(outcome)) world.unheard(reason, true);
@@ -93148,7 +93173,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     );
     if (failed3 !== null && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
       unheard(failed3);
-    return outcome;
+    return ended;
   };
   const settleInSlot = async (effect, outcome) => {
     const input = stamped(doneOf(effect, outcome));
@@ -93204,6 +93229,21 @@ function rendererHost(name, clock, renderer, log, collector, world) {
                 follow(wanted);
               });
               made = { ...captured2, event: ready };
+            } else if (event.kind === "click" && event.context !== null && configs.get(originKey(event.context.durable.origin))?.kind !== "received") {
+              const origin = event.context.durable.origin;
+              if (!followedOrigins.some(
+                (held2) => originKey(held2) === originKey(origin)
+              )) {
+                restore = followedOrigins;
+                follow([...followedOrigins, origin]);
+              }
+              const config = configMade(origin)();
+              if (config.kind !== "event") made = config;
+              else
+                made = {
+                  ...captured2,
+                  event: { ...event, coldConfig: config.event.config }
+                };
             } else made = { ...captured2, event };
           } else made = captured2;
         } catch (thrown2) {
@@ -93219,14 +93259,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          made.event.kind === "click" ? made.runEvidence : void 0
+          made.event.kind === "click" ? made.runEvidence : void 0,
+          made.event.kind === "click" ? made.actsOn : void 0
         );
         if (starting && slotted.turn.kind === "answered") restore = void 0;
+        if (made.event.kind === "click" && restore !== void 0)
+          restore = origins ?? restore;
         return { event: made.event, slotted };
       } finally {
         if (restore !== void 0) {
           const previous2 = restore;
-          recordTaken("start config demand rollback", () => follow(previous2));
+          recordTaken("restore config demand", () => follow(previous2));
         }
         if (held !== null && --held.count === 0)
           pendingClicks.delete(held.session);
@@ -93421,7 +93464,7 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 20;
+var RENDERER_WIRE_VERSION = 21;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -93513,6 +93556,8 @@ function recordingInputProblem({ event }) {
     case "request":
       return contextProblem(event.context);
     case "click": {
+      const problem = event.coldConfig && configProblem(event.coldConfig);
+      if (problem) return problem;
       const live = event.context?.live;
       return live == null ? null : contextProblem(live);
     }
