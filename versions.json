@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-964",
+      "ref": "refs/pull/964/merge",
+      "sha": "c6f1df0d76a45351a09481909ef0b5dfd1c1cfd6",
+      "timestamp": "2026-11-26T05:42:14.564Z",
+      "commits": [
+        {
+          "sha": "c6f1df0d76a45351a09481909ef0b5dfd1c1cfd6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:40:14-07:00",
+          "message": "Merge 074143686836e48fcc23412d39f5c072249b613b into 7138496ca34979f4494658136320889c7360fe00\n"
+        },
+        {
+          "sha": "074143686836e48fcc23412d39f5c072249b613b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:39:54-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
+        },
+        {
+          "sha": "595b71d14a02671706913efefe900e7dda8f03ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:38:32-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
+        },
+        {
+          "sha": "ba765379794a61525fec2b26ffb7c4e784da7a37",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:38:32-07:00",
+          "message": "fix(settings-menu): share row order and verify saved renderer switches\n"
+        },
+        {
+          "sha": "24f90b85823d0ea3187e278eb6074325ce20c86e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:06:44-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
+        },
+        {
+          "sha": "f383ef936de918f8ea459f998babc1ce8bf8646f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T22:38:17-07:00",
+          "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-970",
       "ref": "refs/pull/970/merge",
       "sha": "e78e68c19bb50636a7cd5379976e8b9934fbad31",
@@ -56,49 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T22:38:51-07:00",
           "message": "fix(transcript): a transcript line or sidechain the fold cannot read shows as ⚠, and code only a removed feature read is deleted (candybar-later-fixes-nwu9.3fy) (#960)\n\n* refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n\n* fix(transcript): a transcript line or sidechain the fold cannot read shows as ⚠ on the session's bar (candybar-later-fixes-nwu9.3fy)\n\nA line that is not JSON, or whose entry cannot be projected, used to be\ndropped with only a debug-log line, and so did a sidechain whose read\nfailed, whose first line was not JSON, or whose directory could not be\nlisted. Each left the session's usage and cost short with nothing on the\nbar to say so.\n\nThe fold now keeps what it dropped (how many lines, where the first\nstarts, why) beside its cursor, so the loss lasts exactly as long as the\nnumbers it is missing from and goes when a rewrite re-folds the file. The\nusage store reports each file's losses and each unread sidechain into the\nsession's facts diagnostics, and the bar draws one standing warning per\nfile, with the viewer naming the file and the reason.\n\nTests share one in-process main-renderer harness instead of two copies.\n\n* fix(transcript): a sidechain the fold cannot read fails the refresh, and a line is parsed into its entry or dropped with why (candybar-later-fixes-nwu9.3fy)\n\nLaw-review pass 1 on #960.\n\n- A sidechains directory that cannot be listed, or a new sidechain whose\n  first line cannot be read, fails the refold through its one failed arm,\n  so nothing short is stored and the next render retries. A loss is only\n  what a read that succeeded could not use: a dropped line, or a sidechain\n  whose first line (blank, not JSON, naming no session) cannot say whose\n  it is.\n- The entry parse parses: a timestamp that is not a date, usage with no\n  timestamp, or usage counts that are not numbers drop the line with its\n  reason. A projection that throws is the daemon's fault, not a dropped line.\n- A drop names its line number, which the cursor counts, so it is exact\n  across windows and bytes that are not UTF-8.\n- The window parse returns its drops as data, and a reset replaces the\n  fold in one step.\n- Losses are derived once at refold, stored on the record, and logged once\n  when first met. A sidechain gone after the listing is out of the session,\n  as one gone before it.\n- The facts document carries its stamp failure and its transcript losses as\n  their own fields. The lane diagnostics, a copy of each lane's failed\n  reading that nothing drew, are gone. FACTS_VERSION 6.\n- The cache timer reads its lines through the one line reading.\n- templateHelperRefs and the comments naming the deleted unused check are\n  gone; the real lister's test covers the paths rotation removes; the\n  harness copies left in tests share one helper each.\n\n* fix(transcript): the loss vocabulary sits below the fold and the document, a message's usage with no count is no usage, and a loss is logged once however it grows (candybar-later-fixes-nwu9.3fy)"
-        }
-      ]
-    },
-    {
-      "version": "pr-964",
-      "ref": "refs/pull/964/merge",
-      "sha": "1b5a2880cd95b2d6553ab7934908647382d47605",
-      "timestamp": "2026-11-26T05:40:32.453Z",
-      "commits": [
-        {
-          "sha": "1b5a2880cd95b2d6553ab7934908647382d47605",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:38:45Z",
-          "message": "Merge 595b71d14a02671706913efefe900e7dda8f03ac into 7b3c063cc9a84b9c7c7abb11d8ef71b3fcf7fdb1\n"
-        },
-        {
-          "sha": "595b71d14a02671706913efefe900e7dda8f03ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:38:32-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
-        },
-        {
-          "sha": "ba765379794a61525fec2b26ffb7c4e784da7a37",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:38:32-07:00",
-          "message": "fix(settings-menu): share row order and verify saved renderer switches\n"
-        },
-        {
-          "sha": "24f90b85823d0ea3187e278eb6074325ce20c86e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:06:44-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into renderer-menu-88j\n"
-        },
-        {
-          "sha": "f383ef936de918f8ea459f998babc1ce8bf8646f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T22:38:17-07:00",
-          "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
