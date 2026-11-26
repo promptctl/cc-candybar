@@ -18,7 +18,10 @@ and the binary is staged to `bin/cc-candybar` by `scripts/postinstall.mjs`.
   `install-url-handler`, `--help`): `execvp`s `node <bin>/../dist/index.mjs`
   and forwards argv. The binary stays minimal; complex logic lives in TS.
 
-Wire format and timeouts mirror the existing TS client byte-for-byte.
+The render exchange has one 150 ms deadline covering connection, request,
+response and any compatibility retry. The client waits for socket readiness
+when a partial frame stalls and reads a buffered reply even after the peer
+closes. The wire format matches the TypeScript client.
 `scripts/check-protocol.mjs` (run in `prepublishOnly`) fails the publish if
 `PROTOCOL_VERSION` ever drifts between this crate and `src/daemon/foundations/protocol.ts`.
 

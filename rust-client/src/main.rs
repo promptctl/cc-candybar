@@ -23,6 +23,7 @@
 // optimization that prevents N clients from each forking a Node process
 // when one suffices.
 
+mod deadline_stream;
 mod error_glyph;
 mod follow;
 mod launch;
@@ -33,9 +34,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::os::fd::IntoRawFd;
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -425,15 +424,9 @@ fn exchange_render(
         )))
     })?;
     let budget = remaining_or_io(deadline).map_err(classify_io_error)?;
-    let mut sock =
-        connect_with_timeout(socket, CONNECT_TIMEOUT.min(budget)).map_err(classify_io_error)?;
-    remaining_or_io(deadline)
-        .and_then(|d| sock.set_write_timeout(Some(d)))
-        .map_err(classify_io_error)?;
+    let sock = connect_with_timeout(socket, CONNECT_TIMEOUT.min(budget)).map_err(classify_io_error)?;
+    let mut sock = deadline_stream::DeadlineStream::new(sock, deadline).map_err(classify_io_error)?;
     write_frame(&mut sock, &body).map_err(classify_io_error)?;
-    remaining_or_io(deadline)
-        .and_then(|d| sock.set_read_timeout(Some(d)))
-        .map_err(classify_io_error)?;
     let resp_body = read_frame(&mut sock).map_err(classify_io_error)?;
     serde_json::from_slice(&resp_body).map_err(|e| {
         RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
@@ -890,12 +883,12 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
     let (tx, rx) = mpsc::channel();
     let p = path.to_path_buf();
     thread::spawn(move || {
-        let result = UnixStream::connect(&p).map(|s| s.into_raw_fd());
-        let _ = tx.send(result);
+        // Sending the owned stream also closes a late connection when its
+        // caller has already timed out and dropped the receiver.
+        let _ = tx.send(UnixStream::connect(&p));
     });
     match rx.recv_timeout(timeout) {
-        Ok(Ok(fd)) => Ok(unsafe { UnixStream::from_raw_fd(fd) }),
-        Ok(Err(e)) => Err(e),
+        Ok(result) => result,
         Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timeout")),
     }
 }
