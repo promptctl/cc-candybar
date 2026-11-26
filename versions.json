@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "9a7b5049c643053f3405d7529836b8be87d57e28",
+      "timestamp": "2026-11-26T05:00:56.452Z",
+      "commits": [
+        {
+          "sha": "9a7b5049c643053f3405d7529836b8be87d57e28",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:58:16-07:00",
+          "message": "chore(tests): nothing the withdrawn test plan built or cited is left in the tree (candybar-testing-do00.c3a) (#961)\n\n* chore(tests): nothing caps end-to-end tests or scans the workflows for a daemon start (candybar-testing-do00.c3a)\n\nThe cap, the assertion limit and their sign-off policed a test/e2e/ that was\nnever created, and the workflow scanner failed CI on any step reaching a\nscript that starts a daemon, which laws:testing does not forbid. laws:testing's\ncap is a question a reviewer asks of a proposed test, not a hook.\n\n* docs(tests): the withdrawn test plan and the reports it commissioned are deleted (candybar-testing-do00.c3a)\n\nlaws:testing is the test plan. The design docs that cited the withdrawn one\nname what they meant instead, and no longer state its end-to-end cap.\n\n* chore(tests): no limit or comment rests on a load run, and the heap capture script goes (candybar-testing-do00.c3a)\n\nThe memory default and the render cache's share state their reason from the\nshare's own arithmetic and the working set it is sized for, the draw reserve\nfrom what it covers, and the shared bench helpers name the consumers they\nhave. The benchmark world loses the daemon environment only the heap capture\npassed.\n\n* docs(design): the gap doc's dependency paragraph points into neither the withdrawn plan nor its epic (candybar-testing-do00.c3a)\n\n* fix(tests): each restated reason claims only what the code shows, and what only the benchmark uses lives with it (candybar-testing-do00.c3a)\n\nFrom the plan review. The render cache's capacity target is one value the\nbudget test reads. The share states the reserve's assumption about what each\nsession holds outside it, and the default's comment places the thrash at a\nworking set larger than the share. The draw reserve names both turns it\ncovers and the budget it splits. The daemon argv names every start that reads\nit. The percentile, the session terminal and the transcript generator had one\nconsumer once the load gate went, so they move into the benchmark and their\nsharing markers go with the sharing.\n\n* test: remove the remaining assumptions of the withdrawn tier"
+        }
+      ]
+    },
+    {
       "version": "pr-960",
       "ref": "refs/pull/960/merge",
       "sha": "8c03868d353ac3714c176928fc90b693ec0fdb5c",
@@ -149,21 +164,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-25T03:19:33-07:00",
           "message": "feat(url-handler): copy and open links clicked over ssh act on the Mac (candybar-ssh-links-16rz.6oi)\n\nA click that reaches the daemon down an ssh forward now asks for its copy and open acts to come back in the verdict, and the Mac's app carries them out: text on the Mac's clipboard, and the remote path opened in an editor over ssh. The host leaves exactly the acts stamped for the click's writer, so a click parked for its config is decided like any other. A daemon older than the app, an editor with no host name, and a refusing pasteboard are each told on the Mac. ssh-config now takes the host alias and writes it once, into the forward's file name.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "56989bba0d3078f7c2e2c76efa384cbe0197fa8a",
-      "timestamp": "2026-11-25T06:57:36.719Z",
-      "commits": [
-        {
-          "sha": "56989bba0d3078f7c2e2c76efa384cbe0197fa8a",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-25T06:55:54Z",
-          "message": "chore(release): set `package.json` to 1.238.4\n\n## [1.238.4](https://github.com/promptctl/cc-candybar/compare/v1.238.3...v1.238.4) (2026-11-25)\n\n### Bug Fixes\n\n* **url-handler:** route a click on a bar drawn over ssh to the daemon that drew it ([#963](https://github.com/promptctl/cc-candybar/issues/963)) ([5877b61](https://github.com/promptctl/cc-candybar/commit/5877b610c5add94bfeec9ef566be3e309841d7ec))\n"
         }
       ]
     },
