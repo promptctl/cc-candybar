@@ -78,13 +78,13 @@ function host(
   const frame = async (
     url: string,
     urlV = URL_FRAME_VERSION,
-    actsOn?: string,
+    actsOn?: unknown,
   ) => {
     const handled = await handleRequest(
       parts,
       {
         kind: "url",
-        frame: { kind: "url", urlV, url, ...(actsOn && { actsOn }) },
+        frame: { kind: "url", urlV, url, ...(actsOn === undefined ? {} : { actsOn }) },
       },
       () => false,
       new RuntimeStats(systemTimekeeper).accept(),
@@ -251,16 +251,16 @@ describe("a frame that asks for its acts on the desktop", () => {
     expect(h.copied).toEqual([]);
   });
 
-  test("a frame naming a place the daemon does not know is refused, and acts nowhere", async () => {
+  test.each(["mars", null])("a frame naming %p as its destination is refused, and acts nowhere", async (destination) => {
     const h = host();
     const answered = await h.frame(
       TEST_SIGNER.signLink(COPY),
       URL_FRAME_VERSION,
-      "mars",
+      destination,
     );
     expect(toldAtOnce(answered)).toMatchObject({
       ok: false,
-      error: expect.stringContaining("mars"),
+      error: expect.stringContaining(String(destination)),
     });
     await answered.told.land();
     expect(h.copied).toEqual([]);

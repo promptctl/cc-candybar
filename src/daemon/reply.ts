@@ -950,7 +950,7 @@ function readUrlFrame(
   frame: Record<string, unknown>,
   parts: DaemonParts,
 ): RoutedClick {
-  const { urlV, url } = frame;
+  const { urlV, url, actsOn = ACTS_ON_DAEMON } = frame;
   if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
     return refusedClick(
       `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
@@ -960,7 +960,6 @@ function readUrlFrame(
   // [LAW:parse-dont-validate] Where the click's copy and open act, read once
   // here: a place this daemon does not know is refused, and so is a frame whose
   // writer reads no verdict to carry acts on the desktop in.
-  const actsOn: unknown = frame.actsOn ?? ACTS_ON_DAEMON;
   if (actsOn !== ACTS_ON_DAEMON && actsOn !== ACTS_ON_DESKTOP)
     return refusedClick(
       `the URL handler's frame asks its acts on ${inspect(actsOn)}, which is not a place this daemon knows (${ACTS_ON_DAEMON}, ${ACTS_ON_DESKTOP})`,
@@ -985,9 +984,7 @@ function urlClick(
   clientLeft: () => boolean,
 ): HandledRequest {
   const read = readUrlFrame(frame, parts);
-  const actsOn =
-    read.kind === "link" ? read.actsOn : ACTS_ON_DAEMON;
-  const onDesktop = actsOn === ACTS_ON_DESKTOP;
+  const onDesktop = read.kind === "link" && read.actsOn === ACTS_ON_DESKTOP;
   // [LAW:nothing-unseen] Where the click's acts went, and how many went to the
   // desktop: zero acts and no count are different facts.
   const land = (): Promise<Clicked> =>
@@ -995,7 +992,7 @@ function urlClick(
       noteFacts(facts, {
         via: "forwarder",
         urlV: String(frame.urlV),
-        actsOn,
+        ...(read.kind === "link" ? { actsOn: read.actsOn } : {}),
       });
       const clicked = await ranClick(parts, read, facts, click);
       noteFacts(facts, { desktop: String(clicked.desktop.length) });
