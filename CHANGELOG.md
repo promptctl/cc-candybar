@@ -1,3 +1,9 @@
+## [1.242.0](https://github.com/promptctl/cc-candybar/compare/v1.241.2...v1.242.0) (2026-11-26)
+
+### Features
+
+* **window:** locate the attaching terminal and its live cell grid ([#974](https://github.com/promptctl/cc-candybar/issues/974)) ([cd0c40b](https://github.com/promptctl/cc-candybar/commit/cd0c40bf77869132bbaa1a7851d4005a16c5ed5a))
+
 ## [1.241.2](https://github.com/promptctl/cc-candybar/compare/v1.241.1...v1.241.2) (2026-11-26)
 
 ### Bug Fixes
