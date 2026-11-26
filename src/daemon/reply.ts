@@ -489,6 +489,7 @@ export async function replyTo(
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
+        linkKeyId: parts.linkSigner.keyId(),
         host: limits.host(),
         renderers,
       }),

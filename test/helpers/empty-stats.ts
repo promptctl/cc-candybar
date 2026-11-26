@@ -93,6 +93,7 @@ export function emptyStats(): StatsSnapshot {
     clients: [],
     bundle: "/",
     sourceDigest: null,
+    linkKeyId: { kind: "ok", value: "AbCd-_12" },
     host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0, nearAt: 0 },
     renderers: [
       {
