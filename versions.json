@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-970",
+      "ref": "refs/pull/970/merge",
+      "sha": "f195c76c13fcba09bdd37e40831dbf3b3eda827a",
+      "timestamp": "2026-11-26T05:45:03.987Z",
+      "commits": [
+        {
+          "sha": "f195c76c13fcba09bdd37e40831dbf3b3eda827a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:28-07:00",
+          "message": "Merge a69c2d8b300fc5974b42f1a43f08ed1d558bf50c into 2ccd7d18d29936c29c3f7f7f09208c87d6c65270\n"
+        },
+        {
+          "sha": "a69c2d8b300fc5974b42f1a43f08ed1d558bf50c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:43:24-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.cfxk"
+        },
+        {
+          "sha": "0c558e28f0ddaf9403063cf2c71e065c3bc9aca3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:40:06-07:00",
+          "message": "test(pricing): supply prices to transcript loss fixtures\n"
+        },
+        {
+          "sha": "25d0b4c8c6910261f3c18d820d97db1183c6cb57",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:39:09-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into brandon-unfiled-3248.cfxk\n"
+        },
+        {
+          "sha": "f2dd43eadf6448ebeeca8caba98bc9608267440f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T22:04:01-07:00",
+          "message": "fix(pricing): bound every fetch until its socket closes\n"
+        },
+        {
+          "sha": "ccfda41fc37bad7201bfd6a788da7773e9ac6fa2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-25T21:59:12-07:00",
+          "message": "fix(pricing): own, refresh and abort the daemon price table\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2ccd7d18d29936c29c3f7f7f09208c87d6c65270",
@@ -106,49 +156,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T22:38:17-07:00",
           "message": "feat(settings-menu): the menu leads with 🎨 look and 📚 saves & presets, and the lane switches live under 📺 renderer (brandon-menus-sjhy.88j)\n\nThe first line now reads ✖ ◁ 🎨 look 📚 saves & presets ✎ arrange; the strip\nunder it holds ⚡ session and ⚙ config, and one tab is open at a time across\nboth lines. 🎨 look lays its controls in rows: theme with its ⚙ and endcaps,\nthen effect and speed, then fade in/out. 📚 saves & presets holds the preset\npicker and + preset. The 📐 layout tab and the 🧪 toggles submenu are gone;\n⚙ config's 📺 renderer holds both lane switches.\n\nA tab names the line its trigger leads from and a control the line of its\nplace it sits on, so where things draw stays data. No setting sits on the\nfirst line itself any more, so that place is gone from the type.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-970",
-      "ref": "refs/pull/970/merge",
-      "sha": "e78e68c19bb50636a7cd5379976e8b9934fbad31",
-      "timestamp": "2026-11-26T05:42:09.987Z",
-      "commits": [
-        {
-          "sha": "e78e68c19bb50636a7cd5379976e8b9934fbad31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T05:40:14Z",
-          "message": "Merge 0c558e28f0ddaf9403063cf2c71e065c3bc9aca3 into 7138496ca34979f4494658136320889c7360fe00\n"
-        },
-        {
-          "sha": "0c558e28f0ddaf9403063cf2c71e065c3bc9aca3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:40:06-07:00",
-          "message": "test(pricing): supply prices to transcript loss fixtures\n"
-        },
-        {
-          "sha": "25d0b4c8c6910261f3c18d820d97db1183c6cb57",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:39:09-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into brandon-unfiled-3248.cfxk\n"
-        },
-        {
-          "sha": "f2dd43eadf6448ebeeca8caba98bc9608267440f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:04:01-07:00",
-          "message": "fix(pricing): bound every fetch until its socket closes\n"
-        },
-        {
-          "sha": "ccfda41fc37bad7201bfd6a788da7773e9ac6fa2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T21:59:12-07:00",
-          "message": "fix(pricing): own, refresh and abort the daemon price table\n"
         }
       ]
     },
