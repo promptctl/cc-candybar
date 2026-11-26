@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7b3c063cc9a84b9c7c7abb11d8ef71b3fcf7fdb1",
+      "timestamp": "2026-11-26T05:12:39.918Z",
+      "commits": [
+        {
+          "sha": "7b3c063cc9a84b9c7c7abb11d8ef71b3fcf7fdb1",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-26T05:11:26Z",
+          "message": "chore(release): set `package.json` to 1.238.5\n\n## [1.238.5](https://github.com/promptctl/cc-candybar/compare/v1.238.4...v1.238.5) (2026-11-26)\n\n### Bug Fixes\n\n* **audits:** the nightly colour audit holds the joiner rule's identity under every look, not the ΔE floor it deleted (candybar-later-fixes-nwu9.ic0) ([#962](https://github.com/promptctl/cc-candybar/issues/962)) ([fa1eeb9](https://github.com/promptctl/cc-candybar/commit/fa1eeb9b93a826b08a71ce2eefe360f86ea343cc))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-968",
       "ref": "refs/pull/968/merge",
       "sha": "8fb4dc6555f1087cefc2d78f5205db8c34af830d",
@@ -155,21 +170,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-24T17:55:41-07:00",
           "message": "refactor: code whose only reader was a removed feature is deleted: the click's arrival, the unused-declaration walk and the post-mortem listing (candybar-later-fixes-nwu9.3fy)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "fa1eeb9b93a826b08a71ce2eefe360f86ea343cc",
-      "timestamp": "2026-11-26T05:06:25.324Z",
-      "commits": [
-        {
-          "sha": "fa1eeb9b93a826b08a71ce2eefe360f86ea343cc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-25T22:05:09-07:00",
-          "message": "fix(audits): the nightly colour audit holds the joiner rule's identity under every look, not the ΔE floor it deleted (candybar-later-fixes-nwu9.ic0) (#962)\n\n* test(audits): the seam sweep holds the joiner rule under every look, closed and hot and calm (candybar-later-fixes-nwu9.ic0)\n\nThe sweep takes a scope (looks, views, depths, payloads) instead of one\nvariation at today's dial, unstyled, on the sample payload. Its exemptions\nare computed on the palette the bar wears, transposed through rich-js by\nthe look's style. A payload names which listed cells it puts on alert, and\na calmed cell must wear its tint and is held. Any divider fails.\n\nThe audit keeps its frame case and adds the case the theme-identity seam\nfact walked: every variation x dial position x style, the closed bar, hot\nand calm, at truecolor.\n\n* fix(audits): theme-identity no longer asserts the seam ΔE floor the joiner rule deleted (candybar-later-fixes-nwu9.ic0)\n\nIts second fact failed every seam whose two grounds sit under\nSEAM_MIN_DELTA_E, the floor candybar-joiners-e5r4 replaced with identity\nafter rounding. The seam sweep now holds that rule over the same looks, so\nthe fact and its private seam reader go; the palette fact stays.\n\n* fix(colour): keep hue turns distinct at every supported depth"
         }
       ]
     },
