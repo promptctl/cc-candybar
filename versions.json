@@ -4,15 +4,22 @@
     {
       "version": "pr-975",
       "ref": "refs/pull/975/merge",
-      "sha": "2ef28d31eb14aacd79943908a8fad498f3d61f6e",
-      "timestamp": "2026-11-26T14:16:18.071Z",
+      "sha": "5e7a7312dd511a107761ed2ab66fbdd9e049a03f",
+      "timestamp": "2026-11-26T14:20:41.475Z",
       "commits": [
         {
-          "sha": "2ef28d31eb14aacd79943908a8fad498f3d61f6e",
+          "sha": "5e7a7312dd511a107761ed2ab66fbdd9e049a03f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T14:14:59Z",
-          "message": "Merge 08790515fe54b90e95ee56f24903fac2ae373b16 into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+          "timestamp": "2026-11-26T14:19:31Z",
+          "message": "Merge b0e46f9cbd0f97abc0fb6824d1ab3227786058da into da4a9f02ee553c2281358391119e354c9ea6f1b9\n"
+        },
+        {
+          "sha": "b0e46f9cbd0f97abc0fb6824d1ab3227786058da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:19:19-07:00",
+          "message": "fix(window): stop restarting a follower whose source pane closed\n"
         },
         {
           "sha": "08790515fe54b90e95ee56f24903fac2ae373b16",

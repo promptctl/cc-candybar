@@ -91867,6 +91867,10 @@ var Acts = class {
 // src/daemon/window-followers.ts
 init_globals();
 
+// src/bar-window/exit.ts
+init_globals();
+var SOURCE_PANE_CLOSED = 66;
+
 // src/renderer-interface/wire.ts
 init_globals();
 var RENDERER_WIRE_VERSION = 22;
@@ -91911,7 +91915,7 @@ var WindowFollowers = class {
   desired = /* @__PURE__ */ new Map();
   active = /* @__PURE__ */ new Map();
   issues = observable.map();
-  retries = /* @__PURE__ */ new Map();
+  waiting = /* @__PURE__ */ new Map();
   closing = false;
   issue(session) {
     return this.issues.get(session);
@@ -91929,11 +91933,13 @@ var WindowFollowers = class {
   }
   declare(desired) {
     this.desired = desired;
-    for (const [sid, cancel] of this.retries)
-      if (!desired.has(sid)) {
-        cancel();
-        this.retries.delete(sid);
+    for (const [sid, wait] of this.waiting) {
+      const pane = desired.get(sid)?.pane;
+      if (!pane || paneKey(pane) !== wait.target) {
+        wait.cancelRetry?.();
+        this.waiting.delete(sid);
       }
+    }
     for (const session of [...this.issues.keys()])
       if (!desired.has(session)) this.report(session, "");
     this.reconcile();
@@ -91965,7 +91971,7 @@ var WindowFollowers = class {
         this.report(sid, "The window surface requires macOS.");
         continue;
       }
-      if (!this.active.has(sid) && !this.retries.has(sid) && !retiring.has(paneKey(want.pane)))
+      if (!this.active.has(sid) && !this.waiting.has(sid) && !retiring.has(paneKey(want.pane)))
         this.start(sid, want.pane, want.placement);
     }
   }
@@ -92031,29 +92037,33 @@ var WindowFollowers = class {
       this.active.delete(sid);
       if (this.closing) return;
       if (!follower.stopping && this.desired.has(sid)) {
-        this.report(
-          sid,
-          reason || (result.ok ? "Window follower exited" : whyFailed(result))
-        );
-        this.retries.set(
-          sid,
-          this.clock.after(
+        const target = follower.target;
+        if (!result.ok && result.reason === "non-zero" && result.exitCode === SOURCE_PANE_CLOSED) {
+          this.report(sid, "Claude's tmux pane closed");
+          this.waiting.set(sid, { target });
+        } else {
+          this.report(
+            sid,
+            reason || (result.ok ? "Window follower exited" : whyFailed(result))
+          );
+          const cancelRetry = this.clock.after(
             `window follower restart ${sid}`,
             5e3,
             () => {
-              this.retries.delete(sid);
+              this.waiting.delete(sid);
               this.reconcile();
             },
             { unref: true }
-          )
-        );
+          );
+          this.waiting.set(sid, { target, cancelRetry });
+        }
       }
       this.reconcile();
     });
   }
   async close() {
     this.closing = true;
-    for (const cancel of this.retries.values()) cancel();
+    for (const wait of this.waiting.values()) wait.cancelRetry?.();
     for (const follower of this.active.values()) follower.stop();
     await Promise.all(
       [...this.active.values()].map((follower) => follower.channel.ended)
