@@ -13,7 +13,9 @@ import {
   contrastRatio,
   getThemePalette,
   listThemePalettes,
+  transposePalette,
 } from "@promptctl/rich-js";
+import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { floorOf } from "../../src/config/globals-fields";
 import type { ActiveSegment } from "../../src/render/active-segment";
 import {
@@ -415,7 +417,7 @@ describe("a dial window at a depth", () => {
 
   test("what a theme's preview samples is each hue's window at the depth, in the window's order over as many places as the dial names tones, its hue groups side by side and meeting as a row that turns hue does", () => {
     const wrong: string[] = [];
-    const seen = { moved: 0, noneToGive: 0 };
+    const seen = { moved: 0, turnedOver: 0 };
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
@@ -447,18 +449,25 @@ describe("a dial window at a depth", () => {
                 wrong.push(`${where}, place ${i} not in ${dealt[i]!.hue}`);
               if (entry.shade === dealt[i]!.shade) return;
               seen.moved++;
-              // A place moves only at the meeting, and only where the place
-              // across it was drawn like it, as dealt or as it stands.
-              const across =
-                i === turn ? turn - 1 : i === turn - 1 ? turn : undefined;
+              // A place moves only where the place across a seam the rule
+              // holds was drawn like it, as dealt or as it stands: across the
+              // meeting, or the place before it where the rule moved that one.
+              const afterMoved =
+                i > 0 && sampled[i - 1]!.shade !== dealt[i - 1]!.shade;
+              if (afterMoved && i > turn) seen.turnedOver++;
+              const across = [
+                ...(i === turn ? [turn - 1] : i === turn - 1 ? [turn] : []),
+                ...(afterMoved ? [i - 1] : []),
+              ];
               if (
-                across === undefined ||
-                ![drawn(dealt[across]!), drawn(sampled[across]!)].includes(
-                  drawn(dealt[i]!),
+                !across.some((j) =>
+                  [drawn(dealt[j]!), drawn(sampled[j]!)].includes(
+                    drawn(dealt[i]!),
+                  ),
                 )
               )
                 wrong.push(
-                  `${where}, place ${i} moved, though no place across a meeting was drawn like it`,
+                  `${where}, place ${i} moved, though no place across a seam the rule holds was drawn like it`,
                 );
             });
             const beside = (i: number): string[] =>
@@ -480,14 +489,18 @@ describe("a dial window at a depth", () => {
                 windowAt(palette, left.hue, SHADES[shade], drawnAt).length === 1
               )
                 continue;
+              // At the meeting: only where the place before has no rung apart
+              // from both its neighbours and the place after none drawn
+              // unlike the place before.
               if (
                 left.hue !== right.hue &&
                 !hasRungToGive(i) &&
-                !hasRungToGive(i + 1)
-              ) {
-                seen.noneToGive++;
+                LADDER.every(
+                  (rung) =>
+                    drawn({ hue: right.hue, shade: rung }) === drawn(left),
+                )
+              )
                 continue;
-              }
               wrong.push(`${where}, places ${i} and ${i + 1} drawn alike`);
             }
           }
@@ -495,9 +508,10 @@ describe("a dial window at a depth", () => {
       }
     }
     expect(wrong).toEqual([]);
-    // Non-vacuous: at some depth two hues' groups meet on one colour, and the
-    // turn is held by a move; and where neither has a rung, they meet.
-    expect([seen.moved > 0, seen.noneToGive > 0]).toEqual([true, true]);
+    // Non-vacuous: at some depth two hues' groups meet on one colour and the
+    // meeting is held by a move, and somewhere that move turns the group
+    // after it over.
+    expect([seen.moved > 0, seen.turnedOver > 0]).toEqual([true, true]);
   });
 });
 
@@ -910,7 +924,11 @@ describe("the colour is its role at a shade, as the palette names it", () => {
 // rung drawn as neither of its neighbours nor that, because a trigger can
 // stand beside it and the press keeps apart only from what the windows deal;
 // both cells of a turn are tried apart from the press before either falls
-// back to its neighbours alone.
+// back to its neighbours alone. candybar-later-fixes-nwu9.ic0: and where
+// neither has such a rung, the two are still two colours wherever the cell
+// after has a rung drawn unlike the cell before, since the run after the turn
+// can wear its window the other way about: that cell moves apart from the
+// cell before alone, and the seam it leaves is held in turn.
 describe("where a row turns hue", () => {
   // The hue a place is dealt, in the test's own words: the row starts on its
   // own step (row 0 of 2 on the first, row 1 on the second) and steps every
@@ -937,7 +955,7 @@ describe("where a row turns hue", () => {
   const ROWS = Array.from({ length: 15 }, (_, i) => i + 2);
 
   test.each(VARIATION_NAMES)(
-    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only where a cell across a turn was drawn like it, is drawn apart from an open trigger's pressed shade wherever its ladder has a rung apart from both neighbours and the press, falls back onto it only where the cell across the turn has no such rung either, and leaves its window only where no tone of it stands apart from all it keeps off",
+    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours and the later one's whole ladder draws as the earlier's colour; a cell keeps its hue, leaves the tone its place deals only where a cell across a turn, or a cell before it that the rule moved, was drawn like it, is drawn apart from an open trigger's pressed shade wherever its ladder has a rung apart from both neighbours and the press, falls back onto it only where the cell across has no such rung either, and leaves its window only where no tone of it stands apart from all it keeps off",
     (name) => {
       const variation = VARIATIONS[name];
       const wrong: string[] = [];
@@ -1014,12 +1032,26 @@ describe("where a row turns hue", () => {
                   off: readonly string[],
                 ): boolean =>
                   ladder(line[i]!.hue).some((c) => !off.includes(c));
+                // Whether a moved cell keeps off the press: wherever its
+                // ladder has a rung apart from its neighbours and the press.
+                const offPress = (i: number): boolean =>
+                  rungApart(i, [...whenRead(i), pressed]);
                 // What a moved cell keeps off: its neighbours, and the press
-                // as well wherever its ladder has a rung apart from all of them.
+                // as well wherever it keeps off that.
                 const keptOff = (i: number): string[] =>
-                  rungApart(i, [...whenRead(i), pressed])
-                    ? [...whenRead(i), pressed]
-                    : whenRead(i);
+                  offPress(i) ? [...whenRead(i), pressed] : whenRead(i);
+                // The cells across the seams the rule holds beside a cell: a
+                // neighbour of another hue, across a turn, and the cell
+                // before it where the rule moved that one, since a cell moved
+                // apart from the cell before it alone leaves the seam after it
+                // to be held as the line is read on.
+                const across = (i: number): number[] =>
+                  [i - 1, i + 1].filter(
+                    (j) =>
+                      line[j] !== undefined &&
+                      (line[j]!.hue !== line[i]!.hue ||
+                        (j === i - 1 && line[j]!.shade !== dealt[j]!.shade)),
+                  );
                 line.forEach((entry, i) => {
                   if (entry.hue !== dealt[i]!.hue)
                     wrong.push(
@@ -1027,41 +1059,35 @@ describe("where a row turns hue", () => {
                     );
                   if (entry.shade === dealt[i]!.shade) return;
                   seen.moved++;
-                  // A cell moves only where a cell across a turn beside it was
-                  // drawn like what it was dealt, as dealt or as it stands.
-                  const metAcross = [i - 1, i + 1].some(
-                    (j) =>
-                      dealt[j] !== undefined &&
-                      dealt[j]!.hue !== entry.hue &&
-                      [drawn(dealt[j]!), drawn(line[j]!)].includes(
-                        drawn(dealt[i]!),
-                      ),
+                  // A cell moves only where a cell across a seam the rule
+                  // holds was drawn like what it was dealt, as dealt or as it
+                  // stands.
+                  const metAcross = across(i).some((j) =>
+                    [drawn(dealt[j]!), drawn(line[j]!)].includes(
+                      drawn(dealt[i]!),
+                    ),
                   );
                   if (!metAcross)
                     wrong.push(
-                      `${where}: ${i} left its tone, though no cell across a turn was drawn like it`,
+                      `${where}: ${i} left its tone, though no cell across a seam the rule holds was drawn like it`,
                     );
-                  if (keptOff(i).includes(pressed)) {
+                  if (offPress(i)) {
                     seen.offPress++;
                     if (drawn(entry) === pressed)
                       wrong.push(
                         `${where}: ${i} wears ${entry.shade}, drawn as the press ${pressed}`,
                       );
                   }
-                  // The order the rule moves in: both cells of a turn are
-                  // tried apart from the press before either is tried apart
-                  // from its neighbours alone. So a moved cell falls back onto
-                  // the press only where the cell across the turn had no rung
-                  // apart from its own neighbours and the press either. When
-                  // that turn was read the two were drawn alike, so the cell
-                  // across is judged against its own colour too.
+                  // The order the rule moves in: both cells of a seam it holds
+                  // are tried apart from the press before either is tried
+                  // apart from its neighbours alone. So a moved cell falls
+                  // back onto the press only where the cell across had no
+                  // rung apart from its own neighbours and the press either.
+                  // When that seam was read the two were drawn alike, so the
+                  // cell across is judged against its own colour too.
                   if (drawn(entry) === pressed) {
-                    const across = [i - 1, i + 1].filter(
-                      (j) =>
-                        line[j] !== undefined && line[j]!.hue !== entry.hue,
-                    );
                     if (
-                      across.every((j) =>
+                      across(i).every((j) =>
                         rungApart(j, [
                           ...whenRead(j),
                           drawn(dealt[j]!),
@@ -1071,7 +1097,7 @@ describe("where a row turns hue", () => {
                       )
                     )
                       wrong.push(
-                        `${where}: ${i} fell back onto the press ${pressed}, though the cell across its turn had a rung apart from it`,
+                        `${where}: ${i} fell back onto the press ${pressed}, though the cell across had a rung apart from it`,
                       );
                   }
                   if (windowOf(entry.hue).includes(entry.shade)) return;
@@ -1099,10 +1125,13 @@ describe("where a row turns hue", () => {
                   // ladder draws as one colour (held by the window's own test).
                   if (left.hue === right.hue && windowOf(left.hue).length === 1)
                     continue;
+                  // Across a turn: only where the cell before has no rung
+                  // apart from both its neighbours and the cell after none
+                  // drawn unlike the cell before.
                   if (
                     left.hue !== right.hue &&
                     !hasRungToGive(i) &&
-                    !hasRungToGive(i + 1)
+                    ladder(right.hue).every((c) => c === drawn(left))
                   ) {
                     seen.noneToGive++;
                     continue;
@@ -1129,6 +1158,50 @@ describe("where a row turns hue", () => {
         seen.moved > 0,
         seen.offPress > 0,
       ]).toEqual([name, turns, turns, turns, turns]);
+    },
+  );
+
+  // The bundled bar's status line, its second row of seven cells, under `alt`
+  // at ansi, where a bundled style leaves each hue of the turn a ladder of two
+  // slots and both hues one of them: each cell of the turn finds its two
+  // neighbours on its two slots, while the three cells after the turn can
+  // wear their window the other way about.
+  test.each([
+    ["cyberpunk", "muted", "deepest"],
+    ["rose-pine-moon", "dim", "middle"],
+    ["catppuccin-macchiato", "inverted", "deeper"],
+    ["atom-one-dark", "muted", "brighter"],
+    ["nord", "muted", "brighter"],
+  ] as const)(
+    "%s under the %s style at %s: alt's seven-cell second row at ansi keeps each cell's hue and draws every two cells side by side as two colours",
+    (theme, style, shade) => {
+      const palette = transposePalette(
+        getThemePalette(theme)!,
+        DEFAULT_DSL_CONFIG.styles![style]!,
+      );
+      const decor: Decor = { variation: VARIATIONS.alt, shade: SHADES[shade] };
+      const line = Array.from({ length: 7 }, (_, i) =>
+        decorEntryFor(
+          palette,
+          decor,
+          [row(1, 2), cell(i, 7)],
+          ColorDepth.STANDARD,
+        ),
+      );
+      const drawn = line.map(
+        (entry) =>
+          shownAt(ColorDepth.STANDARD)(decorEntryColour(palette, entry)).hex,
+      );
+      expect(line.map((entry) => entry.hue)).toEqual([
+        ...Array(3).fill("accent"),
+        ...Array(3).fill("secondary"),
+        "accent",
+      ]);
+      expect(
+        drawn.flatMap((colour, i) =>
+          i > 0 && colour === drawn[i - 1] ? [`${i - 1}|${i} ${colour}`] : [],
+        ),
+      ).toEqual([]);
     },
   );
 });

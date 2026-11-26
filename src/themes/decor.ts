@@ -1042,17 +1042,26 @@ const DISTRIBUTION_NAME = new Map<Distribution, DistributionName>(
  * cell is the one that keeps off the press. Where its ladder has no such
  * rung, the cell before the turn takes one by the same rule. Where neither
  * has one, the two take a rung apart from their neighbours alone, in the
- * same order, and a trigger beside the one that moves shares its colour;
- * where neither has even that, both keep what they were dealt and the
- * joiner's lift draws the seam. The line is read from its first place to its
- * last, so a cell with a turn on each side (one cell between two keystones)
- * is decided against the cell before it as that one finally stands, and
- * every seam behind the place being read stays held. That reading is why the
- * cell after the turn moves first: it is the one not yet read, so no cell
- * already read changes unless the cell after has nothing to give. A keystone
- * ending a line is therefore the cell that moves wherever it has a rung to
- * give, and one starting a line keeps its shade wherever the cell after it
- * has one.
+ * same order, and a trigger beside the one that moves shares its colour.
+ * Where neither has even that, each one's neighbours wear every colour its
+ * ladder draws, as two hues whose ladders each draw two slots at ansi, one
+ * slot shared, leave them; yet the line has colours to give, because the
+ * cells of the run after the turn can wear their window the other way about.
+ * So the cell after the turn takes a tone apart from the cell before it
+ * alone, kept off the press where it can be, and the seam that leaves with
+ * its own next cell is held by this same rule as the line is read on: the run
+ * turns over cell by cell until a cell stands apart from both its
+ * neighbours. Only where the cell after has no rung drawn unlike the cell
+ * before, its whole ladder drawn as that one colour, do both keep what they
+ * were dealt and the joiner's lift draws the seam. The line is read from its
+ * first place to its last, so a cell with a turn on each side (one cell
+ * between two keystones) is decided against the cell before it as that one
+ * finally stands, and every seam behind the place being read stays held.
+ * That reading is why the cell after the turn moves first: it is the one not
+ * yet read, so no cell already read changes unless the cell after has
+ * nothing to give. A keystone ending a line is therefore the cell that moves
+ * wherever it has a rung to give, and one starting a line keeps its shade
+ * wherever the cell after it has one.
  *
  * Alike means drawn as one colour, by identity after rounding, as the window
  * decides it; nothing measures a distance between two colours. A cell keeps
@@ -1080,16 +1089,17 @@ function turnsHeld(
   // one colour for the whole bar, known without a position: the rule keeps a
   // cell off it by the cell's address alone.
   const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
-  // The entry `at` takes to stand apart from the cells either side of it and
-  // from every colour `off` names: its own hue, at the first tone of its
-  // window, else the nearest rung of its ladder, drawn as none of them.
+  // The entry `at` takes to stand apart from the cells at `beside` and from
+  // every colour `off` names: its own hue, at the first tone of its window,
+  // else the nearest rung of its ladder, drawn as none of them.
   const apart = (
     at: number,
+    beside: readonly number[],
     off: readonly string[],
   ): DecorEntry | undefined => {
     // [LAW:no-defensive-null-guards] `at` is a place on the line.
     const { hue } = line[at]!;
-    const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
+    const taken = [...beside.map(drawn), ...off].filter(
       (colour): colour is string => colour !== undefined,
     );
     const window = windowAt(palette, hue, decor.shade, drawnAt);
@@ -1099,17 +1109,30 @@ function turnsHeld(
     return tone === undefined ? undefined : { hue, shade: tone };
   };
   // [LAW:dataflow-not-control-flow] Who moves, in the order the rule names,
-  // as data: the cell after the turn, then the one before it, each kept off
-  // the press as well, then each kept off its neighbours alone.
-  const moves = (at: number) =>
-    [[pressed], []].flatMap((off) =>
-      [at, at - 1].map((place) => ({ place, off })),
-    );
+  // as data: the cell after the seam, then the one before it, each apart
+  // from both its neighbours and kept off the press as well, then each apart
+  // from its neighbours alone; then the cell after, apart from the cell
+  // before it alone, off the press and then not.
+  const moves = (at: number) => [
+    ...[[pressed], []].flatMap((off) =>
+      [at, at - 1].map((place) => ({
+        place,
+        beside: [place - 1, place + 1],
+        off,
+      })),
+    ),
+    ...[[pressed], []].map((off) => ({ place: at, beside: [at - 1], off })),
+  ];
   for (let at = 1; at < line.length; at++) {
-    if (line[at - 1]!.hue === line[at]!.hue || drawn(at - 1) !== drawn(at))
-      continue;
-    for (const { place, off } of moves(at)) {
-      const entry = apart(place, off);
+    // The seams the rule holds: a turn, and the seam after a cell it moved,
+    // which its last move leaves to be held here. A seam of one hue between
+    // two cells as they were dealt is the distribution's.
+    const held =
+      line[at - 1]!.hue !== line[at]!.hue ||
+      line[at - 1]!.shade !== dealt[at - 1]!.shade;
+    if (!held || drawn(at - 1) !== drawn(at)) continue;
+    for (const { place, beside, off } of moves(at)) {
+      const entry = apart(place, beside, off);
       if (entry === undefined) continue;
       line[place] = entry;
       break;
