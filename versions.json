@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-975",
+      "ref": "refs/pull/975/merge",
+      "sha": "96e2030614ebfaac352186133dd2cc98e016b663",
+      "timestamp": "2026-11-26T14:03:24.559Z",
+      "commits": [
+        {
+          "sha": "96e2030614ebfaac352186133dd2cc98e016b663",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:02:16-07:00",
+          "message": "Merge 709a427cbb883299cd05e3ed5ba59df5a27f3067 into c0afe8fdcd1688b9b0e5d533ba93d9cbc00b1009\n"
+        },
+        {
+          "sha": "709a427cbb883299cd05e3ed5ba59df5a27f3067",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T07:01:37-07:00",
+          "message": "feat(window): show an interactive session bar docked or inset beside its terminal\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c0afe8fdcd1688b9b0e5d533ba93d9cbc00b1009",
