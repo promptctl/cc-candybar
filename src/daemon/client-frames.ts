@@ -51,7 +51,7 @@ export function openFrameStream(
   lane: Lane,
   onFrame: (resp: Response) => void,
   onEnd: (end: StreamEnd) => void,
-  // A pane that owns the session's pointer says so as it subscribes, with what
+  // A follower that owns the session's pointer says so as it subscribes, with what
   // it knows of it now.
   owner?: OwnerFacts,
 ): FrameStream {

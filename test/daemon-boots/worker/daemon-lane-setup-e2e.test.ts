@@ -21,7 +21,7 @@ import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../../../src/config/loader/edi
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../../src/config/door";
 import { sharedMenuStateKey } from "../../../src/config/menu-keys";
 import { linksOf } from "../../../src/click/read";
-import { LANES, type Lane } from "../../../src/config/lanes";
+import { LANE_NAMES, LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import {
@@ -147,10 +147,9 @@ esac
 
     const editor = "lane-pane-editor";
     await openRenderer(editor);
-    await follow(editor, `☐ ${LANES.statusline.label}`);
-    await follow(editor, `☐ ${LANES.pane.label}`);
+    for (const lane of LANE_NAMES) await follow(editor, `☐ ${LANES[lane].label}`);
     expect(readFileSync(file, "utf8")).toBe(CONFIG);
-    await follow(editor, "💾 save 2");
+    await follow(editor, `💾 save ${LANE_NAMES.length}`);
 
     await bar(sid);
     const opened = (): string[] =>
@@ -163,7 +162,7 @@ esac
     );
     await openRenderer(sid);
     const fresh = textOf(await bar(sid));
-    for (const lane of ["statusline", "pane"] as const) {
+    for (const lane of LANE_NAMES) {
       expect(fresh).toContain(`☑ ${LANES[lane].label}`);
     }
     expect(fresh).not.toContain("💾 save");

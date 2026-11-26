@@ -16,15 +16,14 @@ import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
 import {
   failedWith,
   renderFailed,
-  RENDER_ANSWERS,
+  FEED_ANSWERS,
 } from "./foundations/render-answers";
 import type { FrameSource } from "../click/link-signer.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
-import type { Frame } from "../render/frame.js";
-import { hitMapOf, type HitMap } from "../render/hit-map.js";
 import {
   answerOf,
+  LANES,
   LANE_NAMES,
   type Lane,
   type LaneSwitches,
@@ -34,7 +33,7 @@ import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
 import type { LogLevel } from "../utils/logger";
 import { sameDaemonEvent, type DaemonEvent } from "../utils/event-hold.js";
-import type { PanePointer } from "../click/gesture";
+import type { Pointer } from "../click/gesture";
 import type {
   FeedFrame,
   LaneViewers,
@@ -46,19 +45,19 @@ import type {
 // A subscriber holds the ANSI answer for its own display.
 type Delivered = (delivered: boolean) => void;
 
-// [LAW:one-source-of-truth] A pane that draws the pane lane and sees the
-// pointer over it: its id, and what it last said of the pointer. Held by the
-// feed for as long as the pane's subscription stands.
-export interface PaneOwner {
+// [LAW:one-source-of-truth] A follower that sees the pointer over the bar it
+// draws: its id, and what it last said of the pointer. Held by the feed for as
+// long as the follower's subscription stands.
+export interface PointerOwner {
   readonly id: string;
-  readonly pointer: PanePointer;
+  readonly pointer: Pointer;
 }
 
 export interface Subscriber {
   readonly lane: Lane;
-  // The pane a pane-lane subscriber is, or null for a subscriber that sees no
-  // pointer.
-  readonly owner: PaneOwner | null;
+  // The owner a subscriber that sees the pointer is, or null for one that
+  // sees none.
+  readonly owner: PointerOwner | null;
   // The writer reports completion or replacement for each offered chunk.
   readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
@@ -108,15 +107,15 @@ interface Follower {
   // [LAW:single-enforcer] The transport bounds its outstanding writes. Each
   // carries at most one candidate, replaced when the latest draw is identical.
   readonly writes: Set<PendingWrite>;
-  // What the follower's pane last said of the pointer, where the subscription
-  // declared a pane.
+  // What the follower last said of the pointer, where its subscription
+  // declared an owner.
   owner: HeldPointer | null;
 }
 
-// A pane's facts of its pointer as the feed holds them, and `said`: where its
-// last word came in the order of the feed's panes' words, which is what makes
-// one pane's pointer the session's.
-interface HeldPointer extends PaneOwner {
+// An owner's facts of its pointer as the feed holds them, and `said`: where its
+// last word came in the order of the feed's owners' words, which is what makes
+// one owner's pointer the session's.
+interface HeldPointer extends PointerOwner {
   readonly said: number;
 }
 
@@ -130,11 +129,11 @@ interface Watched {
   pushed: number;
 }
 
-// [LAW:one-source-of-truth] The session's pointer is the one the pane that
-// spoke last holds: the pointer is where the user last moved it, and a pane
-// that opens or reconnects speaks for itself once. It is derived from who
-// follows the session, never stored beside them, so when that pane ends the
-// one that spoke before it owns the pointer again.
+// [LAW:one-source-of-truth] The session's pointer is the one the owner that
+// spoke last holds, whatever lane it follows: the pointer is where the user
+// last moved it, and an owner that opens or reconnects speaks for itself once.
+// It is derived from who follows the session, never stored beside them, so
+// when that owner ends the one that spoke before it owns the pointer again.
 function ownerOf(watched: Watched): HeldPointer | null {
   let found: HeldPointer | null = null;
   for (const { owner } of watched.followers.values())
@@ -148,14 +147,16 @@ interface EncodedAnswer {
   readonly displayedEvents?: readonly DaemonEvent[];
 }
 
+// A frame as its subscribers are sent it: each lane's answer, and the failure
+// it is when it is one, which every lane is sent alike.
 interface EncodedFeed {
-  readonly resp: EncodedAnswer;
-  readonly statusline: EncodedAnswer;
+  answer(lane: Lane): EncodedAnswer;
+  readonly failure: string | null;
 }
 
 const failedFeed = (refusal: Refusal): EncodedFeed => {
   const encoded = { json: JSON.stringify(refusal) };
-  return { resp: encoded, statusline: encoded };
+  return { answer: () => encoded, failure: encoded.json };
 };
 
 function covers(prior: EncodedAnswer, offered: EncodedAnswer): boolean {
@@ -187,34 +188,34 @@ function encodeFeed(
   source: FrameSource,
 ): EncodedFeed {
   if (frame.kind === "failed") return failedFeed(failedWith(frame.message));
-  // [LAW:one-source-of-truth] Each lane's answer is its own value: only the
-  // pane lane's carries the hit map, which holds the signed link of every
-  // gesture, so the statusline lane's bytes never change with it. Each body is
+  // [LAW:one-source-of-truth] Each lane's answer is its own value: the frame
+  // it shows (the bar, or the statusline's handoff) in the encoding its lane
+  // names, so one lane's bytes never change with another's. Each body is
   // published once, whichever lanes show it.
-  // [LAW:carrying-cost] The pane lane's answer is built when a pane-lane
-  // subscriber is first offered it, so a session no pane follows pays for one
-  // encode of its frame, as it did before the pane had a hit map.
-  const answer = (
-    published: Frame<string>,
-    hits: HitMap | undefined,
-  ): EncodedAnswer => ({
-    json: JSON.stringify({
-      ...RENDER_ANSWERS.ansi(published),
-      ...(hits !== undefined && { hits }),
-    }),
-    displayedEvents: frame.displayedEvents,
-  });
   const bar = publish(frame.bar, source);
-  const statusline = answer(
-    frame.handoff === null ? bar : publish(frame.handoff, source),
-    undefined,
-  );
-  let resp: EncodedAnswer | undefined;
+  const shown = {
+    resp: bar,
+    statusline: frame.handoff === null ? bar : publish(frame.handoff, source),
+  };
+  // [LAW:carrying-cost] A lane's answer is built when a subscriber of that
+  // lane is first offered it, so a session one lane follows pays for one
+  // encode of its frame.
+  const answers = new Map<Lane, EncodedAnswer>();
   return {
-    statusline,
-    get resp() {
-      return (resp ??= answer(bar, hitMapOf(bar)));
+    answer(lane) {
+      let answer = answers.get(lane);
+      if (answer === undefined) {
+        answer = {
+          json: JSON.stringify(
+            FEED_ANSWERS[LANES[lane].encoding](answerOf(shown, lane)),
+          ),
+          displayedEvents: frame.displayedEvents,
+        };
+        answers.set(lane, answer);
+      }
+      return answer;
     },
+    failure: null,
   };
 }
 
@@ -242,7 +243,7 @@ export class FrameFeeds<Req> {
   // what it holds is unknown (a delivery failed).
   private handed: string | null = JSON.stringify({});
   private frameDemands = 0;
-  private panesSaid = 0;
+  private ownersSaid = 0;
   private pushed = 0;
   private refused = 0;
   private lookups = 0;
@@ -348,33 +349,33 @@ export class FrameFeeds<Req> {
     });
   }
 
-  // [LAW:single-enforcer] A pane's facts of its pointer, as a subscribe and
-  // each report admit them: its latest, and the latest word of any pane.
-  private held(pane: PaneOwner): HeldPointer {
-    return { ...pane, said: ++this.panesSaid };
+  // [LAW:single-enforcer] An owner's facts of its pointer, as a subscribe and
+  // each report admit them: its latest, and the latest word of any owner.
+  private held(owner: PointerOwner): HeldPointer {
+    return { ...owner, said: ++this.ownersSaid };
   }
 
-  // A pane's report of its pointer: held for the pane, which then owns the
+  // An owner's report of its pointer: held for the owner, which then owns the
   // session's pointer, and the renderer is handed the change like any change
-  // of who watches. A pane that does not follow the session is refused.
+  // of who watches. An owner that does not follow the session is refused.
   pointerOf(
     sessionId: SessionId,
-    pane: PaneOwner,
+    owner: PointerOwner,
   ):
     | { readonly kind: "ok" }
     | { readonly kind: "refused"; readonly reason: string } {
     const watched = this.watched.get(sessionId);
     const reporting = [...(watched?.followers.values() ?? [])].filter(
-      (follower) => follower.owner?.id === pane.id,
+      (follower) => follower.owner?.id === owner.id,
     );
     if (watched === undefined || reporting.length === 0)
       return {
         kind: "refused",
-        reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId)}`,
+        reason: `no owner ${JSON.stringify(owner.id)} follows session ${JSON.stringify(sessionId)}`,
       };
-    // A stream that reconnects over its old one holds the pane's facts twice.
+    // A stream that reconnects over its old one holds the owner's facts twice.
     const owned = ownerOf(watched)?.id ?? null;
-    const admitted = this.held(pane);
+    const admitted = this.held(owner);
     for (const follower of reporting) follower.owner = admitted;
     this.ownerMoved(sessionId, owned, watched);
     this.announce();
@@ -422,17 +423,12 @@ export class FrameFeeds<Req> {
 
   private seen(sessionId: SessionId, watched: Watched): SessionViewers {
     const lanes: Partial<Record<Lane, LaneViewers>> = {};
-    const owner = ownerOf(watched);
-    for (const [sub, follower] of watched.followers) {
+    for (const sub of watched.followers.keys()) {
       const seen = lanes[sub.lane];
       lanes[sub.lane] = {
         ...seen,
         subscribers: (seen?.subscribers ?? 0) + 1,
         drawing: (seen?.drawing ?? false) || sub.drawing(),
-        // [LAW:one-source-of-truth] The owner's facts ride on its own lane: the
-        // renderer reads the pointer where it reads who watches.
-        ...(owner !== null &&
-          follower.owner === owner && { pointer: owner.pointer }),
       };
     }
     // Follower insertion order can change on a replacement within a lane.
@@ -444,6 +440,7 @@ export class FrameFeeds<Req> {
           return viewed === undefined ? [] : [[lane, viewed]];
         }),
       ),
+      pointer: ownerOf(watched)?.pointer ?? null,
       shown: this.shown(sessionId),
       joined: watched.frameDemand,
     };
@@ -525,14 +522,13 @@ export class FrameFeeds<Req> {
         // [LAW:no-silent-failure] The answers this frame is about to be offered
         // are built here, where a failure is this frame's, not a later
         // subscriber's or another session's.
-        for (const { lane } of watched.followers.keys())
-          answerOf(encoded, lane);
+        for (const { lane } of watched.followers.keys()) encoded.answer(lane);
       } catch (error) {
         // [LAW:no-silent-failure] A bad presentation is visible to the lane,
         // and leaves other sessions' frames deliverable.
         const refused = renderFailed(error);
         encoded = failedFeed(refused);
-        if (watched.last?.resp.json !== encoded.resp.json)
+        if (watched.last?.failure !== encoded.failure)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused.error)}`,
@@ -664,7 +660,7 @@ export class FrameFeeds<Req> {
       done?.(false);
       return;
     }
-    const answer = answerOf(encoded, sub.lane);
+    const answer = encoded.answer(sub.lane);
     let latest: PendingWrite | undefined;
     for (const write of follower.writes) latest = write;
     if (latest !== undefined && covers(latest.answer, answer)) {
