@@ -42085,23 +42085,30 @@ function turnsHeld(palette, decor, dealt, drawnAt) {
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
   const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
-  const apart = (at, off) => {
+  const apart = (at, beside2, off) => {
     const { hue } = line[at];
-    const taken2 = [drawn(at - 1), drawn(at + 1), ...off].filter(
+    const taken2 = [...beside2.map(drawn), ...off].filter(
       (colour) => colour !== void 0
     );
     const window2 = windowAt(palette, hue, decor.shade, drawnAt);
     const tone = window2.find((t2) => !taken2.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken2, drawnAt);
     return tone === void 0 ? void 0 : { hue, shade: tone };
   };
-  const moves = (at) => [[pressed], []].flatMap(
-    (off) => [at, at - 1].map((place) => ({ place, off }))
-  );
+  const moves = (at) => [
+    ...[[pressed], []].flatMap(
+      (off) => [at, at - 1].map((place) => ({
+        place,
+        beside: [place - 1, place + 1],
+        off
+      }))
+    ),
+    ...[[pressed], []].map((off) => ({ place: at, beside: [at - 1], off }))
+  ];
   for (let at = 1; at < line.length; at++) {
-    if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
-      continue;
-    for (const { place, off } of moves(at)) {
-      const entry = apart(place, off);
+    const held = line[at - 1].hue !== line[at].hue || line[at - 1].shade !== dealt[at - 1].shade;
+    if (!held || drawn(at - 1) !== drawn(at)) continue;
+    for (const { place, beside: beside2, off } of moves(at)) {
+      const entry = apart(place, beside2, off);
       if (entry === void 0) continue;
       line[place] = entry;
       break;
@@ -77014,11 +77021,6 @@ function spliceOp(text5, path31, op, suffix, rendered) {
   }
 }
 
-// src/renderer-interface/click-arrival.ts
-init_globals();
-var deliveredActsOn = (delivery) => delivery.kind === "forwarder" ? delivery.actsOn : "daemon";
-var actsOnOf = (arrival) => arrival.via === "link" ? deliveredActsOn(arrival.delivery) : "daemon";
-
 // src/claude-input/typing.ts
 init_globals();
 
@@ -77073,10 +77075,7 @@ var typeInPane = (edge) => async (tmux3, line) => {
 
 // src/renderer/verbs/index.ts
 function ask(ctx, act) {
-  ctx.acts.ask(
-    ctx.effects,
-    act.kind === "copy" || act.kind === "open" ? { ...act, actsOn: actsOnOf(ctx.arrival) } : act
-  );
+  ctx.acts.ask(ctx.effects, act);
 }
 function globalAct(step4, ctx, session) {
   ask(
@@ -84569,6 +84568,10 @@ async function readTail(path31, maxBytes) {
   });
 }
 
+// src/renderer-interface/click-arrival.ts
+init_globals();
+var deliveredActsOn = (delivery) => delivery.kind === "forwarder" ? delivery.actsOn : "daemon";
+
 // src/daemon/foundations/debug-types.ts
 init_globals();
 var DEBUG_WHATS = ["vars", "segments", "config"];
@@ -85178,7 +85181,12 @@ function landedReply(parts, { desktop, outcome }) {
   if (desktop.length === 0 && outcome.kind !== "ok")
     return stay(clickReply(outcome));
   const reply = replyOf(
-    { ok: true, output: "", desktopActs: desktop },
+    {
+      ok: true,
+      output: "",
+      desktopActs: desktop,
+      ...outcome.kind === "ok" ? {} : { desktopError: outcome.message }
+    },
     null,
     (taken2) => {
       if (!taken2 && desktop.length > 0)
@@ -85240,6 +85248,7 @@ async function handleClick(parts, {
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
       runEvidence,
+      actsOn: deliveredActsOn(arrival.delivery),
       event: {
         kind: "click",
         click: admitted,
@@ -91763,9 +91772,8 @@ async function paneOff(tmux3, edge) {
 async function desktopActOf(act) {
   switch (act.kind) {
     case "copy":
-      return act.actsOn === ACTS_ON_DESKTOP ? { kind: "copy", text: act.text } : null;
+      return { kind: "copy", text: act.text };
     case "open": {
-      if (act.actsOn !== ACTS_ON_DESKTOP) return null;
       const entry = await stat(act.target);
       if (!entry.isFile() && !entry.isDirectory())
         throw new Error(
@@ -92966,7 +92974,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const problem = inspectionPayloadProblem(reply);
     if (problem !== null) throw new Error(`${label2} returned ${problem}`);
   };
-  const inSlot = async (input, queuedMs, captures = []) => {
+  const inSlot = async (input, queuedMs, captures = [], actsOn = "daemon") => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
     const session = sessionOfEvent(input.event);
@@ -93006,6 +93014,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
     }
+    if (input.event.kind === "click" && input.event.coldConfig !== void 0 && input.event.context !== null) {
+      const key = originKey(input.event.context.durable.origin);
+      if (output.subscriptions.configs.some((origin) => originKey(origin) === key))
+        configs.set(key, { kind: "received", config: input.event.coldConfig });
+    }
     const {
       subscriptions,
       wake: wake2,
@@ -93036,7 +93049,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       input.event,
       output,
       captures,
-      receipt
+      receipt,
+      actsOn
     );
     return {
       received: true,
@@ -93046,7 +93060,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
-  const landInSlot = async (event, output, captures, receipt) => {
+  const landInSlot = async (event, output, captures, receipt, actsOn) => {
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
     );
@@ -93114,7 +93128,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       } else acts.push(effect);
     }
     const performed = async (act) => {
-      const desktop = await desktopActOf(act);
+      const desktop = actsOn === "desktop" ? await desktopActOf(act) : null;
       if (desktop === null) return world.perform(act);
       log("info", actLine(act, "desktop", "handed to the desktop"));
       return Promise.resolve({ kind: "desktop", act: desktop });
@@ -93433,7 +93447,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          made.event.kind === "click" ? made.runEvidence : void 0
+          made.event.kind === "click" ? made.runEvidence : void 0,
+          made.event.kind === "click" ? made.actsOn : void 0
         );
         if (starting && slotted.turn.kind === "answered") restore = void 0;
         if (made.event.kind === "click" && restore !== void 0)
