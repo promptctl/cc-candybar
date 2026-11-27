@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-980",
+      "ref": "refs/pull/980/merge",
+      "sha": "3f99726f50857ca7ed3833f448818145fb2b6ca5",
+      "timestamp": "2026-11-27T04:45:49.774Z",
+      "commits": [
+        {
+          "sha": "3f99726f50857ca7ed3833f448818145fb2b6ca5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:44:36-07:00",
+          "message": "Merge 178948abc1e435b50a8e4517e76d15051f73ae97 into 64b9d9010d34954ec5ffbf748a1d755d845544fb\n"
+        },
+        {
+          "sha": "178948abc1e435b50a8e4517e76d15051f73ae97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:43:44-07:00",
+          "message": "fix(config): preserve action field presence and every structural diagnostic\n"
+        },
+        {
+          "sha": "4ae392dc87d7dc84216299d77ed99fc157cba532",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:34:51-07:00",
+          "message": "refactor(config): derive action parsing, schema and diagnostics from authored records\n"
+        },
+        {
+          "sha": "7990489fde5dd27010d4724770d0911647fca470",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:29:59-07:00",
+          "message": "refactor(config): share authored wire values and identifier rules with click admission\n"
+        }
+      ]
+    },
+    {
       "version": "pr-979",
       "ref": "refs/pull/979/merge",
       "sha": "552a367c4ed706c7c987b9956ee287f52da0e181",
