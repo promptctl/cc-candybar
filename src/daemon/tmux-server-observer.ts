@@ -3,7 +3,7 @@ import { mkdtempSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createConnection, createServer, type Socket } from "node:net";
 import { createInterface } from "node:readline";
-import type { Launcher } from "../proc/launcher.js";
+import { OWNER_CONTEXT, type Launcher } from "../proc/launcher.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import { ObserverServer } from "./tmux-observer-hooks.js";
 
@@ -136,6 +136,7 @@ export function productionTmuxServerObserver(
           return;
         }
         const ran = launcher.launchDetachedSync({
+          ...OWNER_CONTEXT,
           bin: node[0]!,
           args: [
             ...node.slice(1),

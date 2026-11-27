@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Launcher } from "../proc/launcher.js";
+import { OWNER_CONTEXT, type Launcher } from "../proc/launcher.js";
 import { runTmuxAsync, serverObserverHookPrefix } from "../proc/tmux.js";
 import { singleQuoted } from "../shell-word.js";
 
@@ -305,6 +305,7 @@ export class ObserverServer {
   }
   async wait(signal: AbortSignal) {
     const r = await this.launcher.launch({
+      ...OWNER_CONTEXT,
       bin: "tmux",
       // A single non-yielding tmux command queue checks for unread work and
       // subscribes. If work already exists it returns immediately. A wake

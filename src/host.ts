@@ -55,13 +55,15 @@ export const machineHost = (): Host => ({
   tmp: os.tmpdir(),
 });
 
-// The launcher holds the live `process.env`, not a copy, and reads it at each
-// launch, so a variable the process sets after this still reaches the
-// children it launches, apart from the repository-scoped ones.
+// A process main has no narrower shutdown signal. Its lifeline ends when the
+// process exits. The live environment is resolved separately at each spawn.
 function worldOver<C extends Timekeeper>(clock: C): World<C> {
   return {
     host: machineHost(),
-    launcher: systemOneShotLauncher({ inherited: process.env }, clock),
+    launcher: systemOneShotLauncher(
+      { inherited: process.env, signal: AbortSignal.any([]) },
+      clock,
+    ),
     clock,
   };
 }

@@ -4,6 +4,7 @@
 // daemon in this worker with no wait between the close and the build, which is
 // the order a real process can never reach.
 
+import { OWNER_CONTEXT } from "../../../src/proc/launcher.js";
 import {
   chmodSync,
   existsSync,
@@ -145,7 +146,7 @@ esac
   });
 
   test("a launch its rate limit refused runs at once on the next daemon", async () => {
-    const open = { bin: "/bin/echo", category: "click.open" } as const;
+    const open = { ...OWNER_CONTEXT, bin: "/bin/echo", category: "click.open" } as const;
     const first = start();
     expect(await first.daemon.launcher.launch(open)).toMatchObject({
       ok: true,

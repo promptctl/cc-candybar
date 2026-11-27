@@ -4,7 +4,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { LaunchResult, Launcher } from "../../proc/launcher";
+import {
+  INHERIT_FROM_OWNER,
+  type LaunchResult,
+  type Launcher,
+} from "../../proc/launcher.js";
 import { ABSENT, failed, ok, orElse, type Outcome } from "../../utils/outcome";
 import { debug } from "../../utils/logger";
 import { FORGE_CLI } from "../../repository-cli";
@@ -118,6 +122,7 @@ export class GitService {
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
     return this.launcher.launch({
+      environment: INHERIT_FROM_OWNER,
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -604,6 +609,7 @@ export class GitService {
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
     return this.launcher.launch({
+      environment: INHERIT_FROM_OWNER,
       bin,
       args: [...args],
       cwd: options.cwd,

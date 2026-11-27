@@ -18,7 +18,7 @@ import { readDefinition } from "./daemon/config-discovery/discover.js";
 import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
 import { type OneShotLauncher } from "./proc/launch.js";
-import { failureText } from "./proc/launcher.js";
+import { OWNER_CONTEXT, failureText } from "./proc/launcher.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
@@ -99,6 +99,7 @@ function cloneRepo(
 ): void {
   const git = (...args: string[]): void => {
     const run = launcher.launchSync({
+      ...OWNER_CONTEXT,
       bin: "git",
       args,
       envOverlay: { GIT_TERMINAL_PROMPT: "0" },

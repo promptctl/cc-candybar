@@ -32,7 +32,6 @@ import {
 } from "./reply.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
-import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { createPayloadProviders } from "./payload-providers";
@@ -58,6 +57,12 @@ import {
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import { RetiredTmuxStatus } from "./retired-tmux-status.js";
+import {
+  type Launcher,
+  launcherIn,
+  OWNER_CONTEXT,
+  type ContextualLauncher,
+} from "../proc/launcher.js";
 import type { BarPaneEdge } from "./lane-setup.js";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
@@ -152,7 +157,7 @@ export interface DaemonAdapters {
   readonly sessionBook: (
     log: DaemonLogger,
   ) => SessionFileStorage<DurableContext>;
-  readonly claudeInput: (launcher: Pick<Launcher, "launch">) => ClaudeInputEdge;
+  readonly claudeInput: (launcher: ContextualLauncher) => ClaudeInputEdge;
   readonly nativeWindowSupported: boolean;
   readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
   readonly tmuxObserver: (
@@ -599,11 +604,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   // [LAW:single-enforcer] The host's one performer of the acts the renderer's
   // turns return (src/daemon/acts.ts).
-  const programs = (edge: Pick<Launcher, "launch">) => ({
+  const programs = (edge: ContextualLauncher) => ({
     launch: clickLaunchVia(edge),
     claudeInput: inputs.claudeInput(edge),
   });
-  const desktopPrograms = programs(launcher);
+  const desktopPrograms = programs(launcherIn(launcher, OWNER_CONTEXT));
   const acts = new Acts({
     detach: clock.detach,
     programsFor: (session) => {
@@ -613,9 +618,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       const context =
         session === null ? null : sessionBook.programContextOf(session);
       if (context === null) return desktopPrograms;
-      return programs({
-        launch: (options) => launcher.launch({ ...options, ...context }),
-      });
+      return programs(launcherIn(launcher, context));
     },
     run: (run) => runs.start(run),
     // [LAW:single-enforcer] The pane queue reads the same phase as ingress

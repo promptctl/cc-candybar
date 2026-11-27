@@ -16,6 +16,7 @@
 import fs from "node:fs";
 
 import {
+  OWNER_CONTEXT,
   failureText,
   type LaunchResult,
   type Launcher,
@@ -133,6 +134,7 @@ export function chargeProbe(
   return platform === "darwin"
     ? footprintCharge((args) =>
         launcher.launch({
+          ...OWNER_CONTEXT,
           bin: FOOTPRINT,
           args,
           timeoutMs: PROBE_TIMEOUT_MS,
@@ -234,6 +236,7 @@ function commandProbe(
       // accounting, and a TOTAL result — a raw child_process call here would be
       // both an unaccounted child and a throw on the death path.
       const result = await launcher.launch({
+        ...OWNER_CONTEXT,
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,

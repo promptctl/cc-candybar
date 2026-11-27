@@ -46,18 +46,14 @@ const isLifeline = (s: Pick<Spawn, "bin" | "args">): boolean =>
 // lifeline, that spawn stops matching and fails in every case that launches.
 export function fakeLauncher(
   clock: Timekeeper,
-  owner: Partial<LaunchOwner> = {},
+  owner: LaunchOwner,
 ): FakeLauncher {
   const spawner = fakeSpawner(clock);
   spawner.program(
     (bin, args) => isLifeline({ bin, args }),
     readsStdin("until-end"),
   );
-  const launcher = createOneShotLauncher(
-    { inherited: {}, ...owner },
-    clock,
-    spawner,
-  );
+  const launcher = createOneShotLauncher(owner, clock, spawner);
   return {
     launcher,
     spawner,
@@ -65,17 +61,21 @@ export function fakeLauncher(
   };
 }
 
-// A launcher for a test whose subject takes one and means to launch nothing: any
-// launch fails as a missing program does, loudly, so a test that starts to
-// spawn must say what it spawns.
-export const unscriptedLauncher: FakeLauncher["launcher"] =
-  fakeLauncher(systemTimekeeper).launcher;
-
 // A source-runs owner over the unscripted launcher, for owners whose runs a
 // case never starts: one per caller, so no test's holds reach another's.
 export const unscriptedRuns = (): SourceRuns =>
   new SourceRuns({
     watchers: manualWatcherRegistry(systemTimekeeper),
-    launcher: unscriptedLauncher,
+    launcher: {
+      launch: async ({ bin }) => ({
+        ok: false,
+        reason: "spawn-error",
+        exitCode: null,
+        signal: null,
+        stdout: "",
+        stderr: "",
+        error: `spawn ${bin} ENOENT`,
+      }),
+    },
     clock: systemTimekeeper,
   });

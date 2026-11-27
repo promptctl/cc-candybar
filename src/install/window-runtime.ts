@@ -1,3 +1,4 @@
+import { OWNER_CONTEXT } from "../proc/launcher.js";
 import fs from "node:fs";
 import path from "node:path";
 import type { OneShotLauncher } from "../proc/launch.js";
@@ -46,6 +47,7 @@ export function stageWindow(
     );
   const verifies = (file: string) =>
     launcher.launchSync({
+      ...OWNER_CONTEXT,
       bin: "/usr/bin/codesign",
       args: [
         "--verify",

@@ -1,10 +1,15 @@
+import { fixtureFakeLauncher } from "../helpers/scripted-launcher";
 import {
   createOneShotLauncher,
   MAX_CAPTURED_BYTES,
 } from "../../src/proc/launch";
 import { EventEmitter } from "node:events";
 import type { Spawner } from "../../src/proc/spawner";
-import { type LaunchResult } from "../../src/proc/launcher";
+import {
+  OWNER_CONTEXT,
+  type LaunchResult,
+  type LaunchContext,
+} from "../../src/proc/launcher.js";
 import {
   exits,
   floods,
@@ -19,13 +24,40 @@ import {
 } from "../../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "../helpers/held-clock";
 
+// The compiler rejects both an omitted choice and an explicit undefined.
+type ExplicitContext<T extends LaunchContext> = T;
+// @ts-expect-error a directory also requires an environment
+type NoEnvironment = ExplicitContext<{ cwd: string }>;
+// @ts-expect-error an environment also requires a directory
+type NoDirectory = ExplicitContext<{ environment: {} }>;
+// @ts-expect-error undefined cannot stand for inheritance
+type UndefinedDirectory = ExplicitContext<{ cwd: undefined; environment: {} }>;
+// @ts-expect-error undefined cannot stand for inheritance
+type UndefinedEnvironment = ExplicitContext<{
+  cwd: string;
+  environment: undefined;
+}>;
+type ExplicitOwner<T extends Parameters<typeof createOneShotLauncher>[0]> = T;
+// @ts-expect-error a component must supply its lifetime
+type NoLifetime = ExplicitOwner<{ inherited: {} }>;
+type ScriptedOwner<T extends Parameters<typeof fakeLauncher>[1]> = T;
+// @ts-expect-error a scripted OS has the same required lifetime
+type NoScriptedLifetime = ScriptedOwner<{ inherited: {} }>;
+
+type BoundTools<
+  T extends import("../../src/proc/launcher").ContextualLauncher,
+> = T;
+type RawTools = Pick<import("../../src/proc/launcher").Launcher, "launch">;
+// @ts-expect-error fixed desktop tools need a launcher bound to a context
+type UnboundTools = BoundTools<RawTools>;
+
 // [LAW:behavior-not-structure] What a launch promises its caller, proved on the
 // production launcher over a scripted OS and a held clock: no process starts, no
 // time passes, and the cases that used to sleep for a timeout run at once.
 
 function rig() {
   const clock = heldClock(new Date(1_000_000));
-  const fake = fakeLauncher(clock);
+  const fake = fixtureFakeLauncher(clock, {});
   const advance = async (ms: number) => {
     clock.advance(ms);
     await turns();
@@ -37,6 +69,7 @@ const sh = (
   command: string,
   extra: { timeoutMs?: number; signal?: AbortSignal } = {},
 ) => ({
+  ...OWNER_CONTEXT,
   bin: "/bin/sh",
   args: ["-c", command],
   category: "user-shell" as const,
@@ -75,11 +108,12 @@ describe("a launch over a scripted OS", () => {
           spawnSync: () => ({ ...raw, status, signal }),
         };
         const launcher = createOneShotLauncher(
-          { inherited: {} },
+          { inherited: {}, signal: r.ownerSignal },
           r.clock,
           spawner,
         );
         return launcher.launchSync({
+          ...OWNER_CONTEXT,
           ...sh("closed reader"),
           stdinInput: "unread",
         });
@@ -208,6 +242,7 @@ describe("a launch over a scripted OS", () => {
     const r = rig();
     r.spawner.program(shell("pbcopy"), exits(0));
     const click = {
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "pbcopy"],
       category: "click.pbcopy" as const,
@@ -274,7 +309,7 @@ describe("an owner's launcher over a scripted OS", () => {
         },
       };
       const launcher = createOneShotLauncher(
-        { inherited: {} },
+        { inherited: {}, signal: r.ownerSignal },
         r.clock,
         spawner,
       );
@@ -303,6 +338,7 @@ describe("an owner's launcher over a scripted OS", () => {
     const clock = heldClock(new Date(1_000_000));
     const closing = new AbortController();
     const { launcher, spawner, started } = fakeLauncher(clock, {
+      inherited: {},
       signal: closing.signal,
     });
     spawner.program(shell("sleep 60"), hangs());
@@ -322,4 +358,21 @@ describe("an owner's launcher over a scripted OS", () => {
     });
     expect(started()).toHaveLength(1);
   });
+});
+
+test("closing a scripted fixture reaps its TERM-ignoring child and lifeline while another fixture remains usable", async () => {
+  const first = rig();
+  first.spawner.program(shell("work"), ignoring(["SIGTERM"], hangs()));
+  const work = first.launcher.launch(sh("work"));
+  await turns();
+  await first.close();
+  expect(await work).toMatchObject({ reason: "aborted", signal: "SIGKILL" });
+  expect(first.spawner.spawned.every((child) => child.ended !== null)).toBe(
+    true,
+  );
+  const second = rig();
+  second.spawner.program(shell("work"), exits(0, "next"));
+  expect(
+    await settled(second, second.launcher.launch(sh("work"))),
+  ).toMatchObject({ ok: true, stdout: "next" });
 });

@@ -3,6 +3,7 @@
 // checkpoint. The wire and client groups need the built bundle and run under
 // `pnpm bench`, not here.
 
+import { WORLD } from "./helpers/host";
 import { BENCHMARKS } from "../scripts/bench/suites/index";
 
 const SAMPLES = 3;
@@ -30,7 +31,7 @@ describe.each([
   "sources.usage.hit",
 ])("%s", (id) => {
   it("times the samples it is asked for", async () => {
-    const outcome = await byId(id).run({ samples: SAMPLES, note: () => {} });
+    const outcome = await byId(id).run({ world: WORLD, samples: SAMPLES, note: () => {} });
     expect(outcome.kind).toBe("measured");
     if (outcome.kind !== "measured") return;
     for (const series of outcome.series) {

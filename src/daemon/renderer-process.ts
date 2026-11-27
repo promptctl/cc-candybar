@@ -13,8 +13,12 @@ import { backedOffMs } from "../utils/period.js";
 import { streamedToFile } from "./streamed-file.js";
 import type { RendererRecording } from "./renderer-recording.js";
 import type { Timekeeper } from "../time.js";
-import type { Launcher, Channel } from "../proc/launcher.js";
-import { whyFailed } from "../proc/launcher.js";
+import {
+  INHERIT_FROM_OWNER,
+  type Launcher,
+  type Channel,
+  whyFailed,
+} from "../proc/launcher.js";
 import { writeLogLines, type DaemonLogger } from "../utils/logger.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import { eventLine, type Field } from "../utils/logfmt.js";
@@ -337,6 +341,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       log("warn", `renderer ${name}[${generationOf}]: ${text}`),
     );
     const channel = own.launcher.launchChannel({
+      environment: INHERIT_FROM_OWNER,
       bin: own.node[0] as string,
       args: [
         ...rendererNodeArgs(own.node.slice(1), own.heapCapMb),

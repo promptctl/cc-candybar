@@ -7,7 +7,6 @@
 // returned early, empty or stale is a failure and not a fast sample.
 
 import path from "node:path";
-import { processWorld } from "../../../src/host.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
 import {
@@ -54,7 +53,7 @@ const gitBenchmark = ([
     try {
       const repo = path.join(root, "repo");
       makeRepo(repo, shape);
-      const service = new GitService(processWorld().launcher);
+      const service = new GitService(plan.world.launcher);
       const ms = await repeat(plan.samples, async () => {
         const info = await service.getGitInfo(repo);
         // [LAW:no-silent-failure] A read that failed, or saw a tree other
@@ -123,7 +122,7 @@ const coldFold = ([
     try {
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, turns);
-      const world = processWorld();
+      const { world } = plan;
       const ms = await repeat(plan.samples, async () => {
         const store = new SessionUsageStore({
           host: world.host,
@@ -160,7 +159,7 @@ const warmFold = (
     try {
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, WARM_TURNS);
-      const world = processWorld();
+      const { world } = plan;
       const store = new SessionUsageStore({
         host: world.host,
         prices: PRICES,

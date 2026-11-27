@@ -70,16 +70,23 @@ export function sweepJestTmp(
 }
 
 export default async function globalTeardown(): Promise<void> {
-  // [LAW:effects-at-boundaries] The runner's own process reads the process
-  // table through a launcher it holds for its whole life, as a process main
-  // does: its lifeline ends when the runner exits. A test file's launchers are
-  // its environment's (test/helpers/host.ts), which this process never loads.
-  const probe = systemProbe(
-    systemLauncher({ inherited: process.env }, systemTimekeeper),
+  const ending = new AbortController();
+  const launcher = systemLauncher(
+    { inherited: process.env, signal: ending.signal },
+    systemTimekeeper,
   );
-  // The shared pool's own bookkeeping: drop slot files whose recorded owner
-  // is provably dead.
-  await createDaemonPool(DEFAULT_POOL_DIR, DEFAULT_POOL_SIZE, probe).sweepStale();
-
-  sweepJestTmp(os.tmpdir(), process.pid, probe);
+  try {
+    const probe = systemProbe(launcher);
+    await createDaemonPool(
+      DEFAULT_POOL_DIR,
+      DEFAULT_POOL_SIZE,
+      probe,
+    ).sweepStale();
+    sweepJestTmp(os.tmpdir(), process.pid, probe);
+  } finally {
+    ending.abort();
+    const { unreaped } = await launcher.settled();
+    if (unreaped.length)
+      throw new Error(`Sweep left child processes: ${unreaped.join(", ")}`);
+  }
 }

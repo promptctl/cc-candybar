@@ -1,3 +1,4 @@
+import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // A source's identity is a digest of what its run needs, two declarations
 // with one digest share one run, and a key that moves is a new identity whose
@@ -6,7 +7,6 @@ import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-wa
 
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import {
-  fakeLauncher,
   turns,
 } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
@@ -41,9 +41,9 @@ interface Held {
 // A rig: one owner over a scripted launcher on a held clock, and as many
 // registries over it as the test opens, each holding its own runs, as the
 // host holds a session view's.
-function rig() {
+function rig(inherited: NodeJS.ProcessEnv = {}) {
   const clock = heldClock(new Date(0));
-  const { launcher, spawner, started } = fakeLauncher(clock);
+  const { launcher, spawner, started } = fixtureFakeLauncher(clock, inherited);
   const runs = new SourceRuns({
     watchers: manualWatcherRegistry(clock),
     launcher,
@@ -495,4 +495,23 @@ describe("SourceRuns — an entry is kept while held, and dropped with its last 
       r.close();
     }
   });
+});
+
+test("a shell source matching zero session variables gets an empty environment even when the host has a PATH", async () => {
+  const r = rig({ PATH: "/host-only" });
+  try {
+    r.spawner.program(shell("read source"), exits(0, "value"));
+    const h = r.registry({ UNSELECTED: "private" });
+    h.registry.declareShell("source", "read source", {
+      cwd: "/work",
+      env: SHELL_ENV,
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
+    await settledAll(r.clock, h);
+    expect(r.started().map(({ options }) => options.env)).toEqual([{}]);
+    expect(h.store.read("source")).toBe("value");
+  } finally {
+    r.close();
+  }
 });

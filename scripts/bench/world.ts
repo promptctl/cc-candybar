@@ -17,14 +17,18 @@
 
 import { plainEnvironment } from "../../src/daemon/foundations/session-env.js";
 import { spawn } from "node:child_process";
-import { processWorld } from "../../src/host.js";
+import { type World as ProcessWorld } from "../../src/host.js";
 import fs from "node:fs";
 import path from "node:path";
 
 import { nodeClientHint } from "../../src/client-hint.js";
 import { detectClientHints } from "../../src/client-hints.js";
 import { daemonArgs } from "../../src/daemon/acquire.js";
-import { RENDER_BUDGETS, tryRenderViaDaemon } from "../../src/daemon/client.js";
+import {
+  RENDER_BUDGETS,
+  tryClickViaDaemon,
+  tryRenderViaDaemon,
+} from "../../src/daemon/client.js";
 import { fetchStats } from "../../src/daemon/client-stats.js";
 import {
   describeFailure,
@@ -101,6 +105,8 @@ export interface World {
   hookData(session: Session, n: number): ClaudeHookData;
   /** The environment a client process runs in, at a terminal `columns` wide. */
   clientEnv(columns: number): NodeJS.ProcessEnv;
+  /** A click sent to this benchmark's private daemon. */
+  click(url: string): ReturnType<typeof tryClickViaDaemon>;
   /** One render, as the client sends it. */
   tick(session: Session, columns: number, n: number): Promise<Tick>;
   /** One render's Frame: a lookup between samples, never a sample itself. */
@@ -141,7 +147,10 @@ case "$*" in
 esac
 `;
 
-async function startWorld(config = "{}\n"): Promise<World> {
+async function startWorld(
+  machine: ProcessWorld,
+  config = "{}\n",
+): Promise<World> {
   // Short, under /tmp: a unix socket path is capped at 104 bytes on macOS.
   const root = scratchDir("ccbn");
   const dirs = {
@@ -193,7 +202,6 @@ async function startWorld(config = "{}\n"): Promise<World> {
     COLORTERM: "truecolor",
   };
   // The host this world's clients are handed: its socket, its home.
-  const machine = processWorld();
   const host = { env, home: dirs.home, tmp: machine.host.tmp };
   // What its clients ask the daemon with: this world's host, the machine's clock.
   const client = { host, clock: machine.clock };
@@ -318,6 +326,7 @@ async function startWorld(config = "{}\n"): Promise<World> {
   });
 
   const world: World = {
+    click: (url) => tryClickViaDaemon(client, url),
     claudeDir: dirs.claude,
     configFile,
     bootMs,
@@ -439,10 +448,11 @@ function parseRenderEvent(line: string): RenderEvent {
 // error is the cause and stop's is told beside it, not instead of it.
 // [LAW:no-silent-failure]
 export async function inWorld<T>(
+  machine: ProcessWorld,
   body: (world: World) => Promise<T>,
   config?: string,
 ): Promise<T> {
-  const world = await startWorld(config);
+  const world = await startWorld(machine, config);
   let result: T;
   try {
     result = await body(world);

@@ -4,6 +4,7 @@
 // own through its last hook and records it. Whichever file the worker runs
 // second checks the first, whatever order jest picks.
 
+import { OWNER_CONTEXT } from "../../../src/proc/launcher.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -26,7 +27,7 @@ export function lifelineAcrossFiles(file: string): void {
   test("this file's launcher holds a lifeline", async () => {
     const launcher = fixtureLauncher({ inherited: process.env });
     expect(
-      await launcher.launch({ bin: "/bin/echo", category: "user-shell" }),
+      await launcher.launch({ ...OWNER_CONTEXT, bin: "/bin/echo", category: "user-shell" }),
     ).toMatchObject({ ok: true });
     pid = launcher.__lifelineForTest().pid;
     expect(pid).toEqual(expect.any(Number));

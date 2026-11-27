@@ -31,6 +31,8 @@ export interface HeldClock extends Timekeeper {
   burn(ms: number): void;
   // How many timers are armed: a cancelled or fired one-shot is not.
   pending(): number;
+  // Fire the next held timer only if it is due by this monotonic reading.
+  advanceNext(deadline: number): boolean;
   // Cumulative work, including a timer armed and cleared between two readings.
   activity(): { armed: number; fired: number };
   // Puts a file's modification time at this clock's reading, so a check that
@@ -126,6 +128,12 @@ export function heldClock(
       elapsed += span(ms);
     },
     pending: () => timers.size,
+    advanceNext(deadline) {
+      const due = nextDue(deadline);
+      if (!due) return false;
+      fire(due);
+      return true;
+    },
     activity: () => ({ armed, fired }),
     pinMtime: (file) => {
       const at = new Date(start.getTime() + elapsed);

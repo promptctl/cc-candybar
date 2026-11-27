@@ -1,3 +1,4 @@
+import { OWNER_CONTEXT } from "../../src/proc/launcher.js";
 import { processLauncher } from "./host";
 
 // [LAW:one-source-of-truth] How a release before tokens could be spelled any
@@ -6,7 +7,7 @@ import { processLauncher } from "./host";
 // Spelled out here rather than reached through the module, so a change to how
 // the module spells a token is checked against what older daemons still read.
 export async function oldReleaseStartTime(pid: number): Promise<string> {
-  const res = await processLauncher.launch({
+  const res = await processLauncher.launch({ ...OWNER_CONTEXT,
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid)],
     category: "process-fingerprint",

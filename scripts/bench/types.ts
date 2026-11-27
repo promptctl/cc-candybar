@@ -5,6 +5,7 @@
 // [LAW:one-type-per-behavior] A case that differs from another only in a
 // number or a path is the same benchmark with other data.
 
+import type { World } from "../../src/host";
 // What a statusline tick pays, in the order it pays it, then what a click pays.
 export const GROUPS = ["stages", "sources", "wire", "client", "click"] as const;
 export type Group = (typeof GROUPS)[number];
@@ -35,6 +36,7 @@ export type Outcome =
   | { readonly kind: "skipped"; readonly reason: string };
 
 export interface Plan {
+  readonly world: World;
   // The repetitions this run times: the benchmark's own count, scaled.
   readonly samples: number;
   readonly note: (line: string) => void;

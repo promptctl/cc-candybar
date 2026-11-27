@@ -37,7 +37,7 @@ import { buildRig } from "./helpers/rig";
 import { locations } from "../src/daemon/paths";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
-import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";

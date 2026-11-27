@@ -22,9 +22,9 @@
 // exception is a group the launcher was refused to signal: `signal-refused`).
 // `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
 // outliving its caller — the daemon-handoff escape hatch, used only by the
-// daemon-acquisition path. `launchJobSync` is the *job*: it outlives its
-// launcher too, but its output and its verdict are files it owns, so any
-// process can read how it ended. There is no `detached: boolean` flag on
+// daemon-acquisition path. `launchJobSync` holds a job's gate until release.
+// A released job outlives the launcher and writes its output and verdict to
+// files, so any process can read how it ended. There is no `detached: boolean` flag on
 // `LaunchOpts` ([LAW:no-mode-explosion]); the three lifetimes are three
 // functions with three return contracts, so an unwaited helper that survives a
 // render frame is unrepresentable here rather than forbidden by convention.
@@ -49,6 +49,7 @@ import { publishByLink } from "../utils/atomic-write";
 import { withoutRepositoryScopedEnv } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
+import { INHERIT_FROM_OWNER, OWNER_CONTEXT } from "./launcher";
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
 import type {
   LaunchCategory,
@@ -67,12 +68,17 @@ import type {
   ChannelOpts,
 } from "./launcher";
 
+function childDirectory(cwd: LaunchOpts["cwd"]): string | undefined {
+  return cwd === INHERIT_FROM_OWNER ? undefined : cwd;
+}
+
 // [LAW:no-silent-failure] A spawn whose `cwd` is gone fails with the SAME
 // errno as a missing binary — Node words it `spawn /bin/sh ENOENT`, blaming
 // the shell. The one place a spawn failure becomes text names the directory
 // instead when that is what is missing (a removed worktree the session is
 // still rendering from). Measured only on the failure path.
-function spawnErrorText(err: unknown, cwd: string | undefined): string {
+function spawnErrorText(err: unknown, chosen: LaunchOpts["cwd"]): string {
+  const cwd = childDirectory(chosen);
   // isNativeError, not instanceof: the realm-proof test (Node's own errors
   // fail `instanceof Error` under a vm context such as Jest's).
   if (!types.isNativeError(err)) return String(err);
@@ -136,7 +142,9 @@ function childEnv(
 ): NodeJS.ProcessEnv {
   // [LAW:single-enforcer] The one strip; REPOSITORY_SCOPED_ENV says why.
   const env: NodeJS.ProcessEnv = {
-    ...(opts.environment ?? withoutRepositoryScopedEnv(scope.inherited)),
+    ...(opts.environment === INHERIT_FROM_OWNER
+      ? withoutRepositoryScopedEnv(scope.inherited)
+      : opts.environment),
   };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
@@ -379,13 +387,14 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   let line: SpawnedChild;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
-      env: childEnv(state.scope, {}),
+      cwd: childDirectory(OWNER_CONTEXT.cwd),
+      env: childEnv(state.scope, OWNER_CONTEXT),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });
   } catch (err) {
     stats?.onEnd("lifeline", elapsedMs(clock, t0));
-    setFault(state, `did not start: ${spawnErrorText(err, undefined)}`);
+    setFault(state, `did not start: ${spawnErrorText(err, OWNER_CONTEXT.cwd)}`);
     return null;
   }
   stats?.onEnd("lifeline", elapsedMs(clock, t0));
@@ -685,7 +694,7 @@ async function launchPiped(
     let child: SpawnedChild;
     try {
       child = spawner.spawn(opts.bin, opts.args ?? [], {
-        cwd: opts.cwd,
+        cwd: childDirectory(opts.cwd),
         env: childEnv(state.scope, opts),
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
@@ -985,7 +994,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
 
   try {
     const result = state.spawner.spawnSync(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
+      cwd: childDirectory(opts.cwd),
       env: childEnv(state.scope, opts),
       input: opts.stdinInput,
       timeout:
@@ -1064,7 +1073,7 @@ function launchDetachedSyncInner(
   let child;
   try {
     child = state.spawner.spawn(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
+      cwd: childDirectory(opts.cwd),
       env: childEnv(state.scope, opts),
       detached: true,
       stdio: "ignore",
@@ -1117,9 +1126,9 @@ const JOB_SCRIPT =
   `echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; ` +
   `rm -f "$status.$$"`;
 
-// [LAW:single-enforcer] The one launch with the job's lifetime. Detached, so
-// it leads its own group, which nothing aimed at the launcher reaches; never
-// guarded by the lifeline; unref'd, so it never holds the launcher open.
+// [LAW:single-enforcer] A job leads its own group. Its start gate belongs to
+// this launcher until release transfers control to the job. Its files carry
+// the verdict across a launcher restart.
 function launchJob(
   state: LaunchState,
   opts: LaunchOpts,
@@ -1146,7 +1155,7 @@ function launchJob(
         ...(opts.args ?? []),
       ],
       {
-        cwd: opts.cwd,
+        cwd: childDirectory(opts.cwd),
         env: childEnv(state.scope, opts),
         detached: true,
         stdio: ["pipe", "ignore", "ignore"],
@@ -1180,11 +1189,31 @@ function launchJob(
   }
   child.unref();
   gate.unref();
+  // [LAW:no-ambient-temporal-coupling] A gated job belongs to its launcher
+  // until release transfers it. Closing the owner before that transfer sends
+  // EOF with no grant, and settlement waits for the unopened gate to exit.
+  const closed = new Promise<void>((resolve) =>
+    child.once("close", () => {
+      state.inFlight.delete(withdraw);
+      state.ending.delete(closed);
+      resolve();
+    }),
+  );
+  const withdraw = () => {
+    if (!state.inFlight.delete(withdraw)) return;
+    child.ref();
+    state.ending.add(closed);
+    gate.end();
+  };
+  state.inFlight.add(withdraw);
+  if (state.scope.signal.aborted) withdraw();
   return {
     ok: true,
     pid,
-    release: () => gate.end("go\n"),
-    withdraw: () => gate.end(),
+    release() {
+      if (state.inFlight.delete(withdraw)) gate.end("go\n");
+    },
+    withdraw,
   };
 }
 
@@ -1297,8 +1326,8 @@ export interface TestableLauncher extends Launcher {
 // any of the rest of its scope. Nothing here is read from the process, so a
 // launcher a process main builds (bar-pane, the CLI, the daemon's shell before it
 // has a daemon) and the daemon's own differ only in what they are given.
-export type LaunchOwner = Pick<LaunchScope, "inherited"> &
-  Partial<Omit<LaunchScope, "inherited" | "clock">>;
+export type LaunchOwner = Pick<LaunchScope, "inherited" | "signal"> &
+  Partial<Pick<LaunchScope, "stats" | "observeWarnings">>;
 
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.
@@ -1369,7 +1398,6 @@ function launcherWithState(
               : lifelineMessage(change.fault);
         if (message !== null) process.emitWarning(message);
       },
-      signal: new AbortController().signal,
       ...owner,
       clock,
     },

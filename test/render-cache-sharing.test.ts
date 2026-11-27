@@ -2,10 +2,7 @@ import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-w
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
-import {
-  unscriptedLauncher,
-  unscriptedRuns,
-} from "../scripts/lib/draw-fixtures/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";

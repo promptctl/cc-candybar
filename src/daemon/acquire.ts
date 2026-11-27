@@ -1,3 +1,4 @@
+import { OWNER_CONTEXT } from "../proc/launcher.js";
 import fs from "node:fs";
 import path from "node:path";
 import type { Host, World } from "../host";
@@ -484,6 +485,7 @@ function spawnDaemonDetachedReal(
   // reported as success. The previous `void launch({detached:true})` form
   // discarded the Promise and unconditionally returned true.
   const result = launcher.launchDetachedSync({
+    ...OWNER_CONTEXT,
     bin: node,
     args: daemonArgs(script, host.env),
     category: "daemon-spawn",

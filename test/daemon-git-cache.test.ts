@@ -1,3 +1,4 @@
+import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import {
   manualWatcherRegistry,
   manualDirectoryWatches,
@@ -10,7 +11,7 @@ import {
   type ReportThrow,
 } from "../src/time";
 import fs from "node:fs";
-import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+
 import os from "node:os";
 import path from "node:path";
 import {
@@ -174,7 +175,7 @@ function makeCache(
     report?: ReportThrow;
   } = {},
 ) {
-  const inner = new StubGitService(unscriptedLauncher);
+  const inner = new StubGitService(unscriptedLauncher());
   const logs: string[] = [];
   let throwOn = opts.throwOn;
   const clock = clockOver(systemTimers, opts.report ?? rethrowing);
@@ -1276,7 +1277,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 // never the watch.
 describe("GitDataProvider holds a repo's watch across its values", () => {
   function counted(opts: { maxRepos?: number; periodMs?: number } = {}) {
-    const inner = new StubGitService(unscriptedLauncher);
+    const inner = new StubGitService(unscriptedLauncher());
     const counters = {
       watchersOpened: 0,
       watchersClosed: 0,

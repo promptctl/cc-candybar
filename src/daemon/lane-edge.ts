@@ -1,7 +1,7 @@
 import { matchesLegacyCommand, legacyPeerOn } from "./legacy-bar-pane.js";
 import { INSTANCE, PANE_ID } from "./pane-subscription.js";
 import { runTmuxAsync } from "../proc/tmux.js";
-import type { Launcher } from "../proc/launcher.js";
+import { OWNER_CONTEXT, type Launcher } from "../proc/launcher.js";
 import { shellWord } from "../shell-word.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import { digestOf } from "../utils/plain.js";
@@ -102,6 +102,7 @@ export function productionBarPaneEdge(launcher: Launcher): BarPaneEdge {
       if (!INSTANCE.test(instance))
         throw new Error("invalid bar pane instance");
       const which = await launcher.launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: ["-c", "command -v tmux"],
         category: "lane.tmux",

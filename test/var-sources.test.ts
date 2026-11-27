@@ -1,3 +1,4 @@
+import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import {
   manualWatcherRegistry,
   manualDirectoryWatches,
@@ -45,7 +46,6 @@ import { MIN_SHELL_TTL_MS } from "../src/daemon/foundations/judge-run";
 import { PendingValueError } from "../src/var-system/types";
 import { timeoutSignal } from "../src/time";
 import {
-  fakeLauncher,
   turns,
 } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
@@ -1013,7 +1013,7 @@ describe("SourceRegistry — shell: TTL floor", () => {
 describe("SourceRegistry — shell: read timeout", () => {
   it("a command past the timeout is failed in its read phase, its child ended, and the next period starts clean", async () => {
     const clock = heldClock(new Date(0));
-    const { launcher, spawner, started } = fakeLauncher(clock);
+    const { launcher, spawner, started } = fixtureFakeLauncher(clock, {});
     spawner.program(shell("sleep 99"), hangs());
     const store = new VariableStore(clock);
     const registry = registryOver(
@@ -1069,7 +1069,7 @@ describe("SourceRegistry — shell: read timeout", () => {
   // end in, swallowed by the run loop.
   it("a run the timeout ends after dispose publishes nothing and rejects with nothing unhandled", async () => {
     const clock = heldClock(new Date(0));
-    const { launcher, spawner, started } = fakeLauncher(clock);
+    const { launcher, spawner, started } = fixtureFakeLauncher(clock, {});
     spawner.program(shell("sleep 99"), ignoring(["SIGTERM"], hangs()));
     const store = new VariableStore(clock);
     const registry = registryOver(
@@ -1119,7 +1119,7 @@ describe("SourceRegistry — shell: a failed read carries stderr", () => {
   // the clock run past the read's timeout.
   async function failedRead(command: string, behaviour: Behaviour) {
     const clock = heldClock(new Date(0));
-    const { launcher, spawner } = fakeLauncher(clock);
+    const { launcher, spawner } = fixtureFakeLauncher(clock, {});
     spawner.program(shell(command), behaviour);
     const store = new VariableStore(clock);
     const registry = registryOver(
@@ -2938,7 +2938,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
     "runs once for a changed observation: $transition",
     async ({ names, start, move }) => {
       const clock = heldClock(new Date(0));
-      const { launcher, spawner, started } = fakeLauncher(clock);
+      const { launcher, spawner, started } = fixtureFakeLauncher(clock, {});
       const store = new VariableStore(clock);
       const registry = registryOver(
         store,

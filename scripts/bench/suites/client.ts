@@ -94,7 +94,7 @@ const client = (
   async run(plan) {
     const found = command();
     if (typeof found === "string") return skipped(found);
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       const session = world.session(
         "a",
         { files: 200, commits: 20, modified: 8, untracked: 4 },

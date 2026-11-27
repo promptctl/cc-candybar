@@ -1,3 +1,4 @@
+import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // brandon-unfiled-3248.8ro6 §4e: a session's view says when what it draws
 // from moved, and a feed showing the session wakes on nothing else of its
@@ -8,7 +9,7 @@ import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-w
 import fs from "node:fs";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
-import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+
 import { heldRuns } from "../scripts/lib/draw-fixtures/held-runs";
 import os from "node:os";
 import path from "node:path";
@@ -76,7 +77,7 @@ function setUp() {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const runs = heldRuns(unscriptedLauncher, TEST_ENVIRONMENT, cleanups);
+  const runs = heldRuns(unscriptedLauncher(), TEST_ENVIRONMENT, cleanups);
   const changed: string[] = [];
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];

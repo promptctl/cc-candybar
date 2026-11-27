@@ -2,6 +2,7 @@
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
+import { launcherIn, OWNER_CONTEXT } from "../src/proc/launcher";
 import { fixtureLauncher } from "./helpers/host";
 import {
   CLICK_PROGRAM_TIMEOUT_MS,
@@ -17,7 +18,10 @@ describe("clickLaunch", () => {
     await expect(
       clickLaunch(
         clickLaunchVia(
-          fixtureLauncher({ inherited: process.env }),
+          launcherIn(
+            fixtureLauncher({ inherited: process.env }),
+            OWNER_CONTEXT,
+          ),
         ),
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
@@ -30,7 +34,9 @@ describe("clickLaunch", () => {
     ).resolves.toMatchObject({
       outcome: {
         kind: "failed",
-        reason: expect.stringMatching(/^opening https:\/\/example\.com failed \(.*ENOENT\)$/),
+        reason: expect.stringMatching(
+          /^opening https:\/\/example\.com failed \(.*ENOENT\)$/,
+        ),
       },
     });
   });
@@ -63,11 +69,14 @@ describe("clickLaunch", () => {
   test("keeps the launch timeout and returns its failure", async () => {
     const clock = heldClock(new Date(0));
     const closing = new AbortController();
-    const { launcher, spawner } = fakeLauncher(clock, { signal: closing.signal });
+    const { launcher, spawner } = fakeLauncher(clock, {
+      inherited: {},
+      signal: closing.signal,
+    });
     spawner.program((bin) => bin === "/example/opener", hangs());
     try {
       const result = clickLaunch(
-        clickLaunchVia(launcher),
+        clickLaunchVia(launcherIn(launcher, OWNER_CONTEXT)),
         { bin: "/example/opener", category: "click.open" },
         "opening a file",
         "opened",
@@ -82,7 +91,7 @@ describe("clickLaunch", () => {
     } finally {
       closing.abort();
       await clock.settle(0);
-      await launcher.settled();
+      expect(await launcher.settled()).toEqual({ unreaped: [] });
     }
   });
 });

@@ -12,6 +12,7 @@
 // latencies are the laptop's. A benchmark that cannot vouch for its own
 // samples is a failure, and the run exits non-zero.
 
+import { processWorld } from "../../src/host";
 import fs from "node:fs";
 import { parseArgs } from "node:util";
 
@@ -61,11 +62,13 @@ const rows: Report["rows"][number][] = [];
 const skipped: Report["skipped"][number][] = [];
 const failed: Report["failed"][number][] = [];
 
+const world = processWorld();
 for (const [i, b] of selected.entries()) {
   const samples = Math.max(MIN_SAMPLES, Math.round(b.samples * scale));
   console.error(`[${i + 1}/${selected.length}] ${b.id} (${samples})`);
   try {
     const outcome = await b.run({
+      world,
       samples,
       note: (line) => console.error(`    ${line}`),
     });

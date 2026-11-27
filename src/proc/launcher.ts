@@ -78,13 +78,23 @@ export const LAUNCH_CATEGORIES = [
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];
 
-export interface LaunchOpts {
+// [LAW:types-are-the-program] Inheriting from the launcher's owner is a
+// caller's explicit choice. An empty supplied environment stays empty.
+export const INHERIT_FROM_OWNER = Symbol("inherit from launcher owner");
+export interface LaunchContext {
+  readonly cwd: string | typeof INHERIT_FROM_OWNER;
+  readonly environment:
+    | Readonly<Record<string, string>>
+    | typeof INHERIT_FROM_OWNER;
+}
+export const OWNER_CONTEXT = Object.freeze({
+  cwd: INHERIT_FROM_OWNER,
+  environment: INHERIT_FROM_OWNER,
+} as const);
+
+export interface LaunchOpts extends LaunchContext {
   bin: string;
   args?: string[];
-  cwd?: string;
-  // The environment the child starts from in place of the launcher's
-  // inherited one: a session's, for a program the host runs for a session.
-  environment?: Readonly<Record<string, string>>;
   // Set over the environment the child starts from, as given; null unsets.
   envOverlay?: Readonly<Record<string, string | null>>;
   timeoutMs?: number;
@@ -99,6 +109,19 @@ export interface AsyncLaunchOpts extends LaunchOpts {
   // The caller's cancellation: aborting it terminates the child (and its
   // group); the result is `reason: "aborted"` once the child is reaped.
   signal?: AbortSignal;
+}
+
+// Fixed tools get a launcher already bound to the context their caller owns.
+export interface ContextualLauncher {
+  readonly launch: (
+    opts: Omit<AsyncLaunchOpts, keyof LaunchContext>,
+  ) => Promise<LaunchResult>;
+}
+export function launcherIn(
+  launcher: Pick<Launcher, "launch">,
+  context: LaunchContext,
+): ContextualLauncher {
+  return { launch: (opts) => launcher.launch({ ...opts, ...context }) };
 }
 
 export type LaunchResult =
@@ -272,7 +295,8 @@ export type JobLaunch =
       readonly ok: true;
       // Leads the job's process group, as every launched child does.
       readonly pid: number;
-      // Opens the start gate: the program runs.
+      // The launcher owns an unopened gate. Release transfers ownership and
+      // starts the program, which can then outlive the launcher.
       release(): void;
       // Closes the gate unopened: the sh exits, and the program never runs.
       withdraw(): void;

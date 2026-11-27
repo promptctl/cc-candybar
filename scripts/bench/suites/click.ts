@@ -37,7 +37,7 @@ import { APP_NAME, URL_SCHEME } from "../../../src/click/wire.js";
 import { fetchStats } from "../../../src/daemon/client-stats.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import { logPath } from "../../../src/daemon/paths.js";
-import { processWorld } from "../../../src/host.js";
+import { type World } from "../../../src/host.js";
 import { fieldOf, fieldsOf } from "../../../src/utils/logfmt.js";
 import { atOf, msOf } from "../log-event.js";
 import { sleep } from "../measure.js";
@@ -156,10 +156,9 @@ async function click(log: string, verb: string): Promise<Click> {
 // once a benchmark.
 let verdict: Promise<string | null> | null = null;
 
-function cannotMeasure(): Promise<string | null> {
+function cannotMeasure({ host, clock }: World): Promise<string | null> {
   verdict ??= (async () => {
     if (process.platform !== "darwin") return "the scheme is macOS-only";
-    const { host, clock } = processWorld();
     const { CC_CANDYBAR_SOCKET: _override, ...env } = host.env;
     const stats = await fetchStats({ host: { ...host, env }, clock });
     if (stats.kind !== "ok")
@@ -180,9 +179,9 @@ async function clicks(
   plan: Plan,
   before: () => Promise<void>,
 ): Promise<Outcome> {
-  const reason = await cannotMeasure();
+  const reason = await cannotMeasure(plan.world);
   if (reason !== null) return skipped(reason);
-  const log = logPath(processWorld().host);
+  const log = logPath(plan.world.host);
   const run = Date.now().toString(36);
   const samples: Click[] = [];
   for (let i = 0; i < plan.samples; i++) {

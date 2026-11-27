@@ -1,4 +1,9 @@
-import type { Launcher, LaunchOpts, LaunchResult } from "../proc/launcher";
+import {
+  OWNER_CONTEXT,
+  type Launcher,
+  type LaunchOpts,
+  type LaunchResult,
+} from "../proc/launcher";
 
 // ─── Process start-time fingerprint ──────────────────────────────────────────
 //
@@ -72,6 +77,7 @@ export const PROCESS_START_ENV = { LC_ALL: "C", TZ: "UTC" } as const;
 
 function startTimeCommand(pid: number): LaunchOpts {
   return {
+    ...OWNER_CONTEXT,
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid)],
     category: "process-fingerprint",

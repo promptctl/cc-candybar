@@ -8,7 +8,7 @@ import {
   readSync,
 } from "node:fs";
 import path from "node:path";
-import type { Launcher } from "../proc/launcher.js";
+import { OWNER_CONTEXT, type Launcher } from "../proc/launcher.js";
 import type { WatcherRegistry } from "./cache/watchers.js";
 import { watchTargetsOf } from "./foundations/watch-targets.js";
 import { parseSessionId, type SessionId } from "./foundations/session-id.js";
@@ -193,6 +193,7 @@ export function createTmuxSourceEdges(
       if (!/^\/dev\/(?:tty[a-zA-Z0-9]+|pts\/\d+)$/.test(pane.tty))
         return unknown("invalid source pane tty");
       const result = await launcher.launch({
+        ...OWNER_CONTEXT,
         bin: "ps",
         args: [
           "-t",

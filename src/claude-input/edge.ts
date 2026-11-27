@@ -1,5 +1,5 @@
-import type { LaunchCategory, Launcher } from "../proc/launcher.js";
-import { runTmuxAsync, type TmuxRun } from "../proc/tmux.js";
+import type { LaunchCategory, ContextualLauncher } from "../proc/launcher.js";
+import { runTmuxIn, type TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import { type PaneSnapshot } from "./prompt-screen.js";
 import type { SlashLine } from "./slash-line.js";
@@ -11,19 +11,19 @@ const THEN = ";";
 const BUFFER = "cc-candybar-slash";
 
 async function tmux(
-  launcher: Pick<Launcher, "launch">,
+  launcher: ContextualLauncher,
   hint: TmuxHint,
   category: LaunchCategory,
   args: string[],
   stdinInput?: string,
 ): Promise<Exclude<TmuxRun, { kind: "failed" }>> {
-  const run = await runTmuxAsync(launcher, hint, category, args, stdinInput);
+  const run = await runTmuxIn(launcher, hint, category, args, stdinInput);
   if (run.kind === "failed") throw new Error(run.reason);
   return run;
 }
 
 async function read(
-  launcher: Pick<Launcher, "launch">,
+  launcher: ContextualLauncher,
   hint: TmuxHint,
 ): Promise<PaneSnapshot> {
   const run = await tmux(launcher, hint, "claude-input.read", [
@@ -81,7 +81,7 @@ export function pasteLineArgs(
 // ctrl+s stashes a draft (a no-op on an empty input) and Claude Code restores
 // it after the submit.
 async function type(
-  launcher: Pick<Launcher, "launch">,
+  launcher: ContextualLauncher,
   hint: TmuxHint,
   line: SlashLine,
 ): Promise<Typed> {
@@ -101,7 +101,7 @@ async function type(
 }
 
 export function productionClaudeInputEdge(
-  launcher: Pick<Launcher, "launch">,
+  launcher: ContextualLauncher,
 ): ClaudeInputEdge {
   return {
     read: (hint) => read(launcher, hint),

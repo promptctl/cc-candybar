@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import { locations } from "../../../src/daemon/paths.js";
-import { processWorld } from "../../../src/host.js";
+import { type World } from "../../../src/host.js";
 import path from "node:path";
 
 import {
@@ -53,13 +53,14 @@ const EXAMPLES = fs
 // [LAW:no-silent-failure] A config that warns or drops a plugin draws a bar
 // other than the one measured; the benchmark stops rather than time it.
 async function prepared(
+  machine: World,
   layers: readonly string[],
   cwd: string,
 ): Promise<PreparedConfig> {
   const warnings: string[] = [];
   // An example file is explicit: no repository supplies it.
   const config = await prepareConfig(
-    processWorld(),
+    machine,
     layers.map(homeLayer),
     cwd,
     warnings,
@@ -105,13 +106,14 @@ interface Draw {
 // Draws at the advancing second a real session's ticks arrive at, so a draw
 // is never the repeat of the instant before it.
 async function drawing(
+  machine: World,
   draw: Draw,
   samples: number,
   what: string,
 ): Promise<{ ms: number[]; bytes: number }> {
   const cwd = scratchDir("ccbn-stage");
   try {
-    const config = await prepared(draw.layers, cwd);
+    const config = await prepared(machine, draw.layers, cwd);
     try {
       const effective = resolveEffectiveGlobals(
         config.config,
@@ -147,7 +149,7 @@ const drawBenchmark = (
   about: `${about}; ${ABOUT}`,
   samples,
   async run(plan) {
-    const { ms, bytes } = await drawing(draw, plan.samples, id);
+    const { ms, bytes } = await drawing(plan.world, draw, plan.samples, id);
     return measured([{ name: "draw", samples: ms }], { bytes });
   },
 });
@@ -162,7 +164,7 @@ export const STAGES: readonly Benchmark[] = [
       const cwd = scratchDir("ccbn-stage");
       try {
         const ms = await repeat(plan.samples, () => {
-          const locs = locations(processWorld().host);
+          const locs = locations(plan.world.host);
           loadSnapshot(
             snapshotOf(
               sessionPlugins(installedRoots(locs), diskFiles.checkout(cwd)),
@@ -189,7 +191,7 @@ export const STAGES: readonly Benchmark[] = [
       const cwd = scratchDir("ccbn-stage");
       try {
         const ms = await repeat(plan.samples, async () => {
-          (await prepared([], cwd))[Symbol.dispose]();
+          (await prepared(plan.world, [], cwd))[Symbol.dispose]();
         });
         return measured([{ name: "prepare", samples: ms }]);
       } finally {
@@ -208,7 +210,7 @@ export const STAGES: readonly Benchmark[] = [
         let bytes = 0;
         const ms: number[] = [];
         for (let i = 0; i < plan.samples; i++) {
-          const config = await prepared([], cwd);
+          const config = await prepared(plan.world, [], cwd);
           try {
             const effective = resolveEffectiveGlobals(
               config.config,
