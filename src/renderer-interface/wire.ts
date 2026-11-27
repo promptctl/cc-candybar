@@ -15,9 +15,9 @@ import { storedStateOf } from "./stored-state.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import {
   CrossedFailure,
-  failureOf,
   rendererFailureOf,
 } from "../daemon/foundations/verb-error.js";
+import { failureOf } from "../daemon/foundations/host-failure.js";
 import type { Crosses } from "./crosses.js";
 import type { LogLine } from "../utils/logger.js";
 import {
@@ -33,7 +33,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 22;
+export const RENDERER_WIRE_VERSION = 23;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw

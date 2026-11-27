@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
+import { portableRenderer } from './scripts/lib/portable-renderer.ts';
 import { mayImport, mayLoadRendererModule, zoneOf } from './scripts/import-zones.mjs';
 import pkg from './package.json' with { type: 'json' };
 import { sourceDigest } from './src/source-digest.ts';
@@ -35,11 +36,6 @@ function sourceDigestPlugin() {
 	};
 }
 
-// [LAW:one-source-of-truth] Single build artifact — the Node bundle the
-// daemon and CLI both ship as `dist/index.mjs`. The browser-target output
-// was the entry point for the deleted `src/browser.ts` library surface
-// (bzh.2 retired it alongside the legacy renderer; there is no longer a
-// public TypeScript API beyond the CLI).
 export default defineConfig([{
 	entry: ['src/index.ts'],
 	format: 'esm',
@@ -52,7 +48,7 @@ export default defineConfig([{
 	// URL handler copy can run without node_modules.
 	noExternal: [/./],
 	define,
-	plugins: [sourceDigestPlugin(), {
+	plugins: [sourceDigestPlugin(), portableRenderer(ROOT), {
 		name: 'cc-candybar:renderer-boundary',
 		// [LAW:effects-at-boundaries] Only the renderer's graph is bounded in
 		// this shared CLI bundle. Follow packages and dynamic imports as well.

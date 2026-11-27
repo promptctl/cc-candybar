@@ -4,11 +4,9 @@ import type { RenderOrigin } from "../../src/config-hint";
 import { createGates } from "../../src/daemon/foundations/gates";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import {
-  BadVerbArgs,
-  CrossedFailure,
-  failureOf,
-} from "../../src/daemon/foundations/verb-error";
+import { rendererFailureOf, BadVerbArgs,
+  CrossedFailure } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import {
   timed,
@@ -538,4 +536,13 @@ test("a failed prune of an offered config is retried even when the declared orig
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
   expect(fixture.cache.holdsConfig(origin)).toBe(false);
   expect(fixture.subscriptions.map(({ configs }) => configs)).toEqual([[]]);
+});
+
+test("projecting a thrown value never evaluates its metadata accessors", () => {
+  const get = jest.fn(() => { throw new Error("side effect in diagnostic"); });
+  const error = Object.defineProperties(new Error("authored"), {
+    cause: { get }, metadata: { value: Object.defineProperty({}, "value", { enumerable: true, get }), enumerable: true },
+  });
+  expect(rendererFailureOf(error).detail).toContain("value: [Accessor]");
+  expect(get).not.toHaveBeenCalled();
 });

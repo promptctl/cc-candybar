@@ -75,3 +75,16 @@ test.each([
 ])("rejects $problem", async ({ lines, problem }) => {
   await expect(replayRecording(lines)).rejects.toThrow(problem);
 });
+
+test("historical wire 22 recordings replay until an insertion needs its missing seed", async () => {
+  const historical = { ...boot, wireVersion: 22 };
+  const stats = await recordedStats();
+  await expect(replayRecording(linesOf(historical, stats, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  const input = { ...stats.input, event: { kind: "click", context: null, click: {
+    scope: "session", session: "session", verb: "apply-layout-op", steps: [
+      { kind: "session", verb: "apply-layout-op", args: ["user", "presets.default.root", "insert:added:anchor:after"] },
+    ],
+  } } };
+  await expect(replayRecording(linesOf(historical, {...stats, input}, { ...end, turns: 1 })))
+    .rejects.toThrow("recording line 2 cannot reproduce a layout insertion without its placement seed");
+});

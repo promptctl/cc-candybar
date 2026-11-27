@@ -16,7 +16,8 @@ import {
   encodedOf,
   recordMs,
 } from "./foundations/durations.js";
-import { failureOf, type Failure } from "./foundations/verb-error.js";
+import { type Failure } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 
 // How long a `due` that failed holds every later wake off when its turn asks
 // for a tick no later than its own: a renderer whose due turn throws before

@@ -1,4 +1,4 @@
-import { windowRuntime } from "./helpers/window-runtime";
+import { packagedRuntime } from "./helpers/packaged-runtime";
 // candybar-daemon-health-ajx0.co4 — `cc-candybar install` assembles the URL
 // handler app around the prebuilt Swift forwarder: the bundle on disk, the
 // commands it runs and their order (sign, quit the resident instance,
@@ -40,7 +40,7 @@ describe("assembling the URL handler app", () => {
   // the binary sits where `just install-url-handler` leaves it.
   const checkout = (forwarder: string | null): string => {
     const root = path.join(home, "checkout");
-    windowRuntime(root);
+    packagedRuntime(root);
     for (const dir of ["dist/cc-extra", "src", "bin"]) {
       fs.mkdirSync(path.join(root, dir), { recursive: true });
     }

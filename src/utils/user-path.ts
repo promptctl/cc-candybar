@@ -1,7 +1,7 @@
 // A path a user writes — in an environment variable, a flag, a CLI argument,
 // a config file — made into the absolute path it names.
 
-import path from "node:path";
+import path from "path-browserify";
 
 export type UserHome = string | (() => string);
 
@@ -14,6 +14,16 @@ function expandHome(p: string, home: UserHome): string {
   return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
     ? (typeof home === "function" ? home() : home) + p.slice(1)
     : p;
+}
+
+// [LAW:effects-at-boundaries] A client cwd or declaring directory owns a
+// relative path. Looking up a renderer process's cwd would change its meaning.
+export function resolveFrom(base: string, value: string): string {
+  if (!path.isAbsolute(value) && !path.isAbsolute(base))
+    throw new Error(
+      `relative path ${JSON.stringify(value)} needs an absolute base, got ${JSON.stringify(base)}`,
+    );
+  return path.resolve(base, value);
 }
 
 // [LAW:single-enforcer] The one rule for a path a user writes — the
@@ -30,7 +40,7 @@ export function resolveUserPath(
   p: string,
   home: UserHome,
 ): string {
-  return path.resolve(base, expandHome(p, home));
+  return resolveFrom(base, expandHome(p, home));
 }
 
 // [LAW:single-enforcer] An explicit config path, whichever spelling carried

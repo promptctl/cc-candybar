@@ -19,7 +19,8 @@ import type { DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { clickLaunch, type ClickLaunch } from "./foundations/click-launch.js";
-import { DaemonClosing, failureOf } from "./foundations/verb-error.js";
+import { DaemonClosing } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 import type { RunAct, RunEnd } from "./runs.js";
 import type { Timekeeper } from "../time.js";
 

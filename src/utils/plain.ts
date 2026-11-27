@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Text } from "./sha256.js";
 
 // [LAW:types-are-the-program] A value JSON writes as itself: primitives,
 // arrays, and objects whose fields are plain, optional fields included. A Set,
@@ -43,9 +43,7 @@ export type Projection<T> = { readonly [K in keyof T]-?: unknown };
 // `T & Plain<T>` because a constraint `T extends Plain<T>` is circular
 // (TS2313).
 export function digestOf<T>(value: T & Plain<T>): string {
-  return createHash("sha256")
-    .update(JSON.stringify(canonical(value)))
-    .digest("hex");
+  return sha256Text(JSON.stringify(canonical(value)));
 }
 
 function canonical(value: unknown): unknown {

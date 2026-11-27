@@ -1,4 +1,5 @@
-import { windowRuntime } from "./helpers/window-runtime";
+import { rendererAssetName, rendererAssetOf, RENDERER_DIGEST_FILE } from "../src/install/renderer-asset";
+import { packagedRuntime } from "./helpers/packaged-runtime";
 // brandon-menus-sjhy.amf — lane B restarts Claude Code under the attach
 // launcher beside the bundle (src/attach-launcher.ts), so an install stages
 // it with the bundle: the daemon an install starts runs the staged bundle.
@@ -36,7 +37,7 @@ describe("staging the runtime", () => {
   // beside it, the node shim.
   const pkg = (launcher: string | null, preload: string | null = "// preload\n"): string => {
     const root = path.join(home, "pkg");
-    windowRuntime(root);
+    packagedRuntime(root);
     fs.mkdirSync(path.join(root, "dist"), { recursive: true });
     fs.mkdirSync(path.join(root, "bin"), { recursive: true });
     fs.writeFileSync(path.join(root, "dist", "index.mjs"), "// bundle\n");
@@ -101,6 +102,35 @@ describe("staging the runtime", () => {
     fs.writeFileSync(attachPreloadOf(path.join(home, "pkg", "dist", "index.mjs")), "// preload v2\n");
     runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage, process.platform);
     expect(fs.readFileSync(attachPreloadOf(staged.distPath), "utf8")).toBe("// preload v2\n");
+  });
+
+  test("an upgrade retains the previous renderer and collects older modules", () => {
+    const source = pkg("// launcher");
+    const dist = path.join(stage, "dist");
+    const installVersion = (version: string) => {
+      packagedRuntime(path.dirname(path.dirname(source)), version);
+      runStageRuntime(source, stage, process.platform);
+      return rendererAssetName(rendererAssetOf(dist).digest);
+    };
+    const first = installVersion("first");
+    const previous = installVersion("previous");
+    const current = installVersion("current");
+    expect(fs.existsSync(path.join(dist, first))).toBe(false);
+    expect(fs.existsSync(path.join(dist, previous))).toBe(true);
+    expect(fs.existsSync(path.join(dist, current))).toBe(true);
+  });
+
+  test("a damaged renderer leaves the installed runtime intact", () => {
+    const source = pkg("// launcher");
+    const destination = runStageRuntime(source, stage, process.platform);
+    const dist = path.dirname(source);
+    const asset = rendererAssetOf(dist);
+    fs.writeFileSync(path.join(dist, rendererAssetName(asset.digest)), "damaged");
+    expect(() => runStageRuntime(source, stage, process.platform)).toThrow(/does not match its digest/);
+    expect(rendererAssetOf(path.dirname(destination.distPath))).toEqual(asset);
+    fs.unlinkSync(path.join(dist, RENDERER_DIGEST_FILE));
+    expect(() => runStageRuntime(source, stage, process.platform)).toThrow(/renderer\.sha256/);
+    expect(rendererAssetOf(path.dirname(destination.distPath))).toEqual(asset);
   });
 
   test("a package with no preload is refused, naming where it looked", () => {

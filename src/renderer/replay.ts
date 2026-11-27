@@ -1,3 +1,5 @@
+import { VERB_APPLY_LAYOUT_OP } from "../click/wire.js";
+import { decodeLayoutOp } from "../config/layout-ops.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import type {
   Event,
@@ -134,6 +136,23 @@ function inputOf(value: unknown, line: number): EventInput {
     fields.some((field) => !Object.hasOwn(event, field))
   )
     throw new Error(`recording line ${line} has an invalid renderer event`);
+  if (
+    event.kind === "click" &&
+    event.placementSeed === undefined &&
+    isPlainObject(event.click) &&
+    Array.isArray(event.click.steps) &&
+    event.click.steps.some(
+      (step: unknown) =>
+        isPlainObject(step) &&
+        step.verb === VERB_APPLY_LAYOUT_OP &&
+        Array.isArray(step.args) &&
+        typeof step.args[2] === "string" &&
+        decodeLayoutOp(step.args[2])?.op === "insert",
+    )
+  )
+    throw new Error(
+      `recording line ${line} cannot reproduce a layout insertion without its placement seed`,
+    );
   // The checked envelope holds the same payload taken by the private wire.
   return value as unknown as EventInput;
 }
@@ -199,7 +218,8 @@ function constructionOf(entry: Record<string, unknown>): {
     throw new Error(
       `recording line 1 needs format version ${RECORDING_VERSION}`,
     );
-  if (entry.wireVersion !== RENDERER_WIRE_VERSION)
+  // v22 has the same construction data. Its click knew no placement seed.
+  if (entry.wireVersion !== 22 && entry.wireVersion !== RENDERER_WIRE_VERSION)
     throw new Error(
       `recording line 1 needs renderer wire version ${RENDERER_WIRE_VERSION}`,
     );
@@ -207,7 +227,7 @@ function constructionOf(entry: Record<string, unknown>): {
   try {
     boot = rendererBootFrom({
       kind: "boot",
-      wireVersion: entry.wireVersion,
+      wireVersion: RENDERER_WIRE_VERSION,
       boot: entry.input,
     });
   } catch {

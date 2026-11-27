@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   heldAside,
   routedWrites,
@@ -174,7 +173,10 @@ import {
 } from "../../config/action";
 import type { RenderOrigin } from "../../config-hint";
 import { tmuxPaneOf } from "../../claude-input/typing";
-import { BadVerbArgs, failureOf } from "../../daemon/foundations/verb-error";
+import {
+  BadVerbArgs,
+  rendererFailureOf,
+} from "../../daemon/foundations/verb-error";
 import type { RequestFacts } from "../../daemon/foundations/request-event";
 import type { ActsOnTheirWay } from "../acts";
 import { type SessionId } from "../../daemon/foundations/session-id";
@@ -235,6 +237,7 @@ export interface DaemonContext {
 }
 
 export interface VerbContext extends DaemonContext {
+  readonly placementSuffix: () => string;
   // THIS click's session as the host's book holds it.
   readonly context: SessionContext | null;
   // THIS click's turn's effects, which its config changes join.
@@ -577,7 +580,7 @@ function changeLanded(
     try {
       work();
     } catch (e) {
-      failed.push(failureOf(e).message);
+      failed.push(rendererFailureOf(e).message);
     }
   };
   if (outcome.kind === "ok") step(() => consequence(effects));
@@ -1388,9 +1391,12 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
     );
   }
   const into = heldLayer(ctx, origin, role);
-  // [LAW:effects-at-boundaries] The click draws the new placement's suffix.
-  const placed = applyLayoutOpToFile(editStore(ctx, sid), into, key, op, () =>
-    randomBytes(3).toString("hex"),
+  const placed = applyLayoutOpToFile(
+    editStore(ctx, sid),
+    into,
+    key,
+    op,
+    ctx.placementSuffix,
   );
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
@@ -1579,11 +1585,11 @@ function foldEffects<Step extends Exclude<ClickStep, { kind: "invalid" }>>(
     try {
       perform(step);
     } catch (e) {
-      // [LAW:single-enforcer] Classified once, by failureOf. A click the
+      // [LAW:single-enforcer] Classified once, by rendererFailureOf. A click the
       // daemon's close cut off is over: no later effect runs, it keeps its
       // own class, and what failed before it has no bar left to reach, so the
       // log has it.
-      const failure = failureOf(e);
+      const failure = rendererFailureOf(e);
       if (failure.kind !== "bad-request" && failure.kind !== "threw") {
         if (errors.length > 0) log("warn", `click: ${errors.join("; ")}`);
         throw e;

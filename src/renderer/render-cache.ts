@@ -1,3 +1,4 @@
+import { disposeSymbol } from "../utils/dispose-symbol.js";
 import { type RegionalSettings } from "../utils/region.js";
 import { chainName, originKey, type RenderOrigin } from "../config-hint.js";
 import {
@@ -1402,7 +1403,7 @@ export class RenderCache<
     return {
       entry,
       state,
-      [Symbol.dispose]: () => {
+      [disposeSymbol]: () => {
         // [LAW:no-silent-failure] A second release would count a render that
         // is not there, and a later render's hold would then read as none.
         if (released) throw new Error("render-cache hold released twice");
@@ -1433,7 +1434,7 @@ export class RenderCache<
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
       // until the returned hold carries it: a throw before then releases it,
       // or the state could never be reclaimed.
-      held[Symbol.dispose]();
+      held[disposeSymbol]();
       throw err;
     }
     return this.holdViewOf(held, view, lease);
@@ -1502,12 +1503,12 @@ export class RenderCache<
       entry: held.entry,
       state: held.state,
       view,
-      [Symbol.dispose]: () => {
+      [disposeSymbol]: () => {
         if (released) throw new Error("render-cache view hold released twice");
         released = true;
         lease.holders--;
         this.reclaimView(view, lease);
-        held[Symbol.dispose]();
+        held[disposeSymbol]();
       },
     };
   }

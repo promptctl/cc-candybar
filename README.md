@@ -32,7 +32,7 @@ pnpm 11 delays freshly published packages (`minimumReleaseAge`), so on or near a
 
 That single command (re-run it any time to update to the latest release):
 
-1. Stages the runtime at a stable path independent of any package-manager cache — `~/Library/Application Support/CCCandybar/` on macOS, `$XDG_DATA_HOME/cc-candybar/` on Linux — as `bin/cc-candybar` (the prebuilt native render binary for your platform, or a node entry where none exists) beside `dist/index.mjs` (the daemon + CLI bundle).
+1. Stages the runtime at a stable path independent of any package-manager cache — `~/Library/Application Support/CCCandybar/` on macOS, `$XDG_DATA_HOME/cc-candybar/` on Linux — as `bin/cc-candybar` (the prebuilt native render binary for your platform, or a node entry where none exists) beside `dist/index.mjs` (the daemon and CLI) and the portable renderer module that the CLI imports.
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
 3. Writes the staged `bin/cc-candybar` path alone as the statusline command in `~/.claude/settings.json`. Install preserves a customized command, including arguments you added. Pass `install --force` to replace it. Configure the bar in its config file.
 

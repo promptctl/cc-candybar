@@ -1,3 +1,9 @@
+import {
+  rendererAssetOf,
+  rendererAssetName,
+  RENDERER_DIGEST_FILE,
+  type RendererAsset,
+} from "./renderer-asset.js";
 import { OWNER_CONTEXT, whyFailed } from "../proc/launcher.js";
 import {
   ATTACH_DIR,
@@ -245,6 +251,7 @@ export interface StagedRuntime {
 // The package's runtime files, found before anything is staged, so a package
 // missing one fails with nothing changed.
 interface RuntimeSources {
+  readonly renderer: RendererAsset;
   readonly dist: string;
   readonly entry: RenderEntry;
   readonly attach: string;
@@ -281,7 +288,37 @@ function runtimeSources(
       `install: the attach preload was not found at ${preload}. Reinstall the package.`,
     );
   }
-  return { dist: sourceDist, entry, attach, preload };
+  return {
+    dist: sourceDist,
+    renderer: rendererAssetOf(path.dirname(sourceDist)),
+    entry,
+    attach,
+    preload,
+  };
+}
+
+function stageRenderer(
+  changes: InstallChanges,
+  dist: string,
+  asset: RendererAsset,
+): void {
+  const name = rendererAssetName(asset.digest);
+  const manifest = path.join(dist, RENDERER_DIGEST_FILE);
+  const previous = readTextIfPresent(manifest)?.trimEnd();
+  changes.replaceFile(path.join(dist, name), asset.bytes, 0o644);
+  changes.replaceFile(manifest, asset.digest + "\n", 0o644);
+  // [LAW:no-ambient-temporal-coupling] The old and new CLI each name their
+  // own immutable module. Retain the previous generation across the switch
+  // so an overlapping launch can finish resolving its static imports.
+  if (!previous || previous === asset.digest) return;
+  const keep = rendererAssetName(previous);
+  for (const file of fs.readdirSync(dist))
+    if (
+      /^renderer-[0-9a-f]{64}\.mjs$/.test(file) &&
+      file !== keep &&
+      file !== name
+    )
+      changes.remove(path.join(dist, file));
 }
 
 // Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
@@ -302,6 +339,7 @@ function stageRuntime(
   const binPath = stagedBinPath(dir);
   changes.mkdir(path.dirname(distPath));
   changes.mkdir(path.dirname(binPath));
+  stageRenderer(changes, path.dirname(distPath), sources.renderer);
   stageFile(changes, sources.dist, distPath);
   if (platform === "darwin") stageWindow(sources.dist, dir, changes, launcher);
   // A directory staged whole, so no file of an older launcher outlives it.

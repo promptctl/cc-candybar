@@ -1,4 +1,4 @@
-import { windowRuntime } from "../../helpers/window-runtime";
+import { packagedRuntime } from "../../helpers/packaged-runtime";
 // Two Node processes contend for the same user's install. SIGKILL prevents
 // the first one's finally block from running, as a crashed installer would.
 import { spawn, spawnSync } from "node:child_process";
@@ -114,7 +114,7 @@ test.each([
       { encoding: "utf8" },
     );
   try {
-    windowRuntime(checkout);
+    packagedRuntime(checkout);
     for (const dir of ["src", "dist/cc-extra", "bin"])
       fs.mkdirSync(path.join(checkout, dir), { recursive: true });
     fs.mkdirSync(home);

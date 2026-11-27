@@ -13,7 +13,7 @@
 // govern output, not whether operations run.
 
 import { systemRegion, type RegionalSettings } from "../utils/region.js";
-import { createHash } from "node:crypto";
+import { sha256Text } from "../utils/sha256.js";
 import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
@@ -607,7 +607,7 @@ export function compileInputOf(
 // [LAW:one-source-of-truth] THE compile identity: two inputs with one key
 // compile alike, so the render cache shares one compile between them.
 export function compileKey(input: CompileInput): string {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  return sha256Text(JSON.stringify(input));
 }
 
 // Declare every variable of the given scopes into the registry — a directory's

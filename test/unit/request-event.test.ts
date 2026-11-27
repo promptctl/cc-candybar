@@ -8,7 +8,7 @@ import {
   requestEvent,
   type RequestFacts,
 } from "../../src/daemon/foundations/request-event";
-import { failureOf } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 
 describe("requestEvent", () => {
   test("a throw is an error event carrying the facts it reached, then the thrown value with its stack", () => {

@@ -17,7 +17,6 @@
 // resolve falls back to the variable's declared default).
 
 import type { HistoryDepth } from "./settings-history";
-import path from "node:path";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "../daemon/foundations/protocol.js";
 import {
@@ -850,26 +849,14 @@ export function composePayload(
     expiresAt,
   }));
 
-  // home is always available — the host's value, no I/O cost.
-  // [LAW:single-enforcer] The directory fields templates do path math on
-  // (home, the workspace's directories, location.main) are normalized to
-  // forward-slash separators at this boundary. The DSL's directory
-  // template (and any user template that does prefix/relative-path math)
-  // assumes POSIX separators; without normalization, Windows hookData
-  // (current_dir = "C:\Users\Alice") would never match a forward-slash
-  // home prefix. Normalize *here*, not in the template — keeps DSL
-  // templates platform-agnostic by construction.
-  const home = posixify(inputs.home);
-  const workspace = hookData.workspace
-    ? {
-        ...hookData.workspace,
-        current_dir: posixify(hookData.workspace.current_dir) ?? "",
-        project_dir: posixify(hookData.workspace.project_dir) ?? "",
-        added_dirs: (hookData.workspace.added_dirs ?? []).map(
-          (dir) => posixify(dir) ?? dir,
-        ),
-      }
-    : hookData.workspace;
+  // The supported hosts report POSIX paths. A backslash in one is data.
+  const { home } = inputs;
+  const workspace = hookData.workspace && {
+    ...hookData.workspace,
+    current_dir: hookData.workspace.current_dir ?? "",
+    project_dir: hookData.workspace.project_dir ?? "",
+    added_dirs: hookData.workspace.added_dirs ?? [],
+  };
 
   const payload: ViewPayload = {
     ...hookData,
@@ -879,7 +866,7 @@ export function composePayload(
     ...(hookData.location !== undefined && {
       location: {
         ...hookData.location,
-        main: posixify(hookData.location.main) ?? "",
+        main: hookData.location.main ?? "",
       },
     }),
     ...(tmuxPane !== null && {
@@ -1174,20 +1161,6 @@ function pickNonNull<T extends Readonly<Record<string, number | null>>>(
     }
   }
   return any ? out : undefined;
-}
-
-// [LAW:single-enforcer] Convert backslash-separator path strings to
-// forward-slash separators so DSL templates can rely on POSIX path math
-// (prefix checks, trimPrefix) on every platform. Undefined and empty
-// inputs pass through unchanged. The function is platform-conditional
-// only on whether `\` *could* be a separator (it never can on POSIX, so
-// no harm in always converting — but the explicit guard avoids touching
-// strings on non-Windows callers where backslash is meaningful
-// inside path components).
-function posixify(s: string | undefined): string | undefined {
-  if (s === undefined || s.length === 0) return s;
-  if (path.sep !== "\\") return s;
-  return s.replace(/\\/g, "/");
 }
 
 // [LAW:types-are-the-program] Project the outcome-carrying GitInfo down to

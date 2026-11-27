@@ -6,15 +6,22 @@ import type { Effect, Event } from "../renderer-interface/interface.js";
 import type { MainRendererParts } from "./verbs/port.js";
 import type { RequestFacts } from "../daemon/foundations/request-event.js";
 
+import { placementSuffixes } from "../config/layout-ops.js";
+
 type ClickEvent = Extract<Event, { kind: "click" }>;
 
 export function clickTurn(
   { verbs }: Pick<MainRendererParts, "verbs">,
-  { click, context }: ClickEvent,
+  { click, context, placementSeed }: ClickEvent,
   // Where the click's config changes go, and what its turn's record notes,
   // kept by the turn even when the handler throws.
   effects: Effect[],
   record: RequestFacts,
 ): void {
-  verbs.click(click, { context, effects, record });
+  verbs.click(click, {
+    context,
+    effects,
+    record,
+    placementSuffix: placementSuffixes(placementSeed),
+  });
 }

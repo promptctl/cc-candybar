@@ -1,4 +1,4 @@
-import { inspect } from "node:util";
+import { describeValue } from "./describe-value.js";
 
 // [LAW:dataflow-not-control-flow] [LAW:no-silent-failure] Every step runs, in
 // order, whatever a step before it threw: each is its own error boundary. What
@@ -24,7 +24,9 @@ export function throwAll(thrown: readonly unknown[]): void {
     throw new AggregateError(
       thrown,
       thrown
-        .map((each) => (each instanceof Error ? each.message : inspect(each)))
+        .map((each) =>
+          each instanceof Error ? each.message : describeValue(each),
+        )
         .join("; "),
     );
 }

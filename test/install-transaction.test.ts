@@ -1,4 +1,4 @@
-import { windowRuntime } from "./helpers/window-runtime";
+import { packagedRuntime } from "./helpers/packaged-runtime";
 // [LAW:verifiable-goals] `cc-candybar install` changes the user's files whole
 // or not at all: an install that fails at any step leaves every file under
 // the home as it found it, and the statusLine command it writes is the
@@ -58,7 +58,7 @@ function checkout(version: string): string {
     "bin/cc-candybar": `#!/bin/sh\n# shim ${version}\n`,
     "bin/cc-candybar-url-handler-native": `MACHO ${version}`,
   };
-  windowRuntime(dir);
+  packagedRuntime(dir, version);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });

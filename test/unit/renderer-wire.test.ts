@@ -22,10 +22,8 @@ import {
 import type { Instant, Tick } from "../../src/utils/instant";
 import { joinedEvent, type DaemonEvent } from "../../src/utils/event-hold";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import {
-  CrossedFailure,
-  failureOf,
-} from "../../src/daemon/foundations/verb-error";
+import { CrossedFailure } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { unexpectedTimingProblem } from "../helpers/renderers";
 
 // A renderer that answers with a diagnostic. Its turns

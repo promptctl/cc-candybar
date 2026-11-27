@@ -15,7 +15,7 @@
 // plugin, and the drop is a typed fact on the result (`dropped`), which the
 // bar offers as a message beside the settings door.
 
-import path from "node:path";
+import path from "path-browserify";
 import JSON5 from "json5";
 import {
   hasCacheField,
@@ -42,7 +42,7 @@ import {
 } from "./diagnostics.js";
 import { refuseMintedKeys } from "./authored-keys.js";
 import { checkMenuDecls } from "./menu-synth.js";
-import { resolveUserPath } from "../../utils/user-path.js";
+import { resolveFrom, resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
 import type { PluginFile } from "../config-snapshot.js";
 import {
@@ -1223,7 +1223,7 @@ function dataPathOf(
       });
       return undefined;
     }
-    return path.resolve(checkout.root, rel);
+    return resolveFrom(checkout.root, rel);
   }
   // [LAW:no-silent-failure] `{ project }` was this field's spelling until
   // `{ checkout }` replaced it (brandon-plugins-ktag.d6f).

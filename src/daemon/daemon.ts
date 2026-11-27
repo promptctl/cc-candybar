@@ -13,8 +13,8 @@ import {
   BadVerbArgs,
   CrossedFailure,
   DaemonClosing,
-  failureOf,
 } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 import {
   thrownText,
   type ReportedThrow,

@@ -4,7 +4,7 @@ import {
   type Timekeeper,
   type TimerSource,
 } from "../time.js";
-import { failureOf } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 import { recurrence } from "../utils/event-hold.js";
 
 // A throw as the clock reported it: the task's name, what it threw, and the
