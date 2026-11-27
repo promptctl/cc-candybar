@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { ObserverServer } from "../../../src/daemon/tmux-observer-hooks";
 import { spawn, execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -150,7 +152,7 @@ test("an unattached observer sees scoped edits, quiet pane exit, selections and 
       (s) => s.includes("P " + source + " " + id + " 0 1 1 1"),
       "other session zooms the source",
     );
-    r.run("set-option", "-t", "other", "mouse", "on");
+    r.run("set", "-t", "other", "mou", "on");
     await b.next(
       (s) => s.includes("P " + source + " " + id + " 0 1 1 1 1"),
       "mouse is active at source",
@@ -638,6 +640,109 @@ test("replacing a hook and unsetting its local override preserves the user's exa
     await r.release();
   }
 }, 15000);
+
+test("an unread registration returns from wait without a native signal", async () => {
+  const r = setup();
+  const token = randomBytes(16).toString("hex");
+  const server = new ObserverServer(
+    WORLD.launcher,
+    r.server.socket,
+    token,
+    r.run("display-message", "-p", "#{pid}").trim(),
+  );
+  const lifetime = new AbortController();
+  let waiting: Promise<void> | undefined;
+  try {
+    await server.arm();
+    // Registration starts dirty before the first native waiter exists.
+    // A peer may install its own hooks during this first generation.
+    expect((await server.pending()).dirty).toBe(true);
+    let returned = false;
+    waiting = server.wait(lifetime.signal).then(() => {
+      returned = true;
+    });
+    await until(
+      () => returned,
+      "unread registration without a queued wait-for signal",
+    );
+    expect(await server.snapshot()).toContain("P " + r.server.pane + " ");
+  } finally {
+    lifetime.abort();
+    await waiting?.catch(() => {});
+    await server.retire();
+    await r.release();
+  }
+});
+
+test.each(["direct", "sourced"])(
+  "%s hook-table replacement recovers on the next independent pane event",
+  async (mode) => {
+    const r = setup();
+    try {
+      r.run("set", "-t", "bar", "mouse", "off");
+      const other = r
+        .run("split-window", "-d", "-t", "bar", "-P", "-F", "#{pane_id}", "cat")
+        .trim();
+      const a = r.follow();
+      const pane = r.server.pane;
+      const mouse = (s: string, on: boolean) =>
+        s.split("\n").some((row) => {
+          const fields = row.split(" ");
+          return (
+            fields[0] === "P" &&
+            fields[1] === pane &&
+            fields[7] === (on ? "1" : "0")
+          );
+        });
+      await a.next((s) => mouse(s, false), "initial mouse off");
+      const edits = [
+        ["set-hook", "-g", "after-set-hook", "display-message installed"],
+        [
+          "set-hook",
+          "-t",
+          "bar",
+          "after-set-option",
+          "display-message changed",
+        ],
+      ];
+      if (mode === "direct") for (const command of edits) r.run(...command);
+      else {
+        const file = path.join(r.dir, "user-hooks.conf");
+        writeFileSync(
+          file,
+          edits
+            .map((words) => words.map((word) => "'" + word + "'").join(" "))
+            .join("\n"),
+        );
+        r.run("source-file", file);
+      }
+      r.run("set", "-t", "bar", "mou", "on");
+      // Overwriting the trigger can suppress its own notification. A real
+      // selection still invokes a separate hook and discovers both edits.
+      r.run("select-pane", "-t", other);
+      await a.next(
+        (s) => mouse(s, true),
+        "mouse and overridden hook rediscovered",
+      );
+      const count = a.seen.length;
+      r.run("set", "-t", "bar", "mou", "off");
+      await until(
+        () => a.seen.slice(count).some((s) => mouse(s, false)),
+        "mouse delivered through the repaired local table",
+      );
+      a.close();
+      await r.gone();
+      expect(r.run("show-hooks", "-g", "after-set-hook").trim()).toBe(
+        "after-set-hook[0] display-message installed",
+      );
+      expect(r.run("show-hooks", "-t", "bar", "after-set-option").trim()).toBe(
+        "after-set-option[0] display-message changed",
+      );
+    } finally {
+      await r.release();
+    }
+  },
+);
 
 test("the host observer cannot release or renew the floating window's active reservation", async () => {
   const r = setup();

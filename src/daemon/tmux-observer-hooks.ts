@@ -64,6 +64,7 @@ export class ObserverServer {
   private readonly action: string;
   private readonly dirty: string;
   private readonly scopesDirty: string;
+  private readonly waiting: string;
   private readonly live: string;
   private readonly expected: string;
   private readonly hook: string;
@@ -81,6 +82,7 @@ export class ObserverServer {
     this.live = this.action + "_live";
     this.dirty = this.action + "_dirty";
     this.scopesDirty = this.action + "_hooks";
+    this.waiting = this.action + "_waiting";
     this.expected = this.action + "_body";
     this.hook = 'run-shell -C "#{' + this.action + '}"';
   }
@@ -188,18 +190,18 @@ export class ObserverServer {
     )
       throw new Error(keys.reason);
 
-    // Keep event work in the tmux server. A single transition to dirty owns
-    // the classic wait channel's one pending wake, including between clients.
+    // The flags carry unread work even if both registration and a read are in
+    // flight. Signal exactly once per *registered waiter*. On classic tmux a
+    // second unconsumed wait-for -S cancels the first one's native sticky bit.
     const edit =
       "#{||:#{==:#{hook},after-set-hook},#{==:#{hook},after-set-option}}";
-    const relevant = `#{m/r:^(${[...events].join("|")})([[]|$),#{hook_argument_0}}`;
-    const newScope =
-      "#{m/r:^(session-created|window-linked|after-split-window|pane-moved)$,#{hook}}";
-    const scopes = `#{||:${newScope},#{&&:${edit},${relevant}}}`;
-    const wake = `if-shell -F '#{!:#{${this.dirty}}}' { set-option -s ${this.dirty} 1 ; wait-for -S ${this.prefix} }`;
-    const topology = `set-option -s ${this.scopesDirty} 1 ; ${wake}`;
-    const changed = `if-shell -F '${scopes}' { ${topology} } { if-shell -F '#{||:#{!:${edit}},#{==:#{hook_argument_0},mouse}}' { ${wake} } }`;
-    const action = `if-shell -F '${this.current}' { ${changed} }`;
+    const observerEdit = `#{||:#{m:@${serverObserverHookPrefix}*,#{hook_argument_0}},#{m:*${serverObserverHookPrefix}*,#{hook_argument_1}}}`;
+    const wake = `if-shell -F '#{${this.waiting}}' { set-option -su ${this.waiting} ; wait-for -S ${this.prefix} }`;
+    // A user's option may be abbreviated, and an earlier hook-table overwrite
+    // can hide its own edit. Any subsequent external event renews the scopes.
+    const changed = `set-option -s ${this.scopesDirty} 1 ; set-option -s ${this.dirty} 1 ; ${wake}`;
+    const external = `#{!:#{&&:${edit},${observerEdit}}}`;
+    const action = `if-shell -F '#{&&:${this.current},${external}}' { ${changed} }`;
     await this.program([
       command("set-option", "-so", this.live, "1"),
       command("set-option", "-so", this.dirty, "1"),
@@ -280,10 +282,6 @@ export class ObserverServer {
         command("list-panes", "-a", "-F", paneFacts),
         command("list-clients", "-F", "C #{session_id} #{client_control_mode}"),
         command("display-message", "-p", "E #{pid}"),
-        // A scope edit during renewal occurred while the preceding wake was
-        // already outstanding. Give that obligation exactly one new wake at
-        // the beginning of this generation, before accepting another signal.
-        `if-shell -F '#{${this.scopesDirty}}' { set-option -s ${this.dirty} 1 ; wait-for -S ${this.prefix} }`,
       ],
       this.current,
     );
@@ -308,7 +306,18 @@ export class ObserverServer {
   async wait(signal: AbortSignal) {
     const r = await this.launcher.launch({
       bin: "tmux",
-      args: ["-N", "-S", this.socket, "wait-for", this.prefix],
+      // A single non-yielding tmux command queue checks for unread work and
+      // subscribes. If work already exists it returns immediately. A wake
+      // after the check belongs to this waiter even if it has yet to block.
+      args: [
+        "-N",
+        "-S",
+        this.socket,
+        "if-shell",
+        "-F",
+        `#{&&:${this.current},#{!:#{||:#{${this.dirty}},#{${this.scopesDirty}}}}}`,
+        `set-option -s ${this.waiting} 1 ; wait-for ${this.prefix}`,
+      ],
       signal,
       category: "frames.visibility",
     });
@@ -362,6 +371,7 @@ export class ObserverServer {
       this.action,
       this.dirty,
       this.scopesDirty,
+      this.waiting,
     ])
       lines.push(command("set-option", "-su", option));
     // A locked channel cannot disappear on the first signal. The second
