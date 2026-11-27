@@ -103,6 +103,27 @@ describe("a reported environment", () => {
     );
   });
 
+  test("source verification uses the invoking client’s home and per-invocation PID", () => {
+    const tmux = { socket: "/private/server", pane: "%2", truecolor: null };
+    const env = { HOME: "home", TMUX: "/private/server,1,0", TMUX_PANE: "%2" };
+    for (const input of [{ tmux }, { envKey: environmentKey(env) }]) {
+      for (const parentPid of [undefined, 0, -1, 1.5, "42", 42]) {
+        const checked = check(env, undefined, { ...input, parentPid });
+        if (!checked.ok) throw new Error(checked.problems.join("; "));
+        expect(checked.req.sourceConfigDir).toBe("/p/home/.claude");
+        expect(checked.req.hints.parentPid).toBe(
+          parentPid === 42 ? 42 : undefined,
+        );
+      }
+    }
+    expect(check(undefined, "/custom", { tmux })).toMatchObject({
+      req: { sourceConfigDir: "/custom" },
+    });
+    expect(check(undefined, undefined, { tmux })).toMatchObject({
+      req: { sourceConfigDir: "/account/home/.claude" },
+    });
+  });
+
   test("a malformed, missing or mismatched full report cannot register an environment", () => {
     for (const [env, envKey] of [
       [{}, "X".repeat(64)],

@@ -89,6 +89,7 @@ export interface RenderRequest {
   // typed here but arrives as untrusted JSON: callers MUST route the request
   // through parseClientHints at the receive boundary, never read these
   // directly. See the ClientHints doc block for the absence semantics.
+  parentPid?: number;
   termCols?: number;
   termRows?: number;
   ssh?: boolean;
@@ -117,6 +118,7 @@ export type SessionRenderRequest = Pick<
   | "cwd"
   | "deadline"
   | "encoding"
+  | "parentPid"
   | "termCols"
   | "termRows"
   | "client"
@@ -176,6 +178,7 @@ export type SessionRenderRequest = Pick<
 //     old to carry the field (an install whose client predates its daemon). Present, it is total: the
 //     client's kind, the bundle it runs, its build stamp (src/client-hint.ts).
 export interface ClientHints {
+  readonly parentPid?: number;
   readonly termCols?: number;
   readonly termRows?: number;
   readonly ssh?: boolean;
@@ -189,6 +192,7 @@ export interface ClientHints {
 // [LAW:one-source-of-truth] Every field of ClientHints, keyed by the type so
 // a new hint is a compile error here until it is listed.
 const CLIENT_HINT_FIELDS = Object.keys({
+  parentPid: true,
   termCols: true,
   termRows: true,
   ssh: true,
@@ -208,6 +212,12 @@ const CLIENT_HINT_FIELDS = Object.keys({
 export function parseClientHints(
   req: Partial<Record<keyof ClientHints, unknown>>,
 ): ClientHints {
+  const parentPid =
+    typeof req.parentPid === "number" &&
+    Number.isSafeInteger(req.parentPid) &&
+    req.parentPid > 0
+      ? req.parentPid
+      : undefined;
   const termCols = sanitizeTermExtent(req.termCols);
   const termRows = sanitizeTermExtent(req.termRows);
   const ssh = sanitizeSsh(req.ssh);
@@ -217,6 +227,7 @@ export function parseClientHints(
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
   const client = sanitizeClient(req.client);
   return {
+    ...(parentPid !== undefined && { parentPid }),
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
     ...(ssh !== undefined && { ssh }),
@@ -517,10 +528,8 @@ export interface PointerRequest {
   owner: OwnerFacts;
 }
 
-// Which session last rendered from a tmux pane: the session of the daemon's
-// newest render request whose client reported that pane. A tmux bar pane
-// (lane C) knows the pane it draws beside, not the session in it, which
-// changes on a /clear; it asks again to follow.
+// Older pane followers ask for the session confirmed for this physical source.
+// Current followers enroll once and receive changes on their stream.
 export interface PaneSessionRequest {
   v: number;
   kind: "pane-session";
@@ -528,7 +537,19 @@ export interface PaneSessionRequest {
   pane: string;
 }
 
+export interface PaneHello {
+  readonly socket: string;
+  readonly source: string;
+  readonly drawing: string;
+  readonly serverPid: number;
+  readonly followerPid: number;
+  readonly instance: string;
+}
+
+export type PaneEnrollment = PaneHello & { v: number; kind: "pane-enroll" };
+
 export type Request =
+  | PaneEnrollment
   | ReaderRenderRequest
   | SessionRenderRequest
   | SubscribeRequest

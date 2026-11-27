@@ -126,6 +126,12 @@ export function prepareDaemon(
       region: systemRegion(),
       ...productionAdapters(paths, daemonLog, clock),
       watchDirectory: manualDirectoryWatches().open,
+      tmuxObserver: () => ({
+        observe(_socket, events) {
+          events.lost("no tmux server in this fixture");
+          return () => {};
+        },
+      }),
       fetchPricing: repoPricing,
       renderer: inProcessRenderer(),
       bundle: bundleAt(path.join(paths.state, "checkout")),

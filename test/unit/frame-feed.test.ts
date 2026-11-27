@@ -61,16 +61,13 @@ function rig(
   }> = [];
   const logged: string[] = [];
   const acknowledged: DaemonEvent[] = [];
-  const watching = { started: 0, stopped: 0 };
+  const watching: [string, boolean][] = [];
   const deps: FeedDeps<Req> = {
     publishFrame,
     acknowledgeDisplayed: (events) => void acknowledged.push(...events),
     requestChanged: () => {},
     shown: (req) => !hidden.has(req.pane),
-    watching: () => {
-      watching.started++;
-      return () => void watching.stopped++;
-    },
+    watchingChanged: (session, on) => void watching.push([session, on]),
     deliver: (make) =>
       new Promise((resolve, reject) =>
         owed.push({ make, end: (kind) => resolve({ kind }), reject }),
@@ -258,12 +255,10 @@ describe("a session's requests", () => {
     expect(feeds.latest(T)).toBeNull();
   });
 
-  test("newestWhere finds the session of the newest request it matches, and counts its lookups", () => {
+  test("the stats count both answered and unresolved pane lookups", () => {
     const { feeds } = rig();
-    feeds.note(S, { pane: "%1" }, 1);
-    feeds.note(T, { pane: "%1" }, 2);
-    expect(feeds.newestWhere((req) => req.pane === "%1")).toBe(T);
-    expect(feeds.newestWhere((req) => req.pane === "%9")).toBeNull();
+    feeds.notePaneLookup(S);
+    feeds.notePaneLookup(null);
     expect(feeds.getStats()).toMatchObject({ lookups: 2, found: 1 });
   });
 
@@ -589,12 +584,20 @@ describe("a subscriber", () => {
     const r = rig();
     const leaveS = r.feeds.subscribe(S, subscriber("pane").sub);
     const leaveT = r.feeds.subscribe(T, subscriber("pane").sub);
-    expect(r.watching).toEqual({ started: 1, stopped: 0 });
+    expect(r.watching).toEqual([
+      [S, true],
+      [T, true],
+    ]);
     r.took([frame(S)]);
     leaveS();
-    expect(r.watching.stopped).toBe(0);
+    expect(r.watching.at(-1)).toEqual([S, false]);
     leaveT();
-    expect(r.watching).toEqual({ started: 1, stopped: 1 });
+    expect(r.watching).toEqual([
+      [S, true],
+      [T, true],
+      [S, false],
+      [T, false],
+    ]);
     expect(r.logged).toContain(`info feed sid="${S}" unwatched pushed=1`);
   });
 });
@@ -996,7 +999,7 @@ describe("the daemon's close", () => {
     await r.slot();
     r.feeds.close();
     expect(r.feeds.isWatched(S)).toBe(false);
-    expect(r.watching.stopped).toBe(1);
+    expect(r.watching.at(-1)).toEqual([S, false]);
     expect(r.owed).toHaveLength(0);
     r.feeds.subscribe(T, subscriber("pane").sub);
     expect(r.feeds.isWatched(T)).toBe(false);

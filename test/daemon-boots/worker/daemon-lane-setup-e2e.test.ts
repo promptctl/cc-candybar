@@ -1,29 +1,33 @@
+import { decodeAnsi } from "@promptctl/rich-js";
 import { textOf, type Frame } from "../../../src/render/frame";
 import {
-  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
-  existsSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
+import { randomUUID } from "node:crypto";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import path from "node:path";
 
+import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import {
-  effectsUrl,
-  VERB_SET_STATE,
-} from "../../../src/click/wire";
-import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../../../src/config/loader/edit-mode";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../../src/config/door";
 import { sharedMenuStateKey } from "../../../src/config/menu-keys";
 import { linksOf } from "../../../src/click/read";
 import { LANE_NAMES, LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
-import type { ClientHints } from "../../../src/daemon/foundations/protocol";
+import {
+  parseResponse,
+  type ClientHints,
+} from "../../../src/daemon/foundations/protocol";
 import {
   click,
   render,
@@ -53,42 +57,149 @@ describe("tmux panes follow effective display settings", () => {
   let projectDir: string;
   let daemon: InWorkerDaemon;
 
+  // Each server independently owns a terminal, the process record of the
+  // Claude session there and any physical drawing pane. A packet can name
+  // that source without belonging to its recorded session.
+  interface Fixture {
+    readonly socket: string;
+    readonly serverPid: number;
+    readonly root: number;
+    session: string;
+    instance: string | null;
+    opened: number;
+    text?: string;
+    fail: boolean;
+    snapshot?: (raw: string) => void;
+    changed?: () => void;
+  }
+  const servers = new Map<string, Fixture>();
+  function server(name: string): Fixture {
+    const socket = `/tmp/lane-e2e-${name}`;
+    let found = servers.get(socket);
+    if (!found) {
+      const id = 1000 + servers.size * 4;
+      found = {
+        socket,
+        serverPid: id,
+        root: id + 1,
+        session: name,
+        instance: null,
+        opened: 0,
+        fail: false,
+      };
+      servers.set(socket, found);
+    }
+    return found;
+  }
+  function publish(s: Fixture): void {
+    const rows = [
+      `B ${s.serverPid}`,
+      `P %7 $0 1 1 0 1 1 ${s.root} /dev/pts/${s.root}`,
+    ];
+    if (s.instance)
+      rows.push(`P %9 $0 1 1 0 0 1 ${s.root + 1} /dev/pts/${s.root + 1}`);
+    s.snapshot?.([...rows, "C $0 0", `E ${s.serverPid}`].join("\n"));
+  }
+  function enroll(s: Fixture, instance: string): void {
+    let leave: () => void = () => {};
+    leave = daemon.daemon.enroll(
+      {
+        socket: s.socket,
+        source: "%7",
+        drawing: "%9",
+        serverPid: s.serverPid,
+        followerPid: s.root + 1,
+        instance,
+      },
+      {
+        update: (_placement, frame, done) => {
+          if (frame) {
+            const message = parseResponse(JSON.parse(frame));
+            if (message.ok && "output" in message)
+              s.text = decodeAnsi(message.output).plain;
+          }
+          done?.(true);
+        },
+        refused: () =>
+          queueMicrotask(() => {
+            leave();
+            if (s.instance === instance) {
+              s.instance = null;
+              publish(s);
+            }
+          }),
+        disconnect: () => queueMicrotask(() => leave()),
+      },
+    );
+  }
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-lane-e2e");
     ({ removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-lane-e2e-"));
     writeFileSync(path.join(projectDir, "lanes.json5"), CONFIG);
-    const bin = path.join(projectDir, "bin");
-    mkdirSync(bin);
-    writeFileSync(
-      path.join(bin, "tmux"),
-      `#!/bin/sh
-held="$CANDYBAR_TEST_TMUX_STATE/${"$"}{2##*/}.split"
-case "$*" in
-  *list-panes*'pane_start_command'*)
-    if [ -f "$held" ]; then printf '%%9 cc-candybar bar-pane %%7\n'; fi
-    ;;
-  *list-panes*) printf '%%7 $1 1 1 0 1\n' ;;
-  *split-window*)
-    if [ -f "$held.fail" ]; then
-      rm "$held.fail"
-      printf 'temporary split failure\n' >&2
-      exit 1
-    fi
-    touch "$held"
-    printf '%%9\n'
-    ;;
-  *kill-pane*'-t %9') rm -f "$held" ;;
-esac
-`,
-    );
-    chmodSync(path.join(bin, "tmux"), 0o755);
-    env = {
-      ...prepared.env,
-      PATH: `${bin}:${prepared.env.PATH ?? ""}`,
-      CANDYBAR_TEST_TMUX_STATE: projectDir,
-    };
-    daemon = startDaemon(env);
+    env = prepared.env;
+    daemon = startDaemon(env, {
+      tmuxObserver: () => ({
+        observe(socket, events) {
+          const s = servers.get(socket)!;
+          s.snapshot = events.snapshot;
+          queueMicrotask(() => publish(s));
+          return () => {
+            if (s.snapshot === events.snapshot) delete s.snapshot;
+          };
+        },
+      }),
+      tmuxSourceEdges: () => ({
+        async inspect(pane, claims, watch) {
+          const s = [...servers.values()].find((s) => s.root === pane.pid)!;
+          watch([s.socket]);
+          const confirmed = claims.some(
+            (c) =>
+              c.sid === s.session &&
+              (c.parentPid === undefined || c.parentPid === s.root),
+          );
+          return confirmed
+            ? { kind: "confirmed", sid: sessionIdOf(s.session) }
+            : {
+                kind: "unknown",
+                reason: "fixture Claude record holds another session",
+              };
+        },
+        watch(socket, changed) {
+          const s = servers.get(socket)!;
+          s.changed = changed;
+          return () => {
+            if (s.changed === changed) delete s.changed;
+          };
+        },
+      }),
+      barPaneEdge: () => ({
+        async find(source) {
+          const instance = servers.get(source.socket)!.instance;
+          return instance ? { drawing: "%9", instance } : null;
+        },
+        async open(source, _serverPid, _host, instance) {
+          const s = servers.get(source.socket)!;
+          if (s.fail) {
+            s.fail = false;
+            throw new Error("temporary split failure");
+          }
+          if (s.instance) throw new Error("duplicate split");
+          s.instance = instance;
+          s.opened++;
+          publish(s);
+          queueMicrotask(() => enroll(s, instance));
+          return { drawing: "%9", instance };
+        },
+        async retire(source, _serverPid, _host, pane) {
+          const s = servers.get(source.socket)!;
+          if ("instance" in pane && s.instance === pane.instance) {
+            s.instance = null;
+            publish(s);
+          }
+        },
+      }),
+    });
   });
 
   afterAll(async () => {
@@ -105,7 +216,7 @@ esac
   // Each session in a tmux server of its own, so no other test's session
   // takes its pane.
   const inTmux = (sid: string): ClientHints => ({
-    tmux: { socket: `/tmp/lane-e2e-${sid}`, pane: "%7", truecolor: null },
+    tmux: { socket: server(sid).socket, pane: "%7", truecolor: null },
   });
   const renderIn = (sid: string, dir = projectDir): Promise<Frame> =>
     render(daemon, sid, dir, inTmux(sid), args());
@@ -136,44 +247,64 @@ esac
     const file = path.join(projectDir, "pane.json5");
     writeFileSync(file, CONFIG);
     const bar = (session: string) =>
-      render(daemon, session, projectDir, inTmux(session), ["cc-candybar", "--config", file]);
+      render(
+        daemon,
+        session,
+        projectDir,
+        session === sid ? inTmux(session) : { tmux: null },
+        ["cc-candybar", "--config", file],
+      );
     const follow = async (session: string, label: string) =>
       click(daemon, linkTo(await bar(session), label));
     const openRenderer = async (session: string) => {
-      await click(daemon, urlWriting(await bar(session), SETTINGS_ANCHOR, SETTINGS_OPEN));
-      await click(daemon, urlWriting(await bar(session), "candybar.tab", "config"));
-      await click(daemon, urlWriting(await bar(session), sharedMenuStateKey("candybar.pickers"), "renderer"));
+      await click(
+        daemon,
+        urlWriting(await bar(session), SETTINGS_ANCHOR, SETTINGS_OPEN),
+      );
+      await click(
+        daemon,
+        urlWriting(await bar(session), "candybar.tab", "config"),
+      );
+      await click(
+        daemon,
+        urlWriting(
+          await bar(session),
+          sharedMenuStateKey("candybar.pickers"),
+          "renderer",
+        ),
+      );
     };
 
     const editor = "lane-pane-editor";
     await openRenderer(editor);
-    for (const lane of LANE_NAMES) await follow(editor, `☐ ${LANES[lane].label}`);
+    for (const lane of LANE_NAMES)
+      await follow(editor, `☐ ${LANES[lane].label}`);
     expect(readFileSync(file, "utf8")).toBe(CONFIG);
     await follow(editor, `💾 save ${LANE_NAMES.length}`);
 
     await bar(sid);
-    const opened = (): string[] =>
-      logLines(env).filter((line) =>
-        line.includes(`bar-pane sid=${JSON.stringify(sid)} pane="%7" desired=on — opened bar pane %9`),
-      );
+    const source = server(sid);
     await until(
-      () => opened().length > 0,
-      () => `the configured bar pane (${logLines(env).filter((line) => line.includes("bar-pane")).join("; ")})`,
+      () => source.opened === 1,
+      "the saved switch to open its cold source on a legacy render",
     );
-    await openRenderer(sid);
-    const fresh = textOf(await bar(sid));
+    // Inspect the saved controls in another fresh Claude session outside
+    // tmux. The enrolled pane now owns the drawing surface at sid.
+    const settingsReader = "fresh-settings-reader";
+    await openRenderer(settingsReader);
+    const fresh = textOf(await bar(settingsReader));
     for (const lane of LANE_NAMES) {
       expect(fresh).toContain(`☑ ${LANES[lane].label}`);
     }
     expect(fresh).not.toContain("💾 save");
-    expect(opened()).toHaveLength(1);
+    expect(source.opened).toBe(1);
+    await render(daemon, "unrelated-tool", projectDir, inTmux(sid), args());
+    expect(source.instance).not.toBeNull();
+    source.session = "lane-pane-next";
+    source.changed?.();
     await render(daemon, "lane-pane-next", projectDir, inTmux(sid), args());
     await until(
-      () => logLines(env).some((line) =>
-        line.includes(
-          'bar-pane sid="lane-pane-next" pane="%7" desired=off — closed bar pane %9',
-        ),
-      ),
+      () => source.instance === null,
       "the next session's disabled bar pane setting",
     );
   });
@@ -181,61 +312,76 @@ esac
   test("a draft pane preference reaches the host only after Save", async () => {
     const sid = "lane-draft";
     const file = path.join(projectDir, "pane-draft.json5");
-    const bar = () => render(daemon, sid, projectDir, inTmux(sid), [
-      "cc-candybar", "--config", file,
-    ]);
-    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
+    const bar = () =>
+      render(daemon, sid, projectDir, inTmux(sid), [
+        "cc-candybar",
+        "--config",
+        file,
+      ]);
+    const held = server(sid);
     writeFileSync(file, CONFIG);
-    await click(daemon, urlWriting(await bar(), SETTINGS_ANCHOR, SETTINGS_OPEN));
-    await click(daemon, urlWriting(await bar(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    await click(
+      daemon,
+      urlWriting(await bar(), SETTINGS_ANCHOR, SETTINGS_OPEN),
+    );
+    await click(
+      daemon,
+      urlWriting(await bar(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
+    );
     await switchLanes(sid, true, "pane");
     const draft = await bar();
     expect(readFileSync(file, "utf8")).toBe(CONFIG);
-    expect(existsSync(held)).toBe(false);
+    expect(held.instance).toBeNull();
 
     const save = linksOf(draft).find((link) => link.text === "✓ save");
     expect(save).toBeDefined();
     await click(daemon, save!.url);
-    await until(() => existsSync(held), "the saved bar pane to open");
+    await until(() => held.instance !== null, "the saved bar pane to open");
     expect(readFileSync(file, "utf8")).toContain("experimentalPane: true");
   });
 
   test("a first off declaration closes a split left by a previous host", async () => {
     const sid = "lane-pane-previous";
-    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
-    writeFileSync(held, "");
+    const held = server(sid);
+    held.instance = randomUUID();
+    enroll(held, held.instance);
     await renderIn(sid);
-    await until(() => !existsSync(held), "the previous host's split to close");
+    await until(
+      () => held.instance === null,
+      "the previous host's split to close",
+    );
   });
 
   test("an enabled pane retries a temporary split failure", async () => {
     const sid = "lane-pane-retry";
-    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
-    writeFileSync(`${held}.fail`, "");
+    const held = server(sid);
+    held.fail = true;
     await renderIn(sid);
     await switchLanes(sid, true, "pane");
     await until(
-      () => logLines(env).some((line) => line.includes("temporary split failure")),
+      () =>
+        logLines(env).some((line) => line.includes("temporary split failure")),
       "the first split to fail",
     );
     await until(async () => {
       await renderIn(sid);
-      return existsSync(held);
+      return held.instance !== null;
     }, "the configured pane to open on retry");
   });
 
   test("an enabled session moves its bar to the newly reported pane at the same lane setting", async () => {
     const sid = "lane-pane-moved";
     const next = `${sid}-new`;
-    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
-    const replacement = path.join(projectDir, `lane-e2e-${next}.split`);
+    const held = server(sid);
+    const replacement = server(next);
+    replacement.session = sid;
     await renderIn(sid);
     await switchLanes(sid, true, "pane");
-    await until(() => existsSync(held), "the original pane to open");
+    await until(() => held.instance !== null, "the original pane to open");
 
     await render(daemon, sid, projectDir, inTmux(next), args());
     await until(
-      () => existsSync(replacement) && !existsSync(held),
+      () => replacement.instance !== null && held.instance === null,
       "the replacement pane to open and the previous pane to close",
     );
   });
@@ -273,7 +419,7 @@ esac
       const written = (): bigint => statSync(cfg, { bigint: true }).mtimeNs;
       const unwritten = written();
       await switchLanes(`${sid}-0`, true, "pane");
-        const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
+      const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
       // The click's one file write, landed: a save after the click wrote a
       // snapshot taken after its pick.
       await until(() => {
@@ -311,7 +457,11 @@ esac
                 ]),
               ),
             )
-          ).every((drawn) => textOf(drawn).includes("a reloaded mark")),
+          ).every(
+            (drawn, i) =>
+              textOf(drawn).includes("a reloaded mark") ||
+              server(`${sid}-${i}`).text?.includes("a reloaded mark"),
+          ),
         "each entry's draw of the rewritten config",
       );
       for (const d of dirs) {

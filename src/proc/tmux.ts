@@ -14,6 +14,10 @@ import {
 } from "./launcher.js";
 import type { TmuxHint } from "../tmux-hint.js";
 
+// The host's named hook slots are internal. Window observers can distinguish
+// their installation and retirement from a user changing a geometry hook.
+export const serverObserverHookPrefix = "ccb_observer_";
+
 // `rate-limited`: launch.ts refused to spawn, so tmux never ran — a fact about
 // the caller's cadence, not about tmux.
 export type TmuxRun =

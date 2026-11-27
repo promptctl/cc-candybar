@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { reservationLease, reservationPredicate } from "./reservation.js";
 import type { World } from "../host.js";
 import { whyFailed } from "../proc/launcher.js";
-import { runTmuxAsync } from "../proc/tmux.js";
+import { runTmuxAsync, serverObserverHookPrefix } from "../proc/tmux.js";
 import { singleQuoted } from "../shell-word.js";
 import { lineSplitter } from "../renderer-interface/wire.js";
 
@@ -137,7 +137,8 @@ function programFor(
   const dirty = `set-hook -E ${event}`;
   const geometryOption =
     "#{m/r:^(status|status-position|window-size|pane-border-status)$,#{hook_argument_0}}";
-  const userHook = `#{&&:#{m/r:^(${[...HOOKS].join("|")})(\\[|$),#{hook_argument_0}},#{!:#{m:*${OWNER}*,#{hook_argument_0}}}}`;
+  const ownedHook = `#{||:#{m:*${OWNER}*,#{hook_argument_0}},#{m:*${serverObserverHookPrefix}*,#{hook_argument_0}}}`;
+  const userHook = `#{&&:#{m/r:^(${[...HOOKS].join("|")})(\\[|$),#{hook_argument_0}},#{!:${ownedHook}}}`;
   // A config edit can create a new local override. Wake our waiter so this
   // follower can start a successor while this client still guards its lease.
   const wake = `if-shell -F '#{==:#{${lease}},${key}}' { set-option -s ${lease} ${renewing} ; wait-for -E -w ${owner} ${event} }`;

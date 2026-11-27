@@ -43,6 +43,7 @@ import { nodeClientHint } from "./client-hint";
 import { runFrames } from "./frames-cli";
 import { runBarWindow } from "./bar-window";
 import { runBarPane } from "./bar-pane";
+import { runTmuxObserver } from "./daemon/tmux-server-observer";
 import { exitWith } from "./cli-plan";
 import { recordPlan, replayPlan } from "./recording-cli.js";
 import { replayRecording } from "./renderer/replay.js";
@@ -141,6 +142,9 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   "bar-window": async (args) => {
     process.exit(await runBarWindow(args, RUNNING_BUNDLE, commandWorld()));
   },
+  "tmux-observer": async (args) => {
+    await runTmuxObserver(commandWorld().launcher, args);
+  },
   "bar-pane": async (args) => {
     process.exit(await runBarPane(args, commandWorld()));
   },
@@ -235,6 +239,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.cwd(),
       {
         ...terminalObservation(host.env, process.stderr),
+        parentPid: process.ppid,
         client: nodeClientHint("node", RUNNING_BUNDLE),
       },
     );

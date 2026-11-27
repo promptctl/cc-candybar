@@ -68,6 +68,8 @@ export type StartTimeRead =
 // spawn-error, timeout — is `unavailable`, deferring the alive/dead call to
 // kill(pid,0) rather than risk declaring a live owner dead from a `ps` exit
 // code that cannot distinguish "gone" from "cannot read".
+export const PROCESS_START_ENV = { LC_ALL: "C", TZ: "UTC" } as const;
+
 function startTimeCommand(pid: number): LaunchOpts {
   return {
     bin: "ps",
@@ -79,7 +81,7 @@ function startTimeCommand(pid: number): LaunchOpts {
     // process identically for opaque string equality to be sound. LC_ALL=C fixes
     // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
     // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" },
+    envOverlay: PROCESS_START_ENV,
   };
 }
 

@@ -154,6 +154,7 @@ export async function runFrames(
     const hints = {
       ...terminalObservation(world.host.env, process.stderr),
       client: nodeClientHint("frames", bundle),
+      parentPid: process.ppid,
     };
     const outcome = await tryRenderViaDaemon(
       world,

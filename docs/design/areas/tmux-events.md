@@ -1,102 +1,34 @@
 # tmux events
 
-Status: design, nothing built. Tickets: `candybar-tmux-events-y457`.
+The daemon's observer reads the panes and clients of a server when tmux reports a change. The socket in a session's client hint selects the server. Interested consumers of the same server share its observation. A server that disappears supplies a reason and unknown visibility. Its panes count as shown until another request can establish a fresh observation.
 
-## Owns
+## Reading the server
 
-How candybar learns what tmux is showing, without asking on a timer: the control connection, the facts it produces, what the bar pane does while hidden, and the off-screen rate.
+An unattended guardian runs ordinary tmux command clients. It uses an existing server, adds no session or attachment, requests no pane output and has no window reservation lease. A private Unix socket ties it to the host. Host death closes that socket, so the surviving guardian can release its registrations. The host can perform the same release if the guardian dies, including before the first snapshot. A simultaneous uncatchable termination of both processes can leave their entries on the live server.
 
-## Why
+The guardian discovers available hooks and existing local overrides on the addressed server. It claims entries with tmux’s set-if-absent operation. A direct probe selects named entries on 3.8a and sparse integer entries on 3.7b. The floating-window guardian recognizes the host’s named entries, so their installation and retirement leave its existing reservation lease alone. An observed external option edit or topology event rediscovers the effective hook tables. If a command replaces the hook that would report that very edit and then masks the option hook, tmux has no event for the observer until an independent topology event, such as a pane selection. That event publishes the current mouse setting and restores observation of subsequent local option changes. The same rule holds for commands read from a tmux configuration file. Global, session, window and pane scopes retain their own inheritance. During release, one tmux command checks that an entry still holds this observer's exact command before removing it. A user's replacement survives release. Every mutation is bound to the server generation. The floating window separately owns its named-event guardian and the authority to release its inset reservation.
 
-Two polls run today. The daemon asks every tmux server once a second, and each bar pane asks every 500 ms. A switched-to window waits up to that long for its first frame, and each ask spawns tmux, which costs about 20 ms on macOS.
+One clean-to-dirty transition signals a private classic wait channel. Repeated changes share the pending wake. A single tmux command queue clears the dirty bit and reads server identity, all pane memberships, attached clients and the ending server identity. A changed hook table during that work obliges another pass. A result dirtied during the read is discarded before publication. While clean, one unattached command blocks in wait-for. No scheduled metadata request runs. Output is bounded by the same launcher as other tmux commands. Server failure, rejected metadata commands and waiter death end this observation.
 
-tmux already knows when these things change, and a control-mode client is told.
+Each pane row carries its session, attachment count, current-window flag, zoom, active pane, effective mouse option, process ID and tty. Linked windows and grouped sessions can produce several rows for the same physical pane. Each client reports its session and control-mode flag. A real third-party control client contributes to visibility. A gone server and an existing detached server produce distinct results.
 
-## Design
+## Compatibility evidence
 
-### What the polls do today
+The packaged adapter was exercised on private tmux 3.7b and 3.8a servers. Both support the classic wait channel, numeric hook arrays and format-expanded native commands used here. The 3.8 named wait and client-closed hook used by the floating window are absent on 3.7b. A global pane-exited hook wakes a quiet source exit on 3.7b. External zoom through resize-pane wakes via after-resize-pane there. Both versions expose the changed mouse option to after-set-option.
 
-Deleting a poll means every job it does has a new home.
+The process contract in test/daemon-boots/process/tmux-server-observer.test.ts covers the following observations.
 
-| Job | Done today by | Moves to |
-|---|---|---|
-| Which panes are shown | Daemon poll, bar pane poll | Control connection |
-| What each status row shows | Daemon poll | Control connection |
-| Whether the bar pane is shown | Bar pane poll | Pushed over its feed |
-| Which session the pane holds, which is how the bar pane follows `/clear` | Bar pane poll | Pushed over its feed |
-| Whether the Claude Code pane has closed | Bar pane poll | Pushed over its feed |
-| Whether the bar pane is zoomed, so a resize doesn't unzoom it | Bar pane poll | See [Zoom](#zoom) |
+- Two consumers' independently owned adapters can coexist and release only their own entries. A new local override remains effective for its user and is discovered while observation is live.
+- A quiet source exits, selection and zoom change in a separate session, and break, join, link, unlink and move change the observed session memberships. Ordinary terminal attachment and a separate control client's attachment and detachment preserve their true client flags.
+- Changing visibility while a completed server read is withheld discards that old result. A private producer writes 3,000 terminal lines while the observer sees only metadata; a later event verifies it is still receiving changes.
+- The observer starts no tmux commands across multiple former polling intervals. Killing the host, the guardian during initial installation, or the blocked waiter leaves the server's user hooks and attachments intact. A new server at the same socket starts a new observation.
 
-### One connection per tmux server
+## Pane delivery
 
-The connection uses `tmux-control-mode-js`. It exists for the same span the daemon's poll does: from the first feed opening on a server to the last closing. The socket comes from the client's `tmux` hint, as it does today, because the daemon's own environment says nothing about a session.
+tmux supplies physical placement, visibility and loss. Claude's own process record supplies the session after a genuine /clear. A pane surface keeps its subscriber while hidden so returning to its window can deliver a frame without a full Claude Code statusline flash. A resize must recheck zoom at the effect. Numeric off-screen cadence and floating-window reservation cleanup retain their own owners.
 
-Visibility is a fact about tmux, so the connection belongs to Gather, which pushes the result to renderers. Until Gather exists it lives in today's daemon. Nothing here waits for the split.
+The client reports its tmux socket and pane. New Node and Rust clients also report the immediate parent PID on each invocation. That PID is never cached with the session environment. Older clients can still establish the same physical owner. The host checks the source pane's foreground process group and tty, its ancestry back to the pane root, and the interactive CLI record matching the live process start and PID domain. A shell that inherited tmux variables cannot transfer the bar by issuing a render. During a session change the process record can be replaced before or after the render arrives. A pending candidate watches that record. Losing observation keeps an established pane handoff and leaves the host without authority to open or retire a physical split.
 
-### An event means "something changed"
+A managed drawing pane identifies its daemon, source, server incarnation and unique split instance. Enrollment ties the stream to the drawing process seen by that server. The host discovers an existing split before opening another, including when tmux created the split but its reply was lost. An older untagged follower is recognizable from its launch command. On macOS a matching live connection to this daemon can prove that it is safe to retire. If the host cannot verify that connection, it leaves the old pane in place. This fallback was observed on Debian 12 arm64 with tmux 3.3a.
 
-A tmux notification triggers one re-read of panes and clients, sent over the connection and coalesced with any other in flight. The answer goes through the existing pure rule in `src/daemon/pane-visibility.ts`.
-
-Events are never folded into state. A fold would be a second copy of tmux's rules that can drift, and each notification's payload would need its own handling. With a re-read there's one rule, and a missed detail in a payload can't matter.
-
-### Losing the connection
-
-A lost connection is what a failed ask is today: the server's panes count as shown, which costs frames and never freezes a bar. The next request naming that socket opens a new connection, and connecting is one more trigger for the same re-read. So there's no retry timer and no recovery path of its own.
-
-A session that sends no requests stays at the moving rate until one arrives.
-
-### The control client is a real client
-
-- **It counts.** It raises `session_attached` on its session, and the visibility rule treats a control client as showing every window of that session. Both must exclude candybar's own client, or every window of that session reads as shown.
-- **It needs a session.** It attaches to one that already exists. Creating a session of its own would keep the tmux server alive after the user's last session closes, and would show up in their session list.
-- **Its session can end, or something can detach it.** Both are a lost connection.
-- **Attaching fires the user's hooks,** by how hooks work. Observing this is listed under To probe.
-
-### The hidden bar pane
-
-Hidden, the bar pane stays subscribed. Handoff needs a subscriber, so dropping the subscription hands the bar back to Claude Code's statusline, and returning flashes it. A hidden pane draws at the off-screen rate.
-
-### The off-screen rate
-
-Off-screen becomes its own feed period of 5 s, on every surface. Today one period does two jobs: the off-screen rate and the longest gap for a visible bar, which is what refreshes an age or a clock. They separate, and the visible gap stays at 1 s.
-
-A pane turning visible draws at once, because a period this long would otherwise show a frame up to 5 s old.
-
-The rate readout rounds, so 0.2 fps shows as 0. That's a display issue and doesn't affect the rate.
-
-### Zoom
-
-Zoom is a separate concern. Its one use is the resize guard: a resize of a zoomed pane unzooms it. That guard must not be lost when the bar pane's poll goes, so its replacement lands first.
-
-Until then a pane hidden by a zoomed neighbour counts as shown and keeps the full rate. That costs frames only.
-
-### Events control mode doesn't deliver
-
-Some of tmux's events never reach a control client, or reach it only for its own session. Zoom in another session is one. `tmux-control-mode-js` is taking this on as a general capability, covering every such event tmux has. candybar's own connection doesn't depend on it.
-
-## Evidence
-
-Run on tmux 3.7b, on isolated sockets. Scripts: `probes/p9.mjs`, `probes/p10.mjs`.
-
-| Claim | Check | Result |
-|---|---|---|
-| Changes in another session are heard | Control client on A, changes in B | `%session-window-changed`, `%window-pane-changed`, `%client-session-changed` on attach and switch, `%client-detached` |
-| Zoom in another session isn't heard | Same client, zoom and unzoom in B | Nothing |
-| A control client counts as attached | `list-sessions`, `list-clients` | `attached=1`, `control=1` |
-| A global hook can reach a control client | `set-hook -g window-zoomed` running `display-message -c <client>` | `%message` with the session, window and flag |
-| A leftover hook is harmless | Same hook, client gone | Zoom still worked |
-
-Limits: one tmux version. `refresh-client -B` subscriptions aren't used, because they're scoped to the attached session and tmux checks them on a 1 s timer.
-
-## To probe
-
-Without a poll, an event that doesn't arrive leaves visibility stale until the next one, so this list is what stands between the design and 100%.
-
-- **Coverage.** Whether every change to the shown set produces a notification: `break-pane`, `join-pane`, `move-window`, `link-window`, pane and window close, grouped sessions.
-- **The attach.** Whether connecting fires `client-attached` hooks, and which attach flags stop the client affecting window sizes or receiving pane output.
-- **The library per server.** Its README describes one connection per session. Check it serves a whole server.
-- **tmux versions.** The library needs 3.2 or later. Check what candybar supports and what happens below that.
-
-## Done when
-
-A window switched to shows its first frame with no timer involved, no tmux process is spawned on a schedule, `/clear` and a closed pane reach the bar pane, and returning to a hidden bar pane doesn't flash Claude Code's statusline.
+The packaged process test in `test/daemon-boots/process/tmux-pane-handoff.test.ts` drives the production host and follower on a private server. It supplies a foreground process record, switches an ordinary attached client away, replaces the record after the new session reports, and switches back. It checks the Claude handoff while hidden, the new frame in the same physical pane without another render request, and follower exit when the source closes. A separate private run using Claude Code 2.1.299 observed a real `/clear` change the record at the same PID. Callback order in that run was unobserved.

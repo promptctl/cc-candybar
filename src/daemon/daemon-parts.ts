@@ -1,3 +1,4 @@
+import type { TmuxSourceAuthority } from "./tmux-source-authority.js";
 import type { SessionBook } from "./session-book.js";
 import type { Collector } from "./collector.js";
 import type { LinkSigner } from "../click/link-signer.js";
@@ -55,6 +56,7 @@ export interface DaemonParts {
   // runs, which the stats reply reads.
   readonly sourceRuns: SourceRuns;
   readonly retiredTmuxStatus: Pick<RetiredTmuxStatus, "observe">;
+  readonly paneSession: TmuxSourceAuthority["session"];
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
   readonly limits: LimitsHandle;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).

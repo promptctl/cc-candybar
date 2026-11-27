@@ -20,12 +20,6 @@ import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { clickLaunch, type ClickLaunch } from "./foundations/click-launch.js";
 import { DaemonClosing, failureOf } from "./foundations/verb-error.js";
-import {
-  paneOff,
-  paneOn,
-  type BarPaneEdge,
-  type BarPaneHost,
-} from "./lane-setup.js";
 import type { RunAct, RunEnd } from "./runs.js";
 import type { Timekeeper } from "../time.js";
 
@@ -78,7 +72,6 @@ export interface ActDeps {
   // the session that drew this click. Both tmux operations share the selection.
   readonly programsFor: (session: SessionId | null) => ActPrograms;
   readonly run: (run: RunAct) => Promise<RunEnd>;
-  readonly barPane: { readonly edge: BarPaneEdge; readonly host: BarPaneHost };
   // Whether the daemon's close has begun: no act starts after it.
   readonly closing: () => boolean;
   readonly log: DaemonLogger;
@@ -167,7 +160,7 @@ export class Acts {
 
   // [LAW:single-enforcer] A bar-pane split and input typing share the
   // pane's queue. Admission happens when the act reaches the head.
-  private inPaneTurn<Result>(
+  inPaneTurn<Result>(
     pane: TmuxHint,
     act: () => Promise<Result>,
   ): Promise<Result> {
@@ -175,13 +168,6 @@ export class Acts {
       if (this.deps.closing()) throw new DaemonClosing("pane act");
       return act();
     });
-  }
-
-  setBarPane(pane: TmuxHint, on: boolean): Promise<string> {
-    const { edge, host } = this.deps.barPane;
-    return this.inPaneTurn(pane, () =>
-      on ? paneOn(pane, host, edge) : paneOff(pane, edge),
-    );
   }
 
   private typed(act: Of<"type-slash">): Promise<TypeResult> {

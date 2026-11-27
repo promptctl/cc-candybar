@@ -79,7 +79,7 @@ const render = (budgets: RoundTripBudgets) => async (host: Host) => {
     } as never,
     ["cc-candybar"],
     "/tmp",
-    {},
+    { parentPid: 124 },
     budgets,
   );
 };
@@ -127,6 +127,7 @@ describe("the Node client's deadline", () => {
       const [compact, full] = wire;
       expect(compact).toMatchObject({
         kind: "render-session",
+        parentPid: 124,
         envKey: expect.stringMatching(/^[0-9a-f]{64}$/),
       });
       expect(Object.keys(compact!).sort()).toEqual([
@@ -136,11 +137,13 @@ describe("the Node client's deadline", () => {
         "envKey",
         "hookData",
         "kind",
+        "parentPid",
         "v",
       ]);
       expect(full).toMatchObject({
         kind: "render",
         envKey: compact!.envKey,
+        parentPid: 124,
         deadline: compact!.deadline,
         env: { SESSION_MARKER: "synthetic-session" },
       });

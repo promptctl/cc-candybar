@@ -1,3 +1,5 @@
+import { parsePaneHello, type PaneHello } from "./pane-subscription.js";
+import type { PaneEnrollment } from "./foundations/protocol.js";
 // A daemon's answer to a request: the checkpoint, then a reply per kind.
 
 import { inspect } from "node:util";
@@ -118,6 +120,7 @@ export interface Reply {
 // and a slow click that lands is never told as failed.
 export type HandledRequest =
   | ({ kind: "reply" } & Reply)
+  | { kind: "pane-enroll"; hello: PaneHello }
   | {
       kind: "subscribe";
       drawing: boolean;
@@ -241,7 +244,7 @@ export function refuseClosingInbound(
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
 // but a subscribe, the compiler naming one added to the protocol until it is,
 // and the event its outcome is written as.
-export type ReplyRequest = Exclude<Request, SubscribeRequest>;
+export type ReplyRequest = Exclude<Request, SubscribeRequest | PaneEnrollment>;
 const REPLY_EVENTS: Readonly<
   Record<ReplyRequest["kind"], "render" | "click" | "request">
 > = {
@@ -407,6 +410,12 @@ export async function handleRequest(
     );
   }
 
+  if (req.kind === "pane-enroll") {
+    const hello = parsePaneHello(req);
+    return hello
+      ? { kind: "pane-enroll", hello }
+      : refuse("BAD_REQUEST", "invalid pane enrollment identity");
+  }
   if (req.kind === "subscribe" || req.kind === "measure-window")
     return subscription(req);
   // [LAW:parse-dont-validate] The kind is untrusted JSON: one no request
@@ -470,16 +479,9 @@ export async function replyTo(
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,
       });
-    return stay({
-      ok: true,
-      paneSession: frameFeeds.newestWhere(
-        ({ hints: { tmux } }) =>
-          tmux !== null &&
-          tmux !== undefined &&
-          tmux.socket === socket &&
-          tmux.pane === pane,
-      ),
-    });
+    const paneSession = parts.paneSession({ socket, pane });
+    frameFeeds.notePaneLookup(paneSession);
+    return stay({ ok: true, paneSession });
   }
 
   if (req.kind === "pointer") {

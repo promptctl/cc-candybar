@@ -219,7 +219,7 @@ export interface FeedStats {
   readonly pushed: number;
   // Subscriptions refused or ended because their lane was off.
   readonly refused: number;
-  // `newestWhere` lookups (a tmux bar pane asking whose bar its pane holds),
+  // Legacy wire lookups for the confirmed Claude owner of a tmux pane,
   // and how many found a session.
   readonly lookups: number;
   readonly found: number;

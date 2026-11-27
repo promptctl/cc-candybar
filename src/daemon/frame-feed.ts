@@ -62,6 +62,9 @@ export interface Subscriber {
   readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
   readonly drawing: () => boolean;
+  // An enrolled pane keeps its handoff while hidden. Only a shown, current
+  // assignment can confirm that its physical display took an offered frame.
+  readonly presenting?: () => boolean;
 }
 
 export interface FeedDeps<Req> {
@@ -75,9 +78,8 @@ export interface FeedDeps<Req> {
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
-  // The first session watched: whatever runs only while someone watches
-  // starts, and the returned stop is called when the last stops.
-  watching(): () => void;
+  // A session gained its first subscriber or lost its last one.
+  watchingChanged(session: SessionId, watching: boolean): void;
   // [LAW:single-enforcer] Hands the renderer every session's viewers, as
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
@@ -136,8 +138,12 @@ interface Watched {
 // when that owner ends the one that spoke before it owns the pointer again.
 function ownerOf(watched: Watched): HeldPointer | null {
   let found: HeldPointer | null = null;
-  for (const { owner } of watched.followers.values())
-    if (owner !== null && (found === null || owner.said > found.said))
+  for (const [sub, { owner }] of watched.followers)
+    if (
+      sub.presenting?.() !== false &&
+      owner !== null &&
+      (found === null || owner.said > found.said)
+    )
       found = owner;
   return found;
 }
@@ -235,9 +241,6 @@ export class FrameFeeds<Req> {
   // The lanes each session with a view switches on, as the renderer's last
   // output said: a subscriber is gated by its lane.
   private lanes: Readonly<Record<SessionId, LaneSwitches>> = {};
-  // [LAW:no-ambient-temporal-coupling] The stop of what runs while anyone
-  // watches: held exactly from the first session watched to the last.
-  private stopWatching: (() => void) | null = null;
   private delivery: Delivery = "current";
   // The viewers as the renderer was last handed them, serialized; null when
   // what it holds is unknown (a delivery failed).
@@ -280,7 +283,27 @@ export class FrameFeeds<Req> {
   // lane is switched off while it streams is ended as the renderer's output
   // says so (`switched`). A session with no view yet is admitted, and the
   // switches its view opens with decide.
-  subscribe(sessionId: SessionId, sub: Subscriber): () => void {
+  private moving = false;
+  subscribe(
+    sessionId: SessionId,
+    sub: Subscriber,
+    replaces?: () => void,
+  ): () => void {
+    if (replaces === undefined) return this.join(sessionId, sub);
+    // [LAW:no-ambient-temporal-coupling] A physical pane changing sessions
+    // exposes only the complete move to even a synchronous viewer reader.
+    this.moving = true;
+    try {
+      const leave = this.join(sessionId, sub);
+      replaces();
+      return leave;
+    } finally {
+      this.moving = false;
+      this.announce();
+    }
+  }
+
+  private join(sessionId: SessionId, sub: Subscriber): () => void {
     if (this.delivery === "closed") {
       // [LAW:nothing-unseen] Said, so a subscribe never vanishes from the log.
       this.deps.log(
@@ -302,7 +325,7 @@ export class FrameFeeds<Req> {
         pushed: 0,
       };
       this.watched.set(sessionId, watched);
-      this.stopWatching ??= this.deps.watching();
+      this.deps.watchingChanged(sessionId, true);
     }
     if (watched.followers.has(sub))
       return () => this.unsubscribe(sessionId, sub);
@@ -365,8 +388,11 @@ export class FrameFeeds<Req> {
     | { readonly kind: "ok" }
     | { readonly kind: "refused"; readonly reason: string } {
     const watched = this.watched.get(sessionId);
-    const reporting = [...(watched?.followers.values() ?? [])].filter(
-      (follower) => follower.owner?.id === owner.id,
+    const reporting = [...(watched?.followers ?? [])].flatMap(
+      ([sub, follower]) =>
+        follower.owner?.id === owner.id && sub.presenting?.() !== false
+          ? [follower]
+          : [],
     );
     if (watched === undefined || reporting.length === 0)
       return {
@@ -441,7 +467,9 @@ export class FrameFeeds<Req> {
         }),
       ),
       pointer: ownerOf(watched)?.pointer ?? null,
-      shown: this.shown(sessionId),
+      shown: [...watched.followers.keys()].some(
+        (sub) => sub.presenting?.() ?? this.shown(sessionId),
+      ),
       joined: watched.frameDemand,
     };
   }
@@ -452,7 +480,7 @@ export class FrameFeeds<Req> {
   // poll that found every pane as it was). A delivery that failed is made
   // good by the next announcement.
   announce(): void {
-    if (this.delivery !== "current") return;
+    if (this.moving || this.delivery !== "current") return;
     if (JSON.stringify(this.viewers()) === this.handed) return;
     this.delivery = "owed";
     void this.deps
@@ -570,16 +598,10 @@ export class FrameFeeds<Req> {
       this.send(session, watched, sub, encoded, done);
   }
 
-  // The session of the newest request `match` accepts, among the latest
-  // request of each session the daemon holds, or null when none does.
-  newestWhere(match: (req: Req) => boolean): SessionId | null {
-    let newest: { sessionId: SessionId; order: number } | null = null;
-    for (const [sessionId, { req, order }] of this.requests)
-      if (match(req) && (newest === null || order > newest.order))
-        newest = { sessionId, order };
+  // Keep the published feed counters for the legacy pane-session wire query.
+  notePaneLookup(session: SessionId | null): void {
     this.lookups++;
-    if (newest !== null) this.found++;
-    return newest?.sessionId ?? null;
+    if (session !== null) this.found++;
   }
 
   // The latest request the daemon holds of `sessionId`, or null when it
@@ -588,10 +610,8 @@ export class FrameFeeds<Req> {
     return this.requests.get(sessionId)?.req ?? null;
   }
 
-  // The latest request and its arrival order, for consumers reconciling
-  // declarations from sessions that have reported the same pane.
-  latestWithOrder(sessionId: SessionId): Noted<Req> | undefined {
-    return this.requests.get(sessionId);
+  *knownRequests(): IterableIterator<Req> {
+    for (const { req } of this.requests.values()) yield req;
   }
 
   // The frames each renderer drew are its own count, on its panel.
@@ -630,10 +650,7 @@ export class FrameFeeds<Req> {
         "info",
         `feed sid=${JSON.stringify(sessionId)} unwatched pushed=${watched.pushed}`,
       );
-      if (this.watched.size === 0) {
-        this.stopWatching?.();
-        this.stopWatching = null;
-      }
+      this.deps.watchingChanged(sessionId, false);
     }
     this.announce();
     const writes = [...follower.writes];
@@ -674,7 +691,7 @@ export class FrameFeeds<Req> {
       follower.confirmed !== null &&
       covers(follower.confirmed, answer)
     ) {
-      done?.(sub.drawing());
+      done?.(sub.presenting?.() ?? sub.drawing());
       return;
     }
     const write: PendingWrite = { answer, done };
@@ -685,7 +702,7 @@ export class FrameFeeds<Req> {
       // [LAW:effects-at-boundaries] A refusal can detach the subscription
       // while the socket flushes its previous frame. That confirmed write
       // still carried the daemon's event, even after the view receipt ended.
-      const displayed = delivered && sub.drawing();
+      const displayed = delivered && (sub.presenting?.() ?? sub.drawing());
       if (displayed && answer.displayedEvents !== undefined)
         this.deps.acknowledgeDisplayed(answer.displayedEvents);
       if (!follower.writes.delete(write)) return;

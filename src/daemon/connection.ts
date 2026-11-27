@@ -1,3 +1,4 @@
+import type { PaneHello } from "./pane-subscription.js";
 // A daemon's connection: one request answered, or one session's frames pushed,
 // over a stream. The socket is what a daemon's process hands it, and nothing
 // here needs one, so a test runs a connection's behaviour in a jest worker.
@@ -30,7 +31,7 @@ import {
 // What a connection reads of its daemon.
 export type ConnectionDaemon = Pick<
   ServedDaemon,
-  "stats" | "clock" | "handle" | "subscribe" | "exit" | "log"
+  "stats" | "clock" | "handle" | "enroll" | "subscribe" | "exit" | "log"
 >;
 
 // What an answer owes its sender once its fate is known: the exit it carries,
@@ -67,6 +68,7 @@ type Phase = Open | { readonly kind: "closed"; readonly from: Open };
 
 // What happens to a connection, carrying the answer it would send.
 type Event =
+  | { kind: "enroll"; hello: PaneHello }
   | { readonly kind: "read"; readonly opens: Open }
   | { readonly kind: "unparsed"; readonly answer: Reply }
   | { readonly kind: "deadline"; readonly answer: Reply }
@@ -87,6 +89,7 @@ type Event =
 
 // What a step does besides moving the state.
 type Act =
+  | { kind: "attach-pane"; hello: PaneHello }
   | { readonly kind: "none" }
   | { readonly kind: "write"; readonly answer: Reply }
   | {
@@ -272,6 +275,10 @@ const STEP: {
   // Only a waiting client's subscribe attaches: one the backstop answered
   // while it was on its way, or whose subscriber hung up first, is not a
   // subscription.
+  enroll: (p, e) =>
+    p.kind === "answering"
+      ? [p, { kind: "attach-pane", hello: e.hello }]
+      : [p, NONE],
   subscribe: (p, e) =>
     p.kind === "answering"
       ? [
@@ -392,6 +399,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           `${act.owed.exitAfterFlush === null ? act.what : "exit-after-flush"} dropped: ${act.why}`,
         );
         return act.owed.settled(false);
+      case "attach-pane":
+        return attachPane(act.hello);
       case "attach":
         return attach(act.sessionId, act.lane, act.owner, act.drawing);
       case "unsubscribe":
@@ -463,6 +472,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
             return clicked(r);
           case "reply":
             return on({ kind: "replied", answer: r });
+          case "pane-enroll":
+            return on({ kind: "enroll", hello: r.hello });
           case "subscribe":
             return on({
               kind: "subscribe",
@@ -531,6 +542,39 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // timeout, and frames until the subscriber closes it.
   // [LAW:no-ambient-temporal-coupling] A subscriber slower than the frames
   // gets the newest one when its socket drains, never a backlog of stale ones.
+  function attachPane(hello: PaneHello): void {
+    const push = newestWins(sock);
+    const unsubscribe = daemon.enroll(hello, {
+      disconnect: () => sock.destroy(),
+      update: (placement, json, done) => {
+        // The same coalesced write carries placement and the latest frame for
+        // that session, including the positive hello before its first frame.
+        const envelope = (frame: string) =>
+          JSON.stringify({ kind: "pane-state", ...placement }).slice(0, -1) +
+          ',"frame":' +
+          frame +
+          "}";
+        const packet = framed(json ?? "null", envelope, JSON.stringify);
+        if (packet.unsent)
+          daemon.log(
+            "error",
+            "pane frame unsendable: " + packet.unsent.message,
+          );
+        push(packet.frame, (written) => done?.(written && !packet.unsent));
+      },
+      refused: (error) =>
+        on({
+          kind: "refused",
+          answer: replyOf({
+            ok: false,
+            error,
+            code: "SWITCHED_OFF",
+            daemonV: PROTOCOL_VERSION,
+          }),
+        }),
+    });
+    on({ kind: "attached", unsubscribe });
+  }
   function attach(
     sessionId: SessionId,
     lane: Lane,

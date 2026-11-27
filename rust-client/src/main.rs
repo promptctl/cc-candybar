@@ -275,6 +275,7 @@ enum BadInput {
 // cannot be derived from the host's saved environment, including the native
 // client's live TTY geometry and the bundle it is running with.
 fn client_hints(request: &mut serde_json::Value) {
+    request["parentPid"] = serde_json::json!(unsafe { libc::getppid() });
     let (term_cols, term_rows) = detect_term_extents();
     if let Some(cols) = term_cols {
         request["termCols"] = serde_json::Value::from(cols);
