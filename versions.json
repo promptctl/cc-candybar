@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "45e11fecc7f7b958692daf8c8320094d983823c3",
-      "timestamp": "2026-11-27T14:16:33.860Z",
+      "sha": "178959ffe42bb2cd02ac6aa6bdf6369c11281adc",
+      "timestamp": "2026-11-27T14:20:36.857Z",
       "commits": [
         {
-          "sha": "45e11fecc7f7b958692daf8c8320094d983823c3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T07:15:27-07:00",
-          "message": "fix(renderer): make regional and temporal inputs reproducible (#985)"
+          "sha": "178959ffe42bb2cd02ac6aa6bdf6369c11281adc",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T14:18:47Z",
+          "message": "chore(release): set `package.json` to 1.245.1\n\n## [1.245.1](https://github.com/promptctl/cc-candybar/compare/v1.245.0...v1.245.1) (2026-11-27)\n\n### Bug Fixes\n\n* **renderer:** make regional and temporal inputs reproducible ([#985](https://github.com/promptctl/cc-candybar/issues/985)) ([45e11fe](https://github.com/promptctl/cc-candybar/commit/45e11fecc7f7b958692daf8c8320094d983823c3))\n"
         }
       ]
     }
