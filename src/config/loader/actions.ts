@@ -7,8 +7,9 @@ import {
   type ActionKey,
   type OptionDomain,
 } from "../action.js";
-import { DEFAULT_WRITE_LAYER } from "../layer-role.js";
+import { DEFAULT_WRITE_LAYER, type LayerChoice } from "../layer-role.js";
 import {
+  gestureBindingSpellings,
   parseOneDelivered,
   PLAIN_CLICK,
   type GestureName,
@@ -24,11 +25,8 @@ import {
   describeType,
   describeValue,
   ENV_NAME,
-  fields,
   isPlainObject,
   objectJson,
-  type FieldSpec,
-  type FieldSpecMap,
   type JsonNode,
   type ValidateCtx,
 } from "./validate-core.js";
@@ -142,11 +140,26 @@ export function actionHomeOf(filePath: string): ActionHome {
 
 // A present value produces a typed field or a field issue. Absent values are
 // handled by the field's presence policy before the parser sees input.
+interface PresentField<T> {
+  readonly json: JsonNode;
+  parse(
+    ctx: ValidateCtx,
+    path: string,
+    name: string,
+    raw: Record<string, unknown>,
+    home: ActionHome,
+  ): T | undefined;
+}
+type RequiredField<T> = PresentField<T> & { readonly required: true };
+type OptionalField<T> = PresentField<T> & { readonly required: false };
+type DefaultedField<T> = OptionalField<T> & { readonly fallback: () => T };
+type ActionField<T> = RequiredField<T> | OptionalField<T> | DefaultedField<T>;
+
 type Value<T> = { value: T } | { error: string };
 function required<T>(
   json: JsonNode,
   read: (raw: unknown, name: string) => Value<T>,
-): FieldSpec<T> {
+): RequiredField<T> {
   return {
     required: true,
     json,
@@ -158,13 +171,11 @@ function required<T>(
     },
   };
 }
-function defaulted<T>(spec: FieldSpec<T>, fallback: () => T): FieldSpec<T> {
-  return {
-    ...spec,
-    required: false,
-    parse: (ctx, path, name, raw) =>
-      Object.hasOwn(raw, name) ? spec.parse(ctx, path, name, raw) : fallback(),
-  };
+function defaulted<T>(
+  spec: RequiredField<T>,
+  fallback: () => T,
+): DefaultedField<T> {
+  return { ...spec, required: false, fallback };
 }
 const text = required<string>({ type: "string" }, (raw, name) =>
   typeof raw === "string"
@@ -193,7 +204,7 @@ function words(
   minItems: number,
   shape: typeof clickValue,
   end: string,
-): FieldSpec<readonly string[]> {
+): RequiredField<readonly string[]> {
   return required<readonly string[]>(
     { type: "array", items: shape.json, minItems, uniqueItems: true },
     (raw, name) => {
@@ -225,14 +236,14 @@ function words(
 function domain(
   shape: typeof clickValue,
   end: string,
-): FieldSpec<OptionDomain> {
+): RequiredField<OptionDomain> {
   const list = words(1, shape, end);
   return {
     required: true,
     json: { anyOf: [{ type: "string", minLength: 1 }, list.json] },
-    parse(ctx, path, name, raw) {
+    parse(ctx, path, name, raw, home) {
       const v = raw[name];
-      if (typeof v !== "string") return list.parse(ctx, path, name, raw);
+      if (typeof v !== "string") return list.parse(ctx, path, name, raw, home);
       if (v !== "") return v;
       issue(ctx, path + "." + name, `${name} must be a non-empty domain name`);
       return undefined;
@@ -251,17 +262,28 @@ const increment = required<number>(
       ? { value: v }
       : { error: `${name} must be a non-zero integer` },
 );
-const gestures: FieldSpec<Record<GestureName, string>> = {
-  required: false,
-  json: {
+export function gestureBindingsJson(): JsonNode {
+  const groups = gestureBindingSpellings();
+  // Each alias is an admissible property name, but one gesture has one
+  // target. Draft 7 can forbid every pair of equivalent property names.
+  return {
     type: "object",
+    propertyNames: { enum: groups.flat() },
     additionalProperties: { type: "string", minLength: 1 },
-  },
-  parse(ctx, path, name, raw) {
-    return Object.hasOwn(raw, name)
-      ? (validateGestures(ctx, path, raw[name]) ?? undefined)
-      : undefined;
-  },
+    not: {
+      anyOf: groups.flatMap((aliases) =>
+        aliases.flatMap((a, i) =>
+          aliases.slice(i + 1).map((b) => ({ required: [a, b] })),
+        ),
+      ),
+    },
+  };
+}
+const gestures: OptionalField<Record<GestureName, string>> = {
+  required: false,
+  json: { $ref: "#/definitions/GestureBindings" },
+  parse: (ctx, path, name, raw) =>
+    validateGestures(ctx, path, raw[name]) ?? undefined,
 };
 const program = required<readonly [string, ...string[]]>(
   {
@@ -280,6 +302,26 @@ const program = required<readonly [string, ...string[]]>(
           error: `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(v)}`,
         },
 );
+// A program's argv and its declaring directory can each be wrong. Read
+// both before constructing the run even when another record field failed.
+const programInFile: RequiredField<{
+  run: readonly [string, ...string[]];
+  cwd: string | null;
+}> = {
+  ...program,
+  parse(ctx, path, name, raw, home) {
+    const run = program.parse(ctx, path, name, raw, home);
+    if ("text" in home) {
+      issue(
+        ctx,
+        path + "." + name,
+        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`,
+      );
+      return undefined;
+    }
+    return run && { run, cwd: home.dir };
+  },
+};
 const environment = required<Record<string, string>>(
   {
     type: "object",
@@ -328,6 +370,7 @@ const slash = required<SlashLine>(
 );
 
 interface Arm {
+  readonly keys: readonly string[];
   readonly json: JsonNode;
   parse(
     ctx: ValidateCtx,
@@ -336,48 +379,80 @@ interface Arm {
     home: ActionHome,
   ): ActionDecl | null;
 }
-type Specs = Record<string, FieldSpec<unknown>>;
-type Parsed<F extends Specs> = {
-  [K in keyof F]: F[K] extends FieldSpec<infer V> ? V : never;
+type Specs = Record<string, ActionField<unknown>>;
+type Output<F> = F extends PresentField<infer V> ? V : never;
+type AlwaysOutput<F> = F extends
+  | { required: true }
+  | { fallback: () => unknown }
+  ? true
+  : false;
+export type ParsedActionFields<F extends Specs> = {
+  [K in keyof F as AlwaysOutput<F[K]> extends true ? K : never]: Output<F[K]>;
+} & {
+  [K in keyof F as AlwaysOutput<F[K]> extends true ? never : K]?: Output<F[K]>;
 };
-type Project<F extends Specs> = (
-  p: Parsed<F>,
+type Project<F extends Specs> = (p: ParsedActionFields<F>) => ActionDecl;
+
+function readMembers<F extends Specs>(
   ctx: ValidateCtx,
   path: string,
+  raw: Record<string, unknown>,
   home: ActionHome,
-) => ActionDecl | null;
+  specs: F,
+  refine?: (available: Partial<ParsedActionFields<F>>) => void,
+): ParsedActionFields<F> | null {
+  const out: Record<string, unknown> = {};
+  let valid = true;
+  for (const [name, spec] of Object.entries(specs)) {
+    if (!Object.hasOwn(raw, name) && !spec.required) {
+      if ("fallback" in spec) out[name] = spec.fallback();
+      continue;
+    }
+    const value = spec.parse(ctx, path, name, raw, home);
+    if (value === undefined) valid = false;
+    else out[name] = value;
+  }
+  // Only required or defaulted fields are guaranteed on success. A
+  // refinement can inspect the independently parsed facts even on failure.
+  refine?.(out as Partial<ParsedActionFields<F>>);
+  return valid ? (out as ParsedActionFields<F>) : null;
+}
 
-// Optional gesture bindings and the layer an action writes are checked even
-// when its source or preset verb fails to select a record.
-function sharedFields(key: ActionKey) {
+function sharedFields(
+  key: ActionKey,
+):
+  | { on: typeof gestures }
+  | { on: typeof gestures; layer: DefaultedField<LayerChoice> } {
   const layers = LAYER_CHOICES[key];
-  const layer =
-    layers &&
-    defaulted(
-      choice(layers, "must be one of " + layers.join(", ")),
-      () => DEFAULT_WRITE_LAYER,
+  return layers
+    ? {
+        on: gestures,
+        layer: defaulted(
+          choice(layers, "must be one of " + layers.join(", ")),
+          () => DEFAULT_WRITE_LAYER,
+        ),
+      }
+    : { on: gestures };
+}
+
+function unknownKeys(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+  key: ActionKey,
+  keys: readonly string[],
+) {
+  for (const name of Object.keys(raw)) {
+    if (keys.includes(name)) continue;
+    issue(
+      ctx,
+      path + "." + name,
+      name === "layer" && !LAYER_CHOICES[key]
+        ? `a ${key} action writes no config, so it names no layer. Expected only: ${keys.join(", ")}`
+        : `Unknown key "${name}" on a ${key} action. Expected only: ${keys.join(", ")}`,
     );
-  const declared: Specs = { on: gestures };
-  if (layer) declared.layer = layer;
-  return {
-    declared,
-    read(ctx: ValidateCtx, path: string, raw: Record<string, unknown>) {
-      const on = gestures.parse(ctx, path, "on", raw);
-      const resolved = layer?.parse(ctx, path, "layer", raw);
-      return {
-        ...(on && Object.keys(on).length ? { on } : {}),
-        ...(resolved === undefined ? {} : { layer: resolved }),
-      };
-    },
-  };
+  }
 }
-
-// FieldSpecMap checks the forward mapping from a domain type to its fields.
-// Here declared specs are the input and the selected member has their values.
-function mapOf<F extends Specs>(specs: F): FieldSpecMap<Parsed<F>> {
-  return specs as unknown as FieldSpecMap<Parsed<F>>;
-}
-
 // [LAW:single-enforcer] Shared fields join the selected record before either
 // interpreter runs. Unknown-key help therefore includes every authored key.
 function arm<F extends Specs>(
@@ -385,42 +460,47 @@ function arm<F extends Specs>(
   members: F,
   project: Project<F>,
   description?: string,
+  refine?: (
+    available: Partial<ParsedActionFields<F>>,
+    ctx: ValidateCtx,
+    path: string,
+  ) => void,
 ): Arm {
   const shared = sharedFields(key);
-  const declared = { ...members, ...shared.declared };
+  const declared: Specs = { ...members, ...shared };
   const keys = Object.keys(declared);
   return {
+    keys,
     json: {
-      ...objectJson(mapOf(declared)),
+      ...objectJson(declared),
       ...(description === undefined ? {} : { description }),
     },
     parse(ctx, path, raw, home) {
       const before = ctx.issues.length;
-      for (const name of Object.keys(raw)) {
-        if (Object.hasOwn(declared, name)) continue;
-        issue(
-          ctx,
-          path + "." + name,
-          name === "layer" && !Object.hasOwn(shared.declared, name)
-            ? `a ${key} action writes no config, so it names no layer. Expected only: ${keys.join(", ")}`
-            : `Unknown key "${name}" on a ${key} action. Expected only: ${keys.join(", ")}`,
-        );
-      }
-      const extras = shared.read(ctx, path, raw);
-      const body = fields<Parsed<F>>(ctx, mapOf(members), path, raw);
-      if (body === null || ctx.issues.length !== before) return null;
-      const action = project(body, ctx, path, home);
-      // The writing member's layer has been parsed against its own choices.
-      return action === null ? null : Object.assign({}, action, extras);
+      unknownKeys(ctx, path, raw, key, keys);
+      const extras = readMembers(ctx, path, raw, home, shared);
+      const body = readMembers(ctx, path, raw, home, members, (available) =>
+        refine?.(available, ctx, path),
+      );
+      if (body === null || !extras || ctx.issues.length !== before) return null;
+      const { on, ...layer } = extras;
+      return Object.assign(
+        {},
+        project(body),
+        layer,
+        on && Object.keys(on).length ? { on } : {},
+      );
     },
   };
 }
+
 interface Family {
   readonly arms: readonly Arm[];
   select(
     raw: Record<string, unknown>,
     ctx: ValidateCtx,
     path: string,
+    home: ActionHome,
   ): Arm | { error: string };
 }
 function sole(a: Arm): Family {
@@ -446,8 +526,8 @@ function writes(key: "set" | "persist"): Family {
   function source<F extends Specs>(
     name: keyof F & string,
     specs: F,
-    project: (p: Parsed<F>, destination: string) => ActionDecl,
-    check?: (value: Parsed<F>) => string | null,
+    project: (p: ParsedActionFields<F>, destination: string) => ActionDecl,
+    check?: (value: Partial<ParsedActionFields<F>>) => string | null,
     description?: string,
   ) {
     return {
@@ -455,17 +535,16 @@ function writes(key: "set" | "persist"): Family {
       arm: arm(
         key,
         { [key]: destination, ...specs },
-        (p, ctx, path) => {
-          const payload: Parsed<F> = p;
-          const problem = check?.(payload);
-          if (problem) {
-            issue(ctx, path + "." + name, problem);
-            return null;
-          }
-          // This computed property is the required string parsed by destination.
-          return project(payload, p[key] as string);
+        (p) => {
+          // The computed key is the required destination field in this record.
+          const declared: Record<string, unknown> = p;
+          return project(p as ParsedActionFields<F>, declared[key] as string);
         },
         description,
+        (available, ctx, path) => {
+          const reason = check?.(available as Partial<ParsedActionFields<F>>);
+          if (reason) issue(ctx, path + "." + name, reason);
+        },
       ),
     };
   }
@@ -487,7 +566,7 @@ function writes(key: "set" | "persist"): Family {
       { min: integer, max: integer, by: increment },
       (p, v) => ({ ...address(v), min: p.min, max: p.max, by: p.by }),
       (v) =>
-        v.min < v.max
+        v.min === undefined || v.max === undefined || v.min < v.max
           ? null
           : `min (${v.min}) must be less than max (${v.max})`,
       "The loader requires min to be less than max.",
@@ -524,10 +603,10 @@ function writes(key: "set" | "persist"): Family {
   ];
   return {
     arms: entries.map((e) => e.arm),
-    select(raw, ctx, path) {
+    select(raw, ctx, path, home) {
       const found = entries.filter((e) => Object.hasOwn(raw, e.name));
       if (found.length === 1) return found[0]!.arm;
-      destination.parse(ctx, path, key, raw);
+      destination.parse(ctx, path, key, raw, home);
       return {
         error: `a ${key} action declares exactly one value source: ${entries.map((e) => e.name).join(", ")}${found.length ? " — found: " + found.map((e) => e.name).join(", ") : ""}`,
       };
@@ -580,19 +659,11 @@ const registry = {
     arm(
       "run",
       {
-        run: program,
+        run: programInFile,
         env: defaulted(environment, () => ({})),
         refreshes: defaulted(refresh, () => []),
       },
-      (p, ctx, path, home) => {
-        if ("dir" in home) return { ...p, cwd: home.dir };
-        issue(
-          ctx,
-          path + ".run",
-          `a run action runs in the directory of the file that declares it, and ${home.text} is no file`,
-        );
-        return null;
-      },
+      ({ run, env, refreshes }) => ({ ...run, env, refreshes }),
     ),
   ),
   do: sole(arm("do", { do: composition }, (p) => p)),
@@ -630,9 +701,14 @@ function validateActionDecl(
     );
     return null;
   }
-  const selected = registry[present[0]!].select(raw, ctx, path);
+  const key = present[0]!;
+  const family = registry[key];
+  const selected = family.select(raw, ctx, path, home);
   if ("error" in selected) {
-    sharedFields(present[0]!).read(ctx, path, raw);
+    readMembers(ctx, path, raw, home, sharedFields(key));
+    unknownKeys(ctx, path, raw, key, [
+      ...new Set(family.arms.flatMap((a) => a.keys)),
+    ]);
     issue(ctx, path, selected.error);
     return null;
   }

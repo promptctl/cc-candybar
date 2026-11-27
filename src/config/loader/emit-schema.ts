@@ -15,7 +15,7 @@
 import { editGlobalsJson, globalsJson, themeDefaultsJson } from "./globals.js";
 import { variablesMapJson } from "./variables.js";
 import { segmentDefinitions, segmentsJson } from "./segments.js";
-import { actionsJson } from "./actions.js";
+import { actionsJson, gestureBindingsJson } from "./actions.js";
 import { stylesJson } from "./styles.js";
 import { presetsJson } from "./presets.js";
 import {
@@ -72,6 +72,7 @@ export function emitConfigSchema(
       },
     },
     definitions: {
+      GestureBindings: gestureBindingsJson(),
       ...segmentDefinitions(),
       [LAYOUT_NODE_DEF_NAME]: layoutNodeJson(),
       [ROOT_FRAGMENT_DEF_NAME]: rootFragmentJson(),

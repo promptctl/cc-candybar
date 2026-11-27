@@ -822,11 +822,12 @@ export function optionalEnumSpec<T extends string>(
 // caller chooses whether unknown keys are forbidden — a `record` forbids them
 // (additionalProperties:false), a tagged-union arm allows the sibling
 // discriminator. The structure is the declaration; emit is mechanical.
-export function objectJson<T>(
-  fieldMap: FieldSpecMap<T>,
+export function objectJson(
+  specs: Readonly<
+    Record<string, Pick<FieldSpec<unknown>, "json" | "required">>
+  >,
   opts: { readonly closed: boolean } = { closed: true },
 ): JsonNode {
-  const specs = fieldMap as Readonly<Record<string, FieldSpec<unknown>>>;
   const properties: Record<string, JsonNode> = {};
   const required: string[] = [];
   for (const [field, spec] of Object.entries(specs)) {

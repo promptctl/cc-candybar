@@ -1,3 +1,4 @@
+import type { ParsedActionFields } from "../../src/config/loader/actions";
 // [LAW:verifiable-goals] The JSON Schema's contract: accept the configs a user
 // may legitimately write (A-grammar root tree, all variable/action kinds),
 // reject structurally-broken ones. We validate the COMMITTED artifact
@@ -532,6 +533,96 @@ describe("action records in the published schema and file loader", () => {
     expect(bad).toThrow(/plain click/);
     expect(bad).toThrow(/exactly one value source/);
   });
+  test("a projector can rely on required and defaulted values while an optional field can be omitted", () => {
+    type Field = { json: { type: "string" }; parse: () => string | undefined };
+    type Example = ParsedActionFields<{
+      authored: Field & { required: true };
+      fallback: Field & { required: false; fallback: () => string };
+      optional: Field & { required: false };
+    }>;
+    const example: Example = { authored: "declared", fallback: "default" };
+    const required: string = example.authored;
+    const defaulted: string = example.fallback;
+    // @ts-expect-error An omitted optional input cannot promise a string.
+    const optional: string = example.optional;
+    expect([required, defaulted, optional]).toEqual([
+      "declared",
+      "default",
+      undefined,
+    ]);
+  });
+  test("every modifier order is an alias of one binding and distinct bindings may coexist", () => {
+    const orders = [
+      "ctrl+alt+shift",
+      "ctrl+shift+alt",
+      "alt+ctrl+shift",
+      "alt+shift+ctrl",
+      "shift+ctrl+alt",
+      "shift+alt+ctrl",
+    ];
+    function check(on: Record<string, string>, expected: boolean) {
+      const source = JSON.stringify({
+        actions: { shortcut: { copy: "ok", on }, target: { copy: "target" } },
+      });
+      expect(schemaAccepts(source)).toBe(expected);
+      expect(loaderAccepts(source)).toBe(expected);
+    }
+    for (const button of ["left", "middle", "right"]) {
+      const aliases = orders.map((order) => order + "+" + button);
+      for (const [i, alias] of aliases.entries()) {
+        check({ [alias]: "target", hover: "target", middle: "target" }, true);
+        for (const other of aliases.slice(i + 1))
+          check({ [alias]: "target", [other]: "target" }, false);
+      }
+    }
+    for (const spelling of [
+      "left",
+      "wobble",
+      "ctrl+ctrl+right",
+      "ctrl +right",
+      "ctrl+ right",
+      " right",
+      "right ",
+    ])
+      check({ [spelling]: "target" }, false);
+    check({ "ctrl+alt+left": "target", "alt+ctrl+left": "target" }, false);
+  });
+  test("independent field, refinement and declaring-file errors survive the same load", () => {
+    const bounded = () =>
+      fromFile({ set: "key", min: 2, max: 1, by: 1, typo: false });
+    expect(bounded).toThrow(/Unknown key "typo"/);
+    expect(bounded).toThrow(/min \(2\) must be less than max \(1\)/);
+    const multiple = () => fromFile({ set: 99, min: 2, max: 1, by: 0 });
+    expect(multiple).toThrow(/set key/);
+    expect(multiple).toThrow(/non-zero integer/);
+    expect(multiple).toThrow(/must be less than max/);
+    const run = () => parseDslConfig("<stdin>", sourceOf({ run: [], env: 17 }));
+    for (const message of [
+      "run must list",
+      "env must map",
+      "<stdin> is no file",
+    ])
+      expect(run).toThrow(message);
+  });
+  test.each([
+    { persist: "k", typo: true },
+    { persist: "k", to: "one", from: "themes", typo: true },
+    { preset: "other", typo: true },
+  ])(
+    "a failed choice still reports an unknown key and the family's valid fields %j",
+    (action) => {
+      const parse = () => fromFile(action);
+      const key = "persist" in action ? "persist" : "preset";
+      expect(parse).toThrow(
+        new RegExp(
+          String.raw`Unknown key "typo" on a ${key} action\. Expected only: (?=[^\n]*\blayer\b)(?=[^\n]*\bon\b)`,
+        ),
+      );
+      expect(parse).toThrow(
+        key === "persist" ? /exactly one value source/ : /preset must be/,
+      );
+    },
+  );
   test("an ambiguous persist lists the actual source discriminators and omits companion fields", () => {
     const bad = {
       persist: "presets.default.root",

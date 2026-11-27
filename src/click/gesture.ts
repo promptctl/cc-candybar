@@ -85,6 +85,37 @@ export const ALL_GESTURES: readonly GestureName[] = BUTTONS.flatMap((button) =>
   ),
 );
 
+// All authored spellings of each deliverable binding. The modifier and
+// button vocabulary and the canonical grouping are the same as parseGesture.
+function modifierOrders(remaining: readonly Modifier[]): Modifier[][] {
+  return [
+    [],
+    ...remaining.flatMap((head) =>
+      modifierOrders(remaining.filter((m) => m !== head)).map((tail) => [
+        head,
+        ...tail,
+      ]),
+    ),
+  ];
+}
+export function gestureBindingSpellings(): ReadonlyArray<readonly string[]> {
+  const candidates = [
+    HOVER,
+    ...modifierOrders(MODIFIERS).flatMap((order) =>
+      BUTTONS.map((button) => [...order, button].join("+")),
+    ),
+  ];
+  const groups = new Map<string, string[]>();
+  for (const spelling of candidates) {
+    const parsed = parseOneDelivered(spelling);
+    if (parsed.kind !== "ok" || parsed.value === PLAIN_CLICK) continue;
+    const aliases = groups.get(parsed.value) ?? [];
+    aliases.push(spelling);
+    groups.set(parsed.value, aliases);
+  }
+  return [...groups.values()];
+}
+
 // [LAW:parse-dont-validate] The one spelling of a gesture or hover, read:
 // what an action's `on:` key and a pane's delivered list are both made of.
 export function parseOneDelivered(entry: unknown): Asked<Delivered> {

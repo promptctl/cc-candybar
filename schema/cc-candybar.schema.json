@@ -742,11 +742,7 @@
                 "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -782,11 +778,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -816,11 +808,7 @@
                 }
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -851,11 +839,7 @@
                 "uniqueItems": true
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -878,11 +862,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -905,11 +885,7 @@
                 "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -952,11 +928,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -993,11 +965,7 @@
                 }
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1035,11 +1003,7 @@
                 "uniqueItems": true
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1069,11 +1033,7 @@
                 "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1114,11 +1074,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1174,11 +1130,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1203,11 +1155,7 @@
                 "type": "string"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1222,11 +1170,7 @@
                 "type": "string"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1243,11 +1187,7 @@
                 "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1271,11 +1211,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1292,11 +1228,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1313,11 +1245,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1334,11 +1262,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1355,11 +1279,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1384,11 +1304,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1415,11 +1331,7 @@
                 "type": "string"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1444,11 +1356,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1471,11 +1379,7 @@
                 "pattern": "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1516,11 +1420,7 @@
                 }
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1540,11 +1440,7 @@
                 }
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -2003,6 +1899,393 @@
     }
   },
   "definitions": {
+    "GestureBindings": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "hover",
+          "middle",
+          "right",
+          "ctrl+left",
+          "ctrl+middle",
+          "ctrl+right",
+          "ctrl+alt+left",
+          "alt+ctrl+left",
+          "ctrl+alt+middle",
+          "alt+ctrl+middle",
+          "ctrl+alt+right",
+          "alt+ctrl+right",
+          "ctrl+alt+shift+left",
+          "ctrl+shift+alt+left",
+          "alt+ctrl+shift+left",
+          "alt+shift+ctrl+left",
+          "shift+ctrl+alt+left",
+          "shift+alt+ctrl+left",
+          "ctrl+alt+shift+middle",
+          "ctrl+shift+alt+middle",
+          "alt+ctrl+shift+middle",
+          "alt+shift+ctrl+middle",
+          "shift+ctrl+alt+middle",
+          "shift+alt+ctrl+middle",
+          "ctrl+alt+shift+right",
+          "ctrl+shift+alt+right",
+          "alt+ctrl+shift+right",
+          "alt+shift+ctrl+right",
+          "shift+ctrl+alt+right",
+          "shift+alt+ctrl+right",
+          "ctrl+shift+left",
+          "shift+ctrl+left",
+          "ctrl+shift+middle",
+          "shift+ctrl+middle",
+          "ctrl+shift+right",
+          "shift+ctrl+right",
+          "alt+left",
+          "alt+middle",
+          "alt+right",
+          "alt+shift+left",
+          "shift+alt+left",
+          "alt+shift+middle",
+          "shift+alt+middle",
+          "alt+shift+right",
+          "shift+alt+right",
+          "shift+left",
+          "shift+middle",
+          "shift+right"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "ctrl+alt+left",
+              "alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+middle",
+              "alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+right",
+              "alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "ctrl+shift+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "alt+ctrl+shift+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "alt+shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "alt+ctrl+shift+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "alt+shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+left",
+              "alt+shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "shift+ctrl+alt+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "ctrl+shift+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "alt+ctrl+shift+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "alt+shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "alt+ctrl+shift+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "alt+shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+middle",
+              "alt+shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "shift+ctrl+alt+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "ctrl+shift+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "alt+ctrl+shift+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "alt+shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "alt+ctrl+shift+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "alt+shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+right",
+              "alt+shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "shift+ctrl+alt+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+left",
+              "shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+middle",
+              "shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+right",
+              "shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+left",
+              "shift+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+middle",
+              "shift+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+right",
+              "shift+alt+right"
+            ]
+          }
+        ]
+      }
+    },
     "Segment": {
       "type": "object",
       "properties": {
