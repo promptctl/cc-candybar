@@ -92727,8 +92727,10 @@ var HeldFile = class {
   early = [];
   // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
   // as it stands: set by every change, cleared once a save is made. Whether a
-  // write handed over lands is the storage's, and it tells us.
-  behind = false;
+  // write handed over lands is the storage's, and it tells us. A write it
+  // refuses is not owed again until the next change or the close, since a
+  // timer retrying a disk that keeps refusing is load for nothing.
+  owed = false;
   clearOrderTimer = null;
   // [LAW:single-enforcer] Read once. A file that did not read is set aside by
   // the rule every state file keeps, before anything is written. What was
@@ -92782,14 +92784,14 @@ var HeldFile = class {
     let content = false;
     for (const change of changes)
       if (change.kind === "heard" || this.holds(change.key, change.value)) {
-        if (toNewest(this.held, change.key)) this.behind = true;
+        if (toNewest(this.held, change.key)) this.owed = true;
       } else if (putNewest(this.held, change.key, change.value)) {
         content = true;
-        this.behind = true;
+        this.owed = true;
       }
     const evicted2 = this.evict();
     if (content || evicted2.length > 0) this.save();
-    else if (this.behind) this.orderDue();
+    else if (this.owed) this.orderDue();
     return evicted2;
   }
   get(key) {
@@ -92807,7 +92809,7 @@ var HeldFile = class {
   // A save that throws rejects the close.
   async close() {
     try {
-      if (this.behind) this.save();
+      if (this.owed) this.save();
     } finally {
       this.phase = "closed";
     }
@@ -92822,7 +92824,7 @@ var HeldFile = class {
     this.clearOrderTimer = null;
     if (this.phase !== "open") return;
     this.storage.save(this.held);
-    this.behind = false;
+    this.owed = false;
   }
   // [LAW:no-ambient-temporal-coupling] Only an open file is owed an order
   // write: a closed or refused one saves nothing, so it arms no timer.

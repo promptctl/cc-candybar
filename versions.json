@@ -4,15 +4,22 @@
     {
       "version": "pr-988",
       "ref": "refs/pull/988/merge",
-      "sha": "2fd1ad157dc3853cabcb17a8a738371daba8b28b",
-      "timestamp": "2026-11-27T23:19:54.007Z",
+      "sha": "139a8e55626e98895b2794dc48d824749a1058f1",
+      "timestamp": "2026-11-27T23:28:48.402Z",
       "commits": [
         {
-          "sha": "2fd1ad157dc3853cabcb17a8a738371daba8b28b",
+          "sha": "139a8e55626e98895b2794dc48d824749a1058f1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T23:18:49Z",
-          "message": "Merge 26cfd3805b0c22cb7042e0abedba51dbd0f49a41 into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+          "timestamp": "2026-11-27T23:27:41Z",
+          "message": "Merge 40f427688ba7d69a1c496beeed74efbde321d234 into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+        },
+        {
+          "sha": "40f427688ba7d69a1c496beeed74efbde321d234",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T16:27:27-07:00",
+          "message": "fix(stored-state): HeldFile names what it owes apart from what the bar says is behind\n\nA refused write is owed again only by the next change or the close, and the\ne2e gives the book its own disk.\n"
         },
         {
           "sha": "26cfd3805b0c22cb7042e0abedba51dbd0f49a41",
