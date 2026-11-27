@@ -333,7 +333,7 @@ describe("2de.4 — loader proves the group invariants", () => {
   test("a slash-bearing group key is rejected", () => {
     expectIssue(
       withGroups(group(`name: 'g', label: 'x', key: 'a/b'`)),
-      /slash-free SessionState key/,
+      /slash-free.*SessionState key/,
     );
   });
 

@@ -1,3 +1,4 @@
+import { layoutComponent } from "../../click/wire-value.js";
 // [LAW:single-enforcer] All cross-reference resolution on the MERGED config:
 // layout nodes name declared segments, every template-bearing field references
 // only existing variables/actions, and depends_on points at declared variables.
@@ -1391,6 +1392,17 @@ export function validateDeclarations(
         line: findKeyLine(ctx.source, ["actions", name, field]),
       });
       continue;
+    }
+    if (field === "insertSegmentFrom" && typeof from === "string") {
+      const refused = resolveOptionDomain(from, optionDomains).members.find(
+        (value) => layoutComponent.parse(value) === null,
+      );
+      if (refused !== undefined)
+        ctx.issues.push({
+          path: `actions.${name}.${field}`,
+          message: `actions.${name}: segment name ${JSON.stringify(refused)} from domain ${from} ${layoutComponent.rule}`,
+          line: findKeyLine(ctx.source, ["actions", name, field]),
+        });
     }
     // An unknown `from` was refused above, so every domain a persist draws
     // from here resolves.

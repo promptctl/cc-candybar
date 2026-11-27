@@ -130,7 +130,7 @@ describe("state-validators contract", () => {
     // value. Same shape of registry-vs-wire drift as slash-bearing
     // values — caught at factory-build time per [LAW:verifiable-goals].
     expect(() => makeAllowListValidator(["a", "", "b"], "mode")).toThrow(
-      /empty string is not a writable option/,
+      /non-empty.*Offending values: ""/,
     );
     // The validator built from a list without "" doesn't reject at
     // factory time and rejects empty INPUT at runtime — the existing
@@ -153,12 +153,12 @@ describe("state-validators contract", () => {
     // click.
     expect(() =>
       makeAllowListValidator(["good", "with/slash", "another/bad"], "mode"),
-    ).toThrow(/contain "\/"/);
+    ).toThrow(/slash-free/);
     // The error names every offender so the operator can find all
     // misconfigurations in one fix pass.
     expect(() =>
       makeAllowListValidator(["with/slash", "another/bad"], "mode"),
-    ).toThrow(/with\/slash, another\/bad/);
+    ).toThrow(/"with\/slash", "another\/bad"/);
     // Slash-free lists build fine.
     expect(() => makeAllowListValidator(["a", "b", "c"], "mode")).not.toThrow();
   });

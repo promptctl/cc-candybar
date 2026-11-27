@@ -401,7 +401,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                 }
               },
               "parse": {
@@ -602,6 +602,11 @@
     },
     "segments": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
+      },
       "properties": {
         "directory": {
           "$ref": "#/definitions/SegmentDelta"
@@ -688,7 +693,10 @@
           "id": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+            "pattern": "^[^/\\r\\n:]+(?![\\s\\S])",
+            "not": {
+              "pattern": "^(?:groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)"
+            }
           },
           "before": {
             "type": "string"
@@ -724,16 +732,17 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "to": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -746,7 +755,9 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "from": {
                 "anyOf": [
@@ -758,7 +769,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -766,10 +778,7 @@
                 ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -782,7 +791,9 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "min": {
                 "type": "integer"
@@ -791,13 +802,13 @@
                 "type": "integer"
               },
               "by": {
-                "type": "integer"
+                "type": "integer",
+                "not": {
+                  "const": 0
+                }
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -806,22 +817,52 @@
               "max",
               "by"
             ],
+            "additionalProperties": false,
+            "description": "The loader requires min to be less than max."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+              },
+              "cycle": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+                },
+                "minItems": 2,
+                "uniqueItems": true
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
+              }
+            },
+            "required": [
+              "set",
+              "cycle"
+            ],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "int": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -833,39 +874,18 @@
           {
             "type": "object",
             "properties": {
-              "set": {
-                "type": "string"
-              },
-              "cycle": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "minItems": 2,
-                "uniqueItems": true
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "set",
-              "cycle"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "to": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -873,12 +893,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -891,7 +905,9 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "from": {
                 "anyOf": [
@@ -903,12 +919,16 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
                   }
                 ]
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -916,12 +936,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -934,7 +948,9 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "min": {
                 "type": "integer"
@@ -943,7 +959,13 @@
                 "type": "integer"
               },
               "by": {
-                "type": "integer"
+                "type": "integer",
+                "not": {
+                  "const": 0
+                }
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -951,12 +973,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -965,22 +981,29 @@
               "max",
               "by"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "description": "The loader requires min to be less than max."
           },
           {
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "cycle": {
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                 },
                 "minItems": 2,
                 "uniqueItems": true
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -988,12 +1011,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1006,10 +1023,17 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "removeSegment": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1017,12 +1041,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1035,13 +1053,19 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "insertSegment": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
               },
               "anchor": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
               },
               "relation": {
                 "enum": [
@@ -1049,18 +1073,15 @@
                   "after"
                 ]
               },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
+              },
               "layer": {
                 "enum": [
                   "user",
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1075,7 +1096,9 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "insertSegmentFrom": {
                 "anyOf": [
@@ -1087,7 +1110,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -1095,7 +1119,9 @@
                 ]
               },
               "anchor": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
               },
               "relation": {
                 "enum": [
@@ -1103,18 +1129,15 @@
                   "after"
                 ]
               },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
+              },
               "layer": {
                 "enum": [
                   "user",
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1132,10 +1155,7 @@
                 "type": "string"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1150,10 +1170,7 @@
                 "type": "string"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1165,7 +1182,12 @@
             "type": "object",
             "properties": {
               "reset": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1173,12 +1195,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1190,13 +1206,12 @@
             "type": "object",
             "properties": {
               "undo": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1208,13 +1223,12 @@
             "type": "object",
             "properties": {
               "redo": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1226,13 +1240,12 @@
             "type": "object",
             "properties": {
               "back": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1244,13 +1257,12 @@
             "type": "object",
             "properties": {
               "rewind": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1262,7 +1274,12 @@
             "type": "object",
             "properties": {
               "save": {
-                "const": true
+                "enum": [
+                  true
+                ]
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1271,12 +1288,6 @@
                   "local",
                   "ask"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1288,7 +1299,12 @@
             "type": "object",
             "properties": {
               "preset": {
-                "const": "save"
+                "enum": [
+                  "save"
+                ]
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1296,12 +1312,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1313,10 +1323,15 @@
             "type": "object",
             "properties": {
               "preset": {
-                "const": "delete"
+                "enum": [
+                  "delete"
+                ]
               },
               "name": {
                 "type": "string"
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1324,12 +1339,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1342,7 +1351,12 @@
             "type": "object",
             "properties": {
               "themeDefault": {
-                "const": "save"
+                "enum": [
+                  "save"
+                ]
+              },
+              "on": {
+                "$ref": "#/definitions/GestureBindings"
               },
               "layer": {
                 "enum": [
@@ -1350,12 +1364,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1371,10 +1379,7 @@
                 "pattern": "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$"
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1387,15 +1392,21 @@
             "properties": {
               "run": {
                 "type": "array",
-                "items": {
+                "minItems": 1,
+                "items": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                ],
+                "additionalItems": {
                   "type": "string"
-                },
-                "minItems": 1
+                }
               },
               "env": {
                 "type": "object",
                 "propertyNames": {
-                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                 },
                 "additionalProperties": {
                   "type": "string"
@@ -1409,10 +1420,7 @@
                 }
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1425,17 +1433,14 @@
             "properties": {
               "do": {
                 "type": "array",
+                "minItems": 2,
                 "items": {
                   "type": "string",
                   "minLength": 1
-                },
-                "minItems": 2
+                }
               },
               "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
+                "$ref": "#/definitions/GestureBindings"
               }
             },
             "required": [
@@ -1448,6 +1453,11 @@
     },
     "styles": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+      },
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -1519,6 +1529,11 @@
     },
     "presets": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+      },
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -1884,6 +1899,393 @@
     }
   },
   "definitions": {
+    "GestureBindings": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "hover",
+          "middle",
+          "right",
+          "ctrl+left",
+          "ctrl+middle",
+          "ctrl+right",
+          "ctrl+alt+left",
+          "alt+ctrl+left",
+          "ctrl+alt+middle",
+          "alt+ctrl+middle",
+          "ctrl+alt+right",
+          "alt+ctrl+right",
+          "ctrl+alt+shift+left",
+          "ctrl+shift+alt+left",
+          "alt+ctrl+shift+left",
+          "alt+shift+ctrl+left",
+          "shift+ctrl+alt+left",
+          "shift+alt+ctrl+left",
+          "ctrl+alt+shift+middle",
+          "ctrl+shift+alt+middle",
+          "alt+ctrl+shift+middle",
+          "alt+shift+ctrl+middle",
+          "shift+ctrl+alt+middle",
+          "shift+alt+ctrl+middle",
+          "ctrl+alt+shift+right",
+          "ctrl+shift+alt+right",
+          "alt+ctrl+shift+right",
+          "alt+shift+ctrl+right",
+          "shift+ctrl+alt+right",
+          "shift+alt+ctrl+right",
+          "ctrl+shift+left",
+          "shift+ctrl+left",
+          "ctrl+shift+middle",
+          "shift+ctrl+middle",
+          "ctrl+shift+right",
+          "shift+ctrl+right",
+          "alt+left",
+          "alt+middle",
+          "alt+right",
+          "alt+shift+left",
+          "shift+alt+left",
+          "alt+shift+middle",
+          "shift+alt+middle",
+          "alt+shift+right",
+          "shift+alt+right",
+          "shift+left",
+          "shift+middle",
+          "shift+right"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "ctrl+alt+left",
+              "alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+middle",
+              "alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+right",
+              "alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "ctrl+shift+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "alt+ctrl+shift+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "alt+shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "alt+ctrl+shift+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "alt+shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+left",
+              "alt+shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+left",
+              "shift+ctrl+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "shift+ctrl+alt+left",
+              "shift+alt+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "ctrl+shift+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "alt+ctrl+shift+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "alt+shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "alt+ctrl+shift+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "alt+shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+middle",
+              "alt+shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+middle",
+              "shift+ctrl+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "shift+ctrl+alt+middle",
+              "shift+alt+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "ctrl+shift+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "alt+ctrl+shift+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "alt+shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+alt+shift+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "alt+ctrl+shift+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "alt+shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+alt+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+right",
+              "alt+shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+ctrl+shift+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+right",
+              "shift+ctrl+alt+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+ctrl+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "shift+ctrl+alt+right",
+              "shift+alt+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+left",
+              "shift+ctrl+left"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+middle",
+              "shift+ctrl+middle"
+            ]
+          },
+          {
+            "required": [
+              "ctrl+shift+right",
+              "shift+ctrl+right"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+left",
+              "shift+alt+left"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+middle",
+              "shift+alt+middle"
+            ]
+          },
+          {
+            "required": [
+              "alt+shift+right",
+              "shift+alt+right"
+            ]
+          }
+        ]
+      }
+    },
     "Segment": {
       "type": "object",
       "properties": {
@@ -2182,7 +2584,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                     }
                   },
                   "parse": {
@@ -2384,7 +2786,7 @@
         "settings": {
           "type": "object",
           "propertyNames": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])",
             "not": {
               "enum": [
                 "theme",
@@ -2414,7 +2816,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[^/\\n\\r]+$"
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -2439,7 +2842,7 @@
                       },
                       "atLeast": {
                         "type": "string",
-                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                       }
                     }
                   }
@@ -2781,7 +3184,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                     }
                   },
                   "parse": {
@@ -2983,7 +3386,7 @@
         "settings": {
           "type": "object",
           "propertyNames": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])",
             "not": {
               "enum": [
                 "theme",
@@ -3013,7 +3416,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[^/\\n\\r]+$"
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -3038,7 +3442,7 @@
                       },
                       "atLeast": {
                         "type": "string",
-                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                       }
                     }
                   }
@@ -3137,12 +3541,15 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^[^/\\r\\n:]+(?![\\s\\S])",
+              "not": {
+                "pattern": "^(?:groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)"
+              }
             },
             "settings": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
               },
               "additionalProperties": {
                 "anyOf": [
@@ -3173,7 +3580,7 @@
             },
             "name": {
               "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
             },
             "label": {
               "type": "string",
@@ -3190,7 +3597,8 @@
             },
             "key": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
             },
             "bg": {
               "type": "string"
@@ -3237,12 +3645,15 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^[^/\\r\\n:]+(?![\\s\\S])",
+              "not": {
+                "pattern": "^(?:groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)"
+              }
             },
             "settings": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
               },
               "additionalProperties": {
                 "anyOf": [
@@ -3331,7 +3742,7 @@
             "rows": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
               },
               "additionalProperties": {
                 "$ref": "#/definitions/LayoutNode"

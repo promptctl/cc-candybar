@@ -1,3 +1,8 @@
+// Template paths, setting and environment names, and authored row names share
+// this token. A leading digit would allow integer keys to reorder authored rows.
+export const IDENTIFIER_TOKEN = "[A-Za-z_][A-Za-z0-9_]*";
+export const IDENTIFIER = new RegExp(`^${IDENTIFIER_TOKEN}(?![\\s\\S])`);
+
 // The marker that opens an escape, and so the one letter never kept as itself.
 const ESCAPE = "Z";
 const MAX_CODE_POINT = 0x10ffff;

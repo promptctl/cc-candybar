@@ -1,3 +1,4 @@
+import { IDENTIFIER } from "./ident.js";
 // [LAW:decomposition] The root as a MERGEABLE map of named rows — the algebra
 // between the authoring shapes (a whole tree or a `{ rows }` map, see
 // RootFragment) and the tree the render walk consumes (`rootNode`). Every
@@ -30,7 +31,7 @@ import {
 // numerically ahead of every other key, which would silently reorder a rows
 // map under the by-name spread. Shared with group names for the same reason
 // they share the constraint (both splice into addresses).
-export const ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const ROW_NAME_RE = IDENTIFIER;
 
 // [LAW:one-source-of-truth] The name a whole tree's i-th row lowers to. `#`
 // fails ROW_NAME_RE, so a positional row can never collide with — or be

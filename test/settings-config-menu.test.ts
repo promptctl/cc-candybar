@@ -1434,7 +1434,7 @@ describe("save as preset", () => {
 describe("the preset action", () => {
   test.each([
     [{ preset: "rename" }, 'preset must be "save" or "delete", got "rename"'],
-    [{ preset: "delete" }, "actions.a.name must be a string"],
+    [{ preset: "delete" }, "name must be a string"],
     [
       { preset: "save", name: "x" },
       'Unknown key "name" on a preset action. Expected only: preset',

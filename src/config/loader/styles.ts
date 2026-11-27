@@ -1,3 +1,4 @@
+import { clickValue } from "../../click/wire-value.js";
 // [LAW:types-are-the-program] The `styles` schema: each style is a named rich-js
 // ThemeKey — an ADAPTATION applied on top of whatever base theme is active (a
 // transform, not a palette), so one style composes with every theme. The config
@@ -83,10 +84,10 @@ export function validateStyles(
     // splits on "/". Rejecting the shape HERE surfaces the error on every
     // config load, not only once an action ranges the "styles" domain (the same
     // wire shape cycle members and `to` literals enforce in actions.ts).
-    if (name === "" || name.includes("/")) {
+    if (clickValue.parse(name) === null) {
       ctx.issues.push({
         path: `styles.${name}`,
-        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free — a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        message: `style name ${JSON.stringify(name)} ${clickValue.rule} on the set-state wire`,
         line: findKeyLine(ctx.source, ["styles", name]),
       });
       continue;
@@ -115,5 +116,9 @@ export function validateStyles(
 // [LAW:one-source-of-truth] The schema emitter derives from the SAME declaration
 // the validator interprets — a map of style names to the closed four-axis object.
 export function stylesJson(): JsonNode {
-  return { type: "object", additionalProperties: recordJson(STYLE_SCHEMA) };
+  return {
+    type: "object",
+    propertyNames: clickValue.json,
+    additionalProperties: recordJson(STYLE_SCHEMA),
+  };
 }

@@ -60,8 +60,13 @@ click does; templates bind clickable regions to those names. The click gate on
 the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
+Setting keys, literal picker values, and style and preset names must be
+nonempty and free of slashes, carriage returns, and newlines. Segment names
+and placement IDs must also be free of colons, the separator between fields
+in a layout operation. Spaces are allowed in these values.
+
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` / `save` / `slash` / `run` / `do`. A `set` or a `persist`
+`reset` / `undo` / `redo` / `back` / `rewind` / `save` / `preset` / `themeDefault` / `slash` / `run` / `do`. A `set` or a `persist`
 declares exactly one value source:
 
 | declaration | click effect |
@@ -2649,7 +2654,7 @@ Template references unknown variable ".curent_dir"
 ```
 
 ```error
-a set action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
+a set action declares exactly one value source: to, from, min, cycle, int — found: to, from
 ```
 
 ### A `do` member that takes its value from the template, listed after the first

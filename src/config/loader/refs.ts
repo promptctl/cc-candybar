@@ -1,3 +1,4 @@
+import { IDENTIFIER_TOKEN } from "../ident.js";
 // [LAW:dataflow-not-control-flow] Best-effort extraction of the references a
 // template string makes — dotted variable refs, and the actions an `action`,
 // `picker`, `menu` or `carousel` binds — through the template's own text and
@@ -74,7 +75,7 @@ type Dot = string | null;
 // A `.`, `.a.b`, `$` or `$.a.b` operand at the start of `text`, as the Dot it
 // names — `$` being `root`, the dot the enclosing body was entered at;
 // anything else — a `dict`, a pipeline, `$x`, nothing — is null.
-const PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
+const PATH = `${IDENTIFIER_TOKEN}(?:\\.${IDENTIFIER_TOKEN})*`;
 const OPERAND_RE = new RegExp(
   `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`,
 );
@@ -379,7 +380,7 @@ export function bindsComputedAction(
 // variable (`$now`) and a string literal ("now") call nothing. The keywords
 // (`if`, `range`, `template`) are bare identifiers too, so ask it about a
 // function's name, never for a list of functions.
-const BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
+const BARE_NAME_RE = new RegExp(`(?<![\\w.$])${IDENTIFIER_TOKEN}`, "g");
 export function templateFunctions(
   template: string,
   helpers: Readonly<Record<string, string>>,

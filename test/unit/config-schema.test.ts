@@ -1,3 +1,4 @@
+import type { ParsedActionFields } from "../../src/config/loader/actions";
 // [LAW:verifiable-goals] The JSON Schema's contract: accept the configs a user
 // may legitimately write (A-grammar root tree, all variable/action kinds),
 // reject structurally-broken ones. We validate the COMMITTED artifact
@@ -23,6 +24,7 @@ import {
 } from "../../src/config/dsl-loader";
 import { mergeWithDefault } from "../../src/config/loader/merge";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { createKeyspace } from "../../src/daemon/foundations/validator-registry";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 
 const SCHEMA_PATH = path.resolve(
@@ -245,9 +247,6 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     `{ root: { kind: 'container' } }`,
   ],
   ["bare segment node (missing name)", `{ root: { kind: 'segment' } }`],
-  // Schema-checkable cycle shape: type + minItems. (Uniqueness/emptiness/slash
-  // are loader refinements the schema mirrors structurally where JSON Schema
-  // can express them.)
   [
     "one-member cycle",
     `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: ['solo'] } }, root: { h: ['t'] } }`,
@@ -353,5 +352,287 @@ describe("config JSON Schema", () => {
       expect(schemaAccepts(source)).toBe(true);
       expect(loaderAccepts(source)).toBe(true);
     }
+  });
+});
+
+describe("authored picker values and their click destinations", () => {
+  const samples = [
+    { value: "canary red", valid: true },
+    { value: "group:detail", valid: true },
+    { value: "insert:segment:anchor:before", valid: true },
+    { value: "", valid: false },
+    { value: "alpha/beta", valid: false },
+    { value: "trailing\n", valid: false },
+    { value: "line\rbreak", valid: false },
+  ];
+  test.each(samples)(
+    "ordinary wire value $value is admitted consistently",
+    ({ value, valid }) => {
+      const option = { label: "Mode", domain: [value], default: value };
+      const configs = [
+        { actions: { pick: { set: "picked", to: value } } },
+        { actions: { pick: { set: value, to: "chosen" } } },
+        { styles: { [value]: {} } },
+        { presets: { [value]: { globals: { updateNotice: false } } } },
+        {
+          segments: {
+            mypicker: { template: "picker", settings: { mode: option } },
+          },
+          root: "mypicker",
+        },
+      ];
+      for (const config of configs) {
+        const source = JSON.stringify(config);
+        expect([source, schemaAccepts(source), loaderAccepts(source)]).toEqual([
+          source,
+          valid,
+          valid,
+        ]);
+      }
+      const keys = createKeyspace(
+        { unrestricted: (raw) => ({ ok: true, value: raw }) },
+        "state",
+        () => [],
+      );
+      expect(keys.gateFor({}).validate("unrestricted", value).ok).toBe(valid);
+      if (valid) {
+        keys.register("picked", [value]);
+        expect(keys.gateFor({}).validate("picked", value)).toEqual({
+          ok: true,
+          value,
+        });
+      } else {
+        expect(() => keys.register("picked", [value])).toThrow();
+        expect(() => keys.register(value, ["chosen"])).toThrow();
+      }
+    },
+  );
+
+  test.each(samples)(
+    "a placement component $value has its own delimiter rules",
+    ({ value, valid }) => {
+      const source = JSON.stringify({
+        segments: { marker: { template: "marker" } },
+        root: { seg: "marker", id: value },
+      });
+      const admitted = valid && !value.includes(":");
+      expect([schemaAccepts(source), loaderAccepts(source)]).toEqual([
+        admitted,
+        admitted,
+      ]);
+    },
+  );
+
+  test.each(["_ok2", "2bad", "name\n"])(
+    "a row and a segment setting use the same identifier grammar for %j",
+    (name) => {
+      const admitted = name === "_ok2";
+      const segment = {
+        template: "marker",
+        settings: { [name]: { label: "Name", domain: "bool", default: true } },
+      };
+      for (const config of [
+        {
+          root: { rows: { [name]: "marker" } },
+          segments: { marker: { template: "marker" } },
+        },
+        { segments: { marker: segment }, root: "marker" },
+      ]) {
+        const source = JSON.stringify(config);
+        expect([schemaAccepts(source), loaderAccepts(source)]).toEqual([
+          admitted,
+          admitted,
+        ]);
+      }
+    },
+  );
+});
+
+describe("action records in the published schema and file loader", () => {
+  const file = "/config/project/candybar.json5";
+  const sourceOf = (action: object) =>
+    JSON.stringify({ actions: { shortcut: action } });
+  const fromFile = (action: object) =>
+    parseDslConfig(file, sourceOf(action)).actions?.shortcut;
+  const complete = [
+    { set: "page", int: true },
+    { set: "mode", cycle: ["one", "two"] },
+    { set: "mode", from: ["one", "two"] },
+    { persist: "globals.endcaps", to: "round", layer: "project" },
+    { persist: "globals.scrollSpeed", min: 1, max: 5, by: 1 },
+    { persist: "presets.default.root", removeSegment: "dir" },
+    {
+      persist: "presets.default.root",
+      insertSegment: "dir",
+      anchor: "git",
+      relation: "before",
+    },
+    {
+      persist: "presets.default.root",
+      insertSegmentFrom: ["dir"],
+      anchor: "git",
+      relation: "after",
+    },
+    { copy: "copy" },
+    { open: "https://example.invalid" },
+    { reset: "mode" },
+    { undo: true },
+    { redo: true },
+    { back: true },
+    { rewind: true },
+    { save: true, layer: "ask" },
+    { preset: "save" },
+    { preset: "delete", name: "mine" },
+    { themeDefault: "save" },
+    { slash: "/clear" },
+    { run: ["echo", ""] },
+    { do: ["a", "b"] },
+    { copy: "copy", on: { right: "other" } },
+  ];
+  test.each(complete)("admits the authored record %j", (action) => {
+    expect(schemaAccepts(sourceOf(action))).toBe(true);
+    expect(fromFile(action)).toBeDefined();
+  });
+  test.each([
+    { run: ["echo"], env: null },
+    { run: ["echo"], refreshes: null },
+    { run: ["echo"], refreshes: 5 },
+    { run: ["echo"], cwd: "/override" },
+    { run: [""] },
+    { run: ["echo"], env: { "9bad": "value" } },
+    { set: "k", min: 1, max: 2 },
+    { set: "k", min: 1, max: 2, by: 0 },
+    { set: "k", cycle: ["a", "a"] },
+    { set: "k", to: "one", layer: "user" },
+    { reset: "k", layer: "ask" },
+    { persist: "presets.default.root", insertSegment: "a", relation: "after" },
+    { preset: "save", name: "forbidden" },
+    { preset: "delete" },
+    { save: true, layer: null },
+  ])("refuses the invalid field without a usable action %j", (action) => {
+    expect(schemaAccepts(sourceOf(action))).toBe(false);
+    expect(() => fromFile(action)).toThrow(ConfigError);
+  });
+  test("only missing run fields receive defaults, and the declaring file owns cwd", () => {
+    expect(fromFile({ run: ["echo"] })).toEqual({
+      run: ["echo"],
+      env: {},
+      refreshes: [],
+      cwd: "/config/project",
+    });
+  });
+  test("a misspelled writer field offers layer and on, and an invalid sibling is diagnosed too", () => {
+    expect(() => fromFile({ reset: 42, layre: "local" })).toThrow(
+      /Unknown key "layre" on a reset action\. Expected only: (?=[^\n]*\blayer\b)(?=[^\n]*\bon\b)/,
+    );
+    expect(() => fromFile({ reset: 42, layre: "local" })).toThrow(/reset key/);
+  });
+  test("a missing source reports its invalid destination and gesture in the same load", () => {
+    const bad = () => fromFile({ persist: 42, on: { left: "other" } });
+    expect(bad).toThrow(/persist key/);
+    expect(bad).toThrow(/plain click/);
+    expect(bad).toThrow(/exactly one value source/);
+  });
+  test("a projector can rely on required and defaulted values while an optional field can be omitted", () => {
+    type Field = { json: { type: "string" }; parse: () => string | undefined };
+    type Example = ParsedActionFields<{
+      authored: Field & { required: true };
+      fallback: Field & { required: false; fallback: () => string };
+      optional: Field & { required: false };
+    }>;
+    const example: Example = { authored: "declared", fallback: "default" };
+    const required: string = example.authored;
+    const defaulted: string = example.fallback;
+    // @ts-expect-error An omitted optional input cannot promise a string.
+    const optional: string = example.optional;
+    expect([required, defaulted, optional]).toEqual([
+      "declared",
+      "default",
+      undefined,
+    ]);
+  });
+  test("every modifier order is an alias of one binding and distinct bindings may coexist", () => {
+    const orders = [
+      "ctrl+alt+shift",
+      "ctrl+shift+alt",
+      "alt+ctrl+shift",
+      "alt+shift+ctrl",
+      "shift+ctrl+alt",
+      "shift+alt+ctrl",
+    ];
+    function check(on: Record<string, string>, expected: boolean) {
+      const source = JSON.stringify({
+        actions: { shortcut: { copy: "ok", on }, target: { copy: "target" } },
+      });
+      expect(schemaAccepts(source)).toBe(expected);
+      expect(loaderAccepts(source)).toBe(expected);
+    }
+    for (const button of ["left", "middle", "right"]) {
+      const aliases = orders.map((order) => order + "+" + button);
+      for (const [i, alias] of aliases.entries()) {
+        check({ [alias]: "target", hover: "target", middle: "target" }, true);
+        for (const other of aliases.slice(i + 1))
+          check({ [alias]: "target", [other]: "target" }, false);
+      }
+    }
+    for (const spelling of [
+      "left",
+      "wobble",
+      "ctrl+ctrl+right",
+      "ctrl +right",
+      "ctrl+ right",
+      " right",
+      "right ",
+    ])
+      check({ [spelling]: "target" }, false);
+    check({ "ctrl+alt+left": "target", "alt+ctrl+left": "target" }, false);
+  });
+  test("independent field, refinement and declaring-file errors survive the same load", () => {
+    const bounded = () =>
+      fromFile({ set: "key", min: 2, max: 1, by: 1, typo: false });
+    expect(bounded).toThrow(/Unknown key "typo"/);
+    expect(bounded).toThrow(/min \(2\) must be less than max \(1\)/);
+    const multiple = () => fromFile({ set: 99, min: 2, max: 1, by: 0 });
+    expect(multiple).toThrow(/set key/);
+    expect(multiple).toThrow(/non-zero integer/);
+    expect(multiple).toThrow(/must be less than max/);
+    const run = () => parseDslConfig("<stdin>", sourceOf({ run: [], env: 17 }));
+    for (const message of [
+      "run must list",
+      "env must map",
+      "<stdin> is no file",
+    ])
+      expect(run).toThrow(message);
+  });
+  test.each([
+    { persist: "k", typo: true },
+    { persist: "k", to: "one", from: "themes", typo: true },
+    { preset: "other", typo: true },
+  ])(
+    "a failed choice still reports an unknown key and the family's valid fields %j",
+    (action) => {
+      const parse = () => fromFile(action);
+      const key = "persist" in action ? "persist" : "preset";
+      expect(parse).toThrow(
+        new RegExp(
+          String.raw`Unknown key "typo" on a ${key} action\. Expected only: (?=[^\n]*\blayer\b)(?=[^\n]*\bon\b)`,
+        ),
+      );
+      expect(parse).toThrow(
+        key === "persist" ? /exactly one value source/ : /preset must be/,
+      );
+    },
+  );
+  test("an ambiguous persist lists the actual source discriminators and omits companion fields", () => {
+    const bad = {
+      persist: "presets.default.root",
+      removeSegment: "old",
+      insertSegment: "new",
+      anchor: "old",
+      relation: "after",
+    };
+    expect(() => fromFile(bad)).toThrow(
+      "value source: to, from, min, cycle, removeSegment, insertSegment, insertSegmentFrom — found: removeSegment, insertSegment",
+    );
   });
 });

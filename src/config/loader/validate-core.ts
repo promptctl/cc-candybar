@@ -1,3 +1,4 @@
+import { IDENTIFIER } from "../ident.js";
 // [LAW:single-enforcer] The validation engine's primitives: the shared
 // ValidateCtx every per-type validator threads, the field-combinators
 // (requireString / optionalEnum / …) they compose from, and the type-describe
@@ -652,7 +653,7 @@ export function optionalStringSpec(): FieldSpec<string> {
 
 // [LAW:one-source-of-truth] An environment variable's name as a shell
 // spells one.
-export const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const ENV_NAME = IDENTIFIER;
 
 // [LAW:parse-dont-validate] An optional list of environment variable names:
 // what a shell source's command reads, beyond the base set. Present-and-wrong
@@ -821,11 +822,12 @@ export function optionalEnumSpec<T extends string>(
 // caller chooses whether unknown keys are forbidden — a `record` forbids them
 // (additionalProperties:false), a tagged-union arm allows the sibling
 // discriminator. The structure is the declaration; emit is mechanical.
-export function objectJson<T>(
-  fieldMap: FieldSpecMap<T>,
+export function objectJson(
+  specs: Readonly<
+    Record<string, Pick<FieldSpec<unknown>, "json" | "required">>
+  >,
   opts: { readonly closed: boolean } = { closed: true },
 ): JsonNode {
-  const specs = fieldMap as Readonly<Record<string, FieldSpec<unknown>>>;
   const properties: Record<string, JsonNode> = {};
   const required: string[] = [];
   for (const [field, spec] of Object.entries(specs)) {

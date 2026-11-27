@@ -1,3 +1,4 @@
+import { layoutComponent } from "../../click/wire-value.js";
 // [LAW:types-are-the-program] The segment schema: a `template` plus optional
 // layout/paint/visibility fields and a nested `vars` block (validated by the
 // variable schema). Declared as DATA and interpreted by the generic `record`
@@ -75,6 +76,15 @@ export function validateSegments(
 
   const out: Record<string, RawSegmentDecl> = {};
   for (const [name, authored] of Object.entries(raw)) {
+    // Every authored segment is an option in the add-segment picker.
+    if (layoutComponent.parse(name) === null) {
+      ctx.issues.push({
+        path: `segments.${name}`,
+        message: `segment name ${JSON.stringify(name)} ${layoutComponent.rule} in a layout operation`,
+        line: findKeyLine(ctx.source, ["segments", name]),
+      });
+      continue;
+    }
     // [LAW:carrying-cost] This retired Doctor option can remain in existing
     // layouts without changing their declaration.
     const decl =
@@ -317,6 +327,7 @@ export function segmentDefinitions(): Readonly<Record<string, JsonNode>> {
 export function segmentsJson(inherited: ReadonlySet<string>): JsonNode {
   return {
     type: "object",
+    propertyNames: layoutComponent.json,
     properties: Object.fromEntries(
       [...inherited].map((name) => [name, { $ref: SEGMENT_DELTA_REF }]),
     ),

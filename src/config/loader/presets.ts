@@ -1,3 +1,4 @@
+import { clickValue } from "../../click/wire-value.js";
 // [LAW:types-are-the-program] The `presets` schema: each preset is a named
 // config FRAGMENT — an alternative arrangement of the bar the user switches to
 // — capped at exactly the two sections a render RESOLVES (`root`, `globals`)
@@ -97,10 +98,10 @@ export function validatePresets(
     // also an identifier used across other seams (the `presets` domain, the
     // `presets.<name>.root` wire key), so this belongs in its general
     // validity check, not a narrower escape-harder fix at the one splice site.
-    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
+    if (clickValue.parse(name) === null) {
       ctx.issues.push({
         path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free — a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
+        message: `preset name ${JSON.stringify(name)} ${clickValue.rule} on the set-state wire`,
         line: findKeyLine(ctx.source, ["presets", name]),
       });
       continue;
@@ -115,5 +116,9 @@ export function validatePresets(
 // the validator interprets — a map of preset names to the closed two-section
 // fragment object.
 export function presetsJson(): JsonNode {
-  return { type: "object", additionalProperties: recordJson(PRESET_SCHEMA) };
+  return {
+    type: "object",
+    propertyNames: clickValue.json,
+    additionalProperties: recordJson(PRESET_SCHEMA),
+  };
 }

@@ -348,7 +348,7 @@ describe("load errors", () => {
     expect(
       refusal(withSegment(BOOL, `{ h: [{ seg: 's', id: 'a:b' }] }`)),
     ).toContain(
-      `a placement "id" must be a non-empty string without "/" or ":"`,
+      `a placement "id" must be non-empty, slash-free, newline-free, and colon-free`,
     );
   });
 

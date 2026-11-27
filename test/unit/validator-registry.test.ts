@@ -122,7 +122,7 @@ describe("one config's own contributions", () => {
     ).toThrow(/key is required/);
     expect(() =>
       ks.gateFor(declares({ key: "a/b", spec: { kind: "int" } })),
-    ).toThrow(/contains "\/"/);
+    ).toThrow(/slash-free/);
   });
 
   test("a config's gate is derived once, and again for the object a reload makes", () => {
@@ -197,7 +197,7 @@ describe("a daemon-wide key", () => {
     const dispose = ks.register("mode", ["red"]);
     expect(() => ks.register("theme", ["x"])).toThrow(/built-in state key/);
     expect(() => ks.register("", ["x"])).toThrow(/key is required/);
-    expect(() => ks.register("a/b", ["x"])).toThrow(/contains "\/"/);
+    expect(() => ks.register("a/b", ["x"])).toThrow(/slash-free/);
     expect(ks.gateFor(bare).listKeys()).toEqual(["theme", "mode"]);
     expect(ks.gateFor(bare).validate("mode", "red").ok).toBe(true);
     dispose();

@@ -65,24 +65,22 @@ export type { OptionDomain } from "./option-domain.js";
 // `back` is undo's twin over what is OPEN rather than what is set: it restores
 // the menus, tabs, pickers and edit mode the session's last navigating click
 // changed (src/renderer/navigation-history.ts), and leaves every setting alone.
-export const ACTION_KEYS = [
-  "set",
-  "persist",
-  "copy",
-  "open",
-  "reset",
-  "undo",
-  "redo",
-  "back",
-  "rewind",
-  "save",
-  "preset",
-  "themeDefault",
-  "slash",
-  "run",
-  "do",
-] as const;
-export type ActionKey = (typeof ACTION_KEYS)[number];
+export type ActionKey =
+  | "set"
+  | "persist"
+  | "copy"
+  | "open"
+  | "reset"
+  | "undo"
+  | "redo"
+  | "back"
+  | "rewind"
+  | "save"
+  | "preset"
+  | "themeDefault"
+  | "slash"
+  | "run"
+  | "do";
 
 type ActionLayerFor<Key extends ActionKey> = NonNullable<
   Extract<ActionDecl, Record<Key, unknown>> extends infer Action
