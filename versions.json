@@ -4,15 +4,22 @@
     {
       "version": "pr-981",
       "ref": "refs/pull/981/merge",
-      "sha": "50d374680a6227b02055fe466c2534be9f98f637",
-      "timestamp": "2026-11-27T04:57:53.918Z",
+      "sha": "159416a91f58b77e1c6156d69559dbcd2abe016c",
+      "timestamp": "2026-11-27T05:03:59.897Z",
       "commits": [
         {
-          "sha": "50d374680a6227b02055fe466c2534be9f98f637",
+          "sha": "159416a91f58b77e1c6156d69559dbcd2abe016c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T04:55:42Z",
-          "message": "Merge c40a3ab1d4b504329f32b3fe69d9df6544edfdd9 into 24c369f8021d561d17a1baaf73de873118ca0457\n"
+          "timestamp": "2026-11-27T05:03:03Z",
+          "message": "Merge 1ee056fbfc667de263ab2c1d4ba0045742714976 into 24c369f8021d561d17a1baaf73de873118ca0457\n"
+        },
+        {
+          "sha": "1ee056fbfc667de263ab2c1d4ba0045742714976",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:02:51-07:00",
+          "message": "Resolve native loader aliases and physical module ownership\n"
         },
         {
           "sha": "c40a3ab1d4b504329f32b3fe69d9df6544edfdd9",
