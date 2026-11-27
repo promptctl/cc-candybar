@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "6dfc458879136a9734d598708f6975003ea6b4ee",
-      "timestamp": "2026-11-27T05:07:29.984Z",
+      "sha": "f0abfe24617b4d61ff9da09fa07d246e524d18fe",
+      "timestamp": "2026-11-27T05:11:23.216Z",
       "commits": [
         {
-          "sha": "6dfc458879136a9734d598708f6975003ea6b4ee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:06:10-07:00",
-          "message": "fix(lint): enforce module ownership on resolved imports (#981)\n\n* Enforce module ownership on resolved import edges\n\n* fix(lint): resolve native loader bindings and URL-based ownership\n\n* Resolve native loader aliases and physical module ownership"
+          "sha": "f0abfe24617b4d61ff9da09fa07d246e524d18fe",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T05:09:54Z",
+          "message": "chore(release): set `package.json` to 1.244.1\n\n## [1.244.1](https://github.com/promptctl/cc-candybar/compare/v1.244.0...v1.244.1) (2026-11-27)\n\n### Bug Fixes\n\n* **lint:** enforce module ownership on resolved imports ([#981](https://github.com/promptctl/cc-candybar/issues/981)) ([6dfc458](https://github.com/promptctl/cc-candybar/commit/6dfc458879136a9734d598708f6975003ea6b4ee))\n"
         }
       ]
     }
