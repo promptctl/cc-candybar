@@ -1,30 +1,44 @@
-// [LAW:effects-at-boundaries] Only periods created via this Jest sandbox's
-// globals belong to its file. Jest's runner and neighboring files have their
-// own globals even when they share the same Node worker.
-function trackFilePeriods(sandbox, file) {
+const { createHook } = require("node:async_hooks");
+const { setImmediate: nextTurn } = require("node:timers/promises");
+const { clearInterval } = require("node:timers");
+
+// [LAW:effects-at-boundaries] Node exposes one async resource for a timer,
+// regardless of which API created or disposed it. Its init resource carries
+// the repeat period and callback; destroy is the authoritative end. Confine
+// these Node-specific fields to this adapter and exercise them on real timers.
+function trackFilePeriods(sandbox, file, filename) {
   const periods = new Map();
-  const { setInterval, clearInterval, clearTimeout } = sandbox;
-  sandbox.setInterval = (callback, ms, ...args) => {
-    const handle = setInterval(callback, ms, ...args);
-    periods.set(handle, new Error(`${callback.name || "<anonymous>"} (${ms} ms)`));
-    return handle;
-  };
-  // Node accepts either clear function for an interval.
-  sandbox.clearInterval = (handle) => {
-    periods.delete(handle);
-    clearInterval(handle);
-  };
-  sandbox.clearTimeout = (handle) => {
-    periods.delete(handle);
-    clearTimeout(handle);
-  };
-  return () => {
+  const hook = createHook({
+    init(id, type, _trigger, handle) {
+      if (type !== "Timeout" || !(handle._repeat > 0)) return;
+      const callback = handle._onTimeout;
+      const origin = new Error(
+        `${callback?.name || "<anonymous>"} (${handle._repeat} ms)`,
+      );
+      // A file owns functions from its VM, including asynchronously armed
+      // intervals. A Node helper may supply its own callback for a test.
+      if (
+        callback instanceof sandbox.Function ||
+        origin.stack.includes(filename)
+      ) {
+        periods.set(id, { handle, origin });
+      }
+    },
+    destroy(id) {
+      periods.delete(id);
+    },
+  }).enable();
+  return async () => {
+    // Node delivers destroy hooks on a later turn, including after dispose().
+    await nextTurn();
+    hook.disable();
     const leaked = [...periods.values()];
-    for (const handle of periods.keys()) clearInterval(handle);
+    for (const { handle } of leaked) clearInterval(handle);
     periods.clear();
     if (leaked.length) {
-      throw new Error(`${file} left periods armed:
-${leaked.map((error) => error.stack).join("\n")}`);
+      throw new Error(
+        `${file} left periods armed:\n${leaked.map(({ origin }) => origin.stack).join("\n")}`,
+      );
     }
   };
 }

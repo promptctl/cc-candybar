@@ -8,3 +8,8 @@ test("a named period is released", () => {
   );
   cancel();
 });
+
+test("a disposed timer has ended", () => {
+  const handle = setInterval(function disposed() {}, 60000);
+  handle[Symbol.dispose]();
+});

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
-// One real Jest worker runs both files. The teardown verdict must identify
+// One real Jest worker runs the fixture files. The teardown verdict must identify
 // only the file that kept its period, including an unref'd period.
 test("a leaked repeat fails its own file and names the task", () => {
   const root = join(__dirname, "../..");
@@ -25,7 +25,19 @@ test("a leaked repeat fails its own file and names the task", () => {
   const { testResults } = JSON.parse(result.stdout) as {
     testResults: Array<{ name: string; status: string; message: string }>;
   };
-  expect(testResults).toHaveLength(2);
+  expect(testResults).toHaveLength(3);
+  const cleanup = testResults.find((test) =>
+    test.name.endsWith("/cleanup.fixture.ts"),
+  );
+  expect(cleanup).toMatchObject({
+    status: "failed",
+    message: expect.stringContaining("fixture release refused"),
+  });
+  expect(cleanup?.message).not.toContain("left periods armed");
+  const leaked = testResults.find((test) =>
+    test.name.endsWith("/leaked.fixture.ts"),
+  );
+  expect(leaked?.message).toContain("modulePeriod (60000 ms)");
   expect(
     testResults.find((test) => test.name.endsWith("/leaked.fixture.ts")),
   ).toMatchObject({
