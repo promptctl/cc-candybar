@@ -147,6 +147,11 @@ export function environmentOf(file, zone) {
 
 const tools = ownershipRows.filter(({zone}) => zone === "tools" || zone === "lib");
 const globsOf = (rows, glob) => rows.map(({row}) => row.endsWith("/") ? row + glob : row);
+const application = ownershipRows.filter(({row, zone}) => APP.includes(zone) && (row.endsWith("/") || isCodeFile(row)));
+export const APP_FILES = globsOf(application, CODE_GLOB);
+export const APP_TYPESCRIPT = APP_FILES.map((pattern) => [pattern, TS_GLOB]);
+export const APP_JAVASCRIPT = APP_FILES.map((pattern) => [pattern, JS_GLOB]);
+export const isApplicationZone = (zone) => APP.includes(zone);
 export const TOOL_FILES = globsOf(tools, CODE_GLOB);
 export const LIB_FILES = globsOf(ownershipRows.filter(({zone}) => zone === "lib"), CODE_GLOB);
 // Directory probes belonging to the Node project. Exact files and browser

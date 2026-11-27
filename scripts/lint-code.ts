@@ -5,20 +5,43 @@ import { ESLint } from "eslint";
 import { inventory, type OwnedSource } from "./lib/code-inventory.js";
 import { typeCoverageFailures } from "./lib/type-coverage.js";
 
-async function lint(root: string, sources: readonly OwnedSource[]): Promise<boolean> {
+async function lint(
+  root: string,
+  sources: readonly OwnedSource[],
+): Promise<boolean> {
   const groups = [
-    { config: "eslint.config.mjs", rule: "zones/import-direction", files: sources.filter(({zone}) => !["tools", "lib", "test"].includes(zone)) },
-    { config: "eslint.tools.config.mjs", rule: "zones/import-direction", files: sources.filter(({zone}) => zone === "tools" || zone === "lib") },
-    { config: "eslint.tests.config.mjs", rule: "no-unreachable", files: sources.filter(({zone}) => zone === "test" || zone === "lib") },
+    {
+      config: "eslint.config.mjs",
+      rule: "zones/import-direction",
+      files: sources.filter(
+        ({ zone }) => !["tools", "lib", "test"].includes(zone),
+      ),
+    },
+    {
+      config: "eslint.tools.config.mjs",
+      rule: "zones/import-direction",
+      files: sources.filter(({ zone }) => zone === "tools" || zone === "lib"),
+    },
+    {
+      config: "eslint.tests.config.mjs",
+      rule: "no-unreachable",
+      files: sources.filter(({ zone }) => zone === "test" || zone === "lib"),
+    },
   ];
   let passed = true;
   for (const { config, rule, files } of groups) {
     if (!files.length) continue;
-    const eslint = new ESLint({ cwd: root, overrideConfigFile: config, globInputPaths: false });
+    const eslint = new ESLint({
+      cwd: root,
+      overrideConfigFile: config,
+      globInputPaths: false,
+    });
     for (const file of files) {
       const effective = await eslint.calculateConfigForFile(file.path);
       if (effective?.rules?.[rule]?.[0] !== 2)
-        throw new Error(`${file.path} (row ${file.row}) lacks ${rule} in ${config}`);
+        throw new Error(
+          `${file.path} (row ${file.row}) lacks ${rule} in ${config}`,
+        );
     }
     const results = await eslint.lintFiles(files.map((file) => file.path));
     const formatter = await eslint.loadFormatter("stylish");

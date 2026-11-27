@@ -20,7 +20,9 @@ function nodeEntry(file: string): boolean {
     const buffer = Buffer.alloc(512);
     const count = fs.readSync(fd, buffer);
     const firstLine = buffer.toString("utf8", 0, count).split("\n", 1)[0]!;
-    return /^#!\s*(?:\S*\/)?(?:node(?:js)?(?:\s|$)|env\s+(?:-S\s+)?(?:\S*\/)?node(?:js)?(?:\s|$))/.test(firstLine);
+    return /^#!\s*(?:\S*\/)?(?:node(?:js)?(?:\s|$)|env\s+(?:(?:-S|--split-string|-i|--ignore-environment|--|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*(?:\S*\/)?node(?:js)?(?:\s|$))/.test(
+      firstLine,
+    );
   } finally {
     fs.closeSync(fd);
   }
@@ -36,10 +38,16 @@ export function inventory(root: string): readonly OwnedSource[] {
   const missing: string[] = [];
   for (const file of new Set(output.split("\0").filter(Boolean))) {
     const absolute = path.join(root, file);
-    const entry = fs.lstatSync(absolute, { throwIfNoEntry: false });
+    const link = fs.lstatSync(absolute, { throwIfNoEntry: false });
+    const entry = link?.isSymbolicLink() ? fs.statSync(absolute) : link;
     if (!entry || entry.isDirectory()) continue; // An unstaged deletion or submodule.
     if (!isCodeFile(file)) {
-      if (path.extname(file) || !entry.isFile() || !(entry.mode & 0o111) || !nodeEntry(absolute))
+      if (
+        path.extname(file) ||
+        !entry.isFile() ||
+        !(entry.mode & 0o111) ||
+        !nodeEntry(absolute)
+      )
         continue;
     }
     const declaration = coverageOf(file);
@@ -47,11 +55,18 @@ export function inventory(root: string): readonly OwnedSource[] {
       missing.push(file);
     } else if ("zone" in declaration) {
       const { row, zone } = declaration;
-      owned.push({ path: file, row, zone, environment: environmentOf(file, zone) });
+      owned.push({
+        path: file,
+        row,
+        zone,
+        environment: environmentOf(file, zone),
+      });
     }
   }
   if (missing.length) {
-    throw new Error(`Missing source ownership in scripts/import-zones.mjs:\n${missing.sort().join("\n")}`);
+    throw new Error(
+      `Missing source ownership in scripts/import-zones.mjs:\n${missing.sort().join("\n")}`,
+    );
   }
   return owned;
 }
