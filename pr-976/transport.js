@@ -81706,9 +81706,8 @@ var SourceFiles = class {
   }
 };
 
-// src/daemon/cache/watchers.ts
+// src/daemon/foundations/watch-targets.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/utils/folder-identity.ts
 init_globals();
@@ -81733,25 +81732,6 @@ var boundOf = (folder) => {
 };
 var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
 var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
-
-// src/daemon/foundations/polled-entry.ts
-init_globals();
-var failedEntry = (code2) => `error:${code2}`;
-var absentPolledEntry = failedEntry("ENOENT");
-function polledEntryOf(stat3) {
-  const identity2 = `${stat3.mode}:${identityKey(stat3)}`;
-  return stat3.isDirectory() ? identity2 : `${identity2}:${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
-}
-function readPolledEntry(at) {
-  try {
-    return polledEntryOf(lstatSync(at, { bigint: true }));
-  } catch (error) {
-    return failedEntry(error.code);
-  }
-}
-
-// src/daemon/foundations/watch-targets.ts
-init_globals();
 
 // src/utils/watch-target.ts
 init_globals();
@@ -81815,553 +81795,9 @@ function followWatch(held, spec, acquire) {
   return { watch: watch2, move: "rebound" };
 }
 
-// src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message) => debug(message);
-var DEBOUNCE_MS = 50;
-var POLL_MS = 1e3;
-var systemWatchDirectory = (directory, recursive, changed) => fs_default.watch(
-  directory,
-  { persistent: false, recursive },
-  (_event, name) => changed(name)
-);
-function folded(window2, next2) {
-  if (next2.kind === "failed") return next2;
-  if (window2.kind !== "changed") return window2;
-  if (next2.kind === "unknown") return next2;
-  for (const p2 of next2.paths) window2.paths.add(p2);
-  return window2;
-}
-var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path16.default.join(dir, filename)]) };
-var failedOf = (d) => ({
-  kind: "failed",
-  reason: `${d.path}: ${d.reason}`
-});
-var heldBy2 = (state, handle) => state.kind === "listening" && state.handle === handle;
-var UNSEEN = /* @__PURE__ */ Symbol("unseen");
-var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
-var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var isBelow = (at, root) => at.startsWith(root + import_node_path16.default.sep);
-function dirsBelow(at, held, trusted, unlisted) {
-  const heldIn = (dir) => [...held].filter((p2) => p2 === dir || isBelow(p2, dir));
-  let entries2;
-  try {
-    entries2 = fs_default.readdirSync(at, { withFileTypes: true });
-  } catch (e) {
-    const code2 = e.code;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return [];
-    unlisted.push(at);
-    return [...held].filter((p2) => isBelow(p2, at));
-  }
-  return entries2.filter((e) => e.isDirectory()).flatMap((e) => {
-    const below2 = import_node_path16.default.join(at, e.name);
-    return trusted && held.has(below2) ? heldIn(below2) : [below2, ...dirsBelow(below2, held, false, unlisted)];
-  });
-}
-var WatcherRegistry = class {
-  slots = /* @__PURE__ */ new Map();
-  dirs = /* @__PURE__ */ new Map();
-  polled = /* @__PURE__ */ new Map();
-  // The next sweep's cancel, armed exactly while a path is polled.
-  sweep = null;
-  counters;
-  logger;
-  clock;
-  closed = false;
-  nodeWalksTrees;
-  watchDirectory;
-  constructor(opts) {
-    this.clock = opts.clock;
-    this.watchDirectory = opts.watchDirectory ?? systemWatchDirectory;
-    this.counters = opts.counters;
-    this.logger = opts.logger ?? defaultLogger;
-    this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
-  }
-  // [LAW:single-enforcer] A consumer that reloads several slots together can
-  // share their delivery window. Each slot still receives only its own paths.
-  // Keys acquired in this window belong to it until their last release.
-  batch(completed) {
-    const window2 = { pending: null, completed };
-    const acquire = (key, targets, onInvalidate, observed2) => this.acquired(key, targets, onInvalidate, observed2, window2);
-    return {
-      acquire,
-      follow: (held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) => this.followed(
-        held,
-        spec,
-        observed2,
-        (key, targets) => acquire(key, targets, onInvalidate, observed2)
-      )
-    };
-  }
-  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
-  // holder of one slot, and each holder's callback hears every window.
-  // `targets` from the first acquire wins; subsequent acquires keep the
-  // original target set (consumers must use a fresh key if they need different
-  // targets). A consumer that needs no more than "something changed" ignores
-  // the invalidation's value.
-  acquire(key, targets, onInvalidate, observed2) {
-    return this.acquired(key, targets, onInvalidate, observed2);
-  }
-  acquired(key, targets, onInvalidate, observed2 = NO_OBSERVATIONS, window2) {
-    if (this.closed) {
-      return {
-        release: () => {
-        },
-        observed: () => {
-        },
-        deaf: [...targets.dirs.map((d) => d.path), ...targets.polled].map(
-          (path31) => ({
-            kind: "refused",
-            path: path31,
-            reason: "the watcher registry is closed"
-          })
-        ),
-        ridesStream: ridesStream(targets)
-      };
-    }
-    const shared = this.slots.get(key);
-    if (shared !== void 0 && (window2 === void 0 ? shared.window.completed !== void 0 : shared.window !== window2))
-      throw new Error(
-        `watch ${valueOf(key)} belongs to another delivery window`
-      );
-    if (shared !== void 0) {
-      for (const { dir } of shared.listeners.values())
-        this.judged(dir, "acquire");
-      this.reconciled(shared, "acquire", null);
-    }
-    this.sighted(
-      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? []),
-      observed2
-    );
-    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null }, observed2);
-    const holder = { onInvalidate, observed: /* @__PURE__ */ new Map() };
-    slot.holders.add(holder);
-    const handle = this.makeHandle(slot, holder);
-    handle.observed(observed2);
-    return handle;
-  }
-  // The held watch following `spec` (`followWatch`).
-  follow(held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) {
-    return this.followed(
-      held,
-      spec,
-      observed2,
-      (key, targets) => this.acquire(key, targets, onInvalidate, observed2)
-    );
-  }
-  followed(held, spec, observed2, acquire) {
-    const followed = followWatch(held, spec, acquire);
-    if (followed.move === "kept") {
-      this.sighted(this.slots.get(followed.watch.key)?.polled ?? [], observed2);
-      followed.watch.handle.observed(observed2);
-    }
-    return followed;
-  }
-  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
-  // have read a polled path since the last sweep, and read a state no sweep
-  // saw. Where the disk differs from the swept entry now, the next sweep
-  // fires it whatever it reads, so a change undone before the sweep is still
-  // heard. Only the sweep fires, so the work a path drives stays once a
-  // period; a change undone before the holder acquired or followed is one no
-  // poll sees.
-  // [LAW:escape-local-minima] exception: a child that does its own reads
-  // cannot supply descriptor evidence to its parent. Its hold still compares
-  // against the registry's best available observation.
-  sighted(records, observed2) {
-    for (const record2 of records)
-      if (!observed2.has(record2.path) && record2.entry !== UNSEEN && readPolledEntry(record2.path) !== record2.entry)
-        record2.entry = UNSEEN;
-  }
-  opened(key, targets, window2, observed2) {
-    const slot = {
-      key,
-      targets: targets.dirs,
-      listeners: /* @__PURE__ */ new Map(),
-      polled: [],
-      holders: /* @__PURE__ */ new Set(),
-      window: window2
-    };
-    this.reconciled(slot, "acquire", null);
-    for (const at of targets.polled) {
-      const record2 = this.polledAt(at, observed2.get(at));
-      record2.slots.add(slot);
-      slot.polled.push(record2);
-    }
-    this.armSweep();
-    this.slots.set(key, slot);
-    if (this.counters) {
-      if ([...slot.listeners.values()].every(
-        (l) => l.dir.state.kind === "listening"
-      ))
-        this.counters.watchersOpened++;
-      else this.counters.watchRefusals++;
-    }
-    return slot;
-  }
-  // [LAW:single-enforcer] How a tree is heard is decided here, by what the
-  // runtime's recursive watch is. Native (macOS's FSEvents), it is one watch.
-  // Node's own walk (Linux) stops at the first entry it cannot watch and says
-  // nothing, and where it fails cannot be predicted, so a tree there is a
-  // plain watch on the root and on each directory below it, each refused or
-  // heard by the OS on its own. `heardIn` is the directory an event was heard
-  // in, or null for the whole of every target: an event moves only what its
-  // own directory lists, so only that listing is read again.
-  dirsOf(targets, heardIn, held, unlisted) {
-    return targets.flatMap((target) => {
-      if (target.recursive !== true || !this.nodeWalksTrees) return [target];
-      const at = heardIn ?? target.path;
-      if (at !== target.path && !isBelow(at, target.path)) return [];
-      const below2 = dirsBelow(at, held, heardIn !== null, unlisted);
-      return [...heardIn === null ? [at] : [], ...below2].map((dir) => ({
-        path: dir
-      }));
-    });
-  }
-  // [LAW:dataflow-not-control-flow] A slot holds a watch on exactly the
-  // directories its targets name now, below the directory listed again: one
-  // it lacks joins, one no longer named leaves. Run whole at its acquire and
-  // on every period, and for the directory each event its watches hear is
-  // heard in, so a tree's new directory is heard from the event that made it.
-  reconciled(slot, cause, heardIn) {
-    const held = new Set([...slot.listeners.values()].map((l) => l.dir.path));
-    const unlisted = [];
-    const named2 = new Map(
-      this.dirsOf(slot.targets, heardIn, held, unlisted).map((t2) => [
-        dirId(t2),
-        t2
-      ])
-    );
-    for (const [id2, listener] of slot.listeners)
-      if (!named2.has(id2) && (heardIn === null || isBelow(listener.dir.path, heardIn))) {
-        slot.listeners.delete(id2);
-        this.left(listener, cause);
-      }
-    for (const [id2, target] of named2)
-      if (!slot.listeners.has(id2)) {
-        const dir = this.dirFor(target, cause);
-        const listener = { slot, dir };
-        dir.listeners.add(listener);
-        slot.listeners.set(id2, listener);
-        if (slot.holders.size > 0 && dir.state.kind === "deaf")
-          this.fire(slot, failedOf(dir.state.deafness));
-      }
-    for (const at of unlisted) {
-      const dir = this.dirs.get(dirId({ path: at }));
-      if (dir?.state.kind === "listening")
-        this.reopen(dir, "it cannot be listed");
-    }
-  }
-  // A directory watch closes with the last slot on it.
-  left(listener, cause) {
-    const { dir } = listener;
-    dir.listeners.delete(listener);
-    if (dir.listeners.size > 0) return;
-    if (dir.state.kind === "listening")
-      this.closeHandle(dir.path, dir.state.handle, cause);
-    this.dirs.delete(dir.id);
-  }
-  // The directory watch a slot's target joins: the one already open there,
-  // judged, or a new one.
-  dirFor(target, cause) {
-    const id2 = dirId(target);
-    const existing = this.dirs.get(id2);
-    if (existing !== void 0) {
-      this.judged(existing, cause);
-      return existing;
-    }
-    const where = { path: target.path, recursive: target.recursive === true };
-    const dir = {
-      id: id2,
-      ...where,
-      listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, cause, null)
-    };
-    this.dirs.set(id2, dir);
-    return dir;
-  }
-  // [LAW:single-enforcer] The one rule that a directory watch names the
-  // folder at its path, applied whenever a holder acquires the directory,
-  // whenever an event says the folder there moved, and on every period
-  // (`judge`). A deaf one is opened again; a listening one whose path holds
-  // another folder than the one it bound (removed and made again, or a strict
-  // ancestor renamed away and another tree put at its path: inotify hears the
-  // old inode, and the bound folder is what an event naming the directory is
-  // judged against) is reopened in place. A path that binds nothing right now
-  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
-  // on the path hears the folder come back.
-  judged(dir, cause) {
-    if (dir.state.kind === "deaf") {
-      this.reopen(dir, cause);
-      return;
-    }
-    const now2 = boundOf(dir.path);
-    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
-      this.reopen(dir, "another folder is at its path");
-  }
-  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
-  // the disk, on the period the file-event delivery owner keeps (the daemon
-  // wires it). It is the one trigger for a replacement no event reaches a
-  // handle for (a strict ancestor renamed away and another tree put at its
-  // path: inotify reports a directory's own removal or self-move, never its
-  // parent's), and the retry of a directory the OS refused or whose handle
-  // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing; a tree heard
-  // directory by directory costs a listing of each directory too.
-  judge() {
-    for (const slot of this.slots.values())
-      this.reconciled(slot, "period", null);
-    for (const dir of this.dirs.values()) this.judged(dir, "period");
-  }
-  // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, or deaf for another reason, it hears the fault.
-  // Listening again, it hears an `unknown` window: whatever changed while the
-  // directory was deaf or bound to another folder went unheard, and a holder
-  // that re-derives on it reports its fault cleared. Deaf for the same reason
-  // is no change and tells nothing.
-  reopen(dir, cause) {
-    const was = dir.state;
-    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    const now2 = this.open(dir, () => dir, cause, was);
-    dir.state = now2;
-    if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening" || !compareStructural(was.deafness, now2.deafness))
-      this.tell(dir, failedOf(now2.deafness));
-  }
-  // `dirOf` names the watch the handle belongs to; its callbacks run only
-  // after the open returns, once the watch holds the state returned here.
-  open(where, dirOf, cause, was) {
-    const at = where.path;
-    const bound = boundKey(boundOf(at));
-    try {
-      fs_default.opendirSync(at).closeSync();
-      const handle = this.watchDirectory(
-        at,
-        where.recursive,
-        (changed) => this.heard(dirOf(), handle, changed)
-      );
-      handle.on("error", (e) => {
-        const dir = dirOf();
-        if (!heldBy2(dir.state, handle)) return;
-        this.logger("warn", `watcher error ${at}: ${e.message}`);
-        if (this.counters) this.counters.watchErrors++;
-        this.closeHandle(at, handle, "error");
-        const deafness = {
-          kind: "failed",
-          path: at,
-          reason: e.message
-        };
-        dir.state = { kind: "deaf", deafness };
-        this.tell(dir, failedOf(deafness));
-      });
-      if (this.counters) this.counters.dirWatchesOpened++;
-      this.logger(
-        "info",
-        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
-      );
-      return { kind: "listening", handle, bound };
-    } catch (e) {
-      const reason = e.message;
-      const deafness = { kind: "refused", path: at, reason };
-      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
-        this.logger("warn", `watch failed ${at}: ${reason}`);
-      return { kind: "deaf", deafness };
-    }
-  }
-  // [LAW:dataflow-not-control-flow] Every event reaches every slot on the
-  // watch. One naming the directory itself, while the folder at the path is
-  // no longer the one this handle bound (its removal or replacement, which
-  // macOS reports as a change and Linux as a rename), is then judged, so a
-  // handle never stays bound to a folder no longer at its path and every later
-  // event naming the directory is judged against the folder there.
-  heard(dir, handle, changed) {
-    const { state } = dir;
-    if (!heldBy2(state, handle)) return;
-    this.tell(dir, namedOf(dir.path, changed));
-    if (changed === import_node_path16.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
-      this.judged(dir, "moved");
-    for (const slot of [...dir.listeners].map((l) => l.slot))
-      this.reconciled(slot, "heard", dir.path);
-  }
-  tell(dir, invalidation) {
-    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
-  }
-  // [LAW:no-silent-failure] Every holder hears the window, whatever one before
-  // it threw: each hearing is a clock task named for its watch, so what it
-  // throws reaches the bar as that watch's, in its own words.
-  // [LAW:no-ambient-temporal-coupling] A slot an earlier holder closed, or a
-  // holder it released, hears nothing: each is judged as its turn comes.
-  deliver(changes, completed) {
-    for (const [changed, gathered] of changes) {
-      if (this.slots.get(changed.key) !== changed) continue;
-      const heard = heardOf(gathered);
-      for (const holder of changed.holders)
-        this.clock.detach(
-          `watch ${changed.key} holder`,
-          () => holder.onInvalidate(heard)
-        );
-    }
-    completed?.();
-  }
-  fire(slot, invalidation) {
-    const { window: window2 } = slot;
-    if (window2.pending === null) {
-      const changes2 = /* @__PURE__ */ new Map();
-      window2.pending = {
-        changes: changes2,
-        cancel: this.clock.after(
-          "watch delivery",
-          DEBOUNCE_MS,
-          () => {
-            window2.pending = null;
-            this.deliver(changes2, window2.completed);
-          },
-          { unref: true }
-        )
-      };
-    }
-    const { changes } = window2.pending;
-    const gathered = changes.get(slot);
-    changes.set(
-      slot,
-      gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
-    );
-  }
-  makeHandle(slot, holder) {
-    return {
-      get deaf() {
-        return [...slot.listeners.values()].flatMap(
-          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
-        );
-      },
-      // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
-      ridesStream: slot.listeners.size > 0,
-      observed: (files) => {
-        if (!slot.holders.has(holder)) return;
-        holder.observed.clear();
-        for (const { path: path31 } of slot.polled) {
-          const seen = files.get(path31);
-          if (seen !== void 0) holder.observed.set(path31, seen);
-        }
-      },
-      release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
-        this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
-      }
-    };
-  }
-  closeHandle(at, handle, cause) {
-    try {
-      handle.close();
-    } catch {
-    }
-    if (this.counters) this.counters.dirWatchesClosed++;
-    this.logger(
-      "info",
-      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
-    );
-  }
-  // A directory watch closes, and a polled path is forgotten, with the last
-  // slot on it: a slot that names the path again starts from what is there at
-  // its own acquire.
-  closeSlot(slot, cause) {
-    const { window: window2 } = slot;
-    const { pending: pending2 } = window2;
-    if (pending2 !== null && pending2.changes.delete(slot) && pending2.changes.size === 0) {
-      pending2.cancel();
-      window2.pending = null;
-    }
-    for (const listener of slot.listeners.values()) this.left(listener, cause);
-    for (const record2 of slot.polled) {
-      record2.slots.delete(slot);
-      if (record2.slots.size === 0) this.polled.delete(record2.path);
-    }
-    if (this.polled.size === 0) this.disarmSweep();
-    if (this.counters) this.counters.watchersClosed++;
-  }
-  polledAt(at, observed2) {
-    const held = this.polled.get(at);
-    if (held !== void 0) return held;
-    const record2 = {
-      path: at,
-      entry: observed2 ?? readPolledEntry(at),
-      slots: /* @__PURE__ */ new Set()
-    };
-    this.polled.set(at, record2);
-    return record2;
-  }
-  // [LAW:no-ambient-temporal-coupling] The sweep runs every period while a
-  // path is polled and the registry is open. The reads are synchronous, so no
-  // two sweeps overlap and no older read lands over a newer one.
-  // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
-  // renders, once a period per path and once per acquire or follow naming it,
-  // so a mount under a polled path that stops answering stops every bar until
-  // it answers. The paths are a session's own files (its transcript, its
-  // settings, its config, its git directory), which the daemon reads on this
-  // thread to render anyway.
-  armSweep() {
-    if (this.sweep !== null || this.closed || this.polled.size === 0) return;
-    this.sweep = this.clock.every(
-      "polled paths read",
-      POLL_MS,
-      () => this.readPolled(),
-      {
-        unref: true
-      }
-    );
-  }
-  disarmSweep() {
-    this.sweep?.();
-    this.sweep = null;
-  }
-  // [LAW:dataflow-not-control-flow] The same read for every polled path each
-  // sweep. A path whose entry differs fires every slot that names it, by its
-  // path, through the slot's debounce, as a directory watch reports a child.
-  readPolled() {
-    for (const record2 of this.polled.values()) {
-      const now2 = readPolledEntry(record2.path);
-      const previous2 = record2.entry;
-      record2.entry = now2;
-      for (const slot of record2.slots) {
-        let changed = false;
-        for (const holder of slot.holders) {
-          const seen = holder.observed.get(record2.path) ?? previous2;
-          holder.observed.delete(record2.path);
-          changed ||= now2 !== seen;
-        }
-        if (changed)
-          this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
-      }
-    }
-  }
-  // The slots held now.
-  size() {
-    return this.slots.size;
-  }
-  // The paths polled now: no OS watch each.
-  polledPaths() {
-    return this.polled.size;
-  }
-  // The OS directory watches open now.
-  dirWatches() {
-    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
-  }
-  // Every directory a held watch targets.
-  watchedDirs() {
-    return [...this.dirs.values()].map((d) => d.path);
-  }
-  closeAll() {
-    this.closed = true;
-    this.disarmSweep();
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
-    this.slots.clear();
-  }
-};
-
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/file-events-warnings.ts
 init_globals();
@@ -82561,7 +81997,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path17.default.join(inst.folder, PROBE_FILE),
+        import_node_path16.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -83247,7 +82683,7 @@ var SourceRuns = class {
     const logger = deps.logger ?? quietLogger;
     const ledger = deps.ledger ?? new RefreshLedger(logger);
     this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.watchers,
       deps.fileEvents ?? NO_FILE_EVENTS
     );
     const source = (kind) => new KeyedSource({
@@ -83835,7 +83271,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/client-hints.ts
 init_globals();
@@ -84126,19 +83562,19 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path18.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path17.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
   }
   const projectDir = req.hookData?.workspace?.project_dir;
-  if (typeof projectDir === "string" && !(0, import_node_path18.isAbsolute)(projectDir)) {
+  if (typeof projectDir === "string" && !(0, import_node_path17.isAbsolute)(projectDir)) {
     wireProblems.push(
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
     );
   }
   const currentDir = req.hookData?.workspace?.current_dir;
-  if (typeof currentDir === "string" && !(0, import_node_path18.isAbsolute)(currentDir)) {
+  if (typeof currentDir === "string" && !(0, import_node_path17.isAbsolute)(currentDir)) {
     wireProblems.push(
       `field 'workspace.current_dir' is not an absolute path: ${JSON.stringify(currentDir)}`
     );
@@ -84173,7 +83609,7 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
     env2 = presented;
   }
   const keyed = env2.kind === "reported" && env2.key !== void 0 ? env2.env : void 0;
-  const clientHome = keyed ? keyed.HOME ? (0, import_node_path18.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
+  const clientHome = keyed ? keyed.HOME ? (0, import_node_path17.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
   const rawHints = keyed ? {
     ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
     ...req.termCols !== void 0 && { termCols: req.termCols },
@@ -84641,7 +84077,7 @@ function isDebugWhat(v) {
 
 // src/daemon/foundations/recording-command.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 function recordingCommandOf(value) {
   if (!isPlainObject(value) || typeof value.renderer !== "string")
     throw new BadVerbArgs("recording needs a renderer name");
@@ -84652,7 +84088,7 @@ function recordingCommandOf(value) {
     throw new BadVerbArgs(String(error));
   }
   if (value.action === "stop") return { action: "stop", renderer: name };
-  if (value.action === "start" && typeof value.file === "string" && (0, import_node_path19.isAbsolute)(value.file) && !value.file.includes("\0"))
+  if (value.action === "start" && typeof value.file === "string" && (0, import_node_path18.isAbsolute)(value.file) && !value.file.includes("\0"))
     return { action: "start", renderer: name, file: value.file };
   throw new BadVerbArgs(
     "recording needs stop, or start with an absolute output file"
@@ -85448,7 +84884,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -85543,8 +84979,8 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: [{ path: import_node_path20.default.join(commonDir, "refs", "heads"), recursive: true }],
-    polled: [import_node_path20.default.join(gitDir, "HEAD"), import_node_path20.default.join(gitDir, "index")]
+    dirs: [{ path: import_node_path19.default.join(commonDir, "refs", "heads"), recursive: true }],
+    polled: [import_node_path19.default.join(gitDir, "HEAD"), import_node_path19.default.join(gitDir, "index")]
   });
 }
 function branchOf(outcome) {
@@ -85593,7 +85029,6 @@ var GitDataProvider = class {
   maxRepos;
   forgeLookups;
   watchers;
-  ownsWatchers;
   logger;
   clock;
   constructor(opts) {
@@ -85616,16 +85051,7 @@ var GitDataProvider = class {
       refresh: ["first", "period"],
       lines: ["first", "period"]
     });
-    if (opts.watchers) {
-      this.watchers = opts.watchers;
-      this.ownsWatchers = false;
-    } else {
-      this.watchers = new WatcherRegistry({
-        clock: this.clock,
-        logger: this.logger
-      });
-      this.ownsWatchers = true;
-    }
+    this.watchers = opts.watchers;
   }
   getWatcherRegistry() {
     return this.watchers;
@@ -85988,17 +85414,16 @@ var GitDataProvider = class {
     for (const state of this.repos.values()) this.drop(state);
     this.repos.clear();
     this.resolutions.clear();
-    if (this.ownsWatchers) this.watchers.closeAll();
   }
 };
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/cache/pricing.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 
 // src/utils/wire-shape.ts
 init_globals();
@@ -86347,7 +85772,7 @@ var Pricing = class {
     const file = this.opts.cache;
     try {
       if (signal.aborted) return;
-      await fs_default.promises.mkdir(import_node_path21.default.dirname(file), { recursive: true });
+      await fs_default.promises.mkdir(import_node_path20.default.dirname(file), { recursive: true });
       if (signal.aborted) return;
       const written2 = {
         data: Object.fromEntries(table.models),
@@ -86373,7 +85798,7 @@ var Pricing = class {
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -86447,19 +85872,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path22.join)(homeDir, ".config", "claude"), (0, import_node_path22.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path21.join)(homeDir, ".config", "claude"), (0, import_node_path21.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path22.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path21.join)(claudePath, "projects");
     const entries2 = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries2 ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path22.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path21.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -86476,7 +85901,7 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   const unowned = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path22.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path21.join)(projectPath, sessionId2, "subagents");
   let files;
   try {
     files = await unlessGone(readdir2(subagentsDir));
@@ -86490,7 +85915,7 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
     (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
   );
   for (const fileName2 of agentFileNames) {
-    const filePath2 = (0, import_node_path22.join)(subagentsDir, fileName2);
+    const filePath2 = (0, import_node_path21.join)(subagentsDir, fileName2);
     if (verified?.has(filePath2)) {
       paths2.push(filePath2);
       continue;
@@ -87262,7 +86687,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path23.join)(dir, "projects") + import_node_path23.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path22.join)(dir, "projects") + import_node_path22.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -87284,7 +86709,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const found2 = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path23.dirname)(transcriptPath),
+      (0, import_node_path22.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     if (found2.kind === "failed") return found2;
@@ -87352,7 +86777,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path23.join)(dir, file);
+          const filePath2 = (0, import_node_path22.join)(dir, file);
           const st = await unlessGone(stat2(filePath2, { bigint: true }));
           if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
@@ -87446,24 +86871,24 @@ var SessionUsageStore = class {
 
 // src/daemon/cache/git-service.ts
 init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path24 = __toESM(require_path_browserify(), 1);
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 function checkoutAt(start, files) {
-  let dir = import_node_path24.default.resolve(start);
+  let dir = import_node_path23.default.resolve(start);
   for (; ; ) {
     const found2 = gitEntryAt(dir, files);
     if (found2.kind === "ok") return ok({ root: dir, entry: found2.value });
     if (found2.kind === "failed") return found2;
-    const parent = import_node_path24.default.dirname(dir);
+    const parent = import_node_path23.default.dirname(dir);
     if (parent === dir) return ABSENT2;
     dir = parent;
   }
 }
 function gitEntryAt(dir, files = checkoutFiles) {
-  return files.stat(import_node_path24.default.join(dir, ".git"));
+  return files.stat(import_node_path23.default.join(dir, ".git"));
 }
 function gitRootOf(start, files = checkoutFiles) {
   const found2 = checkoutAt(start, files);
@@ -87475,7 +86900,7 @@ function checkoutOf(cwd2, files = checkoutFiles) {
     case "ok":
       return ok({ root: root.value, git: true });
     case "absent":
-      return ok({ root: import_node_path24.default.resolve(cwd2), git: false });
+      return ok({ root: import_node_path23.default.resolve(cwd2), git: false });
     case "failed":
       return root;
   }
@@ -87499,29 +86924,29 @@ var checkoutFiles = {
   text: (file) => probe(file, () => readRegularTextSync(file))
 };
 function gitDirNamed(root, files = checkoutFiles) {
-  const text5 = files.text(import_node_path24.default.join(root, ".git"));
+  const text5 = files.text(import_node_path23.default.join(root, ".git"));
   if (text5.kind !== "ok") return text5;
   const named2 = text5.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named2 === void 0 ? failed(`${import_node_path24.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path24.default.resolve(root, named2));
+  return named2 === void 0 ? failed(`${import_node_path23.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path23.default.resolve(root, named2));
 }
 function sharedExcludeOf(root) {
-  const dotGit = import_node_path24.default.join(root, ".git");
+  const dotGit = import_node_path23.default.join(root, ".git");
   const entry = gitEntryAt(root);
   if (entry.kind !== "ok") return entry;
   if (entry.value.isDirectory())
-    return ok(import_node_path24.default.join(dotGit, "info", "exclude"));
+    return ok(import_node_path23.default.join(dotGit, "info", "exclude"));
   const gitDir = gitDirNamed(root);
   if (gitDir.kind !== "ok") return gitDir;
   const common = commonDirOf(gitDir.value);
   if (common.kind === "failed") return common;
   const shared = common.kind === "ok" ? common.value : gitDir.value;
-  return ok(import_node_path24.default.join(shared, "info", "exclude"));
+  return ok(import_node_path23.default.join(shared, "info", "exclude"));
 }
 function commonDirOf(gitDir, files = checkoutFiles) {
-  const text5 = files.text(import_node_path24.default.join(gitDir, "commondir"));
+  const text5 = files.text(import_node_path23.default.join(gitDir, "commondir"));
   if (text5.kind !== "ok") return text5;
   const common = text5.value.trim();
-  return common === "" ? failed(`${import_node_path24.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path24.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path23.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path23.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -87543,11 +86968,11 @@ function worktreeLink(dir, files = checkoutFiles) {
   const link = worktreeLinkAt(found2.value, files);
   return link.kind === "linked" ? {
     kind: "linked",
-    main: import_node_path24.default.join(link.main, import_node_path24.default.relative(found2.value.root, dir))
+    main: import_node_path23.default.join(link.main, import_node_path23.default.relative(found2.value.root, dir))
   } : link;
 }
 function worktreeLinkAt({ root, entry }, files) {
-  const dotGit = import_node_path24.default.join(root, ".git");
+  const dotGit = import_node_path23.default.join(root, ".git");
   if (entry.isDirectory()) return UNLINKED;
   const direct = files.lstat(dotGit);
   if (direct.kind !== "ok") return unverified(dotGit, direct);
@@ -87559,22 +86984,22 @@ function worktreeLinkAt({ root, entry }, files) {
   const common = commonDirOf(gitDir.value, files);
   if (common.kind === "absent") return UNLINKED;
   if (common.kind === "failed")
-    return unverified(import_node_path24.default.join(gitDir.value, "commondir"), common);
+    return unverified(import_node_path23.default.join(gitDir.value, "commondir"), common);
   const realCommon = files.realpath(common.value);
   if (realCommon.kind !== "ok") return unverified(common.value, realCommon);
-  if (import_node_path24.default.dirname(gitDir.value) !== import_node_path24.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path23.default.dirname(gitDir.value) !== import_node_path23.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path24.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path23.default.join(gitDir.value, "gitdir");
   const back2 = files.text(backFile);
   if (back2.kind !== "ok") return unverified(backFile, back2);
-  const pointer = import_node_path24.default.resolve(gitDir.value, back2.value.trim());
-  if (import_node_path24.default.basename(pointer) !== ".git") {
+  const pointer = import_node_path23.default.resolve(gitDir.value, back2.value.trim());
+  if (import_node_path23.default.basename(pointer) !== ".git") {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const parent = import_node_path24.default.dirname(pointer);
+  const parent = import_node_path23.default.dirname(pointer);
   const pointerDir = files.realpath(parent);
   if (pointerDir.kind !== "ok") return unverified(parent, pointerDir);
   if (pointerDir.value !== root) {
@@ -87582,23 +87007,23 @@ function worktreeLinkAt({ root, entry }, files) {
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path24.default.basename(realCommon.value) === ".git" ? import_node_path24.default.dirname(realCommon.value) : realCommon.value;
+  const main = import_node_path23.default.basename(realCommon.value) === ".git" ? import_node_path23.default.dirname(realCommon.value) : realCommon.value;
   return { kind: "linked", main };
 }
 function checkoutLocation(dir, files = checkoutFiles) {
   const real = files.realpath(dir);
   if (real.kind === "failed") return real;
-  const at = real.kind === "ok" ? real.value : import_node_path24.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path23.default.resolve(dir);
   const found2 = checkoutAt(at, files);
   if (found2.kind !== "ok") return found2;
   const { root } = found2.value;
-  const sub2 = import_node_path24.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path24.default.sep).join("/")}`;
+  const sub2 = import_node_path23.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path23.default.sep).join("/")}`;
   const link = worktreeLinkAt(found2.value, files);
   if (link.kind === "unreadable") return failed(link.reason, "read");
   return link.kind === "linked" ? ok({
     main: link.main,
-    worktree: import_node_path24.default.basename(root),
+    worktree: import_node_path23.default.basename(root),
     subpath,
     noRepo: false
   }) : ok({ main: root, worktree: "", subpath, noRepo: false });
@@ -87773,17 +87198,17 @@ var GitService = class {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path25.default.join(workingDir, ".git"));
+    return orElse(gitDirNamed(workingDir), import_node_path24.default.join(workingDir, ".git"));
   }
   getOngoingOperation(workingDir) {
     try {
       const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "CHERRY_PICK_HEAD")))
+      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "CHERRY_PICK_HEAD")))
         return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path25.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path25.default.join(gitDir, "rebase-apply")))
+      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path24.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
       return ABSENT2;
     } catch (e) {
@@ -87910,7 +87335,7 @@ var GitService = class {
   // unrepresentable. Sync, because reading one small file is not worth a
   // microtask: its former `Promise.all` partner is the only spawn left.
   getStashCount(workingDir) {
-    const reflog = import_node_path25.default.join(
+    const reflog = import_node_path24.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
@@ -87977,7 +87402,7 @@ var GitService = class {
   // yields no stamp and therefore no memo, so an unreadable config re-reads rather
   // than freezing an answer.
   async getRemotesAsync(workingDir) {
-    const configPath = import_node_path25.default.join(
+    const configPath = import_node_path24.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
@@ -88026,7 +87451,7 @@ var GitService = class {
   // remotes read stays failed at the call site instead of borrowing this rule.
   repoNameFrom(remotes, workingDir) {
     const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path25.default.basename(workingDir);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path24.default.basename(workingDir);
   }
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote; a
@@ -88839,7 +88264,7 @@ var RefreshFaults = class {
 
 // src/daemon/cache/managed-storage.ts
 init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 
 // src/var-system/parse.ts
 init_globals();
@@ -88867,7 +88292,7 @@ var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS3;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS3;
 var MAX_ENTRIES3 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path26.default.join(f.folder, fileName(f.sessionId));
+var fileOf = (f) => import_node_path25.default.join(f.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 function madeOnce(folder) {
   try {
@@ -89194,7 +88619,7 @@ var ManagedStorage = class {
     const { folder } = watching.key;
     if (this.folders.get(folder) !== watching) return;
     const inFolder = (f) => f.folder === folder;
-    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path26.default.join(folder, import_node_path26.default.basename(folder)))) {
+    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path25.default.join(folder, import_node_path25.default.basename(folder)))) {
       const paths2 = new Set(invalidation.paths);
       this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
       return;
@@ -89287,7 +88712,7 @@ var ManagedStorage = class {
       for (const entry of entries2) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
-        const file = import_node_path26.default.join(key.folder, entry.name);
+        const file = import_node_path25.default.join(key.folder, entry.name);
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held = this.sessions.isHeld(
@@ -89466,6 +88891,570 @@ function createPayloadProviders(opts) {
     ]
   };
 }
+
+// src/daemon/cache/watchers.ts
+init_globals();
+var import_node_path26 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/polled-entry.ts
+init_globals();
+var failedEntry = (code2) => `error:${code2}`;
+var absentPolledEntry = failedEntry("ENOENT");
+function polledEntryOf(stat3) {
+  const identity2 = `${stat3.mode}:${identityKey(stat3)}`;
+  return stat3.isDirectory() ? identity2 : `${identity2}:${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
+}
+function readPolledEntry(at) {
+  try {
+    return polledEntryOf(lstatSync(at, { bigint: true }));
+  } catch (error) {
+    return failedEntry(error.code);
+  }
+}
+
+// src/daemon/cache/watchers.ts
+var defaultLogger = (_level, message) => debug(message);
+var DEBOUNCE_MS = 50;
+var POLL_MS = 1e3;
+var systemWatchDirectory = (directory, recursive, changed) => fs_default.watch(
+  directory,
+  { persistent: false, recursive },
+  (_event, name) => changed(name)
+);
+function folded(window2, next2) {
+  if (next2.kind === "failed") return next2;
+  if (window2.kind !== "changed") return window2;
+  if (next2.kind === "unknown") return next2;
+  for (const p2 of next2.paths) window2.paths.add(p2);
+  return window2;
+}
+var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path26.default.join(dir, filename)]) };
+var failedOf = (d) => ({
+  kind: "failed",
+  reason: `${d.path}: ${d.reason}`
+});
+var heldBy2 = (state, handle) => state.kind === "listening" && state.handle === handle;
+var UNSEEN = /* @__PURE__ */ Symbol("unseen");
+var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
+var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var isBelow = (at, root) => at.startsWith(root + import_node_path26.default.sep);
+function dirsBelow(at, held, trusted, unlisted) {
+  const heldIn = (dir) => [...held].filter((p2) => p2 === dir || isBelow(p2, dir));
+  let entries2;
+  try {
+    entries2 = fs_default.readdirSync(at, { withFileTypes: true });
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT" || code2 === "ENOTDIR") return [];
+    unlisted.push(at);
+    return [...held].filter((p2) => isBelow(p2, at));
+  }
+  return entries2.filter((e) => e.isDirectory()).flatMap((e) => {
+    const below2 = import_node_path26.default.join(at, e.name);
+    return trusted && held.has(below2) ? heldIn(below2) : [below2, ...dirsBelow(below2, held, false, unlisted)];
+  });
+}
+var WatcherRegistry = class {
+  slots = /* @__PURE__ */ new Map();
+  dirs = /* @__PURE__ */ new Map();
+  polled = /* @__PURE__ */ new Map();
+  // The next sweep's cancel, armed exactly while a path is polled.
+  sweep = null;
+  counters;
+  logger;
+  clock;
+  closed = false;
+  nodeWalksTrees;
+  watchDirectory;
+  constructor(opts) {
+    this.clock = opts.clock;
+    this.watchDirectory = opts.watchDirectory;
+    this.counters = opts.counters;
+    this.logger = opts.logger ?? defaultLogger;
+    this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
+  }
+  // [LAW:single-enforcer] A consumer that reloads several slots together can
+  // share their delivery window. Each slot still receives only its own paths.
+  // Keys acquired in this window belong to it until their last release.
+  batch(completed) {
+    const window2 = { pending: null, completed };
+    const acquire = (key, targets, onInvalidate, observed2) => this.acquired(key, targets, onInvalidate, observed2, window2);
+    return {
+      acquire,
+      follow: (held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) => this.followed(
+        held,
+        spec,
+        observed2,
+        (key, targets) => acquire(key, targets, onInvalidate, observed2)
+      )
+    };
+  }
+  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
+  // holder of one slot, and each holder's callback hears every window.
+  // `targets` from the first acquire wins; subsequent acquires keep the
+  // original target set (consumers must use a fresh key if they need different
+  // targets). A consumer that needs no more than "something changed" ignores
+  // the invalidation's value.
+  acquire(key, targets, onInvalidate, observed2) {
+    return this.acquired(key, targets, onInvalidate, observed2);
+  }
+  acquired(key, targets, onInvalidate, observed2 = NO_OBSERVATIONS, window2) {
+    if (this.closed) {
+      return {
+        release: () => {
+        },
+        observed: () => {
+        },
+        deaf: [...targets.dirs.map((d) => d.path), ...targets.polled].map(
+          (path31) => ({
+            kind: "refused",
+            path: path31,
+            reason: "the watcher registry is closed"
+          })
+        ),
+        ridesStream: ridesStream(targets)
+      };
+    }
+    const shared = this.slots.get(key);
+    if (shared !== void 0 && (window2 === void 0 ? shared.window.completed !== void 0 : shared.window !== window2))
+      throw new Error(
+        `watch ${valueOf(key)} belongs to another delivery window`
+      );
+    if (shared !== void 0) {
+      for (const { dir } of shared.listeners.values())
+        this.judged(dir, "acquire");
+      this.reconciled(shared, "acquire", null);
+    }
+    this.sighted(
+      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? []),
+      observed2
+    );
+    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null }, observed2);
+    const holder = { onInvalidate, observed: /* @__PURE__ */ new Map() };
+    slot.holders.add(holder);
+    const handle = this.makeHandle(slot, holder);
+    handle.observed(observed2);
+    return handle;
+  }
+  // The held watch following `spec` (`followWatch`).
+  follow(held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) {
+    return this.followed(
+      held,
+      spec,
+      observed2,
+      (key, targets) => this.acquire(key, targets, onInvalidate, observed2)
+    );
+  }
+  followed(held, spec, observed2, acquire) {
+    const followed = followWatch(held, spec, acquire);
+    if (followed.move === "kept") {
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? [], observed2);
+      followed.watch.handle.observed(observed2);
+    }
+    return followed;
+  }
+  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
+  // have read a polled path since the last sweep, and read a state no sweep
+  // saw. Where the disk differs from the swept entry now, the next sweep
+  // fires it whatever it reads, so a change undone before the sweep is still
+  // heard. Only the sweep fires, so the work a path drives stays once a
+  // period; a change undone before the holder acquired or followed is one no
+  // poll sees.
+  // [LAW:escape-local-minima] exception: a child that does its own reads
+  // cannot supply descriptor evidence to its parent. Its hold still compares
+  // against the registry's best available observation.
+  sighted(records, observed2) {
+    for (const record2 of records)
+      if (!observed2.has(record2.path) && record2.entry !== UNSEEN && readPolledEntry(record2.path) !== record2.entry)
+        record2.entry = UNSEEN;
+  }
+  opened(key, targets, window2, observed2) {
+    const slot = {
+      key,
+      targets: targets.dirs,
+      listeners: /* @__PURE__ */ new Map(),
+      polled: [],
+      holders: /* @__PURE__ */ new Set(),
+      window: window2
+    };
+    this.reconciled(slot, "acquire", null);
+    for (const at of targets.polled) {
+      const record2 = this.polledAt(at, observed2.get(at));
+      record2.slots.add(slot);
+      slot.polled.push(record2);
+    }
+    this.armSweep();
+    this.slots.set(key, slot);
+    if (this.counters) {
+      if ([...slot.listeners.values()].every(
+        (l) => l.dir.state.kind === "listening"
+      ))
+        this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return slot;
+  }
+  // [LAW:single-enforcer] How a tree is heard is decided here, by what the
+  // runtime's recursive watch is. Native (macOS's FSEvents), it is one watch.
+  // Node's own walk (Linux) stops at the first entry it cannot watch and says
+  // nothing, and where it fails cannot be predicted, so a tree there is a
+  // plain watch on the root and on each directory below it, each refused or
+  // heard by the OS on its own. `heardIn` is the directory an event was heard
+  // in, or null for the whole of every target: an event moves only what its
+  // own directory lists, so only that listing is read again.
+  dirsOf(targets, heardIn, held, unlisted) {
+    return targets.flatMap((target) => {
+      if (target.recursive !== true || !this.nodeWalksTrees) return [target];
+      const at = heardIn ?? target.path;
+      if (at !== target.path && !isBelow(at, target.path)) return [];
+      const below2 = dirsBelow(at, held, heardIn !== null, unlisted);
+      return [...heardIn === null ? [at] : [], ...below2].map((dir) => ({
+        path: dir
+      }));
+    });
+  }
+  // [LAW:dataflow-not-control-flow] A slot holds a watch on exactly the
+  // directories its targets name now, below the directory listed again: one
+  // it lacks joins, one no longer named leaves. Run whole at its acquire and
+  // on every period, and for the directory each event its watches hear is
+  // heard in, so a tree's new directory is heard from the event that made it.
+  reconciled(slot, cause, heardIn) {
+    const held = new Set([...slot.listeners.values()].map((l) => l.dir.path));
+    const unlisted = [];
+    const named2 = new Map(
+      this.dirsOf(slot.targets, heardIn, held, unlisted).map((t2) => [
+        dirId(t2),
+        t2
+      ])
+    );
+    for (const [id2, listener] of slot.listeners)
+      if (!named2.has(id2) && (heardIn === null || isBelow(listener.dir.path, heardIn))) {
+        slot.listeners.delete(id2);
+        this.left(listener, cause);
+      }
+    for (const [id2, target] of named2)
+      if (!slot.listeners.has(id2)) {
+        const dir = this.dirFor(target, cause);
+        const listener = { slot, dir };
+        dir.listeners.add(listener);
+        slot.listeners.set(id2, listener);
+        if (slot.holders.size > 0 && dir.state.kind === "deaf")
+          this.fire(slot, failedOf(dir.state.deafness));
+      }
+    for (const at of unlisted) {
+      const dir = this.dirs.get(dirId({ path: at }));
+      if (dir?.state.kind === "listening")
+        this.reopen(dir, "it cannot be listed");
+    }
+  }
+  // A directory watch closes with the last slot on it.
+  left(listener, cause) {
+    const { dir } = listener;
+    dir.listeners.delete(listener);
+    if (dir.listeners.size > 0) return;
+    if (dir.state.kind === "listening")
+      this.closeHandle(dir.path, dir.state.handle, cause);
+    this.dirs.delete(dir.id);
+  }
+  // The directory watch a slot's target joins: the one already open there,
+  // judged, or a new one.
+  dirFor(target, cause) {
+    const id2 = dirId(target);
+    const existing = this.dirs.get(id2);
+    if (existing !== void 0) {
+      this.judged(existing, cause);
+      return existing;
+    }
+    const where = { path: target.path, recursive: target.recursive === true };
+    const dir = {
+      id: id2,
+      ...where,
+      listeners: /* @__PURE__ */ new Set(),
+      state: this.open(where, () => dir, cause, null)
+    };
+    this.dirs.set(id2, dir);
+    return dir;
+  }
+  // [LAW:single-enforcer] The one rule that a directory watch names the
+  // folder at its path, applied whenever a holder acquires the directory,
+  // whenever an event says the folder there moved, and on every period
+  // (`judge`). A deaf one is opened again; a listening one whose path holds
+  // another folder than the one it bound (removed and made again, or a strict
+  // ancestor renamed away and another tree put at its path: inotify hears the
+  // old inode, and the bound folder is what an event naming the directory is
+  // judged against) is reopened in place. A path that binds nothing right now
+  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
+  // on the path hears the folder come back.
+  judged(dir, cause) {
+    if (dir.state.kind === "deaf") {
+      this.reopen(dir, cause);
+      return;
+    }
+    const now2 = boundOf(dir.path);
+    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
+      this.reopen(dir, "another folder is at its path");
+  }
+  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
+  // the disk, on the period the file-event delivery owner keeps (the daemon
+  // wires it). It is the one trigger for a replacement no event reaches a
+  // handle for (a strict ancestor renamed away and another tree put at its
+  // path: inotify reports a directory's own removal or self-move, never its
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing; a tree heard
+  // directory by directory costs a listing of each directory too.
+  judge() {
+    for (const slot of this.slots.values())
+      this.reconciled(slot, "period", null);
+    for (const dir of this.dirs.values()) this.judged(dir, "period");
+  }
+  // [LAW:no-silent-failure] Every slot on the directory hears it change
+  // state. Going deaf, or deaf for another reason, it hears the fault.
+  // Listening again, it hears an `unknown` window: whatever changed while the
+  // directory was deaf or bound to another folder went unheard, and a holder
+  // that re-derives on it reports its fault cleared. Deaf for the same reason
+  // is no change and tells nothing.
+  reopen(dir, cause) {
+    const was = dir.state;
+    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
+    const now2 = this.open(dir, () => dir, cause, was);
+    dir.state = now2;
+    if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening" || !compareStructural(was.deafness, now2.deafness))
+      this.tell(dir, failedOf(now2.deafness));
+  }
+  // `dirOf` names the watch the handle belongs to; its callbacks run only
+  // after the open returns, once the watch holds the state returned here.
+  open(where, dirOf, cause, was) {
+    const at = where.path;
+    const bound = boundKey(boundOf(at));
+    try {
+      fs_default.opendirSync(at).closeSync();
+      const handle = this.watchDirectory(
+        at,
+        where.recursive,
+        (changed) => this.heard(dirOf(), handle, changed)
+      );
+      handle.on("error", (e) => {
+        const dir = dirOf();
+        this.logger("warn", `watcher error ${at}: ${e.message}`);
+        if (this.counters) this.counters.watchErrors++;
+        if (!heldBy2(dir.state, handle)) return;
+        this.closeHandle(at, handle, "error");
+        const deafness = {
+          kind: "failed",
+          path: at,
+          reason: e.message
+        };
+        dir.state = { kind: "deaf", deafness };
+        this.tell(dir, failedOf(deafness));
+      });
+      if (this.counters) this.counters.dirWatchesOpened++;
+      this.logger(
+        "info",
+        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
+      );
+      return { kind: "listening", handle, bound };
+    } catch (e) {
+      const reason = e.message;
+      const deafness = { kind: "refused", path: at, reason };
+      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
+        this.logger("warn", `watch failed ${at}: ${reason}`);
+      return { kind: "deaf", deafness };
+    }
+  }
+  // [LAW:dataflow-not-control-flow] Every event reaches every slot on the
+  // watch. One naming the directory itself, while the folder at the path is
+  // no longer the one this handle bound (its removal or replacement, which
+  // macOS reports as a change and Linux as a rename), is then judged, so a
+  // handle never stays bound to a folder no longer at its path and every later
+  // event naming the directory is judged against the folder there.
+  heard(dir, handle, changed) {
+    const { state } = dir;
+    if (!heldBy2(state, handle)) return;
+    this.tell(dir, namedOf(dir.path, changed));
+    if (changed === import_node_path26.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
+      this.judged(dir, "moved");
+    for (const slot of [...dir.listeners].map((l) => l.slot))
+      this.reconciled(slot, "heard", dir.path);
+  }
+  tell(dir, invalidation) {
+    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
+  }
+  // [LAW:no-silent-failure] Every holder hears the window, whatever one before
+  // it threw: each hearing is a clock task named for its watch, so what it
+  // throws reaches the bar as that watch's, in its own words.
+  // [LAW:no-ambient-temporal-coupling] A slot an earlier holder closed, or a
+  // holder it released, hears nothing: each is judged as its turn comes.
+  deliver(changes, completed) {
+    for (const [changed, gathered] of changes) {
+      if (this.slots.get(changed.key) !== changed) continue;
+      const heard = heardOf(gathered);
+      for (const holder of changed.holders)
+        this.clock.detach(
+          `watch ${changed.key} holder`,
+          () => holder.onInvalidate(heard)
+        );
+    }
+    completed?.();
+  }
+  fire(slot, invalidation) {
+    const { window: window2 } = slot;
+    if (window2.pending === null) {
+      const changes2 = /* @__PURE__ */ new Map();
+      window2.pending = {
+        changes: changes2,
+        cancel: this.clock.after(
+          "watch delivery",
+          DEBOUNCE_MS,
+          () => {
+            window2.pending = null;
+            this.deliver(changes2, window2.completed);
+          },
+          { unref: true }
+        )
+      };
+    }
+    const { changes } = window2.pending;
+    const gathered = changes.get(slot);
+    changes.set(
+      slot,
+      gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
+    );
+  }
+  makeHandle(slot, holder) {
+    return {
+      get deaf() {
+        return [...slot.listeners.values()].flatMap(
+          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
+        );
+      },
+      // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
+      ridesStream: slot.listeners.size > 0,
+      observed: (files) => {
+        if (!slot.holders.has(holder)) return;
+        holder.observed.clear();
+        for (const { path: path31 } of slot.polled) {
+          const seen = files.get(path31);
+          if (seen !== void 0) holder.observed.set(path31, seen);
+        }
+      },
+      release: () => {
+        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (this.slots.get(slot.key) !== slot) return;
+        this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
+      }
+    };
+  }
+  closeHandle(at, handle, cause) {
+    try {
+      handle.close();
+    } catch {
+    }
+    if (this.counters) this.counters.dirWatchesClosed++;
+    this.logger(
+      "info",
+      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
+    );
+  }
+  // A directory watch closes, and a polled path is forgotten, with the last
+  // slot on it: a slot that names the path again starts from what is there at
+  // its own acquire.
+  closeSlot(slot, cause) {
+    const { window: window2 } = slot;
+    const { pending: pending2 } = window2;
+    if (pending2 !== null && pending2.changes.delete(slot) && pending2.changes.size === 0) {
+      pending2.cancel();
+      window2.pending = null;
+    }
+    for (const listener of slot.listeners.values()) this.left(listener, cause);
+    for (const record2 of slot.polled) {
+      record2.slots.delete(slot);
+      if (record2.slots.size === 0) this.polled.delete(record2.path);
+    }
+    if (this.polled.size === 0) this.disarmSweep();
+    if (this.counters) this.counters.watchersClosed++;
+  }
+  polledAt(at, observed2) {
+    const held = this.polled.get(at);
+    if (held !== void 0) return held;
+    const record2 = {
+      path: at,
+      entry: observed2 ?? readPolledEntry(at),
+      slots: /* @__PURE__ */ new Set()
+    };
+    this.polled.set(at, record2);
+    return record2;
+  }
+  // [LAW:no-ambient-temporal-coupling] The sweep runs every period while a
+  // path is polled and the registry is open. The reads are synchronous, so no
+  // two sweeps overlap and no older read lands over a newer one.
+  // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
+  // renders, once a period per path and once per acquire or follow naming it,
+  // so a mount under a polled path that stops answering stops every bar until
+  // it answers. The paths are a session's own files (its transcript, its
+  // settings, its config, its git directory), which the daemon reads on this
+  // thread to render anyway.
+  armSweep() {
+    if (this.sweep !== null || this.closed || this.polled.size === 0) return;
+    this.sweep = this.clock.every(
+      "polled paths read",
+      POLL_MS,
+      () => this.readPolled(),
+      {
+        unref: true
+      }
+    );
+  }
+  disarmSweep() {
+    this.sweep?.();
+    this.sweep = null;
+  }
+  // [LAW:dataflow-not-control-flow] The same read for every polled path each
+  // sweep. A path whose entry differs fires every slot that names it, by its
+  // path, through the slot's debounce, as a directory watch reports a child.
+  readPolled() {
+    for (const record2 of this.polled.values()) {
+      const now2 = readPolledEntry(record2.path);
+      const previous2 = record2.entry;
+      record2.entry = now2;
+      for (const slot of record2.slots) {
+        let changed = false;
+        for (const holder of slot.holders) {
+          const seen = holder.observed.get(record2.path) ?? previous2;
+          holder.observed.delete(record2.path);
+          changed ||= now2 !== seen;
+        }
+        if (changed)
+          this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+      }
+    }
+  }
+  // The slots held now.
+  size() {
+    return this.slots.size;
+  }
+  // The paths polled now: no OS watch each.
+  polledPaths() {
+    return this.polled.size;
+  }
+  // The OS directory watches open now.
+  dirWatches() {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
+  }
+  // Every directory a held watch targets.
+  watchedDirs() {
+    return [...this.dirs.values()].map((d) => d.path);
+  }
+  closeAll() {
+    this.closed = true;
+    this.disarmSweep();
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    this.slots.clear();
+  }
+};
 
 // src/daemon/stats.ts
 init_globals();
