@@ -23,7 +23,7 @@ import {
   type RenderPayload,
   type ViewPayload,
 } from "../../../src/renderer/render-payload";
-import type { Instant } from "../../../src/utils/instant";
+import type { Instant, Tick } from "../../../src/utils/instant";
 import { ABSENT, ok } from "../../../src/utils/outcome";
 
 const SAMPLE_SESSION = sessionIdOf("test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
@@ -60,7 +60,7 @@ export function samplePayload(
     SAMPLE_SESSION,
     readings,
     daemonFactsOf(),
-    at,
+    { at, tick: 0 as Tick },
   );
   const { term: _term, ...payload } = composePayload(
     document,

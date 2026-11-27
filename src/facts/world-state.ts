@@ -6,7 +6,8 @@ import type { MetricsFold } from "../segments/metrics";
 import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
 import type { TranscriptLoss } from "../utils/transcript-loss";
-import type { Fact } from "./fact";
+import type { Answered, Fact } from "./fact";
+import type { Instant, Tick } from "../utils/instant";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LifelineWarning } from "../proc/launcher";
@@ -36,7 +37,35 @@ export type SourceValue = JsonValue;
 export interface RunFact {
   readonly reading: Fact<SourceValue>;
   readonly fault: string | null;
+  readonly faultAt?: Instant;
+  readonly settling?: DocumentSettlement;
+  // [LAW:types-are-the-program] The new read is still pending. Its last
+  // publication can already be displayed while the source is reacquired.
+  readonly beforeRead?: PublishedDocument | null;
+  // Only declarations whose prior publication differs from the shared run.
+  readonly documents?: Readonly<Record<string, DocumentPublication>>;
 }
+
+export interface DocumentPublication {
+  readonly at?: Instant;
+  readonly beforeRead?: PublishedDocument | null;
+  readonly settling?: DocumentSettlement;
+}
+
+export interface PublishedDocument {
+  readonly reading: Answered<SourceValue>;
+  readonly settling?: DocumentSettlement;
+}
+
+// [LAW:no-ambient-temporal-coupling] A failed JSON read can be a writer
+// between writes. A peer observing that failure gets the original deadline
+// and the actual preceding document if one was still visible.
+export interface DocumentSettlement {
+  readonly until: Tick;
+  readonly previous: Extract<Fact<SourceValue>, { kind: "ok" }> | null;
+}
+
+export const TORN_WRITE_SETTLE_MS = 250;
 
 // An `env` variable no world state carries yet: the host has not handed it
 // in.

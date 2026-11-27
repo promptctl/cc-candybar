@@ -110,6 +110,7 @@ export type DeclaredSources = ReadonlyMap<string, string>;
 export interface Subscribed {
   readonly plugins: DeclaredSources;
   readonly runs: ReadonlyMap<string, Judged>;
+  readonly documents?: ReadonlyMap<string, readonly string[]>;
   // The variables its `env` sources name, sorted.
   readonly env: readonly string[];
 }

@@ -263,6 +263,24 @@ function historicalOutputs(
   }
   return (output) => ({
     ...output,
+    subscriptions:
+      wireVersion >= 35
+        ? output.subscriptions
+        : {
+            ...output.subscriptions,
+            sources: Object.fromEntries(
+              Object.entries(output.subscriptions.sources).map(
+                ([sid, entries]) => [
+                  sid,
+                  entries.map((source) =>
+                    source.kind === "run"
+                      ? { kind: source.kind, run: source.run }
+                      : source,
+                  ),
+                ],
+              ),
+            ),
+          },
     effects: output.effects.map((effect) => {
       if (
         wireVersion >= 28 ||

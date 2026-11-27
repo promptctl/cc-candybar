@@ -1,3 +1,4 @@
+import type { JsonValue } from "../../src/var-system/types";
 import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type {
   ConfigSnapshot,
@@ -144,7 +145,7 @@ function facts(
       losses: [],
     },
     daemonFactsOf(),
-    AT,
+    { at: AT, tick: 0 as Tick },
   );
 }
 
@@ -287,6 +288,19 @@ test("equal shell output keeps its wire bytes when newly bound environment makes
   expect(facts(undefined, new Map([["run", inherited]]), tainted)).toBe(
     tainted,
   );
+});
+
+test("an outstanding document read keeps the export refusal of its preceding shell output", () => {
+  const from = (reading: Current<JsonValue>, documentRun: string, privateOutput: boolean, prior?: WorldState) =>
+    facts(undefined, new Map([["doc", environmentOutput({ reading, fault:null, documentRun }, privateOutput)]]), prior);
+  const good = from(ok({ text:SECRET }), "old environment", true);
+  const rejected = from(failed("incomplete JSON", "parse"), "old environment", true, good);
+  const rereading = from(pending("unread"), "old environment", false, rejected);
+  expect(JSON.stringify(rereading.runs)).toContain(SECRET);
+  expect(recordingInputProblem(input({kind:"world-state", worldState:rereading}))).toMatch(/command returned data/);
+  const replaced = from(pending("unread"), "different environment", false, rereading);
+  expect(JSON.stringify(replaced.runs)).not.toContain(SECRET);
+  expect(recordingInputProblem(input({kind:"world-state", worldState:replaced}))).toBeNull();
 });
 
 test("a daemon task's throw refuses the capture while every bar holds it, and allows it once it has left", () => {

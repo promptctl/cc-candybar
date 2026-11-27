@@ -21,7 +21,7 @@ import { sumsOf } from "./helpers/today";
 import { claudeConfigDir, claudeSettingsPath } from "../src/claude-settings";
 import type { CheckedHookData } from "../src/renderer-interface/request-context";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
-import { instantOf, type Instant } from "../src/utils/instant";
+import { instantOf, type Instant, type Tick } from "../src/utils/instant";
 import {
   ABSENT,
   failed,
@@ -62,6 +62,7 @@ const HOOK: CheckedHookData = {
 const at = (seconds: number): Instant =>
   instantOf(new Date(1_700_000_000_000 + seconds * 1000));
 const T0 = at(0);
+const stampTime = (seconds: number) => ({ at: at(seconds), tick: seconds as Tick });
 
 const GIT: GitRead = {
   branch: "main",
@@ -163,7 +164,7 @@ describe("a session's facts document", () => {
       SID,
       readingsOf(r.inputs, r.inputs.lanes()),
       daemonFactsOf(),
-      T0,
+      stampTime(0),
     );
     // The expected document is read from the owners, never from the readings.
     const lanes = r.inputs.lanes();
@@ -203,7 +204,7 @@ describe("a session's facts document", () => {
       SID,
       readingsOf(r.inputs, r.inputs.lanes()),
       daemonFactsOf(),
-      T0,
+      stampTime(0),
     );
     expect(Object.keys(doc.builtins).sort()).toEqual([...BUILTIN_KEYS]);
     for (const key of ["session", "git", "pr", "tmux", "context"] as const) {
@@ -219,7 +220,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        T0,
+        stampTime(0),
       ).builtins.pr;
     };
 
@@ -264,7 +265,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, lanes),
         daemonFactsOf(),
-        T0,
+        stampTime(0),
       );
       expect(doc.sources).toEqual({
         written: { kind: "ok", value: { home: "/h" }, at: T0 },
@@ -281,14 +282,14 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        T0,
+        stampTime(0),
       );
       const again = assembleFacts(
         first,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        at(60),
+        stampTime(60),
       );
       expect(again).toBe(first);
     });
@@ -300,7 +301,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        T0,
+        stampTime(0),
       );
       r.held.faults.refreshed(SID, "cache", "refresh threw");
       const second = assembleFacts(
@@ -308,7 +309,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        at(60),
+        stampTime(60),
       );
       expect(second.seq).toBe(2);
       expect(second.builtins.cache).toEqual({
@@ -329,7 +330,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        at(120),
+        stampTime(120),
       );
       expect(third.seq).toBe(3);
       expect(third.builtins.cache).toEqual({
@@ -347,7 +348,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        T0,
+        stampTime(0),
       );
       expect(first.transcriptLosses).toEqual([]);
 
@@ -364,7 +365,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        at(60),
+        stampTime(60),
       );
       expect(second.seq).toBe(2);
       expect(second.transcriptLosses).toEqual([loss]);
@@ -378,7 +379,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        at(120),
+        stampTime(120),
       );
       expect(again).toBe(second);
     });
@@ -391,18 +392,18 @@ describe("a session's facts document", () => {
         SID,
         readings,
         daemonFactsOf(),
-        T0,
+        stampTime(0),
       );
       expect(first.daemon.fileEvents).toEqual([]);
       expect(
-        assembleFacts(first, SID, readings, daemonFactsOf(), at(5)),
+        assembleFacts(first, SID, readings, daemonFactsOf(), stampTime(5)),
       ).toBe(first);
       const second = assembleFacts(
         first,
         SID,
         readings,
         daemonFactsOf(FILE_EVENTS_STALLED),
-        at(10),
+        stampTime(10),
       );
       expect(second.daemon.fileEvents).toBe(FILE_EVENTS_STALLED);
       expect(second.seq).toBe(2);
@@ -420,7 +421,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        T0,
+        stampTime(0),
       );
       const failedOnce = failedStamp(first, "the read broke", daemonFactsOf());
       expect(failedOnce.seq).toBe(first.seq + 1);
@@ -449,7 +450,7 @@ describe("a session's facts document", () => {
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
         daemonFactsOf(),
-        at(60),
+        stampTime(60),
       );
       expect(clean.seq).toBe(failedOnce.seq + 1);
       expect(clean.stampFailure).toBeNull();

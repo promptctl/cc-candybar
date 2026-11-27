@@ -24,7 +24,7 @@ import { settledWorld } from "../scripts/lib/draw-fixtures/settled";
 import type { Readings } from "../src/daemon/readings";
 import { readTranscriptLanes } from "../scripts/lib/draw-fixtures/payload-owners";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { instantOf } from "../src/utils/instant";
+import { instantOf, type Tick } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import type { DaemonFacts } from "../src/facts/world-state";
@@ -304,7 +304,7 @@ describe("the all-pending document", () => {
         SID,
         pendingReadings,
         daemonFactsOf(),
-        instantOf(new Date(0)),
+        { at: instantOf(new Date(0)), tick: 0 as Tick },
       );
       // Nothing is known: every fact of the document is pending, and the draw
       // takes each as its loading cell.

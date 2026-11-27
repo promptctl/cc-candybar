@@ -27,7 +27,7 @@ import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import type { CheckedHookData } from "../src/renderer-interface/request-context";
-import { instantOf } from "../src/utils/instant";
+import { instantOf, type Tick } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { hostOf } from "../scripts/lib/host";
@@ -166,7 +166,7 @@ test("two hooks that differ only in their instantaneous fields read one document
         }),
       ),
       daemonFactsOf(),
-      AT,
+      { at: AT, tick: 0 as Tick },
     );
   };
   const document = await documentOf(one);

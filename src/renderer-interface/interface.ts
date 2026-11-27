@@ -22,7 +22,7 @@ import {
   rendererFailureOf,
   type Failure,
 } from "../daemon/foundations/verb-error";
-import type { Run } from "../facts/source-identity";
+import type { RunSubscription } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
 import type { Awaiting } from "../facts/awaited";
@@ -58,7 +58,7 @@ import type {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 34;
+export const RENDERER_WIRE_VERSION = 35;
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
@@ -518,7 +518,7 @@ export type Subscription =
       readonly source: SourceId;
       readonly folder: string;
     }
-  | { readonly kind: "run"; readonly run: Run }
+  | RunSubscription
   // A variable an `env` source reads, from the session's environment, which
   // the host holds and hands in as that one variable's value.
   | { readonly kind: "env"; readonly name: string };

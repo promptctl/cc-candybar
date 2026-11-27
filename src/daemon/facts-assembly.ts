@@ -4,23 +4,19 @@ import { ownValue } from "../utils/plain";
 import type {
   BuiltinFacts,
   DaemonFacts,
-  RunFact,
   WorldState,
   SourceValue,
 } from "../facts/world-state";
 import type { GitInfo, GitRead, PullRequest } from "../segments/git";
-import type { Instant } from "../utils/instant";
+import type { Readings as StampTime } from "../utils/instant";
 import { ABSENT, ok, type Reading } from "../utils/outcome";
 import type { SessionId } from "./foundations/session-id";
 import type { Readings } from "./readings";
-import {
-  environmentOutput,
-  isEnvironmentOutput,
-} from "./environment-output.js";
+import { stampRuns } from "./document-settlement.js";
 
 // The shape of a facts document on the wire; a document of another version is
 // not this one.
-export const FACTS_VERSION = 6;
+export const FACTS_VERSION = 7;
 
 // A reading's value carried through `project`; every other arm as it stands.
 const over = <T, U>(
@@ -68,12 +64,13 @@ export function assembleFacts(
   session: SessionId,
   readings: Readings,
   daemon: DaemonFacts,
-  at: Instant,
+  time: StampTime,
   windowIssue?: string,
+  releasedRuns?: WorldState["runs"],
 ): WorldState {
   const { lanes } = readings;
   const stamp = <T>(held: Fact<T> | undefined, reading: Reading<T>): Fact<T> =>
-    restamp(held, reading, at);
+    restamp(held, reading, time.at);
   const held = prior?.builtins;
 
   const builtins: BuiltinFacts = {
@@ -105,23 +102,7 @@ export function assembleFacts(
 
   // Each run by digest; an entry whose reading and fault are both the prior's
   // is the prior entry itself, so `sameFacts` finds it unmoved.
-  const runs: Record<string, RunFact> = Object.fromEntries(
-    [...lanes.runs].map(([digest, observation]) => {
-      const { reading, fault } = observation;
-      const held = prior?.runs[digest];
-      const fact = stamp(held?.reading, reading);
-      const privateOutput = isEnvironmentOutput(observation);
-      return [
-        digest,
-        held !== undefined &&
-        held.reading === fact &&
-        held.fault === fault &&
-        isEnvironmentOutput(held) === privateOutput
-          ? held
-          : environmentOutput({ reading: fact, fault }, privateOutput),
-      ];
-    }),
-  );
+  const runs = stampRuns(prior?.runs, releasedRuns, lanes.runs, time);
 
   const env: Record<string, Fact<string>> = Object.fromEntries(
     [...lanes.env].map(([name, reading]) => [

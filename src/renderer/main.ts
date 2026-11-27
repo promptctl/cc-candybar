@@ -810,6 +810,7 @@ function build(
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock: time.clock,
+      sourceTime: wireVersion < 35 ? time.clock.now : undefined,
       locations: inputs.locations,
       region: inputs.region,
       identifyCompile,

@@ -90,6 +90,7 @@ import {
 } from "../config/loader/plugins.js";
 import { ownedBy, pluginNs } from "../config/loader/plugin-scope.js";
 import { projectionsOf } from "../config/loader/projections.js";
+import type { Instant } from "../utils/instant.js";
 import type { TurnClock } from "./turn-time";
 import type { RenderCacheStats } from "../renderer-interface/renderer-stats";
 
@@ -170,7 +171,7 @@ const MAX_UNPINNED_FAILURES = 256;
 export interface RenderDeps<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
-> extends Pick<StateDeps, "region" | "identifyCompile"> {
+> extends Pick<StateDeps, "region" | "identifyCompile" | "sourceTime"> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;
   // Where the user's home is, which a `~` in a plugin's data path names
@@ -198,6 +199,8 @@ export interface RenderDeps<
 
 // What building one config's state needs.
 export interface StateDeps {
+  // Historical recording wires dated a source publication by its receiving turn.
+  readonly sourceTime?: (at: Instant) => number;
   readonly region: RegionalSettings;
   // The clock its variables' ages run on, and its sources' held work: the
   // renderer's turn time, or the clock of a command that draws once.
@@ -759,6 +762,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
+    deps.sourceTime,
   );
 
   let registration: Registration;
@@ -1139,9 +1143,7 @@ const subscriptionsOf = ({
 export const registrySubscriptions = (
   registry: Pick<SourceRegistry, "subscriptions" | "envSubscriptions">,
 ): Subscription[] => [
-  ...registry
-    .subscriptions()
-    .map((run): Subscription => ({ kind: "run", run })),
+  ...registry.subscriptions(),
   ...registry
     .envSubscriptions()
     .map((name): Subscription => ({ kind: "env", name })),
