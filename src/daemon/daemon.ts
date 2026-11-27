@@ -723,7 +723,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     log,
   );
 
-  function reportSource(req: CheckedRenderRequest): void {
+  function reportSource(req: CheckedRenderRequest, incoming = false): void {
     const pane = req.hints.tmux;
     const configDir = req.sourceConfigDir;
     if (
@@ -739,6 +739,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           configDir,
         ),
       );
+      if (incoming)
+        declaredSurfaces.retryOnReport(pane, req.hookData.session_id, () =>
+          authority.verifies(pane, {
+            sid: req.hookData.session_id,
+            parentPid: req.hints.parentPid,
+            configDir,
+          }),
+        );
     }
   }
 
@@ -781,7 +789,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       changed.hints.tmux &&
       previous.has(paneKey(changed.hints.tmux))
     )
-      reportSource(changed);
+      reportSource(changed, true);
   }
   const binaryWatch = makeBinaryWatch({
     clock,

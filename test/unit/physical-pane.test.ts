@@ -287,3 +287,79 @@ test("confirmed release of the physical source removes its prior session members
   await turn();
   expect(r.edge.open).toHaveBeenCalledTimes(1);
 });
+
+test.each([false, true])(
+  "a new confirmed report rediscovers an unacknowledged split (committed=%s)",
+  async (committed) => {
+    const r = rig();
+    jest
+      .mocked(r.edge.open)
+      .mockImplementationOnce(async (_src, _pid, _host, instance) => {
+        if (committed) r.setPhysical({ drawing: "%2", instance });
+        throw new Error("split reply lost");
+      });
+    r.demand();
+    await turn();
+    expect(r.edge.open).toHaveBeenCalledTimes(1);
+    const activity = r.clock.activity();
+    expect(r.clock.pending()).toBe(0);
+    r.clock.advance(60_000);
+    await turn();
+    expect(r.clock.activity()).toEqual(activity);
+    expect(r.edge.open).toHaveBeenCalledTimes(1);
+    const refused = jest.fn(async () => false);
+    r.surfaces.retryOnReport(source, a, refused);
+    await turn();
+    expect(refused).toHaveBeenCalledTimes(1);
+    expect(r.edge.open).toHaveBeenCalledTimes(1);
+    r.clock.advance(1000);
+    const proof = Promise.withResolvers<boolean>();
+    const verify = jest.fn(() => proof.promise);
+    r.surfaces.retryOnReport(source, a, verify);
+    r.surfaces.retryOnReport(source, a, verify);
+    expect(verify).toHaveBeenCalledTimes(1);
+    jest.mocked(r.edge.find).mockClear();
+    proof.resolve(true);
+    await turn();
+    const firstLookup = jest.mocked(r.edge.find).mock.invocationCallOrder[0];
+    expect(firstLookup).toBeDefined();
+    expect(r.edge.open).toHaveBeenCalledTimes(committed ? 1 : 2);
+    if (!committed)
+      expect(firstLookup!).toBeLessThan(
+        jest.mocked(r.edge.open).mock.invocationCallOrder[1]!,
+      );
+  },
+);
+
+test("switching off while a retry is being verified cancels its split", async () => {
+  const r = rig();
+  jest.mocked(r.edge.open).mockRejectedValueOnce(new Error("split reply lost"));
+  r.demand();
+  await turn();
+  r.clock.advance(1000);
+  const proof = Promise.withResolvers<boolean>();
+  r.surfaces.retryOnReport(source, a, () => proof.promise);
+  r.surfaces.declare({ [a]: off });
+  proof.resolve(true);
+  await turn();
+  expect(r.edge.open).toHaveBeenCalledTimes(1);
+});
+
+test("a snapshot's unfinished discovery can consume a report verified during its lookup", async () => {
+  const r = rig();
+  jest.mocked(r.edge.open).mockRejectedValueOnce(new Error("split reply lost"));
+  r.demand();
+  await turn();
+  r.clock.advance(1000);
+  const proof = Promise.withResolvers<boolean>();
+  r.surfaces.retryOnReport(source, a, () => proof.promise);
+  const found = Promise.withResolvers<null>();
+  jest.mocked(r.edge.find).mockReturnValueOnce(found.promise);
+  r.observe(false);
+  proof.resolve(true);
+  await turn();
+  expect(r.edge.open).toHaveBeenCalledTimes(1);
+  found.resolve(null);
+  await turn();
+  expect(r.edge.open).toHaveBeenCalledTimes(2);
+});

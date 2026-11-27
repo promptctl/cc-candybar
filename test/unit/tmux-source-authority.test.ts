@@ -162,3 +162,19 @@ test("candidate interest survives unknown topology but ends on positive removal 
   a.observed(source.socket, view(2));
   expect([...a.candidates(source)]).toEqual([]);
 });
+
+test("a retry checks its own claim even when another invocation already established the same session", async () => {
+  const { authority: a, inspected } = fixture();
+  a.observed(source.socket, view(100));
+  const claim = { sid: A, parentPid: process.pid, configDir: "/claude" };
+  await a.report(source, claim.sid, claim.parentPid, claim.configDir);
+  expect(a.session(source)).toBe(A);
+  expect(await a.verifies(source, { ...claim, parentPid: 99 })).toBe(false);
+  expect(inspected.at(-1)).toEqual([{ ...claim, parentPid: 99 }]);
+  expect(await a.verifies(source, claim)).toBe(true);
+  expect(await a.verifies(source, { ...claim, parentPid: undefined })).toBe(
+    true,
+  );
+  a.release(source);
+  expect(await a.verifies(source, claim)).toBe(false);
+});

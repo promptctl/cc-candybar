@@ -22,23 +22,13 @@ import type {
   PanePlacement,
   PaneStream,
 } from "./pane-subscription.js";
+import type { PaneFacts, TmuxServerView } from "./pane-visibility.js";
 
-interface PaneFact {
-  shown: boolean;
-  zoomed: boolean;
-  mouse: boolean;
-  pid: number;
-  tty: string;
-}
-interface View {
-  serverPid: number;
-  panes: ReadonlyMap<string, PaneFact>;
-}
 interface Dependencies {
   paneOf(sid: SessionId): TmuxHint | undefined;
   host: BarPaneHost;
   edge: BarPaneEdge;
-  clock: Pick<Timekeeper, "detach">;
+  clock: Pick<Timekeeper, "detach" | "monotonic">;
   log: DaemonLogger;
   windows(desired: ReadonlyMap<SessionId, WindowDemand>): void;
   subscribe(sid: SessionId, sub: Subscriber, replaces?: () => void): () => void;
@@ -57,10 +47,15 @@ interface Client {
 }
 // Unknown discovery blocks opening. A missing pane can be opened once; a
 // process that failed before hello stays failed until demand changes.
+// A split command may fail after tmux committed it. A later confirmed report
+// must rediscover the pane before retrying the split.
+type OpenPermission = boolean | { retryAfter: number };
+const SPLIT_RETRY_MS = 1000;
+
 type Slot =
   | { kind: "legacy"; pane: LegacyPane }
-  | { kind: "discover"; allowOpen: boolean }
-  | { kind: "missing"; allowOpen: boolean }
+  | { kind: "discover"; allowOpen: OpenPermission }
+  | { kind: "missing"; allowOpen: OpenPermission }
   | {
       kind: "managed";
       pane: ManagedPane;
@@ -80,7 +75,7 @@ interface Physical {
 }
 export class DeclaredSurfaces {
   private readonly sources = new Map<string, Physical>();
-  private readonly views = new Map<string, View>();
+  private readonly views = new Map<string, TmuxServerView>();
   private lanes: Readonly<Record<SessionId, DeclaredLanes>> = {};
   private closed = false;
   constructor(private readonly deps: Dependencies) {}
@@ -123,6 +118,57 @@ export class DeclaredSurfaces {
     this.reconcile(state);
     this.reported();
   }
+  retryOnReport(
+    source: TmuxHint,
+    session: SessionId,
+    verify: () => Promise<boolean>,
+  ): void {
+    const server = this.views.get(source.socket)?.serverPid;
+    if (server === undefined) return;
+    const state = this.sources.get(this.key(source, server));
+    if (
+      !state ||
+      state.session !== session ||
+      !this.lanes[session]?.pane ||
+      state.busy ||
+      !("allowOpen" in state.slot)
+    )
+      return;
+    const retry = state.slot.allowOpen;
+    if (
+      typeof retry === "boolean" ||
+      this.deps.clock.monotonic() < retry.retryAfter
+    )
+      return;
+    // One in-flight proof consumes this report, including concurrent duplicates.
+    retry.retryAfter = Infinity;
+    this.deps.clock.detach(
+      `verify split retry for ${source.pane}`,
+      async () => {
+        try {
+          if (
+            (await verify()) &&
+            !this.closed &&
+            this.sources.get(this.key(source, server)) === state &&
+            state.session === session &&
+            this.lanes[session]?.pane &&
+            "allowOpen" in state.slot &&
+            state.slot.allowOpen === retry
+          ) {
+            // A snapshot can start discovery while the source proof is pending.
+            // Let that lookup finish against the updated permission.
+            state.slot.allowOpen = true;
+            if (state.slot.kind === "missing")
+              state.slot = { kind: "discover", allowOpen: true };
+            this.reconcile(state);
+          }
+        } finally {
+          retry.retryAfter = this.deps.clock.monotonic() + SPLIT_RETRY_MS;
+        }
+      },
+    );
+  }
+
   declare(lanes: Readonly<Record<SessionId, DeclaredLanes>>): void {
     const prior = this.lanes;
     this.lanes = lanes;
@@ -164,7 +210,7 @@ export class DeclaredSurfaces {
       this.reconcile(s);
     }
   }
-  observed(socket: string, view: View | null): void {
+  observed(socket: string, view: TmuxServerView | null): void {
     if (this.closed) return;
     if (view) this.views.set(socket, view);
     else this.views.delete(socket);
@@ -284,7 +330,7 @@ export class DeclaredSurfaces {
     s: Physical,
     c: Client,
     sid: SessionId,
-    fact: PaneFact | undefined,
+    fact: PaneFacts | undefined,
   ): void {
     const previous = c.assignment;
     const shown = fact?.shown ?? false,
@@ -421,7 +467,8 @@ export class DeclaredSurfaces {
       slot.kind === "legacy" &&
       slot.pane.grant === "connected" &&
       (s.lost || enabled !== undefined);
-    const open = !off && enabled && slot.kind === "missing" && slot.allowOpen;
+    const open =
+      !off && enabled && slot.kind === "missing" && slot.allowOpen === true;
     if (!inspect && !retire && !open && !migrate) {
       if (slot.kind === "missing" && s.clients.size)
         this.refuseAll(s, "no matching managed pane on this server");
@@ -526,7 +573,17 @@ export class DeclaredSurfaces {
         });
       } catch (error) {
         s.busy = false;
-        if (s.slot === slot) s.slot = { kind: "discover", allowOpen: !open };
+        if (s.slot === slot)
+          s.slot = {
+            kind: "discover",
+            allowOpen: open
+              ? {
+                  retryAfter: this.deps.clock.monotonic() + SPLIT_RETRY_MS,
+                }
+              : "allowOpen" in slot
+                ? slot.allowOpen
+                : true,
+          };
         this.failure(s, String(error));
         return;
       }

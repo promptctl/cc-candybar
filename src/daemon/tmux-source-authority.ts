@@ -90,6 +90,24 @@ export class TmuxSourceAuthority {
     return sessions;
   }
 
+  // [LAW:effects-at-boundaries] Retrying an uncertain split is an effect.
+  // Its permission comes from this exact invocation, freshly checked apart
+  // from any earlier genuine claims still held for the source.
+  async verifies(source: TmuxHint, claim: SourceClaim): Promise<boolean> {
+    const key = paneKey(source);
+    const held = this.held.get(key);
+    if (!held?.physical || held.owner?.sid !== claim.sid) return false;
+    const physical = held.physical;
+    const version = held.version;
+    const proof = await this.deps.inspect(physical, [claim], () => {});
+    return (
+      held.version === version &&
+      held.physical === physical &&
+      proof.kind === "confirmed" &&
+      proof.sid === claim.sid
+    );
+  }
+
   report(
     source: TmuxHint,
     sid: SessionId,
