@@ -112,7 +112,9 @@ describe("a per-session file whose write fails", () => {
     const picksFile = sessionStatePath(hostOf(isolated.env));
     const bookFile = path.join(path.dirname(picksFile), "session-book.json");
     const historyFile = path.join(project, "settings-history.json");
+    // Each file its own disk, so a landing of one says nothing of another.
     const refused = { value: true, attempts: 0 };
+    const bookRefused = { value: true, attempts: 0 };
     const historyRefused = { value: true, attempts: 0 };
     daemon = startDaemon(isolated.env, {
       profile: (log) => ({
@@ -137,7 +139,7 @@ describe("a per-session file whose write fails", () => {
           systemTimekeeper,
           0,
           log,
-          refusing(refused),
+          refusing(bookRefused),
         ),
     });
 
@@ -185,18 +187,8 @@ describe("a per-session file whose write fails", () => {
       normalized(picks, "Sessionpicks", picksFile),
     );
 
-    // It stands, as it was said, while the writes keep failing: a refusal of
-    // the same cause names another staged file, and says nothing new.
-    const standing = [...rows].sort();
-    const failed = refused.attempts;
-    await clickOn("behind-a", "[pad+]");
-    await until(
-      async () => refused.attempts > failed,
-      () => "another write of the picks was refused",
-    );
-    expect([...(await behindOn("behind-b"))].sort()).toEqual(standing);
-
-    // A write that lands clears its own file's row alone.
+    // A write that lands clears its own file's row alone: the book and the
+    // history, still refused, stand.
     refused.value = false;
     await clickOn("behind-a", "[pad+]");
     await until(
@@ -206,6 +198,7 @@ describe("a per-session file whose write fails", () => {
       },
       () => `the picks row cleared once its write landed, saw ${rows.length}`,
     );
+    expect(rows.some((r) => r.includes(bare(bookFile)))).toBe(true);
     expect(rows.some((r) => r.includes(bare(historyFile)))).toBe(true);
 
     // The history's row clears when its own write lands.

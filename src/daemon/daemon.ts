@@ -365,8 +365,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // A file nothing is saved to stands for as long as this daemon runs.
   const unsaved = new Map<string, StoreUnsavedWarning>();
   // [LAW:single-enforcer] A file whose last write failed stands until a write
-  // lands. Its own map beside `unsaved`, so a landing clears only a standing
-  // it set.
+  // lands. Its own map beside `unsaved`, each with the one writer that sets
+  // and clears its rows.
   const behind = new Map<string, StoreUnsavedWarning>();
   // [LAW:single-enforcer] Every store's report on what it read reaches the log
   // and the bar here, whichever store made it and whenever.

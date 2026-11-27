@@ -53,8 +53,10 @@ export class HeldFile<V> {
   private early: Array<HeldChange<V>> = [];
   // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
   // as it stands: set by every change, cleared once a save is made. Whether a
-  // write handed over lands is the storage's, and it tells us.
-  private behind = false;
+  // write handed over lands is the storage's, and it tells us. A write it
+  // refuses is not owed again until the next change or the close, since a
+  // timer retrying a disk that keeps refusing is load for nothing.
+  private owed = false;
   private clearOrderTimer: (() => void) | null = null;
 
   constructor(
@@ -77,8 +79,8 @@ export class HeldFile<V> {
   ) {
     // [LAW:one-source-of-truth] The file's standing is held here, once: it is
     // told when it changes, and a failure is the same standing while its
-    // cause is. The message is not the cause: a failed write's names a staged
-    // file unique to the attempt, so the code is.
+    // cause is. The message is not the cause of a system error: a failed
+    // write's names a staged file unique to the attempt, so the code is.
     let cause: string | null = null;
     storage.landed((landed) => {
       const now = landed.ok ? null : causeOf(landed.error);
@@ -151,14 +153,14 @@ export class HeldFile<V> {
     let content = false;
     for (const change of changes)
       if (change.kind === "heard" || this.holds(change.key, change.value)) {
-        if (toNewest(this.held, change.key)) this.behind = true;
+        if (toNewest(this.held, change.key)) this.owed = true;
       } else if (putNewest(this.held, change.key, change.value)) {
         content = true;
-        this.behind = true;
+        this.owed = true;
       }
     const evicted = this.evict();
     if (content || evicted.length > 0) this.save();
-    else if (this.behind) this.orderDue();
+    else if (this.owed) this.orderDue();
     return evicted;
   }
 
@@ -179,7 +181,7 @@ export class HeldFile<V> {
   // A save that throws rejects the close.
   async close(): Promise<void> {
     try {
-      if (this.behind) this.save();
+      if (this.owed) this.save();
     } finally {
       this.phase = "closed";
     }
@@ -196,7 +198,7 @@ export class HeldFile<V> {
     this.clearOrderTimer = null;
     if (this.phase !== "open") return;
     this.storage.save(this.held);
-    this.behind = false;
+    this.owed = false;
   }
 
   // [LAW:no-ambient-temporal-coupling] Only an open file is owed an order
