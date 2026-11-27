@@ -11,9 +11,12 @@
 
 import fs from "node:fs";
 
-import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire.js";
 import { linksOf } from "../../../src/click/read.js";
-import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
+import { TAB_LABEL } from "../../../src/config/menu-places.js";
+import {
+  DOOR_CLOSE_GLYPH,
+  DOOR_GLYPH,
+} from "../../../src/config/disclosure.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import {
   rendererStatsOf,
@@ -435,6 +438,19 @@ async function click(world: World, url: string): Promise<number> {
   return ms;
 }
 
+async function drawnLink(
+  world: World,
+  session: Session,
+  tick: number,
+  text: string,
+): Promise<string> {
+  const frame = await world.frame(session, DEFAULT_COLUMNS, tick);
+  const link = linksOf(frame).find((link) => link.text === text);
+  if (!link)
+    throw new Error(`the bar did not draw the ${JSON.stringify(text)} link`);
+  return link.url;
+}
+
 const menuClicks: Benchmark = {
   id: "wire.click.menu",
   group: "wire",
@@ -445,10 +461,6 @@ const menuClicks: Benchmark = {
     return inWorld(plan.world, async (world) => {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
-      const menu = (state: string): string =>
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [session.id, "candybar.menu", state] },
-        ]);
       const series: Record<
         "click-open" | "draw-open" | "click-close" | "draw-close",
         number[]
@@ -463,11 +475,13 @@ const menuClicks: Benchmark = {
         await world.tick(session, DEFAULT_COLUMNS, n++),
         "closed",
       ).output.split("\n").length;
+      const openDoor = await drawnLink(world, session, n++, DOOR_GLYPH);
+      let closeDoor: string | undefined;
       // One round before the first sample: what an open menu builds on its
       // first draw it holds from then on.
       for (let i = -1; i < plan.samples; i++) {
         const recorded = i >= 0;
-        const open = await click(world, menu("open"));
+        const open = await click(world, openDoor);
         const drawOpen = drawn(
           await world.tick(session, DEFAULT_COLUMNS, n++),
           "menu open",
@@ -476,7 +490,8 @@ const menuClicks: Benchmark = {
         if (drawOpen.output.split("\n").length <= closedLines) {
           throw new Error("the settings menu did not draw when clicked open");
         }
-        const close = await click(world, menu(DISCLOSURE_CLOSED));
+        closeDoor ??= await drawnLink(world, session, n++, DOOR_CLOSE_GLYPH);
+        const close = await click(world, closeDoor);
         const drawClose = drawn(
           await world.tick(session, DEFAULT_COLUMNS, n++),
           "menu closed",
@@ -499,17 +514,16 @@ const settingClick: Benchmark = {
   id: "wire.click.setting",
   group: "wire",
   about:
-    "a click that changes a setting and writes the config file (the preset stepper): the click's round trip, and the time from the click to a bar drawn from the new config (visible)",
+    "stepping the session's preset: the click's round trip and the time until the bar shows the changed preset",
   samples: 10,
   async run(plan) {
     return inWorld(plan.world, async (world) => {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
+      await click(world, await drawnLink(world, session, 98, DOOR_GLYPH));
       await click(
         world,
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [session.id, "candybar.menu", "open"] },
-        ]),
+        await drawnLink(world, session, 99, TAB_LABEL.presets),
       );
       const clicks: number[] = [];
       const visible: number[] = [];
@@ -520,7 +534,7 @@ const settingClick: Benchmark = {
         const menu = await world.frame(session, DEFAULT_COLUMNS, n++);
         const step = linksOf(menu).find((l) => l.text === "▶");
         if (step === undefined) {
-          throw new Error("the open menu drew no ▶ preset stepper to click");
+          throw new Error("the presets tab did not draw its next-preset link");
         }
         let clickMs = 0;
         const changed = await untilChanged(
