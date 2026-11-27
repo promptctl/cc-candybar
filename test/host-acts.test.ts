@@ -149,7 +149,7 @@ function hostOver(
       subscribed: () => {},
       frames: () => {},
       holding: () => () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
     },
     world,

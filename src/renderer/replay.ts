@@ -240,7 +240,7 @@ function verify<T>(
 // a wrong key, value, deletion or order must still show up in verification.
 function historicalOutputs(
   stored: StoredState,
-  fullPicks: boolean,
+  wireVersion: number,
 ): (output: RendererOutput) => unknown {
   const histories = new Map(
     Object.entries(stored.history) as Array<[SessionId, SessionHistory]>,
@@ -252,7 +252,14 @@ function historicalOutputs(
   }
   return (output) => ({
     ...output,
+    effects: output.effects.map((effect) => {
+      if (effect.kind !== "change" && effect.kind !== "approve-repo")
+        return effect;
+      const { onApplied: _hostDecision, ...historical } = effect;
+      return historical;
+    }),
     stored: output.stored.map((write) => {
+      if (wireVersion >= 26) return write;
       if (write.kind === "heard") return write;
       if (write.store === "settings-history") {
         const next = historyAfterEdits(histories.get(write.key), write.edits);
@@ -265,7 +272,7 @@ function historicalOutputs(
           value: next && durableHistory(next),
         };
       }
-      if (!fullPicks) return write;
+      if (wireVersion >= 25) return write;
       const value = storedPicksAfter(picks.get(write.key), write);
       if (value === null) picks.delete(write.key);
       else picks.set(write.key, value);
@@ -294,21 +301,21 @@ function constructionOf(entry: Record<string, unknown>): {
     );
   // Older recordings only carry a locale name. Recover its presentation at
   // the offline boundary. Whole-output verification still detects any drift.
-  const legacyRegion = entry.wireVersion === 22 || entry.wireVersion === 23;
+  const wireVersion = entry.wireVersion;
   if (
-    !legacyRegion &&
-    entry.wireVersion !== 24 &&
-    entry.wireVersion !== 25 &&
-    entry.wireVersion !== 26 &&
-    entry.wireVersion !== RENDERER_WIRE_VERSION
+    typeof wireVersion !== "number" ||
+    !Number.isInteger(wireVersion) ||
+    wireVersion < 22 ||
+    wireVersion > RENDERER_WIRE_VERSION
   )
     throw new Error(
       `recording line 1 needs renderer wire version ${RENDERER_WIRE_VERSION}`,
     );
+  const legacyRegion = wireVersion <= 23;
   let boot;
   try {
     let input = entry.input;
-    if (entry.wireVersion !== RENDERER_WIRE_VERSION && isPlainObject(input))
+    if (wireVersion < 27 && isPlainObject(input))
       input = { ...input, sessionRevision: 0 };
     if (legacyRegion && isPlainObject(input) && isPlainObject(input.region)) {
       const { locale, timeZone } = input.region;
@@ -339,9 +346,9 @@ function constructionOf(entry: Record<string, unknown>): {
     renderer,
     sessionRevision: boot.sessionRevision,
     compareAs:
-      entry.wireVersion === RENDERER_WIRE_VERSION || entry.wireVersion === 26
+      wireVersion === RENDERER_WIRE_VERSION
         ? undefined
-        : historicalOutputs(boot.stored, entry.wireVersion !== 25),
+        : historicalOutputs(boot.stored, wireVersion),
   };
 }
 
@@ -372,7 +379,7 @@ export async function replayRecording(
       const boot = constructionOf(entry);
       historical = entry.wireVersion === 22;
       sessionRevision =
-        entry.wireVersion === RENDERER_WIRE_VERSION
+        entry.wireVersion === RENDERER_WIRE_VERSION || entry.wireVersion === 27
           ? boot.sessionRevision
           : undefined;
       verify(entry.result, boot.result, "recording boot", "result");

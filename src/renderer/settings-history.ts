@@ -24,10 +24,9 @@
 // [LAW:no-ambient-temporal-coupling] A click lands whole or not at all. Its
 // session writes are held in its journal, which it reads its own through, and
 // its config writes are changes the host performs after its turn. The
-// journal's commit is the click's consequence: the held writes reach the store
-// and the history moves together. It runs once the click's changes land, or
-// at once for a click that made none, and never for a click whose changes the
-// host refused.
+// journal exposes those picks and history moves as data. A file-writing click
+// gives its proposal to the host before it writes. A refused file batch
+// publishes none of it. Private drafts use the same journal inside the edit.
 
 import { observable, runInAction } from "mobx";
 import type { DaemonLogger } from "../utils/logger";
@@ -121,6 +120,9 @@ export interface Journal {
   undo(sessionId: SessionId): Step;
   redo(sessionId: SessionId): Step;
   writes(sessionId: SessionId): ReadonlyMap<string, string | null>;
+  // The host can take these decisions with the guarded file batch. Reading
+  // them publishes neither the picks nor the history to the local view.
+  proposed(): readonly StoreWrite[];
   // [LAW:no-ambient-temporal-coupling] The session writes it landed, handed
   // back as a value, so no reader asks for them after they are gone.
   commit(): ClickWrites;
@@ -285,6 +287,31 @@ export class SettingsHistory {
     return {
       sessionState,
       writes: held.writes,
+      proposed: () => {
+        step();
+        const writes: StoreWrite[] = [];
+        for (const [key, picks] of held.entries) {
+          const changes = [...picks].filter(
+            ([k, value]) => this.sessionState.get(key, k) !== value,
+          );
+          if (changes.length)
+            writes.push({
+              kind: "patch",
+              store: "session-state",
+              key,
+              changes: Object.fromEntries(changes),
+            });
+        }
+        for (const [key, { edits }] of working)
+          if (edits.length)
+            writes.push({
+              kind: "steps",
+              store: "settings-history",
+              key,
+              edits: [...edits],
+            });
+        return writes;
+      },
       file: (sessionId, file, before, after) => {
         note(sessionId, {
           kind: "layer",
@@ -523,6 +550,7 @@ function stepOf(
 // store until its consequence lands (`flush`): nothing outside the click sees
 // a write whose click may not land, and the click reads its own.
 function heldWrites(store: SessionStateRW): SessionStateRW & {
+  readonly entries: ClickWrites;
   readonly writes: Journal["writes"];
   readonly flush: () => ClickWrites;
 } {
@@ -533,6 +561,7 @@ function heldWrites(store: SessionStateRW): SessionStateRW & {
     held.set(sessionId, writes);
   };
   return {
+    entries: held,
     get: (sessionId, key) => {
       const writes = held.get(sessionId);
       return writes?.has(key) ? writes.get(key)! : store.get(sessionId, key);

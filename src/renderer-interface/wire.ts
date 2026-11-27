@@ -38,7 +38,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 27;
+export const RENDERER_WIRE_VERSION = 28;
 export const SESSION_DELIVERY_LIMIT = {
   revisions: 256,
   bytes: 1024 * 1024,
@@ -66,6 +66,26 @@ export function sessionCommitOf(raw: unknown): SessionCommit {
   return raw;
 }
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
+
+function validConfigDecisions(effects: readonly unknown[]): boolean {
+  let found = false;
+  for (const effect of effects) {
+    if (!isPlainObject(effect) || effect.onApplied === undefined) continue;
+    if (
+      found ||
+      (effect.kind !== "change" && effect.kind !== "approve-repo") ||
+      !Array.isArray(effect.onApplied) ||
+      effect.onApplied.length === 0 ||
+      !effect.onApplied.every(
+        (write) =>
+          isStoreWrite(write, isHistoryEdit) && write.key === effect.session,
+      )
+    )
+      return false;
+    found = true;
+  }
+  return true;
+}
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
 // version. A legacy message that omits it admits no renderer input.
@@ -408,7 +428,9 @@ export function rendererOverLines(deps: {
           }
           if (
             !Array.isArray(heard.output.stored) ||
-            !heard.output.stored.every((w) => isStoreWrite(w, isHistoryEdit))
+            !heard.output.stored.every((w) => isStoreWrite(w, isHistoryEdit)) ||
+            (Array.isArray(heard.output.effects) &&
+              !validConfigDecisions(heard.output.effects))
           ) {
             reject(
               new Error(

@@ -166,7 +166,7 @@ export class HostSessionImage {
     else this.histories.set(id, next);
   }
 
-  take(writes: readonly StoreWrite[]): DurableWrite[] {
+  prepare(writes: readonly StoreWrite[]): () => DurableWrite[] {
     // Resolve every ordered history reference before mutating either store.
     // One bad peer message cannot land half a transaction.
     const staged = new Map<SessionId, SessionHistory>();
@@ -184,6 +184,13 @@ export class HostSessionImage {
       staged.set(write.key, prior);
       histories.push({ next: prior, edits });
     }
+    return () => this.apply(writes, histories);
+  }
+
+  private apply(
+    writes: readonly StoreWrite[],
+    histories: ReadonlyArray<{ next: SessionHistory; edits: DurableEdit[] }>,
+  ): DurableWrite[] {
     let at = 0;
     const durable: DurableWrite[] = [];
     for (const write of writes) {

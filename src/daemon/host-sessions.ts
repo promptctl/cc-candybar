@@ -30,10 +30,10 @@ export interface SessionPersistence {
 export interface SessionStores {
   load(): readonly StoreReport[];
   current(name: RendererName): SessionCheckpoint;
-  take(
+  prepare(
     writes: readonly StoreWrite[],
     published?: (revision: number) => void,
-  ): void;
+  ): () => void;
   close(): Promise<void>;
 }
 
@@ -76,22 +76,36 @@ export class HostSessions implements SessionStores {
     writes: readonly StoreWrite[],
     published?: (revision: number) => void,
   ): void {
-    if (!writes.length) return;
-    if (!this.image) {
-      this.early.push([...writes]);
-      return;
-    }
-    const durable = this.image.take(writes);
-    this.revision++;
-    if (!this.closed) {
-      try {
-        this.disk?.append(this.revision, durable, this.checkpoint);
-      } finally {
-        // A refused disk write still changed the live session. Its peers
-        // observe that decision while its caller learns persistence failed.
-        published?.(this.revision);
+    this.prepare(writes, published)();
+  }
+  prepare(
+    writes: readonly StoreWrite[],
+    published?: (revision: number) => void,
+  ): () => void {
+    if (!writes.length) return () => {};
+    if (!this.image)
+      return () => {
+        this.early.push([...writes]);
+      };
+    const apply = this.image.prepare(writes);
+    const expected = this.revision;
+    return () => {
+      if (this.revision !== expected)
+        throw new Error(
+          `session decision prepared at revision ${expected} cannot land at ${this.revision}`,
+        );
+      const durable = apply();
+      this.revision++;
+      if (!this.closed) {
+        try {
+          this.disk?.append(this.revision, durable, this.checkpoint);
+        } finally {
+          // A refused disk write still changed the live session. Its peers
+          // observe that decision while its caller learns persistence failed.
+          published?.(this.revision);
+        }
       }
-    }
+    };
   }
   async close(): Promise<void> {
     this.closed = true;

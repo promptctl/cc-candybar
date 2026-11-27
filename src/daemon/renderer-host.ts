@@ -40,6 +40,7 @@ import {
   type Present,
   type PushedFrame,
   type RendererOutput,
+  configSessionDecision,
   type TimedRenderer,
   type Timed,
   type TurnFailure,
@@ -264,7 +265,7 @@ export function rendererHost(
     ) => void;
     // [LAW:single-enforcer] Where every output's stored writes go: the host's
     // copy of the renderer's stores, before any later input.
-    readonly stored: (writes: readonly StoreWrite[]) => void;
+    readonly prepare: (writes: readonly StoreWrite[]) => () => void;
     // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Every turn
     // holds the session its event names until it settles, so no sweep retires
     // a session under a turn on it.
@@ -540,10 +541,27 @@ export function rendererHost(
     const answers = output.effects.filter(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
-    const landed = landConfig(changes, answers);
-    if (landed.kind === "ok")
-      recordTaken("landed config report", () => world.reported(landed.reports));
-    const configOutcome = configEffectOutcome(landed);
+    const decision = configSessionDecision(output.effects);
+    let publish: (() => void) | undefined;
+    let landed: ConfigLanding;
+    try {
+      // [LAW:no-ambient-temporal-coupling] Resolve the entire session
+      // decision while the file can still be refused. The guarded write
+      // and publishing that decision share this synchronous host turn.
+      if (decision !== undefined)
+        publish = collector.prepare([...output.stored, ...decision]);
+      landed = landConfig(changes, answers);
+    } catch (thrown) {
+      landed = {
+        kind: "refused",
+        reason: `session decision rejected before configuration changed: ${failureOf(thrown).message}`,
+      };
+    }
+    const accepted = landed.kind === "ok" ? publish : undefined;
+    const configOutcome =
+      accepted === undefined
+        ? configEffectOutcome(landed)
+        : ({ kind: "ok", sessionCommitted: true } as const);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
     // A cold snapshot belongs to one click. If the renderer also wants this
@@ -556,16 +574,20 @@ export function rendererHost(
     // [LAW:no-silent-failure] The renderer's answer is a proposal. A click
     // that changed history can only report success after its host write.
     // Wake the next turn even if storage or a later collector fails.
-    if (startFailure === null)
-      recordTaken("wake declaration", () => wake.declare(output.wake));
     const owed: Array<Promise<HostOutcome | readonly HostOutcome[]>> = [];
     try {
-      collector.stored(output.stored);
+      (accepted ?? collector.prepare(output.stored))();
     } catch (thrown) {
       const failure = failureOf(thrown);
       notTaken("stored writes", failure);
       owed.push(Promise.resolve({ kind: "failed", reason: failure.message }));
     }
+    if (landed.kind === "ok") {
+      const { reports } = landed;
+      recordTaken("landed config report", () => world.reported(reports));
+    }
+    if (startFailure === null)
+      recordTaken("wake declaration", () => wake.declare(output.wake));
     const followed = took(
       output.subscriptions,
       output.frames,

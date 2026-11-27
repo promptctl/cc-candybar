@@ -217,7 +217,7 @@ async function answer(
       {
         subscribed: (subscriptions) => void subscribed.push(subscriptions),
         frames: () => {},
-        stored: () => {},
+        prepare: () => () => {},
         recorded: () => {},
         holding,
       },
@@ -465,7 +465,7 @@ test("a new session context retries its failed config with the same declaration,
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -859,7 +859,7 @@ describe("the request's draws, and its wait for what a draw owes", () => {
       {
         subscribed: () => {},
         frames: () => {},
-        stored: () => {},
+        prepare: () => () => {},
         recorded: () => {},
         holding: () => () => {},
       },

@@ -2,16 +2,13 @@
 // `change`s its turn returns, which the host performs, never as a file the
 // renderer writes, and with them its answers to the trust book, which decide
 // which config a session renders. A click reads and writes only the layers of
-// its session's origin, from the snapshot the host handed in for it, and
-// each change names its layer by that origin and its role. A click lands
-// whole or not at all, so what else it did is its consequence (its journal's
-// commit), held here from its turn until its changes' `effect-done`s: applied
-// once they land, dropped when they do not. The host lands a turn's changes, and hands in their
-// `effect-done`s, before the renderer's next input (src/daemon/renderer-host.ts),
-// so each click reads the snapshot the clicks ahead of it moved, and at most
-// one click is ever landing.
+// its session's origin. The first guarded effect carries the picks and undo
+// changes that the host publishes with a successful file batch. The renderer
+// keeps its local draft and navigation work until the receipt tells it how
+// the file batch landed. Receipts follow the config reload in the same slot.
 
 import { diffChanges } from "../config/config-changes.js";
+import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import { makeObservable, observableRef, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
@@ -38,7 +35,7 @@ import type {
 
 // What a click's consequence is applied in: the turn its changes landed in,
 // whose effects what it asks joins.
-export type Consequence = (effects: Effect[]) => void;
+export type Consequence = (effects: Effect[], sessionCommitted?: true) => void;
 
 // A click whose changes are on their way: the session it clicked, the files
 // they change, and its consequence.
@@ -186,6 +183,7 @@ export class ConfigWrites {
     effects: Effect[],
     session: SessionId | null,
     consequence: Consequence,
+    proposed: () => readonly StoreWrite[] = () => [],
   ): void {
     const answers = this.answers;
     this.answers = [];
@@ -242,6 +240,8 @@ export class ConfigWrites {
         answer,
       })),
     ];
+    const onApplied = proposed();
+    if (onApplied.length) landing[0] = { ...landing[0]!, onApplied };
     runInAction(() => {
       this.inFlight = {
         of: { session, origin, files, consequence },
@@ -263,7 +263,7 @@ export class ConfigWrites {
     runInAction(() => {
       this.inFlight = null;
     });
-    return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
+    return { ...landing.of, outcome: landing.missed ?? outcome };
   }
 
   // The origin of the click whose changes are on their way, if one's are.

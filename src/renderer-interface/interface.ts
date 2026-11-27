@@ -344,7 +344,7 @@ export function followingOf(viewers: SessionViewers | undefined): Set<Lane> {
 }
 
 export type EffectOutcome =
-  | { readonly kind: "ok" }
+  | { readonly kind: "ok"; readonly sessionCommitted?: true }
   | { readonly kind: "failed"; readonly reason: string }
   // Refused before it acted: a change to a setting that moved since the
   // renderer read it, so nothing made over that reading can land; or an act
@@ -389,6 +389,7 @@ export interface ConfigChange {
   readonly session: SessionId;
   readonly target: ChangeTarget;
   readonly changes: readonly Change[];
+  readonly onApplied?: readonly StoreWrite[];
 }
 
 export interface ChangeTarget {
@@ -449,6 +450,7 @@ export type Act = { readonly id: EffectId } & (
       // changes: the trust book is the host's. `dir` is the one its signed
       // link asked about, which must still be `origin`'s repository.
       readonly kind: "approve-repo";
+      readonly onApplied?: readonly StoreWrite[];
       readonly session: SessionId;
       readonly origin: RenderOrigin;
       readonly dir: string;
@@ -461,6 +463,20 @@ export type ActRequest = Unnamed<Act>;
 type Unnamed<A> = A extends unknown ? Omit<A, "id"> : never;
 
 export type Effect = Present | ConfigChange | Act;
+
+// [LAW:one-source-of-truth] The first member of a guarded config batch
+// carries the session decision once, including when later members share it.
+export function configSessionDecision(
+  effects: readonly Effect[],
+): readonly StoreWrite[] | undefined {
+  for (const effect of effects)
+    if (
+      (effect.kind === "change" || effect.kind === "approve-repo") &&
+      effect.onApplied !== undefined
+    )
+      return effect.onApplied;
+  return undefined;
+}
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.

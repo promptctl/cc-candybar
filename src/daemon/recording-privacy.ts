@@ -24,6 +24,7 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import type { WorldState } from "../facts/world-state.js";
+import { configSessionDecision } from "../renderer-interface/interface.js";
 import type { WireFrame } from "../render/frame.js";
 import type {
   EventInput,
@@ -310,6 +311,11 @@ export function recordingOutputProblem(
   }
   const writesProblem = recordingWritesProblem(output.stored, controls);
   if (writesProblem !== null) return writesProblem;
+  const decision = configSessionDecision(output.effects);
+  if (decision !== undefined) {
+    const problem = recordingWritesProblem(decision, controls);
+    if (problem !== null) return problem;
+  }
   for (const [drawn, pairs] of frames) controls?.remember(drawn, pairs);
   return null;
 }

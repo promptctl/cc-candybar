@@ -23,6 +23,7 @@ import {
   type RendererHost,
 } from "../src/daemon/renderer-host";
 import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
+import { HostSessions } from "../src/daemon/host-sessions";
 import {
   writeConfigFile,
   type WriteConfigFile,
@@ -119,6 +120,8 @@ function hostOver(
     repoDir: () => null,
     readText: readTextIfPresent,
   };
+  const sessions = new HostSessions();
+  sessions.load();
   const host = rendererHost(
     bound?.name ?? MAIN_RENDERER,
     CLOCK,
@@ -137,7 +140,7 @@ function hostOver(
       subscribed: (value) => void declarations.push(value),
       frames: () => {},
       holding: () => () => {},
-      stored: () => {},
+      prepare: (writes) => sessions.prepare(writes),
       recorded: () => {},
     },
     {
@@ -148,7 +151,7 @@ function hostOver(
       unheard: (text) => void logged.push(`unheard ${text}`),
     },
   );
-  return { host, heard, logged, follows, declarations };
+  return { host, heard, logged, follows, declarations, sessions };
 }
 
 const due = { kind: "due" } as const;
@@ -423,6 +426,43 @@ test("an origin a watch moved that the renderer let go by its slot is abandoned,
 // [LAW:no-silent-failure] A click that waited for its origin's config runs in
 // that config turn, so the turn that named the origin answers for it.
 describe("a turn settles as the config turns it named", () => {
+  test("an impossible undo refuses the entire batch before its valid file change", async () => {
+    const before = fs.readFileSync(file, "utf8");
+    const change: Effect = {
+      kind: "change",
+      id: 1 as EffectId,
+      session: S,
+      target: { kind: "layer", origin: ORIGIN, role: "user" },
+      changes: diffChanges(before, '{ globals: { theme: "dawn" } }\n'),
+      onApplied: [
+        {
+          kind: "patch",
+          store: "session-state",
+          key: S,
+          changes: { padding: "4" },
+        },
+        {
+          kind: "steps",
+          store: "settings-history",
+          key: S,
+          edits: [{ kind: "undo" }],
+        },
+      ],
+    };
+    const { host, sessions } = hostOver((event) =>
+      output(event.kind === "config" ? [change] : [], [ORIGIN]),
+    );
+    const turn = await host.answer(() => ({ kind: "event", event: due }));
+    expect(turn.settled).toEqual([
+      { kind: "refused", reason: expect.stringContaining("empty stack") },
+    ]);
+    expect(fs.readFileSync(file, "utf8")).toBe(before);
+    expect(sessions.current(MAIN_RENDERER)).toMatchObject({
+      revision: 0,
+      state: { sessions: {}, history: {} },
+    });
+  });
+
   test("a change one of them returned is among its outcomes, refused as it landed", async () => {
     const change: Effect = {
       kind: "change",
@@ -430,16 +470,18 @@ describe("a turn settles as the config turns it named", () => {
       session: S,
       target: { kind: "layer", origin: ORIGIN, role: "user" },
       // Read from a file the disk no longer holds.
+      onApplied: [{ kind: "patch", store: "session-state", key: S, changes: { padding: "4" } }],
       changes: diffChanges(
         `{ globals: { theme: "noon" } }\n`,
         `{ globals: { theme: "dawn" } }\n`,
       ),
     };
-    const { host, heard } = hostOver((event) =>
+    const { host, heard, sessions } = hostOver((event) =>
       output(event.kind === "config" ? [change] : [], [ORIGIN]),
     );
     const answered = await host.answer(() => ({ kind: "event", event: due }));
     expect(heard).toEqual(["due", "config", "effect-done refused"]);
+    expect(sessions.current(MAIN_RENDERER).revision).toBe(0);
     expect(answered.settled).toEqual([
       { kind: "refused", reason: expect.any(String) },
     ]);

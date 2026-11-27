@@ -78,14 +78,14 @@ describe("a daemon aimed by its paths value", () => {
       ).sessionStores(() => {});
       stores.load();
       const second = rendererNameOf("second");
-      stores.take([
+      stores.prepare([
         {
           store: "session-state",
           kind: "patch",
           key: sessionIdOf("s1"),
           changes: { theme: "x" },
         },
-      ]);
+      ])();
       expect(stores.current(second)).toEqual(stores.current(MAIN_RENDERER));
       expect(fs.existsSync(aimed.sessionState)).toBe(false);
       await stores.close();
@@ -131,14 +131,14 @@ describe("a daemon aimed by its paths value", () => {
       fs.writeFileSync(retiredFile, retiredContents);
       const storage = adapters.sessionStores(() => {});
       storage.load();
-      storage.take([
+      storage.prepare([
         {
           kind: "patch",
           store: "session-state",
           key: sessionIdOf("s1"),
           changes: { theme: "x" },
         },
-      ]);
+      ])();
       await storage.close();
       adapters.linkKey();
       const limits = adapters.limits({

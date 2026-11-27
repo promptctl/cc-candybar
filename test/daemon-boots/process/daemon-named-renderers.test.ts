@@ -188,6 +188,105 @@ test("live renderer processes observe a signed click and one undo step across a 
   }
 });
 
+test("a successful file change remains undoable when its issuing worker dies at the rename", async () => {
+  const isolated = prepareIsolatedDaemonEnv("ccb-config-issuer");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-config-issuer-"));
+  const config = path.join(root, "bar.json5");
+  const arm = path.join(root, "issuer-pid");
+  const probe = path.join(root, "after-rename.cjs");
+  let daemon: RunningDaemon | undefined;
+  try {
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { padding: 1 },
+        actions: {
+          wider: { persist: "padding", min: 0, max: 4, by: 1, layer: "user" },
+        },
+        segments: {
+          choice: {
+            template:
+              'padding={{ .padding.effective }} {{ action "wider" "WIDER" }}',
+          },
+        },
+        root: { h: ["choice"] },
+      }),
+    );
+    // Only this isolated host writes this file. Termination follows the
+    // real rename before the host can send its first config or effect receipt.
+    fs.writeFileSync(
+      probe,
+      `
+      const fs = require("node:fs");
+      const rename = fs.renameSync;
+      fs.renameSync = (...args) => {
+        const result = rename(...args);
+        if (args[1] === ${JSON.stringify(config)} && fs.existsSync(${JSON.stringify(arm)})) {
+          const pid = Number(fs.readFileSync(${JSON.stringify(arm)}, "utf8"));
+          fs.unlinkSync(${JSON.stringify(arm)});
+          process.kill(pid, "SIGKILL");
+        }
+        return result;
+      };
+      require("node:module").syncBuiltinESMExports();
+    `,
+    );
+    daemon = await spawnDaemonWithEnv(
+      {
+        ...isolated.env,
+        NODE_OPTIONS: [isolated.env.NODE_OPTIONS, `--require=${probe}`]
+          .filter(Boolean)
+          .join(" "),
+      },
+      builtDaemon,
+    );
+    const sid = sessionIdOf("saved-file");
+    const peer = rendererNameOf("worktree");
+    const draw = (named: boolean) =>
+      frameRequest(isolated.sockPath, {
+        ...renderBody(sid, root, {}, ["cc-candybar", "--config", config]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: peer },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const frame = await draw(false);
+    const wider = linksOf(frame).find((link) => link.text === "WIDER");
+    if (!wider) throw new Error("the issuer never drew its file control");
+    expect(textOf(await draw(true))).toContain("padding=1");
+    const log = () =>
+      fs.readFileSync(path.join(isolated.stateDir, "daemon.log"), "utf8");
+    const issuer = /renderer main\[1\] started pid=(\d+)/.exec(log());
+    if (!issuer) throw new Error("the isolated host never launched the issuer");
+    fs.writeFileSync(arm, issuer[1]!);
+    await click(isolated.sockPath, wider.url);
+    expect(fs.existsSync(arm)).toBe(false);
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
+      2,
+    );
+    const undo = drawnLink(
+      isolated.sockPath,
+      effectsUrl([{ verb: VERB_UNDO, args: [sid] }]),
+      { renderer: peer, session: sid },
+    );
+    await click(isolated.sockPath, undo);
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
+      1,
+    );
+    expect(await sendClick(isolated.sockPath, undo)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("nothing to undo"),
+    });
+  } finally {
+    try {
+      await daemon?.stop();
+    } finally {
+      isolated.removeTmpDirs();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
 test("two named renderer processes draw separately and share config, transcript and plugin-source reads", async () => {
   const isolated = prepareIsolatedDaemonEnv("ccb-named");
   const root = fs.realpathSync(

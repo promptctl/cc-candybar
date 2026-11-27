@@ -32,7 +32,7 @@ export const unfollowedCollector = (
   subscribed: collector.subscribed.bind(collector),
   holding: collector.holding.bind(collector),
   frames: () => {},
-  stored: () => {},
+  prepare: () => () => {},
   recorded: () => {},
 });
 

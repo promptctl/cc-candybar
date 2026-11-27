@@ -22,7 +22,7 @@ test("a journal prefix equals the durable projection after every cap, private ed
   const image = new HostSessionImage(EMPTY_STORED_STATE);
   const disk = new HostSessionImage(EMPTY_STORED_STATE);
   const take = (write: StoreWrite) => {
-    const changes = image.take([write]);
+    const changes = image.prepare([write])();
     const json = JSON.stringify(changes);
     expect(json).not.toContain("private-secret");
     expect(json).not.toContain(EDIT_MODE_KEY);
@@ -71,7 +71,7 @@ test("a journal prefix equals the durable projection after every cap, private ed
 test("an invalid relative edit refuses its whole transaction", () => {
   const image = new HostSessionImage(EMPTY_STORED_STATE);
   expect(() =>
-    image.take([
+    image.prepare([
       {
         store: "session-state",
         kind: "patch",

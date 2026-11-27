@@ -449,7 +449,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
     {
       subscribed: (subscriptions) => void published.push(subscriptions),
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },

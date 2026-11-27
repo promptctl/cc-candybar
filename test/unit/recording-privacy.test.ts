@@ -453,13 +453,19 @@ test("only an earlier captured control in the same session identifies an authore
     root: { h: ["item"] },
   }));
   const patch = { kind: "patch", store: "session-state", key: SESSION, changes: { choice: "displayed" } } as const;
+  const decision = { ...output, effects: [{
+    kind: "change" as const, session: SESSION, id: 1 as EffectId, changes: [],
+    target: { kind: "layer" as const, origin: checked().req.requested, role: "user" as const }, onApplied: [patch],
+  }] };
   const click = (value: string) => input({
     kind: "click", placementSeed: "seed", context: null,
     click: admitClick(VERB_SET_STATE, encodeSegments([SESSION, "choice", value]), TEST_SIGNER).click,
   });
   expect(recordingInputProblem(click("displayed"), controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem(decision, controls)).toMatch(/unknown origin/);
   expect(recordingOutputProblem({ ...output, stored: [patch] }, controls)).toMatch(/unknown origin/);
   expect(recordingOutputProblem(output, controls)).toBeNull();
+  expect(recordingOutputProblem(decision, controls)).toBeNull();
   expect(recordingInputProblem(click("displayed"), controls)).toBeNull();
   expect(recordingInputProblem(click(SECRET), controls)).toMatch(/unknown origin/);
   expect(recordingOutputProblem({ ...output, stored: [patch] }, controls)).toBeNull();

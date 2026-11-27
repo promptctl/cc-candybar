@@ -141,7 +141,7 @@ function rig(
     (level, line) => logged.push({ level, line }),
     {
       subscribed: (next) => subscriptions.push(next),
-      stored: (writes) => stored.push(writes),
+      prepare: (writes) => () => stored.push(writes),
       holding: () => () => {},
       recorded: () => {},
       frames: () => {},

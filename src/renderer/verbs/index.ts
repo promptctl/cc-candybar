@@ -583,7 +583,8 @@ function changeLanded(
       failed.push(rendererFailureOf(e).message);
     }
   };
-  if (outcome.kind === "ok") step(() => consequence(effects));
+  if (outcome.kind === "ok")
+    step(() => consequence(effects, outcome.sessionCommitted));
   else if (outcome.kind === "closing") return;
   else failed.push(outcome.reason);
   if (failed.length === 0) return;
@@ -1720,7 +1721,7 @@ function journaled<C extends DaemonContext>(
   // [LAW:no-ambient-temporal-coupling] Save releases the draft only in the
   // host's successful acknowledgement turn. Conflict and failure keep the
   // original draft and its undo and redo history.
-  const consequence = (): void => {
+  const consequence = (_effects: Effect[], sessionCommitted?: true): void => {
     if (requested.finish === "save" && saved === null) return;
     const failed: unknown[] = [];
     let visits: EndedVisits = new Map();
@@ -1739,7 +1740,9 @@ function journaled<C extends DaemonContext>(
     try {
       if (edit === undefined) {
         const clicked = new Map([
-          ...(journal.commit().get(sid) ?? []),
+          ...(sessionCommitted
+            ? journal.writes(sid)
+            : (journal.commit().get(sid) ?? [])),
           ...aside.held(sid),
         ]);
         const entering =
@@ -1755,7 +1758,7 @@ function journaled<C extends DaemonContext>(
           ctx.editViewChanged(sid);
         } else if (edited.size > 0) failed.push(staleEdit(edited.keys()));
       } else if (saved !== null) {
-        saved.commit();
+        if (!sessionCommitted) saved.commit();
         end();
       } else {
         const { moved, clicked } = edit.commit();
@@ -1774,7 +1777,12 @@ function journaled<C extends DaemonContext>(
     throwAll(failed);
   };
   try {
-    ctx.configWrites.seal(effects, sid, consequence);
+    ctx.configWrites.seal(
+      effects,
+      sid,
+      consequence,
+      () => (saved ?? (edit === undefined ? journal : null))?.proposed() ?? [],
+    );
   } catch (e) {
     failures.push(e);
   }

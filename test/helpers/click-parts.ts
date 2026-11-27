@@ -149,7 +149,7 @@ export function clickParts(
       subscribed: () => {},
       frames: () => {},
       holding: collector.holding,
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
     },
     world,

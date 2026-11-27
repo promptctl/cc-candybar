@@ -166,6 +166,8 @@ The interface is `src/renderer-interface/interface.ts`; an origin is `RenderOrig
 
 ### Effects
 
+A file-writing gesture sends its proposed session picks and undo changes with its guarded file batch. The host checks that each proposed history move is possible before it touches a file. If the file guard succeeds, it applies and journals the decision in the same host turn. A refused file guard discards the conditional changes. A worker can die at the successful rename and a peer can still undo that write. The originating worker uses the receipt to finish its local navigation and draft work.
+
 The effects are in `src/renderer-interface/interface.ts` (a frame to present, a config change, and the acts a click asks done in the world); a change's edits, the address each names and the guard each carries are in `src/config/config-changes.ts`. A renderer names a document it was handed, never a path, so no stored effect or undo entry can hold a path (R-13). [LAW:types-are-the-program] A value crosses as JSON5 text, so a copied row keeps its comments and an inline placement stays inline.
 
 - **An act carries where it goes.** A slash line names the pane it acts in, from the client hints the renderer holds for the session, so an act after a daemon restart goes where the bar the user clicked was drawn. A session that reported no pane is refused by the renderer, with the hints' own reason, and no act is sent. The host decides nothing about where an act goes.
@@ -280,7 +282,7 @@ A turn sends the pick keys it changed. A null value clears one key, a drop remov
 
 Settings history sends an appended step once. Undo and redo move a step already held by the receiver. Forgetting a stale target names that target, trimming names the number of oldest steps, and clearing releases the session’s history. Peers apply these decisions in order. The legacy history file keeps the committed setting and layer changes in each step.
 
-Offline replay reads wire versions 22 through 27. A wire 27 recording interleaves numbered turns with the session revisions that renderer received. Replay checks revision order and verifies the terminal turn count and session revision, including changes received after the final turn. A peer that received an unrecognized pick through a live change refuses to publish its recording under the same rule as a peer that received it at boot.
+Offline replay reads wire versions 22 through 28. Starting with wire 27, recordings interleave numbered turns with the session revisions that renderer received. Replay checks revision order and verifies the terminal turn count and session revision, including changes received after the final turn. Wire 28 also records the session decision attached to a guarded file operation. The same provenance checks apply to proposed values, live updates and the initial snapshot.
 
 For recordings through wire 25 replay reconstructs both undo stacks from the boot and the history edits made during replay. To verify a pre-25 recording, replay reconstructs the older full pick record from the boot and the changes produced by the replaying renderer. Untouched picks, config-writing effects, their completions and subsequent frames all participate in comparison.
 

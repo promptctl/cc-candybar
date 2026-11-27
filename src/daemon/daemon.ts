@@ -1002,8 +1002,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           });
           frameFeeds.took(name, routed, settled);
         },
-        stored: (writes) =>
-          stores.take(writes, (revision) => {
+        prepare: (writes) =>
+          stores.prepare(writes, (revision) => {
             const commit = encodeSessionCommit({
               kind: "session-commit",
               revision,
