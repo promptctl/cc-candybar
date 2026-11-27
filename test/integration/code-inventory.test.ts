@@ -115,28 +115,10 @@ test("inventory checks the working tree and normal lint names an unowned source"
     expect(
       execFileSync(path.join(root, "new-code/delegated"), { encoding: "utf8" }),
     ).toBe("node");
-    // Typecheck resolves the checkout from its own repo.cjs. Both normal
-    // commands therefore run from this fixture's copies of their entry points.
-    for (const file of [
-      "package.json",
-      "scripts/lint-code.ts",
-      "scripts/typecheck-code.ts",
-      "scripts/import-zones.mjs",
-      "scripts/lib/repo.cjs",
-      "scripts/lib/code-inventory.ts",
-      "scripts/lib/filewide-disable.ts",
-      "scripts/lib/type-coverage.ts",
-    ])
-      write(file, fs.readFileSync(path.join(REPO, file), "utf8"));
-    fs.symlinkSync(
-      path.join(REPO, "node_modules"),
-      path.join(root, "node_modules"),
-      "dir",
-    );
     for (const command of ["lint-code.ts", "typecheck-code.ts"]) {
       const lint = spawnSync(
         process.execPath,
-        ["--import", tsx, path.join(root, "scripts", command)],
+        ["--import", tsx, path.join(REPO, "scripts", command)],
         { cwd: root, encoding: "utf8" },
       );
       expect(lint.error).toBeUndefined();

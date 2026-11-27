@@ -1,16 +1,16 @@
 import ts from "typescript";
 import { isJavaScript } from "./import-zones.mjs";
 import { inventory } from "./lib/code-inventory.js";
-import { REPO } from "./lib/repo.cjs";
 import { readTypeProjects } from "./lib/type-coverage.js";
 
-const { projects, failures } = readTypeProjects(REPO, inventory(REPO));
+const root = process.cwd();
+const { projects, failures } = readTypeProjects(root, inventory(root));
 for (const failure of failures) console.error(failure);
 if (failures.length > 0) process.exitCode = 1;
 else {
   const format: ts.FormatDiagnosticsHost = {
     getCanonicalFileName: (file) => file,
-    getCurrentDirectory: () => REPO,
+    getCurrentDirectory: () => root,
     getNewLine: () => "\n",
   };
   for (const { parsed } of projects) {

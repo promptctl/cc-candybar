@@ -20,7 +20,11 @@ test("normal typecheck judges JavaScript in each environment, strict TS and decl
   const check = (command = "typecheck") => {
     const result = spawnSync(
       process.execPath,
-      ["--import", "tsx", `scripts/${command}-code.ts`],
+      [
+        "--import",
+        require.resolve("tsx"),
+        path.join(REPO, "scripts", `${command}-code.ts`),
+      ],
       { cwd: dir, encoding: "utf8", timeout: 45_000 },
     );
     if (result.error) throw result.error;
@@ -33,12 +37,6 @@ test("normal typecheck judges JavaScript in each environment, strict TS and decl
       "tsconfig.json",
       "test/tsconfig.json",
       "tsconfig.browser.json",
-      "scripts/typecheck-code.ts",
-      "scripts/lint-code.ts",
-      "scripts/import-zones.mjs",
-      "scripts/lib/code-inventory.ts",
-      "scripts/lib/type-coverage.ts",
-      "scripts/lib/repo.cjs",
     ])
       copy(file);
     fs.symlinkSync(
