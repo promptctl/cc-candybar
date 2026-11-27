@@ -1,13 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { once } from "node:events";
 
+import { untilTestEnds } from "../../helpers/test-end";
 import { PARENT_PID_ENV } from "../../../src/daemon/parent-watchdog";
-import { processProbe } from "../../helpers/host";
-import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
-import { type DaemonProcess } from "../../../scripts/lib/daemon/process";
-import { until } from "../../../scripts/lib/until";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
+import type { RunningDaemon } from "../../../scripts/lib/daemon/isolated";
 
 // [LAW:verifiable-goals] End-to-end proof of the acceptance criterion in
 // miniature: a REAL daemon process anchored to a throwaway "spawner" exits on
@@ -15,94 +12,39 @@ import { until } from "../../../scripts/lib/until";
 // gap a killed Jest leaves. One controlled daemon, asserted dead, and force-
 // reaped in afterEach so this test can never itself contribute to the leak.
 describe("daemon dies with its spawner (integration)", () => {
-  const spawned: ChildProcess[] = [];
-  const tmpDirs: string[] = [];
-  const daemons: DaemonProcess[] = [];
-
-  const track = (c: ChildProcess): ChildProcess => {
-    spawned.push(c);
-    return c;
-  };
-  const tmp = (prefix: string): string => {
-    const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-    tmpDirs.push(d);
-    return d;
-  };
+  let anchor: ChildProcess;
+  let daemon: RunningDaemon | undefined;
+  let removeTmpDirs: () => void;
 
   afterEach(async () => {
-    // The daemon first: a test that failed before its watchdog fired leaves it
-    // running, and it must be gone before the directories it writes under are
-    // removed. Safe after the daemon's own exit, which a stop then only waits
-    // on and does not signal.
-    for (const daemon of daemons.splice(0)) await daemon.stop();
-    // [LAW:no-silent-failure] A process that is already gone is the one
-    // refusal expected here, and kill answers it by returning false; it
-    // throws or emits 'error' for any other refusal, which the test hears.
-    for (const c of spawned) {
-      if (c.exitCode === null && c.signalCode === null) c.kill("SIGKILL");
+    try {
+      await daemon?.stop();
+    } finally {
+      if (anchor.exitCode === null && anchor.signalCode === null) anchor.kill("SIGKILL");
+      removeTmpDirs();
     }
-    spawned.length = 0;
-    for (const d of tmpDirs) {
-      try {
-        fs.rmSync(d, { recursive: true, force: true });
-      } catch {
-        // best effort
-      }
-    }
-    tmpDirs.length = 0;
   });
 
   test("SIGKILLing the anchor process shuts the daemon down", async () => {
-    // A throwaway "spawner": stays alive until we kill it.
-    const anchorProc = track(
-      spawn(process.execPath, ["-e", "setInterval(() => {}, 1 << 30)"], {
-        stdio: "ignore",
-      }),
-    );
-
-    const stateRoot = tmp("cc-candybar-watchdog-");
-    const stateDir = path.join(stateRoot, "cc-candybar");
-    // Bind-time trust precondition: socket parent must be uid==me + mode 0700.
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    const sockPath = path.join(stateDir, "socket");
-
-    const spawnedDaemon = await spawnTestDaemon({
-      ...process.env,
-      CC_CANDYBAR_SOCKET: sockPath,
-      XDG_STATE_HOME: stateRoot,
-      XDG_CACHE_HOME: tmp("cc-candybar-watchdog-cache-"),
-      XDG_CONFIG_HOME: tmp("cc-candybar-watchdog-config-"),
-      // Anchor the daemon to the throwaway process, NOT this Jest worker, so
-      // killing the anchor (and only the anchor) exercises the watchdog.
-      [PARENT_PID_ENV]: String(anchorProc.pid),
+    const isolated = prepareIsolatedDaemonEnv("ccb-watchdog");
+    removeTmpDirs = isolated.removeTmpDirs;
+    anchor = spawn(process.execPath, ["-e", "process.stdin.resume()"], {
+      stdio: ["pipe", "ignore", "ignore"],
     });
-    daemons.push(spawnedDaemon);
-    const daemon = spawnedDaemon.child;
-
-    // The socket file appears inside bind(), which runs strictly AFTER the
-    // watchdog is armed — so its existence guarantees the watchdog is live.
-    await until(() => fs.existsSync(sockPath), "the daemon's socket");
-    expect(daemon.exitCode).toBeNull();
-
-    const daemonExited = new Promise<void>((resolve) =>
-      daemon.once("exit", () => resolve()),
+    await once(anchor, "spawn");
+    // The shared readiness contract has received a stats reply from this daemon.
+    daemon = await spawnDaemonWithEnv({
+      ...isolated.env,
+      [PARENT_PID_ENV]: String(anchor.pid),
+    });
+    const anchorExit = once(anchor, "exit");
+    const child = daemon.child;
+    const daemonExit = untilTestEnds(
+      (signal) => once(child, "exit", { signal }),
+      `daemon ${child.pid} to exit after its spawner ${anchor.pid} was killed`,
     );
-
-    anchorProc.kill("SIGKILL");
-
-    // Poll interval is 250ms + a 500ms shutdown backstop; 8s is a generous
-    // ceiling. Clear the deadline timer once the daemon exits so it can't
-    // outlive the test and hold Jest's event loop open.
-    let deadline: NodeJS.Timeout | undefined;
-    const exitedInTime = await Promise.race([
-      daemonExited.then(() => true),
-      new Promise<boolean>((r) => {
-        deadline = setTimeout(() => r(false), 8000);
-      }),
-    ]);
-    clearTimeout(deadline);
-
-    expect(exitedInTime).toBe(true);
-    expect(processProbe.alive(daemon.pid!)).toBe(false);
-  }, 20000);
+    expect(anchor.kill("SIGKILL")).toBe(true);
+    expect(await anchorExit).toEqual([null, "SIGKILL"]);
+    expect(await daemonExit).toEqual([0, null]);
+  });
 });

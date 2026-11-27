@@ -1,6 +1,7 @@
-import { startDaemon } from "./helpers/in-worker-daemon";
+import { replyOf, startDaemon } from "./helpers/in-worker-daemon";
 import { renderBody, configFlag } from "./helpers/daemon-e2e";
-import { sendDaemonRequest } from "../scripts/lib/daemon/wire";
+import { heldClock } from "./helpers/held-clock";
+import { reportingClock } from "../src/daemon/task-throws";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 import { hostHeld } from "./helpers/renderers";
 import { renderFailedFrame } from "../src/render/frame";
@@ -75,22 +76,17 @@ test("a renderer restart restores live sessions beyond the feed's request histor
       };
     },
   });
-  const daemon = startDaemon(env, { renderer });
+  const clock = heldClock(new Date(0), reportingClock);
+  const daemon = startDaemon(env, { clock, renderer });
   try {
     const first = "still-live";
     const selected = path.join(stateDir, "selected.json5");
     const ask = async (session: string, args: string[] = []): Promise<void> => {
-      const reply = await sendDaemonRequest(
-        daemon,
-        {
-          v: PROTOCOL_VERSION,
-          kind: "render",
-          ...renderBody(session, stateDir, {}, args),
-        },
-        5000,
-      );
-      if (!reply.ok)
-        throw new Error(`${session}: ${reply.code} ${reply.error}`);
+      await replyOf(daemon.daemon, {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        ...renderBody(session, stateDir, {}, args),
+      });
     };
     await ask(first, configFlag(selected));
     for (let n = 0; n < 256; n++) await ask(`later-${n}`);

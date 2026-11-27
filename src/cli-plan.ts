@@ -9,6 +9,7 @@
 // their write callbacks, and only then does the process exit, with the code
 // the plan carries.
 
+import { peerClosedPipe } from "./proc/pipe";
 import process from "node:process";
 import { debugText } from "./utils/logger";
 
@@ -27,9 +28,8 @@ export interface CliPlan {
 // a plan with nothing on one stream waits on nothing.
 const written = (stream: NodeJS.WritableStream, text: string): Promise<void> =>
   new Promise((resolve, reject) => {
-    // [LAW:no-silent-failure] exception: EPIPE is the reader hanging up —
-    // `| head` — which ends the delivery as SIGPIPE ends any other writer,
-    // and is not the command's failure to report; the plan's code stands.
+    // [LAW:no-silent-failure] exception: a pipe reader can leave early
+    // (`| head`). The planned exit code still describes the command.
     // Any other refusal rejects into the command's catch. The stream emits
     // the error as well as passing it to the callback, so the listener is
     // what keeps a hung-up reader from being an unhandled event.
@@ -41,7 +41,7 @@ const written = (stream: NodeJS.WritableStream, text: string): Promise<void> =>
       if (!err) {
         stream.off("error", settled);
         resolve();
-      } else if ((err as NodeJS.ErrnoException).code === "EPIPE") {
+      } else if (peerClosedPipe(err)) {
         resolve();
       } else {
         reject(err);
@@ -51,7 +51,12 @@ const written = (stream: NodeJS.WritableStream, text: string): Promise<void> =>
     stream.write(text, settled);
   });
 
-export async function exitWith(plan: CliPlan): Promise<never> {
+// A process exits after both streams settle. Returning its code also lets a
+// caller deliver the plan into streams it owns.
+export async function deliverPlan(
+  plan: CliPlan,
+  streams: { stdout: NodeJS.WritableStream; stderr: NodeJS.WritableStream },
+): Promise<number> {
   // [LAW:nothing-unseen] The delivery's record, on the client's debug channel:
   // what each stream took and the code the process ends with. It rides the
   // plan's own stderr write, so it is waited for like the rest — a line
@@ -70,11 +75,15 @@ export async function exitWith(plan: CliPlan): Promise<never> {
   // to close. The first refusal is then the command's failure.
   const refusals: unknown[] = [];
   for (const [stream, text] of [
-    [process.stdout, plan.stdout],
-    [process.stderr, plan.stderr + record],
+    [streams.stdout, plan.stdout],
+    [streams.stderr, plan.stderr + record],
   ] as const) {
     await written(stream, text).catch((e: unknown) => refusals.push(e));
   }
   if (refusals.length > 0) throw refusals[0];
-  process.exit(plan.code);
+  return plan.code;
+}
+
+export async function exitWith(plan: CliPlan): Promise<never> {
+  process.exit(await deliverPlan(plan, process));
 }

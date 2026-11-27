@@ -38,6 +38,7 @@
 // timeout, its caller's `signal`, its own exit, or the lifeline (below) when
 // the process that launched it ends.
 
+import { peerClosedPipe } from "./pipe";
 import { existsSync, readFileSync } from "node:fs";
 import type { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
@@ -423,6 +424,8 @@ function guard(state: LaunchState, group: number): void {
 function unguard(state: LaunchState, group: number): void {
   state.liveGroups.delete(group);
   state.lifeline?.pipe.write(`- ${group}\n`);
+  if (state.scope.signal.aborted && state.liveGroups.size === 0)
+    endLifeline(state);
 }
 
 // A closed owner's lifeline goes with it: the EOF a dying launcher gives it, on
@@ -703,7 +706,15 @@ async function launchPiped(
     // A child whose spawn failed asynchronously (ENOENT) has no pid, and no
     // group to guard: its `error` event settles it.
     const group = child.pid;
+    let guarded = group;
     if (group !== undefined) guard(state, group);
+    // The group and the pipe can end independently. Once absence is observed,
+    // neither the lifeline nor a later deadline may signal this number again.
+    const releaseGroup = () => {
+      if (guarded === undefined) return;
+      unguard(state, guarded);
+      guarded = undefined;
+    };
     const exited = new Promise((end) => child.once("exit", end));
     // Node destroys a child's stdin when the child itself exits, dropping input
     // a descendant still reads (`(cat > f) <&0 &`). The launch owns the pipe
@@ -740,6 +751,7 @@ async function launchPiped(
     let timer: (() => void) | null = null;
     let killTimer: (() => void) | null = null;
     let groupEndTimer: (() => void) | null = null;
+    let concludeTurn: (() => void) | null = null;
     // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
     // termination — and which — is data we have to carry. The OS doesn't tell
     // us why a child was signalled — without it, SIGKILL from the OOM killer,
@@ -759,8 +771,9 @@ async function launchPiped(
       timer?.();
       killTimer?.();
       groupEndTimer?.();
+      concludeTurn?.();
       unlisten();
-      if (group !== undefined) unguard(state, group);
+      releaseGroup();
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
       // The launch's scope goes once its child has exited: what still reads
       // the child's pipes then is a drain, which holds nothing of the launch.
@@ -812,25 +825,41 @@ async function launchPiped(
     // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
     // what was written before it is read. It concludes on the child's exit.
     const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
-    const concludeNextTurn = () =>
-      clock.defer(tasks.conclude, concludeWithGroup);
-    // While a member of the group lives the launch waits for it, guarded, so
-    // SIGKILL still reaches it. The OS has no event for a group's end, so it is
-    // polled, with exponential backoff.
+    const concludeNextTurn = () => {
+      if (!settled)
+        concludeTurn ??= clock.defer(tasks.conclude, concludeWithGroup);
+    };
+    const groupEnded = () => {
+      releaseGroup();
+      killTimer?.();
+      // A closed owner releases its pipe readers. A live owner gets the
+      // next I/O turn for the group's final output, or close if it comes first.
+      if (state.scope.signal.aborted) concludeWithGroup();
+      else concludeNextTurn();
+    };
+    // The OS supplies a leader-exit event but no group-exit event. Inspect
+    // the group at leader exit, then only while a remaining member is alive.
     if (group !== undefined) {
       const awaitGroupEnd = (delayMs: number) => {
-        if (settled) return;
+        if (settled || guarded === undefined) return;
         if (spawner.groupGone(group)) {
-          concludeNextTurn();
+          groupEnded();
           return;
         }
         groupEndTimer = clock.after(tasks.groupEnd, delayMs, () =>
           awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
-      afterExit(tasks.groupEnd, () =>
-        clock.defer(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
-      );
+      afterExit(tasks.groupEnd, () => {
+        if (settled) return;
+        // On an ordinary exit give the pipes their initial I/O turn. During
+        // termination a pending signal makes the group check due at exit.
+        if (terminated !== null) awaitGroupEnd(GROUP_END_POLL_MIN_MS);
+        else
+          groupEndTimer = clock.defer(tasks.groupEnd, () =>
+            awaitGroupEnd(GROUP_END_POLL_MIN_MS),
+          );
+      });
     }
 
     // [LAW:types-are-the-program] Do NOT settle here. We signal and let
@@ -851,9 +880,9 @@ async function launchPiped(
       // may no longer be the launch's. It did not time out; an abort and an
       // overflow, which happened, still stand.
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== undefined && spawner.groupGone(group)) {
+      if (ended && (guarded === undefined || spawner.groupGone(guarded))) {
         terminated = cause === "timeout" ? null : cause;
-        concludeNextTurn();
+        groupEnded();
         return;
       }
       terminated = cause;
@@ -865,7 +894,8 @@ async function launchPiped(
         // Concluding here is not behind the group's end: a group holding an
         // unreaped zombie never reads as gone, and this is that launch's bound.
         killTimer = clock.after(tasks.killGrace, TIMEOUT_KILL_GRACE_MS, () => {
-          signal(pid, "SIGKILL");
+          // A group that has drained since SIGTERM no longer owns this pid.
+          if (!spawner.groupGone(pid)) signal(pid, "SIGKILL");
           afterExit(tasks.conclude, concludeNextTurn);
         });
         signal(pid, "SIGTERM");
@@ -908,18 +938,7 @@ async function launchPiped(
         });
         return;
       }
-      if (code === 0) {
-        settle({ ok: true, ...output(), exitCode: code });
-        return;
-      }
-      const reason: "signal" | "non-zero" = signal ? "signal" : "non-zero";
-      settle({
-        ok: false,
-        reason,
-        ...output(),
-        exitCode: code,
-        signal,
-      });
+      settle(childVerdict(code, signal, output()));
     };
 
     child.on("close", conclude);
@@ -936,6 +955,23 @@ async function launchPiped(
 
     pipes.opened(input, group ?? null);
   });
+}
+
+// [LAW:single-enforcer] Both captured launches report the same exit. A peer
+// leaving its input unread can change how the pipe ends, never how it exited.
+function childVerdict(
+  exitCode: number | null,
+  signal: NodeJS.Signals | null,
+  output: { stdout: string; stderr: string },
+): LaunchResult {
+  if (exitCode === 0) return { ok: true, ...output, exitCode };
+  return {
+    ok: false,
+    reason: signal ? "signal" : "non-zero",
+    ...output,
+    exitCode,
+    signal,
+  };
 }
 
 // Sync variant. For callers that genuinely cannot be async — the spawn
@@ -968,7 +1004,11 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
     // mid-close) are input the child left unread; its exit stays the verdict,
     // as in `launch`.
     const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
-    if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
+    if (
+      result.error &&
+      (!peerClosedPipe(result.error) ||
+        (result.status === null && result.signal === null))
+    ) {
       const reason: "timeout" | "spawn-error" =
         code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
@@ -985,21 +1025,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
       };
     }
 
-    if (result.status === 0) {
-      return { ok: true, stdout, stderr, exitCode: result.status };
-    }
-
-    // A real timeout returned above on ETIMEDOUT, so a signal here came from
-    // somewhere else (OOM killer, ctrl-C through the tty group, etc.).
-    const reason: "signal" | "non-zero" = result.signal ? "signal" : "non-zero";
-    return {
-      ok: false,
-      reason,
-      stdout,
-      stderr,
-      exitCode: result.status,
-      signal: result.signal ?? null,
-    };
+    return childVerdict(result.status, result.signal, { stdout, stderr });
   } catch (err) {
     stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
@@ -1362,7 +1388,10 @@ function launcherWithState(
       state.inFlight.forEach((end) => end());
       // Nothing reads a closed launcher's drains, so their fds go with it.
       state.drains.forEach((pipe) => pipe.destroy());
-      endLifeline(state);
+      // On an orderly close the launcher still owns termination. Keep the
+      // lifeline informed until its last group retires. Process death closes
+      // the pipe independently and still activates the emergency fallback.
+      if (state.liveGroups.size === 0) endLifeline(state);
     },
     { once: true },
   );

@@ -138,6 +138,14 @@ type Landed =
   | { readonly ok: false; readonly error: Error };
 const LANDED: Landed = { ok: true };
 
+// Runtime state carries conversation identifiers. Resolve the logical path
+// before publishing owner-only bytes so an existing symlink stays in place.
+async function publishSession(filePath: string, body: string): Promise<void> {
+  const file = resolvedTarget(filePath);
+  await fs.promises.mkdir(path.dirname(file), { recursive: true });
+  await publishByRenameAsync(file, body, 0o600);
+}
+
 // [LAW:single-enforcer] The debounce + atomic write of every per-session
 // file. Its owner calls save() on every change; this coalesces the bursty
 // 22-session × 1 Hz write load into at most one disk write per window.
@@ -166,6 +174,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
     // daemon.log: the daemon passes its log, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
+    private readonly publish = publishSession,
   ) {
     this.disk = sessionFileOnDisk(kind, filePath);
     this.file = filePath;
@@ -253,14 +262,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
       body = this.body(snapshot);
       // The thread is held until the first await.
       heldMs = elapsedMs(this.clock, started);
-      // [LAW:single-enforcer] Published where a write to the path lands, as
-      // every state file is (`resolvedTarget`), so a symlinked file stays a
-      // link, and a set-aside and the next write agree on the file.
-      const file = resolvedTarget(this.filePath);
-      await fs.promises.mkdir(path.dirname(file), { recursive: true });
-      // [LAW:single-enforcer] Daemon runtime files are owner-only, like
-      // pid/spawn.lock: a session file carries conversation identifiers.
-      await publishByRenameAsync(file, body, 0o600);
+      await this.publish(this.filePath, body);
     } catch (e) {
       // A snapshot whose write failed waits for the next save or shutdown's
       // flush, so a disk that keeps refusing is not retried on a timer.

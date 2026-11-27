@@ -31,6 +31,8 @@ export interface HeldClock extends Timekeeper {
   burn(ms: number): void;
   // How many timers are armed: a cancelled or fired one-shot is not.
   pending(): number;
+  // Cumulative work, including a timer armed and cleared between two readings.
+  activity(): { armed: number; fired: number };
   // Puts a file's modification time at this clock's reading, so a check that
   // ages the file against `now` reads one clock, not two.
   pinMtime(file: string): void;
@@ -53,6 +55,8 @@ export function heldClock(
     clockOver(source, rethrowing),
 ): HeldClock {
   let elapsed = 0;
+  let armed = 0;
+  let fired = 0;
   // A repeating timer keeps its record and re-arms a period from where it fired,
   // as an interval does after a blocked loop: one late run, not one per missed
   // period. A one-shot leaves the set.
@@ -69,6 +73,7 @@ export function heldClock(
     } else {
       due.at = elapsed + due.period;
     }
+    fired++;
     due.fire();
   };
   const fireThrough = (end: number): void => {
@@ -99,6 +104,7 @@ export function heldClock(
   };
   const arm = (ms: number, fire: () => void, period?: number) => {
     const timer = { at: elapsed + ms, fire, period };
+    armed++;
     timers.add(timer);
     return () => timers.delete(timer);
   };
@@ -120,6 +126,7 @@ export function heldClock(
       elapsed += span(ms);
     },
     pending: () => timers.size,
+    activity: () => ({ armed, fired }),
     pinMtime: (file) => {
       const at = new Date(start.getTime() + elapsed);
       fs.utimesSync(file, at, at);

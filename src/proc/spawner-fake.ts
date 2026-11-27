@@ -151,6 +151,10 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
           new Writable({
             write(chunk: Buffer, _enc, done) {
               stdinText.push(chunk);
+              if (behaviour?.stdin === "echo")
+                timers.push(
+                  clock.after(`fake echo ${bin}`, 0, () => out?.write(chunk)),
+                );
               // Decoded whole, so a character split across chunks is not.
               record.stdin = Buffer.concat(stdinText).toString();
               done();
@@ -185,6 +189,7 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
       // binary does, never as a program that quietly succeeded.
       spawned.push(record);
       clock.after(`fake spawn refusal ${bin}`, 0, () => {
+        inn?.destroy();
         events.emit("error", errno("ENOENT", "spawn", bin));
         out?.end();
         err?.end();
@@ -206,6 +211,10 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
     const finish = (code: number | null, signal: NodeJS.Signals | null) => {
       if (done) return;
       done = true;
+      // [LAW:effects-at-boundaries] These scripted programs have no other
+      // stdin reader. Retire the pipe before reporting their exit, so a late
+      // write gets Node's stream error without reaching the echo program.
+      inn?.destroy();
       timers.forEach((clear) => clear());
       child.exitCode = code;
       child.signalCode = signal;
@@ -255,9 +264,6 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
     );
     if (behaviour.stdin !== undefined && inn !== null) {
       inn.once("finish", () => {
-        if (behaviour.stdin === "echo") {
-          out?.write(Buffer.concat(stdinText));
-        }
         timers.push(ending(0));
       });
     }

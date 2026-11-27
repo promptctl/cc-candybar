@@ -41,20 +41,32 @@ export function publishByRename(
 // writer on the daemon's one thread whose disk may be slow: its write,
 // rename and cleanup hold no bar and no click. One contract, held by one
 // test suite over both.
+export interface RenameFiles {
+  writeFile(
+    file: string,
+    bytes: string | Uint8Array,
+    options: { flag: "wx"; mode?: number; signal?: AbortSignal },
+  ): Promise<void>;
+  chmod(file: string, mode: number): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
+  rm(file: string, options: { force: true }): Promise<void>;
+}
+
 export async function publishByRenameAsync(
   file: string,
   bytes: string | Uint8Array,
   mode?: number,
   signal?: AbortSignal,
+  files: RenameFiles = fs.promises,
 ): Promise<void> {
   const staged = stagedName(file);
   try {
-    await fs.promises.writeFile(staged, bytes, { flag: "wx", mode, signal });
-    if (mode !== undefined) await fs.promises.chmod(staged, mode);
+    await files.writeFile(staged, bytes, { flag: "wx", mode, signal });
+    if (mode !== undefined) await files.chmod(staged, mode);
     signal?.throwIfAborted();
-    await fs.promises.rename(staged, file);
+    await files.rename(staged, file);
   } catch (e) {
-    const removal = await fs.promises
+    const removal = await files
       .rm(staged, { force: true })
       .then(() => null, asError);
     throw noted(e, staged, removal);

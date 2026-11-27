@@ -26,7 +26,7 @@ export const NOT_JEST_PACKAGES = [
 ];
 
 // What a test's environment installs: Jest's globals, and the suite's own
-// fixture hook (test/helpers/quarantine-environment.cjs).
+// fixture hook (test/helpers/fixture-environment.cjs).
 export const JEST_RUNTIME_GLOBALS = [
   "afterAll",
   "afterEach",

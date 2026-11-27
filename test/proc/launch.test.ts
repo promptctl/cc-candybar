@@ -1086,31 +1086,47 @@ describe("a launcher's scope", () => {
 describe("launch input a child does not read", () => {
   const unread = "x".repeat(10 * 1024 * 1024);
 
-  it("leaves a child's success standing", async () => {
-    const r = await launch({
-      category: "user-shell",
-      bin: "sh",
-      args: ["-c", "exit 0"],
-      stdinInput: unread,
-    });
-    expect(r.ok).toBe(true);
-  });
-
-  it("leaves a child's failure its own explanation", async () => {
-    const r = await launch({
-      category: "user-shell",
-      bin: "sh",
-      args: ["-c", "echo refused >&2; exit 1"],
-      stdinInput: unread,
-    });
-    expect(r).toMatchObject({
-      ok: false,
-      reason: "non-zero",
-      exitCode: 1,
-      stderr: "refused\n",
-    });
-    expect(r).not.toHaveProperty("error");
-  });
+  // [LAW:behavior-not-structure] Real pipe buffers exercise Node's native
+  // stdin boundary. Comparing the whole answer retains errno, code, signal
+  // and both streams in the failure report regardless of platform.
+  it.each([
+    ["exits successfully", "exit 0", { ok: true, exitCode: 0 }],
+    [
+      "refuses",
+      "printf refused >&2; exit 1",
+      {
+        ok: false,
+        reason: "non-zero",
+        exitCode: 1,
+        signal: null,
+        stderr: "refused",
+      },
+    ],
+    ["reads a prefix", "head -c 1 >/dev/null", { ok: true, exitCode: 0 }],
+    [
+      "ends by TERM",
+      "kill -TERM $$",
+      { ok: false, reason: "signal", exitCode: null, signal: "SIGTERM" },
+    ],
+    [
+      "ends by KILL",
+      "kill -KILL $$",
+      { ok: false, reason: "signal", exitCode: null, signal: "SIGKILL" },
+    ],
+  ] as const)(
+    "preserves the sync and async verdict when the child %s",
+    async (_, script, exit) => {
+      const opts = {
+        category: "user-shell" as const,
+        bin: "sh",
+        args: ["-c", script],
+        stdinInput: unread,
+      };
+      const expected = { stdout: "", stderr: "", ...exit };
+      expect(launchSync(opts)).toEqual(expected);
+      expect(await launch(opts)).toEqual(expected);
+    },
+  );
 
   it("reports a timeout as a timeout", async () => {
     const r = await launch({
@@ -1139,36 +1155,6 @@ describe("launch input a child does not read", () => {
       ok: false,
       reason: "timeout",
       error: "timed out after 0.1 s",
-    });
-  });
-
-  it("gives the blocking launch the same verdicts", () => {
-    const run = (script: string) =>
-      launchSync({
-        category: "user-shell",
-        bin: "sh",
-        args: ["-c", script],
-        stdinInput: unread,
-      });
-    expect(run("exit 0").ok).toBe(true);
-    expect(run("exit 1")).toMatchObject({
-      ok: false,
-      reason: "non-zero",
-      exitCode: 1,
-    });
-    expect(run("head -c 1 >/dev/null").ok).toBe(true);
-    expect(
-      launchSync({
-        category: "user-shell",
-        bin: "sh",
-        args: ["-c", "kill -TERM $$"],
-        timeoutMs: 5000,
-      }),
-    ).toMatchObject({ ok: false, reason: "signal", signal: "SIGTERM" });
-    expect(run("kill -KILL $$")).toMatchObject({
-      ok: false,
-      reason: "signal",
-      signal: "SIGKILL",
     });
   });
 });

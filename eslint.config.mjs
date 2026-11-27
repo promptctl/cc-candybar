@@ -716,7 +716,7 @@ export default [
   },
   // [LAW:one-way-deps] Jest's globals are the test zone's: an editor linting a
   // test with this config knows them, and the suite's own fixture hook
-  // (test/helpers/quarantine-environment.cjs). Everywhere else each is
+  // (test/helpers/fixture-environment.cjs). Everywhere else each is
   // undefined.
   {
     files: TEST_ROOTS.map((root) => `${root}${CODE_GLOB}`),

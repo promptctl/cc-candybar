@@ -52,8 +52,8 @@ export default {
   globalTeardown: "<rootDir>/test/global-teardown.ts",
   preset: "ts-jest/presets/default-esm",
   extensionsToTreatAsEsm: [".ts"],
-  // Jest's node environment, plus the one place a quarantined case leaves the gate.
-  testEnvironment: "<rootDir>/test/helpers/quarantine-environment.cjs",
+  // The file's fixtures are released after its tests and hooks finish.
+  testEnvironment: "<rootDir>/test/helpers/fixture-environment.cjs",
   roots: ["<rootDir>/test"],
   testMatch: [],
   moduleNameMapper: {

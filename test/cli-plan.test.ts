@@ -5,6 +5,7 @@
 // (brandon-unfiled-3248.6di0). Linux pipes are synchronous, so there the
 // test cannot fail; it is the contract, pinned where it can break.
 
+import { once } from "node:events";
 import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 
@@ -48,23 +49,35 @@ test("the delivery is recorded on the debug channel", () => {
 // `| head`: the reader hangs up before the body is through. That ends the
 // delivery as SIGPIPE ends any other writer — the plan's code, no stack trace.
 test("a reader that hangs up ends the delivery with the plan's code", async () => {
-  const child = spawn(TSX, [CHILD, String(BODY_BYTES), "0"], {
-    env: process.env,
-  });
+  const child = spawn(process.execPath, [
+    "--import",
+    "tsx",
+    CHILD,
+    String(BODY_BYTES),
+    "0",
+    "--wait-for-reader",
+  ]);
+  const closed = once(child, "close");
   let stderr = "";
   child.stderr.setEncoding("utf8").on("data", (t: string) => (stderr += t));
-  await new Promise<void>((resolve) =>
-    child.stdout.once("data", () => {
-      child.stdout.destroy();
-      resolve();
-    }),
-  );
-  // Code and signal together: a signal death reads as what it is, not as a
-  // code that happens to be null.
-  const end = await new Promise<{ code: number | null; signal: string | null }>(
-    (resolve) =>
-      child.once("exit", (code, signal) => resolve({ code, signal })),
-  );
-  expect(end).toEqual({ code: 0, signal: null });
-  expect(stderr).not.toContain("EPIPE");
+  try {
+    // [LAW:no-ambient-temporal-coupling] Close the real reader before
+    // releasing the writer. No OS buffer size or producer speed decides it.
+    const [ready] = await Promise.race([
+      once(child.stdout, "data"),
+      closed.then(([code, signal]) => {
+        throw new Error(
+          `writer ended before readiness (code=${code}, signal=${signal}): ${stderr}`,
+        );
+      }),
+    ]);
+    expect(String(ready)).toBe("ready\n");
+    child.stdout.destroy();
+    child.stdin.end("go");
+    expect(await closed).toEqual([0, null]);
+    expect(stderr).toContain("advisory\n");
+    expect(stderr).not.toMatch(/EPIPE|ECONNRESET|\n\s+at /);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+  }
 });

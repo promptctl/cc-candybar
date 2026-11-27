@@ -46,7 +46,6 @@ import {
   render,
   renderBody,
   renderRequest,
-  renderUntil,
   refusedClick,
   runRealClient,
   urlsOfAnsi,
@@ -523,21 +522,12 @@ describe("the daemon's renderer process", () => {
       10_000,
     );
     expect(rendererStarts(handle)[1]).not.toBe(pid);
+    // The first draw after the replacement starts carries the warning.
+    const warned = await render(handle.sockPath, "rproc", projectDir);
+    expect(textOf(warned)).toMatch(/⚠ \d/);
     const restored = textOf(await drawProfile());
     expect(restored).toContain("details");
     expect(restored).not.toContain("profile-body");
-
-    // The restarted renderer configures the session again from the request
-    // the daemon holds, and the bar warns of the end.
-    const warned = await renderUntil(
-      handle.sockPath,
-      "rproc",
-      projectDir,
-      (frame) => /⚠/.test(textOf(frame)),
-      "a bar warning that its renderer restarted",
-      10_000,
-    );
-    expect(textOf(warned)).toMatch(/⚠ \d/);
     const log = fs.readFileSync(
       path.join(handle.stateDir, "daemon.log"),
       "utf8",

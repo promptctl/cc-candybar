@@ -8,12 +8,7 @@ import {
   listRegistryFiles,
   readRegistryEntry,
 } from "../../../src/daemon/fork-bomb-breaker";
-import {
-  sameLiveProcess,
-  type ProcessIdentity,
-} from "../../../src/daemon/process-fingerprint";
-import { processProbe } from "../../helpers/host";
-import { until } from "../../../scripts/lib/until";
+import type { ProcessIdentity } from "../../../src/daemon/process-fingerprint";
 
 // [LAW:verifiable-goals] Integration proof for the daemon-side fork-bomb
 // circuit breaker (brandon-daemon-lifecycle-gad.2): with a real, tiny ceiling
@@ -110,20 +105,17 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
     // admitDaemon()'s sweep exists to reclaim. It is waited out as the
     // breaker reads it: a killed daemon stays a zombie, still live, until it
     // is reaped, and a reused pid with another start time is not it.
-    await d2.stop();
-    await until(
-      async () =>
-        !(await sameLiveProcess(d2Entry.pid, d2Entry.startTime, processProbe)),
-      `d2 (pid ${d2Entry.pid}) gone`,
-    );
+    expect(await d2.stop("SIGKILL")).toEqual({ code: null, signal: "SIGKILL" });
+    expect(registered()).toContainEqual(d2Entry);
 
     // d3's own environment boots once a slot is free, so its refusal was the
     // ceiling's; and its admission swept d2's stale entry: the registry
     // names d1 and this one alone.
-    await boot(d3Env);
+    const d4 = await boot(d3Env);
     const now = registered();
     expect(now).toHaveLength(2);
     expect(now).toContainEqual(d1Entry);
+    expect(now.map(({ pid }) => pid)).toContain(d4.child.pid);
     expect(now).not.toContainEqual(d2Entry);
   });
 });

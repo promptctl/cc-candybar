@@ -176,6 +176,8 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
   // rename, again until the bar shows it (the folder's watch goes live after
   // it opens).
   const programWrites = async (doc: object, shows: string): Promise<void> => {
+    // The host creates the plugin's storage directory when it first loads this project.
+    await renderRaw();
     let bar = "";
     await untilHeard(
       () => {
@@ -231,13 +233,16 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
   });
 
   test.each([
-    ["raise", ["set", "session", "+100_000"], "limit=500000"],
-    ["lower", ["set", "session", "-100_000"], `limit=${PROJECT_LIMIT}`],
-    ["off", ["set", "session", "off"], "limit=off"],
-    ["clear", ["clear", "session"], `limit=${PROJECT_LIMIT}`],
-  ])(
+    ["raise", ["set", "session", "+100_000"], null, "limit=500000"],
+    ["lower", ["set", "session", "-100_000"], 500_000, `limit=${PROJECT_LIMIT}`],
+    ["off", ["set", "session", "off"], PROJECT_LIMIT, "limit=off"],
+    ["clear", ["clear", "session"], "off", `limit=${PROJECT_LIMIT}`],
+  ] as const)(
     "%s runs the program the session's status names, with the session's facts, and the bar shows what it wrote",
-    async (action, args, shows) => {
+    async (action, args, layer, shows) => {
+      fs.writeFileSync(path.join(gaugeHome, `layer-${SESSION}.json`), JSON.stringify(layer));
+      const limit = layer ?? PROJECT_LIMIT;
+      await programWrites({ home: gaugeHome, command: program, limit, session: layer }, `limit=${limit}`);
       const before = calls().length;
       const { url, drawn } = moveLink(await renderRaw(), `plugins.gauge.${action}`);
       expect(drawn).toEqual({

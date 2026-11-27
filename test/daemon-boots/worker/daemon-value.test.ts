@@ -9,10 +9,10 @@ import {
 } from "../../../src/daemon/task-throws";
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import { linkSignerOver } from "../../../src/click/link-signer";
+import { createHook } from "node:async_hooks";
 import { hostOf } from "../../../scripts/lib/host";
 import type { Host } from "../../../src/host";
 import type { ClaudeInputEdge } from "../../../src/claude-input/typing";
-import { createHook } from "node:async_hooks";
 import {
   existsSync,
   mkdirSync,
@@ -30,8 +30,7 @@ import {
   VERB_SLASH,
 } from "../../../src/click/wire";
 import type { RenderOrigin } from "../../../src/config-hint";
-import { LANES } from "../../../src/config/lanes";
-import type { ServedDaemon } from "../../../src/daemon/daemon";
+import type { DaemonInputs, ServedDaemon } from "../../../src/daemon/daemon";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import {
   processPort,
@@ -47,6 +46,8 @@ import type { LaunchResult } from "../../../src/proc/launcher";
 import { type Timekeeper } from "../../../src/time";
 import { daemonClock } from "../../../src/host";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
+import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
+import { fakeSpawner, hangs, readsStdin, shell } from "../../../src/proc/spawner-fake";
 import { processProbe } from "../../helpers/host";
 import {
   daemonPaths,
@@ -73,15 +74,13 @@ import {
   statsOf,
 } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
-import { until } from "../../../scripts/lib/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
 import { heldClock } from "../../helpers/held-clock";
 import type { FetchPricing } from "../../../src/daemon/cache/pricing";
-import { failed } from "../../../src/utils/outcome";
+import { ok } from "../../../src/utils/outcome";
 
 const VALUE_REFUSED = sessionIdOf("value-refused");
-const VALUE_CLOSE = sessionIdOf("value-close");
 const WORKTREE = rendererNameOf("worktree");
 
 // The daemon and its process supervisor are real. The channel keeps one
@@ -138,39 +137,6 @@ function waitingRenderer(waitingFor: RendererName) {
 
 jest.setTimeout(30_000);
 
-// What can outlive a close. Enabled before the file's first launch, so it sees
-// the lifeline. `getActiveResourcesInfo` can't show this: it omits what is
-// unref'd, which is nearly every timer the daemon holds.
-const WATCHED = new Set([
-  "Timeout",
-  "FSEVENTWRAP",
-  "FSEVENT",
-  "PROCESSWRAP",
-  "PIPEWRAP",
-]);
-const live = new Map<number, Error>();
-// From a close's return on: `init` and `before` run as the timer is armed and
-// as it fires, where `destroy` lands some turns later. Null until then.
-let baseline = new Set<number>();
-let afterClose: { armed: Error[]; fired: Error[] } | null = null;
-const resources = createHook({
-  init: (id, type) => {
-    if (!WATCHED.has(type)) return;
-    const origin = new Error(type);
-    live.set(id, origin);
-    if (type === "Timeout") afterClose?.armed.push(origin);
-  },
-  before: (id) => {
-    const origin = live.get(id);
-    if (origin?.message === "Timeout" && !baseline.has(id)) {
-      afterClose?.fired.push(origin);
-    }
-  },
-  destroy: (id) => {
-    live.delete(id);
-  },
-});
-
 describe("the daemon is a value", () => {
   let root: string;
   let projectDir: string;
@@ -206,6 +172,7 @@ describe("the daemon is a value", () => {
       renderer?: RendererPort;
       claudeInput?: () => ClaudeInputEdge;
       fetchPricing?: FetchPricing;
+      launcher?: DaemonInputs["launcher"];
     } = {},
   ): ServedDaemon => {
     const { profile } = inputs;
@@ -221,6 +188,7 @@ describe("the daemon is a value", () => {
       ...(inputs.renderer && { renderer: inputs.renderer }),
       ...(inputs.claudeInput && { claudeInput: inputs.claudeInput }),
       ...(inputs.fetchPricing && { fetchPricing: inputs.fetchPricing }),
+      ...(inputs.launcher && { launcher: inputs.launcher }),
     });
     open = daemon;
     openLogs.push(daemonLog);
@@ -317,7 +285,6 @@ describe("the daemon is a value", () => {
   });
 
   beforeAll(() => {
-    resources.enable();
     root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-value-"));
     // A source checkout: what the band's setup needs of the bundle it runs.
     const checkout = path.join(root, "checkout");
@@ -347,7 +314,6 @@ describe("the daemon is a value", () => {
   });
 
   afterAll(() => {
-    resources.disable();
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -673,11 +639,21 @@ describe("the daemon is a value", () => {
     const unreadable = (): never => {
       throw new Error("the profile cannot be opened");
     };
-    const settled = [...live.keys()];
-    expect(() => construct({ profile: unreadable })).toThrow(
-      "the profile cannot be opened",
-    );
-    expect([...live.keys()].filter((id) => !settled.includes(id))).toEqual([]);
+    const live = new Set<number>();
+    const resources = createHook({
+      init(id, type) {
+        if (["Timeout", "FSEVENTWRAP", "FSEVENT", "PROCESSWRAP", "PIPEWRAP"].includes(type)) live.add(id);
+      },
+      destroy(id) { live.delete(id); },
+    }).enable();
+    try {
+      expect(() => construct({ profile: unreadable })).toThrow(
+        "the profile cannot be opened",
+      );
+      expect([...live]).toEqual([]);
+    } finally {
+      resources.disable();
+    }
 
     const daemon = construct();
     await frameOf(daemon, renderRequest("value-rebuilt"));
@@ -744,122 +720,105 @@ describe("the daemon is a value", () => {
     expect(textOf(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
   });
 
-  test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", async () => {
-    const pidFile = path.join(root, "child.pid");
-    rmSync(pidFile, { force: true });
-    const ran = path.join(root, "shell-ran");
-    rmSync(ran, { force: true });
+  test("close reaps the launcher's live child and refuses a late launch", async () => {
+    const daemon = construct();
+    let ready!: () => void;
+    const listening = new Promise<void>((resolve) => { ready = resolve; });
+    const child = daemon.launcher.launchChannel({
+      bin: "/bin/sh", args: ["-c", "echo ready; exec cat"],
+      category: "user-shell",
+      heard: { stdout: ready, stderr: () => {} },
+    });
+    await Promise.race([listening, child.ended.then((r) => {
+      throw new Error("child exited before readiness: " + JSON.stringify(r));
+    })]);
+    expect(child.pid).not.toBeNull();
+    expect(processProbe.alive(child.pid!)).toBe(true);
+    await close(daemon);
+    expect(await child.ended).toMatchObject({ ok: false, reason: "aborted" });
+    expect(processProbe.alive(child.pid!)).toBe(false);
+    expect(await daemon.launcher.launch({ bin: "/bin/echo", category: "user-shell" }))
+      .toMatchObject({ ok: false, reason: "aborted" });
+  });
+
+  test("closing an armed daemon aborts a subscribed shell source and its waiting render; reaping the child starts no work", async () => {
+    const session = sessionIdOf("value-close");
+    const command = "hold-source";
     writeConfig(`{
-      variables: {
-        slow: { kind: 'shell', command: 'touch ${ran}; exec sleep 30', parse: { json: true }, cache: { never: true } },
-      },
+      globals: { experimentalStatusline: true },
+      variables: { slow: { kind: 'shell', command: '${command}', parse: { json: true }, cache: { never: true } } },
       segments: { mark: { template: 'mark {{ .slow }}' } },
       root: { h: ['mark'] },
     }`);
-
-    const settled = [...live.keys()];
-    baseline = new Set(settled);
-    const daemon = construct();
-    daemon.arm();
-
-    // A recorded session and a source waiting in the background.
-    await frameOf(daemon, renderRequest("value-close"));
-    const { setting, on } = LANES.statusline.switch;
-    await clickLink(
-      daemon,
-      drawnHere(
-        effectsUrl([
-          {
-            verb: VERB_SET_STATE,
-            args: ["value-close", setting, String(on)],
-          },
-        ]),
-      ),
+    const start = new Date();
+    const clock = heldClock(start, reportingClock);
+    // The OS delivers child exit independently of the daemon's timer queue.
+    const processes = heldClock(start);
+    const spawner = fakeSpawner(processes);
+    spawner.program(
+      (bin, args) => bin === "awk" && args[0] === LIFELINE_PROGRAM,
+      readsStdin("until-end"),
     );
-    // A feed on the lane the click turned on: a refused subscription is no
-    // feed, and would leave nothing here for the close to end.
+    const source = shell(command);
+    spawner.program(source, hangs());
+    const waiting = Promise.withResolvers<void>();
+    const daemon = construct({
+      clock: {
+        ...clock,
+        after: (name, ms, fire, options) => {
+          const stop = clock.after(name, ms, fire, options);
+          if (name === `render wait ${session}`) waiting.resolve();
+          return stop;
+        },
+      },
+      launcher: (owner) => createLauncher(owner, clock, spawner),
+    });
+    daemon.arm();
+    const frame = jest.fn();
     const refused = jest.fn();
-    daemon.subscribe(VALUE_CLOSE, {
+    daemon.subscribe(session, {
       lane: "statusline",
       owner: null,
-      frame: () => {},
+      frame,
       refused,
       drawing: () => true,
     });
-    expect(refused).not.toHaveBeenCalled();
-    // The launcher has an independent, long-lived child to reap.
-    const child = daemon.launcher.launch({
-      bin: "/bin/sh",
-      args: ["-c", 'echo $$ > "$1"; exec sleep 30', "sh", pidFile],
-      category: "user-shell",
-    });
-    // The shell opens the file before echo writes the PID. An empty file
-    // would produce pid 0, which probes the worker's own process group.
-    let childPid = 0;
-    await until(() => {
-      if (!existsSync(pidFile)) return false;
-      const line = readFileSync(pidFile, "utf8");
-      if (!/^[1-9]\d*\n$/.test(line)) return false;
-      childPid = Number(line);
-      return Number.isSafeInteger(childPid);
-    }, "the child to record its pid");
-    expect(processProbe.alive(childPid)).toBe(true);
-
-    // A render waiting on the slow source as the daemon closes.
-    await until(() => existsSync(ran), "the slow source running");
-    const midWait = daemon.handle(
-      classifyInbound(
-        renderRequest("value-close", systemTimekeeper.now() + 20_000),
-      ),
+    const render = daemon.handle(
+      classifyInbound(renderRequest(session, clock.now() + 20_000)),
       () => false,
       daemon.stats.accept(),
       () => false,
     );
-
-    const sessionFile = sessionStatePath(hostNow());
-    const { settled: closing } = await daemon.close();
+    await waiting.promise;
+    const child = spawner.spawned.find(({ bin, args }) => source(bin, args));
+    expect(child).toMatchObject({ ended: null, signals: [] });
+    expect(refused).not.toHaveBeenCalled();
+    const { settled } = await daemon.close();
+    const atClose = clock.activity();
+    const framesAtClose = frame.mock.calls.length;
+    // SIGTERM has reached the OS. It will deliver the child's exit on its next turn.
+    expect(child).toMatchObject({ ended: null, signals: ["SIGTERM"] });
+    await processes.settle(0);
+    expect(await settled).toEqual({ unreaped: [] });
     open = null;
-    afterClose = { armed: [], fired: [] };
-    const closedWith = readFileSync(sessionFile, "utf8");
-    // The click's write, still inside its debounce, is on disk once the close
-    // has resolved.
-    expect(JSON.parse(closedWith)["value-close"]).toMatchObject({
-      [setting]: String(on),
+    expect(child?.ended).toEqual({ code: null, signal: "SIGTERM" });
+    expect(await render).toMatchObject({
+      kind: "reply",
+      resp: { ok: false, error: expect.stringContaining("the daemon closed") },
     });
-
-    expect(await closing).toEqual({ unreaped: [] });
-    expect(await child).toMatchObject({ ok: false, reason: "aborted" });
-    expect(processProbe.alive(childPid)).toBe(false);
-    await midWait;
-
-    // Turns, not timers: a wait of this test's own would be in the record.
-    const leftover = () =>
-      [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
-    const quietBy = Date.now() + 5_000;
-    while (leftover().length > 0 && Date.now() < quietBy) {
-      await new Promise((turn) => setImmediate(turn));
-    }
-    const { armed, fired } = afterClose;
-    afterClose = null;
-    const origins = (held: Error[]) => held.map(({ stack }) => stack);
-    expect(origins(leftover())).toEqual([]);
-    expect(origins(armed)).toEqual([]);
-    // A launch's SIGKILL escalation is the one timer a close means to leave
-    // armed: on a slow turn it fires before the child's end clears it.
-    expect(
-      origins(fired.filter(({ stack }) => !stack?.includes("at terminate ("))),
-    ).toEqual([]);
-    expect(readFileSync(sessionFile, "utf8")).toBe(closedWith);
-    // Late work that would start a child finds its launcher closed.
-    expect(
-      await daemon.launcher.launch({
-        bin: "/bin/echo",
-        category: "user-shell",
-      }),
-    ).toMatchObject({ ok: false, reason: "aborted" });
+    // Drain continuations of the source's late result. Even a timer that
+    // armed and cleared in this turn would have advanced the activity record.
+    await clock.settle(0);
+    expect(clock.pending()).toBe(0);
+    expect(clock.activity()).toEqual(atClose);
+    expect(frame).toHaveBeenCalledTimes(framesAtClose);
+    await Promise.all(openLogs.map((log) => log.drained()));
+    const logged = readFileSync(daemonPaths(hostNow()).log, "utf8");
+    expect(logged).toContain('feed sid="value-close" subscribed');
+    expect(logged).toContain('feed sid="value-close" unwatched');
   });
 
-  test("close ends a pricing load in flight: its fetch is aborted, nothing is written, and nothing of it is left armed", async () => {
+  test("closing cancels an in-flight pricing fetch and discards its late response", async () => {
     writeConfig(`{
       segments: { mark: { template: 'priced {{ .session.cost }}' } },
       root: { h: ['mark'] },
@@ -877,58 +836,38 @@ describe("the daemon is a value", () => {
         },
       }) + "\n",
     );
-    let asked!: AbortSignal;
-    let fetching!: () => void;
-    const fetchAsked = new Promise<void>((resolve) => (fetching = resolve));
-    // [LAW:verifiable-goals] The response held: a machine timer stands in for
-    // the socket a real fetch holds open, and only the abort clears it, so a
-    // close that left the fetch running leaves it in the record.
-    const fetchPricing: FetchPricing = (signal) =>
-      new Promise((resolve) => {
-        asked = signal;
-        const socket = setTimeout(
-          () => resolve(failed("never answered", "read")),
-          10 * 60_000,
-        );
-        signal.addEventListener("abort", () => {
-          clearTimeout(socket);
-          resolve(failed("aborted", "read"));
-        });
-        fetching();
-      });
-
-    const settled = [...live.keys()];
-    baseline = new Set(settled);
-    const daemon = construct({ fetchPricing });
+    const clock = heldClock(new Date(), reportingClock);
+    const fetchAsked = Promise.withResolvers<void>();
+    const aborted = Promise.withResolvers<void>();
+    const reply = Promise.withResolvers<void>();
+    const prices = readFileSync(
+      path.resolve(__dirname, "../../../pricing.json"),
+      "utf8",
+    );
+    const fetchPricing: FetchPricing = async (signal) => {
+      signal.addEventListener("abort", () => aborted.resolve(), { once: true });
+      fetchAsked.resolve();
+      await reply.promise;
+      return ok(prices);
+    };
+    const daemon = construct({ clock, fetchPricing });
     const render = daemon.handle(
-      classifyInbound(
-        renderRequest("value-pricing", systemTimekeeper.now() + 20_000),
-      ),
+      classifyInbound(renderRequest("value-pricing", clock.now() + 20_000)),
       () => false,
       daemon.stats.accept(),
       () => false,
     );
-    await fetchAsked;
-
-    const { settled: closing } = await daemon.close();
+    await fetchAsked.promise;
+    const closing = daemon.close();
+    await aborted.promise;
+    // The response crosses the cancellation, which must win even if the
+    // remote operation was already too far along to cancel its result.
+    reply.resolve();
+    const { settled } = await closing;
     open = null;
-    afterClose = { armed: [], fired: [] };
-    expect(asked.aborted).toBe(true);
-    expect(await closing).toEqual({ unreaped: [] });
+    expect(await settled).toEqual({ unreaped: [] });
     await render;
-
-    // Turns, not timers: a wait of this test's own would be in the record.
-    const leftover = () =>
-      [...live].filter(([id]) => !settled.includes(id)).map(([, held]) => held);
-    const quietBy = Date.now() + 5_000;
-    while (leftover().length > 0 && Date.now() < quietBy) {
-      await new Promise((turn) => setImmediate(turn));
-    }
-    const { armed } = afterClose;
-    afterClose = null;
-    const origins = (held: Error[]) => held.map(({ stack }) => stack);
-    expect(origins(leftover())).toEqual([]);
-    expect(origins(armed)).toEqual([]);
+    expect(clock.pending()).toBe(0);
     expect(existsSync(daemonPaths(hostNow()).pricingCache)).toBe(false);
   });
 });

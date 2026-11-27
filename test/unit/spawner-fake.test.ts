@@ -4,6 +4,7 @@ import {
   shell,
   exits,
   hangs,
+  readsStdin,
 } from "../../src/proc/spawner-fake";
 import { heldClock } from "../helpers/held-clock";
 import { spawnerContract, type Program } from "../contract/spawner.contract";
@@ -66,6 +67,26 @@ describe("the fake spawner", () => {
       signals: ["SIGTERM"],
       ended: { code: null, signal: "SIGTERM" },
     });
+  });
+
+  test("a write to an exited echo program arms no more work", async () => {
+    const clock = heldClock(new Date(0));
+    const spawner = fakeSpawner(clock);
+    spawner.program(program("echo-input"), readsStdin("echo"));
+    const child = spawner.spawn("echo-input", [], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    clock.advance(0);
+    spawner.signalGroup(child.pid!, "SIGKILL");
+    clock.advance(0);
+    await turns();
+    expect(child.signalCode).toBe("SIGKILL");
+    expect(clock.pending()).toBe(0);
+    const refused = Promise.withResolvers<Error | null | undefined>();
+    expect(child.stdin!.write("never echoed", refused.resolve)).toBe(false);
+    expect(await refused.promise).toMatchObject({ code: "ERR_STREAM_DESTROYED" });
+    expect(spawner.spawned[0]!.stdin).toBe("");
+    expect(clock.pending()).toBe(0);
   });
 
   test("a group whose members changed their uid refuses every signal", () => {
