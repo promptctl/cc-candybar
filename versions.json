@@ -2,46 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-983",
-      "ref": "refs/pull/983/merge",
-      "sha": "aeda1c1e6ecda97fc60bbd1ff8987ae5875435ad",
-      "timestamp": "2026-11-27T12:14:15.101Z",
-      "commits": [
-        {
-          "sha": "aeda1c1e6ecda97fc60bbd1ff8987ae5875435ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T12:13:19Z",
-          "message": "Merge b522c91172afdb8489f311b1a269741f0368d0c3 into baa0154ae296580d06ae87e7722574a1a4028def\n"
-        },
-        {
-          "sha": "b522c91172afdb8489f311b1a269741f0368d0c3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:13:06-07:00",
-          "message": "fix(renderer): distinguish restart behavior from confirmed loss\n"
-        },
-        {
-          "sha": "65ad7d872eb1e6aef028a6724d3c96da59f74b01",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:10:30-07:00",
-          "message": "fix(renderer): report the state actually lost on restart\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "baa0154ae296580d06ae87e7722574a1a4028def",
-      "timestamp": "2026-11-27T05:39:55.804Z",
+      "sha": "381022e93253b0c5cb6870ad8f26b4c1c80dde27",
+      "timestamp": "2026-11-27T12:16:50.592Z",
       "commits": [
         {
-          "sha": "baa0154ae296580d06ae87e7722574a1a4028def",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-27T05:38:30Z",
-          "message": "chore(release): set `package.json` to 1.244.2\n\n## [1.244.2](https://github.com/promptctl/cc-candybar/compare/v1.244.1...v1.244.2) (2026-11-27)\n\n### Bug Fixes\n\n* **lint:** check every owned source in its runtime environment ([#982](https://github.com/promptctl/cc-candybar/issues/982)) ([ea31b27](https://github.com/promptctl/cc-candybar/commit/ea31b273cb3166b992666554cfa1b34472166803))\n"
+          "sha": "381022e93253b0c5cb6870ad8f26b4c1c80dde27",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T05:15:43-07:00",
+          "message": "fix(renderer): report the state actually lost on restart (#983)\n\n* fix(renderer): report the state actually lost on restart\n\n* fix(renderer): distinguish restart behavior from confirmed loss"
         }
       ]
     }
