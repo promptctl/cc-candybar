@@ -4,15 +4,29 @@
     {
       "version": "pr-982",
       "ref": "refs/pull/982/merge",
-      "sha": "f1138b37bba4769689602445953f44f644083b7a",
-      "timestamp": "2026-11-27T05:19:39.462Z",
+      "sha": "26391f36ad4ce72c6f36cbf7d5a57168256e1736",
+      "timestamp": "2026-11-27T05:30:41.491Z",
       "commits": [
         {
-          "sha": "f1138b37bba4769689602445953f44f644083b7a",
+          "sha": "26391f36ad4ce72c6f36cbf7d5a57168256e1736",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:18:49Z",
-          "message": "Merge 63c5c8c9c2ffe5d451cad3f84e3f3ead29a42ebf into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+          "timestamp": "2026-11-27T05:29:37Z",
+          "message": "Merge 699e5c6fec94fb0fba56df44c14acdca99256823 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+        },
+        {
+          "sha": "699e5c6fec94fb0fba56df44c14acdca99256823",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:29:18-07:00",
+          "message": "Require source coverage for opaque Node entries and whole-file lint exemptions\n"
+        },
+        {
+          "sha": "a0102201db0ca9dfe94e0c6dba5b2dd672628a00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:22:22-07:00",
+          "message": "Require type coverage for compiler-disabled source files\n"
         },
         {
           "sha": "63c5c8c9c2ffe5d451cad3f84e3f3ead29a42ebf",
