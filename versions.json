@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ea31b273cb3166b992666554cfa1b34472166803",
-      "timestamp": "2026-11-27T05:35:23.634Z",
+      "sha": "baa0154ae296580d06ae87e7722574a1a4028def",
+      "timestamp": "2026-11-27T05:39:55.804Z",
       "commits": [
         {
-          "sha": "ea31b273cb3166b992666554cfa1b34472166803",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:34:08-07:00",
-          "message": "fix(lint): check every owned source in its runtime environment (#982)\n\n* test(coverage): verify the WebKit bridge and both Node entry layouts\n\n* Check first-party source semantics in the owning type environment\n\n* Inventory repository sources and dispatch their zone lint rules\n\n* style(window): use the project array types for the panel contract\n\n* Exercise normal typecheck across Node, Jest and WebKit sources\n\n* Verify real source coverage and derive app rule selection from its rows\n\n* fix(types): preserve the full project environment for JavaScript\n\n* Require type coverage for compiler-disabled source files\n\n* Require source coverage for opaque Node entries and whole-file lint exemptions\n\n* fix(tooling): check the working directory through both source gates"
+          "sha": "baa0154ae296580d06ae87e7722574a1a4028def",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T05:38:30Z",
+          "message": "chore(release): set `package.json` to 1.244.2\n\n## [1.244.2](https://github.com/promptctl/cc-candybar/compare/v1.244.1...v1.244.2) (2026-11-27)\n\n### Bug Fixes\n\n* **lint:** check every owned source in its runtime environment ([#982](https://github.com/promptctl/cc-candybar/issues/982)) ([ea31b27](https://github.com/promptctl/cc-candybar/commit/ea31b273cb3166b992666554cfa1b34472166803))\n"
         }
       ]
     }
