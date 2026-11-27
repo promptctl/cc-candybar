@@ -17,10 +17,10 @@ test("normal typecheck judges JavaScript in each environment, strict TS and decl
     fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
     fs.writeFileSync(path.join(dir, file), source);
   };
-  const check = () => {
+  const check = (command = "typecheck") => {
     const result = spawnSync(
       process.execPath,
-      ["--import", "tsx", "scripts/typecheck-code.ts"],
+      ["--import", "tsx", `scripts/${command}-code.ts`],
       { cwd: dir, encoding: "utf8", timeout: 45_000 },
     );
     if (result.error) throw result.error;
@@ -34,6 +34,7 @@ test("normal typecheck judges JavaScript in each environment, strict TS and decl
       "test/tsconfig.json",
       "tsconfig.browser.json",
       "scripts/typecheck-code.ts",
+      "scripts/lint-code.ts",
       "scripts/import-zones.mjs",
       "scripts/lib/code-inventory.ts",
       "scripts/lib/type-coverage.ts",
@@ -61,7 +62,8 @@ test("normal typecheck judges JavaScript in each environment, strict TS and decl
     );
     write(
       "test/owned.cjs",
-      wrong + "expect(1); process.pid; releaseTestFixture(async () => {}); document.body;",
+      wrong +
+        "expect(1); process.pid; releaseTestFixture(async () => {}); document.body;",
     );
     write("src/owned.ts", "export function read(input){return input;}");
     write("src/owned.d.mts", "export type Missing = AbsentOwnedDeclaration;");
@@ -80,6 +82,43 @@ test("normal typecheck judges JavaScript in each environment, strict TS and decl
     expect(codes("test/owned.cjs")).toEqual(["TS2322", "TS2584"].sort());
     expect(codes("src/owned.ts")).toEqual(["TS7006"]);
     expect(codes("src/owned.d.mts")).toEqual(["TS2304"]);
+    write(
+      "scripts/untyped.mjs",
+      "#!/usr/bin/env node\n// @TS-NOCHECK\n" + wrong,
+    );
+    write(
+      "src/untyped.ts",
+      "// @ts-check\n// @ts-nocheck\nexport const n: number = 'wrong';",
+    );
+    write(
+      "src/still-checked.ts",
+      "// @ts-nocheck\n// @ts-check\nexport const n = 1;",
+    );
+    write(
+      "src/allowed.ts",
+      [
+        "// This comment mentions @ts-nocheck.",
+        "export const text = '// @ts-nocheck';",
+        "// @ts-expect-error: exercise a single suppressed line",
+        "export const n: number = 'wrong';",
+        "// @ts-nocheck",
+      ].join("\n"),
+    );
+    for (const command of ["lint", "typecheck"]) {
+      const suppressed = check(command)
+        .split("\n")
+        .filter((line) => line.includes("disables file-wide type checking"));
+      expect(suppressed).toEqual(
+        [
+          "scripts/untyped.mjs (owned by scripts/)",
+          "src/untyped.ts (owned by src/)",
+        ].map(
+          (path) =>
+            path +
+            " disables file-wide type checking with @ts-nocheck. Declare any source exemption in scripts/import-zones.mjs.",
+        ),
+      );
+    }
     // TypeScript's glob skips a hidden directory even under a declared root.
     write("scripts/.hidden/entry.ts", "export {};");
     expect(check()).toContain(
