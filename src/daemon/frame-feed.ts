@@ -61,7 +61,6 @@ export interface Subscriber {
   // The writer reports completion or replacement for each offered chunk.
   readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
-  readonly drawing: () => boolean;
 }
 
 export interface FeedDeps<Req> {
@@ -428,7 +427,6 @@ export class FrameFeeds<Req> {
       lanes[sub.lane] = {
         ...seen,
         subscribers: (seen?.subscribers ?? 0) + 1,
-        drawing: (seen?.drawing ?? false) || sub.drawing(),
       };
     }
     // Follower insertion order can change on a replacement within a lane.
@@ -674,7 +672,7 @@ export class FrameFeeds<Req> {
       follower.confirmed !== null &&
       covers(follower.confirmed, answer)
     ) {
-      done?.(sub.drawing());
+      done?.(true);
       return;
     }
     const write: PendingWrite = { answer, done };
@@ -685,12 +683,11 @@ export class FrameFeeds<Req> {
       // [LAW:effects-at-boundaries] A refusal can detach the subscription
       // while the socket flushes its previous frame. That confirmed write
       // still carried the daemon's event, even after the view receipt ended.
-      const displayed = delivered && sub.drawing();
-      if (displayed && answer.displayedEvents !== undefined)
+      if (delivered && answer.displayedEvents !== undefined)
         this.deps.acknowledgeDisplayed(answer.displayedEvents);
       if (!follower.writes.delete(write)) return;
       if (delivered) follower.confirmed = answer;
-      settleWrite(write, displayed);
+      settleWrite(write, delivered);
     };
     try {
       sub.frame(answer.json, finished);

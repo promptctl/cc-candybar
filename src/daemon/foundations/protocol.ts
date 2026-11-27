@@ -489,12 +489,13 @@ export interface RecordingRequest {
 // its first render streams nothing until that render arrives. A subscription
 // names the animation lane it serves (src/config/lanes.ts); the session's own
 // settings decide whether that lane may have its frames.
-// The distinct measurement request is refused by an older daemon rather
-// than accidentally taking over the statusline as a drawing subscriber.
-export type SubscribeRequest = { v: number; sessionId: string } & (
-  | { kind: "subscribe"; lane: Lane; owner?: OwnerFacts }
-  | { kind: "measure-window"; lane: "window"; owner?: never }
-);
+export type SubscribeRequest = {
+  v: number;
+  sessionId: string;
+  kind: "subscribe";
+  lane: Lane;
+  owner?: OwnerFacts;
+};
 
 // [LAW:one-source-of-truth] What a follower says of its pointer, whole: who it
 // is (an id it made), the gestures its surface delivers (`hover` among them),

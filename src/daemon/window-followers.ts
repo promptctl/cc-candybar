@@ -1,6 +1,5 @@
 import { observable, runInAction } from "mobx";
 import { SOURCE_PANE_CLOSED } from "../bar-window/exit.js";
-import type { WindowPlacement } from "../config/lanes.js";
 import { lineSplitter } from "../renderer-interface/wire.js";
 import { whyFailed, type Launcher, type Channel } from "../proc/launcher.js";
 import type { Timekeeper } from "../time.js";
@@ -11,13 +10,11 @@ import type { BarPaneHost } from "./lane-setup.js";
 
 export interface WindowDemand {
   readonly pane: TmuxHint | undefined;
-  readonly placement: WindowPlacement;
 }
 
 interface Following {
   readonly channel: Channel;
   readonly target: string;
-  placement: WindowPlacement;
   stop: () => void;
   stopping: boolean;
 }
@@ -79,11 +76,6 @@ export class WindowFollowers {
       const want = this.desired.get(sid);
       if (!want?.pane || paneKey(want.pane) !== follower.target) {
         follower.stop();
-      } else if (!follower.stopping && want.placement !== follower.placement) {
-        follower.placement = want.placement;
-        follower.channel.write(
-          JSON.stringify({ kind: "placement", value: want.placement }) + "\n",
-        );
       }
       if (follower.stopping) retiring.add(follower.target);
     }
@@ -104,11 +96,11 @@ export class WindowFollowers {
         !this.waiting.has(sid) &&
         !retiring.has(paneKey(want.pane))
       )
-        this.start(sid, want.pane, want.placement);
+        this.start(sid, want.pane);
     }
   }
 
-  private start(sid: SessionId, pane: TmuxHint, placement: WindowPlacement) {
+  private start(sid: SessionId, pane: TmuxHint) {
     let reason = "";
     const heard = (message: string) => {
       reason = message;
@@ -142,7 +134,6 @@ export class WindowFollowers {
         sid,
         pane.socket,
         pane.pane,
-        placement,
       ],
       envOverlay: { CC_CANDYBAR_SOCKET: this.host.socket },
       category: "bar-window.follower",
@@ -151,7 +142,6 @@ export class WindowFollowers {
     const follower: Following = {
       channel,
       target: paneKey(pane),
-      placement,
       stopping: false,
       stop: () => {
         if (follower.stopping) return;

@@ -51,15 +51,4 @@ if case .measured = snapshot.measure(frame: viewport.offsetBy(dx: 1, dy: 0), col
 if case .measured = snapshot.measure(frame: viewport, columns: 80, rows: 29) {
     expect(false, "An asynchronously resized tty cannot consume its old grid")
 }
-let left = CGRect(x: -1200, y: 0, width: 1200, height: 800)
-let right = CGRect(x: 0, y: 0, width: 1400, height: 900)
-let crossing = CGRect(x: -200, y: 100, width: 600, height: 500)
-expect(dockedFrame(window: crossing, height: 22, screens: [left, right]) ==
-       CGRect(x: -200, y: 600, width: 600, height: 22), "Dock below a terminal spanning adjoining displays")
-expect(dockedFrame(window: right, height: 22, screens: [right]) ==
-       CGRect(x: 0, y: 878, width: 1400, height: 22), "Keep a full-screen terminal's footer visible")
-expect(dockedFrame(window: crossing, height: 22, screens: [left.offsetBy(dx: -50, dy: 0), right]) ==
-       CGRect(x: -200, y: 578, width: 600, height: 22), "A display gap cannot cover the footer")
-expect(dockedFrame(window: crossing, height: 22, screens: [right.offsetBy(dx: 2000, dy: 0)]) == nil,
-       "Hide after the terminal's display is removed")
 print("Geometry expectations passed")

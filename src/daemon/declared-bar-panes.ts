@@ -1,7 +1,4 @@
-import {
-  DEFAULT_WINDOW_PLACEMENT,
-  type DeclaredLanes,
-} from "../config/lanes.js";
+import type { LaneSwitches } from "../config/lanes.js";
 import type { WindowDemand } from "./window-followers.js";
 import type { Timekeeper } from "../time.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
@@ -37,7 +34,7 @@ const RETRY_MS = 1000;
 // renderer's effective settings, independent of which input changed them.
 export class DeclaredSurfaces {
   private readonly held = new Map<string, HeldPane>();
-  private lanes: Readonly<Record<SessionId, DeclaredLanes>> = {};
+  private lanes: Readonly<Record<SessionId, LaneSwitches>> = {};
 
   constructor(
     private readonly paneOf: (session: SessionId) => ReportedPane | undefined,
@@ -49,7 +46,7 @@ export class DeclaredSurfaces {
     ) => void,
   ) {}
 
-  declare(lanes: Readonly<Record<SessionId, DeclaredLanes>>): void {
+  declare(lanes: Readonly<Record<SessionId, LaneSwitches>>): void {
     this.lanes = lanes;
     this.reconcileDemands();
   }
@@ -78,7 +75,7 @@ export class DeclaredSurfaces {
     // A pane can begin another session while the old view is still held.
     // Its newest request selects the effective setting for the pane.
     for (const [session, switches] of Object.entries(this.lanes) as Array<
-      [SessionId, DeclaredLanes]
+      [SessionId, LaneSwitches]
     >) {
       const reported = this.paneOf(session);
       if (reported === undefined) continue;
@@ -89,15 +86,12 @@ export class DeclaredSurfaces {
     }
     const windows = new Map<SessionId, WindowDemand>();
     for (const [sid, switches] of Object.entries(this.lanes) as Array<
-      [SessionId, DeclaredLanes]
+      [SessionId, LaneSwitches]
     >) {
       if (!switches.window) continue;
       const pane = this.paneOf(sid)?.pane;
       if (!pane || next.get(paneKey(pane))?.session === sid)
-        windows.set(sid, {
-          pane,
-          placement: switches.windowPlacement ?? DEFAULT_WINDOW_PLACEMENT,
-        });
+        windows.set(sid, { pane });
     }
     this.windows(windows);
     for (const [key, demand] of next) {

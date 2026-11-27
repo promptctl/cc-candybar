@@ -7,7 +7,6 @@ private final class BarPanel: NSPanel {
 }
 
 private enum Placement {
-    case docked
     case inset(column: Int, row: Int, width: Int, height: Int)
     case hidden
 }
@@ -45,18 +44,10 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
     }
     private var placement: Placement = .hidden
     private var loaded = false
-    private var rowCount = 1
     private var revision = 0
     private var hasPresentedFrame = false
     private var lastState = ""
     private var metrics = CGSize.zero
-    // Docked windows use their own font when the terminal supplies no grid.
-    // Inset placement always requires actual measured terminal cells.
-    private let dockFontSize: CGSize = {
-        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        return CGSize(width: ("0" as NSString).size(withAttributes: [.font: font]).width,
-                      height: NSLayoutManager().defaultLineHeight(for: font))
-    }()
 
     init(page: URL, lockPath: String) throws {
         self.page = page.standardizedFileURL
@@ -138,23 +129,13 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
         case .locating: hide("hidden", "Locating terminal tab")
         case let .hidden(reason): hide("hidden", reason)
         case let .unavailable(reason): hide("unavailable", reason)
-        case let .visible(id, window, grid):
+        case let .visible(id, _, grid):
+            // The panel covers the reserved tmux pane exactly, in the
+            // terminal's own measured cells; the page fits the frame in it.
             let cell: CGSize
-            if case let .measured(cells) = grid { cell = cells.firstCell.size }
-            else { cell = dockFontSize }
             let frame: CGRect
             switch placement {
             case .hidden: hide("hidden", "Claude's tmux pane is not on screen"); return
-            case .docked:
-                guard let primary = NSScreen.screens.first else { hide("unavailable", "No active display"); return }
-                let screens = NSScreen.screens.map {
-                    CGRect(x: $0.frame.minX, y: primary.frame.maxY - $0.frame.maxY, width: $0.frame.width, height: $0.frame.height)
-                }
-                guard let dock = dockedFrame(window: window, height: cell.height * CGFloat(rowCount), screens: screens) else {
-                    hide("hidden", "Terminal is outside the active displays")
-                    return
-                }
-                frame = dock
             case let .inset(x, y, width, height):
                 switch grid {
                 case let .remeasuring(reason): hide("hidden", reason); return
@@ -163,6 +144,7 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
                     guard let box = cells.frame(column: x, row: y, width: width, height: height) else {
                         hide("hidden", "Reserved pane is outside the terminal viewport"); return
                     }
+                    cell = cells.firstCell.size
                     frame = box
                 }
             }
@@ -235,7 +217,6 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
             selected = mode == "hidden" ? nil : try Viewer(command)
             switch mode {
             case "hidden": placement = .hidden
-            case "docked": placement = .docked
             case "inset":
                 guard let x = command["column"] as? Int, let y = command["row"] as? Int,
                       let width = command["width"] as? Int, let height = command["height"] as? Int else {
@@ -246,14 +227,9 @@ final class WindowPanel: NSObject, WKNavigationDelegate, WKScriptMessageHandler 
             }
             align()
         case "frame":
-            guard loaded, let rows = command["rows"] as? [[String: Any]], let sequence = command["revision"] as? Int,
+            guard loaded, command["rows"] is [[String: Any]], let sequence = command["revision"] as? Int,
                   sequence > revision else { throw LocationFailure("Invalid presentation frame") }
             revision = sequence
-            let nextHeight = max(rows.count, 1)
-            if rowCount != nextHeight {
-                rowCount = nextHeight
-                align()
-            }
             web.callAsyncJavaScript("window.present(frame)", arguments: ["frame": command], in: nil, in: .page) { [weak self] result in
                 if case let .failure(error) = result { self?.fail(error.localizedDescription) }
             }

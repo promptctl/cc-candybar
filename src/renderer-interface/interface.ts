@@ -36,7 +36,7 @@ import type {
   DebugWhat,
 } from "../daemon/foundations/debug-types";
 import type { Crosses } from "./crosses";
-import type { Lane, DeclaredLanes } from "../config/lanes";
+import type { Lane, LaneSwitches } from "../config/lanes";
 import type { Pointer } from "../click/gesture";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
@@ -291,9 +291,8 @@ export type Notification =
     };
 
 // [LAW:one-source-of-truth] Who watches one session's frames, as the host
-// derives it from its own sources: each lane's subscribers and whether any of
-// them draws the bar now, and
-// whether the session's pane is on a screen.
+// derives it from its own sources: each lane's subscribers, each of which
+// draws the bar, and whether the session's pane is on a screen.
 export interface SessionViewers {
   readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
   // [LAW:one-source-of-truth] Where the follower that owns the session's
@@ -308,7 +307,6 @@ export interface SessionViewers {
 
 export interface LaneViewers {
   readonly subscribers: number;
-  readonly drawing: boolean;
 }
 
 // Every session someone watches, whole: a session absent has no viewer.
@@ -318,10 +316,7 @@ export type Viewers = Readonly<Record<SessionId, SessionViewers>>;
 // the one derivation from its viewers, which the renderer hands the bar to
 // and the host's lane edge waits on.
 export function followingOf(viewers: SessionViewers | undefined): Set<Lane> {
-  const following = new Set<Lane>();
-  for (const [lane, seen] of Object.entries(viewers?.lanes ?? {}))
-    if (seen.drawing) following.add(lane as Lane);
-  return following;
+  return new Set(Object.keys(viewers?.lanes ?? {}) as Lane[]);
 }
 
 export type EffectOutcome =
@@ -490,7 +485,7 @@ export interface Subscriptions {
   // the host gates every subscriber by its lane, and reconciles the tmux bar
   // pane of each session from its `pane` switch, in the pane its newest
   // request reports. A session with no view has no switch to read.
-  readonly lanes: Readonly<Record<SessionId, DeclaredLanes>>;
+  readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
   // The origins whose config the renderer holds: each live session's, and
   // each a parked event waits on. The host discovers an origin as it is
   // first named, follows its files while it is named, and lets it go when it

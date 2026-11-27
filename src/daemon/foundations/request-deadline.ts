@@ -34,7 +34,6 @@ export const BACKSTOP_BOUNDS_READ: Readonly<Record<Request["kind"], boolean>> =
     render: true,
     [SESSION_RENDER_KIND]: true,
     subscribe: true,
-    "measure-window": true,
     "pane-session": true,
     pointer: true,
     shutdown: true,

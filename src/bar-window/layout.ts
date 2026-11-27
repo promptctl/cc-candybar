@@ -4,7 +4,6 @@ import { runTmuxAsync } from "../proc/tmux.js";
 import type { Message } from "./presentation.js";
 import { clientKey, type Client, type Availability } from "./availability.js";
 
-import type { WindowPlacement } from "../config/lanes.js";
 export interface TmuxTarget {
   socket: string;
   pane: string;
@@ -15,7 +14,6 @@ interface LayoutResult {
   layout: Message;
   issue?: string;
   closed?: boolean;
-  measureHeight?: boolean;
 }
 
 class InsetHeightError extends Error {}
@@ -162,7 +160,6 @@ export class WindowLayout {
   }
 
   async locate(
-    placement: WindowPlacement,
     height: number,
     preferred: Client | undefined,
     observations: ReadonlyMap<string, Availability>,
@@ -173,7 +170,6 @@ export class WindowLayout {
     ]);
     const source = panes.filter((row) => row[0] === this.target.pane);
     const owned = panes.filter((row) => this.mine(row));
-    if (placement === "docked") this.rejectedGeometry = undefined;
     const hidden = { kind: "layout", placement: "hidden" };
     if (!source[0]) {
       await this.remove(owned);
@@ -211,12 +207,11 @@ export class WindowLayout {
     const reservation = owned.find((row) => row[2] === original[2]);
     const zoomed = original[7] === "1";
     const sourceVisible = !zoomed || original[8] === "1";
-    let keep = placement === "inset" ? reservation : undefined;
+    let keep = reservation;
     await this.remove(owned.filter((row) => !keep || row[0] !== keep[0]));
     // [LAW:single-enforcer] The same client that supplies the viewport
     // supplies its pan offsets and status rows. Neither is portable to peers.
     let issue: string | undefined;
-    let measureHeight = false;
     for (const { row, client, observation } of attached) {
       if (
         !observation ||
@@ -229,12 +224,6 @@ export class WindowLayout {
         continue;
       }
       if (!sourceVisible) continue;
-      if (placement === "docked")
-        return {
-          clients,
-          selected: client,
-          layout: { kind: "layout", placement, ...client },
-        };
       if (observation.state === "remeasuring") continue;
       if (!("columns" in observation)) {
         issue ??= observation.reason;
@@ -257,31 +246,27 @@ export class WindowLayout {
         box.row + box.height <= observation.rows;
       const anchor = keep ?? original;
       const bottom = count(anchor[4]) + count(anchor[6]);
-      const prospective = bounds(anchor, bottom - height, height);
-      // Only a bar that could actually fit at a smaller height needs
-      // frames to detect that change. Hidden or horizontally clipped
-      // attachments never acquire a measurement subscription.
-      const shorterFits =
-        height > 1 &&
-        (keep !== undefined || count(original[6]) >= 3) &&
-        fits(bounds(anchor, bottom - 1, 1));
-      if (!keep && count(original[6]) < height + 2) {
-        issue ??= "Claude's tmux pane is too small for the inset reservation";
-        measureHeight ||= shorterFits;
+      // [LAW:dataflow-not-control-flow] One geometry for every frame: the bar
+      // reserves the rows its frame needs, up to half of the rows it shares
+      // with Claude's pane (less the border between them), so Claude's screen
+      // is never shorter than the bar. The page scales a frame taller than
+      // its reservation into it, so a tall menu shrinks instead of hiding.
+      const shared = count(original[6]) + (keep ? count(keep[6]) + 1 : 0);
+      const rows = Math.min(height, Math.floor((shared - 1) / 2));
+      if (rows < 1) {
+        issue ??= "Claude's tmux pane has no rows to spare for the bar";
         continue;
       }
-      if (!fits(prospective)) {
+      if (!fits(bounds(anchor, bottom - rows, rows))) {
         issue ??= "Reserved pane is outside the terminal viewport";
-        measureHeight ||= shorterFits;
         continue;
       }
       let actual: string[] | undefined;
       try {
-        actual = await this.reserve(keep, height, original);
+        actual = await this.reserve(keep, rows, original);
       } catch (error) {
         if (!(error instanceof InsetHeightError)) throw error;
         issue ??= error.message;
-        measureHeight ||= shorterFits;
         keep = undefined;
         continue;
       }
@@ -292,7 +277,7 @@ export class WindowLayout {
         return {
           clients,
           selected: client,
-          layout: { kind: "layout", placement, ...client, ...box },
+          layout: { kind: "layout", placement: "inset", ...client, ...box },
         };
       issue ??= "Reserved pane is outside the terminal viewport";
     }
@@ -312,6 +297,6 @@ export class WindowLayout {
         );
       if (!pending && !zoom) await this.remove([keep]);
     }
-    return { clients, layout: hidden, issue, measureHeight };
+    return { clients, layout: hidden, issue };
   }
 }

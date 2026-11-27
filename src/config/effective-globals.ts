@@ -2,12 +2,7 @@
 // precedence chain (staged › session pick › active preset's globals › the
 // theme's default › floor) every renderer draws through.
 
-import {
-  LANES,
-  perLane,
-  type DeclaredLanes,
-  type LaneSwitches,
-} from "./lanes.js";
+import { LANES, perLane, type LaneSwitches } from "./lanes.js";
 import { effectivePresetName, presetGlobals } from "./presets.js";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "./loader/edit-mode.js";
 import type { DslConfig, Globals } from "./dsl-types.js";
@@ -97,13 +92,6 @@ export type EffectiveGlobals = ValuedGlobals & {
 // effective configuration, however that configuration was authored.
 export const laneSwitches = (effective: EffectiveGlobals): LaneSwitches =>
   perLane((lane) => effective[LANES[lane].switch.setting]);
-
-export function declaredLanes(effective: EffectiveGlobals): DeclaredLanes {
-  const switches = laneSwitches(effective);
-  return switches.window
-    ? { ...switches, windowPlacement: effective.windowPlacement }
-    : switches;
-}
 
 export function editGlobalsOf(
   config: DslConfig,

@@ -63,28 +63,3 @@ enum TerminalObservation: Equatable {
     case hidden(String)
     case unavailable(String)
 }
-
-// All rectangles are in WindowServer points. A full-width footer can be
-// covered by two displays even when neither display contains it alone.
-func dockedFrame(window: CGRect, height: CGFloat, screens: [CGRect]) -> CGRect? {
-    let visible = screens.compactMap { screen -> (CGRect, CGFloat)? in
-        let part = screen.intersection(window)
-        return part.isEmpty ? nil : (screen, part.width * part.height)
-    }
-    guard height > 0, let anchor = visible.max(by: { $0.1 < $1.1 })?.0 else { return nil }
-    let below = CGRect(x: window.minX, y: window.maxY, width: window.width, height: height)
-    let pieces = screens.map { $0.intersection(below) }.filter { !$0.isEmpty }
-    let edges = Set([below.minY, below.maxY] + pieces.flatMap { [$0.minY, $0.maxY] }).sorted()
-    let covered = zip(edges, edges.dropFirst()).allSatisfy { low, high in
-        let spans = pieces.filter { $0.minY <= low && $0.maxY >= high }.sorted { $0.minX < $1.minX }
-        var right = below.minX
-        for span in spans {
-            if span.minX > right { return false }
-            right = max(right, span.maxX)
-        }
-        return right >= below.maxX
-    }
-    if covered { return below }
-    return CGRect(x: window.minX, y: min(window.maxY, anchor.maxY) - height,
-                  width: window.width, height: height)
-}

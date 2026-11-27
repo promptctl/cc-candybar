@@ -4,6 +4,16 @@ const tell = message => window.webkit.messageHandlers.panel.postMessage(message)
 let revision = 0;
 let pointer = null;
 let lastHover = null;
+let cell = { height: 0, width: 0 };
+
+// [LAW:dataflow-not-control-flow] Every frame draws at the scale that fits its
+// rows into the reserved tmux pane the panel covers: a frame that fits draws at
+// 1, and a taller one (an open menu in a short pane) shrinks instead of hiding.
+function fit() {
+  const scale = Math.min(1, window.innerHeight / (bar.children.length * cell.height));
+  bar.style.lineHeight = cell.height * scale + "px";
+  bar.style.fontSize = (cell.width / 0.60205) * scale + "px";
+}
 
 function hit(element) {
   const item = element?.closest("[data-run]");
@@ -48,14 +58,16 @@ window.present = function(frame) {
   }
   revision = frame.revision;
   bar.replaceChildren(rows);
+  fit();
   tell({ kind: "presented", revision });
   hover();
 };
 
 window.metrics = function(height, width) {
-  bar.style.lineHeight = height + "px";
-  bar.style.fontSize = (width / 0.60205) + "px";
+  cell = { height, width };
+  fit();
 };
+window.addEventListener("resize", fit);
 bar.addEventListener("mousemove", event => { pointer = { x: event.clientX, y: event.clientY }; hover(); });
 document.documentElement.addEventListener("mouseleave", () => { pointer = null; hover(); });
 bar.addEventListener("contextmenu", event => event.preventDefault());
