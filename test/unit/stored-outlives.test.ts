@@ -1,3 +1,4 @@
+import { durableHistory } from "../../src/renderer-interface/history-storage";
 // What a live renderer shares with its host, and what the profile keeps.
 
 import { SESSION_STATE_FILE } from "../../src/daemon/session-state-file";
@@ -150,7 +151,7 @@ test("eviction and recreation in one turn erase the old keys on a warm host", ()
   ]);
 });
 
-test("a history reaches the host without a placement draft's steps", () => {
+test("history changes carry private draft steps while legacy files keep only setting changes", () => {
   const history = new SettingsHistory(new SessionState(), () => {});
   const draft = `${PLACEMENT_DRAFT_NS}default.clock.format`;
   const both = history.begin(NO_LAYERS);
@@ -160,18 +161,16 @@ test("a history reaches the host without a placement draft's steps", () => {
   const only = history.begin(NO_LAYERS);
   only.sessionState.set(S2, draft, "12h");
   only.commit();
-  expect(history.drain()).toEqual([
-    {
-      kind: "put",
-      store: "settings-history",
-      key: S1,
-      value: {
-        past: [
-          [{ kind: "session", key: "theme", before: null, after: "nord" }],
-        ],
-        future: [],
-      },
-    },
-    { kind: "put", store: "settings-history", key: S2, value: null },
+  const writes = history.drain();
+  const theme = { kind: "session", key: "theme", before: null, after: "nord" };
+  expect(writes).toEqual([
+    { kind: "steps", store: "settings-history", key: S1, edits: [{kind: "append", step: [
+      theme, {kind: "session", key: draft, before: null, after: "24h"},
+    ]}] },
+    { kind: "steps", store: "settings-history", key: S2, edits: [{kind: "append", step: [
+      {kind: "session", key: draft, before: null, after: "12h"},
+    ]}] },
   ]);
+  expect(durableHistory(history.history(S1))).toEqual({past:[[theme]], future: []});
+  expect(durableHistory(history.history(S2))).toBeNull();
 });

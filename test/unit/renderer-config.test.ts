@@ -340,9 +340,9 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   expect(started.subscriptions.configs).toEqual([origin]);
   expect(started.subscriptions.lanes[session]?.pane).toBe(true);
   expect(started.stored).toContainEqual({
-    kind: "put", store: "settings-history",
+    kind: "steps", store: "settings-history",
     key: oversizedSession,
-    value: null,
+    edits: [{ kind: "clear" }],
   });
   expect(started.diagnostics).not.toContainEqual(bootDiagnostic);
   const first = presentOf(answered(await turn(

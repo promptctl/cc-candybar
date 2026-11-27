@@ -12,7 +12,7 @@ import {
   type SessionFileStorage,
 } from "./session-state-file.js";
 import { asError } from "../utils/atomic-write.js";
-import { putNewest, toNewest } from "../utils/recency.js";
+import { RecencyMap } from "../utils/recency.js";
 import type { Found, StoreReport } from "./foundations/stored-file.js";
 
 // [LAW:carrying-cost] How long a change of order alone waits for its write.
@@ -41,7 +41,7 @@ export type HeldChange<V> =
 type Phase = "unread" | "open" | "refused" | "closed";
 
 export class HeldFile<V> {
-  private held = new Map<SessionId, V>();
+  private readonly held = new RecencyMap<SessionId, V>();
   private phase: Phase = "unread";
   // [LAW:no-ambient-temporal-coupling] What is taken before the load, replayed
   // over the file's sessions as it loads: a put, a drop, a hearing and the
@@ -107,7 +107,7 @@ export class HeldFile<V> {
               sessions: current.sessions.size,
               dropped: current.dropped,
             };
-    this.held = new Map(current.sessions);
+    for (const [id, value] of current.sessions) this.held.set(id, value);
     this.phase = found.kind === "refused" ? "refused" : "open";
     const early = this.early;
     this.early = [];
@@ -128,7 +128,7 @@ export class HeldFile<V> {
     let content = false;
     for (const change of changes) {
       if (change.kind === "heard") {
-        if (toNewest(this.held, change.key)) this.behind = true;
+        if (this.held.touch(change.key)) this.behind = true;
         continue;
       }
       const value =
@@ -136,8 +136,11 @@ export class HeldFile<V> {
           ? change.apply(this.held.get(change.key))
           : change.value;
       if (this.holds(change.key, value)) {
-        if (toNewest(this.held, change.key)) this.behind = true;
-      } else if (putNewest(this.held, change.key, value)) {
+        if (this.held.touch(change.key)) this.behind = true;
+      } else {
+        if (value === null) {
+          if (!this.held.delete(change.key)) continue;
+        } else this.held.set(change.key, value);
         content = true;
         this.behind = true;
       }
@@ -202,8 +205,8 @@ export class HeldFile<V> {
 
   private evict(): SessionId[] {
     const evicted: SessionId[] = [];
-    for (const oldest of this.held.keys()) {
-      if (this.held.size <= this.bound) break;
+    while (this.held.size > this.bound && this.held.oldest !== undefined) {
+      const oldest = this.held.oldest;
       this.held.delete(oldest);
       evicted.push(oldest);
     }

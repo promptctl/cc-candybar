@@ -15,7 +15,10 @@ import { isPlainObject } from "../config/loader/validate-core.js";
 import { synthesizeSettingsMenu } from "../config/settings-menu.js";
 import { sessionKeyKind } from "../config/session-key.js";
 import { makeStateKeyspace } from "./foundations/state-validators.js";
-import type { SessionHistory } from "../renderer-interface/history-storage.js";
+import type {
+  Step,
+  HistoryEdit,
+} from "../renderer-interface/history-storage.js";
 import type { ChangedPicks } from "../renderer-interface/stored-state.js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WireFrame } from "../render/frame.js";
@@ -309,8 +312,8 @@ export function recordingOutputProblem(
             write.changes,
             (key, value) => controls?.offers(write.key, key, value) === true,
           )
-        : write.kind === "put" && write.value !== null
-          ? historyProblem(write.value)
+        : write.kind === "steps"
+          ? editsProblem(write.edits)
           : null;
     if (problem !== null) return problem;
   }
@@ -369,21 +372,44 @@ function picksProblem(
     : UNKNOWN_PROFILE;
 }
 
-function historyProblem({ past, future }: SessionHistory): string | null {
-  for (const steps of [past, future]) {
-    for (const step of steps) {
-      for (const change of step) {
-        for (const value of [change.before, change.after]) {
-          if (change.kind === "session") {
-            if (!knownPick(change.key, value)) return UNKNOWN_PROFILE;
-          } else if (value !== null) {
-            const problem = configTextProblem(value);
-            if (problem !== null)
-              return `${problem} or use a fresh renderer profile`;
-          }
+function stepsProblem(steps: readonly Step[]): string | null {
+  for (const step of steps) {
+    for (const change of step) {
+      for (const value of [change.before, change.after]) {
+        if (change.kind === "session") {
+          if (!knownPick(change.key, value)) return UNKNOWN_PROFILE;
+        } else if (value !== null) {
+          const problem = configTextProblem(value);
+          if (problem !== null)
+            return `${problem} or use a fresh renderer profile`;
         }
       }
+      if (change.kind === "layer" && !isLayerDigest(change.digest))
+        return UNKNOWN_PROFILE;
     }
+  }
+  return null;
+}
+
+// A layer target is the digest of its path. Unknown bytes in a field named
+// digest are still bytes the capture would publish.
+const isLayerDigest = (digest: string) => /^[0-9a-f]{64}$/.test(digest);
+
+function editsProblem(edits: readonly HistoryEdit[]): string | null {
+  for (const edit of edits) {
+    if (edit.kind === "append") {
+      const problem = stepsProblem([edit.step]);
+      if (problem !== null) return problem;
+    }
+    if (
+      edit.kind === "forget" &&
+      edit.targets.some((target) =>
+        target.kind === "session"
+          ? !knownPick(target.key, null)
+          : !isLayerDigest(target.digest),
+      )
+    )
+      return UNKNOWN_PROFILE;
   }
   return null;
 }
@@ -396,7 +422,7 @@ export function recordingBootProblem({ stored }: RendererBoot): string | null {
     if (problem !== null) return problem;
   }
   for (const history of Object.values(stored.history)) {
-    const problem = historyProblem(history);
+    const problem = stepsProblem(history.past) ?? stepsProblem(history.future);
     if (problem !== null) return problem;
   }
   return null;

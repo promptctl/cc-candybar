@@ -3,8 +3,13 @@
 // every renderer it builds, and moved only by the stored writes the renderer's
 // turns return, each written behind to its file.
 
+import type { SessionId } from "./foundations/session-id.js";
 import type { SessionFileStorage, SessionPicks } from "./session-state-file.js";
-import type { SessionHistory } from "../renderer-interface/history-storage.js";
+import {
+  durableHistory,
+  historyAfterEdits,
+  type SessionHistory,
+} from "../renderer-interface/history-storage.js";
 import { runEach, throwAll } from "../utils/run-each.js";
 import type {
   StoredState,
@@ -21,6 +26,33 @@ export interface ProfileStorage {
   readonly history: SessionFileStorage<SessionHistory>;
 }
 
+// [LAW:effects-at-boundaries] The live stacks retain private draft steps so
+// subsequent undo and redo refer to the same step everywhere. Only the file
+// projects those steps away. Unchanged immutable histories reuse their export.
+function historyFile(
+  storage: SessionFileStorage<SessionHistory>,
+): SessionFileStorage<SessionHistory> {
+  const exported = new WeakMap<SessionHistory, SessionHistory | null>();
+  return {
+    file: storage.file,
+    observe: () => storage.observe(),
+    setAside: (file) => storage.setAside(file),
+    flush: () => storage.flush(),
+    save: (histories) => {
+      const snapshot = new Map<SessionId, SessionHistory>();
+      for (const [id, history] of histories) {
+        let kept = exported.get(history);
+        if (kept === undefined) {
+          kept = durableHistory(history);
+          exported.set(history, kept);
+        }
+        if (kept !== null) snapshot.set(id, kept);
+      }
+      storage.save(snapshot);
+    },
+  };
+}
+
 export class HeldStores {
   // [LAW:one-source-of-truth] Each store's order is its renderer's, which
   // bounds it: the renderer's writes and hearings move these, and nothing
@@ -33,7 +65,11 @@ export class HeldStores {
     clock: Pick<Timekeeper, "after">,
   ) {
     this.sessions = new HeldFile("Session picks", storage.session, clock);
-    this.history = new HeldFile("Settings history", storage.history, clock);
+    this.history = new HeldFile(
+      "Settings history",
+      historyFile(storage.history),
+      clock,
+    );
   }
 
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a
@@ -81,7 +117,15 @@ export class HeldStores {
           );
           break;
         case "settings-history":
-          history.push(write);
+          history.push(
+            write.kind === "heard"
+              ? write
+              : {
+                  kind: "update",
+                  key: write.key,
+                  apply: (prior) => historyAfterEdits(prior, write.edits),
+                },
+          );
           break;
         default:
           write satisfies never;

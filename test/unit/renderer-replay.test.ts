@@ -144,3 +144,16 @@ test.each([22, 23])("wire %d reproduces the cache identity of both captured conf
   const altered = lines.with(2, lines[2]!.replace("86b51f35df7a", "000000000000"));
   await expect(replayRecording(altered)).rejects.toThrow("recording turn 2 differs at output.diagnostics");
 });
+
+test("wire 25 compares sparse picks alongside the full recorded undo history", async () => {
+  const lines = linesOf(...wire24);
+  const bootEntry = JSON.parse(lines[0]!);
+  const turn = JSON.parse(lines[2]!);
+  expect(turn.output.stored[0]).toEqual({kind: "put", store: "session-state", key: "peer-replay", value: {padding: "2", endcaps: "round"}});
+  turn.output.stored[0] = {kind: "patch", store: "session-state", key: "peer-replay", changes: {padding: "2"}};
+  lines[0] = JSON.stringify({...bootEntry, wireVersion: 25});
+  lines[2] = JSON.stringify(turn);
+  await expect(replayRecording(lines)).resolves.toEqual({turns: 8});
+  const altered = lines.with(5, lines[5]!.replace('"role":"user"', '"role":"project"'));
+  await expect(replayRecording(altered)).rejects.toThrow("recording turn 5 differs at output.stored[0].value");
+});

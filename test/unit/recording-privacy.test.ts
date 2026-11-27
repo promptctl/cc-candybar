@@ -9,6 +9,7 @@ import {
   NO_HOVER,
 } from "../../src/config/click-mode";
 import { EDIT_MODE_KEY } from "../../src/config/reserved-names";
+import { digestOf } from "../../src/utils/plain";
 import { DISCLOSURE_OPEN } from "../../src/config/disclosure";
 import { SETTINGS_ANCHOR } from "../../src/config/door";
 import {
@@ -48,6 +49,7 @@ import {
 } from "../../src/renderer-interface/interface";
 import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import type { HistoryTarget } from "../../src/renderer-interface/history-storage";
 import { mainRendererOf } from "../../src/renderer/main";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, failed, ok } from "../../src/utils/outcome";
@@ -491,27 +493,53 @@ test("turn recordings inspect live pick values, erased key names and undo histor
       ...output,
       stored: [
         {
-          kind: "put",
+          kind: "steps",
           store: "settings-history",
           key: SESSION,
-          value: {
-            past: [],
-            future: [
-              [
+          edits: [
+            {
+              kind: "append",
+              step: [
                 {
                   kind: "layer",
                   role: "user",
-                  digest: "same-layer",
+                  digest: digestOf("/offline/layer"),
                   before: ACTION_CONFIG,
                   after: null,
                 },
               ],
-            ],
-          },
+            },
+          ],
         },
       ],
     }),
   ).toMatch(/run action supplies environment/);
+  const forgotten = (...targets: HistoryTarget[]) =>
+    recordingOutputProblem({
+      ...output,
+      stored: [
+        {
+          kind: "steps",
+          store: "settings-history",
+          key: SESSION,
+          edits: [{ kind: "forget", targets }],
+        },
+      ],
+    });
+  expect(
+    forgotten(
+      { kind: "session", key: "padding" },
+      { kind: "layer", role: "user", digest: digestOf("/offline/layer") },
+    ),
+  ).toBeNull();
+  for (const target of [
+    { kind: "session", key: SECRET },
+    { kind: "layer", role: "user", digest: SECRET },
+  ] as const) {
+    const problem = forgotten(target);
+    expect(problem).toMatch(/unknown origin/);
+    expect(problem).not.toContain(SECRET);
+  }
 });
 
 test("recording can start from a profile saved with the former layout and toggles menus open", () => {
@@ -654,7 +682,7 @@ test("boot preserves built-in state and layer history and refuses unsupported hi
               {
                 kind: "layer" as const,
                 role: "user" as const,
-                digest: "same-layer",
+                digest: digestOf("/offline/layer"),
                 before: "{}",
                 after: "{ globals: { padding: 2 } }",
               },
@@ -688,7 +716,7 @@ test("boot preserves built-in state and layer history and refuses unsupported hi
               {
                 kind: "layer",
                 role: "user",
-                digest: "same-layer",
+                digest: digestOf("/offline/layer"),
                 before: ACTION_CONFIG,
                 after: "{}",
               },

@@ -232,10 +232,10 @@ require("node:module").syncBuiltinESMExports();`,
           kind: "answered",
           stored: [
             {
-              kind: "put",
+              kind: "steps",
               store: "settings-history",
               key: oversizedSession,
-              value: null,
+              edits: [{ kind: "clear" }],
             },
           ],
         }),

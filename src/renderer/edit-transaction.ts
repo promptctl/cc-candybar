@@ -180,7 +180,7 @@ class EditDraft implements DraftWrites {
     // draft, over the sessions as the router writes them, which hands this
     // session's writes to this draft. A menu's state is no setting, so
     // opening one never adds an edit step.
-    this.history = new SettingsHistory(sessions, log, {});
+    this.history = new SettingsHistory(sessions, log, {}, "private");
   }
 
   // [LAW:effects-at-boundaries] A transaction pins the content it edits.

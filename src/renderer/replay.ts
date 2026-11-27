@@ -1,3 +1,8 @@
+import {
+  historyAfterEdits,
+  durableHistory,
+  type SessionHistory,
+} from "../renderer-interface/history-storage.js";
 import { VERB_APPLY_LAYOUT_OP } from "../click/wire.js";
 import { decodeLayoutOp } from "../config/layout-ops.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
@@ -233,7 +238,11 @@ function verify<T>(
 // a wrong key, value, deletion or order must still show up in verification.
 function historicalOutputs(
   stored: StoredState,
+  fullPicks: boolean,
 ): (output: RendererOutput) => unknown {
+  const histories = new Map(
+    Object.entries(stored.history) as Array<[SessionId, SessionHistory]>,
+  );
   const picks = new Map<SessionId, SessionPicks>();
   for (const [id, values] of Object.entries(stored.sessions)) {
     const kept = withoutRetiredKeys(values);
@@ -242,8 +251,19 @@ function historicalOutputs(
   return (output) => ({
     ...output,
     stored: output.stored.map((write) => {
-      if (write.store !== "session-state" || write.kind === "heard")
-        return write;
+      if (write.kind === "heard") return write;
+      if (write.store === "settings-history") {
+        const next = historyAfterEdits(histories.get(write.key), write.edits);
+        if (next === null) histories.delete(write.key);
+        else histories.set(write.key, next);
+        return {
+          kind: "put",
+          store: write.store,
+          key: write.key,
+          value: next && durableHistory(next),
+        };
+      }
+      if (!fullPicks) return write;
       const value = storedPicksAfter(picks.get(write.key), write);
       if (value === null) picks.delete(write.key);
       else picks.set(write.key, value);
@@ -275,6 +295,7 @@ function constructionOf(entry: Record<string, unknown>): {
   if (
     !legacyRegion &&
     entry.wireVersion !== 24 &&
+    entry.wireVersion !== 25 &&
     entry.wireVersion !== RENDERER_WIRE_VERSION
   )
     throw new Error(
@@ -308,7 +329,7 @@ function constructionOf(entry: Record<string, unknown>): {
     compareAs:
       entry.wireVersion === RENDERER_WIRE_VERSION
         ? undefined
-        : historicalOutputs(boot.stored),
+        : historicalOutputs(boot.stored, entry.wireVersion !== 25),
   };
 }
 

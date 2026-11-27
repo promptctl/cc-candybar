@@ -9,7 +9,7 @@ import type {
   StoredState,
   StoreWrite,
 } from "../renderer-interface/stored-state";
-import { putNewest, toNewest } from "../utils/recency";
+import { RecencyMap } from "../utils/recency";
 import { StoredMoves } from "./stored-moves";
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
@@ -72,7 +72,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // hold more than maxSessions, so the bound is structural, not dependent on
   // an external prune caller, and drops the session idle longest. A read
   // moves nothing, so the host's copy, told of every move, keeps the order.
-  private readonly sessions = new Map<SessionId, Set<string>>();
+  private readonly sessions = new RecencyMap<SessionId, Set<string>>();
   // [LAW:one-source-of-truth] Each pick has one observable address, even
   // before it exists. The recency index holds only its session's key names
   // for eviction and persistence. An unrelated insertion cannot wake it.
@@ -200,7 +200,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // drops the session idle longest. What it holds is unchanged, so no reader
   // is told, and the host hears only its place.
   heard(sessionId: SessionId): void {
-    if (toNewest(this.sessions, sessionId)) this.moved.heard(sessionId);
+    if (this.sessions.touch(sessionId)) this.moved.heard(sessionId);
   }
 
   // [LAW:dataflow-not-control-flow] Coalesce writes to a key before crossing
@@ -236,7 +236,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // written, here and in what the host is told.
   private changed(sessionId: SessionId, keys: Set<string>): void {
     this.revisions.set(sessionId, ++this.head);
-    putNewest(this.sessions, sessionId, keys);
+    this.sessions.set(sessionId, keys);
     this.told(sessionId);
   }
 
@@ -257,14 +257,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private evictOldest(): void {
-    let overflow = this.sessions.size - this.maxSessions;
-    if (overflow <= 0) return;
-    // Delete the oldest keys in insertion order. Cost is proportional to the
-    // number of evictions, not the total loaded set — deleting an already-
-    // yielded key mid-iteration is well-defined for a Map.
-    for (const [id, keys] of this.sessions) {
-      this.dropped(id, keys);
-      if (--overflow === 0) break;
+    while (
+      this.sessions.size > this.maxSessions &&
+      this.sessions.oldest !== undefined
+    ) {
+      const oldest = this.sessions.oldest;
+      this.dropped(oldest, this.sessions.get(oldest)!);
     }
   }
 }

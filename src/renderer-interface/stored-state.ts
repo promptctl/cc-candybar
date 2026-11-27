@@ -15,7 +15,7 @@ import { isClickErrorRecord } from "../daemon/foundations/click-error";
 import {
   parseSessionHistory,
   type HistoryState,
-  type SessionHistory,
+  type HistoryEdit,
 } from "./history-storage";
 
 // [LAW:one-source-of-truth] Every store the profile holds, as it stands: each
@@ -165,10 +165,10 @@ export function storedPicksAfter(
 export type StoreWrite =
   | PickWrite
   | {
-      readonly kind: "put";
+      readonly kind: "steps";
       readonly store: "settings-history";
       readonly key: SessionId;
-      readonly value: SessionHistory | null;
+      readonly edits: readonly HistoryEdit[];
     }
   | {
       readonly kind: "heard";

@@ -40,7 +40,12 @@ import {
   type Step,
   type SessionHistory,
   holdsNothing,
-  withoutRetiredChanges,
+  historyAfter,
+  historyTarget,
+  targetKey,
+  type HistoryTarget,
+  type HistoryEdit,
+  EMPTY_HISTORY,
 } from "../renderer-interface/history-storage";
 import { isUndoStepKey } from "../config/session-key";
 import {
@@ -55,7 +60,7 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { digestOf } from "../utils/plain.js";
-import { putNewest, toNewest } from "../utils/recency.js";
+import { RecencyMap } from "../utils/recency.js";
 import { StoredMoves } from "./stored-moves.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
@@ -78,11 +83,8 @@ export const EMPTY_HISTORY_DEPTH: HistoryDepth = {
 // is bounded three ways: steps per session, sessions, and total snapshot text.
 // Over either shared bound, the session that changed least recently goes
 // first; a lone session over the byte bound loses its oldest steps.
-const MAX_STEPS = 50;
 const MAX_SESSIONS = 32;
 const MAX_BYTES = 8 * 1024 * 1024;
-
-const EMPTY: SessionHistory = { past: [], future: [] };
 
 // Where a click's config writes go: changes its turn returns
 // (src/renderer/config-writes.ts).
@@ -133,27 +135,18 @@ export type ClickWrites = ReadonlyMap<
 // twice records one change from its first `before` to its last `after`.
 type Pending = Map<SessionId, Map<string, Change>>;
 
-const identity = (c: Change): string =>
-  c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
-
 export class SettingsHistory {
-  // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
-  // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
-  // refused `↶` that drops steps included, which moves no pick. Per key: a
-  // whole next state is adopted by `replace`, which keeps its order (the
-  // recency) and moves only the sessions whose history changed, so one
-  // session's click recomputes no other session's payload.
+  // [LAW:dataflow-not-control-flow] Reading a session's depth subscribes only
+  // to that session. A hearing changes the budget's eviction order alone.
   private readonly held = observable.map<SessionId, SessionHistory>(undefined, {
     deep: false,
   });
-  private get state(): ReadonlyMap<SessionId, SessionHistory> {
-    return this.held;
-  }
-  private set state(next: Map<SessionId, SessionHistory>) {
-    runInAction(() => this.held.replace(next));
-  }
+  private readonly costs = new RecencyMap<SessionId, number>();
+  private readonly stepCosts = new WeakMap<Step, number>();
+  private totalCost = 0;
 
   private readonly moved = new StoredMoves();
+  private readonly edits = new Map<SessionId, HistoryEdit[]>();
 
   // `loaded` is what the profile holds, oldest first, as the host handed it
   // in: held to the same bounds as every step that lands.
@@ -161,47 +154,45 @@ export class SettingsHistory {
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
     loaded: StoredState["history"] = {},
+    private readonly destination: "host" | "private" = "host",
   ) {
-    this.adopt(
-      new Map(Object.entries(loaded) as Array<[SessionId, SessionHistory]>),
-    );
+    runInAction(() => {
+      for (const [id, history] of Object.entries(loaded))
+        this.keep(id as SessionId, history);
+      this.bound();
+    });
   }
 
-  // A request from the session: it moves to the newest end, so the bounds
-  // drop the session idle longest. [LAW:carrying-cost] It runs on every
-  // request, so the order alone changes: a replace keeps each entry's
-  // observable, so no session's readers hear of it, only the order's.
   heard(sessionId: SessionId): void {
-    const order = new Map(this.held);
-    if (!toNewest(order, sessionId)) return;
-    runInAction(() => this.held.replace(order));
-    this.moved.heard(sessionId);
+    if (!this.costs.touch(sessionId)) return;
+    if (this.destination === "host") this.moved.heard(sessionId);
   }
 
-  // What the host has not yet been told: each session whose history moved, as
-  // it now stands (null for one gone) or only its place, in the order they
-  // last moved.
   drain(): StoreWrite[] {
-    return this.moved.drain(
+    const writes = this.moved.drain(
       (key, moved): StoreWrite =>
         moved === "heard"
           ? { kind: "heard", store: "settings-history", key }
           : {
-              kind: "put",
+              kind: "steps",
               store: "settings-history",
               key,
-              value: this.outliving(key),
+              edits: this.edits.get(key)!,
             },
     );
+    this.edits.clear();
+    return writes;
   }
 
-  // [LAW:single-enforcer] What the host keeps of a session's history is what
-  // a load of its file keeps, so the file never holds a draft's step.
-  private outliving(sessionId: SessionId): SessionHistory | null {
-    const history = this.state.get(sessionId);
-    if (history === undefined) return null;
-    const outlives = withoutRetiredChanges(history);
-    return outlives.kind === "ok" ? outlives.value.value : null;
+  private record(session: SessionId, edits: readonly HistoryEdit[]): void {
+    if (this.destination === "private") return;
+    this.moved.put(session);
+    if (!this.held.has(session)) this.edits.set(session, [{ kind: "clear" }]);
+    else {
+      const pending = this.edits.get(session);
+      if (pending === undefined) this.edits.set(session, [...edits]);
+      else pending.push(...edits);
+    }
   }
 
   depth(sessionId: SessionId): HistoryDepth {
@@ -214,26 +205,35 @@ export class SettingsHistory {
   }
 
   history(sessionId: SessionId): SessionHistory {
-    return this.state.get(sessionId) ?? EMPTY;
+    return this.held.get(sessionId) ?? EMPTY_HISTORY;
   }
 
   begin(files: ConfigFiles): Journal {
     const held = heldWrites(this.sessionState);
     // Each session's history as this click leaves it.
-    const working = new Map<SessionId, SessionHistory>();
+    const working = new Map<
+      SessionId,
+      { history: SessionHistory; edits: HistoryEdit[] }
+    >();
+    const historyOf = (sid: SessionId) =>
+      working.get(sid)?.history ?? this.history(sid);
     const click: Click = {
       held,
       files,
-      historyOf: (sessionId) =>
-        working.get(sessionId) ?? this.history(sessionId),
-      move: (sessionId, history) => working.set(sessionId, history),
+      historyOf,
+      move: (sid, edit) => {
+        const history = historyAfter(historyOf(sid), edit);
+        const edits = working.get(sid)?.edits ?? [];
+        edits.push(edit);
+        working.set(sid, { history, edits });
+      },
     };
     const pending: Pending = new Map();
     const note = (sessionId: SessionId, change: Change): void => {
       const changes = pending.get(sessionId) ?? new Map<string, Change>();
-      const earlier = changes.get(identity(change));
+      const earlier = changes.get(targetKey(change));
       changes.set(
-        identity(change),
+        targetKey(change),
         earlier === undefined ? change : { ...change, before: earlier.before },
       );
       pending.set(sessionId, changes);
@@ -251,10 +251,7 @@ export class SettingsHistory {
           (c) => c.before !== c.after,
         );
         if (changes.length > 0)
-          click.move(sessionId, {
-            past: capped([...click.historyOf(sessionId).past, changes]),
-            future: [],
-          });
+          click.move(sessionId, { kind: "append", step: changes });
       }
       pending.clear();
     };
@@ -273,53 +270,26 @@ export class SettingsHistory {
       },
       undo: (sessionId) => {
         step();
-        return this.undo(click, sessionId);
+        return this.travel(click, sessionId, "undo");
       },
       redo: (sessionId) => {
         step();
-        return this.redo(click, sessionId);
+        return this.travel(click, sessionId, "redo");
       },
       commit: () => {
         step();
-        const moved = new Map(working);
-        working.clear();
-        for (const [sessionId, history] of moved) this.put(sessionId, history);
-        return held.flush();
+        return runInAction(() => {
+          for (const [sessionId, { history, edits }] of working) {
+            if (holdsNothing(history)) this.drop(sessionId);
+            else this.keep(sessionId, history);
+            this.record(sessionId, edits);
+          }
+          working.clear();
+          this.bound();
+          return held.flush();
+        });
       },
     };
-  }
-
-  private undo(click: Click, sessionId: SessionId): Step {
-    const history = click.historyOf(sessionId);
-    const step = history.past.at(-1);
-    if (step === undefined) {
-      throw new BadVerbArgs("undo: nothing to undo");
-    }
-    this.apply(
-      click,
-      sessionId,
-      step,
-      "before",
-      "undo",
-      afterUndo(history, step),
-    );
-    return step;
-  }
-
-  private redo(click: Click, sessionId: SessionId): Step {
-    const history = click.historyOf(sessionId);
-    const { past, future } = history;
-    const step = future.at(-1);
-    if (step === undefined) {
-      throw new BadVerbArgs("redo: nothing to redo");
-    }
-    const all = [...past, step];
-    const kept = capped(all);
-    this.apply(click, sessionId, step, "after", "redo", {
-      past: kept,
-      future: future.slice(0, -1),
-    });
-    return step;
   }
 
   // [LAW:no-silent-failure] A step is refused whole when a target it steps
@@ -331,24 +301,23 @@ export class SettingsHistory {
   // file never stops it. [LAW:single-enforcer] That text has not been loaded
   // by anyone, so it passes the gate every click's write passes before it
   // lands.
-  private apply(
+  private travel(
     click: Click,
     sessionId: SessionId,
-    step: Step,
-    to: "before" | "after",
     verb: "undo" | "redo",
-    then: SessionHistory,
-  ): void {
+  ): Step {
+    const history = click.historyOf(sessionId);
+    const step = (verb === "undo" ? history.past : history.future).at(-1);
+    if (step === undefined)
+      throw new BadVerbArgs(`${verb}: nothing to ${verb}`);
+    const to = verb === "undo" ? "before" : "after";
     const stepped = step.map((c) => stepOf(click, sessionId, c, to));
     const stale = stepped.flatMap((s) => (s.kind === "moved" ? [s] : []));
     if (stale.length > 0) {
-      click.move(
-        sessionId,
-        forgotten(
-          click.historyOf(sessionId),
-          new Set(stale.map((s) => s.target)),
-        ),
-      );
+      click.move(sessionId, {
+        kind: "forget",
+        targets: stale.map((s) => s.target),
+      });
       throw new BadVerbArgs(
         `${verb}: ${stale.map((s) => s.what).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
       );
@@ -372,82 +341,70 @@ export class SettingsHistory {
       if (s.kind === "session")
         if (s.value === null) click.held.clear(sessionId, s.key);
         else click.held.set(sessionId, s.key, s.value);
-    click.move(sessionId, then);
+    click.move(sessionId, { kind: verb });
+    return step;
   }
 
-  // Move-to-end keeps insertion order as recency, so the bounds drop the
-  // session that changed least recently.
-  private put(sessionId: SessionId, history: SessionHistory): void {
-    const next = new Map(this.state);
-    putNewest(next, sessionId, holdsNothing(history) ? null : history);
-    // A history that moved to the end is told even when it holds what it
-    // held, so the host's order is this one's.
-    this.moved.put(sessionId);
-    this.adopt(next);
+  // [LAW:single-enforcer] Account immutable steps once. Only the affected
+  // session changes its contribution to the shared budget. Keep the original
+  // weight in string code units so an upgrade preserves eviction decisions.
+  private keep(sessionId: SessionId, history: SessionHistory): void {
+    let cost = 0;
+    for (const stack of [history.past, history.future]) {
+      for (const step of stack) {
+        let weight = this.stepCosts.get(step);
+        if (weight === undefined) {
+          weight = step.reduce(
+            (sum, change) =>
+              sum + (change.before?.length ?? 0) + (change.after?.length ?? 0),
+            0,
+          );
+          this.stepCosts.set(step, weight);
+        }
+        cost += weight;
+      }
+    }
+    this.totalCost += cost - (this.costs.get(sessionId) ?? 0);
+    this.costs.set(sessionId, cost);
+    this.held.set(sessionId, history);
   }
 
-  // [LAW:single-enforcer] The one enforcer of the bounds, over what the
-  // profile handed in and over every step: each session the bounds trim or
-  // drop is told.
-  private adopt(next: Map<SessionId, SessionHistory>): void {
-    const before = new Map(next);
-    this.bound(next);
-    for (const [sessionId, history] of before)
-      if (next.get(sessionId) !== history) this.moved.put(sessionId);
-    this.state = next;
+  private drop(sessionId: SessionId): void {
+    this.totalCost -= this.costs.get(sessionId) ?? 0;
+    this.costs.delete(sessionId);
+    this.held.delete(sessionId);
   }
 
-  private bound(next: Map<SessionId, SessionHistory>): void {
-    while (next.size > MAX_SESSIONS || weight(next) > MAX_BYTES) {
-      const [oldest, h] = next.entries().next().value!;
-      if (next.size > 1) {
-        next.delete(oldest);
+  private bound(): void {
+    while (this.costs.size > MAX_SESSIONS || this.totalCost > MAX_BYTES) {
+      const oldest = this.costs.oldest!;
+      if (this.costs.size > 1) {
+        this.drop(oldest);
+        this.record(oldest, []);
         continue;
       }
-      const trimmed = withoutOldestStep(h);
-      if (holdsNothing(trimmed)) next.delete(oldest);
-      else next.set(oldest, trimmed);
-      this.logger(
-        "info",
-        `settings-history: trimmed an old step for session ${oldest}`,
-      );
-    }
-  }
-}
-
-function weight(state: ReadonlyMap<SessionId, SessionHistory>): number {
-  let bytes = 0;
-  for (const { past, future } of state.values()) {
-    for (const step of [...past, ...future]) {
-      for (const c of step) {
-        bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
+      const history = this.held.get(oldest)!;
+      let remaining = this.totalCost;
+      let count = 0;
+      for (const stack of [history.past, history.future]) {
+        for (const step of stack) {
+          if (remaining <= MAX_BYTES) break;
+          remaining -= this.stepCosts.get(step)!;
+          count++;
+        }
       }
+      const edit = { kind: "trim", count } as const;
+      const trimmed = historyAfter(history, edit);
+      if (holdsNothing(trimmed)) this.drop(oldest);
+      else this.keep(oldest, trimmed);
+      this.record(oldest, [edit]);
+      for (let i = 0; i < count; i++)
+        this.logger(
+          "info",
+          `settings-history: trimmed an old step for session ${oldest}`,
+        );
     }
   }
-  return bytes;
-}
-
-function withoutOldestStep({ past, future }: SessionHistory): SessionHistory {
-  return past.length > 0
-    ? { past: past.slice(1), future }
-    : { past, future: future.slice(1) };
-}
-
-function capped(steps: readonly Step[]): readonly Step[] {
-  return steps.slice(-MAX_STEPS);
-}
-
-function afterUndo(history: SessionHistory, step: Step): SessionHistory {
-  return {
-    past: history.past.slice(0, -1),
-    future: capped([...history.future, step]),
-  };
-}
-
-function without(steps: readonly Step[], gone: ReadonlySet<string>): Step[] {
-  return steps
-    .map((step) => step.filter((c) => !gone.has(identity(c))))
-    .filter((step) => step.length > 0);
 }
 
 export function describeStep(step: Step): string {
@@ -468,7 +425,7 @@ interface Click {
   readonly held: SessionStateRW;
   readonly files: ConfigFiles;
   readonly historyOf: (sessionId: SessionId) => SessionHistory;
-  readonly move: (sessionId: SessionId, history: SessionHistory) => void;
+  readonly move: (sessionId: SessionId, edit: HistoryEdit) => void;
 }
 
 // What a change stepped to `to` writes, read in the click: a session pick's
@@ -486,7 +443,11 @@ type Stepped =
       readonly file: string;
       readonly text: string | null;
     }
-  | { readonly kind: "moved"; readonly target: string; readonly what: string };
+  | {
+      readonly kind: "moved";
+      readonly target: HistoryTarget;
+      readonly what: string;
+    };
 
 function stepOf(
   click: Click,
@@ -500,7 +461,7 @@ function stepOf(
       ? { kind: "session", key: change.key, value: change[to] }
       : {
           kind: "moved",
-          target: identity(change),
+          target: historyTarget(change),
           what: `session setting "${change.key}"`,
         };
   // [LAW:no-silent-failure] A role the chain no longer holds, or one that now
@@ -510,7 +471,7 @@ function stepOf(
   if (file === null || digestOf(file) !== change.digest)
     return {
       kind: "moved",
-      target: identity(change),
+      target: historyTarget(change),
       what: `the ${change.role} layer (${file === null ? "this session renders from none now" : "it is another file now"})`,
     };
   const applied = applyChanges(
@@ -521,20 +482,12 @@ function stepOf(
     ? { kind: "file", file, text: applied.text }
     : {
         kind: "moved",
-        target: identity(change),
+        target: historyTarget(change),
         what:
           applied.kind === "incomplete"
             ? `${file}: ${applied.reason}`
             : `${addressText(applied.at)} in the ${change.role} layer`,
       };
-}
-
-// The history with every change to the targets gone from both stacks.
-function forgotten(
-  { past, future }: SessionHistory,
-  gone: ReadonlySet<string>,
-): SessionHistory {
-  return { past: without(past, gone), future: without(future, gone) };
 }
 
 // [LAW:no-ambient-temporal-coupling] A click's session writes, held over the

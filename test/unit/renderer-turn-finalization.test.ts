@@ -347,14 +347,8 @@ test("the first failure in collection still lands history, holds subscriptions, 
   });
   expect(fixture.stored[1]).toEqual([
     {
-      kind: "put", store: "settings-history",
-      key: SESSION,
-      value: {
-        past: [
-          [{ kind: "session", key: "theme", before: null, after: "nord" }],
-        ],
-        future: [],
-      },
+      kind: "steps", store: "settings-history", key: SESSION,
+      edits: [{ kind: "append", step: [{ kind: "session", key: "theme", before: null, after: "nord" }] }],
     },
   ]);
   expect(fixture.subscriptions.map(({ sources }) => sources)).toEqual([
