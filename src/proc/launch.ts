@@ -741,6 +741,7 @@ async function launchPiped(
     let timer: (() => void) | null = null;
     let killTimer: (() => void) | null = null;
     let groupEndTimer: (() => void) | null = null;
+    let concludeTurn: (() => void) | null = null;
     // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
     // termination — and which — is data we have to carry. The OS doesn't tell
     // us why a child was signalled — without it, SIGKILL from the OOM killer,
@@ -760,6 +761,7 @@ async function launchPiped(
       timer?.();
       killTimer?.();
       groupEndTimer?.();
+      concludeTurn?.();
       unlisten();
       if (group !== undefined) unguard(state, group);
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
@@ -813,8 +815,10 @@ async function launchPiped(
     // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
     // what was written before it is read. It concludes on the child's exit.
     const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
-    const concludeNextTurn = () =>
-      clock.defer(tasks.conclude, concludeWithGroup);
+    const concludeNextTurn = () => {
+      if (!settled)
+        concludeTurn ??= clock.defer(tasks.conclude, concludeWithGroup);
+    };
     // While a member of the group lives the launch waits for it, guarded, so
     // SIGKILL still reaches it. The OS has no event for a group's end, so it is
     // polled, with exponential backoff.
@@ -829,9 +833,14 @@ async function launchPiped(
           awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
-      afterExit(tasks.groupEnd, () =>
-        clock.defer(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
-      );
+      afterExit(tasks.groupEnd, () => {
+        // The pipe close can settle the launch before this exit continuation.
+        // All group checks, even the first deferred turn, share its lifetime.
+        if (!settled)
+          groupEndTimer = clock.defer(tasks.groupEnd, () =>
+            awaitGroupEnd(GROUP_END_POLL_MIN_MS),
+          );
+      });
     }
 
     // [LAW:types-are-the-program] Do NOT settle here. We signal and let

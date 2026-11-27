@@ -105,6 +105,17 @@ describe("a launch over a scripted OS", () => {
     },
   );
 
+  test("settling on pipe close releases the deferred process-group check", async () => {
+    const r = rig();
+    r.spawner.program(shell("done"), exits(0));
+    const launched = r.launcher.launch(sh("done"));
+    await r.advance(0);
+    expect(await launched).toMatchObject({ ok: true });
+    // Give the exit continuation its turn without firing deferred clock work.
+    await turns();
+    expect(r.clock.pending()).toBe(0);
+  });
+
   test("a program that exits 0 gives its output", async () => {
     const r = rig();
     r.spawner.program(shell("echo hi"), exits(0, "hi\n", "warn"));
