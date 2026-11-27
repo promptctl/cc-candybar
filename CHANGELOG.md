@@ -1,3 +1,9 @@
+## [1.245.3](https://github.com/promptctl/cc-candybar/compare/v1.245.2...v1.245.3) (2026-11-27)
+
+### Bug Fixes
+
+* **stored-state:** a per-session file whose write fails stands behind on every bar ([#988](https://github.com/promptctl/cc-candybar/issues/988)) ([59949da](https://github.com/promptctl/cc-candybar/commit/59949da179994f9735daa010c71c696f055a4fa5))
+
 ## [1.245.2](https://github.com/promptctl/cc-candybar/compare/v1.245.1...v1.245.2) (2026-11-27)
 
 ### Bug Fixes
