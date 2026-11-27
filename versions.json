@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-983",
+      "ref": "refs/pull/983/merge",
+      "sha": "1c6433462946dff123165198d4c72233ca468c94",
+      "timestamp": "2026-11-27T12:12:03.505Z",
+      "commits": [
+        {
+          "sha": "1c6433462946dff123165198d4c72233ca468c94",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T05:10:56-07:00",
+          "message": "Merge 65ad7d872eb1e6aef028a6724d3c96da59f74b01 into baa0154ae296580d06ae87e7722574a1a4028def\n"
+        },
+        {
+          "sha": "65ad7d872eb1e6aef028a6724d3c96da59f74b01",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T05:10:30-07:00",
+          "message": "fix(renderer): report the state actually lost on restart\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "baa0154ae296580d06ae87e7722574a1a4028def",
