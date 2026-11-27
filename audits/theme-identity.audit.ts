@@ -16,6 +16,7 @@
 // alike, as Textual draws them — and the fact above is what holds a bar to its
 // theme.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
@@ -84,7 +85,7 @@ const UNSTYLED: readonly Variant[] = VARIATION_NAMES.flatMap((variation) =>
 // over between renders but the compiled config itself. One instant for every
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore(systemTimekeeper);
-const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
+const REGISTRY = new SourceRegistry(STORE, SAMPLE_REGION, "", new SessionState());
 const COMPILED = registerDslConfig(CONFIG, REGISTRY, {
   cwd: process.cwd(),
 });

@@ -69,7 +69,7 @@ export default {
     // direct path and the .pnpm/ shadow.
     // Scoped packages (@scope/name) are encoded as @scope+name in the pnpm
     // shadow directory prefix — [/+] covers both the direct and shadow forms.
-    "node_modules/(?!(\\.pnpm/)?(@promptctl[/+]go-template-js|@promptctl[/+]rich-js|@noble[/+]hashes)(@|/))",
+    "node_modules/(?!(\\.pnpm/)?(@promptctl[/+]go-template-js|@promptctl[/+]rich-js|@noble[/+]hashes|@formatjs[/+](intl-datetimeformat|intl-localematcher|fast-memoize))(@|/))",
   ],
   transform: {
     "^.+\\.(t|j)sx?$": [

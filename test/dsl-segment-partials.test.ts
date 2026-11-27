@@ -6,6 +6,7 @@
 // function (a computed name) is a separate, upstream-blocked follow-up
 // (candybar-templates-zh8b.ph5) and is not exercised here.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
@@ -47,7 +48,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store,
+  const registry = new SourceRegistry(store, SAMPLE_REGION,
     "",
     new SessionState(),
   );

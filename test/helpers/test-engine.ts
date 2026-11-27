@@ -1,11 +1,13 @@
 // What a test engine that renders no bar is built with: a truecolor depth,
 // since no render publishes one. Its clock is the engine's own, read only
 // inside a draw — a test that reads the time binds one (`drawingNow`).
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import { ColorDepth, Timeline } from "@promptctl/rich-js";
 import { bindClock } from "../../src/template-engine/engine";
 import { instantOf } from "../../src/utils/instant";
 
 export const TEST_ENGINE = {
+  region: SAMPLE_REGION,
   drawnAt: (): ColorDepth => ColorDepth.TRUECOLOR,
 };
 

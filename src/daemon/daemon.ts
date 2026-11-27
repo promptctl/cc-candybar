@@ -586,6 +586,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     logger: log,
   });
   const payloadProviders = createPayloadProviders({
+    timeZone: inputs.region.timeZone,
     launcher,
     host,
     prices: pricing,

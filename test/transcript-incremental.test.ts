@@ -7,6 +7,7 @@
 // incremental fold is OBSERVATIONALLY EQUAL to a from-scratch read of the final
 // file — the optimization changes cost, never output.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import {
   mkdtempSync,
@@ -542,6 +543,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const incPath = join(dir, "inc.jsonl");
     writeFileSync(incPath, "");
     const incStore = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -562,6 +564,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const fullPath = join(dir, "full.jsonl");
     writeFileSync(fullPath, contents.join(""));
     const freshStore = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -601,6 +604,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     const l3 = line(new Date(), 0.03, 300, 60);
 
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -630,6 +634,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       const fullPath = join(dir, "Rfull.jsonl");
       writeFileSync(fullPath, l1 + l2 + l3);
       const fresh = new SessionUsageStore({
+        timeZone: SAMPLE_REGION.timeZone,
         prices: settledPrices,
         clock: systemTimekeeper,
         host: HOST,
@@ -660,6 +665,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   test("a newer fold that lands after an older one is still the one stored", async () => {
     const t = join(dir, "N.jsonl");
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -726,6 +732,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     );
 
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -757,6 +764,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
 
     const logged: string[] = [];
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -823,6 +831,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       JSON.stringify({ sessionId: sid }) + "\n" + line(new Date(), 0.1),
     );
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -888,6 +897,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         }) + "\n",
       );
       const store = new SessionUsageStore({
+        timeZone: SAMPLE_REGION.timeZone,
         prices: settledPrices,
         clock: systemTimekeeper,
         host: HOST,
@@ -923,6 +933,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03),
     );
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,

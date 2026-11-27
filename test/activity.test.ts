@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import {
   sessionIdOf,
   type SessionId,
@@ -625,7 +626,7 @@ describe("the bundled activity segment renders the payload", () => {
       "activity",
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       const compiled = registerDslConfig(narrowed, registry, {
         cwd: process.cwd(),

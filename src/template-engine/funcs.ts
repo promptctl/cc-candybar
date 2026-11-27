@@ -5,6 +5,10 @@
 
 import path from "path-browserify";
 import type { FuncMap } from "@promptctl/go-template-js";
+import {
+  formatInteger,
+  type IntegerPresentation,
+} from "../utils/integer-presentation.js";
 import type { ClockFactory } from "./clock.js";
 import {
   toNumber,
@@ -14,7 +18,6 @@ import {
 } from "../var-system/types.js";
 import {
   abbreviatePath,
-  formatInteger,
   formatModelName,
   shortenModelName,
 } from "../utils/formatters.js";
@@ -257,8 +260,7 @@ export const relativeTimeFuncs: ClockFactory = (clock) => ({
   },
 });
 
-export function formatterFuncs(locale?: string): FuncMap {
-  const numbers = new Intl.NumberFormat(locale);
+export function formatterFuncs(numbers: IntegerPresentation): FuncMap {
   return {
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
     // [LAW:one-source-of-truth] Group numbers using the host's locale. The

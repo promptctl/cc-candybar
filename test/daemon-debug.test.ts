@@ -11,6 +11,7 @@
 // a pure function over the DSL state bundle, so tests drive it with
 // constructed state and read the result.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
 import { readingsIn } from "./helpers/session-environment";
@@ -87,7 +88,7 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store,
+  const registry = new SourceRegistry(store, SAMPLE_REGION,
     "",
     new SessionState(),
   );

@@ -15,6 +15,7 @@ import {
   rendererBootFrom,
   RENDERER_WIRE_VERSION,
 } from "../renderer-interface/wire.js";
+import { regionFor } from "../utils/region.js";
 import { ownValue } from "../utils/plain.js";
 import { mainRendererOf } from "./main.js";
 
@@ -221,17 +222,25 @@ function constructionOf(entry: Record<string, unknown>): {
     throw new Error(
       `recording line 1 needs format version ${RECORDING_VERSION}`,
     );
-  // v22 has the same construction data. Its click knew no placement seed.
-  if (entry.wireVersion !== 22 && entry.wireVersion !== RENDERER_WIRE_VERSION)
+  // Older recordings only carry a locale name. Recover its presentation at
+  // the offline boundary. Whole-output verification still detects any drift.
+  const legacyRegion = entry.wireVersion === 22 || entry.wireVersion === 23;
+  if (!legacyRegion && entry.wireVersion !== RENDERER_WIRE_VERSION)
     throw new Error(
       `recording line 1 needs renderer wire version ${RENDERER_WIRE_VERSION}`,
     );
   let boot;
   try {
+    let input = entry.input;
+    if (legacyRegion && isPlainObject(input) && isPlainObject(input.region)) {
+      const { locale, timeZone } = input.region;
+      if (typeof locale === "string" && typeof timeZone === "string")
+        input = { ...input, region: regionFor(locale, timeZone) };
+    }
     boot = rendererBootFrom({
       kind: "boot",
       wireVersion: RENDERER_WIRE_VERSION,
-      boot: entry.input,
+      boot: input,
     });
   } catch {
     throw new Error("recording line 1 has an invalid renderer boot input");

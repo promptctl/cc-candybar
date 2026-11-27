@@ -20,7 +20,7 @@ const exec = promisify(execFile);
 const BUNDLE = path.resolve("dist/index.mjs");
 const ENV_NAME = "CCB_RECORDING_TEST_VALUE";
 const ENV_VALUE = "only-the-live-bar-may-see-this";
-const LOCALIZED = "50.000 1969-12-31 19:00 -0500";
+const LOCALIZED = "50.000 03:30 -0400 03:00 -0500";
 
 function replayedFrames(stdout: string): readonly {
   readonly session: string;
@@ -55,7 +55,7 @@ test("the running host records two independent renderer sessions for offline rep
       variables: { remembered: { kind: "state", key: "remembered", default: "empty" } },
       segments: {
         sample: {
-          template: 'recorded-source padding={{ .padding.effective }} {{ action "wider" "WIDER" }} {{ frames 0.1 "phase-a" 0.1 "phase-b" }} {{ .remembered }} {{ action "remember" "REMEMBER" }} {{ formatInteger 50000 }} {{ date "2006-01-02 15:04 -0700" 0 }}',
+          template: 'recorded-source padding={{ .padding.effective }} {{ action "wider" "WIDER" }} {{ frames 0.1 "phase-a" 0.1 "phase-b" }} {{ .remembered }} {{ action "remember" "REMEMBER" }} {{ formatInteger 50000 }} {{ date "15:04 -0700" "2024-03-10T02:30:00" }} {{ date "15:04 -0700" "2024-01-01 12::05 +0400" }}',
         },
       },
       root: { h: ["sample"] },

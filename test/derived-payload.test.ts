@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // brandon-unfiled-3248.8ro6, step 4e (the data half): a view's payload is
 // derived and a draw writes no input. So a cache policy over the payload — a
@@ -51,7 +52,7 @@ function viewOver(
   runs: string,
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
     cwd: os.tmpdir(),
   });
@@ -300,7 +301,7 @@ describe("a policy or rule over what the draw answers is refused at load", () =>
 // view reads it as the run's failure and no wait hangs on a run never read.
 test("a run whose declaration throws reads as its failure, naming the throw", async () => {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, SAMPLE_REGION);
   registry.declareShell("probe", "echo hi", {
     cwd: os.tmpdir(),
     env: [],

@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../../scripts/lib/draw-fixtures/sample-region.js";
 import { relocateRenderer } from "../../helpers/packaged-runtime";
 // [LAW:verifiable-goals] On a REAL daemon: the renderer runs in a process of
 // its own, a renderer that dies is started again, and the bar the next one
@@ -76,7 +77,7 @@ const COMPATIBLE_BOOT = {
       dataHome: "/home/.local/share",
       dataDirs: [],
     },
-    region: { locale: "en-US", timeZone: "UTC" },
+    region: SAMPLE_REGION,
     memoryLimitBytes: 1,
   },
 } satisfies Omit<Extract<HostLine, { kind: "boot" }>, "kind">;

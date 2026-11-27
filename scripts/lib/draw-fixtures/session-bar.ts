@@ -6,6 +6,7 @@
 // session picks and the accent-looks harness (proto-looks/) draw through this
 // one rig, so a field the render path comes to need reaches them all.
 
+import { SAMPLE_REGION } from "./sample-region.js";
 import { drawPayload } from "./draw-payload";
 import { unscriptedRuns } from "./fake-launcher";
 import type { RichText } from "@promptctl/rich-js";
@@ -60,7 +61,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
   );
   const session = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", session);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/home/tester/code/project",
   });

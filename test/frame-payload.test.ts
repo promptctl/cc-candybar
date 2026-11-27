@@ -11,6 +11,7 @@
 // reads its source made, and "reads what the request stored" is the payload
 // a frame draws beside the one the request drew.
 
+import { SAMPLE_CALENDAR } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { sumsOf } from "./helpers/today";
 import { renderWidth, todayOf } from "../src/renderer/render-payload";
@@ -146,7 +147,7 @@ function counted(pr: unknown = ABSENT) {
     return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
-  const today = (at = AT) => todayOf(todayReadingOf(inputs()), at);
+  const today = (at = AT) => todayOf(todayReadingOf(inputs()), at, SAMPLE_CALENDAR);
   return { reads, inputs, request, today, deps, owners, logs };
 }
 

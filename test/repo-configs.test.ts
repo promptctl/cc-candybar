@@ -3,6 +3,7 @@
 // approved the repository, and every resolution (the render and the durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { writeStatePlan } from "./helpers/state-file";
 import { bareGates } from "./helpers/gates";
 import { HOST, hostOf } from "../scripts/lib/host";
@@ -173,6 +174,7 @@ describe("the gate over a project's plugins", () => {
   test("a plugin folder awaits the directory's answer, and loads once approved", () => {
     write(".cc-candybar/plugins/deploy/plugin.json5", PLUGIN);
     const deps = {
+    region: SAMPLE_REGION,
       clock: systemTimekeeper,
       sessionState: new SessionState(),
       gates: bareGates(),

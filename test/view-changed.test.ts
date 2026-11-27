@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // brandon-unfiled-3248.8ro6 §4e: a session's view says when what it draws
@@ -83,6 +84,7 @@ function setUp() {
   const reloads: Array<readonly string[]> = [];
   const cache = new DiscoveringCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),

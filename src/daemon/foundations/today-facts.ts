@@ -1,3 +1,4 @@
+import type { ZonedCalendar } from "../../utils/calendar.js";
 import type { TokenBreakdown } from "../../segments/session";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
 import { dateOf, type Instant } from "../../utils/instant";
@@ -19,22 +20,16 @@ export function addDay(into: DayUsage, d: DayUsage): void {
   into.cacheRead += d.cacheRead;
 }
 
-export function dayKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 // Day sums holding one day: `cost` and `tokens` on the day `at` falls in. What
 // a test fixture holds in place of a scan.
 export function oneDay(
+  calendar: ZonedCalendar,
   at: Instant,
   cost: number,
   tokens: number,
 ): Readonly<Record<string, DayUsage>> {
   return {
-    [dayKey(dateOf(at))]: { ...EMPTY_DAY, cost, input: tokens },
+    [calendar.dayKey(dateOf(at))]: { ...EMPTY_DAY, cost, input: tokens },
   };
 }
 
@@ -53,8 +48,9 @@ export interface TodayInfo {
 export function projectToday(
   facts: TodayFacts,
   at: Instant,
+  calendar: ZonedCalendar,
 ): Outcome<TodayInfo> {
-  const today = dayKey(dateOf(at));
+  const today = calendar.dayKey(dateOf(at));
   const inSet = facts.sums[today];
   const own = facts.own[today];
   if (inSet === undefined && own === undefined) return ABSENT;

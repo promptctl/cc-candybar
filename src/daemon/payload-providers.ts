@@ -42,6 +42,7 @@ export function createPayloadProviders(opts: {
   readonly launcher: Launcher;
   // The machine the providers read: where transcripts and settings live.
   readonly host: Host;
+  readonly timeZone: string;
   // What the usage store prices an entry without a cost by: the caller's,
   // which it closes.
   readonly prices: Prices;
@@ -63,6 +64,7 @@ export function createPayloadProviders(opts: {
   // ones the payload reads.
   const lanes = {
     usageStore: new SessionUsageStore({
+      timeZone: opts.timeZone,
       host: opts.host,
       prices: opts.prices,
       clock,

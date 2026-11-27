@@ -5,6 +5,7 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
@@ -85,10 +86,10 @@ interface Frame {
 function renderer(
   cfg: ValidatedConfig,
   session = new SessionState(),
-  compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg)),
+  compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg, SAMPLE_REGION)),
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const opts = {
     endcaps: "powerline" as const,
@@ -339,8 +340,8 @@ describe("nothing fades in where the frame is drawn from another source", () => 
   test("a reload over a shared compile still compares against nothing", () => {
     const loaded = config();
     const again = config();
-    expect(compileKey(compileInputOf(again))).toBe(compileKey(compileInputOf(loaded)));
-    const shared = compileDslConfig(compileInputOf(loaded));
+    expect(compileKey(compileInputOf(again, SAMPLE_REGION))).toBe(compileKey(compileInputOf(loaded, SAMPLE_REGION)));
+    const shared = compileDslConfig(compileInputOf(loaded, SAMPLE_REGION));
     const first = renderer(loaded, new SessionState(), shared);
     const reloaded = renderer(again, new SessionState(), shared);
     try {

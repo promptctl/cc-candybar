@@ -1,3 +1,4 @@
+import type { ZonedCalendar } from "../utils/calendar.js";
 // [LAW:single-enforcer] The single place where the daemon assembles every
 // data field the DSL templates can read. The output of this function — the
 // view's payload (`composePayload`) — is what a session view's inputs derive from
@@ -1058,8 +1059,9 @@ export function speedPayloadOf(
 export function instantFacts(
   builtins: { readonly today: Reading<TodayFacts> },
   at: Instant,
+  calendar: ZonedCalendar,
 ): { readonly today: TodayPayload | Pending | undefined } {
-  return { today: todayOf(spelled(builtins.today), at) };
+  return { today: todayOf(spelled(builtins.today), at, calendar) };
 }
 
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
@@ -1070,10 +1072,11 @@ export function instantFacts(
 export function todayOf(
   fact: Reading<TodayFacts, PendingWhy>,
   at: Instant,
+  calendar: ZonedCalendar,
 ): TodayPayload | Pending | undefined {
   if (fact.kind === "pending") return pendingOf(fact.why);
   if (fact.kind !== "ok") return undefined;
-  const today = projectToday(fact.value, at);
+  const today = projectToday(fact.value, at, calendar);
   return today.kind === "ok"
     ? { cost: today.value.cost, tokens: today.value.tokens }
     : undefined;

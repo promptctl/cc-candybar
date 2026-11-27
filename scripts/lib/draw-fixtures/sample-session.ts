@@ -1,4 +1,5 @@
 // A sample Claude Code session with populated git, transcript, and rate-limit data.
+import { SAMPLE_CALENDAR } from "./sample-region.js";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol.js";
 import type { SessionId } from "../../../src/daemon/foundations/session-id.js";
 import type { Lanes } from "../../../src/daemon/readings.js";
@@ -131,5 +132,5 @@ export function sampleLanes(at: Instant) {
 // [LAW:one-source-of-truth] One day's sums, which the draw projects to its own
 // day as the daemon's draw does.
 export function sampleDay(at: Instant): DaySums {
-  return { roots: [], sums: oneDay(at, 12.5, 3_400_000) };
+  return { roots: [], sums: oneDay(SAMPLE_CALENDAR, at, 12.5, 3_400_000) };
 }

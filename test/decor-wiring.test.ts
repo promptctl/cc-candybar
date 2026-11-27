@@ -14,6 +14,7 @@
 //   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -93,7 +94,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   // The cells of the latest draw, which bgOf and fgOf read after it.
   let segments: ReadonlyMap<string, readonly RichText[]> = new Map();

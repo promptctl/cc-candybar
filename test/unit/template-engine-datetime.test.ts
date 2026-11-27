@@ -1,9 +1,10 @@
+import { regionFor } from "../../src/utils/region.js";
 import { createCcCandybarEngine } from "../../src/template-engine/engine";
 import { drawingAt, TEST_ENGINE } from "../helpers/test-engine";
 
 const engine = createCcCandybarEngine({
   ...TEST_ENGINE,
-  region: { locale: "de-DE", timeZone: "America/New_York" },
+  region: regionFor("de-DE", "America/New_York"),
 });
 
 function render(source: string): string {
@@ -31,6 +32,15 @@ test.each([
     "2024-01-01 12:00 -05:00",
   ],
   [`date "${layout}" "2024-01-01 12::05 +0400"`, "2024-01-01 03:00 -05:00"],
+  [`date "${layout}" "Mon, 01 Jan 2024 12:00:00 (lunch) +0300"`, "2024-01-01 04:00 -05:00"],
+  [`date "${layout}" "Mon, 01 Jan 2024 12:00:00 (a (b)) GMT+3"`, "2024-01-01 04:00 -05:00"],
+  [`date "${layout}" "2024-01-01 12:00Z"`, "2024-01-01 07:00 -05:00"],
+  ['unixEpoch "2024-01-01Z"', "1704067200"],
+  ['unixEpoch "2024/01/01Z"', "1704067200"],
+  ['unixEpoch "Sat Jan 01 2022 00:00:00 GMT-0700(MST)"', "1641020400"],
+  ['dateInZone "2006-01-02 15:04:05 -0700 Z07:00" 0 "Africa/Monrovia"', "1969-12-31 23:15:30 -0044 -00:44"],
+  ['htmlDate "May 2025"', "2025-05-01"],
+  ['htmlDate "0001/01/02"', "2002-01-01"],
   ['htmlDate "2024-01-01T00:00:00"', "2024-01-01"],
   ['htmlDate "2024-01-01"', "2023-12-31"],
   ['htmlDate "-000000-01-01"', "2001-01-01"],
@@ -65,3 +75,9 @@ test("keeps native rejection of a legacy date with an invalid separator", () => 
     /sprig: cannot parse date value/,
   );
 });
+
+test.each(["2024-02-29T24:00:00.0001Z", "Mon, 01 Jan 2024 12:00:00 (note) garbage"])(
+  "rejects invalid date %s without truncating its suffix", (value) => {
+    expect(() => render(`unixEpoch ${JSON.stringify(value)}`)).toThrow(/cannot parse date/);
+  },
+);

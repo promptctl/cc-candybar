@@ -2,6 +2,7 @@
 // each other gesture runs. Driven through the real loader and draw, so what a
 // click delivers is read from the link the frame drew for that gesture.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -47,7 +48,7 @@ function draw(src: string): readonly Run[] {
   const cfg = load(src);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp/proj" });
   recordRender(sessionState, S1);
   const { frame } = drawPayload(

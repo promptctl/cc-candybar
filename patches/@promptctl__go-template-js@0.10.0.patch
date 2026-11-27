@@ -1,0 +1,184 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 111314687b6026de8230453ec336f755d8d1bb85..3ca9d36d38fc742801bd01c4ddb5712b89fc0fa7 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -631,6 +631,12 @@ type Clock = () => Date;
+  *   `EngineConfig.clock`).
+  */
+ declare function sprigDatetime(clock?: Clock): FuncMap;
++interface SprigZoneParts {
++  year: number; month: number; day: number; weekday: number; hour: number;
++  hour12: number; minute: number; second: number; ms: number;
++  tzAbbr: string; offsetMinutes: number;
++}
++declare function sprigDatetimeIn(clock: Clock, timeZone: () => string, parts: (date: Date, zone: string) => SprigZoneParts, parseString: (text: string) => Date): FuncMap;
+ //#endregion
+ //#region src/sprig/defaults/index.d.ts
+ declare function sprigDefaults(): FuncMap;
+@@ -691,5 +697,5 @@ declare function sprigStrings(): FuncMap;
+ //#region src/sprig/types/index.d.ts
+ declare function sprigTypes(): FuncMap;
+ //#endregion
+-export { type ArgCount, ArgCountError, type ArgType, type Arity, Defines, type Delims, Engine, type EngineConfig, type ErrorKind, EvalError, FailError, type FuncMap, FuncNotFoundError, MissingFieldError, type MissingKeyOption, NotIntegerError, ParseError, type ReferencedArg, type ReferencedCall, type ReferencedLiteral, Template, TemplateError, type TemplateFunc, TypeMismatchError, createEngine, sprigConversions, sprigDatetime, sprigDefaults, sprigDicts, sprigFlow, sprigHash, sprigLists, sprigMath, sprigRandom, sprigRegex, sprigSemver, sprigStrings, sprigTypes, staticDictEntries };
++export { type ArgCount, ArgCountError, type ArgType, type Arity, Defines, type Delims, Engine, type EngineConfig, type ErrorKind, EvalError, FailError, type FuncMap, FuncNotFoundError, MissingFieldError, type MissingKeyOption, NotIntegerError, ParseError, type ReferencedArg, type ReferencedCall, type ReferencedLiteral, Template, TemplateError, type TemplateFunc, TypeMismatchError, createEngine, sprigConversions, sprigDatetime, sprigDatetimeIn, sprigDefaults, sprigDicts, sprigFlow, sprigHash, sprigLists, sprigMath, sprigRandom, sprigRegex, sprigSemver, sprigStrings, sprigTypes, staticDictEntries };
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/index.js b/dist/index.js
+index 18c57b481c78b6d74684a6e167ef81f4d7e5332f..1feb93250eeacb3dd3ffc7f662940da86806ce76 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2957,12 +2957,12 @@ function secondsToNs(s) {
+ * [LAW:single-enforcer] One place owns `t → Date` normalisation.
+ * All date functions call this; none duplicate the logic.
+ */
+-function resolveDate(t) {
++function resolveDate(t, parseString) {
+ 	if (t instanceof Date) return t;
+ 	if (typeof t === "bigint") return /* @__PURE__ */ new Date(Number(t) * 1e3);
+ 	if (typeof t === "number") return /* @__PURE__ */ new Date(t * 1e3);
+ 	if (typeof t === "string") {
+-		const parsed = new Date(t);
++		const parsed = parseString(t);
+ 		if (!Number.isNaN(parsed.getTime())) return parsed;
+ 		throw new Error(`sprig: cannot parse date value ${JSON.stringify(t)}`);
+ 	}
+@@ -2974,8 +2974,8 @@ function resolveDate(t) {
+ * `ago t` — Go-style duration since `t`.
+ * Mirrors Go sprig: `time.Since(t).Round(time.Second).String()`.
+ */
+-function ago(t, clock) {
+-	const ms = clock().getTime() - resolveDate(t).getTime();
++function ago(date, clock) {
++	const ms = clock().getTime() - date.getTime();
+ 	return formatDurationNs(Math.round(ms / 1e3) * 1e9);
+ }
+ //#endregion
+@@ -3216,7 +3216,7 @@ function localTz() {
+ * in the host timezone (mirrors Go's `date` which uses `time.Local`).
+ */
+ function date(format, t) {
+-	return formatGoLayout(format, getZoneParts(resolveDate(t), localTz()));
++	return formatGoLayout(format, getZoneParts(resolveDate(t, text => new Date(text)), localTz()));
+ }
+ //#endregion
+ //#region src/sprig/datetime/dateInZone.ts
+@@ -3224,8 +3224,8 @@ function date(format, t) {
+ * `dateInZone format t zone` — format `t` using Go's reference-time
+ * layout, displayed in the named IANA timezone.
+ */
+-function dateInZone(format, t, zone) {
+-	return formatGoLayout(format, getZoneParts(resolveDate(t), zone));
++function dateInZone(format, date, zone, parts) {
++	return formatGoLayout(format, parts(date, zone));
+ }
+ //#endregion
+ //#region src/sprig/datetime/dateModify.ts
+@@ -3233,8 +3233,7 @@ function dateInZone(format, t, zone) {
+ * `dateModify duration t` — add or subtract a Go duration from `t`.
+ * `duration` is a Go duration string: "1h30m", "-24h", "300ms".
+ */
+-function dateModify(duration, t) {
+-	const d = resolveDate(t);
++function dateModify(duration, d) {
+ 	const ns = parseDurationNs(duration);
+ 	if (Number.isNaN(ns)) return d;
+ 	return new Date(d.getTime() + ns / 1e6);
+@@ -3292,14 +3291,14 @@ function durationRound(d) {
+ //#region src/sprig/datetime/htmlDate.ts
+ /** `htmlDate t` — YYYY-MM-DD in the host timezone. */
+ function htmlDate(t) {
+-	const z = getZoneParts(resolveDate(t), localTz());
++	const z = getZoneParts(resolveDate(t, text => new Date(text)), localTz());
+ 	return `${z.year}-${String(z.month).padStart(2, "0")}-${String(z.day).padStart(2, "0")}`;
+ }
+ //#endregion
+ //#region src/sprig/datetime/htmlDateInZone.ts
+ /** `htmlDateInZone t zone` — YYYY-MM-DD in the named timezone. */
+-function htmlDateInZone(t, zone) {
+-	const z = getZoneParts(resolveDate(t), zone);
++function htmlDateInZone(date, zone, parts) {
++	const z = parts(date, zone);
+ 	return `${z.year}-${String(z.month).padStart(2, "0")}-${String(z.day).padStart(2, "0")}`;
+ }
+ //#endregion
+@@ -3710,8 +3709,8 @@ function toDate(format, value) {
+ //#endregion
+ //#region src/sprig/datetime/unixEpoch.ts
+ /** `unixEpoch t` — seconds since Unix epoch as a decimal string. */
+-function unixEpoch(t) {
+-	return String(Math.floor(resolveDate(t).getTime() / 1e3));
++function unixEpoch(date) {
++	return String(Math.floor(date.getTime() / 1e3));
+ }
+ //#endregion
+ //#region src/sprig/datetime/index.ts
+@@ -3723,6 +3722,10 @@ function unixEpoch(t) {
+ *   `EngineConfig.clock`).
+ */
+ function sprigDatetime(clock = () => /* @__PURE__ */ new Date()) {
++	return sprigDatetimeIn(clock, localTz, getZoneParts, text => new Date(text));
++}
++function sprigDatetimeIn(clock, timeZone, parts, parseString) {
++	const resolve = value => resolveDate(value, parseString);
+ 	return {
+ 		now: {
+ 			fn: () => now(clock),
+@@ -3730,12 +3733,12 @@ function sprigDatetime(clock = () => /* @__PURE__ */ new Date()) {
+ 			arity: { kind: "exact" }
+ 		},
+ 		date: {
+-			fn: (format, t) => date(format, t),
++			fn: (format, t) => dateInZone(format, resolve(t), timeZone(), parts),
+ 			argTypes: ["string", "value"],
+ 			arity: { kind: "exact" }
+ 		},
+ 		dateInZone: {
+-			fn: (format, t, zone) => dateInZone(format, t, zone),
++			fn: (format, t, zone) => dateInZone(format, resolve(t), zone, parts),
+ 			argTypes: [
+ 				"string",
+ 				"value",
+@@ -3744,17 +3747,17 @@ function sprigDatetime(clock = () => /* @__PURE__ */ new Date()) {
+ 			arity: { kind: "exact" }
+ 		},
+ 		dateModify: {
+-			fn: (dur, t) => dateModify(dur, t),
++			fn: (dur, t) => dateModify(dur, resolve(t)),
+ 			argTypes: ["string", "value"],
+ 			arity: { kind: "exact" }
+ 		},
+ 		htmlDate: {
+-			fn: (t) => htmlDate(t),
++			fn: (t) => htmlDateInZone(resolve(t), timeZone(), parts),
+ 			argTypes: ["value"],
+ 			arity: { kind: "exact" }
+ 		},
+ 		htmlDateInZone: {
+-			fn: (t, zone) => htmlDateInZone(t, zone),
++			fn: (t, zone) => htmlDateInZone(resolve(t), zone, parts),
+ 			argTypes: ["value", "string"],
+ 			arity: { kind: "exact" }
+ 		},
+@@ -3774,12 +3777,12 @@ function sprigDatetime(clock = () => /* @__PURE__ */ new Date()) {
+ 			arity: { kind: "exact" }
+ 		},
+ 		ago: {
+-			fn: (t) => ago(t, clock),
++			fn: (t) => ago(resolve(t), clock),
+ 			argTypes: ["value"],
+ 			arity: { kind: "exact" }
+ 		},
+ 		unixEpoch: {
+-			fn: (t) => unixEpoch(t),
++			fn: (t) => unixEpoch(resolve(t)),
+ 			argTypes: ["value"],
+ 			arity: { kind: "exact" }
+ 		}
+@@ -6535,6 +6538,6 @@ function sprigTypes() {
+ 	};
+ }
+ //#endregion
+-export { ArgCountError, Defines, Engine, EvalError, FailError, FuncNotFoundError, MissingFieldError, NotIntegerError, ParseError, Template, TemplateError, TypeMismatchError, createEngine, sprigConversions, sprigDatetime, sprigDefaults, sprigDicts, sprigFlow, sprigHash, sprigLists, sprigMath, sprigRandom, sprigRegex, sprigSemver, sprigStrings, sprigTypes, staticDictEntries };
++export { ArgCountError, Defines, Engine, EvalError, FailError, FuncNotFoundError, MissingFieldError, NotIntegerError, ParseError, Template, TemplateError, TypeMismatchError, createEngine, sprigConversions, sprigDatetime, sprigDatetimeIn, sprigDefaults, sprigDicts, sprigFlow, sprigHash, sprigLists, sprigMath, sprigRandom, sprigRegex, sprigSemver, sprigStrings, sprigTypes, staticDictEntries };
+ 
+ //# sourceMappingURL=index.js.map

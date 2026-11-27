@@ -84,18 +84,3 @@ export function abbreviatePath(path: string): string {
     })
     .join("/");
 }
-
-// [LAW:one-source-of-truth] Locale-grouped integer rendering. Callers that
-// want "50,000" instead of "50000" go through this rather than calling
-// toLocaleString() ad-hoc — the legacy context segment used the latter
-// pattern inline, and the DSL formatter (template-engine/funcs.ts)
-// delegates here so the two producers agree by construction.
-//
-// A renderer passes its host's locale. A standalone caller can format in
-// its own process's locale by omitting it.
-export function formatInteger(
-  n: number,
-  formatter = new Intl.NumberFormat(),
-): string {
-  return formatter.format(n);
-}

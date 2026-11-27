@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 // [LAW:one-type-per-behavior] The lines are a transport, not a second
 // renderer: it answers the same inputs in process and over lines.
 
@@ -310,7 +311,7 @@ describe("a renderer's boot line", () => {
   const boot = {
     locations,
     stored,
-    region: { locale: "en-US", timeZone: "UTC" },
+    region: SAMPLE_REGION,
     memoryLimitBytes: Number.MAX_SAFE_INTEGER * 1024 * 1024,
   };
   const read = (value: unknown) =>
@@ -336,6 +337,9 @@ describe("a renderer's boot line", () => {
       "invalid resolved locations",
     ],
     [{ ...boot, region: null }, "locale and time zone"],
+    [{ ...boot, region: { ...SAMPLE_REGION, integers: null } }, "integer presentation"],
+    [{ ...boot, region: { ...SAMPLE_REGION, integers: { ...SAMPLE_REGION.integers,
+      negative: ["#"] } } }, "integer presentation"],
     [
       { ...boot, region: { locale: "not valid", timeZone: "UTC" } },
       "unsupported locale or time zone",

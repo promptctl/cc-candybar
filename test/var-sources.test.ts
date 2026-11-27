@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import {
   manualWatcherRegistry,
@@ -210,7 +211,7 @@ function registryOver(
   runs: SourceRuns = runsOver(),
 ): SourceRegistry {
   const registry = new SourceRegistry(
-    store,
+    store, SAMPLE_REGION,
     defaultEmptyValue,
     sessionState,
     parent,
@@ -2845,12 +2846,11 @@ describe("SourceRegistry — template: cycle detection", () => {
 // ─── time source kind ─────────────────────────────────────────────────────────
 
 describe("SourceRegistry — time: the draw's instant, formatted", () => {
-  // Built from local fields, so the layout's local-time reading is the same
-  // wherever the suite runs.
+  // All layouts in this fixture use its explicit UTC region.
   const at = (h: number, m: number, sec: number) =>
-    new Date(2026, 5, 4, h, m, sec);
+    new Date(Date.UTC(2026, 5, 4, h, m, sec));
   // Fixed reference date: 2024-03-15 09:07:05 (Friday)
-  const ref = new Date(2024, 2 /* March */, 15, 9, 7, 5);
+  const ref = new Date(Date.UTC(2024, 2 /* March */, 15, 9, 7, 5));
 
   it.each([
     ["2006-01-02", ref, "2024-03-15"],
@@ -2865,10 +2865,10 @@ describe("SourceRegistry — time: the draw's instant, formatted", () => {
     ["06", ref, "24"],
     ["1/2/06", ref, "3/15/24"],
     ["Time: 15:04:05!", ref, "Time: 09:07:05!"],
-    ["3:04 PM", new Date(2024, 0, 1, 14, 30, 0), "2:30 PM"],
-    ["3:04 PM", new Date(2024, 0, 1, 0, 0, 0), "12:00 AM"],
+    ["3:04 PM", new Date(Date.UTC(2024, 0, 1, 14, 30, 0)), "2:30 PM"],
+    ["3:04 PM", new Date(Date.UTC(2024, 0, 1, 0, 0, 0)), "12:00 AM"],
     // Go's padded day, which a layout reads as a token rather than text.
-    ["Jan _2", new Date(2024, 0, 1), "Jan  1"],
+    ["Jan _2", new Date(Date.UTC(2024, 0, 1)), "Jan  1"],
   ] as const)('layout "%s" at %s → "%s"', (layout, date, expected) => {
     const { store, registry } = make();
     registry.declareTime("t", { format: layout });
@@ -3745,7 +3745,7 @@ describe("SourceRegistry — in-flight runs", () => {
 describe("SourceRegistry — the runs it needs", () => {
   it("are the same runs on a read in which nothing moved, with nothing observing", () => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store);
+    const registry = new SourceRegistry(store, SAMPLE_REGION);
     live.add(registry);
     registry.declareShell("val", "echo hi", {
       cwd: process.cwd(),

@@ -16,6 +16,7 @@
 // Jest gives each test FILE its own module registry, so the sharing below spans
 // the rigs one file builds, never two files.
 
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
 import {
@@ -228,7 +229,7 @@ export function buildRig(init: RigInit = {}): Rig {
         ? sessionState.get(sid, key)
         : ctx.edits.view.get(sid, key),
   };
-  const registry = new SourceRegistry(store, "", view, null);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", view, null);
   const readings = readingsIn(init.env ?? {});
   const registered = registerCompiled(
     drawn,

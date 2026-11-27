@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] A click writes the layer its action names, by role,
 // in the chain of the snapshot its renderer holds for the session's origin:
@@ -82,6 +83,7 @@ function session(): {
   const sessionState = new SessionState();
   const cache = new DiscoveringCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),

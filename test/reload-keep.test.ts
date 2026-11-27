@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import fs from "node:fs";
 import { HOST, hostOf } from "../scripts/lib/host";
 import { worldOf } from "./helpers/host";
@@ -71,6 +72,7 @@ function rig(
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: opts.clock ?? systemTimekeeper,
       locations: locations(host),

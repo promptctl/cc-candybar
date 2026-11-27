@@ -10,6 +10,7 @@
 //   - a global the menu has never seen — a throwaway enum — gets a working
 //     control from the same generator, with its option domain and its gate.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -233,7 +234,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
     const render = () =>
       drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;

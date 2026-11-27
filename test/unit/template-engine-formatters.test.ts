@@ -1,3 +1,5 @@
+import { regionFor } from "../../src/utils/region";
+import { formatInteger } from "../../src/utils/integer-presentation";
 // [LAW:behavior-not-structure] Asserts wrapper output equals the canonical
 // formatter's output. The wrappers' purpose is to expose src/utils/formatters.ts
 // through the template engine without re-deriving the formatting rules;
@@ -15,11 +17,11 @@
 // expression yet (locale grouping, regex model-name parsing) plus the
 // clock-reading numeric primitive minutesUntilReset.
 
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import { TEST_ENGINE } from "../helpers/test-engine";
 import { createCcCandybarEngine } from "../../src/template-engine/engine";
 import { formatterFuncs } from "../../src/template-engine/funcs";
 import {
-  formatInteger,
   formatModelName,
   shortenModelName,
 } from "../../src/utils/formatters";
@@ -100,7 +102,7 @@ describe("formatInteger wrapper", () => {
   test.each([0, 1, 999, 1000, 12345, 50000, 1_234_567])(
     "matches source for n=%p",
     (n) => {
-      expect(evalText("{{ formatInteger .n }}", { n })).toBe(formatInteger(n));
+      expect(evalText("{{ formatInteger .n }}", { n })).toBe(new Intl.NumberFormat(SAMPLE_REGION.locale).format(n));
     },
   );
 });
@@ -172,7 +174,7 @@ describe("shortenModelName wrapper", () => {
 
 describe("formatterFuncs registry", () => {
   test("registers exactly the expected names", () => {
-    const funcs = formatterFuncs();
+    const funcs = formatterFuncs(SAMPLE_REGION.integers);
     expect(Object.keys(funcs).sort()).toEqual([
       "formatInteger",
       "formatModelName",
@@ -182,7 +184,7 @@ describe("formatterFuncs registry", () => {
   });
 
   test("all entries have argTypes arrays", () => {
-    for (const [, entry] of Object.entries(formatterFuncs())) {
+    for (const [, entry] of Object.entries(formatterFuncs(SAMPLE_REGION.integers))) {
       expect(Array.isArray(entry.argTypes)).toBe(true);
     }
   });
@@ -193,7 +195,7 @@ describe("formatterFuncs registry", () => {
   // an engine.ts refactor that drops the spread.
   test("each registered name is callable from the engine", () => {
     const engine = createCcCandybarEngine(TEST_ENGINE);
-    for (const name of Object.keys(formatterFuncs())) {
+    for (const name of Object.keys(formatterFuncs(SAMPLE_REGION.integers))) {
       // Parse-only smoke: a missing func is reported at evaluate time, but the
       // engine pre-validates that referenced names exist in the registry.
       // Calling parse alone doesn't trigger the check (Go templates resolve
@@ -212,3 +214,13 @@ describe("formatterFuncs registry", () => {
     }
   });
 });
+
+test.each(["bn-IN", "ar-EG", "es-ES", "hi-IN", "en-u-nu-mathsans", "zh-u-nu-hanidec"])(
+  "%s preserves the host's digit shapes, grouping thresholds and sign marks across a boot round trip",
+  locale => {
+    const native = new Intl.NumberFormat(locale);
+    const captured = JSON.parse(JSON.stringify(regionFor(locale, "UTC").integers));
+    for (const n of [0, -0, 987, 1_000, -12_345, 1_234_567, Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER])
+      expect(formatInteger(n, captured)).toBe(native.format(n));
+  },
+);

@@ -16,6 +16,7 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { locs } from "./helpers/host";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
@@ -128,7 +129,7 @@ function rig(
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       cwd: "/tmp",
     });

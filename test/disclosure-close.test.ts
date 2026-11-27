@@ -20,6 +20,7 @@
 //   - a body whose every child is hidden lays no row and so no ✕ — not on
 //     the bar, and not in the trigger's cells.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, type Row } from "../src/render/frame";
@@ -134,7 +135,7 @@ function build(src: string, withDefault: boolean) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
   });

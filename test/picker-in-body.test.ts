@@ -1,6 +1,7 @@
 // brandon-menu-ia-q30.jl1: the two template arguments the `◀ label ▶` picker
 // is built from — a carousel whose label fires an action of the author's, and a
 // picker that is a row of a disclosure body and so draws no ✕ of its own.
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -54,7 +55,7 @@ function renderOf(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   return drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
     ...OPTS,
@@ -147,7 +148,7 @@ describe("{{ picker }} over a catalogue", () => {
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     const compiled = registerDslConfig(config, registry, {
       cwd: "/tmp/proj",
     });

@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:behavior-not-structure] A plugin, end to end, as the two programs that
 // meet it see it: the load and render diagnostics
@@ -585,6 +586,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
   const loaded = loadDiscovered(dir, dir, good, {
+    region: SAMPLE_REGION,
     clock: systemTimekeeper,
     stateDir: stateDir(host),
     locations: locations(host),
@@ -641,6 +643,7 @@ describe("a plugin's own variables", () => {
     expect(rendered).toContain("no data here");
     expect(warnings).toEqual([]);
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -683,6 +686,7 @@ describe("a plugin's own variables", () => {
     expect(warnings).toEqual([]);
     expect(rendered).toContain("hello, world 7 ran open=no");
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -739,6 +743,7 @@ describe("a plugin's own variables", () => {
       `{ plugins: ["./hello/plugin.json5", "./d/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
     );
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -756,6 +761,7 @@ describe("a plugin's own variables", () => {
 
   test("none declared counts zero", () => {
     const loaded = loadDiscovered(dir, dir, config(), {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -803,6 +809,7 @@ describe("an installed plugin", () => {
 
   function segmentsIn(projectDir: string): string[] {
     const loaded = loadDiscovered(projectDir, projectDir, undefined, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -891,6 +898,7 @@ describe("an installed plugin", () => {
       path.join(dir, "main/.claude/worktrees/w"),
       placing("plugins.lit.ticket"),
       {
+        region: SAMPLE_REGION,
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
@@ -949,6 +957,7 @@ describe("an installed plugin", () => {
     });
     const cache = new DiscoveringCache(
       {
+        region: SAMPLE_REGION,
         editRevision: () => null,
         clock: systemTimekeeper,
         stateDir: stateDir(host),
@@ -1051,6 +1060,7 @@ describe("an installed plugin", () => {
     const p = placing("plugins.lit.ticket");
     const load = (): string => {
       const loaded = loadDiscovered(dir, path.join(dir, "outer/inner"), p, {
+        region: SAMPLE_REGION,
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
@@ -1560,6 +1570,7 @@ describe("an installed plugin", () => {
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -1598,6 +1609,7 @@ describe("an installed plugin", () => {
     });
     const cache = new DiscoveringCache(
       {
+        region: SAMPLE_REGION,
         editRevision: () => null,
         clock: systemTimekeeper,
         stateDir: stateDir(host),
@@ -1710,6 +1722,7 @@ describe("an installed plugin", () => {
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -1788,6 +1801,7 @@ describe("an installed plugin", () => {
     );
     const p = placing("plugins.lit.s");
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -1926,6 +1940,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       rendered.indexOf("repo-ticket"),
     );
     const loaded = loadDiscovered(repo, repo, undefined, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),

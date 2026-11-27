@@ -651,7 +651,7 @@ export function drawRender(
     drawing,
     feeds,
     ...pointerFacts(pointer, mode, sessionState.get(sessionId, HOVER_KEY)),
-    ...instantFacts(document.builtins, at),
+    ...instantFacts(document.builtins, at, view.registry.calendar),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   const sources = sourceSummaryOf(

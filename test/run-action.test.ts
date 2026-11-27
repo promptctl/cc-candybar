@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:behavior-not-structure] The `run` action through what a user and an
 // operator see: the load errors a declaration earns, the link a draw makes,
@@ -222,6 +223,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     logger: log,
   });
   const providers = createPayloadProviders({
+    timeZone: SAMPLE_REGION.timeZone,
     prices: settledPrices,
     clock: systemTimekeeper,
     launcher: processLauncher,
@@ -244,6 +246,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const served = collected({ owners: providers, log }, cleanups);
   const cache = new DiscoveringCache<SessionSource>(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
@@ -439,6 +442,7 @@ describe("a run's declaration", () => {
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
     const loaded = loadDiscovered(dir, dir, config(["mine"]), {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
@@ -466,6 +470,7 @@ describe("a run's declaration", () => {
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadDiscovered(dir, dir, file, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),

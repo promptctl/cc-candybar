@@ -7,11 +7,10 @@ import {
   FlexStrip,
   Segment,
   render,
-  resolveDestination,
+  explicitDestination,
   type Joiner,
   type SeamForm,
   type Renderable,
-  type ColorSystemName,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
@@ -53,12 +52,12 @@ export interface DrawnRow {
 function draw(
   renderable: Renderable,
   options: {
-    readonly colorSystem: ColorSystemName | null;
+    readonly colorSystem: ColorCompatibility | null;
     readonly width?: number;
     readonly time?: number;
   },
 ): DrawnRow {
-  const destination = resolveDestination(options.colorSystem);
+  const destination = explicitDestination(options.colorSystem);
   const { time } = options;
   let told = Infinity;
   const segments = [

@@ -3,6 +3,7 @@
 // and a durable click writes the user's file, refusing a change a project
 // layer would hide.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import fs from "node:fs";
 import { hostOf } from "../scripts/lib/host";
 import { worldOf } from "./helpers/host";
@@ -777,6 +778,7 @@ describe("a project layer inserting into the user's row", () => {
 test("a layer that could not be read fails the load naming it", () => {
   fs.mkdirSync(projectFile);
   const loaded = loadDiscovered(project, project, undefined, {
+    region: SAMPLE_REGION,
     clock: systemTimekeeper,
     stateDir: stateDir(host),
     locations: locations(host),

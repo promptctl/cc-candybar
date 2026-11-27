@@ -11,6 +11,7 @@
 // reads it the way it reads the daemon's. `requestPayload` below declares
 // the lanes over the fakes as the collector declares a session's.
 
+import { SAMPLE_CALENDAR } from "./sample-region.js";
 import type { SessionEnvironment } from "../../../src/daemon/foundations/session-env";
 import { daemonFactsOf } from "./daemon-facts";
 import { observable, runInAction } from "mobx";
@@ -472,7 +473,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(spelled(todayReadingOf(inputs)), at),
+    today: todayOf(spelled(todayReadingOf(inputs)), at, SAMPLE_CALENDAR),
   };
 }
 

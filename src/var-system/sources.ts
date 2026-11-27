@@ -9,7 +9,8 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
-import { systemRegion, type RegionalSettings } from "../utils/region.js";
+import { ZonedCalendar } from "../utils/calendar.js";
+import { type RegionalSettings } from "../utils/region.js";
 import {
   compareStructural,
   computed,
@@ -351,6 +352,7 @@ const EMPTY_INPUT = { string: "", number: 0, boolean: false } as const;
 // duplicate box definitions for input-kind variables.
 
 export class SourceRegistry {
+  readonly calendar: ZonedCalendar;
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -484,12 +486,13 @@ export class SourceRegistry {
   // Omitted in tests that don't exercise state vars.
   constructor(
     private readonly store: VariableStore,
+    readonly region: RegionalSettings,
     private readonly defaultEmptyValue: string = EMPTY_INPUT.string,
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
-    readonly region: RegionalSettings = systemRegion(),
   ) {
+    this.calendar = parent?.calendar ?? new ZonedCalendar(region.timeZone);
     this.engine = createCcCandybarEngine({ drawnAt: this.drawnAt, region });
     this.sessionState = sessionState;
     this.cleanups.push(observe(this.subscriptionsNow, () => {}));
@@ -507,10 +510,10 @@ export class SourceRegistry {
   view(): SourceRegistry {
     return new SourceRegistry(
       new VariableStore(this.store.clock, this.store),
+      this.region,
       this.defaultEmptyValue,
       this.sessionState,
       this,
-      this.region,
     );
   }
 

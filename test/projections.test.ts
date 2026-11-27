@@ -2,6 +2,7 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
@@ -92,7 +93,7 @@ test("a date function of its arguments alone reads no clock", () => {
   }`);
   expect([...own(projectionsOf(cfg)).keys()]).toEqual([]);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, SAMPLE_REGION);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     // Read with no draw bound: neither reaches the clock.
@@ -109,7 +110,7 @@ test("a value reaching the instant by a name it does not spell is refused, never
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, SAMPLE_REGION);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     // The fold cannot see the read, so `hidden` keeps its answer.
@@ -129,7 +130,7 @@ test("a value that keeps its answer is told why, drawn or not", () => {
     hidden: { kind: "template", template: '{{ index . "clock" }}' },
   }`);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, SAMPLE_REGION);
   try {
     declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
     expect(() => store.read("hidden")).toThrow(
@@ -172,7 +173,7 @@ test("a projection is derived at each draw; a derived template is cached", () =>
     shown: { kind: "template", template: "{{ .label }}" },
   }`);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, SAMPLE_REGION);
   try {
     // The synthesized menu's `state` variables need a SessionState this
     // registry has not got; this test's own variables declare.
@@ -208,6 +209,7 @@ test("the config load line names the load's projections", () => {
       `{ variables: ${variables}, segments: ${segments} }`,
     );
     const loaded = loadDiscovered(dir, dir, file, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
@@ -294,7 +296,7 @@ test("a compile is keyed on the projections alone", () => {
         parseAndValidate(
           "/tmp/test.json5",
           `{ variables: ${variables}, segments: { s: { template: "{{ ${read} }}" } }, root: { h: ["s"] } }`,
-        ),
+        ), SAMPLE_REGION,
       ),
     );
   const clock = `clock: { kind: "time", layout: "15:04" }`;

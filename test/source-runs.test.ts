@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // A source's identity is a digest of what its run needs, two declarations
@@ -53,7 +54,7 @@ function rig(inherited: NodeJS.ProcessEnv = {}) {
   // A session's registry, its programs run in `environment`.
   const registry = (environment: Environment = {}): Held => {
     const store = new VariableStore(clock);
-    const r = new SourceRegistry(store, "");
+    const r = new SourceRegistry(store, SAMPLE_REGION, "");
     const held = collectedRuns(runs, r, ok(environment));
     r.bindInputs({
       session: () => {

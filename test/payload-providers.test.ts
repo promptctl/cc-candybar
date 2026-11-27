@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:behavior-not-structure] The providers' one close, as steps of a
@@ -22,6 +23,7 @@ function providers() {
     logger: log,
   });
   const built = createPayloadProviders({
+    timeZone: SAMPLE_REGION.timeZone,
     prices: settledPrices,
     clock: systemTimekeeper,
     launcher: unscriptedLauncher(),

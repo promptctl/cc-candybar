@@ -11,6 +11,7 @@
 // open, or idle time between turns, yields ABSENCE (missing field → -1
 // default → "—"), never a stale or divide-by-zero number.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { textOf } from "../src/render/frame";
 import { HOST } from "../scripts/lib/host";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
@@ -145,6 +146,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -177,6 +179,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
   test("a sample says whether its turn is open: a prompt opens it, a tool call keeps it, a final message closes it", async () => {
     const t = join(dir, "T.jsonl");
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -211,6 +214,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -232,6 +236,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -264,6 +269,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
   test("the ring accumulates recent samples oldest→newest", async () => {
     const t = join(dir, "R.jsonl");
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -302,6 +308,7 @@ describe("SessionUsageStore speed — the sample ring", () => {
     // order the samples were inserted.
     const t = join(dir, "O.jsonl");
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -416,7 +423,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and speed's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, {
       cwd: "/tmp",

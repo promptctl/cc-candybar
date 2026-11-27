@@ -1,3 +1,4 @@
+import { SAMPLE_CALENDAR } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type {
   DaySums,
   SessionUsageStore,
@@ -52,11 +53,11 @@ function projected(
   at: Instant,
 ) {
   const fact = todayReading(lane, store, sessionIdOf(hookData.session_id));
-  return fact.kind === "ok" ? projectToday(fact.value, at) : fact;
+  return fact.kind === "ok" ? projectToday(fact.value, at, SAMPLE_CALENDAR) : fact;
 }
 
 // The day sums of a directory set holding one day: `cost` and `tokens` on the
 // day `at` falls in, with no roots.
 export function sumsOf(at: Instant, cost: number, tokens: number): DaySums {
-  return { roots: [], sums: oneDay(at, cost, tokens) };
+  return { roots: [], sums: oneDay(SAMPLE_CALENDAR, at, cost, tokens) };
 }

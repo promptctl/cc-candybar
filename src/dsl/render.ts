@@ -12,7 +12,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import { systemRegion, type RegionalSettings } from "../utils/region.js";
+import { type RegionalSettings } from "../utils/region.js";
 import { sha256Text } from "../utils/sha256.js";
 import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
@@ -563,7 +563,7 @@ export interface CompileInput {
 
 export function compileInputOf(
   config: ValidatedConfig,
-  region: RegionalSettings = systemRegion(),
+  region: RegionalSettings,
 ): CompileInput {
   const { variables, ...rest } = config;
   // [LAW:one-source-of-truth] Map each SessionState key → the variable a `set`

@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { runUnder, sameDraw } from "./helpers/frame";
@@ -84,7 +85,7 @@ function renderer(
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

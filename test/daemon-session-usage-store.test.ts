@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { reaction } from "mobx";
 import { HOST } from "../scripts/lib/host";
@@ -124,6 +125,7 @@ describe("SessionUsageStore — session projection", () => {
     writeFileSync(t, usageLine("a", new Date(), 0.01));
     const table = jest.fn(settledPrices.table);
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: { table },
       clock: systemTimekeeper,
       host: HOST,
@@ -157,6 +159,7 @@ describe("SessionUsageStore — session projection", () => {
       lines.push(`${level} ${msg}`),
     );
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -208,6 +211,7 @@ describe("SessionUsageStore — session projection", () => {
       usageLine("a1", new Date(), 0.01) + usageLine("a2", new Date(), 0.02),
     );
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -261,6 +265,7 @@ describe("SessionUsageStore — session projection", () => {
     );
     const lines: string[] = [];
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -292,6 +297,7 @@ describe("SessionUsageStore — session projection", () => {
     writeFileSync(t, usageLine("a", lastWeek, 0.01));
     const lines: string[] = [];
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -320,6 +326,7 @@ describe("SessionUsageStore — session projection", () => {
     writeFileSync(t, usageLine("a", at, 0.01));
     const lines: string[] = [];
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -344,6 +351,7 @@ describe("SessionUsageStore — session projection", () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -367,6 +375,7 @@ describe("SessionUsageStore — session projection", () => {
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -403,6 +412,7 @@ describe("SessionUsageStore — session projection", () => {
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -430,6 +440,7 @@ describe("SessionUsageStore — session projection", () => {
   // empty record — two facts a draw must not confuse.
   test("a draw before the session's refresh is not answered; after one it is what the refresh answered", async () => {
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -458,6 +469,7 @@ describe("SessionUsageStore — session projection", () => {
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -505,6 +517,7 @@ describe("SessionUsageStore — session projection", () => {
         block("msg-2", "req-2"),
     );
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -535,6 +548,7 @@ describe("SessionUsageStore — session projection", () => {
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -566,6 +580,7 @@ describe("SessionUsageStore — session projection", () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -580,6 +595,7 @@ describe("SessionUsageStore — session projection", () => {
       // Fresh store: K concurrent first-reads coalesce onto
       // one flight, so cumulative fs ops stay near a single parse, not K×.
       const store2 = new SessionUsageStore({
+        timeZone: SAMPLE_REGION.timeZone,
         prices: settledPrices,
         clock: systemTimekeeper,
         host: HOST,
@@ -650,6 +666,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   test("a second session's directory is seeded on first sight and keeps its own sum", async () => {
     const other = mkdtempSync(join(tmpdir(), "cc-candybar-store-other-"));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -723,6 +740,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
 
   test("seed aggregates today cost across every session", async () => {
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -753,6 +771,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   test("today sums every session the seed ingests, however many", async () => {
     const many = mkdtempSync(join(tmpdir(), "cc-candybar-store-many-"));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -789,6 +808,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   test("today counts a response once however many session files hold a copy of it", async () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-fork-"));
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -844,6 +864,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const PERIOD_MS = 50;
     const lines: string[] = [];
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -858,7 +879,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const ongoing = join(pdir, "ongoing.jsonl");
       // Local noon: every draw below falls on one day, whenever this runs.
       const noon = new Date();
-      noon.setHours(12, 0, 0, 0);
+      noon.setUTCHours(12, 0, 0, 0);
       writeFileSync(active, usageLine("active", noon, 1));
       writeFileSync(ongoing, usageLine("ongoing-0", noon, 2));
       const tick = new Date(Math.floor(Date.now() / 1000) * 1000);
@@ -930,6 +951,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const lines: string[] = [];
     let failNextScan = true;
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -948,7 +970,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       mkdirSync(pdir, { recursive: true });
       const active = join(pdir, "active.jsonl");
       const noon = new Date();
-      noon.setHours(12, 0, 0, 0);
+      noon.setUTCHours(12, 0, 0, 0);
       writeFileSync(active, usageLine("active", noon, 1));
       writeFileSync(
         join(pdir, "headless.jsonl"),
@@ -996,6 +1018,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const pdir = join(tree, "projects", "proj");
     const headless = join(pdir, "headless.jsonl");
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -1006,7 +1029,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       mkdirSync(pdir, { recursive: true });
       const active = join(pdir, "active.jsonl");
       const noon = new Date();
-      noon.setHours(12, 0, 0, 0);
+      noon.setUTCHours(12, 0, 0, 0);
       writeFileSync(active, usageLine("active", noon, 1));
       writeFileSync(headless, usageLine("headless", noon, 4));
       chmodSync(headless, 0o000);
@@ -1041,6 +1064,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const locked = join(tree, "projects", "locked");
     const lines: string[] = [];
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -1088,6 +1112,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-noprojects-"));
     const projects = join(tree, "projects");
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -1118,6 +1143,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // no record changed and nothing read, it is the new day's — nothing spent.
   test("a frame past midnight reads the new day with no refresh", async () => {
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -1129,8 +1155,8 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const answered = await todayInfo(store, holds, hd, root, instantOf(now));
       expect(answered.kind).toBe("ok");
       const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 1, 0);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      tomorrow.setUTCHours(0, 0, 1, 0);
       const ops = await countFsOps(async () => {
         expect(todayNow(store, holds, hd, root, instantOf(tomorrow))).toBe(
           ABSENT,
@@ -1153,6 +1179,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
 
   test("after the seed, N renders with an unchanged session do ZERO transcript fs work", async () => {
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -1184,6 +1211,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
 
   test("a changed session re-parses only itself, not the tree", async () => {
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,
@@ -1214,6 +1242,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
 
   test("a closed store answers a late declaration of today as closed", () => {
     const store = new SessionUsageStore({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       host: HOST,

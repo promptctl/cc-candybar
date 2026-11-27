@@ -8,6 +8,7 @@
 // session too young to project yields ABSENCE (a missing field → the -1 default
 // → "—"), never a fabricated number.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
@@ -185,7 +186,7 @@ function renderBurnrate(
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and burnrate's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, {
       cwd: "/tmp",

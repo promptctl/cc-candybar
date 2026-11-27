@@ -7,6 +7,7 @@
 // no validation error and no error cell (⚠) in the output — so any future drift
 // fails CI, not a user's status line.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { hangs } from "../src/proc/spawner-fake";
@@ -66,7 +67,7 @@ describe("shipped examples load and render through the real cascade", () => {
     // it is to the real launcher until a process answers.
     const { launcher, spawner } = fixtureFakeLauncher(systemTimekeeper, {});
     spawner.program(() => true, hangs());
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       cwd: process.cwd(),
     });

@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type {
   ConfigSnapshot,
   PluginFile,
@@ -65,7 +66,7 @@ const BOOT: RendererBoot = {
     dataHome: "/nowhere/data",
     dataDirs: [],
   },
-  region: { locale: "en-US", timeZone: "UTC" },
+  region: SAMPLE_REGION,
   memoryLimitBytes: 1024 * 1024 * 1024,
 };
 const SELECTED = "CANDYBAR_CAPTURE_SELECTED";

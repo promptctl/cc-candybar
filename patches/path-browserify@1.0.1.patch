@@ -1,0 +1,36 @@
+diff --git a/index.js b/index.js
+index 24235288130acf35900f66f60c350d19583816e6..03a4c6ab9d48e1af48f9ae15573567b23394c935 100644
+--- a/index.js
++++ b/index.js
+@@ -113,18 +113,8 @@ var posix = {
+   resolve: function resolve() {
+     var resolvedPath = '';
+     var resolvedAbsolute = false;
+-    var cwd;
+-
+-    for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+-      var path;
+-      if (i >= 0)
+-        path = arguments[i];
+-      else {
+-        if (cwd === undefined)
+-          cwd = process.cwd();
+-        path = cwd;
+-      }
+-
++    for (var i = arguments.length - 1; i >= 0 && !resolvedAbsolute; i--) {
++      var path = arguments[i];
+       assertPath(path);
+ 
+       // Skip empty entries
+@@ -136,8 +126,8 @@ var posix = {
+       resolvedAbsolute = path.charCodeAt(0) === 47 /*/*/;
+     }
+ 
+-    // At this point the path should be resolved to a full absolute path, but
+-    // handle relative paths to be safe (might happen when process.cwd() fails)
++    if (!resolvedAbsolute)
++      throw new TypeError('Resolving a relative path requires an absolute base');
+ 
+     // Normalize the path
+     resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);

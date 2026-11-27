@@ -18,6 +18,7 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
@@ -401,7 +402,7 @@ describe("a fill segment fills wherever the walk places it", () => {
       new Set(listResolvablePaletteNames()),
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
+    const registry = new SourceRegistry(store, SAMPLE_REGION,
       "",
       new SessionState(),
     );

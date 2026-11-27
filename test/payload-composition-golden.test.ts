@@ -9,6 +9,7 @@
 // [LAW:behavior-not-structure] Asserts what a viewer sees and what a template
 // reads, over owners that answer fixed values; no composition function is named.
 
+import { SAMPLE_CALENDAR } from "../scripts/lib/draw-fixtures/sample-region.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -54,7 +55,7 @@ async function drawnUnder(preset: string | null) {
     {
       drawing: { by: "request" },
       feeds: UNFOLLOWED_FEEDS,
-      today: todayOf(view.source.facts().builtins.today, AT),
+      today: todayOf(view.source.facts().builtins.today, AT, SAMPLE_CALENDAR),
     },
     AT,
     renderOptionsOf(effective, COLS),

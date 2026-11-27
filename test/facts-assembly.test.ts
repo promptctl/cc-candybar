@@ -3,6 +3,7 @@
 // a turn in which nothing moved leaves untouched, and what the stamp says when
 // one answer does.
 
+import { SAMPLE_CALENDAR } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { restamp, type Fact } from "../src/facts/fact";
 import type { BuiltinFacts } from "../src/facts/world-state";
@@ -175,7 +176,7 @@ describe("a session's facts document", () => {
     const expected: Record<keyof BuiltinFacts, Fact<unknown>> = {
       session: restamp(undefined, r.held.usageStore.usageOf(SID), T0),
       // The fixture's one day, and the session with no days of its own.
-      today: restamp(undefined, ok({ sums: oneDay(T0, 5, 50), own: {} }), T0),
+      today: restamp(undefined, ok({ sums: oneDay(SAMPLE_CALENDAR, T0, 5, 50), own: {} }), T0),
       speed: restamp(undefined, r.held.usageStore.speedOf(SID), T0),
       context: restamp(undefined, r.held.contextProvider.tokensOf(SID), T0),
       metrics: restamp(undefined, r.held.metricsProvider.foldOf(SID), T0),

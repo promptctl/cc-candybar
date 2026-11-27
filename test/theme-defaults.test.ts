@@ -16,6 +16,7 @@
 // [LAW:single-enforcer] Everything runs the real spine: parse → merge →
 // validate, resolveEffectiveGlobals, registerDslConfig + drawDsl.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import type { RichText } from "@promptctl/rich-js";
@@ -262,7 +263,7 @@ const SID = "theme-defaults";
 function cellBg(source: string): { daemon: string; compileOnly: string } {
   const config = load(source);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const bg = (segments: ReadonlyMap<string, readonly RichText[]>): string => {
     const cells = segments.get("cell");

@@ -8,6 +8,8 @@
 // the renderer's process,
 // around its answer, and its time crosses with its output.
 
+import { isIntegerPresentation } from "../utils/integer-presentation.js";
+import { ZonedCalendar } from "../utils/calendar.js";
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import { compareStructural } from "mobx";
@@ -33,7 +35,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 23;
+export const RENDERER_WIRE_VERSION = 24;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -85,19 +87,18 @@ export function rendererBootFrom(raw: unknown): RendererBoot {
     typeof region.timeZone !== "string"
   )
     throw new Error("renderer boot has no resolved locale and time zone");
-  const { locale, timeZone } = region;
-  // [LAW:parse-dont-validate] Named locales must be supported on the peer.
-  // Intl otherwise silently substitutes the machine's own default locale.
+  const { locale, timeZone, integers } = region;
   try {
-    if (!Intl.NumberFormat.supportedLocalesOf([locale]).length)
-      throw new RangeError();
-    new Intl.DateTimeFormat(locale, { timeZone });
+    Intl.getCanonicalLocales(locale);
+    new ZonedCalendar(timeZone);
   } catch {
     throw new Error("renderer boot has an unsupported locale or time zone");
   }
+  if (!isIntegerPresentation(integers))
+    throw new Error("renderer boot has invalid integer presentation");
   return {
     locations: { home, configHome, dataHome, dataDirs },
-    region: { locale, timeZone },
+    region: { locale, timeZone, integers },
     memoryLimitBytes,
     stored: storedStateOf(boot.stored),
   };
