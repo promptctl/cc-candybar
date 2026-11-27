@@ -1,10 +1,13 @@
 // [LAW:no-ambient-temporal-coupling] Jest owns each file's runtime, so its
 // environment releases the fixtures that runtime created after the final hook.
+const path = require("node:path");
+const { trackFilePeriods } = require("./file-periods.cjs");
 const { TestEnvironment } = require("jest-environment-node");
 
 class FixtureEnvironment extends TestEnvironment {
   constructor(config, context) {
     super(config, context);
+    this.checkPeriods = trackFilePeriods(this.global, path.relative(config.projectConfig.rootDir, context.testPath));
     this.fixtureReleases = [];
     this.global.releaseTestFixture = (release) => this.fixtureReleases.push(release);
   }
@@ -16,7 +19,11 @@ class FixtureEnvironment extends TestEnvironment {
     try {
       await Promise.all(this.fixtureReleases.map((release) => release()));
     } finally {
-      await super.teardown();
+      try {
+        this.checkPeriods();
+      } finally {
+        await super.teardown();
+      }
     }
   }
 }

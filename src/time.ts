@@ -104,8 +104,14 @@ export function clockOver(
     monotonic: () => source.monotonic(),
     after: (task, ms, fire, options) =>
       source.timer(ms, run(task, fire), options),
-    every: (task, ms, fire, options) =>
-      source.interval(ms, run(task, fire), options),
+    every: (task, ms, fire, options) => {
+      // The interval remains armed across calls. Its callback carries the
+      // owner's task name into timer diagnostics for its whole lifetime.
+      const callback = Object.defineProperty(run(task, fire), "name", {
+        value: task,
+      });
+      return source.interval(ms, callback, options);
+    },
     defer: (task, fire) => source.turn(run(task, fire)),
     detach: (task, fire) => {
       let settled: unknown;
