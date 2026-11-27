@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-984",
+      "ref": "refs/pull/984/merge",
+      "sha": "fded9141db90a0071322263bae16bbbe6a501855",
+      "timestamp": "2026-11-27T12:43:37.261Z",
+      "commits": [
+        {
+          "sha": "fded9141db90a0071322263bae16bbbe6a501855",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T12:42:21Z",
+          "message": "Merge 32ea2a796eb292327b09e7be990bbc2357db768d into f7be96a940c3997ccbb5d75d6d08f3746681fcf6\n"
+        },
+        {
+          "sha": "32ea2a796eb292327b09e7be990bbc2357db768d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T05:42:08-07:00",
+          "message": "fix(build): keep the patch lock compatible with CI pnpm\n"
+        },
+        {
+          "sha": "5de575167fc82dca16576147a39e75c0d1eb9180",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T05:37:30-07:00",
+          "message": "feat(renderer): ship one portable renderer for Node and WebKit\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f7be96a940c3997ccbb5d75d6d08f3746681fcf6",
