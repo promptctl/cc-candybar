@@ -631,7 +631,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // What waited for a start that never came fails as no renderer's.
     for (const send of queued) send(unavailable(phase));
     const event: HeldEvent = {
-      text: `${why}; it restarts with committed settings. Unsaved edits and menu Back history are lost.`,
+      text: `${why}. Retrying with committed settings. Unsaved edits and menu Back history last only for the renderer’s lifetime.`,
       at: instantAt(clock),
       answered: false,
     };

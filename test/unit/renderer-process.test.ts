@@ -377,7 +377,7 @@ describe("a renderer process's start", () => {
     await settled();
     expect(ends.map((e) => e.text)).toEqual([
       expect.stringMatching(
-        /^renderer main\[1\] refused its boot: .*the session state cannot be read; it restarts/,
+        /^renderer main\[1\] refused its boot: .*the session state cannot be read\. Retrying with committed settings/,
       ),
     ]);
   });
@@ -627,7 +627,7 @@ describe("a renderer process's start", () => {
     await waiting;
     await stopped(clock, children[0]!);
     expect(ends.map((e) => e.text)).toEqual([
-      `renderer main[1] stopped answering for ${HUNG_AFTER_MS / 1000} s; it restarts with committed settings. Unsaved edits and menu Back history are lost.`,
+      `renderer main[1] stopped answering for ${HUNG_AFTER_MS / 1000} s. Retrying with committed settings. Unsaved edits and menu Back history last only for the renderer’s lifetime.`,
     ]);
   });
 });
@@ -678,7 +678,9 @@ describe("a renderer process's end", () => {
     expect(logs).toContain(
       "renderer main[1] killed by SIGKILL after 2 s; next start in 1 s",
     );
-    expect(ends[0]!.text).toMatch(/^renderer main\[1\] killed by SIGKILL;/);
+    expect(ends[0]!.text).toMatch(
+      /^renderer main\[1\] killed by SIGKILL\. Retrying with committed settings/,
+    );
     await expect(link.renderer.answer(pin)).rejects.toThrow(
       new RendererDown("renderer main is down: killed by SIGKILL"),
     );
