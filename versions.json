@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-976",
+      "ref": "refs/pull/976/merge",
+      "sha": "a1ccb696df112ec3b5de1dc22cc7a59feb8d0b72",
+      "timestamp": "2026-11-27T02:55:35.268Z",
+      "commits": [
+        {
+          "sha": "a1ccb696df112ec3b5de1dc22cc7a59feb8d0b72",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T19:54:34-07:00",
+          "message": "Merge 242c8d79191d589b4b27794957e0e903d5ff8f80 into 8684e9e2a1cac1590f5ee4ca99bee60729084947\n"
+        },
+        {
+          "sha": "242c8d79191d589b4b27794957e0e903d5ff8f80",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T19:54:06-07:00",
+          "message": "refactor(watchers): drive directory events at the host boundary\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "8684e9e2a1cac1590f5ee4ca99bee60729084947",
