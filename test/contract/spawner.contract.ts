@@ -89,6 +89,20 @@ export function spawnerContract(name: string, make: () => Subject): void {
       }
     }
 
+    // [LAW:behavior-not-structure] A retained pipe handle exposes the same
+    // refusal as Node, including whether its writer had already sent EOF.
+    async function expectClosedInput(
+      w: Watched,
+      code: "ERR_STREAM_DESTROYED" | "ERR_STREAM_WRITE_AFTER_END",
+    ): Promise<void> {
+      const input = w.child.stdin!;
+      const replied = Promise.withResolvers<Error | null | undefined>();
+      expect(input.write("after close", replied.resolve)).toBe(false);
+      expect(await replied.promise).toMatchObject({ code });
+      expect(input.destroyed).toBe(true);
+      expect(input.writable).toBe(false);
+    }
+
     const hung = (): Behaviour => ({ runsFor: Infinity, exitCode: 0 });
 
     test("a program that exits reports its code, and its output arrives before its close", async () => {
@@ -98,6 +112,7 @@ export function spawnerContract(name: string, make: () => Subject): void {
       expect(w.child.exitCode).toBe(3);
       expect(w.stdout).toBe("out");
       expect(w.stderr).toBe("err");
+      await expectClosedInput(w, "ERR_STREAM_DESTROYED");
       expect(w.events.indexOf("exit")).toBeLessThan(w.events.indexOf("close"));
       expect(w.events.indexOf("data")).toBeLessThan(w.events.indexOf("close"));
     });
@@ -131,7 +146,9 @@ export function spawnerContract(name: string, make: () => Subject): void {
       });
       await until("SIGTERM ignore installed", () => w.stdout === "ready\n");
       subject!.spawner.signalGroup(w.child.pid!, "SIGTERM");
-      w.child.stdin!.write("after TERM\n");
+      const written = Promise.withResolvers<Error | null | undefined>();
+      expect(w.child.stdin!.write("after TERM\n", written.resolve)).toBe(true);
+      expect((await written.promise) ?? null).toBeNull();
       await until("the live child answered after TERM", () =>
         w.stdout.includes("after TERM\n"),
       );
@@ -139,6 +156,7 @@ export function spawnerContract(name: string, make: () => Subject): void {
       await until("SIGKILL closed the child", () => w.events.includes("close"));
       expect(w.exit).toEqual({ code: null, signal: "SIGKILL" });
       expect(w.child.signalCode).toBe("SIGKILL");
+      await expectClosedInput(w, "ERR_STREAM_DESTROYED");
     });
 
     test("a group is not gone while its program runs, and is once it has ended", async () => {
@@ -166,12 +184,15 @@ export function spawnerContract(name: string, make: () => Subject): void {
       await until("error", () => w.error !== null);
       expect(w.child.pid).toBeUndefined();
       expect(w.error!.code).toBe("ENOENT");
+      await until("failed spawn closed", () => w.events.includes("close"));
+      await expectClosedInput(w, "ERR_STREAM_DESTROYED");
     });
 
     test("what is written to a program's stdin reaches it, and its end is seen", async () => {
       const w = begin({ ...hung(), stdin: "echo" });
       w.child.stdin!.end("hello");
-      await until("exit", () => w.exit !== null);
+      await until("echo closed after EOF", () => w.events.includes("close"));
+      await expectClosedInput(w, "ERR_STREAM_WRITE_AFTER_END");
       expect(w.stdout).toBe("hello");
       expect(w.exit).toEqual({ code: 0, signal: null });
     });
