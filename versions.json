@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-981",
-      "ref": "refs/pull/981/merge",
-      "sha": "159416a91f58b77e1c6156d69559dbcd2abe016c",
-      "timestamp": "2026-11-27T05:03:59.897Z",
-      "commits": [
-        {
-          "sha": "159416a91f58b77e1c6156d69559dbcd2abe016c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:03:03Z",
-          "message": "Merge 1ee056fbfc667de263ab2c1d4ba0045742714976 into 24c369f8021d561d17a1baaf73de873118ca0457\n"
-        },
-        {
-          "sha": "1ee056fbfc667de263ab2c1d4ba0045742714976",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:02:51-07:00",
-          "message": "Resolve native loader aliases and physical module ownership\n"
-        },
-        {
-          "sha": "c40a3ab1d4b504329f32b3fe69d9df6544edfdd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:54:21-07:00",
-          "message": "fix(lint): resolve native loader bindings and URL-based ownership\n"
-        },
-        {
-          "sha": "7066b9c664df6832ee0eca3aec19549f8f91905a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:40:08-07:00",
-          "message": "Enforce module ownership on resolved import edges\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "24c369f8021d561d17a1baaf73de873118ca0457",
-      "timestamp": "2026-11-27T04:56:34.092Z",
+      "sha": "6dfc458879136a9734d598708f6975003ea6b4ee",
+      "timestamp": "2026-11-27T05:07:29.984Z",
       "commits": [
         {
-          "sha": "24c369f8021d561d17a1baaf73de873118ca0457",
+          "sha": "6dfc458879136a9734d598708f6975003ea6b4ee",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:55:14-07:00",
-          "message": "refactor(config): derive action validation and editor schema from common records (#980)\n\n* refactor(config): share authored wire values and identifier rules with click admission\n\n* refactor(config): derive action parsing, schema and diagnostics from authored records\n\n* fix(config): preserve action field presence and every structural diagnostic"
+          "timestamp": "2026-11-26T22:06:10-07:00",
+          "message": "fix(lint): enforce module ownership on resolved imports (#981)\n\n* Enforce module ownership on resolved import edges\n\n* fix(lint): resolve native loader bindings and URL-based ownership\n\n* Resolve native loader aliases and physical module ownership"
         }
       ]
     }
