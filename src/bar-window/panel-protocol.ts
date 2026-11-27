@@ -2,16 +2,16 @@
 export interface PanelFrame {
   readonly kind: "frame";
   readonly revision: number;
-  readonly rows: readonly {
-    readonly runs: readonly {
+  readonly rows: ReadonlyArray<{
+    readonly runs: ReadonlyArray<{
       readonly text: string;
       readonly fg?: string;
       readonly bg?: string;
       readonly attrs?: readonly string[];
       readonly clickable: boolean;
       readonly action?: string;
-    }[];
-  }[];
+    }>;
+  }>;
 }
 
 interface Cell {
