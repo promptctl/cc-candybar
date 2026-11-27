@@ -9,7 +9,7 @@ import * as nodeModule from "node:module";
 import * as nodeProcess from "node:process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
+import { CODE_GLOB, coverageOf, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -332,7 +332,8 @@ const importDirection = {
           }),
       };
     }
-    const fromZone = zoneOf(from);
+    const caller = coverageOf(file);
+    const fromZone = caller && "zone" in caller ? caller.zone : zoneOf(from);
     if (fromZone === NO_ZONE) {
       return {
         Program: (node) =>
@@ -1074,13 +1075,6 @@ export default [
     },
   },
   {
-    ignores: [
-      "node_modules/",
-      "dist/",
-      "**/*.d.ts",
-      "**/*.js",
-      "!src/**/*.js",
-      "!eslint.config.mjs",
-    ],
+    ignores: ["node_modules/", "dist/"],
   },
 ];

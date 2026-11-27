@@ -1,4 +1,6 @@
 import tsparser from "@typescript-eslint/parser";
+import globals from "globals";
+import { CODE_GLOB, JS_GLOB, LIB_FILES, TEST_ROOTS } from "./scripts/import-zones.mjs";
 import { zonesPlugin } from "./eslint.config.mjs";
 
 // [LAW:effects-at-boundaries] [LAW:no-shared-mutable-globals] A test states the
@@ -80,9 +82,21 @@ const REAL_LAUNCHER_EXCEPTIONS = [
   "test/var-sources.test.ts",
 ];
 // The suite, and what it shares with the tools.
-const SUITE = ["test/**/*.{ts,mts}", "scripts/lib/**/*.{ts,mts}"];
+const tests = TEST_ROOTS.map((root) => root + CODE_GLOB);
+const SUITE = [...tests, ...LIB_FILES];
 
 export default [
+  // Every suite file, including effect adapters, receives a substantive lint.
+  {
+    files: SUITE,
+    languageOptions: { parser: tsparser, ecmaVersion: "latest", sourceType: "module" },
+    rules: { "no-unreachable": "error" },
+  },
+  {
+    files: tests.map((pattern) => [pattern, JS_GLOB]),
+    languageOptions: { globals: { ...globals.node, ...globals.jest, releaseTestFixture: "readonly" } },
+    rules: { "no-undef": ["error", { typeof: true }] },
+  },
   {
     files: SUITE,
     ignores: [
