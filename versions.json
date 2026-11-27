@@ -2,102 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-982",
-      "ref": "refs/pull/982/merge",
-      "sha": "e63fe8333a5a89a6d7a54735927cad3edbb1982e",
-      "timestamp": "2026-11-27T05:32:38.182Z",
-      "commits": [
-        {
-          "sha": "e63fe8333a5a89a6d7a54735927cad3edbb1982e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:31:27Z",
-          "message": "Merge b22d3f5e642a2b99ae36ae88d34834c5efbd7448 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
-        },
-        {
-          "sha": "b22d3f5e642a2b99ae36ae88d34834c5efbd7448",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:31:15-07:00",
-          "message": "fix(tooling): check the working directory through both source gates\n"
-        },
-        {
-          "sha": "699e5c6fec94fb0fba56df44c14acdca99256823",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:29:18-07:00",
-          "message": "Require source coverage for opaque Node entries and whole-file lint exemptions\n"
-        },
-        {
-          "sha": "a0102201db0ca9dfe94e0c6dba5b2dd672628a00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:22:22-07:00",
-          "message": "Require type coverage for compiler-disabled source files\n"
-        },
-        {
-          "sha": "63c5c8c9c2ffe5d451cad3f84e3f3ead29a42ebf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:18:35-07:00",
-          "message": "fix(types): preserve the full project environment for JavaScript\n"
-        },
-        {
-          "sha": "f746b7f30864b1698abd8e2b17754bd46d4f7209",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:16:16-07:00",
-          "message": "Verify real source coverage and derive app rule selection from its rows\n"
-        },
-        {
-          "sha": "2d378ac3d5498ddf87d3e348cf56c53d9b47b054",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:14:51-07:00",
-          "message": "Exercise normal typecheck across Node, Jest and WebKit sources\n"
-        },
-        {
-          "sha": "5a6d7a841f77199a8b150b828d6dfe7d01da6822",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:13:45-07:00",
-          "message": "style(window): use the project array types for the panel contract\n"
-        },
-        {
-          "sha": "958593914df7a68d30dd101a8b03546ac4e093ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:12:49-07:00",
-          "message": "Inventory repository sources and dispatch their zone lint rules\n"
-        },
-        {
-          "sha": "797b0fbaa8d54a987607797dff7f0c16c6d96cd2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:12:39-07:00",
-          "message": "Check first-party source semantics in the owning type environment\n"
-        },
-        {
-          "sha": "a97b071d202b6d8e10bc0b05763d67d349fcecc1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:10:24-07:00",
-          "message": "test(coverage): verify the WebKit bridge and both Node entry layouts\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f0abfe24617b4d61ff9da09fa07d246e524d18fe",
-      "timestamp": "2026-11-27T05:11:23.216Z",
+      "sha": "ea31b273cb3166b992666554cfa1b34472166803",
+      "timestamp": "2026-11-27T05:35:23.634Z",
       "commits": [
         {
-          "sha": "f0abfe24617b4d61ff9da09fa07d246e524d18fe",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-27T05:09:54Z",
-          "message": "chore(release): set `package.json` to 1.244.1\n\n## [1.244.1](https://github.com/promptctl/cc-candybar/compare/v1.244.0...v1.244.1) (2026-11-27)\n\n### Bug Fixes\n\n* **lint:** enforce module ownership on resolved imports ([#981](https://github.com/promptctl/cc-candybar/issues/981)) ([6dfc458](https://github.com/promptctl/cc-candybar/commit/6dfc458879136a9734d598708f6975003ea6b4ee))\n"
+          "sha": "ea31b273cb3166b992666554cfa1b34472166803",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:34:08-07:00",
+          "message": "fix(lint): check every owned source in its runtime environment (#982)\n\n* test(coverage): verify the WebKit bridge and both Node entry layouts\n\n* Check first-party source semantics in the owning type environment\n\n* Inventory repository sources and dispatch their zone lint rules\n\n* style(window): use the project array types for the panel contract\n\n* Exercise normal typecheck across Node, Jest and WebKit sources\n\n* Verify real source coverage and derive app rule selection from its rows\n\n* fix(types): preserve the full project environment for JavaScript\n\n* Require type coverage for compiler-disabled source files\n\n* Require source coverage for opaque Node entries and whole-file lint exemptions\n\n* fix(tooling): check the working directory through both source gates"
         }
       ]
     }
