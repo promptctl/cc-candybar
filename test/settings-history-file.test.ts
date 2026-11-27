@@ -79,3 +79,31 @@ test("retired setting keys and the obsolete savepoint leave committed history", 
     { session: SID, part: "progression", why },
   ]);
 });
+
+// [LAW:no-silent-failure] A write the disk refuses is told as every
+// per-session file's is, stays pending, and is told again when one lands.
+test("a history write the disk refuses is told, held for the next write, and told again when one lands", async () => {
+  const locked = path.join(dir, "locked");
+  fs.mkdirSync(locked, { mode: 0o500 });
+  const file = path.join(locked, "history.json");
+  const storage = fileHistoryStorage(file, () => {});
+  const told: Array<string | null> = [];
+  storage.landed((landed) =>
+    told.push(landed.ok ? null : landed.error.message),
+  );
+  storage.save(new Map([[SID, { past: [], future: [] }]]));
+  expect(told).toHaveLength(1);
+  expect(told[0]).toContain("EACCES");
+  // What is pending is what the close's flush writes, and a flush that cannot
+  // says so.
+  await expect(storage.flush()).rejects.toThrow("EACCES");
+  fs.chmodSync(locked, 0o700);
+  await storage.flush();
+  expect(told.at(-1)).toBeNull();
+  expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({
+    s1: { past: [], future: [] },
+  });
+  // Nothing pending is nothing to write, and nothing to tell.
+  await storage.flush();
+  expect(told).toHaveLength(3);
+});

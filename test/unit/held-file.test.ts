@@ -5,6 +5,7 @@ import { HeldFile, ORDER_PERIOD_MS } from "../../src/daemon/held-file";
 import {
   reportLine,
   reportText,
+  type StoreStanding,
 } from "../../src/daemon/foundations/stored-file";
 import {
   sessionIdOf,
@@ -23,13 +24,14 @@ function holder(
   options: Parameters<typeof heldStorage<string>>[1] = {},
   bound?: number,
   same?: (held: string, put: string) => boolean,
+  told: (standing: StoreStanding) => void = () => {},
 ) {
   const clock = heldClock(new Date(1_000_000));
   const kept = heldStorage<string>(read, { file: FILE, ...options });
   return {
     ...kept,
     clock,
-    held: new HeldFile("The store", kept.storage, clock, bound, same),
+    held: new HeldFile("The store", kept.storage, clock, told, bound, same),
   };
 }
 
@@ -313,5 +315,27 @@ describe("the order a restart reads", () => {
     held.take([{ kind: "heard", key: S1 }]);
     expect(held.take([{ kind: "put", key: S3, value: "c" }])).toEqual([S2]);
     expect([...saves.at(-1)!.keys()]).toEqual([S1, S3]);
+  });
+});
+
+// [LAW:no-silent-failure] What its storage tells of a write is the owner's to
+// hear: the file is behind with the error's reason, or it is not.
+describe("a write its storage tells", () => {
+  test("is the file's standing, behind with the error, then not behind", () => {
+    const told: StoreStanding[] = [];
+    const { held, land } = holder(
+      undefined,
+      {},
+      undefined,
+      undefined,
+      (standing) => told.push(standing),
+    );
+    held.load();
+    land({ ok: false, error: new Error("ENOSPC") });
+    land({ ok: true });
+    expect(told).toEqual([
+      { store: "The store", file: FILE, behind: "ENOSPC" },
+      { store: "The store", file: FILE, behind: null },
+    ]);
   });
 });

@@ -1,7 +1,7 @@
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { FileRetirement } from "../../src/daemon/file-rewrites";
 import type { SessionFileStorage } from "../../src/daemon/session-state-file";
-import type { Dropped } from "../../src/daemon/foundations/stored-file";
+import type { Dropped, Landed } from "../../src/daemon/foundations/stored-file";
 
 // What a per-session file in memory reads as: none, its sessions and what
 // the load dropped of them, or a read that failed.
@@ -29,6 +29,7 @@ export function heldStorage<V>(
   const saves: Array<ReadonlyMap<SessionId, V>> = [];
   const asides: FileRetirement[] = [];
   let flushes = 0;
+  const listeners: Array<(landed: Landed) => void> = [];
   const storage: SessionFileStorage<V> = {
     file,
     observe: () => ({
@@ -55,10 +56,17 @@ export function heldStorage<V>(
       options.save?.(snapshot);
       saves.push(new Map(snapshot));
     },
+    landed: (listener) => {
+      listeners.push(listener);
+    },
     flush: () => {
       flushes += 1;
       return options.flush?.() ?? Promise.resolve();
     },
   };
-  return { storage, saves, asides, flushes: () => flushes };
+  // What a write of this file came to, as its storage tells the holder.
+  const land = (landed: Landed): void => {
+    for (const listener of listeners) listener(landed);
+  };
+  return { storage, saves, asides, flushes: () => flushes, land };
 }

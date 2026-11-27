@@ -91,6 +91,7 @@ const heldOver = (storage: Partial<ProfileStorage>) => {
       ...storage,
     },
     systemTimekeeper,
+    () => {},
   );
   return { stores, loads: stores.load() };
 };
@@ -125,6 +126,7 @@ describe("the session book's file", () => {
     const book = new SessionBook(
       new SessionFile(SESSION_BOOK_FILE, file, systemTimekeeper, 0, log),
       systemTimekeeper,
+      () => {},
     );
     return { book, loads: [book.load()] };
   };

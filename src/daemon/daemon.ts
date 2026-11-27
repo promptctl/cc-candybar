@@ -77,9 +77,11 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
+  behindText,
   reportLine,
   reportText,
   type StoreReport,
+  type StoreStanding,
   type StoreUnsavedWarning,
 } from "./foundations/stored-file.js";
 import {
@@ -378,6 +380,17 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       } else storeLoads.occur({ file, text });
     }
   };
+  // [LAW:no-silent-failure] A write a file refuses has no caller to throw
+  // into, so its storage tells it here, and the file stands behind on every
+  // bar until a write lands. A write that lands over a file that was not
+  // behind changes nothing and restates nothing: it is every write's outcome.
+  const storeStanding = ({ store, file, behind }: StoreStanding): void => {
+    const message = behind === null ? null : behindText(store, file, behind);
+    if ((unsaved.get(file)?.message ?? null) === message) return;
+    if (message === null) unsaved.delete(file);
+    else unsaved.set(file, { kind: "store-unsaved", file, message });
+    restateOnceBuilt();
+  };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
   // [LAW:one-source-of-truth] Each task's error is the one event its subject
@@ -506,7 +519,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
-  const sessionBook = new SessionBook(inputs.sessionBook(log), clock);
+  const sessionBook = new SessionBook(
+    inputs.sessionBook(log),
+    clock,
+    storeStanding,
+  );
   // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
@@ -899,7 +916,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
-    const stores = new HeldStores(inputs.profile(name, log), clock);
+    const stores = new HeldStores(
+      inputs.profile(name, log),
+      clock,
+      storeStanding,
+    );
     // [LAW:one-source-of-truth] Each start reads the latest held profile.
     const boot = (): RendererBoot => ({
       stored: stores.current(),

@@ -87,14 +87,40 @@ export interface StoreReport {
   readonly found: Found;
 }
 
-// [LAW:no-silent-failure] A per-session file that did not read and could not
-// be set aside: nothing is saved to it while this daemon runs, so it stands
-// on every bar for as long, about its file.
+// [LAW:no-silent-failure] A per-session file that is behind what the daemon
+// holds: one that did not read and could not be set aside, which nothing is
+// saved to while this daemon runs, or one whose last write failed. It stands
+// on every bar, about its file, until a write lands.
 export interface StoreUnsavedWarning {
   readonly kind: "store-unsaved";
   readonly file: string;
   readonly message: string;
 }
+
+// What one write of a per-session file came to, its error kept whole. Nothing
+// pending is landed: an earlier write landed it.
+export type Landed =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: Error };
+export const LANDED: Landed = { ok: true };
+
+// What a store tells the daemon after a write: why its file is behind what
+// the daemon holds, or null once a write has landed.
+export interface StoreStanding {
+  // The store, as the bar names it.
+  readonly store: string;
+  readonly file: string;
+  readonly behind: string | null;
+}
+
+// [LAW:one-source-of-truth] How every per-session file says it is behind
+// what the daemon holds, whichever write found it.
+export const behindText = (
+  store: string,
+  file: string,
+  reason: string,
+): string =>
+  `${store} (${file}) is behind what this daemon holds: the file keeps what it last saved, and a restart loses the difference — ${reason}`;
 
 // [LAW:one-source-of-truth] What the bar says of a store's file, or null for
 // one with nothing to say: a file kept aside, one nothing is saved to, and

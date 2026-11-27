@@ -26,7 +26,7 @@ import type {
   SessionFileKind,
   SessionFileStorage,
 } from "./session-state-file.js";
-import { kept } from "./foundations/stored-file.js";
+import { kept, type StoreStanding } from "./foundations/stored-file.js";
 import type { Asked } from "../utils/outcome.js";
 import type { Timekeeper } from "../time.js";
 import { HeldFile } from "./held-file.js";
@@ -95,11 +95,13 @@ export class SessionBook {
   constructor(
     storage: SessionFileStorage<DurableContext>,
     clock: Pick<Timekeeper, "after">,
+    told: (standing: StoreStanding) => void,
   ) {
     this.book = new HeldFile(
       "Session book",
       storage,
       clock,
+      told,
       MAX_SESSIONS,
       sameDurable,
     );

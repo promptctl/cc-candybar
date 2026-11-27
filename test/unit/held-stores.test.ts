@@ -1,5 +1,5 @@
-// The host's held stores: a write a file refuses is the turn's taking's
-// failure, which the host says on every bar, and the write is still held.
+// The host's held stores: a write a file refuses is told by its storage, and
+// the write is still held.
 
 import { HeldStores, type ProfileStorage } from "../../src/daemon/held-stores";
 import { commandTray } from "../../src/config/command-tray";
@@ -11,13 +11,17 @@ import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { heldClock } from "../helpers/held-clock";
 import { heldStorage } from "../helpers/held-storage";
+import type { StoreStanding } from "../../src/daemon/foundations/stored-file";
 import type { SessionHistory } from "../../src/renderer-interface/history-storage";
 
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 const STEP = { past: [], future: [] };
 
-function held(storage: Partial<ProfileStorage>): HeldStores {
+function held(
+  storage: Partial<ProfileStorage>,
+  told: (standing: StoreStanding) => void = () => {},
+): HeldStores {
   const stores = new HeldStores(
     {
       session: ephemeralSessionFile(),
@@ -25,6 +29,7 @@ function held(storage: Partial<ProfileStorage>): HeldStores {
       ...storage,
     },
     heldClock(new Date(1_000_000)),
+    told,
   );
   stores.load();
   return stores;
@@ -46,20 +51,28 @@ test("a replacement restores a committed menu and confirmation without restoring
   expect(replacement.get(S1, EDIT_MODE_KEY)).toBeNull();
 });
 
-test("a history its file refuses throws, and the step is still held", () => {
-  const stores = held({
-    history: heldStorage<SessionHistory>(undefined, {
-      save: () => {
-        throw new Error("ENOSPC: no space left on device");
-      },
-    }).storage,
+// [LAW:no-silent-failure] A file that refuses a write is told by its storage,
+// not thrown into the turn that made it, and what the turn changed is held.
+test("a history its file refuses is told, and the step is still held", () => {
+  const told: StoreStanding[] = [];
+  const history = heldStorage<SessionHistory>(undefined, {
+    file: "/state/history.json",
+    save: () => history.land({ ok: false, error: new Error("ENOSPC") }),
   });
-  expect(() =>
-    stores.take([
-      { kind: "put", store: "settings-history", key: S1, value: STEP },
-      { kind: "put", store: "session-state", key: S1, value: { pick: "a" } },
-    ]),
-  ).toThrow("ENOSPC: no space left on device");
+  const stores = held({ history: history.storage }, (standing) =>
+    told.push(standing),
+  );
+  stores.take([
+    { kind: "put", store: "settings-history", key: S1, value: STEP },
+    { kind: "put", store: "session-state", key: S1, value: { pick: "a" } },
+  ]);
+  expect(told).toEqual([
+    {
+      store: "Settings history",
+      file: "/state/history.json",
+      behind: "ENOSPC",
+    },
+  ]);
   expect(stores.current().history[S1]).toEqual(STEP);
   expect(stores.current().sessions[S1]).toEqual({ pick: "a" });
 });
@@ -114,6 +127,7 @@ test("a boot read before the load is refused", () => {
   const stores = new HeldStores(
     { session: ephemeralSessionFile(), history: ephemeralSessionFile() },
     heldClock(new Date(1_000_000)),
+    () => {},
   );
   expect(() => stores.current()).toThrow(
     "Session picks is read before its load",

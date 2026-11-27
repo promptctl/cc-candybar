@@ -4,7 +4,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { DaemonLogger } from "../utils/logger";
-import { writeAtomic } from "../utils/atomic-write.js";
+import { asError, writeAtomic } from "../utils/atomic-write.js";
+import type { SessionId } from "./foundations/session-id";
+import { LANDED, type Landed } from "./foundations/stored-file";
 import {
   sessionFileOnDisk,
   type SessionFileKind,
@@ -30,30 +32,46 @@ const HISTORY_FILE: Pick<SessionFileKind<SessionHistory>, "parse"> = {
 // [LAW:single-enforcer] Read as every per-session file is (session-state-file.ts).
 // [LAW:one-type-per-behavior] exception: written at once, not behind as the
 // other per-session files are. Each step is the undo of a config edit that
-// has already landed, so it is on disk before the click answers, and a
-// write that fails throws into the click's taking, which says it on the bar:
-// what the daemon holds undoes until it restarts, not after. A write
-// behind would lose the step to a kill inside its window and say a failure
-// only in the log; one beside this write could land older bytes over a
-// newer step.
+// has already landed, so it is on disk before the click answers. A write
+// behind would lose the step to a kill inside its window; one beside this
+// write could land older bytes over a newer step. A write that fails is told
+// as every file's is, through `landed`, and stays pending for the next save
+// or the close's flush.
 export function fileHistoryStorage(
   file: string,
   logger: DaemonLogger,
 ): SessionFileStorage<SessionHistory> {
+  const listeners: Array<(landed: Landed) => void> = [];
+  let pending: ReadonlyMap<SessionId, SessionHistory> | null = null;
+  const write = (): Landed => {
+    if (pending === null) return LANDED;
+    let landed: Landed = LANDED;
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      // [LAW:effects-at-boundaries] The file's record of the histories, in
+      // the order the owner holds them, written before this returns.
+      writeAtomic(file, JSON.stringify(Object.fromEntries(pending)), 0o600);
+      pending = null;
+    } catch (e) {
+      const error = asError(e);
+      logger("error", `settings-history write failed: ${error.message}`);
+      landed = { ok: false, error };
+    }
+    for (const listener of listeners) listener(landed);
+    return landed;
+  };
   return {
     ...sessionFileOnDisk(HISTORY_FILE, file),
     save: (state) => {
-      try {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        // [LAW:effects-at-boundaries] The file's record of the histories, in
-        // the order the owner holds them, written before this returns.
-        writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 0o600);
-      } catch (e) {
-        const message = `settings-history write failed — what this daemon holds undoes until it restarts, and the file keeps what it last saved: ${(e as Error).message}`;
-        logger("error", message);
-        throw new Error(message);
-      }
+      pending = new Map(state);
+      write();
     },
-    flush: async () => {},
+    landed: (listener) => {
+      listeners.push(listener);
+    },
+    flush: async () => {
+      const landed = write();
+      if (!landed.ok) throw landed.error;
+    },
   };
 }

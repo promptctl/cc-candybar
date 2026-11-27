@@ -13,7 +13,11 @@ import {
 } from "./session-state-file.js";
 import { asError } from "../utils/atomic-write.js";
 import { putNewest, toNewest } from "../utils/recency.js";
-import type { Found, StoreReport } from "./foundations/stored-file.js";
+import type {
+  Found,
+  StoreReport,
+  StoreStanding,
+} from "./foundations/stored-file.js";
 
 // [LAW:carrying-cost] How long a change of order alone waits for its write.
 // Order is what the bound reads after a restart, and a write on every
@@ -43,9 +47,8 @@ export class HeldFile<V> {
   // bound each run one way, whenever they come.
   private early: Array<HeldChange<V>> = [];
   // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
-  // as it stands: set by every change, cleared only once a save returns, so
-  // one that throws (history's) is still owed to the next change and to the
-  // close. Whether a write handed over lands is the storage's.
+  // as it stands: set by every change, cleared once a save is made. Whether a
+  // write handed over lands is the storage's, and it tells us.
   private behind = false;
   private clearOrderTimer: (() => void) | null = null;
 
@@ -55,6 +58,10 @@ export class HeldFile<V> {
     private readonly storage: SessionFileStorage<V>,
     // The daemon's clock: the order period is the daemon's to hold.
     private readonly clock: Pick<Timekeeper, "after">,
+    // [LAW:no-silent-failure] Told after every write the storage makes: why
+    // the file is behind what is held, or that it is not. The one way a
+    // failed write behind reaches the bar.
+    told: (standing: StoreStanding) => void,
     // [LAW:carrying-cost] The most sessions it holds; past it the one heard
     // or written longest ago goes. A store whose renderer bounds it holds
     // what it is told.
@@ -62,7 +69,15 @@ export class HeldFile<V> {
     // Whether a value put is the one the session holds, which makes the put
     // a hearing: it moves only the session's place.
     private readonly same: (held: V, put: V) => boolean = Object.is,
-  ) {}
+  ) {
+    storage.landed((landed) =>
+      told({
+        store,
+        file: storage.file,
+        behind: landed.ok ? null : landed.error.message,
+      }),
+    );
+  }
 
   // [LAW:single-enforcer] Read once. A file that did not read is set aside by
   // the rule every state file keeps, before anything is written. What was
@@ -148,13 +163,10 @@ export class HeldFile<V> {
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
   // is still owed is handed over now, what is pending lands, and what is
   // taken after it stays in memory.
-  // A save that throws (history's is synchronous) rejects the close.
+  // A write the file refuses rejects the close.
   async close(): Promise<void> {
-    try {
-      if (this.behind) this.save();
-    } finally {
-      this.phase = "closed";
-    }
+    if (this.behind) this.save();
+    this.phase = "closed";
     await this.storage.flush();
   }
 

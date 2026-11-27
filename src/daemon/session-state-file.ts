@@ -17,7 +17,12 @@ import {
 } from "../renderer-interface/stored-state";
 import { stateFile, type StateObservation } from "./state-file";
 import { setAside, type FileRetirement } from "./file-rewrites";
-import type { Dropped, Kept } from "./foundations/stored-file";
+import {
+  LANDED,
+  type Dropped,
+  type Kept,
+  type Landed,
+} from "./foundations/stored-file";
 export type { SessionPicks } from "../renderer-interface/stored-state";
 
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
@@ -56,8 +61,14 @@ export interface SessionFileStorage<V> {
   setAside(file: string): FileRetirement;
   // The sessions as they stand, oldest first. The storage keeps its own copy
   // until the write behind lands, so the owner may go on changing its map;
-  // the file keeps their order.
+  // the file keeps their order. A write that fails does not throw: it is told
+  // through `landed`, and the snapshot stays pending for the next save or
+  // flush.
   save(snapshot: ReadonlyMap<SessionId, V>): void;
+  // [LAW:no-silent-failure] Hears what each write came to, landed or not,
+  // when it is known: a write behind has no caller to throw into.
+  landed(listener: (landed: Landed) => void): void;
+  // What is pending lands now; rejects with the error of a write that fails.
   flush(): Promise<void>;
 }
 
@@ -71,6 +82,7 @@ export const ephemeralSessionFile = <V>(): SessionFileStorage<V> => ({
     throw new Error("a file kept nowhere always reads");
   },
   save: () => {},
+  landed: () => {},
   flush: async () => {},
 });
 
@@ -131,13 +143,6 @@ export function sessionFileOnDisk<V>(
   };
 }
 
-// What one write came to, its error kept whole. Nothing pending is landed:
-// an earlier write landed it.
-type Landed =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly error: Error };
-const LANDED: Landed = { ok: true };
-
 // Runtime state carries conversation identifiers. Resolve the logical path
 // before publishing owner-only bytes so an existing symlink stays in place.
 async function publishSession(filePath: string, body: string): Promise<void> {
@@ -163,6 +168,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   private written: Promise<void> = Promise.resolve();
   // The write queued behind the one in flight and not yet begun.
   private waiting: Promise<Landed> | null = null;
+  private readonly listeners: Array<(landed: Landed) => void> = [];
 
   constructor(
     private readonly kind: SessionFileKind<V>,
@@ -186,6 +192,10 @@ export class SessionFile<V> implements SessionFileStorage<V> {
 
   setAside(file: string): FileRetirement {
     return this.disk.setAside(file);
+  }
+
+  landed(listener: (landed: Landed) => void): void {
+    this.listeners.push(listener);
   }
 
   save(snapshot: ReadonlyMap<SessionId, V>): void {
@@ -268,13 +278,21 @@ export class SessionFile<V> implements SessionFileStorage<V> {
       // flush, so a disk that keeps refusing is not retried on a timer.
       const error = asError(e);
       this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
-      return { ok: false, error };
+      return this.told({ ok: false, error });
     }
     // [LAW:no-ambient-temporal-coupling] An identity, not a value: a newer
     // save made while this one was on its way stays pending.
     if (this.pending === snapshot) this.pending = null;
     this.saved(body, snapshot, started, heldMs);
-    return LANDED;
+    return this.told(LANDED);
+  }
+
+  // [LAW:no-silent-failure] Every write that wrote, or failed to, is heard by
+  // whoever holds the file, since the debounced write has no caller to throw
+  // into.
+  private told(landed: Landed): Landed {
+    for (const listener of this.listeners) listener(landed);
+    return landed;
   }
 
   // For shutdown and for callers that read the file back: what is pending
