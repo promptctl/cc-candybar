@@ -48,7 +48,7 @@ import {
   type TurnRecord,
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
-import { readingsAt } from "../utils/instant.js";
+import { readingsAt, type Tick } from "../utils/instant.js";
 import type { DaemonEvent } from "../utils/event-hold.js";
 import type { StoreReport } from "./foundations/stored-file.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
@@ -165,6 +165,7 @@ export interface HostWorld {
 
 export interface RendererHost {
   readonly name: RendererName;
+  advance(tick: Tick): void;
   // [LAW:no-ambient-temporal-coupling] Begin or end a recording between
   // complete turns. Replacing the worker here cannot interrupt a draw.
   recordingBoundary<T>(operation: () => Promise<T>): Promise<T>;
@@ -1263,6 +1264,7 @@ export function rendererHost(
     moved,
     stats,
     closeWake: () => wake.close(),
+    advance: (tick) => wake.advance(tick),
   };
 }
 

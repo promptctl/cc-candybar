@@ -13,9 +13,10 @@ import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { rendererStatsOf } from "../../../src/daemon/foundations/stats-snapshot";
 import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
-import { click, findUrl, frameRequest, hookData, observePane, renderBody, renderRequest, urlWriting, urlsOfAnsi } from "../../helpers/daemon-e2e";
+import { click, drawnLink, findUrl, frameRequest, hookData, observePane, renderBody, renderRequest, urlWriting, urlsOfAnsi } from "../../helpers/daemon-e2e";
 import { saidOf, sendClick } from "../../../scripts/lib/daemon/requests";
 import {
+  effectsUrl,
   VERB_APPLY_LAYOUT_OP,
   VERB_REDO,
   VERB_REPO_CONFIG,
@@ -44,7 +45,8 @@ import {
 } from "../../../src/daemon/config-discovery/repo-configs";
 import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
-import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
+import { MAIN_RENDERER, rendererNameOf } from "../../../src/daemon/foundations/renderer-name";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 
 const BUNDLE = path.resolve("dist/index.mjs");
 const builtDaemon = (env: NodeJS.ProcessEnv) => ({
@@ -79,6 +81,112 @@ function cacheEntry(id: string, timestamp: string): string {
     }) + "\n"
   );
 }
+
+test("live renderer processes observe a signed click and one undo step across a route switch", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-live-session", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "project-"));
+    const config = path.join(dir, "bar.json5");
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { padding: 1, experimentalPane: true },
+        actions: {
+          four: { set: "padding", to: "4" },
+          back: { undo: true },
+          again: { redo: true },
+        },
+        segments: {
+          choice: {
+            template:
+              'pick={{ .padding.effective }} {{ action "four" "FOUR" }} {{ action "back" "UNDO" }} {{ action "again" "REDO" }}',
+          },
+        },
+        root: { h: ["choice"] },
+      }),
+    );
+    const session = sessionIdOf("live-picks");
+    const peer = rendererNameOf("worktree");
+    const draw = (named: boolean) =>
+      frameRequest(daemon.sockPath, {
+        ...renderBody(session, dir, {}, [
+          "cc-candybar",
+          "--config-only",
+          config,
+        ]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: peer },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const main = await draw(false);
+    const set = findUrl(
+      linksOf(main).map((l) => l.url),
+      (effects) =>
+        effects.some(
+          (e) =>
+            e.verb === VERB_SET_STATE &&
+            e.args[1] === "padding" &&
+            e.args[2] === "4",
+        ),
+    );
+    if (!set) throw new Error("missing signed control in " + textOf(main));
+    expect(textOf(await draw(true))).toContain("pick=1");
+    const pane = observePane(daemon.sockPath, session);
+    try {
+      await pane.waitFor(
+        (line) => line.includes("pick=1"),
+        "the named renderer's first pane frame",
+      );
+      // Stop only the worker this isolated host launched. Its pane cannot
+      // acknowledge the revision before the click on main has completed.
+      const log = () =>
+        fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8");
+      const peerPid = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+      if (!peerPid)
+        throw new Error("the isolated host never launched the named renderer");
+      const pid = Number(peerPid[1]);
+      process.kill(pid, "SIGSTOP");
+      try {
+        await click(daemon.sockPath, set);
+        await until(
+          () => /session commit revision=\d+ writer=main bytes=[1-9]\d* recipients=main\[1\],worktree\[1\]/.test(log()),
+          "the daemon log flushing the revision, byte count and both recipient generations",
+        );
+      } finally {
+        process.kill(pid, "SIGCONT");
+      }
+      await pane.waitFor(
+        (line) => line.includes("pick=4"),
+        "the named pane updating from the main renderer's click",
+      );
+    } finally {
+      pane.close();
+    }
+    expect(textOf(await draw(true))).toContain("pick=4");
+    const undo = drawnLink(
+      daemon.sockPath,
+      effectsUrl([{ verb: VERB_UNDO, args: [session] }]),
+      { renderer: peer, session },
+    );
+    await click(daemon.sockPath, undo);
+    expect(textOf(await draw(false))).toContain("pick=1");
+    const empty = await sendClick(daemon.sockPath, undo);
+    expect(empty).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("nothing to undo"),
+    });
+    const redo = drawnLink(
+      daemon.sockPath,
+      effectsUrl([{ verb: VERB_REDO, args: [session] }]),
+      { renderer: MAIN_RENDERER, session },
+    );
+    await click(daemon.sockPath, redo);
+    expect(textOf(await draw(true))).toContain("pick=4");
+  } finally {
+    await daemon.cleanup();
+  }
+});
 
 test("two named renderer processes draw separately and share config, transcript and plugin-source reads", async () => {
   const isolated = prepareIsolatedDaemonEnv("ccb-named");

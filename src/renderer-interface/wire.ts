@@ -13,7 +13,8 @@ import { ZonedCalendar } from "../utils/calendar.js";
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import { compareStructural } from "mobx";
-import { storedStateOf } from "./stored-state.js";
+import { isStoreWrite, storedStateOf } from "./stored-state.js";
+import { isHistoryEdit } from "./history-storage.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import {
   CrossedFailure,
@@ -30,12 +31,40 @@ import {
   type EventInput,
   type Timed,
   type TimedRenderer,
+  type SessionCommit,
+  type SessionObservation,
 } from "./interface.js";
 
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 26;
+export const RENDERER_WIRE_VERSION = 27;
+export const SESSION_DELIVERY_LIMIT = {
+  revisions: 256,
+  bytes: 1024 * 1024,
+} as const;
+function isSessionCommit(raw: unknown): raw is SessionCommit {
+  return (
+    isPlainObject(raw) &&
+    raw.kind === "session-commit" &&
+    Object.keys(raw).length === 5 &&
+    typeof raw.revision === "number" &&
+    Number.isSafeInteger(raw.revision) &&
+    raw.revision >= 1 &&
+    typeof raw.at === "number" &&
+    Number.isFinite(raw.at) &&
+    typeof raw.tick === "number" &&
+    Number.isFinite(raw.tick) &&
+    Array.isArray(raw.writes) &&
+    raw.writes.length > 0 &&
+    raw.writes.every((w) => isStoreWrite(w, isHistoryEdit))
+  );
+}
+
+export function sessionCommitOf(raw: unknown): SessionCommit {
+  if (!isSessionCommit(raw)) throw new Error("invalid session commit");
+  return raw;
+}
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -96,7 +125,15 @@ export function rendererBootFrom(raw: unknown): RendererBoot {
   }
   if (!isIntegerPresentation(integers))
     throw new Error("renderer boot has invalid integer presentation");
+  const { sessionRevision } = boot;
+  if (
+    typeof sessionRevision !== "number" ||
+    !Number.isSafeInteger(sessionRevision) ||
+    sessionRevision < 0
+  )
+    throw new Error("renderer boot has an invalid session revision");
   return {
+    sessionRevision,
     locations: { home, configHome, dataHome, dataDirs },
     region: { locale, timeZone, integers },
     memoryLimitBytes,
@@ -143,6 +180,7 @@ type WireAnswer<T extends Answer = Answer> = T extends Answer
   : never;
 
 export type HostLine =
+  | SessionCommit
   | {
       readonly kind: "boot";
       readonly wireVersion: RendererWireVersion;
@@ -160,6 +198,10 @@ export type HostLine =
   | { readonly kind: "heap-snapshot"; readonly n: number };
 
 export type RendererLine =
+  | (SessionObservation & {
+      readonly kind: "observation";
+      readonly sessionRevision: number;
+    })
   // The boot answered: the renderer is built, or why it is not.
   | (RendererDiagnostics & {
       readonly kind: "started";
@@ -173,13 +215,19 @@ export type RendererLine =
     })
   | {
       readonly kind: "output";
+      readonly sessionRevision?: number;
       readonly n: number;
       readonly output: WireAnswer;
     }
   // An input whose answer rejected: nothing of its turn is taken, so the
   // host's caller hears it as the turn's failure.
   | { readonly kind: "rejected"; readonly n: number; readonly failure: Failure }
-  | { readonly kind: "ping"; readonly n: number; readonly usage: MemorySizes }
+  | {
+      readonly kind: "ping";
+      readonly n: number;
+      readonly usage: MemorySizes;
+      readonly sessionRevision?: number;
+    }
   // [LAW:effects-at-boundaries] A heap snapshot's next piece of text, which
   // the host writes: the renderer process opens no file.
   | { readonly kind: "heap-chunk"; readonly n: number; readonly chunk: string }
@@ -243,6 +291,7 @@ export interface RendererOverLines {
 
 export function rendererOverLines(deps: {
   readonly send: (line: HostLine) => void;
+  readonly observed: (observation: SessionObservation) => void;
   // A line the host could not take.
   readonly fault: (message: string) => void;
 }): RendererOverLines {
@@ -357,6 +406,17 @@ export function rendererOverLines(deps: {
             reject(new Error(`renderer output ${heard.n} is not an object`));
             return true;
           }
+          if (
+            !Array.isArray(heard.output.stored) ||
+            !heard.output.stored.every((w) => isStoreWrite(w, isHistoryEdit))
+          ) {
+            reject(
+              new Error(
+                `renderer output ${heard.n} has invalid session writes`,
+              ),
+            );
+            return true;
+          }
           const output = received(heard.output, heard.n);
           if (output === null)
             reject(
@@ -380,6 +440,17 @@ export function rendererOverLines(deps: {
       return;
     }
     switch (line.kind) {
+      case "observation": {
+        if (line.wake !== undefined && !Number.isFinite(line.wake)) {
+          deps.fault("renderer sent an invalid observation wake");
+          return;
+        }
+        const diagnostics = rendererDiagnosticsFrom(line.diagnostics, () =>
+          deps.fault("renderer sent invalid observation diagnostics"),
+        );
+        deps.observed({ wake: line.wake, diagnostics });
+        return;
+      }
       case "heap-chunk": {
         const write = chunks.get(line.n);
         if (write === undefined) {
@@ -465,20 +536,34 @@ export function rendererOverLines(deps: {
 // its output, and the host's reads of the process answered here, outside any
 // turn.
 export function serveRenderer(deps: {
+  readonly observe: (commit: SessionCommit) => SessionObservation;
   readonly renderer: TimedRenderer;
   readonly send: (line: RendererLine) => void;
   readonly memory: () => MemorySizes;
   // The process's heap as text, each piece handed to `chunk` in order.
   readonly heapSnapshot: (chunk: (text: string) => void) => Promise<void>;
-}): (line: HostLine) => void {
+}): (line: HostLine, receivedBytes?: number) => void {
   const { renderer, send } = deps;
+  let applied: { readonly sessionRevision?: number } = {};
+  let unreportedCount = 0;
+  let unreportedBytes = 0;
+  const receipt = () => {
+    unreportedCount = 0;
+    unreportedBytes = 0;
+    return applied;
+  };
   let sent: Subscriptions | undefined;
   const answer = (
     n: number,
     { subscriptions, wake, ...rest }: Answer,
   ): void => {
     const updates = subscriptions === sent ? {} : { subscriptions };
-    send({ kind: "output", n, output: { ...rest, wake, ...updates } });
+    send({
+      kind: "output",
+      n,
+      ...receipt(),
+      output: { ...rest, wake, ...updates },
+    });
     sent = subscriptions;
   };
   const answerInput = async (input: EventInput) => {
@@ -490,8 +575,31 @@ export function serveRenderer(deps: {
       throw new Error("renderer click has no placement seed");
     return renderer.answer(input);
   };
-  return (line) => {
+  return (line, receivedBytes = 0) => {
     switch (line.kind) {
+      case "session-commit": {
+        const note = deps.observe(sessionCommitOf(line));
+        applied = { sessionRevision: line.revision };
+        unreportedCount++;
+        unreportedBytes += receivedBytes;
+        // A healthy passive worker can consume a whole window between pings.
+        // Send cumulative progress with an existing notice or at a quarter
+        // window, leaving ample room for the two pipes to run independently.
+        if (
+          note.wake !== undefined ||
+          note.diagnostics !== undefined ||
+          unreportedCount >= SESSION_DELIVERY_LIMIT.revisions / 4 ||
+          unreportedBytes >= SESSION_DELIVERY_LIMIT.bytes / 4
+        ) {
+          receipt();
+          send({
+            kind: "observation",
+            sessionRevision: line.revision,
+            ...note,
+          });
+        }
+        return;
+      }
       case "input":
         // [LAW:no-silent-failure] An input whose answer rejected is answered
         // as that input's failure, never left to end the process.
@@ -506,7 +614,7 @@ export function serveRenderer(deps: {
         );
         return;
       case "ping":
-        send({ kind: "ping", n: line.n, usage: deps.memory() });
+        send({ kind: "ping", n: line.n, ...receipt(), usage: deps.memory() });
         return;
       case "heap-snapshot": {
         const { n } = line;

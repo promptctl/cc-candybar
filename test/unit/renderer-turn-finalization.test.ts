@@ -107,6 +107,7 @@ function rig(
   // Events and commands go through the actual negotiated JSON
   // transport before the same mailbox that lands production output.
   const pipe = rendererOverLines({
+    observed: () => {},
     send: (input) => receive(JSON.parse(JSON.stringify(input))),
     fault: (message) => {
       throw new Error(message);
@@ -115,6 +116,7 @@ function rig(
   const lines: RendererLine[] = [];
   const logged: LogLine[] = [];
   const receive = serveRenderer({
+    observe: () => { throw new Error("unexpected session commit"); },
     renderer: timed(renderer, fault.rendererClock ?? clock.monotonic, (line) => {
       logged.push({ level: "warn", line });
     }),

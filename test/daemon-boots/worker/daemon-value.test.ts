@@ -167,14 +167,13 @@ describe("the daemon is a value", () => {
       clock?: ReportingClock;
       checkout?: string;
       digest?: string;
-      profile?: () => never;
+      sessionStores?: DaemonInputs["sessionStores"];
       renderer?: RendererPort;
       claudeInput?: () => ClaudeInputEdge;
       fetchPricing?: FetchPricing;
       launcher?: DaemonInputs["launcher"];
     } = {},
   ): ServedDaemon => {
-    const { profile } = inputs;
     const { daemon, daemonLog } = buildDaemon({
       host: hostNow(),
       paths: daemonPaths(hostNow()),
@@ -183,7 +182,7 @@ describe("the daemon is a value", () => {
         inputs.digest,
       ),
       ...(inputs.clock && { clock: inputs.clock }),
-      ...(profile && { profile }),
+      ...(inputs.sessionStores && { sessionStores: inputs.sessionStores }),
       ...(inputs.renderer && { renderer: inputs.renderer }),
       ...(inputs.claudeInput && { claudeInput: inputs.claudeInput }),
       ...(inputs.fetchPricing && { fetchPricing: inputs.fetchPricing }),
@@ -268,10 +267,11 @@ describe("the daemon is a value", () => {
     open = built.daemon;
     openLogs.push(built.daemonLog);
     expect(boots.map((boot) => Object.keys(boot).sort())).toEqual([
-      ["locations", "memoryLimitBytes", "region", "stored"],
+      ["locations", "memoryLimitBytes", "region", "sessionRevision", "stored"],
     ]);
     expect(boots).toMatchObject([
       {
+        sessionRevision: 0,
         locations: {
           home: root,
           configHome: path.join(root, "chosen-config"),
@@ -688,7 +688,7 @@ describe("the daemon is a value", () => {
       destroy(id) { live.delete(id); },
     }).enable();
     try {
-      expect(() => construct({ profile: unreadable })).toThrow(
+      expect(() => construct({ sessionStores: unreadable })).toThrow(
         "the profile cannot be opened",
       );
       expect([...live]).toEqual([]);

@@ -70,6 +70,7 @@ jest.setTimeout(30_000);
 const COMPATIBLE_BOOT = {
   wireVersion: RENDERER_WIRE_VERSION,
   boot: {
+    sessionRevision: 0,
     stored: EMPTY_STORED_STATE,
     locations: {
       home: "/home",
@@ -373,6 +374,7 @@ test("the supervisor names the unanswered input when its built worker is killed"
   const session = sessionIdOf("interrupted-session");
   const readings = { at: 0 as Instant, tick: 0 as Tick };
   const link: RendererLink = processRenderer({
+    observed: () => {},
     launcher: {
       launchChannel: (options) => {
         const channel = launcher.launchChannel(options);

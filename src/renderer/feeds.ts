@@ -203,8 +203,22 @@ const paceOf = (period: number): number => Math.round(1000 / period);
 export class Feeds {
   private readonly feeds = new Map<SessionId, Feed>();
   private drawnTotal = 0;
+  private observation?: { wake?: Tick };
 
   constructor(private readonly deps: FeedDeps) {}
+
+  // [LAW:carrying-cost] Only a reaction which actually moves a feed's
+  // deadline contributes a wake. An unrelated commit visits no feed.
+  observe(apply: () => void): { readonly wake?: Tick } {
+    const advanced: { wake?: Tick } = {};
+    this.observation = advanced;
+    try {
+      apply();
+      return advanced;
+    } finally {
+      this.observation = undefined;
+    }
+  }
 
   // [LAW:one-source-of-truth] Who watches each session now, whole: a feed
   // opens for a session named and closes for one no longer named, and a feed
@@ -252,7 +266,8 @@ export class Feeds {
     // animation is at its frame ceiling. Background data and animation keep
     // their budget. Several clicks before the draw share that draw.
     const soonest =
-      cause === "interaction" && feed.viewers.shown
+      (cause === "interaction" || this.observation !== undefined) &&
+      feed.viewers.shown
         ? tick
         : (Math.max(tick, feed.last + this.spacingOf(feed)) as Tick);
     if (kind === "retry" || (next !== null && next <= soonest)) {
@@ -260,6 +275,11 @@ export class Feeds {
       return;
     }
     feed.schedule = { kind: "frame", next: soonest, change: null };
+    if (
+      this.observation &&
+      (this.observation.wake === undefined || soonest < this.observation.wake)
+    )
+      this.observation.wake = soonest;
   }
 
   // The earliest tick a feed's next frame falls due, or null when none waits

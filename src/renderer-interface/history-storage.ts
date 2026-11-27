@@ -155,17 +155,34 @@ const isStep = (v: unknown): v is Step => Array.isArray(v) && v.every(isChange);
 
 export function isHistoryEdit(v: unknown): v is HistoryEdit {
   if (!isPlainObject(v)) return false;
+  const fields = Object.keys(v).length;
   switch (v.kind) {
     case "clear":
     case "undo":
     case "redo":
-      return true;
+      return fields === 1;
     case "append":
-      return isStep(v.step) && v.step.length > 0;
+      return (
+        fields === 2 &&
+        isStep(v.step) &&
+        v.step.length > 0 &&
+        v.step.every(
+          (c) => Object.keys(c).length === (c.kind === "layer" ? 5 : 4),
+        )
+      );
     case "forget":
-      return Array.isArray(v.targets) && v.targets.every(isHistoryTarget);
+      return (
+        fields === 2 &&
+        Array.isArray(v.targets) &&
+        v.targets.every(
+          (t) =>
+            isHistoryTarget(t) &&
+            Object.keys(t).length === (t.kind === "layer" ? 3 : 2),
+        )
+      );
     case "trim":
       return (
+        fields === 2 &&
         typeof v.count === "number" &&
         Number.isSafeInteger(v.count) &&
         v.count > 0

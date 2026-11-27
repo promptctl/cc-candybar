@@ -19,7 +19,10 @@ import type {
   Step,
   HistoryEdit,
 } from "../renderer-interface/history-storage.js";
-import type { ChangedPicks } from "../renderer-interface/stored-state.js";
+import type {
+  ChangedPicks,
+  StoreWrite,
+} from "../renderer-interface/stored-state.js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WireFrame } from "../render/frame.js";
 import type {
@@ -305,7 +308,17 @@ export function recordingOutputProblem(
     }
     if (controls) frames.set(drawn, pairs);
   }
-  for (const write of output.stored) {
+  const writesProblem = recordingWritesProblem(output.stored, controls);
+  if (writesProblem !== null) return writesProblem;
+  for (const [drawn, pairs] of frames) controls?.remember(drawn, pairs);
+  return null;
+}
+
+export function recordingWritesProblem(
+  writes: readonly StoreWrite[],
+  controls?: RecordingControls,
+): string | null {
+  for (const write of writes) {
     const problem =
       write.kind === "patch"
         ? picksProblem(
@@ -317,7 +330,6 @@ export function recordingOutputProblem(
           : null;
     if (problem !== null) return problem;
   }
-  for (const [drawn, pairs] of frames) controls?.remember(drawn, pairs);
   return null;
 }
 

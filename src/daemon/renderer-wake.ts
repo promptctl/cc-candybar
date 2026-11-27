@@ -9,7 +9,7 @@
 // the rest: the tick, not the timer, says when a `due` is made.
 
 import type { Timekeeper } from "../time.js";
-import { tickAt, type Tick } from "../utils/instant.js";
+import { earliestOf, tickAt, type Tick } from "../utils/instant.js";
 import {
   distributionOf,
   durationHistogram,
@@ -69,6 +69,7 @@ export class RendererWake {
   private state: State = { kind: "idle" };
   // The tick the renderer last declared, whatever state the wake was in.
   private declared: Tick | null = null;
+  private advanced: Tick | null = null;
   // The tick no wake is armed before, after a `due` failed declaring no later
   // tick; null otherwise.
   private heldUntil: Tick | null = null;
@@ -97,6 +98,14 @@ export class RendererWake {
     if (this.state.kind === "idle" || this.state.kind === "armed") this.arm();
   }
 
+  // An observation arrives independently of numbered answers. Its earlier
+  // deadline survives an older answer until the next due can consume it.
+  advance(tick: Tick): void {
+    if (this.advanced !== null && this.advanced <= tick) return;
+    this.advanced = tick;
+    if (this.state.kind === "idle" || this.state.kind === "armed") this.arm();
+  }
+
   // The wake's end: no timer stays armed, and no `due` is made after it.
   close(): void {
     if (this.state.kind === "armed") this.state.cancel();
@@ -109,10 +118,11 @@ export class RendererWake {
   }
 
   private arm(): void {
+    const next = earliestOf([this.declared, this.advanced]);
     const tick =
-      this.declared === null || this.heldUntil === null
-        ? this.declared
-        : (Math.max(this.declared, this.heldUntil) as Tick);
+      next === null || this.heldUntil === null
+        ? next
+        : (Math.max(next, this.heldUntil) as Tick);
     if (this.state.kind === "armed") {
       if (this.state.tick === tick) return;
       this.state.cancel();
@@ -137,6 +147,7 @@ export class RendererWake {
         return;
       }
       this.state = { kind: "queued" };
+      if (this.advanced !== null && this.advanced <= tick) this.advanced = null;
       // [LAW:no-silent-failure] A `due` that rejected failed: the wake
       // hears it as one that threw, so it is said and the wake arms again.
       // What its answer throws past that reaches the clock.

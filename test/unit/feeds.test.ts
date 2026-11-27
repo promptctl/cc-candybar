@@ -377,6 +377,17 @@ describe("a wake", () => {
     }
   });
 
+  test("an observed session change advances a visible feed once at the commit tick", () => {
+    const r = rig();
+    view({ [S]: watched(true) })(r.feeds);
+    r.turn(0);
+    expect(r.feeds.observe(() => {})).toEqual({});
+    const change = () => r.feeds.wake(S, "state", tick(0.001));
+    expect(r.feeds.observe(change)).toEqual({ wake: 0.001 });
+    expect(r.feeds.observe(change)).toEqual({});
+    expect(r.feeds.next()).toBe(0.001);
+  });
+
   test("background wakes at 1 ms intervals draw a shown feed at most once a moving period, and an unseen one once a still period", () => {
     for (const [shown, spacing] of [
       [true, 0.1],

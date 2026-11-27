@@ -52,6 +52,7 @@ import type { RegionalSettings } from "../utils/region.js";
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
 export interface RendererBoot {
+  readonly sessionRevision: number;
   readonly stored: StoredState;
   readonly locations: Locations;
   readonly region: RegionalSettings;
@@ -60,7 +61,7 @@ export interface RendererBoot {
 
 export type RendererConstruction = RendererDiagnostics &
   (
-    | { readonly kind: "built"; readonly renderer: Renderer }
+    | { readonly kind: "built"; readonly renderer: SessionRenderer }
     | { readonly kind: "refused"; readonly failure: Failure }
   );
 
@@ -78,6 +79,22 @@ export type EffectId = number & { readonly [EFFECT_ID]: true };
 // both take the same ordinary input and answer with the same data.
 export interface Renderer {
   answer(input: EventInput): Promise<RendererOutput>;
+}
+
+export interface SessionCommit extends Readings {
+  readonly kind: "session-commit";
+  readonly revision: number;
+  readonly writes: readonly StoreWrite[];
+}
+
+// Observation changes the read projection. This channel cannot return
+// a frame, action, file write or another proposed commit.
+export interface SessionRenderer extends Renderer {
+  observe(commit: SessionCommit): SessionObservation;
+}
+
+export interface SessionObservation extends RendererDiagnostics {
+  readonly wake?: Tick;
 }
 
 // A completed answer whose transport timing failed has no duration.

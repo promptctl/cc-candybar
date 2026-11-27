@@ -3,7 +3,11 @@
 // as the renderer is built, and which changes only by the writes the
 // renderer's turns return.
 
-import { sessionIdOf, type SessionId } from "../daemon/foundations/session-id";
+import {
+  parseSessionId,
+  sessionIdOf,
+  type SessionId,
+} from "../daemon/foundations/session-id";
 import { isPlainObject } from "../config/loader/validate-core";
 import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
@@ -168,19 +172,47 @@ export function storedPicksAfter(
   return Object.keys(picks).length ? picks : null;
 }
 
-export type StoreWrite =
+export type StoreWrite<Edit = HistoryEdit> =
   | PickWrite
   | {
       readonly kind: "steps";
       readonly store: "settings-history";
       readonly key: SessionId;
-      readonly edits: readonly HistoryEdit[];
+      readonly edits: readonly Edit[];
     }
   | {
       readonly kind: "heard";
       readonly store: "session-state" | "settings-history";
       readonly key: SessionId;
     };
+
+// [LAW:parse-dont-validate] The process wire and the durable journal share
+// the pick vocabulary. Only a journal also accepts privacy-preserving cuts.
+export function isStoreWrite<E>(
+  v: unknown,
+  edit: (raw: unknown) => raw is E,
+): v is StoreWrite<E> {
+  if (!isPlainObject(v) || !parseSessionId(v.key).ok) return false;
+  const fields = Object.keys(v).length;
+  if (v.store === "settings-history")
+    return (
+      (v.kind === "heard" && fields === 3) ||
+      (v.kind === "steps" &&
+        fields === 4 &&
+        Array.isArray(v.edits) &&
+        v.edits.every(edit))
+    );
+  return (
+    v.store === "session-state" &&
+    (((v.kind === "drop" || v.kind === "heard") && fields === 3) ||
+      (v.kind === "patch" &&
+        fields === 4 &&
+        isPlainObject(v.changes) &&
+        Object.values(v.changes).every(
+          (value) => value === null || typeof value === "string",
+        )))
+  );
+}
 
 // [LAW:types-are-the-program] Plain data, so a boot and a turn's output carry
 // them as they are.

@@ -78,6 +78,40 @@ describe("SessionState MobX integration", () => {
     expect(state.observers()).toBe(0);
   });
 
+  test("an echoed pick and a recency-only move do not reevaluate either peer's readers", () => {
+    const other = sessionIdOf("other");
+    const picks = Object.fromEntries(Array.from({ length: 128 }, (_, i) => [`key${i}`, "old"]));
+    const peers = [0, 1].map(() => {
+      const state = new SessionState({ [S1]: picks, [other]: picks });
+      const reads = jest.fn();
+      const stops = [S1, other].flatMap(sid => Object.keys(picks).map(key => autorun(() => {
+        reads(sid, key, state.get(sid, key));
+      })));
+      reads.mockClear();
+      return { state, reads, stops };
+    });
+    try {
+      const writer = peers[0]!;
+      writer.state.set(S1, "key17", "new");
+      const writes = writer.state.drain();
+      expect(writes).toEqual([{ kind: "patch", store: "session-state", key: S1, changes: { key17: "new" } }]);
+      for (const { state, reads } of peers) {
+        for (const write of writes) {
+          if (write.store !== "session-state") throw new Error("unexpected history proposal");
+          state.observe(write);
+        }
+        expect(reads.mock.calls).toEqual([[S1, "key17", "new"]]);
+        state.observe({ kind: "heard", key: other });
+        expect(reads).toHaveBeenCalledTimes(1);
+        state.observe({ kind: "patch", store: "session-state", key: S1, changes: { key17: null } });
+        expect(reads.mock.calls).toEqual([[S1, "key17", "new"], [S1, "key17", null]]);
+        expect(state.drain()).toEqual([]);
+      }
+    } finally {
+      for (const { stops } of peers) for (const stop of stops) stop();
+    }
+  });
+
   test("one reader observes a complete batch and then the eviction", () => {
     const state = new SessionState({}, 1);
     const seen: Array<Array<string | null>> = [];

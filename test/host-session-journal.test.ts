@@ -61,7 +61,7 @@ test("imports both former profiles once, retains conflict sources byte for byte 
   const original = fs.readFileSync(named().sessionState);
   const first = build();
   const reports = first.load();
-  const merged = first.current(peer);
+  const merged = first.current(peer).state;
   expect(merged.sessions[sid]).toEqual({
     theme: "from-primary",
     padding: "4",
@@ -98,7 +98,7 @@ test("imports both former profiles once, retains conflict sources byte for byte 
   expect(next.load().filter((r) => r.store === "Session migration")).toEqual(
     [],
   );
-  const resumed = next.current(main);
+  const resumed = next.current(main).state;
   expect(resumed.sessions[sid]).toEqual({
     theme: "from-primary",
     shared: "same",
@@ -110,7 +110,7 @@ test("imports both former profiles once, retains conflict sources byte for byte 
   expect(again.load().filter((r) => r.store === "Session migration")).toEqual(
     [],
   );
-  expect(again.current(peer)).toEqual(resumed);
+  expect(again.current(peer).state).toEqual(resumed);
   await again.close();
 });
 
@@ -135,7 +135,7 @@ test("an abrupt handoff recovers the journal before reconciling a conflicting ro
   const next = build();
   const reports = next.load();
   expect(logs.some((m) => m.includes("recovered incomplete tail"))).toBe(true);
-  expect(next.current(main).sessions[sid]).toEqual({
+  expect(next.current(main).state.sessions[sid]).toEqual({
     theme: "newer",
     padding: "2",
   });
@@ -221,7 +221,7 @@ test("compaction racing a later click leaves its ordered suffix recoverable", as
   }
   const next = build();
   next.load();
-  expect(next.current(main).sessions[sid]).toEqual({ counter: "after" });
+  expect(next.current(main).state.sessions[sid]).toEqual({ counter: "after" });
   await next.close();
 });
 
@@ -333,7 +333,7 @@ test("an older renderer editing a partially published handoff retains all three 
   expect(read(manifest.prior)).toEqual(old);
   expect(read(manifest.intended)).toEqual(intended);
   expect(read(manifest.observed)).toEqual(edited);
-  expect(next.current(main).sessions[sid]).toEqual({
+  expect(next.current(main).state.sessions[sid]).toEqual({
     padding: "4",
     theme: "nord",
   });
@@ -357,7 +357,7 @@ test("a refused append is held live and the next successful write makes both cli
       },
     ]),
   ).toThrow(/cannot append shared session journal/);
-  expect(first.current(main).sessions[sid]?.theme).toBe("nord");
+  expect(first.current(main).state.sessions[sid]?.theme).toBe("nord");
   fs.rmdirSync(journal());
   first.take([
     {
@@ -369,7 +369,7 @@ test("a refused append is held live and the next successful write makes both cli
   ]);
   const afterCrash = build();
   afterCrash.load();
-  expect(afterCrash.current(main).sessions[sid]).toEqual({
+  expect(afterCrash.current(main).state.sessions[sid]).toEqual({
     theme: "nord",
     padding: "2",
   });

@@ -41,6 +41,10 @@ import {
   type MainRendererParts,
 } from "./verbs/port.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
+import {
+  historyAfter,
+  type SessionHistory,
+} from "../renderer-interface/history-storage.js";
 import { createGates } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -84,6 +88,7 @@ import {
   type Renderer,
   type RendererBoot,
   type RendererConstruction,
+  type SessionRenderer,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
@@ -697,7 +702,7 @@ function build(
   inputs: RendererBoot,
   turnLog: TurnLog,
   identifyCompile: StateDeps["identifyCompile"],
-): Renderer {
+): SessionRenderer {
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
@@ -843,7 +848,7 @@ function build(
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
-  return mainRenderer(
+  const core = mainRenderer(
     {
       ...parts,
       turnLog,
@@ -858,6 +863,46 @@ function build(
     },
     { "session-state": store, "settings-history": settingsHistory },
   );
+  let revision = inputs.sessionRevision;
+  return {
+    answer: (input) => {
+      settingsHistory.beginInput();
+      return core.answer(input);
+    },
+    observe: (commit) =>
+      turnLog.during(() =>
+        time.during(commit, () => {
+          if (commit.revision !== revision + 1)
+            throw new Error(
+              `session revision ${commit.revision} follows ${revision}`,
+            );
+          // Validate relative moves against the last accepted stacks before
+          // publishing any part of the transaction to a MobX derivation.
+          const staged = new Map<SessionId, SessionHistory>();
+          const histories: SessionHistory[] = [];
+          for (const write of commit.writes) {
+            if (write.kind !== "steps") continue;
+            const before =
+              staged.get(write.key) ?? settingsHistory.beforeCommit(write.key);
+            const next = write.edits.reduce(historyAfter, before);
+            staged.set(write.key, next);
+            histories.push(next);
+          }
+          return feeds.observe(() =>
+            runInAction(() => {
+              let at = 0;
+              for (const write of commit.writes) {
+                if (write.store === "session-state") store.observe(write);
+                else if (write.kind === "heard")
+                  settingsHistory.observeHearing(write.key);
+                else settingsHistory.observe(write.key, histories[at++]!);
+              }
+              revision = commit.revision;
+            }),
+          );
+        }),
+      ),
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The debug projection samples whatever DSL

@@ -29,8 +29,11 @@ export interface SessionPersistence {
 
 export interface SessionStores {
   load(): readonly StoreReport[];
-  current(name: RendererName): StoredState;
-  take(writes: readonly StoreWrite[]): void;
+  current(name: RendererName): SessionCheckpoint;
+  take(
+    writes: readonly StoreWrite[],
+    published?: (revision: number) => void,
+  ): void;
   close(): Promise<void>;
 }
 
@@ -56,20 +59,23 @@ export class HostSessions implements SessionStores {
     for (const writes of early) this.take(writes);
     return seed.reports;
   }
-  current(name: RendererName): StoredState {
+  current(name: RendererName): SessionCheckpoint {
     if (!this.image)
       throw new Error("shared session state read before loading");
     if (!this.closed && !this.names.has(name)) {
       this.disk?.register(name);
       this.names.add(name);
     }
-    return this.image.snapshot("live");
+    return { revision: this.revision, state: this.image.snapshot("live") };
   }
   private readonly checkpoint = (): SessionCheckpoint => ({
     revision: this.revision,
     state: this.image!.snapshot("durable"),
   });
-  take(writes: readonly StoreWrite[]): void {
+  take(
+    writes: readonly StoreWrite[],
+    published?: (revision: number) => void,
+  ): void {
     if (!writes.length) return;
     if (!this.image) {
       this.early.push([...writes]);
@@ -77,8 +83,15 @@ export class HostSessions implements SessionStores {
     }
     const durable = this.image.take(writes);
     this.revision++;
-    if (!this.closed)
-      this.disk?.append(this.revision, durable, this.checkpoint);
+    if (!this.closed) {
+      try {
+        this.disk?.append(this.revision, durable, this.checkpoint);
+      } finally {
+        // A refused disk write still changed the live session. Its peers
+        // observe that decision while its caller learns persistence failed.
+        published?.(this.revision);
+      }
+    }
   }
   async close(): Promise<void> {
     this.closed = true;

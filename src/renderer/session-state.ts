@@ -166,33 +166,66 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     sessionId: SessionId,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
+    this.patch(sessionId, pairs, true);
+  }
+
+  clear(sessionId: SessionId, key: string): void {
+    this.patch(sessionId, [{ key, value: null }], true);
+  }
+
+  // [LAW:effects-at-boundaries] A peer observes decisions that the host
+  // has already admitted. Updating its read projection authors no writes.
+  observe(
+    write:
+      | Extract<StoreWrite, { store: "session-state" }>
+      | { kind: "heard"; key: SessionId },
+  ): void {
+    if (write.kind === "heard") {
+      this.sessions.touch(write.key);
+    } else if (write.kind === "drop") {
+      const keys = this.sessions.get(write.key);
+      if (keys) this.dropped(write.key, keys, false);
+    } else {
+      this.patch(
+        write.key,
+        Object.entries(write.changes).map(([key, value]) => ({ key, value })),
+        false,
+      );
+    }
+  }
+
+  private patch(
+    sessionId: SessionId,
+    pairs: ReadonlyArray<{ key: string; value: string | null }>,
+    authored: boolean,
+  ): void {
     runInAction(() => {
       const keys = this.sessions.get(sessionId) ?? new Set<string>();
       let moved = false;
       for (const { key, value } of pairs) {
         const address = pickAddress(sessionId, key);
-        if (this.picks.get(address) === value) continue;
-        this.picks.set(address, value);
-        this.edited(sessionId, key, value);
-        keys.add(key);
+        if ((this.picks.get(address) ?? null) === value) continue;
+        if (value === null) {
+          this.picks.delete(address);
+          keys.delete(key);
+        } else {
+          this.picks.set(address, value);
+          keys.add(key);
+        }
+        if (authored) this.edited(sessionId, key, value);
         moved = true;
       }
       if (moved) {
-        this.changed(sessionId, keys);
-        this.evictOldest();
+        if (!keys.size) this.dropped(sessionId, keys, authored);
+        else {
+          this.revisions.set(sessionId, ++this.head);
+          this.sessions.set(sessionId, keys);
+          if (authored) this.moved.put(sessionId);
+        }
+        if (authored) this.evictOldest();
+      } else if (!authored) {
+        this.sessions.touch(sessionId);
       }
-    });
-  }
-
-  clear(sessionId: SessionId, key: string): void {
-    const keys = this.sessions.get(sessionId);
-    if (keys === undefined || !keys.has(key)) return;
-    runInAction(() => {
-      this.picks.delete(pickAddress(sessionId, key));
-      this.edited(sessionId, key, null);
-      keys.delete(key);
-      if (keys.size === 0) this.dropped(sessionId, keys);
-      else this.changed(sessionId, keys);
     });
   }
 
@@ -232,28 +265,20 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     edits.set(key, value);
   }
 
-  // Move-to-end: re-inserting at the tail makes this the most recently
-  // written, here and in what the host is told.
-  private changed(sessionId: SessionId, keys: Set<string>): void {
-    this.revisions.set(sessionId, ++this.head);
-    this.sessions.set(sessionId, keys);
-    this.told(sessionId);
-  }
-
-  private dropped(sessionId: SessionId, keys: ReadonlySet<string>): void {
+  private dropped(
+    sessionId: SessionId,
+    keys: ReadonlySet<string>,
+    authored: boolean,
+  ): void {
     this.head++;
     for (const key of keys) {
       this.picks.delete(pickAddress(sessionId, key));
       // A session evicted then recreated in this turn still erases its old keys.
-      this.edited(sessionId, key, null);
+      if (authored) this.edited(sessionId, key, null);
     }
     this.revisions.delete(sessionId);
     this.sessions.delete(sessionId);
-    this.told(sessionId);
-  }
-
-  private told(sessionId: SessionId): void {
-    this.moved.put(sessionId);
+    if (authored) this.moved.put(sessionId);
   }
 
   private evictOldest(): void {
@@ -262,7 +287,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
       this.sessions.oldest !== undefined
     ) {
       const oldest = this.sessions.oldest;
-      this.dropped(oldest, this.sessions.get(oldest)!);
+      this.dropped(oldest, this.sessions.get(oldest)!, true);
     }
   }
 }

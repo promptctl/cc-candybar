@@ -185,7 +185,6 @@ export const moduleOwnership = {
       ["src/claude-input/edge", "productionClaudeInputEdge"],
       ["src/daemon/lane-edge", "productionBarPaneEdge"],
       ["src/daemon/limits", "realLimitsDeps"],
-      ["src/daemon/file-storage", "fileStorage"],
       ["src/daemon/cache/pricing-fetch", "fetchPricing"],
     ].map(([module, name]) =>
       named(

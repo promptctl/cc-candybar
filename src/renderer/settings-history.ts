@@ -147,6 +147,10 @@ export class SettingsHistory {
 
   private readonly moved = new StoredMoves();
   private readonly edits = new Map<SessionId, HistoryEdit[]>();
+  // The renderer reads its own proposal during a turn. The host can send
+  // an earlier peer decision before confirming it. Keep just the original
+  // stacks touched by that turn so a relative move is applied exactly once.
+  private readonly proposedFrom = new Map<SessionId, SessionHistory>();
 
   // `loaded` is what the profile holds, oldest first, as the host handed it
   // in: held to the same bounds as every step that lands.
@@ -206,6 +210,29 @@ export class SettingsHistory {
 
   history(sessionId: SessionId): SessionHistory {
     return this.held.get(sessionId) ?? EMPTY_HISTORY;
+  }
+
+  beginInput(): void {
+    this.proposedFrom.clear();
+  }
+
+  private proposing(session: SessionId): void {
+    if (this.destination === "host" && !this.proposedFrom.has(session))
+      this.proposedFrom.set(session, this.history(session));
+  }
+
+  beforeCommit(session: SessionId): SessionHistory {
+    return this.proposedFrom.get(session) ?? this.history(session);
+  }
+
+  observe(session: SessionId, history: SessionHistory): void {
+    this.proposedFrom.delete(session);
+    if (holdsNothing(history)) this.drop(session);
+    else this.keep(session, history);
+  }
+
+  observeHearing(session: SessionId): void {
+    this.costs.touch(session);
   }
 
   begin(files: ConfigFiles): Journal {
@@ -280,6 +307,7 @@ export class SettingsHistory {
         step();
         return runInAction(() => {
           for (const [sessionId, { history, edits }] of working) {
+            this.proposing(sessionId);
             if (holdsNothing(history)) this.drop(sessionId);
             else this.keep(sessionId, history);
             this.record(sessionId, edits);
@@ -378,6 +406,7 @@ export class SettingsHistory {
   private bound(): void {
     while (this.costs.size > MAX_SESSIONS || this.totalCost > MAX_BYTES) {
       const oldest = this.costs.oldest!;
+      this.proposing(oldest);
       if (this.costs.size > 1) {
         this.drop(oldest);
         this.record(oldest, []);

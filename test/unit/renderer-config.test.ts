@@ -97,6 +97,7 @@ function rendererLines(send: (bytes: string) => void) {
       }
       const { renderer: core, ...outcome } = built;
       const receive = serveRenderer({
+        observe: core.observe,
         renderer: timed(core, () => 0, unexpectedTimingProblem),
         send: (line) => send(lineBytes(line)),
         memory: () => {
@@ -137,6 +138,7 @@ async function recordedRenderer(boot: RendererBoot) {
     child.take(bytes);
   };
   const host = rendererOverLines({
+    observed: () => {},
     send,
     fault: (reason) => {
       throw new Error(reason);
@@ -234,6 +236,7 @@ test("rotating an in-process renderer disposes its previous view before serving 
     cores.push(core);
     return core;
   })({ name: MAIN_RENDERER, boot: bootOf, entry: "/nowhere/renderer", node: [] }).start({
+    observed: () => {},
     clock: heldClock(new Date(AT * 1000)),
     log: (level, line) => logged.push({ level, line }),
     start: async () => {},
@@ -453,7 +456,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
 
   const recordedTurns = recording.length - 1;
   const replayed: RendererOutput[] = [];
-  const lines = [...recording, { kind: "end", turns: recordedTurns }].map((entry) => JSON.stringify(entry));
+  const lines = [...recording, { kind: "end", turns: recordedTurns, sessionRevision: boot.sessionRevision }].map((entry) => JSON.stringify(entry));
   expect(await replayRecording(lines, (_input, output) => replayed.push(output))).toEqual({ turns: recordedTurns });
   expect(replayed.flatMap((answer) => answer.frames).filter(({ frame }) => frame.kind === "drawn")).toHaveLength(2);
   expect(replayed.flatMap((answer) => answer.effects).some((effect) => effect.kind === "change")).toBe(true);

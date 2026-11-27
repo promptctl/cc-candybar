@@ -32,7 +32,7 @@ import {
 } from "./reply.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
-import type { DaemonLogger } from "../utils/logger";
+import { writeLogLines, type DaemonLogger } from "../utils/logger";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { createPayloadProviders } from "./payload-providers";
 import { Pricing, type FetchPricing } from "./cache/pricing";
@@ -73,7 +73,7 @@ import { linkSignerOver } from "../click/link-signer.js";
 import { authorizeRun } from "./foundations/run-authorization.js";
 import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
-import { instantAt, type Instant } from "../utils/instant.js";
+import { instantAt, readingsAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import type { SessionStores } from "./host-sessions.js";
 import {
@@ -101,6 +101,8 @@ import type {
   Viewers,
 } from "../renderer-interface/interface.js";
 import type { RendererLink, RendererPort } from "./renderer-process.js";
+import { encodeSessionCommit } from "./session-delivery.js";
+import { eventLine } from "../utils/logfmt.js";
 import {
   variableOf,
   type SessionEnvironment,
@@ -902,12 +904,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     entry: string,
   ) {
     // [LAW:one-source-of-truth] Every generation starts from the host image.
-    const boot = (): RendererBoot => ({
-      stored: stores.current(name),
-      locations: locs,
-      region: inputs.region,
-      memoryLimitBytes,
-    });
+    const boot = (): RendererBoot => {
+      const { revision, state } = stores.current(name);
+      return {
+        stored: state,
+        sessionRevision: revision,
+        locations: locs,
+        region: inputs.region,
+        memoryLimitBytes,
+      };
+    };
     const prepared = inputs.renderer({
       name,
       entry,
@@ -927,6 +933,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const link = prepared.start({
       log,
       clock,
+      observed: ({ wake, diagnostics }) => {
+        if (wake !== undefined) renderer.advance(wake);
+        if (diagnostics !== undefined) writeLogLines(log, diagnostics);
+      },
       // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
       // mailbox and only rebuilds the sessions currently routed to it.
       start: async () => {
@@ -992,7 +1002,30 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           });
           frameFeeds.took(name, routed, settled);
         },
-        stored: (writes) => stores.take(writes),
+        stored: (writes) =>
+          stores.take(writes, (revision) => {
+            const commit = encodeSessionCommit({
+              kind: "session-commit",
+              revision,
+              writes,
+              ...readingsAt(clock),
+            });
+            const recipients: string[] = [];
+            for (const [peer, target] of renderers) {
+              const generation = target.link.observe(commit);
+              if (generation !== null)
+                recipients.push(`${peer}[${generation}]`);
+            }
+            log(
+              "info",
+              eventLine("session commit", [
+                ["revision", String(revision)],
+                ["writer", name],
+                ["bytes", String(commit.bytes)],
+                ["recipients", recipients.join(",") || "-"],
+              ]),
+            );
+          }),
         holding: (session) => collector.holding(session),
         recorded: () => {},
       },

@@ -130,7 +130,16 @@ test("the running host records two independent renderer sessions for offline rep
     if (wider === undefined || remember === undefined)
       throw new Error("recorded statusline showed no config or state control");
     await click(isolated.sockPath, wider.url);
+    await command("record", "stop");
+    const observerCapture = path.join(dir, "observer.jsonl");
+    await command("record", "start", observerCapture, "--renderer", "observer");
+    await draw("observer-session", config, "observer");
     await click(isolated.sockPath, remember.url);
+    await expect(command("record", "stop", "--renderer", "observer")).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringMatching(/saved renderer state contains values of unknown origin/),
+    });
+    expect(fs.existsSync(observerCapture)).toBe(false);
     const edited = fs.readFileSync(config, "utf8");
     expect(parseJson5Syntax(edited)).toMatchObject({ kind: "parsed", value: { globals: { padding: 2 } } });
     const pane = observePane(isolated.sockPath, namedSession);
@@ -149,7 +158,6 @@ test("the running host records two independent renderer sessions for offline rep
     await until(() => liveLog().includes(`feed sid="${namedSession}" closed`), "the closing pane's renderer diagnostic");
 
     await command("record", "stop", "--renderer", "worktree");
-    await command("record", "stop");
     expect(mainStarts()).toEqual(afterStart);
     const captured = fs.readFileSync(namedCapture, "utf8");
     expect(captured).not.toContain(ENV_NAME);
@@ -202,7 +210,10 @@ test("the running host records two independent renderer sessions for offline rep
     expect(decodeFromCompressedBase64(histogram).totalCount).toBeGreaterThan(0);
     // The checked-in core and the shipped bundle must agree on the actual
     // diagnostic bytes, including the closed pane's encoded distribution.
-    await expect(replayRecording(captured.trimEnd().split("\n"))).resolves.toEqual({ turns: records.length - 2 });
+    expect(records.some((record) => record.kind === "session-commit")).toBe(true);
+    await expect(replayRecording(captured.trimEnd().split("\n"))).resolves.toEqual({
+      turns: records.filter((record) => record.kind === "turn").length,
+    });
     const firstDraw = records.findIndex((entry) => entry.kind === "turn" && entry.output.effects.some(({ kind }) => kind === "present"));
     const entry = records[firstDraw];
     if (entry?.kind !== "turn") throw new Error("the recording contains no statusline presentation");
@@ -214,7 +225,7 @@ test("the running host records two independent renderer sessions for offline rep
     await expect(replay(bad, BUNDLE)).rejects.toMatchObject({
       code: 1,
       stdout: "",
-      stderr: expect.stringContaining(`recording turn ${firstDraw} differs at output.wake`),
+      stderr: expect.stringContaining(`recording turn ${records.slice(0, firstDraw + 1).filter((record) => record.kind === "turn").length} differs at output.wake`),
     });
   } finally {
     try {

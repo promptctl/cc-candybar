@@ -9,7 +9,7 @@ import { isPlainObject } from "../config/loader/validate-core.js";
 import type {
   Event,
   EventInput,
-  Renderer,
+  SessionRenderer,
   RendererOutput,
 } from "../renderer-interface/interface.js";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../renderer-interface/recording.js";
 import {
   rendererBootFrom,
+  sessionCommitOf,
   RENDERER_WIRE_VERSION,
 } from "../renderer-interface/wire.js";
 import { sha256Text } from "../utils/sha256.js";
@@ -109,8 +110,9 @@ function requireFields(
   entry: Record<string, unknown>,
   kind: keyof typeof ENTRY_FIELDS,
   line: number,
+  extra: readonly string[] = [],
 ): void {
-  const fields = ENTRY_FIELDS[kind];
+  const fields = [...ENTRY_FIELDS[kind], ...extra];
   if (
     Object.keys(entry).length !== fields.length ||
     fields.some((field) => !Object.hasOwn(entry, field))
@@ -282,7 +284,8 @@ function legacyCompileKey(input: CompileInput): string {
 
 function constructionOf(entry: Record<string, unknown>): {
   readonly result: RecordedConstruction;
-  readonly renderer: Renderer | null;
+  readonly sessionRevision: number;
+  readonly renderer: SessionRenderer | null;
   readonly compareAs?: (output: RendererOutput) => unknown;
 } {
   if (entry.version !== RECORDING_VERSION)
@@ -296,6 +299,7 @@ function constructionOf(entry: Record<string, unknown>): {
     !legacyRegion &&
     entry.wireVersion !== 24 &&
     entry.wireVersion !== 25 &&
+    entry.wireVersion !== 26 &&
     entry.wireVersion !== RENDERER_WIRE_VERSION
   )
     throw new Error(
@@ -304,6 +308,8 @@ function constructionOf(entry: Record<string, unknown>): {
   let boot;
   try {
     let input = entry.input;
+    if (entry.wireVersion !== RENDERER_WIRE_VERSION && isPlainObject(input))
+      input = { ...input, sessionRevision: 0 };
     if (legacyRegion && isPlainObject(input) && isPlainObject(input.region)) {
       const { locale, timeZone } = input.region;
       if (typeof locale === "string" && typeof timeZone === "string")
@@ -321,13 +327,19 @@ function constructionOf(entry: Record<string, unknown>): {
     boot,
     legacyRegion ? legacyCompileKey : undefined,
   );
-  if (built.kind === "refused") return { result: built, renderer: null };
+  if (built.kind === "refused")
+    return {
+      result: built,
+      renderer: null,
+      sessionRevision: boot.sessionRevision,
+    };
   const { renderer, ...result } = built;
   return {
     result,
     renderer,
+    sessionRevision: boot.sessionRevision,
     compareAs:
-      entry.wireVersion === RENDERER_WIRE_VERSION
+      entry.wireVersion === RENDERER_WIRE_VERSION || entry.wireVersion === 26
         ? undefined
         : historicalOutputs(boot.stored, entry.wireVersion !== 25),
   };
@@ -341,7 +353,8 @@ export async function replayRecording(
   lines: AsyncIterable<string> | Iterable<string>,
   onTurn?: (input: EventInput, output: RendererOutput) => void,
 ): Promise<{ turns: number }> {
-  let renderer: Renderer | null = null;
+  let renderer: SessionRenderer | null = null;
+  let sessionRevision: number | undefined;
   let historical = false;
   let compareAs: ((output: RendererOutput) => unknown) | undefined;
   let ended = false;
@@ -358,9 +371,27 @@ export async function replayRecording(
       requireFields(entry, "boot", line);
       const boot = constructionOf(entry);
       historical = entry.wireVersion === 22;
+      sessionRevision =
+        entry.wireVersion === RENDERER_WIRE_VERSION
+          ? boot.sessionRevision
+          : undefined;
       verify(entry.result, boot.result, "recording boot", "result");
       renderer = boot.renderer;
       compareAs = boot.compareAs;
+    } else if (
+      entry.kind === "session-commit" &&
+      sessionRevision !== undefined &&
+      renderer !== null
+    ) {
+      try {
+        const commit = sessionCommitOf(entry);
+        renderer.observe(commit);
+        sessionRevision = commit.revision;
+      } catch {
+        throw new Error(
+          `recording line ${line} has an invalid or out-of-order session commit`,
+        );
+      }
     } else if (entry.kind === "turn") {
       requireFields(entry, "turn", line);
       if (renderer === null)
@@ -397,7 +428,16 @@ export async function replayRecording(
       );
       onTurn?.(input, output);
     } else if (entry.kind === "end") {
-      requireFields(entry, "end", line);
+      requireFields(
+        entry,
+        "end",
+        line,
+        sessionRevision === undefined ? [] : ["sessionRevision"],
+      );
+      if (entry.sessionRevision !== sessionRevision)
+        throw new Error(
+          `recording line ${line} has the wrong terminal session revision (expected ${sessionRevision})`,
+        );
       if (entry.turns !== turns)
         throw new Error(
           `recording line ${line} has the wrong terminal turn count (expected ${turns})`,

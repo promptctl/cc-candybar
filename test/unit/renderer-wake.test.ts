@@ -90,6 +90,18 @@ test("a declared tick arms one timer, kept when the same tick is declared again"
   expect(r.live()).toEqual([]);
 });
 
+test("a peer's earlier wake survives an older turn landing and moves one timer forward", async () => {
+  const r = rig();
+  r.wake.declare(tick(1));
+  r.wake.advance(tick(0.004));
+  r.wake.advance(tick(0.010));
+  r.wake.declare(tick(2));
+  expect(r.live().map((timer) => timer.at)).toEqual([4]);
+  await r.fire();
+  expect(r.dues).toEqual([0.004]);
+  expect(r.live().map((timer) => timer.at)).toEqual([2000]);
+});
+
 test("a timer that fires early waits out the rest, and the `due` is made at the tick", async () => {
   const r = rig();
   r.wake.declare(tick(2));

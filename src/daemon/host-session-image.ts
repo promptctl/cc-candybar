@@ -2,7 +2,7 @@
 // record is needed at boot and at a disk checkpoint. A click touches only the
 // named picks, histories and recency links.
 import { isPlainObject } from "../config/loader/validate-core.js";
-import { parseSessionId, type SessionId } from "./foundations/session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 import { RecencyMap } from "../utils/recency.js";
 import {
   durableHistory,
@@ -17,6 +17,7 @@ import {
 } from "../renderer-interface/history-storage.js";
 import {
   durablePickValue,
+  isStoreWrite,
   type StoreWrite,
   type StoredState,
 } from "../renderer-interface/stored-state.js";
@@ -31,14 +32,7 @@ interface Cut {
   readonly clearFuture: boolean;
 }
 export type DurableEdit = HistoryEdit | Cut;
-export type DurableWrite =
-  | Exclude<StoreWrite, { kind: "steps" }>
-  | {
-      readonly store: "settings-history";
-      readonly key: SessionId;
-      readonly kind: "steps";
-      readonly edits: readonly DurableEdit[];
-    };
+export type DurableWrite = StoreWrite<DurableEdit>;
 
 // [LAW:parse-dont-validate] A valid checksum establishes the recorded bytes.
 // Admit only decisions this build knows how to apply to its recovered state.
@@ -52,25 +46,7 @@ export function durableWritesOf(raw: unknown): readonly DurableWrite[] {
       count(e.past) &&
       count(e.future) &&
       typeof e.clearFuture === "boolean");
-  const write = (v: unknown): v is DurableWrite => {
-    if (!isPlainObject(v) || !parseSessionId(v.key).ok) return false;
-    if (v.store === "settings-history")
-      return (
-        v.kind === "heard" ||
-        (v.kind === "steps" && Array.isArray(v.edits) && v.edits.every(edit))
-      );
-    return (
-      v.store === "session-state" &&
-      (v.kind === "drop" ||
-        v.kind === "heard" ||
-        (v.kind === "patch" &&
-          isPlainObject(v.changes) &&
-          Object.values(v.changes).every(
-            (value) => value === null || typeof value === "string",
-          )))
-    );
-  };
-  if (!Array.isArray(raw) || !raw.every(write))
+  if (!Array.isArray(raw) || !raw.every((v) => isStoreWrite(v, edit)))
     throw new Error("invalid durable session changes");
   return raw;
 }

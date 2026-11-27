@@ -63,6 +63,7 @@ const ROOT = "/nowhere/project";
 const HOOK = viewFacts(ROOT, SESSION).hookData;
 const AT = instantOf(new Date(1_700_000_000_000));
 const BOOT: RendererBoot = {
+  sessionRevision: 0,
   stored: EMPTY_STORED_STATE,
   locations: {
     home: "/nowhere/home",

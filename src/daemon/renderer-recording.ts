@@ -14,6 +14,7 @@ import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { eventLine } from "../utils/logfmt.js";
 import type { RendererName } from "./foundations/renderer-name.js";
+import type { EncodedSessionCommit } from "./session-delivery.js";
 import type { RecordingFile } from "./recording-file.js";
 import type { RecordingCommand } from "./foundations/recording-command.js";
 import type { Timekeeper } from "../time.js";
@@ -22,6 +23,7 @@ import {
   recordingBootProblem,
   recordingInputProblem,
   recordingOutputProblem,
+  recordingWritesProblem,
 } from "./recording-privacy.js";
 
 type CaptureState =
@@ -49,7 +51,10 @@ export class RendererRecording {
   private pending: Promise<void> = Promise.resolve();
   private waitingBytes = 0;
   private turns = 0;
+  private sessionRevision = 0;
   private readonly controls = new RecordingControls();
+  private afterInput?: EncodedSessionCommit[];
+  private afterBytes = 0;
 
   constructor(
     readonly renderer: RendererName,
@@ -79,6 +84,7 @@ export class RendererRecording {
     this.admit(
       () => recordingBootProblem(input),
       () => {
+        this.sessionRevision = input.sessionRevision;
         this.state = { kind: result.kind };
         return this.append({
           kind: "boot",
@@ -99,6 +105,7 @@ export class RendererRecording {
       () => recordingInputProblem(input, this.controls),
       () => this.snapshot(input),
     );
+    this.afterInput = [];
     let timed: Timed<RendererOutput>;
     try {
       timed = await answer(input);
@@ -112,10 +119,41 @@ export class RendererRecording {
       () => recordingOutputProblem(output, this.controls),
       () => {
         this.turns++;
-        return this.append({ kind: "turn", input: captured, output });
+        this.append({ kind: "turn", input: captured, output });
+        for (const commit of this.afterInput ?? []) {
+          if (!this.active) break;
+          this.appendLine(commit.line, commit.bytes);
+        }
       },
     );
+    this.afterInput = undefined;
+    this.afterBytes = 0;
     return timed;
+  }
+
+  observed(commit: EncodedSessionCommit): void {
+    if (!this.active) return;
+    this.admit(
+      () => recordingWritesProblem(commit.value.writes, this.controls),
+      () => {
+        if (commit.value.revision !== this.sessionRevision + 1) {
+          this.fail("recording missed a session revision");
+          return;
+        }
+        this.sessionRevision = commit.value.revision;
+        if (this.afterInput === undefined)
+          this.appendLine(commit.line, commit.bytes);
+        else if (
+          this.afterBytes + this.waitingBytes + commit.bytes >
+          MAX_QUEUED_BYTES
+        )
+          this.fail("recording storage could not keep up with session commits");
+        else {
+          this.afterInput.push(commit);
+          this.afterBytes += commit.bytes;
+        }
+      },
+    );
   }
 
   // A rejected export must leave the actual renderer and its turn intact.
@@ -143,7 +181,10 @@ export class RendererRecording {
       this.fail("renderer data could not be encoded");
       return;
     }
-    const bytes = Buffer.byteLength(line);
+    this.appendLine(line, Buffer.byteLength(line));
+  }
+
+  private appendLine(line: string, bytes: number): void {
     if (this.waitingBytes > 0 && this.waitingBytes + bytes > MAX_QUEUED_BYTES) {
       this.fail("recording storage could not keep up with the renderer");
       return;
@@ -161,6 +202,8 @@ export class RendererRecording {
   }
 
   fail(reason: string): void {
+    this.afterInput = undefined;
+    this.afterBytes = 0;
     if (this.state.kind === "failed" || this.state.kind === "finished") return;
     this.state = { kind: "failed", reason };
     this.pending = this.pending
@@ -197,7 +240,11 @@ export class RendererRecording {
       );
     if (this.state.kind === "built" || this.state.kind === "refused") {
       this.state = { kind: "sealed" };
-      this.append({ kind: "end", turns: this.turns });
+      this.append({
+        kind: "end",
+        turns: this.turns,
+        sessionRevision: this.sessionRevision,
+      });
     }
   }
 

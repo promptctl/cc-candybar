@@ -13,7 +13,6 @@ import {
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import type { IsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
-import { heldStorage } from "../../helpers/held-storage";
 import { sessionStatePath } from "../../../src/daemon/paths";
 import { hostOf } from "../../../scripts/lib/host";
 
@@ -63,26 +62,18 @@ test("a session-state file that does not read is kept beside itself, and the bar
 });
 
 test("a file that can be neither read nor set aside stands on the bar as saving nothing", async () => {
-  daemon = startDaemon(isolated.env, {
-    profile: () => ({
-      session: heldStorage<Record<string, string>>(
-        { kind: "failed", reason: "EIO: i/o error, read" },
-        {
-          file: "/state/session-state.json",
-          refuseAside: new Error("EROFS: read-only file system, rename"),
-        },
-      ).storage,
-    }),
-  });
+  const file = sessionStatePath(hostOf(isolated.env));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.symlinkSync(file, file);
+  daemon = startDaemon(isolated.env);
   const pages = await said("stored-refused");
   expect(
-    pages.find((p) => p.includes("EIO: i/o error, read"))?.replace(/\s+/g, " "),
-  ).toContain(
-    "setting it aside failed (EROFS: read-only file system, rename), and nothing is saved to it until the daemon starts again",
-  );
+    pages.find((p) => p.includes("ELOOP"))?.replace(/\s+/g, ""),
+  ).toContain("andnothingissavedtoituntilthedaemonstartsagain");
+  expect(fs.readlinkSync(file)).toBe(file);
   // It stands: a later bar still says it.
   expect(
-    (await said("stored-refused-later")).some((p) => p.includes("EIO")),
+    (await said("stored-refused-later")).some((p) => p.includes("ELOOP")),
   ).toBe(true);
 });
 

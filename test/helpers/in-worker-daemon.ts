@@ -22,14 +22,11 @@ import {
   type PreparedDaemon,
   type RunningBundle,
 } from "../../src/daemon/daemon";
-import { HeldStores, type ProfileStorage } from "../../src/daemon/held-stores";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { memoryLimitBytes } from "../../src/daemon/limits";
-import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
 import {
   daemonPaths,
-  profilePaths,
   type DaemonPaths,
 } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
@@ -45,7 +42,6 @@ import { parseFrame, type Frame } from "../../src/render/frame";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { daemonClock } from "../../src/host";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
-import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "../../scripts/lib/daemon/wire";
 import type { StartBarDaemon } from "../../scripts/lib/drive-bar";
 import { memoryConnection } from "./memory-connection";
@@ -63,7 +59,6 @@ const repoPricing: FetchPricing = () => Promise.resolve(ok(REPO_PRICES));
 
 export type DaemonOverrides = Partial<Omit<DaemonInputs, "paths">> & {
   readonly paths?: DaemonPaths;
-  readonly profile?: (log: DaemonLogger) => Partial<ProfileStorage>;
 };
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
@@ -120,21 +115,10 @@ export function prepareDaemon(
   // does, on the bar.
   const clock = overrides.clock ?? daemonClock();
   const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, clock);
-  const profile = overrides.profile;
-  const sessionStores = profile
-    ? (log: DaemonLogger) =>
-        new HeldStores(
-          {
-            ...fileStorage(profilePaths(paths, MAIN_RENDERER), log, clock),
-            ...profile(log),
-          },
-          clock,
-        )
-    : fileSessionStores(paths, clock);
   try {
     const daemon = createDaemon({
       region: systemRegion(),
-      ...productionAdapters(paths, daemonLog, clock, sessionStores),
+      ...productionAdapters(paths, daemonLog, clock, fileSessionStores(paths, clock)),
       watchDirectory: manualDirectoryWatches().open,
       tmuxObserver: () => ({
         observe(_socket, events) {

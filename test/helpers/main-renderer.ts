@@ -33,6 +33,7 @@ export const PROJECT = "/nowhere/project";
 export const USER_FILE = "/nowhere/config/cc-candybar/config.json5";
 
 export const bootOf = (stored = EMPTY_STORED_STATE): RendererBoot => ({
+  sessionRevision: 0,
   stored,
   locations: {
     home: "/nowhere/home",

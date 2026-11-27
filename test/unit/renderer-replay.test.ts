@@ -9,6 +9,7 @@ import { replayRecording } from "../../src/renderer/replay";
 import type { Instant, Tick } from "../../src/utils/instant";
 
 const settings: RendererBoot = {
+  sessionRevision: 0,
   stored: EMPTY_STORED_STATE,
   locations: { home: "/offline", configHome: "/offline/config", dataHome: "/offline/data", dataDirs: [] },
   region: SAMPLE_REGION,
@@ -18,8 +19,54 @@ const boot = {
   kind: "boot", version: RECORDING_VERSION, wireVersion: RENDERER_WIRE_VERSION,
   input: settings, result: { kind: "built" },
 } as const satisfies RecordingEntry;
-const end = { kind: "end", turns: 0 } as const satisfies RecordingEntry;
+const oldEnd = { kind: "end", turns: 0 } as const;
+const end = { ...oldEnd, sessionRevision: 0 } as const satisfies RecordingEntry;
 const linesOf = (...entries: unknown[]) => entries.map((entry) => JSON.stringify(entry));
+
+test("the final revision verifies changes received between turns, including the last change", async () => {
+  const checkpoint = { ...boot, input: { ...settings, sessionRevision: 40 } };
+  const change = {
+    kind: "session-commit",
+    at: 15,
+    tick: 1,
+    revision: 41,
+    writes: [
+      {
+        kind: "patch",
+        store: "session-state",
+        key: "sample",
+        changes: { padding: "4" },
+      },
+    ],
+  };
+  const deletion = {
+    ...change,
+    revision: 42,
+    writes: [
+      {
+        kind: "patch",
+        store: "session-state",
+        key: "sample",
+        changes: { padding: null },
+      },
+    ],
+  };
+  const footer = { ...end, sessionRevision: 42 };
+  const action = jest.fn();
+  await expect(
+    replayRecording(linesOf(checkpoint, change, deletion, footer), action),
+  ).resolves.toEqual({ turns: 0 });
+  expect(action).not.toHaveBeenCalled();
+  await expect(
+    replayRecording(linesOf(checkpoint, deletion, footer)),
+  ).rejects.toThrow("out-of-order session commit");
+  await expect(
+    replayRecording(linesOf(checkpoint, change, footer)),
+  ).rejects.toThrow("wrong terminal session revision");
+  await expect(
+    replayRecording(linesOf(checkpoint, change, deletion, oldEnd)),
+  ).rejects.toThrow("invalid end fields");
+});
 
 async function recordedStats() {
   const built = mainRendererOf(settings);
@@ -81,7 +128,7 @@ test.each([
 test("historical wire 22 recordings replay until an insertion needs its missing seed", async () => {
   const historical = { ...boot, wireVersion: 22, input: { ...settings, region: { locale: "en-US", timeZone: "UTC" } } };
   const stats = await recordedStats();
-  await expect(replayRecording(linesOf(historical, stats, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  await expect(replayRecording(linesOf(historical, stats, { ...oldEnd, turns: 1 }))).resolves.toEqual({ turns: 1 });
   const input = { ...stats.input, event: { kind: "click", context: null, click: {
     scope: "session", session: "session", verb: "apply-layout-op", steps: [
       { kind: "session", verb: "apply-layout-op", args: ["user", "presets.default.root", "insert:added:anchor:after"] },
@@ -98,17 +145,17 @@ test("historical wire 22 recordings replay until an insertion needs its missing 
       at: 1, revision: 1, answered: false,
     }),
   } }];
-  await expect(replayRecording(linesOf(historical, { ...stats, input, output: { ...actual, stored } }, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  await expect(replayRecording(linesOf(historical, { ...stats, input, output: { ...actual, stored } }, { ...oldEnd, turns: 1 }))).resolves.toEqual({ turns: 1 });
   for (const placementSeed of [undefined, "", 42])
     await expect(replayRecording(linesOf(boot, { ...stats, input: { ...input, event: { ...input.event, placementSeed } } }, { ...end, turns: 1 }))).rejects.toThrow("invalid click placement seed");
-  await expect(replayRecording(linesOf(historical, {...stats, input}, { ...end, turns: 1 })))
+  await expect(replayRecording(linesOf(historical, {...stats, input}, { ...oldEnd, turns: 1 })))
     .rejects.toThrow("this historical insertion had no recorded placement seed");
 });
 
 test.each([22, 23])("wire %d requires reconstructible number data", async wireVersion => {
   const recording = (locale: string) => linesOf({ ...boot, wireVersion, input: {
     ...settings, region: { locale, timeZone: "UTC" },
-  } }, end);
+  } }, oldEnd);
   await expect(replayRecording(recording("en-US"))).resolves.toEqual({ turns: 0 });
   await expect(replayRecording(recording("zz-ZZ"))).rejects.toThrow("invalid renderer boot input");
 });
