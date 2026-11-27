@@ -76,6 +76,20 @@ export class TmuxSourceAuthority {
     return this.held.get(paneKey(source))?.owner?.sid ?? null;
   }
 
+  // A later request can lose its tmux hint while an earlier genuine
+  // candidate awaits its process record. The host keeps observing that pane
+  // until it is positively absent or no interested session claims it.
+  candidates(
+    source: Pick<TmuxHint, "socket" | "pane">,
+  ): ReadonlySet<SessionId> {
+    const held = this.held.get(paneKey(source));
+    const view = this.views.get(source.socket);
+    if (!held || (view && !view.panes.has(source.pane))) return new Set();
+    const sessions = new Set([...held.claims.values()].map((c) => c.sid));
+    if (held.owner) sessions.add(held.owner.sid);
+    return sessions;
+  }
+
   report(
     source: TmuxHint,
     sid: SessionId,
@@ -241,6 +255,10 @@ export class TmuxSourceAuthority {
             );
           }
           held.reason = null;
+          if (
+            [...held.claims.values()].every((claim) => claim.sid === proof.sid)
+          )
+            this.watch(held, []);
         }
         if (version === held.version) break;
       }

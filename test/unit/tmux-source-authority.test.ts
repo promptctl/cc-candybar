@@ -66,6 +66,7 @@ test.each(["request first", "record first"])(
     a.observed(source.socket, view(100));
     await a.report(source, A, undefined, "/claude");
     expect(a.session(source)).toBe(A);
+    expect(listeners.size).toBe(0);
     a.report(source, TOOL, 91, "/claude");
     await a.report(source, A, 91, "/claude");
     if (order === "record first") replace(B);
@@ -146,4 +147,18 @@ test("only foreground descendants on the full source tty can own the pane", () =
   expect(() =>
     foregroundMembers({ pid: 51, tty: "/dev/pts/18" }, listing),
   ).toThrow("no matching foreground tty");
+});
+
+test("candidate interest survives unknown topology but ends on positive removal or release", async () => {
+  const { authority: a } = fixture();
+  a.observed(source.socket, view(1));
+  await a.report(source, A, undefined, "/c");
+  expect([...a.candidates(source)]).toEqual([A]);
+  a.observed(source.socket, null);
+  expect([...a.candidates(source)]).toEqual([A]);
+  a.observed(source.socket, { serverPid: 1, panes: new Map() });
+  expect([...a.candidates(source)]).toEqual([]);
+  a.release(source);
+  a.observed(source.socket, view(2));
+  expect([...a.candidates(source)]).toEqual([]);
 });
