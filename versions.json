@@ -4,15 +4,36 @@
     {
       "version": "pr-977",
       "ref": "refs/pull/977/merge",
-      "sha": "70eb890e0941db0a8dd7df86a60325355d6bbe29",
-      "timestamp": "2026-11-27T03:19:11.846Z",
+      "sha": "3c86fb66caea8d04707de798454b4ef18aeafeba",
+      "timestamp": "2026-11-27T03:43:42.355Z",
       "commits": [
         {
-          "sha": "70eb890e0941db0a8dd7df86a60325355d6bbe29",
+          "sha": "3c86fb66caea8d04707de798454b4ef18aeafeba",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:18:20-07:00",
-          "message": "Merge 96973ea9708782aed4cbed456471318c888ca7b8 into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
+          "timestamp": "2026-11-27T03:42:26Z",
+          "message": "Merge 30d274bf0e35ce3d6dbad126ad88f1e3d194a5ff into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
+        },
+        {
+          "sha": "30d274bf0e35ce3d6dbad126ad88f1e3d194a5ff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:41:54-07:00",
+          "message": "Stop polling terminated shell groups after daemon close\n"
+        },
+        {
+          "sha": "02f63be1b176f277fbb9ce6abe0d36f44b5da5ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:25:37-07:00",
+          "message": "fix(proc): close the fake child input when its reader exits\n"
+        },
+        {
+          "sha": "5b24bc2c1786b22de31785733624bf8aa569fe0a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:28:23-07:00",
+          "message": "test: observe timer retirement after all fixture cleanups\n"
         },
         {
           "sha": "96973ea9708782aed4cbed456471318c888ca7b8",

@@ -79889,7 +79889,7 @@ async function launchPiped(state, opts, pipes) {
         );
       };
       afterExit(tasks.groupEnd, () => {
-        if (!settled3)
+        if (!settled3 && terminated === null)
           groupEndTimer = clock.defer(
             tasks.groupEnd,
             () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)
@@ -79906,11 +79906,12 @@ async function launchPiped(state, opts, pipes) {
       }
       terminated = cause;
       timer?.();
+      groupEndTimer?.();
       unlisten();
       const pid2 = child.pid;
       if (pid2 !== void 0) {
         killTimer = clock.after(tasks.killGrace, TIMEOUT_KILL_GRACE_MS, () => {
-          signal(pid2, "SIGKILL");
+          if (!spawner.groupGone(pid2)) signal(pid2, "SIGKILL");
           afterExit(tasks.conclude, concludeNextTurn);
         });
         signal(pid2, "SIGTERM");
