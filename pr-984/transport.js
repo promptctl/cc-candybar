@@ -28329,9 +28329,9 @@ function describeValue(value, crossed) {
       const errors2 = item instanceof AggregateError ? Object.getOwnPropertyDescriptor(item, "errors")?.value : void 0;
       if (Array.isArray(errors2)) {
         for (let i2 = 0; i2 < errors2.length && remaining > 0; i2++) {
+          remaining--;
           const field = Object.getOwnPropertyDescriptor(errors2, i2);
           if (field) lines2.push(`errors[${i2}]: ${descriptorText(field)}`);
-          else remaining--;
         }
       }
       for (const key of Object.keys(item)) {
