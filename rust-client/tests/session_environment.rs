@@ -78,6 +78,9 @@ fn cold_and_steady_statusline_ticks_send_the_environment_only_on_request() {
     let probe = rx.recv_timeout(Duration::from_secs(2)).unwrap();
     let full = rx.recv_timeout(Duration::from_secs(2)).unwrap();
     let steady = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    for request in [&probe, &full, &steady] {
+        assert_eq!(request["parentPid"], std::process::id());
+    }
     for tick in [&probe, &steady] {
         assert_eq!(tick["kind"], "render-session");
         assert_eq!(tick["termCols"], 96);

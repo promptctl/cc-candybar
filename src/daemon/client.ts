@@ -75,7 +75,7 @@ export async function tryRenderViaDaemon(
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
-  observed: Pick<ClientHints, "termCols" | "termRows" | "client">,
+  observed: Pick<ClientHints, "termCols" | "termRows" | "client" | "parentPid">,
   budgets: RoundTripBudgets = RENDER_BUDGETS,
 ): Promise<ClientOutcome> {
   // The environment Claude Code gave this client, which the host runs the
@@ -83,8 +83,17 @@ export async function tryRenderViaDaemon(
   const expiresAt = world.clock.now() + budgets.budgetMs;
   const env = plainEnvironment(world.host.env);
   const envKey = environmentKey(env);
-  const { termCols, termRows, client } = observed;
-  const fields = { hookData, args, cwd, envKey, termCols, termRows, client };
+  const { termCols, termRows, client, parentPid } = observed;
+  const fields = {
+    hookData,
+    args,
+    cwd,
+    envKey,
+    termCols,
+    termRows,
+    client,
+    parentPid,
+  };
   const needed = Symbol("environment");
   const first = await requestOutcome<string | typeof needed>(
     world,

@@ -38,6 +38,7 @@ export type CheckedRenderRequest = Omit<
   "deadline" | "encoding" | "hookData" | "env" | "envKey"
 > & {
   readonly hookData: CheckedHookData;
+  readonly sourceConfigDir?: string;
   readonly deadline: ClientDeadline;
   readonly encoding: RenderEncoding;
   readonly hints: ClientHints;

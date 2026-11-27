@@ -235,6 +235,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.cwd(),
       {
         ...terminalObservation(host.env, process.stderr),
+        parentPid: process.ppid,
         client: nodeClientHint("node", RUNNING_BUNDLE),
       },
     );

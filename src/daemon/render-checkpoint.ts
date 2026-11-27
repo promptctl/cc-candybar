@@ -3,6 +3,7 @@
 import { parseArgs } from "node:util";
 import { isAbsolute, resolve } from "node:path";
 import { explicitConfigPath, type UserHome } from "../utils/user-path";
+import { claudeConfigDir, detectClaudeConfigDir } from "../claude-settings";
 import { detectClientHints } from "../client-hints";
 import {
   CONFIG_FLAGS,
@@ -277,6 +278,7 @@ export function checkRenderRequest(
         ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
         ...(req.termCols !== undefined && { termCols: req.termCols }),
         ...(req.termRows !== undefined && { termRows: req.termRows }),
+        parentPid: req.parentPid,
         client: req.client,
       }
     : req;
@@ -318,6 +320,20 @@ export function checkRenderRequest(
       cwd: req.cwd,
       args: req.args,
       ...hints,
+      // [LAW:effects-at-boundaries] A legacy unkeyed client can report its
+      // own HOME too. Only a source pane needs a Claude process record.
+      ...(hints.tmux && {
+        sourceConfigDir:
+          hints.claudeConfigDir ??
+          claudeConfigDir(
+            env.kind === "reported"
+              ? detectClaudeConfigDir(env.env, req.cwd)
+              : undefined,
+            env.kind === "reported" && env.env.HOME
+              ? resolve(req.cwd, env.env.HOME)
+              : (lookup?.accountHome() ?? home),
+          ),
+      }),
       // Existing workers show a diagnostic for an explicitly refused hint.
       // Forward only the declared fields they need for that diagnostic.
       ...Object.fromEntries(
