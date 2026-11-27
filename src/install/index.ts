@@ -1,3 +1,11 @@
+import {
+  rendererAssetOf,
+  rendererAssetName,
+  RUNTIME_MANIFEST,
+  manifestOf,
+  obsoleteRendererFiles,
+  type RendererAsset,
+} from "./renderer-asset.js";
 import { OWNER_CONTEXT, whyFailed } from "../proc/launcher.js";
 import {
   ATTACH_DIR,
@@ -245,6 +253,7 @@ export interface StagedRuntime {
 // The package's runtime files, found before anything is staged, so a package
 // missing one fails with nothing changed.
 interface RuntimeSources {
+  readonly renderer: RendererAsset;
   readonly dist: string;
   readonly entry: RenderEntry;
   readonly attach: string;
@@ -281,7 +290,31 @@ function runtimeSources(
       `install: the attach preload was not found at ${preload}. Reinstall the package.`,
     );
   }
-  return { dist: sourceDist, entry, attach, preload };
+  return {
+    dist: sourceDist,
+    renderer: rendererAssetOf(path.dirname(sourceDist), sourceDist),
+    entry,
+    attach,
+    preload,
+  };
+}
+
+function stageRenderer(
+  changes: InstallChanges,
+  dist: string,
+  asset: RendererAsset,
+): void {
+  const name = rendererAssetName(asset.digest);
+  const manifest = path.join(dist, RUNTIME_MANIFEST);
+  const previous = manifestOf(readTextIfPresent(manifest) ?? "")?.renderer;
+  changes.replaceFile(path.join(dist, name), asset.bytes, 0o644);
+  changes.replaceFile(manifest, asset.manifest, 0o644);
+  for (const file of obsoleteRendererFiles(
+    fs.readdirSync(dist),
+    previous,
+    asset.digest,
+  ))
+    changes.remove(path.join(dist, file));
 }
 
 // Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
@@ -302,7 +335,12 @@ function stageRuntime(
   const binPath = stagedBinPath(dir);
   changes.mkdir(path.dirname(distPath));
   changes.mkdir(path.dirname(binPath));
-  stageFile(changes, sources.dist, distPath);
+  stageRenderer(changes, path.dirname(distPath), sources.renderer);
+  changes.replaceFile(
+    distPath,
+    sources.renderer.cli,
+    fs.statSync(sources.dist).mode & 0o777,
+  );
   if (platform === "darwin") stageWindow(sources.dist, dir, changes, launcher);
   // A directory staged whole, so no file of an older launcher outlives it.
   changes.replaceDir(path.join(path.dirname(distPath), ATTACH_DIR), (staging) =>

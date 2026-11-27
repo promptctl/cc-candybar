@@ -1,7 +1,7 @@
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import type { SessionId } from "./foundations/session-id.js";
-import { failureOf } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 
 export { createTmuxSourceEdges } from "./tmux-source-edge.js";
 

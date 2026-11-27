@@ -1,3 +1,4 @@
+import { relocateRenderer } from "../../helpers/packaged-runtime";
 // [LAW:verifiable-goals] On a REAL daemon: the renderer runs in a process of
 // its own, a renderer that dies is started again, and the bar the next one
 // draws says the restart happened and what it cost.
@@ -304,6 +305,7 @@ test("the same failed turn returns identical data from different worker paths", 
     const source = fs.readFileSync(built, "utf8");
     expect(source.startsWith("#!")).toBe(true);
     fs.writeFileSync(second, source.replace("\n", "\n\n"));
+    relocateRenderer(built, second);
     const answer = (bundle: string, session: string) => {
       const lines: readonly HostLine[] = [
         { kind: "boot", ...COMPATIBLE_BOOT },

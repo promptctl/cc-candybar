@@ -59,11 +59,8 @@ import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
 import { inspectionPayloadProblem } from "./foundations/inspection-reply.js";
-import {
-  CrossedFailure,
-  failureOf,
-  type Failure,
-} from "./foundations/verb-error.js";
+import { CrossedFailure, type Failure } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 import {
   performChanges,
   configEffectOutcome,

@@ -10,7 +10,7 @@ import {
 import { composeBar, type Frame } from "../../render/frame.js";
 import type { FeedEncoding, RenderEncoding } from "../../render/encodings.js";
 import { hitMapOf } from "../../render/hit-map.js";
-import { failureOf, type Failure } from "./verb-error.js";
+import { failureOf } from "./host-failure.js";
 
 // A value as it crosses the wire: the value its frame carries, the frame, and
 // why the value meant could not be sent, when it could not.
@@ -58,12 +58,6 @@ export const failedWith = (message: string): Refusal => ({
 
 export const renderFailed = (err: unknown): Refusal =>
   failedWith(failureOf(err).message);
-
-// [LAW:single-enforcer] An argument failure inside a checked render is a
-// daemon bug. Closing, abandonment and renderer availability retain their
-// own outcomes even though the wire uses the same failure envelope.
-export const renderFailure = (failure: Failure): Failure =>
-  failure.kind === "bad-request" ? { ...failure, kind: "threw" } : failure;
 
 // [LAW:dataflow-not-control-flow] A render's answer in each encoding, looked up
 // by the value the checkpoint parsed. Keyed by the type, so a new encoding names

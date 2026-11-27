@@ -1,4 +1,5 @@
-import path from "node:path";
+import path from "path-browserify";
+import { resolveFrom } from "./utils/user-path.js";
 
 // [LAW:one-source-of-truth] The variable that moves Claude Code's
 // configuration directory. Mirrored by the Rust client
@@ -23,7 +24,7 @@ export function detectClaudeConfigDir(
   cwd: string,
 ): string | undefined {
   const first = (env[CLAUDE_CONFIG_DIR_ENV] ?? "").split(",")[0]!.trim();
-  return first === "" ? undefined : path.resolve(cwd, first);
+  return first === "" ? undefined : resolveFrom(cwd, first);
 }
 
 // Claude Code's configuration directory: the one a client detected, else the

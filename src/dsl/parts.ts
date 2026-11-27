@@ -18,6 +18,7 @@
 // reads a projection part is one — a body reads its segment's colours, and its
 // lead and trail read whether the body opened.
 
+import { disposeSymbol } from "../utils/dispose-symbol.js";
 import { observable, runInAction, type IObservableValue } from "mobx";
 import type {
   ColorDepth,
@@ -522,7 +523,7 @@ export class ViewParts {
                   error: e instanceof Error ? e.message : String(e),
                 };
           } finally {
-            bound?.[Symbol.dispose]();
+            bound?.[disposeSymbol]();
             this.phase.ruling = false;
           }
         },

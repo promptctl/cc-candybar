@@ -22,10 +22,8 @@ import {
 import type { Instant, Tick } from "../../src/utils/instant";
 import { joinedEvent, type DaemonEvent } from "../../src/utils/event-hold";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import {
-  CrossedFailure,
-  failureOf,
-} from "../../src/daemon/foundations/verb-error";
+import { CrossedFailure } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { unexpectedTimingProblem } from "../helpers/renderers";
 
 // A renderer that answers with a diagnostic. Its turns
@@ -415,6 +413,17 @@ describe("the renderer over lines", () => {
     expect(faults).toEqual([
       "renderer said ping after its end (renderer main exited)",
     ]);
+  });
+
+  test("a malformed input rejects just its turn and the worker answers the next ping", async () => {
+    const output: RendererLine[] = [];
+    const receive = serveRenderer({ renderer: talkingRenderer(), send: line => output.push(line),
+      memory: () => ({ rss: 1, heapTotal: 1 }), heapSnapshot: async () => {} });
+    receive({ kind: "input", n: 15, input: { kind: "event" } } as HostLine);
+    await Promise.resolve();
+    expect(output).toEqual([expect.objectContaining({ kind: "rejected", n: 15 })]);
+    receive({ kind: "ping", n: 16 });
+    expect(output.at(-1)).toEqual({ kind: "ping", n: 16, usage: { rss: 1, heapTotal: 1 } });
   });
 
   test("a command that rejected fails as it does in this process, its failure kept", async () => {

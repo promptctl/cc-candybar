@@ -11,7 +11,7 @@
 // declarations differing only in those share a run. The key's VALUE is in,
 // hashed, so a key that moves is a new identity with a run of its own.
 
-import crypto from "node:crypto";
+import { sha256Text } from "../utils/sha256.js";
 import { digestOf } from "../utils/plain.js";
 
 export type ReadMode = "whole" | "first-line";
@@ -80,5 +80,5 @@ export const runOf = (identity: SourceIdentity): Run =>
 // [LAW:one-source-of-truth] The one hash of a key's value, the `key` message's
 // `keyHash` on the wire (spec section 13).
 export function keyHashOf(value: string): string {
-  return crypto.createHash("sha256").update(value).digest("hex");
+  return sha256Text(value);
 }

@@ -1,3 +1,4 @@
+import { relocateRenderer } from "../../helpers/packaged-runtime";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -40,6 +41,7 @@ test("the running host records two independent renderer sessions for offline rep
     fs.mkdirSync(relocated);
     const alternate = path.join(relocated, "index.mjs");
     fs.copyFileSync(BUNDLE, alternate);
+    relocateRenderer(BUNDLE, alternate);
     const mainCapture = path.join(dir, "main.jsonl");
     const namedCapture = path.join(dir, "worktree.jsonl");
     const refusedCapture = path.join(dir, "refused.jsonl");

@@ -1,3 +1,4 @@
+import { relocateRenderer } from "../../helpers/packaged-runtime";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -153,6 +154,7 @@ async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") 
       [sourceFile(worktree)]: ["readFile"],
     });
     fs.copyFileSync(bundle, namedBundle);
+    relocateRenderer(bundle, namedBundle);
     gate = await rendererBootGate(
       entry,
       namedBundle,

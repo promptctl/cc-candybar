@@ -2,7 +2,7 @@ import type { LinkSigner } from "../../click/link-signer.js";
 import { runLinkFields, type RunEvidence } from "../../click/wire.js";
 import type { Act } from "../../renderer-interface/interface.js";
 import type { Asked } from "../../utils/outcome.js";
-import { failureOf } from "./verb-error.js";
+import { failureOf } from "./host-failure.js";
 
 export type RequestedRun = Extract<Act, { kind: "run" }>;
 

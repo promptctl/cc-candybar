@@ -1,5 +1,5 @@
 import type { RequestId } from "../../renderer-interface/interface.js";
-import path from "node:path";
+import path from "path-browserify";
 import type { Duplex } from "node:stream";
 import type { RenderHookData } from "../../utils/claude";
 import type { StatsSnapshot } from "./stats-snapshot";

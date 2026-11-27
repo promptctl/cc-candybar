@@ -9,7 +9,7 @@
 // file, so the renderer can ask what a chain's places are. The search that
 // looks at the disk is the host's discovery.
 
-import path from "node:path";
+import path from "path-browserify";
 import type { ConfigTarget } from "../../config-hint.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { ProjectAccess } from "./repo-gate.js";

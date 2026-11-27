@@ -28,10 +28,8 @@ import type { Awaiting } from "../../src/facts/awaited";
 import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import type { RequestFacts } from "../../src/daemon/foundations/request-event";
-import {
-  BadVerbArgs,
-  failureOf,
-} from "../../src/daemon/foundations/verb-error";
+import { BadVerbArgs } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 import {
   type Effect,
   Present,

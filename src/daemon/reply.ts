@@ -3,13 +3,10 @@ import type { PaneEnrollment } from "./foundations/protocol.js";
 // A daemon's answer to a request: the checkpoint, then a reply per kind.
 
 import { inspect } from "node:util";
+import { randomUUID } from "node:crypto";
 import type { DaemonParts } from "./daemon-parts.js";
 import { cacheTallyFacts } from "./readings.js";
-import {
-  failedWith,
-  framedResponse,
-  renderFailure,
-} from "./foundations/render-answers.js";
+import { failedWith, framedResponse } from "./foundations/render-answers.js";
 import {
   answerStatusline,
   NOTHING_TO_SETTLE,
@@ -54,10 +51,11 @@ import {
   badRequest,
   ClickAbandoned,
   DaemonClosing,
-  failureOf,
   RendererDown,
+  renderFailure,
   type Failure,
 } from "./foundations/verb-error";
+import { failureOf } from "./foundations/host-failure";
 import { elapsedMs, spanMs } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
@@ -1164,6 +1162,7 @@ async function handleClick(
           event: {
             kind: "click",
             click: admitted,
+            placementSeed: randomUUID(),
             context:
               admitted.scope === "global"
                 ? null

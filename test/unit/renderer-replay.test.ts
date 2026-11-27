@@ -75,3 +75,24 @@ test.each([
 ])("rejects $problem", async ({ lines, problem }) => {
   await expect(replayRecording(lines)).rejects.toThrow(problem);
 });
+
+test("historical wire 22 recordings replay until an insertion needs its missing seed", async () => {
+  const historical = { ...boot, wireVersion: 22 };
+  const stats = await recordedStats();
+  await expect(replayRecording(linesOf(historical, stats, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  const input = { ...stats.input, event: { kind: "click", context: null, click: {
+    scope: "session", session: "session", verb: "apply-layout-op", steps: [
+      { kind: "session", verb: "apply-layout-op", args: ["user", "presets.default.root", "insert:added:anchor:after"] },
+    ],
+  } } };
+  // This insertion fails at the session/config gate, before an ID is minted.
+  const live = mainRendererOf(settings);
+  if (live.kind !== "built") throw new Error("renderer refused construction");
+  const actual = await live.renderer.answer({ ...input, event: { ...input.event, placementSeed: "new" } } as EventInput);
+  expect(actual.kind).toBe("threw");
+  await expect(replayRecording(linesOf(historical, { ...stats, input, output: actual }, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  for (const placementSeed of [undefined, "", 42])
+    await expect(replayRecording(linesOf(boot, { ...stats, input: { ...input, event: { ...input.event, placementSeed } } }, { ...end, turns: 1 }))).rejects.toThrow("invalid click placement seed");
+  await expect(replayRecording(linesOf(historical, {...stats, input}, { ...end, turns: 1 })))
+    .rejects.toThrow("this historical insertion had no recorded placement seed");
+});

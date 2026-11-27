@@ -37,6 +37,7 @@
 //    budget AND duration/time-remaining formatters moved to DSL helper templates
 //    — see DEFAULT_DSL_CONFIG.helpers.)
 
+import { disposeSymbol } from "../utils/dispose-symbol.js";
 import { systemRegion, type RegionalSettings } from "../utils/region.js";
 import {
   createEngine,
@@ -115,7 +116,7 @@ export function bindClock(at: Instant, timeline: Timeline): BoundClock {
   drawing = bound;
   return {
     heard: () => bound.soonest,
-    [Symbol.dispose]: () => {
+    [disposeSymbol]: () => {
       drawing = null;
     },
   };

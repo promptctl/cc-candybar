@@ -3,7 +3,7 @@
 // [LAW:single-enforcer] The boundary gate (argTypes) lives at the engine
 // dispatch site; the bodies here trust the runtime types they declared.
 
-import { basename as pathBasename, dirname as pathDirname } from "path";
+import path from "path-browserify";
 import type { FuncMap } from "@promptctl/go-template-js";
 import type { ClockFactory } from "./clock.js";
 import {
@@ -62,12 +62,12 @@ export function ccCandybarFuncs(): FuncMap {
   return {
     // Path operations absent from sprig in this package.
     basename: {
-      fn: (s: string) => pathBasename(s),
+      fn: (s: string) => path.basename(s),
       argTypes: ["string"],
       arity: { kind: "exact" },
     },
     dirname: {
-      fn: (s: string) => pathDirname(s),
+      fn: (s: string) => path.dirname(s),
       argTypes: ["string"],
       arity: { kind: "exact" },
     },

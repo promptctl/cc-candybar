@@ -162,7 +162,7 @@ function hostOver(
             runEvidence,
             actsOn,
             event: {
-              kind: "click",
+              kind: "click", placementSeed: "test-click",
               click: {
                 scope: "session",
                 verb: VERB_RUN,

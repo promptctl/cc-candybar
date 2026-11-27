@@ -1,3 +1,4 @@
+import { placementSuffixes } from "../../src/config/layout-ops";
 import { configQuery } from "../../src/config/loader/chain-places.js";
 import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 // Test helpers for the click wire. A rendered click URL is `dispatch/does=…&e=…`
@@ -285,6 +286,7 @@ export function testVerbContext(
   const configWrites = new LandingAtOnce(mint, stateDir(host), discovered);
   return configWrites.of({
     configWrites,
+    placementSuffix: placementSuffixes("test-clicks"),
     snapshotFor: discovered.snapshotOf,
     acts: new ActsOnTheirWay(mint, (session, reason) =>
       holdClickError(sessionState, session, reason, instantOf(new Date())),

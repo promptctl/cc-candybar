@@ -1853,7 +1853,7 @@ describe("the session's config, ahead of its request", () => {
       const result = await host.answerClick(session, () => ({
         kind: "event",
         actsOn: "desktop",
-        event: { kind: "click", click, context: heardContextOf(clicked) },
+        event: { kind: "click", placementSeed: "test-click", click, context: heardContextOf(clicked) },
       }));
       expect(result).toMatchObject({
         kind: "threw",
@@ -2223,7 +2223,7 @@ describe("a click", () => {
     verb: string,
     live: CheckedRenderRequest | null = null,
   ): Event => ({
-    kind: "click",
+    kind: "click", placementSeed: "test-click",
     click: { scope: "session", verb, session: SESSION, steps: [] },
     context: live === null ? null : heardContextOf(live),
   });

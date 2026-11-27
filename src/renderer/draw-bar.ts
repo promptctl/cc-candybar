@@ -1,5 +1,6 @@
 // One render of a session, a request's or a frame's, and what it records.
 
+import { disposeSymbol } from "../utils/dispose-symbol.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LifelineWarning } from "../proc/launcher";
 import type { StoreUnsavedWarning } from "../daemon/foundations/stored-file";
@@ -118,8 +119,10 @@ import {
   warningChanges,
 } from "./render-warnings.js";
 import type { Acceptance, FrameCandidate } from "./presented-frames.js";
-import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
-import { renderFailure } from "../daemon/foundations/render-answers";
+import {
+  renderFailure,
+  rendererFailureOf,
+} from "../daemon/foundations/verb-error.js";
 
 // The renderer's own state, including the world state its views were handed.
 export interface RendererParts {
@@ -287,7 +290,7 @@ const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
 // The session's view opened at the context, and let go: what a `context`
 // waits for its origin's config to do.
 export function openSession(parts: RendererParts, session: SessionId): void {
-  holdSessionAt(parts, parts.worldStates.requestOf(session))[Symbol.dispose]();
+  holdSessionAt(parts, parts.worldStates.requestOf(session))[disposeSymbol]();
 }
 
 // [LAW:single-enforcer] A `retire` turn: the session's world state goes, and
@@ -369,7 +372,7 @@ function setUpFrame(
     contextFacts(req, facts);
     hintsError = hintsErrorOf(req);
   } catch (e) {
-    hold[Symbol.dispose]();
+    hold[disposeSymbol]();
     throw e;
   }
   return setUpDraw(parts, hold, req, hintsError, readings, facts);
@@ -405,10 +408,10 @@ function setUpDraw(
       view,
       hintsError,
       terminal,
-      [Symbol.dispose]: () => hold[Symbol.dispose](),
+      [disposeSymbol]: () => hold[disposeSymbol](),
     };
   } catch (e) {
-    hold[Symbol.dispose]();
+    hold[disposeSymbol]();
     throw e;
   }
 }

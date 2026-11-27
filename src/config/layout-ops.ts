@@ -14,6 +14,7 @@
 // root. This module owns only the op's shape, its wire codec, and the id an
 // insertion mints.
 
+import { sha256Text } from "../utils/sha256.js";
 import { placementIds, type LayoutNode } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] The two operations brandon-layout-edit-2gc.1
@@ -72,6 +73,19 @@ export function decodeLayoutOp(token: string): LayoutOp | null {
 export interface NewPlacement {
   readonly seg: string;
   readonly id: string;
+}
+
+// [LAW:effects-at-boundaries] Each admitted click owns one candidate stream.
+// A recorded click repeats its choices, including retries against live IDs.
+export function placementSuffixes(seed: string): () => string {
+  let index = 0;
+  return () => {
+    if (typeof seed !== "string" || seed.length === 0)
+      throw new Error(
+        "layout insertion needs a placement seed from its recorded click",
+      );
+    return sha256Text(`placement/${seed}/${index++}`).slice(0, 6);
+  };
 }
 
 // [LAW:single-enforcer] THE id an insertion mints: the segment's name and a

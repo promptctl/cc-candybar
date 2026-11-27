@@ -103,7 +103,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   const { verb, value } = clickOf(indicator!.url);
   answered(
     await handIn(r, {
-      kind: "click",
+      kind: "click", placementSeed: "test-click",
       click: admitClick(verb, value, TEST_SIGNER).click,
       context: {
         session,

@@ -15,16 +15,13 @@ import { waitWithin } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import type { CheckoutLocation } from "../utils/git-root.js";
 import type { Outcome } from "../utils/outcome.js";
-import {
-  failedWith,
-  RENDER_ANSWERS,
-  renderFailure,
-} from "./foundations/render-answers.js";
+import { failedWith, RENDER_ANSWERS } from "./foundations/render-answers.js";
 import {
   DaemonClosing,
-  failureOf,
+  renderFailure,
   type Failure,
 } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 import type { Response } from "./foundations/protocol";
 import type { PublishFrame } from "./foundations/frame-publication.js";
 import { timeoutResponse } from "./foundations/request-deadline.js";

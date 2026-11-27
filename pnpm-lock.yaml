@@ -19,6 +19,9 @@ importers:
       '@eslint/plugin-kit':
         specifier: 0.4.1
         version: 0.4.1
+      '@noble/hashes':
+        specifier: 2.2.0
+        version: 2.2.0
       '@pkgjs/parseargs':
         specifier: 0.11.0
         version: 0.11.0
@@ -43,6 +46,9 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.39
+      '@types/path-browserify':
+        specifier: 1.0.3
+        version: 1.0.3
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.39.0
         version: 8.59.1(@typescript-eslint/parser@8.59.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)(typescript@5.9.3)
@@ -1254,6 +1260,9 @@ packages:
 
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
+
+  '@types/path-browserify@1.0.3':
+    resolution: {integrity: sha512-ZmHivEbNCBtAfcrFeBCiTjdIc2dey0l7oCGNGpSuRTy8jP6UVND7oUowlvDujBy8r2Hoa8bfFUOCiPWfmtkfxw==}
 
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
@@ -4742,6 +4751,8 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/normalize-package-data@2.4.4': {}
+
+  '@types/path-browserify@1.0.3': {}
 
   '@types/stack-utils@2.0.3': {}
 

@@ -48,9 +48,9 @@ import {
 import {
   DaemonClosing,
   RendererDown,
-  failureOf,
   failureKindOf,
 } from "./foundations/verb-error.js";
+import { failureOf } from "./foundations/host-failure.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 
 // What the host holds of its renderer, whichever link it runs over.

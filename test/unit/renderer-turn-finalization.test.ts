@@ -4,11 +4,9 @@ import type { RenderOrigin } from "../../src/config-hint";
 import { createGates } from "../../src/daemon/foundations/gates";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import {
-  BadVerbArgs,
-  CrossedFailure,
-  failureOf,
-} from "../../src/daemon/foundations/verb-error";
+import { rendererFailureOf, BadVerbArgs,
+  CrossedFailure } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import {
   timed,
@@ -538,4 +536,30 @@ test("a failed prune of an offered config is retried even when the declared orig
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
   expect(fixture.cache.holdsConfig(origin)).toBe(false);
   expect(fixture.subscriptions.map(({ configs }) => configs)).toEqual([[]]);
+});
+
+test("projecting a thrown value never evaluates its metadata accessors", () => {
+  const get = jest.fn(() => { throw new Error("side effect in diagnostic"); });
+  const error = Object.defineProperties(new Error("authored"), {
+    cause: { get }, metadata: { value: Object.defineProperty({}, "value", { enumerable: true, get }), enumerable: true },
+  });
+  expect(rendererFailureOf(error).detail).toContain("value: [Accessor]");
+  expect(get).not.toHaveBeenCalled();
+});
+
+test("native exceptions and uninspectable objects keep an answer", () => {
+  expect(rendererFailureOf(new DOMException("Disconnect", "AbortError"))).toMatchObject({ message: "Disconnect", detail: "AbortError: Disconnect" });
+  expect(rendererFailureOf(new Proxy(new Map(), {})).detail).toContain("Uninspectable");
+  const re = Object.defineProperty(/foo/g, "source", { get() { throw new Error("getter"); } });
+  expect(rendererFailureOf(re).detail).toBe("/foo/g");
+});
+
+test("each aggregate slot counts against the diagnostic budget", () => {
+  const values = new Array(10000);
+  for (let i = 0; i < values.length; i++)
+    Object.defineProperty(values, i, { get() { throw new Error("unread"); } });
+  const descriptor = jest.fn(Reflect.getOwnPropertyDescriptor);
+  const error = Object.assign(new AggregateError([]), { errors: new Proxy(values, { getOwnPropertyDescriptor: descriptor }) });
+  expect(rendererFailureOf(error).detail).toContain("…");
+  expect(descriptor.mock.calls.length).toBeLessThanOrEqual(100);
 });

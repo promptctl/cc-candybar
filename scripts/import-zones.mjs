@@ -199,16 +199,11 @@ const unknown = [...Object.values(ZONE_ROWS), packageZoneOf("jest")].filter(
 if (unknown.length > 0)
   throw new Error(`scripts/import-zones.mjs: no zone ${[...new Set(unknown)].join(", ")}`);
 
-// [LAW:effects-at-boundaries] Shared rendering code uses Node for paths, URLs,
-// hashes and value inspection. Only the process entry also owns its pipes,
-// process measurements and heap snapshots. A new native dependency is
-// checked even when it arrives through a package.
-const renderBuiltins = new Set([
-  "crypto", "path", "path/posix", "path/win32", "url", "util", "util/types",
-]);
+// The Node transport uses native diagnostics and owns its pipes and heap.
+// The separately built renderer module admits no builtin anywhere.
 const transportBuiltins = new Set(["events", "process", "v8"]);
 export function mayLoadRendererModule(id, atProcessEntry) {
   if (!isBuiltin(id)) return true;
   const name = id.replace(/^node:/, "");
-  return renderBuiltins.has(name) || (atProcessEntry && transportBuiltins.has(name));
+  return name === "util" || (atProcessEntry && transportBuiltins.has(name));
 }

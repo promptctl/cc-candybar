@@ -40,11 +40,9 @@ import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
-import {
-  DaemonClosing,
-  RendererDown,
-  failureOf,
-} from "../../src/daemon/foundations/verb-error";
+import { DaemonClosing,
+  RendererDown } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
 import {
   oversizedRendererHistory,

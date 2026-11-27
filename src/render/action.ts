@@ -20,6 +20,7 @@
 // injected into the engine by the caller (registerDslConfig hands the action
 // FuncMap in as data). The generic engine never imports this module.
 
+import { disposeSymbol } from "../utils/dispose-symbol.js";
 import type { PlacedSegment } from "../dsl/node-registry.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { RichText, Style, type Palette } from "@promptctl/rich-js";
@@ -436,7 +437,7 @@ export function bindRender(
   }
   runtime.bound = binding;
   return {
-    [Symbol.dispose]: () => {
+    [disposeSymbol]: () => {
       runtime.bound = undefined;
     },
   };

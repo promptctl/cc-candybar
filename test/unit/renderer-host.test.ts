@@ -7,10 +7,8 @@ import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { FOREGROUND_BURST } from "../../src/utils/keyed-serial-queue";
-import {
-  failureOf,
-  type Failure,
-} from "../../src/daemon/foundations/verb-error";
+import { type Failure } from "../../src/daemon/foundations/verb-error";
+import { failureOf } from "../../src/daemon/foundations/host-failure";
 import {
   type CommandReply,
   type Effect,

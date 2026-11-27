@@ -27,7 +27,7 @@
 // concern lives in its own `loader/` module (split by change-reason); the
 // re-exports below keep the import surface stable for every consumer.
 
-import nodePath from "node:path";
+import nodePath from "path-browserify";
 import type { ConfigSnapshot, PluginFile, Stray } from "./config-snapshot.js";
 import {
   type DslConfig,

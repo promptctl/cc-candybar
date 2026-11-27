@@ -1,4 +1,9 @@
-import { inspect } from "node:util";
+import {
+  describeValue,
+  errorMessage,
+  isReportedError,
+  UNINSPECTABLE,
+} from "../../utils/describe-value.js";
 
 // [LAW:types-are-the-program] Argument-shape failures are structurally
 // distinct from operational failures. `failureOf` classifies a thrown value
@@ -52,6 +57,12 @@ export interface Failure {
   readonly detail: string;
 }
 
+// [LAW:single-enforcer] An argument failure inside a checked render is a
+// daemon bug. Closing, abandonment and renderer availability retain their
+// own outcomes even though the wire uses the same failure envelope.
+export const renderFailure = (failure: Failure): Failure =>
+  failure.kind === "bad-request" ? { ...failure, kind: "threw" } : failure;
+
 // [LAW:dataflow-not-control-flow] The kind each Error is thrown as; anything
 // else the daemon threw.
 const KINDS: ReadonlyArray<
@@ -79,94 +90,32 @@ export class CrossedFailure extends Error {
 
 // [LAW:single-enforcer] A crossed failure was classified where it was
 // thrown, so it keeps both its kind and its original detail.
-function classified(
+export function classified(
   thrown: unknown,
   detailOf: (value: unknown) => string,
 ): Failure {
-  if (thrown instanceof CrossedFailure) return thrown.failure;
-  const detail = detailOf(thrown);
-  return {
-    kind: KINDS.find(([as]) => thrown instanceof as)?.[1] ?? "threw",
-    message: thrown instanceof Error ? thrown.message : detail,
-    detail,
-  };
-}
-
-export function failureOf(thrown: unknown): Failure {
-  return classified(thrown, inspect);
+  try {
+    if (thrown instanceof CrossedFailure) return thrown.failure;
+    const detail = detailOf(thrown);
+    return {
+      kind: KINDS.find(([as]) => thrown instanceof as)?.[1] ?? "threw",
+      message: isReportedError(thrown) ? errorMessage(thrown) : detail,
+      detail,
+    };
+  } catch {
+    return { kind: "threw", message: UNINSPECTABLE, detail: UNINSPECTABLE };
+  }
 }
 
 // [LAW:effects-at-boundaries] A renderer answer records what failed, which
 // does not depend on where the runtime put the executing code. Report the
 // exception and its explicit fields without inspecting its native stack.
 export function rendererFailureOf(thrown: unknown): Failure {
-  return classified(thrown, (value) => rendererDetail(value, new Set()));
-}
-
-function rendererDetail(value: unknown, path: Set<Error>): string {
-  if (value instanceof CrossedFailure) return value.failure.detail;
-  if (!(value instanceof Error))
-    return inspect(rendererValue(value, path, new Map()), {
-      customInspect: false,
-    });
-  const title = Error.prototype.toString.call(value);
-  if (path.has(value)) return `[Circular: ${title}]`;
-  path.add(value);
-  const lines = [title];
-  if (Object.hasOwn(value, "cause"))
-    lines.push(`cause: ${rendererDetail(value.cause, path)}`);
-  if (value instanceof AggregateError) {
-    const errors: readonly unknown[] = value.errors;
-    for (const [index, error] of errors.entries())
-      lines.push(`errors[${index}]: ${rendererDetail(error, path)}`);
-  }
-  for (const key of Object.keys(value)) {
-    if (
-      key === "name" ||
-      key === "message" ||
-      key === "stack" ||
-      key === "cause"
-    )
-      continue;
-    if (key === "errors" && value instanceof AggregateError) continue;
-    const field = Object.getOwnPropertyDescriptor(value, key);
-    if (field !== undefined && "value" in field)
-      lines.push(`${key}: ${rendererDetail(field.value, path)}`);
-  }
-  path.delete(value);
-  return lines.join("\n");
-}
-
-// [LAW:single-enforcer] A native exception in a plain cause or metadata
-// value uses the same projection. Preserve ordinary data and references for
-// inspect, including cycles, without invoking domain accessors.
-function rendererValue(
-  value: unknown,
-  errors: Set<Error>,
-  seen: Map<object, object>,
-): unknown {
-  if (value instanceof Error) return rendererDetail(value, errors);
-  if (typeof value !== "object" || value === null) return value;
-  const previous = seen.get(value);
-  if (previous !== undefined) return previous;
-
-  let copy: object;
-  if (Array.isArray(value)) {
-    copy = new Array<unknown>(value.length);
-  } else {
-    const prototype: unknown = Object.getPrototypeOf(value);
-    if (prototype !== null && prototype !== Object.prototype) return value;
-    copy = prototype === null ? Object.create(null) : {};
-  }
-  seen.set(value, copy);
-  for (const key of Reflect.ownKeys(value)) {
-    const field = Object.getOwnPropertyDescriptor(value, key);
-    if (!field?.enumerable) continue;
-    if ("value" in field)
-      field.value = rendererValue(field.value, errors, seen);
-    Object.defineProperty(copy, key, field);
-  }
-  return copy;
+  return classified(thrown, (value) =>
+    describeValue(value, (error) =>
+      error instanceof CrossedFailure ? error.failure.detail : undefined,
+    ),
+  );
 }
 
 // A request refused for what it carried, nothing having thrown.

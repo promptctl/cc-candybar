@@ -20,7 +20,7 @@
 // (menu-keys.ts/disclosure.ts) so a synthesized menu and a hand-authored one
 // are indistinguishable at render. Nothing here is a new render concept.
 
-import path from "node:path";
+import path from "path-browserify";
 import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
   mapOpens,

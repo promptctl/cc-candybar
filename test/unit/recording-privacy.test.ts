@@ -321,7 +321,7 @@ test("capture refuses raw hook extensions and the raw hint payload the renderer 
       context: req,
     });
     const asClick = input({
-      kind: "click",
+      kind: "click", placementSeed: "test-click",
       click,
       context: heardContextOf(req),
     });
@@ -350,7 +350,7 @@ test("action overlays are refused before raw layer, plugin or retained config by
   for (const event of [
     input({ kind: "config", origin, config: snapshot(ACTION_CONFIG) }),
     input({
-      kind: "click",
+      kind: "click", placementSeed: "test-click",
       click: admitClick(
         VERB_SET_STATE,
         encodeSegments([SESSION, "example", "value"]),

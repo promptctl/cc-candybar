@@ -1,6 +1,6 @@
 // [LAW:one-source-of-truth] An authored action is a closed record. Its fields
 // determine parsing, the editor schema and the keys offered in diagnostics.
-import nodePath from "node:path";
+import nodePath from "path-browserify";
 import {
   LAYER_CHOICES,
   type ActionDecl,

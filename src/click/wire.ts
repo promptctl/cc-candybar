@@ -28,8 +28,6 @@
 // a `#fragment` because URLSearchParams reads a fragment into the last effect.
 // parseEffects never reads it, so it is advisory: only a mac proves a link.
 
-import { URLSearchParams } from "node:url";
-
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
 import { DIAGNOSTICS_CLOSED } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";

@@ -9,6 +9,7 @@ import {
   decodeLayoutOp,
   encodeLayoutOp,
   mintPlacementId,
+  placementSuffixes,
   type LayoutOp,
 } from "../../src/config/layout-ops";
 
@@ -56,4 +57,12 @@ describe("mintPlacementId", () => {
       mintPlacementId("clock", new Set(["clock-a1"]), () => "a1"),
     ).toThrow(/no free id for a placement of "clock"/);
   });
+});
+
+test("a replayed insertion consumes the same sequence when its first ID is taken", () => {
+  const expected = placementSuffixes("click A");
+  const taken = new Set(["clock-" + expected()]);
+  const mint = (seed: string) => mintPlacementId("clock", taken, placementSuffixes(seed));
+  expect(mint("click A")).toBe("clock-" + expected());
+  expect(mint("click B")).not.toEqual(mint("click A"));
 });
