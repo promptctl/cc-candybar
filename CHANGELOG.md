@@ -1,3 +1,9 @@
+## [1.244.0](https://github.com/promptctl/cc-candybar/compare/v1.243.1...v1.244.0) (2026-11-27)
+
+### Features
+
+* **tmux:** drive pane visibility and session handoff from server events ([#978](https://github.com/promptctl/cc-candybar/issues/978)) ([5c3741c](https://github.com/promptctl/cc-candybar/commit/5c3741c7841a04b995a81d83663d549d4ce6d153))
+
 ## [1.243.1](https://github.com/promptctl/cc-candybar/compare/v1.243.0...v1.243.1) (2026-11-27)
 
 ### Bug Fixes
