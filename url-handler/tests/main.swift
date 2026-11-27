@@ -170,7 +170,7 @@ func forwardVia(_ file: String) -> Route {
 let named = forwardVia("\(id).web.eu-1.sock")
 let partial = verdictOf(json(#"{"ok":true,"output":"","desktopActs":[{"kind":"copy","text":"hi"}],"desktopError":"cannot open the remote file"}"#))
 if case .accepted(let acts) = partial {
-  expect(steps(for: acts, via: named), [.copy("hi"), .tell("cannot open the remote file")], "successful acts and a partial failure both reach the writer")
+  expect(steps(for: acts, via: named), [.copy("hi"), .clickFailed("cannot open the remote file")], "successful acts and a partial failure both reach the writer")
 } else { expect(false, true, "expected the partial result") }
 
 // A click that asked no act and then failed is the same verdict as one that
@@ -178,8 +178,18 @@ if case .accepted(let acts) = partial {
 let failedAlone = verdictOf(json(#"{"ok":true,"output":"","desktopActs":[],"desktopError":"copy-diagnostic: unknown renderer"}"#))
 expect(failedAlone, .accepted(acts: [.failed("copy-diagnostic: unknown renderer")]), "a click that asked nothing and failed is a taken link with its failure")
 if case .accepted(let acts) = failedAlone {
-  expect(steps(for: acts, via: named), [.tell("copy-diagnostic: unknown renderer")], "and its failure is told, not taken for the forward's")
+  expect(steps(for: acts, via: named), [.clickFailed("copy-diagnostic: unknown renderer")], "and its failure is told as the click's, not taken for the forward's")
 }
+expect(
+  verdictOf(json(#"{"ok":true,"output":"","desktopError":"boom"}"#)),
+  .accepted(acts: [.malformed("desktopActs is missing"), .failed("boom")]),
+  "a failure with no acts key is not an older daemon's verdict")
+
+// What a verdict comes to for the person: only a frame that never reached the
+// daemon is a forward that took nothing.
+expect(told(.accepted(acts: [])), .delivered(acts: []), "a taken link")
+expect(told(.refused("no")), .refused("no"), "a refused link")
+expect(told(.failed("no renderer")), .daemonFailed("no renderer"), "a failure the daemon said is the daemon's, not the forward's")
 
 expect(
   steps(for: [.copy("hi"), .open("/srv/x", file: false)], via: named),

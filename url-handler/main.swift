@@ -39,7 +39,9 @@
 // --predicate 'subsystem == "com.cccandybar.url-handler"'`) and told to the
 // user as a macOS user notification carrying what was observed or the
 // daemon's reason, never a diagnosis. A click whose verb fails is not one of
-// them: the bar holds that failure. A click that asked the daemon to copy or
+// them: the bar holds that failure, except for a click forwarded over ssh,
+// whose bar this Mac never sees, so the daemon says it in the verdict and the
+// app tells it. A click that asked the daemon to copy or
 // open on this Mac is told when it cannot be carried out here too (an editor
 // with no host name, a daemon older than this app, a pasteboard that refused),
 // so it never looks to have worked when it did not. A lost click is lost by
@@ -77,20 +79,6 @@ func socketPath() -> String {
 }
 
 let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
-
-enum Forward {
-  // The daemon took the link, and said what the click asked of this Mac.
-  case delivered(acts: [DesktopAct]?)
-  // The daemon refused the link, for the reason it gave.
-  case refused(String)
-  // The frame was written, and no verdict on it could be read.
-  case unconfirmed(String)
-  // The daemon answered that it could not take the click, for the reason it
-  // gave: the forward carried the frame and the verdict back.
-  case daemonFailed(String)
-  // The frame never reached the daemon.
-  case failed(String)
-}
 
 func errnoText(_ what: String) -> String {
   "\(what): \(String(cString: strerror(errno))) (errno \(errno))"
@@ -256,13 +244,7 @@ func verdict(_ fd: Int32, waiting: Int32) -> Forward {
   guard let read = verdictOf(body) else {
     return .unconfirmed("the daemon's verdict is not one this app reads")
   }
-  switch read {
-  case .accepted(let acts): return .delivered(acts: acts)
-  // A refusal of the link is a bad request; any other failure is the daemon's
-  // own, said by the daemon.
-  case .refused(let why): return .refused(why)
-  case .failed(let why): return .daemonFailed(why)
-  }
+  return told(read)
 }
 
 // Tells the user a click was lost or refused, in a form that needs no bar to
@@ -342,6 +324,9 @@ func carryOut(_ steps: [Step], click: UUID) {
     case .tell(let why):
       log.error("act not carried out: \(why, privacy: .public)")
       notify("Click did nothing here", why, notice)
+    case .clickFailed(let why):
+      log.error("click failed: \(why, privacy: .public)")
+      notify("Click failed", why, notice)
     }
   }
 }

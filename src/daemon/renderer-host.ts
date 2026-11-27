@@ -606,17 +606,16 @@ export function rendererHost(
       } else acts.push(effect);
     }
 
-    // [LAW:single-enforcer] The performer decides what the destination means
-    // for an act (src/daemon/acts.ts); the host only says which one this turn
-    // acts on. Only the acts of this writer's click can leave in its reply.
-    const performed = (act: HostAct): Promise<HostOutcome> =>
-      world.perform(act, actsOn);
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
       const acted =
         configOutcome.kind === "ok"
           ? before
-              .then(() => performed(act))
+              // [LAW:single-enforcer] The performer decides what the
+              // destination means for an act (src/daemon/acts.ts); the host
+              // only says which one this turn acts on. Only the acts of this
+              // writer's click can leave in its reply.
+              .then(() => world.perform(act, actsOn))
               .catch(
                 (error: unknown): EffectOutcome => ({
                   kind: "failed",

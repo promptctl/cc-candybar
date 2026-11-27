@@ -43,6 +43,7 @@ import type {
 } from "../../src/renderer-interface/interface";
 import { ActsOnTheirWay } from "../../src/renderer/acts";
 import { Acts, outlives, type ActPrograms, type ActDeps } from "../../src/daemon/acts";
+import { ACTS_ON_DAEMON } from "../../src/daemon/foundations/protocol";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
 import {
@@ -466,7 +467,10 @@ export async function performActs(
       outcomes.push(outcome);
       continue;
     }
-    const settled = acts.perform(read.value, "daemon").then((outcome) => {
+    const settled = acts.perform(read.value, ACTS_ON_DAEMON).then((outcome) => {
+      // An act performed on the daemon is never handed to the desktop.
+      if (outcome.kind === "desktop")
+        throw new Error(`${act.kind} was handed to the desktop`);
       (ctx.acts as ActsOnTheirWay).done(act.id, act.session, outcome);
       return outcome;
     });

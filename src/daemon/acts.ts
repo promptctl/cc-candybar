@@ -8,7 +8,6 @@ import { stat } from "node:fs/promises";
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 import {
   ACTS_ON_DESKTOP,
-  type ACTS_ON_DAEMON,
   type ActsOn,
   type DesktopAct,
 } from "./foundations/protocol.js";
@@ -196,8 +195,6 @@ export class Acts {
   // handed to the desktop when its click's writer runs there. A throw is
   // classified once, here: a refusal the user can act on, the daemon's close,
   // or a failure.
-  perform(act: HostAct, actsOn: typeof ACTS_ON_DAEMON): Promise<EffectOutcome>;
-  perform(act: HostAct, actsOn: ActsOn): Promise<HostOutcome>;
   async perform(act: HostAct, actsOn: ActsOn): Promise<HostOutcome> {
     const { outcome, said } = this.deps.closing()
       ? not({ kind: "closing", reason: "the daemon is closing" })

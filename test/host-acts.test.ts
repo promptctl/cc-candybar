@@ -384,6 +384,11 @@ describe("a click forwarded from the desktop", () => {
     ]);
   });
 
+  test("closes without handing over an act after shutdown begins", async () => {
+    const { turn } = hostOver([copy()], { closing: () => true });
+    expect((await turn([], "desktop")).settled.map((o) => o.kind)).toEqual(["closing"]);
+  });
+
   test("a click that is not forwarded performs its acts on the daemon's own machine", async () => {
     const destinations: string[] = [];
     const { turn } = hostOver([copy()], {
