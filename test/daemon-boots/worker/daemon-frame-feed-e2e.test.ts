@@ -9,6 +9,7 @@
 // nobody can see is drawn at the still rate however it moves, and a request
 // the daemon cannot take is refused with a reply, never a thrown handler.
 
+import { systemWatchDirectory } from "../../../src/daemon/cache/watchers";
 import { parseAndValidate } from "../../../scripts/lib/draw-fixtures/parse-and-validate";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config";
@@ -293,7 +294,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     daemon = startDaemon({
       ...prepared.env,
       PATH: `${bin}:${prepared.env.PATH ?? ""}`,
-    });
+    }, { watchDirectory: systemWatchDirectory });
     await daemon.listen(sockPath);
   });
 

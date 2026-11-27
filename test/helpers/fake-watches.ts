@@ -1,30 +1,43 @@
-import fs from "node:fs";
 import { EventEmitter } from "node:events";
+import type { WatchDirectory } from "../../src/daemon/cache/watchers";
 
-// fs.watch replaced by handles a test fires by hand: deterministic events,
-// errors after open, and refusals.
-export function fakeWatches(refuse: ReadonlySet<string> = new Set()) {
+export function manualDirectoryWatches(refused = new Set<string>()) {
   const opened: Array<{
     path: string;
-    listener: (event: string, filename: string | null) => void;
+    changed: (name: string | null) => void;
     emitter: EventEmitter;
+    closed: boolean;
   }> = [];
-  jest.spyOn(fs, "watch").mockImplementation(((
-    target: string,
-    _opts: unknown,
-    listener: (event: string, filename: string | null) => void,
-  ) => {
-    if (refuse.has(target)) {
+  const open: WatchDirectory = (path, _recursive, changed) => {
+    if (refused.has(path)) {
       throw Object.assign(
-        new Error(`EMFILE: too many open files, watch '${target}'`),
-        {
-          code: "EMFILE",
-        },
+        new Error(`EMFILE: too many open files, watch '${path}'`),
+        { code: "EMFILE" },
       );
     }
-    const emitter = Object.assign(new EventEmitter(), { close: () => {} });
-    opened.push({ path: target, listener, emitter });
-    return emitter;
-  }) as unknown as typeof fs.watch);
-  return opened;
+    const record = {
+      path,
+      changed,
+      emitter: new EventEmitter(),
+      closed: false,
+    };
+    opened.push(record);
+    return Object.assign(record.emitter, {
+      close: () => {
+        record.closed = true;
+      },
+    });
+  };
+  return {
+    open,
+    opened,
+    refused,
+    change(directory: string, name: string | null) {
+      const listeners = opened.filter(
+        (record) => !record.closed && record.path === directory,
+      );
+      if (!listeners.length) throw new Error(`No watch on ${directory}`);
+      for (const listener of listeners) listener.changed(name);
+    },
+  };
 }

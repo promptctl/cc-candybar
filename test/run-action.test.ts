@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 // [LAW:behavior-not-structure] The `run` action through what a user and an
 // operator see: the load errors a declaration earns, the link a draw makes,
 // what a click does with a link (runs the program, or refuses it into the
@@ -67,7 +68,6 @@ import {
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { heardRequest } from "./helpers/click";
 import { throughout, until } from "../scripts/lib/until";
-import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
 import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { stateDir } from "../src/daemon/paths";
@@ -172,6 +172,7 @@ function programWrites(sid: string, doc: unknown): void {
 }
 
 interface Rig {
+  readonly directoryEvents: ReturnType<typeof manualDirectoryWatches>;
   readonly cache: RenderCache<SessionSource>;
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly sessionState: SessionState;
@@ -214,7 +215,9 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const log = (level: string, message: string): void => {
     lines.push(`${level} ${message}`);
   };
+  const directoryEvents = manualDirectoryWatches();
   const watchers = new WatcherRegistry({
+    watchDirectory: directoryEvents.open,
     clock: systemTimekeeper,
     logger: log,
   });
@@ -284,6 +287,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     watchers.closeAll();
   });
   return {
+    directoryEvents,
     cache,
     providers,
     sessionState,
@@ -344,9 +348,8 @@ async function answered(
   );
 }
 
-// fs.watch goes live after it returns, with no ready signal: the program
-// writes again until the view has read what it wrote.
 async function writeUntilRead(
+  rig: Rig,
   view: SessionView<SessionSource>,
   name: string,
   sid: string,
@@ -357,16 +360,12 @@ async function writeUntilRead(
     const r = view.source.facts().sources[name];
     return r?.kind === "ok" && JSON.stringify(r.value) === JSON.stringify(doc);
   };
-  await untilHeard(
-    () => {
-      fs.mkdirSync(folder, { recursive: true });
-      const tmp = path.join(folder, `.${sid}.tmp`);
-      fs.writeFileSync(tmp, JSON.stringify(doc));
-      fs.renameSync(tmp, path.join(folder, `${sid}.json`));
-    },
-    read,
-    `${name}'s write being read`,
-  );
+  fs.mkdirSync(folder, { recursive: true });
+  const tmp = path.join(folder, `.${sid}.tmp`);
+  fs.writeFileSync(tmp, JSON.stringify(doc));
+  fs.renameSync(tmp, path.join(folder, `${sid}.json`));
+  rig.directoryEvents.change(folder, `${sid}.json`);
+  await until(read, `${name}'s write being read`);
 }
 
 // The run link a draw made: its URL and what it carries.
@@ -597,7 +596,7 @@ describe("a run link", () => {
     expect(Object.keys(view.source.facts().sources)).toEqual(
       expect.arrayContaining([STATUS, DOC]),
     );
-    await writeUntilRead(view, DOC, SID, { home: "/h/other" });
+    await writeUntilRead(r, view, DOC, SID, { home: "/h/other" });
     const { links, errors } = draw(view);
     expect(errors).toEqual([]);
     const link = runLink(links, "plugins.p.go");
@@ -624,7 +623,7 @@ describe("a run link", () => {
     const r = rig();
     const view = viewOf(r, config(["plugins.p.computed"]));
     await answered(view, DOC);
-    await writeUntilRead(view, DOC, SID, { home2: "/h/third" });
+    await writeUntilRead(r, view, DOC, SID, { home2: "/h/third" });
     const { links, errors } = draw(view);
     expect(errors).toEqual([]);
     expect(runLink(links, "plugins.p.go2").drawn.env).toEqual({
@@ -637,7 +636,7 @@ describe("a click on a run link", () => {
   async function drawnLink(r: Rig) {
     const view = viewOf(r, config(["plugins.p.shown", "plugins.p.go"]));
     await answered(view, DOC);
-    await writeUntilRead(view, DOC, SID, { home: "/h/new" });
+    await writeUntilRead(r, view, DOC, SID, { home: "/h/new" });
     return { view, link: runLink(draw(view).links, "plugins.p.go") };
   }
 
@@ -779,7 +778,7 @@ describe("a click on a run link", () => {
     const program = heldLaunch();
     const r = rig(program.launch);
     const { view, link } = await drawnLink(r);
-    await writeUntilRead(view, STATUS, SID, { home: "/h/old" });
+    await writeUntilRead(r, view, STATUS, SID, { home: "/h/old" });
     expect(draw(view).text).toContain("home=/h/old");
 
     await clickActing(link.url, clickContext(r, view), running(r));
@@ -797,6 +796,7 @@ describe("a click on a run link", () => {
     // Through real turns with its write on disk, so a source resumed before the
     // exit would draw it. A slow machine shortens this hold and cannot fail it.
     programWrites(SID, { home: "/h/new" });
+    r.directoryEvents.change(storage(), `${SID}.json`);
     await throughout(
       () => draw(view).text.includes(LOADING_GLYPH),
       "the loading cell while the program runs",

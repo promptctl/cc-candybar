@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 // [LAW:behavior-not-structure] The providers' one close, as steps of a
 // teardown: what a teardown that meets a throwing owner still ends, and what
 // it says.
@@ -18,6 +19,7 @@ import {
 function providers() {
   const log = () => {};
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     logger: log,
   });

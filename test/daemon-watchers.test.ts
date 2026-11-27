@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 import { refuseFile } from "./helpers/refuse-file";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
@@ -551,12 +552,17 @@ describe("WatcherRegistry", () => {
   describe("a tree heard directory by directory", () => {
     let root: string;
     let reg: WatcherRegistry;
+    let events: ReturnType<typeof manualDirectoryWatches>;
+    let clock: HeldClock;
     beforeEach(() => {
       root = fs.realpathSync(
         fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-")),
       );
+      events = manualDirectoryWatches();
+      clock = heldClock(new Date(0));
       reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+        clock,
+        watchDirectory: events.open,
         logger: () => {},
         nodeWalksTrees: true,
       });
@@ -571,21 +577,14 @@ describe("WatcherRegistry", () => {
         { dirs: [{ path: root, recursive: true as const }], polled: [] },
         (inv) => seen.push(inv),
       );
-    // [LAW:no-ambient-temporal-coupling] FSEvents goes live after fs.watch
-    // returns and never reports a change made before then, so a watch whose
-    // event a test waits on is first proven live by a probe write it hears.
-    const live = (seen: Invalidation[], dir: string) => {
-      const probe = path.join(dir, "probe");
-      return untilHeard(
-        () => fs.writeFileSync(probe, "probe"),
-        () => changedPaths(seen).includes(probe),
-        `the watch on ${dir} live`,
-      );
+    const deliver = (dir: string, name: string) => {
+      events.change(dir, name);
+      clock.advance(DEBOUNCE_MS);
     };
 
     test(
       "a directory below the root it cannot open is refused on its own, and its siblings are heard",
-      async () => {
+      () => {
         const locked = path.join(root, "team", "locked");
         fs.mkdirSync(locked, { recursive: true });
         fs.mkdirSync(path.join(root, "team", "open"));
@@ -601,30 +600,33 @@ describe("WatcherRegistry", () => {
           },
         ]);
         expect(reg.dirWatches()).toBe(3);
-        // A write made before the watch is live can be lost on FSEvents.
-        await live(seen, path.join(root, "team", "open"));
+        const open = path.join(root, "team", "open");
+        deliver(open, "file");
+        expect(changedPaths(seen)).toContain(path.join(open, "file"));
       },
     );
 
-    test("a directory made under the root after the open is watched, and leaves with its removal", async () => {
+    test("a directory made under the root after the open is watched, and leaves with its removal", () => {
       const seen: Invalidation[] = [];
       acquired(seen);
       expect(reg.dirWatches()).toBe(1);
-      await live(seen, root);
       const feature = path.join(root, "feature");
       fs.mkdirSync(feature);
-      await until(() => reg.dirWatches() === 2, "the new directory's watch");
+      deliver(root, "feature");
+      expect(reg.dirWatches()).toBe(2);
       seen.length = 0;
-      await live(seen, feature);
+      deliver(feature, "file");
+      expect(changedPaths(seen)).toContain(path.join(feature, "file"));
       fs.rmSync(feature, { recursive: true });
-      await until(() => reg.dirWatches() === 1, "its watch closing");
+      deliver(root, "feature");
+      expect(reg.dirWatches()).toBe(1);
     });
 
     // [LAW:no-ambient-temporal-coupling] The period is the backstop for an
     // event a filesystem drops, so it is driven here before any event lands.
     test(
       "the period joins a directory no event told of, and one refused there reaches the holders",
-      async () => {
+      () => {
         const seen: Invalidation[] = [];
         const handle = acquired(seen);
         fs.mkdirSync(path.join(root, "found"));
@@ -636,16 +638,14 @@ describe("WatcherRegistry", () => {
         expect(handle.deaf).toEqual([
           expect.objectContaining({ kind: "refused", path: locked }),
         ]);
-        await until(
-          () => seen.some((inv) => inv.kind === "failed"),
-          "the refusal's window",
-        );
+        clock.advance(DEBOUNCE_MS);
+        expect(seen.some((inv) => inv.kind === "failed")).toBe(true);
       },
     );
 
     test(
       "a held directory that cannot be listed is refused, and the watches below it stay",
-      async () => {
+      () => {
         const team = path.join(root, "team");
         fs.mkdirSync(path.join(team, "x"), { recursive: true });
         const seen: Invalidation[] = [];
@@ -657,38 +657,29 @@ describe("WatcherRegistry", () => {
           expect.objectContaining({ kind: "refused", path: team }),
         ]);
         expect(reg.dirWatches()).toBe(2);
-        await until(
-          () => seen.some((inv) => inv.kind === "failed"),
-          "the refusal's window",
-        );
+        clock.advance(DEBOUNCE_MS);
+        expect(seen.some((inv) => inv.kind === "failed")).toBe(true);
       },
     );
 
     // `git branch -m feat/x feat`: the prefix directory is pruned and a ref
     // file takes its name, so an event below it names a path whose parent is
     // a file.
-    test("a directory replaced by a file leaves with its watches, and the daemon hears on", async () => {
+    test("a directory replaced by a file leaves with its watches, and the daemon hears on", () => {
       const feat = path.join(root, "feat");
       fs.mkdirSync(path.join(feat, "x"), { recursive: true });
       const seen: Invalidation[] = [];
       const handle = acquired(seen);
       expect(reg.dirWatches()).toBe(3);
-      await live(seen, root);
       fs.rmSync(feat, { recursive: true });
       fs.writeFileSync(feat, "ref");
-      await until(() => reg.dirWatches() === 1, "the pruned watches closing");
+      deliver(root, "feat");
+      expect(reg.dirWatches()).toBe(1);
       // Gone is not refused: nothing at the path is no fault to show.
       expect(handle.deaf).toEqual([]);
       expect(seen.filter((inv) => inv.kind === "failed")).toEqual([]);
-      // On macOS every watch shares one FSEvents stream, rebuilt when a watch
-      // closes, and a write landing in the rebuild is never reported, so the
-      // write is made again until the root's watch hears it.
-      const main = path.join(root, "main");
-      await untilHeard(
-        () => fs.writeFileSync(main, "ref"),
-        () => changedPaths(seen).includes(main),
-        "the root's next event",
-      );
+      deliver(root, "main");
+      expect(changedPaths(seen)).toContain(path.join(root, "main"));
     });
 
     test("where the recursive watch is native, a tree is one watch", () => {

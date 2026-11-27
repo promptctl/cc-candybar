@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 // [LAW:verifiable-goals] An origin's config as the host routes it
 // (src/daemon/renderer-host.ts): an origin a turn newly names gets its
 // `config` turn in that turn's slot, before anything queued behind it; each
@@ -335,7 +336,7 @@ test("a write through a config symlink reloads the remaining holder after the wr
   fs.symlinkSync(file, link);
   const origin = originOf(dir, dir, link);
   const secondary = rendererNameOf("secondary");
-  const watches = new WatcherRegistry({ clock: systemTimekeeper });
+  const watches = new WatcherRegistry({ watchDirectory: manualDirectoryWatches().open, clock: systemTimekeeper });
   const hosts = new Map<RendererName, RendererHost>();
   const discovery = new ConfigDiscovery({
     locations: locations(HOST),

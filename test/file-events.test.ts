@@ -18,7 +18,7 @@ import {
   WARNING_SEVERITY,
   collectDiagnostics,
 } from "../src/render/diagnostics";
-import { fakeWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 import { until } from "../scripts/lib/until";
 
 // [LAW:behavior-not-structure] The daemon's one owner of file-event delivery
@@ -26,6 +26,7 @@ import { until } from "../scripts/lib/until";
 // lines it logs and its stats — never which internal function ran.
 
 interface Rig {
+  readonly watches: ReturnType<typeof manualDirectoryWatches>;
   readonly folder: string;
   readonly events: FileEventDelivery;
   readonly lines: string[];
@@ -58,7 +59,8 @@ const fakeClock = () =>
     ],
   });
 
-function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
+function rig(opts: { nativeWatch?: boolean; identityOf?: IdentityRead } = {}): Rig {
+  const watches = manualDirectoryWatches();
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "file-events-")),
   );
@@ -67,7 +69,11 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const events = new FileEventDelivery({
     clock: systemTimekeeper,
-    watchers: new WatcherRegistry({ clock: systemTimekeeper, logger }),
+    watchers: new WatcherRegistry({
+      watchDirectory: opts.nativeWatch ? undefined : watches.open,
+      clock: systemTimekeeper,
+      logger,
+    }),
     logger,
     identityOf: opts.identityOf,
   });
@@ -78,6 +84,7 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
     notice.kind === "period" ? periods++ : notices.push(notice),
   );
   return {
+    watches,
     folder: path.join(root, "watch-probe"),
     events,
     lines,
@@ -112,13 +119,12 @@ describe("FileEventDelivery", () => {
   });
 
   test("a watch that reports each probe stays delivering", async () => {
-    const watches = fakeWatches();
     fakeClock();
     const r = rig();
     r.events.start(r.folder);
     for (let i = 1; i <= 4; i++) {
       await probes(r, i);
-      watches[0]!.listener("change", PROBE_FILE);
+      r.watches.opened[0]!.changed(PROBE_FILE);
       await quiet();
       period();
     }
@@ -133,7 +139,6 @@ describe("FileEventDelivery", () => {
 
   // libuv's macOS watch drops what lands while it rebuilds its one stream.
   test("one probe unreported is not a stall", async () => {
-    const watches = fakeWatches();
     fakeClock();
     const r = rig();
     r.events.start(r.folder);
@@ -141,7 +146,7 @@ describe("FileEventDelivery", () => {
       await probes(r, i);
       period();
       await probes(r, i + 1);
-      watches[0]!.listener("change", PROBE_FILE);
+      r.watches.opened[0]!.changed(PROBE_FILE);
       await quiet();
     }
     expect(r.events.stats()).toMatchObject({ stalls: 0 });
@@ -149,7 +154,6 @@ describe("FileEventDelivery", () => {
   });
 
   test("within two periods with nothing reported it is stalled since the first unreported probe, warned once", async () => {
-    fakeWatches();
     fakeClock();
     const r = rig();
     const first = Date.now();
@@ -175,7 +179,6 @@ describe("FileEventDelivery", () => {
   });
 
   test("one reported event recovers a stall: one catch-up carrying its start, with the span's length logged", async () => {
-    const watches = fakeWatches();
     fakeClock();
     const r = rig();
     const first = Date.now();
@@ -185,7 +188,7 @@ describe("FileEventDelivery", () => {
     period();
     await probes(r, 3);
     expect(kind(r)).toBe("stalled");
-    watches[0]!.listener("change", PROBE_FILE);
+    r.watches.opened[0]!.changed(PROBE_FILE);
     await until(() => kind(r) === "delivering", "the recovery");
     expect(r.events.delivery()).toMatchObject({ missedSince: null });
     expect(r.notices).toEqual([
@@ -200,12 +203,11 @@ describe("FileEventDelivery", () => {
   });
 
   test("a failed probe write is unmeasured with its error, opening the span; the next write that lands measures again, and its report is one catch-up", async () => {
-    const watches = fakeWatches();
     fakeClock();
     const r = rig();
     r.events.start(r.folder);
     await probes(r, 1);
-    watches[0]!.listener("change", PROBE_FILE);
+    r.watches.opened[0]!.changed(PROBE_FILE);
     await quiet();
     fs.chmodSync(probeFile(r), 0o444);
     period();
@@ -232,7 +234,7 @@ describe("FileEventDelivery", () => {
       unreported: [landedAt],
       missedSince: failedAt,
     });
-    watches[0]!.listener("change", PROBE_FILE);
+    r.watches.opened[0]!.changed(PROBE_FILE);
     await until(() => r.events.stats().catchUps === 1, "the catch-up");
     expect(r.notices).toEqual([
       { kind: "moved" },
@@ -243,7 +245,6 @@ describe("FileEventDelivery", () => {
   });
 
   test("stalled, then unmeasured by a failed write, then delivering by a write that lands and is reported: the row stands until one catch-up carrying the stall's start", async () => {
-    const watches = fakeWatches();
     fakeClock();
     const r = rig();
     const first = Date.now();
@@ -274,7 +275,7 @@ describe("FileEventDelivery", () => {
         message: expect.stringContaining(new Date(first).toISOString()),
       }),
     ]);
-    watches[0]!.listener("change", PROBE_FILE);
+    r.watches.opened[0]!.changed(PROBE_FILE);
     await until(() => r.events.stats().catchUps === 1, "the catch-up");
     expect(r.notices.filter((n) => n.kind === "caught-up")).toEqual([
       { kind: "caught-up", since: first },
@@ -307,7 +308,6 @@ describe("FileEventDelivery", () => {
     }
 
     test("a folder it cannot make", async () => {
-      fakeWatches();
       fakeClock();
       const r = rig();
       fs.writeFileSync(r.folder, "");
@@ -322,7 +322,6 @@ describe("FileEventDelivery", () => {
     });
 
     test("a folder gone as it was made", async () => {
-      fakeWatches();
       fakeClock();
       const r = rig({ identityOf: () => "gone" });
       r.events.start(r.folder);
@@ -336,7 +335,7 @@ describe("FileEventDelivery", () => {
 
     test("a watch the OS refused", async () => {
       const r = rig();
-      const watches = fakeWatches(new Set([r.folder]));
+      r.watches.refused.add(r.folder);
       fakeClock();
       const at = Date.now();
       r.events.start(r.folder);
@@ -349,27 +348,25 @@ describe("FileEventDelivery", () => {
         missedSince: at,
       });
       await staysEnded(r, () => {});
-      expect(watches).toHaveLength(0);
+      expect(r.watches.opened).toHaveLength(0);
     });
 
     test("a watch that reports a failure", async () => {
-      const watches = fakeWatches();
       fakeClock();
       const r = rig();
       r.events.start(r.folder);
       await probes(r, 1);
-      watches[0]!.emitter.emit("error", new Error("EIO: i/o error"));
+      r.watches.opened[0]!.emitter.emit("error", new Error("EIO: i/o error"));
       await until(() => kind(r) === "unmeasured", "the end");
       expect(r.events.delivery()).toMatchObject({
         reason: expect.stringMatching(
           /^the probe folder's watch failed: .*EIO: i\/o error.*; restart the daemon$/,
         ),
       });
-      await staysEnded(r, () => watches[0]!.listener("change", PROBE_FILE));
+      await staysEnded(r, () => r.watches.opened[0]!.changed(PROBE_FILE));
     });
 
     test("its folder removed", async () => {
-      fakeWatches();
       fakeClock();
       const r = rig();
       r.events.start(r.folder);
@@ -387,7 +384,6 @@ describe("FileEventDelivery", () => {
     });
 
     test("its folder unreadable", async () => {
-      fakeWatches();
       fakeClock();
       let refused = false;
       const identityOf: IdentityRead = (folder) => {
@@ -408,7 +404,6 @@ describe("FileEventDelivery", () => {
     });
 
     test("its folder replaced at the path", async () => {
-      fakeWatches();
       fakeClock();
       let replaced = false;
       const identityOf: IdentityRead = (folder) => {
@@ -430,7 +425,6 @@ describe("FileEventDelivery", () => {
     });
 
     test("a stall ended by its folder's removal keeps the stall's span open, and never catches up", async () => {
-      fakeWatches();
       fakeClock();
       const r = rig();
       const first = Date.now();
@@ -454,7 +448,6 @@ describe("FileEventDelivery", () => {
   });
 
   test("a probe still in flight when the owner closes judges nothing", async () => {
-    fakeWatches();
     fakeClock();
     let fail: (e: Error) => void = () => {};
     jest
@@ -475,7 +468,7 @@ describe("FileEventDelivery", () => {
   // reads the stall it exists to catch: CI's runner judges it.
   test("a real watch reports the probe's own write, so a folder nobody else writes keeps delivering", async () => {
     fakeClock();
-    const r = rig();
+    const r = rig({ nativeWatch: true });
     r.events.start(r.folder);
     for (let i = 0; i < 2; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1_000));

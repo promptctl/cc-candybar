@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST } from "../scripts/lib/host";
@@ -997,6 +998,7 @@ function makeCache(reloads?: ReloadSignal): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
@@ -1210,6 +1212,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const loads: string[] = [];
     const lines: string[] = [];
     const watchers = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       logger: () => {},
     });

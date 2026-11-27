@@ -13,7 +13,7 @@ import {
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
 import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
-import { fakeWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost } from "./helpers/config-host";
@@ -64,7 +64,8 @@ function rig(
   const reloaded: string[] = [];
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+    watchDirectory: manualDirectoryWatches().open,
+    clock: opts.clock ?? systemTimekeeper,
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
@@ -234,7 +235,6 @@ test("an installed plugin nothing places, added with the config unchanged, build
 // made while the OS delivered nothing was never heard by the origin's own
 // watch.
 test("a catch-up reloads the entry edited while its watch heard nothing, and leaves the other as it was", () => {
-  fakeWatches();
   const clock = heldClock(new Date());
   const r = rig({ clock });
   const other = path.join(dir, "other");

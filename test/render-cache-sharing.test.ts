@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
@@ -77,6 +78,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     counters,
     logger: () => {},

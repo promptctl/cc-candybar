@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./fake-watches";
 // A session's view, opened through the daemon's own composition (the render
 // cache serving views from the session source) over owners that answer one
 // fixed world at one fixed instant, whichever machine runs the test.
@@ -166,6 +167,7 @@ export function sessionRig(
     cleanups,
   );
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     logger: () => {},
   });

@@ -1,3 +1,4 @@
+import { systemWatchDirectory } from "../../../src/daemon/cache/watchers";
 // [LAW:verifiable-goals] The fit check: a plugin another program ships,
 // installed in the user's plugin root of a daemon, shaped as such a
 // program ships one: a session status file it writes, a segment gated on that
@@ -139,7 +140,7 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
       CLAUDE_CONFIG_DIR: "/the/daemon/spawners/.claude",
       TMUX: "/tmp/the-daemon-spawners-tmux,1,0",
       TMUX_PANE: "%99",
-    });
+    }, { watchDirectory: systemWatchDirectory });
   });
 
   afterAll(async () => {

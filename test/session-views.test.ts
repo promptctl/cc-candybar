@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { HOST } from "../scripts/lib/host";
 import { fixtureLauncher, locs, processLauncher } from "./helpers/host";
@@ -88,6 +89,7 @@ function makeCache(
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

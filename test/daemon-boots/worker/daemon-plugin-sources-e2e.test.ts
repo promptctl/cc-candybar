@@ -1,3 +1,4 @@
+import { systemWatchDirectory } from "../../../src/daemon/cache/watchers";
 // [LAW:nothing-unseen] A plugin's session source and its `run` action,
 // measured on a daemon: the bar a request draws before and after the
 // plugin's program writes the session's file, a clicked program's write in the
@@ -93,7 +94,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.gated", "plugins.p.go"] } }`,
     );
     storage = path.join(fs.realpathSync(folder), "session");
-    daemon = startDaemon({ ...prepared.env, XDG_DATA_HOME: dataHome });
+    daemon = startDaemon({ ...prepared.env, XDG_DATA_HOME: dataHome }, { watchDirectory: systemWatchDirectory });
   });
 
   afterAll(async () => {

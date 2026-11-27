@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "./helpers/fake-watches";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.2 —
 // persistent config writes — driven through the real spine, mirroring
 // dsl-actions.test.ts's model for `set`:
@@ -987,6 +988,7 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

@@ -43,7 +43,7 @@ import type { Timekeeper } from "../time";
 import { type Acceptance } from "./foundations/request-event.js";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "./source-runs";
-import { WatcherRegistry } from "./cache/watchers";
+import { WatcherRegistry, type WatchDirectory } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, type LimitsDeps } from "./limits";
 import { RenderSightings } from "./render-sightings";
@@ -131,6 +131,7 @@ export interface RunningBundle {
 // ones. An adapter that needs what `createDaemon` builds, as the launcher needs
 // its stats and its closing signal, is a factory over those.
 export interface DaemonAdapters {
+  readonly watchDirectory: WatchDirectory;
   // Available in the installed host. Each test or embedded host chooses its file edge.
   readonly openRecording?: (file: string) => Promise<RecordingFile>;
   readonly accountHome: () => string;
@@ -292,6 +293,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // Non-daemon consumers (var-system tests, future library use) take the
   // default debug-routed loggers and never write to daemon log files.
   const watcherRegistry = new WatcherRegistry({
+    watchDirectory: inputs.watchDirectory,
     clock,
     counters: stats,
     logger: log,
