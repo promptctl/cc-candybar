@@ -19,6 +19,7 @@ cc-candybar renders Claude Code's statusline. A small client runs on every statu
 
 ## Rules for every task
 
+- Fix or delete a test that fails on a run before merging. A passing retry leaves the original failure unresolved.
 - pnpm is the package manager. Don't add an npm or yarn lockfile.
 - Publishing runs lint, typecheck, the TS↔Rust protocol check, the schema drift check and the build, in that order. Any failure blocks the publish. Fix the cause and never bypass a step.
 - **The project publishes 1.x only.** Never bump to 2.0. A commit marked breaking (`!` or a `BREAKING CHANGE` footer) releases a major, so don't write one.

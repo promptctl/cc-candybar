@@ -6,7 +6,7 @@ import type { LaunchOwner, TestableLauncher } from "../../src/proc/launch";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
-// A test file's environment (test/helpers/quarantine-environment.cjs) hands
+// A test file's environment (test/helpers/fixture-environment.cjs) hands
 // its runtime this hook and runs what it is given after the file's last hook.
 // Only a test file's runtime loads this module.
 declare global {

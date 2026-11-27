@@ -12,7 +12,6 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { missingRuns, renderSummary, summarise } = require("./lib/test-records.cjs");
-const { readQuarantine } = require("./lib/quarantine.cjs");
 
 const runsAt = process.argv.indexOf("--runs");
 const runs = runsAt === -1 ? [] : (process.argv[runsAt + 1] ?? "").split(",").filter(Boolean);
@@ -29,9 +28,7 @@ const records = runs.flatMap((run) =>
 const missing = missingRuns(records, runs);
 if (missing.length > 0) throw new Error(`no records for ${missing.join(", ")}`);
 
-const report = renderSummary(
-  summarise(records, readQuarantine(path.resolve(import.meta.dirname, "..")), Date.now()),
-);
+const report = renderSummary(summarise(records));
 console.log(report);
 if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Tests by layer\n\n${report}\n`);
