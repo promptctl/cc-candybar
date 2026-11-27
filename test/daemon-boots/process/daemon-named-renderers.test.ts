@@ -265,6 +265,51 @@ test("peers and a replacement share Back visits and the cursor after a guarded m
   }
 });
 
+test("a renderer switch keeps the last working bar and the latest rejected config", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-config-handoff", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "config-"));
+    const file = path.join(dir, "bar.json5");
+    const install = (label: string) =>
+      fs.writeFileSync(file, JSON.stringify({
+        segments: { marker: { template: label } },
+        root: { h: ["marker"] },
+      }));
+    const draw = async (name: string, session = "moving", at = file) =>
+      textOf(await frameRequest(daemon.sockPath, {
+        ...renderBody(session, dir, {}, ["cc-candybar", "--config-only", at]),
+        env: { ...TEST_ENV, CC_CANDYBAR_NAME: name },
+        client: { kind: "node", bundle: BUNDLE, source: null },
+      }));
+    install("first-working-bar");
+    expect(await draw("main")).toContain("first-working-bar");
+    const warmFile = path.join(dir, "other.json5");
+    fs.copyFileSync(file, warmFile);
+    expect(await draw("warm", "other-session", warmFile)).toContain("first-working-bar");
+    fs.writeFileSync(file, "{ rejected: ");
+    await until(async () => (await draw("main")).includes("⚠"), "issuer rejects the edited config");
+    // This process already serves the broken origin for an unrelated session.
+    const rejected = await draw("resident", "already-here");
+    expect(rejected).toContain("⚠");
+    expect(rejected).not.toContain("first-working-bar");
+    expect(await draw("fallback", "no-authored-config")).not.toContain("first-working-bar");
+    for (const renderer of ["warm", "cold", "resident"]) {
+      const frame = await draw(renderer);
+      expect(frame).toContain("first-working-bar");
+      expect(frame).toContain("⚠");
+    }
+    const bundled = await draw("main", "no-authored-config");
+    expect(bundled).toContain("⚠");
+    expect(bundled).not.toContain("first-working-bar");
+    install("corrected-bar");
+    await until(async () => (await draw("cold")).includes("corrected-bar"), "peer loads the repair");
+    expect(await draw("main")).toContain("corrected-bar");
+    expect(await draw("warm", "other-session", warmFile)).toContain("first-working-bar");
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
 test("a held file control stays bound to its displayed origin across config and peer switches", async () => {
   const daemon = await spawnIsolatedDaemon("ccb-pinned-origin", builtDaemon);
   try {

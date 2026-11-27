@@ -1237,15 +1237,27 @@ export class RenderCache<
   // A `config` turn: what discovery found at `origin` now. The offer is
   // recorded before its entry, when it has one, reconciles with it, so a load
   // that throws leaves the offer for the next event that uses the entry.
-  configure(origin: RenderOrigin, snapshot: ConfigSnapshot): void {
+  configure(
+    origin: RenderOrigin,
+    snapshot: ConfigSnapshot,
+    basis: "previous" | "offered" = "previous",
+  ): void {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
     const revision = revisionOf(snapshot);
     runInAction(() => {
       this.configDeliveries.set(key, revision);
       const entry = this.entries.get(key);
-      if (entry !== undefined)
-        this.reconcile(entry, revision, { kind: "config" });
+      if (entry === undefined) return;
+      // [LAW:one-source-of-truth] The session brought a selected input.
+      // A cached entry for an unrelated session cannot supply its fallback.
+      if (
+        basis === "offered" &&
+        entry.selected.kind === "authored" &&
+        entry.selected.digest !== revision.digest
+      )
+        this.reloadInto(entry, revision, { kind: "config" }, null);
+      else this.reconcile(entry, revision, { kind: "config" });
     });
   }
 
@@ -2047,6 +2059,7 @@ export class RenderCache<
     entry: CacheEntry,
     revision: ConfigRevision,
     cause: LoadCause,
+    previous: SelectedState | null = entry.selected,
   ): void {
     // [LAW:no-ambient-temporal-coupling] Retry only the failures held before
     // this observation. A successor that fails here waits for a new one.
@@ -2065,7 +2078,7 @@ export class RenderCache<
     // (`reconcile`).
     let chosen: ReturnType<typeof this.enter>;
     try {
-      chosen = this.enter(entry.origin, revision, entry.selected);
+      chosen = this.enter(entry.origin, revision, previous);
     } catch (error) {
       // [LAW:one-source-of-truth] The bar says what the turn's failure says.
       const fault = rendererFailureOf(error).message;

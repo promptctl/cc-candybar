@@ -135,7 +135,7 @@ function lineEntry(raw: string, line: number): Record<string, unknown> {
 function inputOf(
   value: unknown,
   line: number,
-  historical: boolean,
+  wireVersion: number,
 ): EventInput {
   if (
     !isPlainObject(value) ||
@@ -158,7 +158,9 @@ function inputOf(
   )
     throw new Error(`recording line ${line} has an invalid renderer event`);
   if (event.kind === "click") {
-    if (historical && !Object.hasOwn(event, "placementSeed")) {
+    if (wireVersion < 33 && Object.hasOwn(event, "coldConfig"))
+      event.coldConfig = { config: event.coldConfig };
+    if (wireVersion === 22 && !Object.hasOwn(event, "placementSeed")) {
       // The historical click may have been refused before it needed an ID.
       // An empty seed fails only when the renderer actually mints a placement.
       event.placementSeed = "";
@@ -299,6 +301,7 @@ function legacyCompileKey(input: CompileInput): string {
 
 function constructionOf(entry: Record<string, unknown>): {
   readonly result: RecordedConstruction;
+  readonly wireVersion: number;
   readonly sessionRevision: number;
   readonly renderer: SessionRenderer | null;
   readonly compareAs?: (output: RendererOutput) => unknown;
@@ -346,12 +349,14 @@ function constructionOf(entry: Record<string, unknown>): {
   if (built.kind === "refused")
     return {
       result: built,
+      wireVersion,
       renderer: null,
       sessionRevision: boot.sessionRevision,
     };
   const { renderer, ...result } = built;
   return {
     result,
+    wireVersion,
     renderer,
     sessionRevision: boot.sessionRevision,
     compareAs:
@@ -371,7 +376,7 @@ export async function replayRecording(
 ): Promise<{ turns: number }> {
   let renderer: SessionRenderer | null = null;
   let sessionRevision: number | undefined;
-  let historical = false;
+  let wireVersion: number = RENDERER_WIRE_VERSION;
   let compareAs: ((output: RendererOutput) => unknown) | undefined;
   let ended = false;
   let line = 0;
@@ -386,11 +391,8 @@ export async function replayRecording(
         throw new Error("recording line 1 must be a boot entry");
       requireFields(entry, "boot", line);
       const boot = constructionOf(entry);
-      historical = entry.wireVersion === 22;
-      sessionRevision =
-        typeof entry.wireVersion === "number" && entry.wireVersion >= 27
-          ? boot.sessionRevision
-          : undefined;
+      wireVersion = boot.wireVersion;
+      sessionRevision = wireVersion >= 27 ? boot.sessionRevision : undefined;
       verify(entry.result, boot.result, "recording boot", "result");
       renderer = boot.renderer;
       compareAs = boot.compareAs;
@@ -414,7 +416,7 @@ export async function replayRecording(
         throw new Error(
           `recording line ${line} has a turn after refused construction`,
         );
-      const input = inputOf(entry.input, line, historical);
+      const input = inputOf(entry.input, line, wireVersion);
       turns++;
       let actual: RendererOutput;
       try {

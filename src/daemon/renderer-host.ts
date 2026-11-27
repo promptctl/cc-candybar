@@ -29,6 +29,7 @@ import {
   isCommand,
   sessionOfEvent,
   type ConfigChange,
+  type ConfigOffer,
   type Command,
   type CommandReply,
   type ReplyTo,
@@ -84,7 +85,6 @@ import type { Asked } from "../utils/outcome.js";
 import { RendererWake } from "./renderer-wake.js";
 import { isEnvironmentOutput } from "./environment-output.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
-import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
 import type { ActsOn } from "./foundations/protocol.js";
@@ -235,7 +235,29 @@ type ConfigDelivery =
   | { readonly kind: "scheduled" | "unreceived" }
   // The immutable observation actually offered to this worker. Discovery
   // may publish a newer observation before the worker selects this one.
-  | { readonly kind: "received"; readonly config: ConfigSnapshot };
+  | { readonly kind: "received"; readonly offer: ConfigOffer };
+
+// [LAW:single-enforcer] Receipt validation and transfer settlement see the
+// exact same offer the worker received, including a click's borrowed input.
+function forEachConfigOffer(
+  event: Event,
+  take: (origin: RenderOrigin, offer: ConfigOffer) => void,
+): void {
+  switch (event.kind) {
+    case "start":
+      for (const offer of event.configs) take(offer.origin, offer);
+      return;
+    case "config":
+      take(event.origin, event);
+      return;
+    case "context":
+      if (event.handoff) take(event.context.requested, event.handoff);
+      return;
+    case "click":
+      if (event.coldConfig && event.context)
+        take(event.context.durable.origin, event.coldConfig);
+  }
+}
 
 type ConfigFollowing =
   | { readonly kind: "following"; readonly named: readonly RenderOrigin[] }
@@ -313,16 +335,10 @@ export function rendererHost(
   // generation whose initial turn never reached that point.
   let startFailure: Failure | null = null;
 
-  type StartResult =
-    | { readonly kind: "threw"; readonly failure: Failure }
-    | { readonly kind: "answered"; readonly event: StartEvent };
-
-  const endedStart = (result: StartResult): void => {
-    startFailure = result.kind === "threw" ? result.failure : null;
-    if (result.kind === "threw") return;
+  const endedStart = (failure: Failure | null): void => {
+    startFailure = failure;
+    if (failure !== null) return;
     configs.clear();
-    for (const { origin, config } of result.event.configs)
-      configs.set(originKey(origin), { kind: "received", config });
     declared = undefined;
     origins = undefined;
     selected = undefined;
@@ -332,6 +348,16 @@ export function rendererHost(
   const follow = (wanted: Subscriptions["configs"]): void => {
     world.configs.follow(wanted);
     followedOrigins = wanted;
+  };
+
+  const offerOf = (
+    origin: RenderOrigin,
+    restoring: boolean,
+  ): ConfigOffer | null => {
+    const config = world.configs.snapshotOf(origin);
+    if (config === null) return null;
+    const retained = restoring ? world.configs.retainedOf(origin) : undefined;
+    return retained === undefined ? { config } : { config, retained };
   };
 
   // [LAW:one-source-of-truth] Restoring a generation uses the same discovery
@@ -348,15 +374,10 @@ export function rendererHost(
     if (wanted.size > followedOrigins.length || followFailure !== null)
       borrow([...wanted.values()]);
     const configs = [...wanted].map(([key, origin]) => {
-      const config = world.configs.snapshotOf(origin);
-      if (config === null)
+      const offer = offerOf(origin, true);
+      if (offer === null)
         throw new Error(`no config snapshot for renderer start origin ${key}`);
-      const retained = world.configs.retainedOf(origin);
-      return {
-        origin,
-        config,
-        ...(retained === undefined ? {} : { retained }),
-      };
+      return { origin, ...offer };
     });
     return { ...event, configs };
   };
@@ -452,7 +473,7 @@ export function rendererHost(
     } catch (thrown) {
       recordTaken("session release", release);
       const failure = failureOf(thrown);
-      if (input.event.kind === "start") endedStart({ kind: "threw", failure });
+      if (input.event.kind === "start") endedStart(failure);
       return unanswered(failure, queuedMs);
     }
     recordDiagnostics(output.diagnostics);
@@ -473,11 +494,6 @@ export function rendererHost(
           line: `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
         },
       ]);
-    }
-    if (input.event.kind === "config" && startFailure === null) {
-      const key = originKey(input.event.origin);
-      if (configs.has(key))
-        configs.set(key, { kind: "received", config: input.event.config });
     }
     const {
       subscriptions,
@@ -507,9 +523,13 @@ export function rendererHost(
             ),
     };
     if (input.event.kind === "start")
-      endedStart(
-        turn.kind === "threw" ? turn : { kind: "answered", event: input.event },
-      );
+      endedStart(turn.kind === "threw" ? turn.failure : null);
+    if (startFailure === null && input.event.kind !== "click")
+      forEachConfigOffer(input.event, (origin, offer) => {
+        const key = originKey(origin);
+        if (input.event.kind === "start" || configs.has(key))
+          configs.set(key, { kind: "received", offer });
+      });
     recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled, configFailure } = await landInSlot(
       input.event,
@@ -600,7 +620,14 @@ export function rendererHost(
       output.frames,
       retryOrigin,
       receipt,
+      event.kind === "click" ? event.coldConfig : undefined,
     );
+    if (
+      startFailure === null &&
+      followed.kind === "following" &&
+      output.kind === "answered"
+    )
+      forEachConfigOffer(event, world.configs.received);
     let configFailure: Failure | null = null;
     const waited: Array<Promise<readonly HostOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
@@ -807,6 +834,7 @@ export function rendererHost(
     frames: readonly PushedFrame[],
     requested: RenderOrigin | null,
     receipt: SettlePresentation,
+    coldOffer?: ConfigOffer,
   ): ConfigFollowing => {
     // [LAW:effects-at-boundaries] A failed replacement still owes its own
     // collected writes and effects. Its view and wake declarations cannot
@@ -876,8 +904,11 @@ export function rendererHost(
       const entries = subscriptions.configSelections;
       if (selected !== entries) {
         world.configs.selected(entries, (origin) => {
-          const delivered = configs.get(originKey(origin));
-          return delivered?.kind === "received" ? delivered.config : undefined;
+          const key = originKey(origin);
+          if (coldOffer && requested && key === originKey(requested))
+            return coldOffer;
+          const delivered = configs.get(key);
+          return delivered?.kind === "received" ? delivered.offer : undefined;
         });
         selected = entries;
       }
@@ -915,14 +946,17 @@ export function rendererHost(
   const configMade =
     (origin: RenderOrigin) =>
     (): Made<Extract<Notification, { kind: "config" }>> => {
-      const config = world.configs.snapshotOf(origin);
-      return config === null
+      const offer = offerOf(
+        origin,
+        configs.get(originKey(origin))?.kind !== "received",
+      );
+      return offer === null
         ? {
             kind: "abandoned",
             message: "the renderer let the origin go",
             detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`,
           }
-        : { kind: "event", event: { kind: "config", origin, config } };
+        : { kind: "event", event: { kind: "config", origin, ...offer } };
     };
   // An origin's `config` turn in the slot of the turn that named it or moved
   // it: settled once that turn's own acts have.
@@ -1126,6 +1160,16 @@ export function rendererHost(
                 follow(wanted);
               });
               made = { ...captured, event: ready };
+            } else if (event.kind === "context") {
+              const origin = event.context.requested;
+              const handoff =
+                configs.get(originKey(origin))?.kind === "received"
+                  ? world.configs.handoffOf(origin)
+                  : undefined;
+              made = {
+                ...captured,
+                event: handoff ? { ...event, handoff } : event,
+              };
             } else if (
               event.kind === "click" &&
               event.context !== null &&
@@ -1145,18 +1189,20 @@ export function rendererHost(
               }
               const config = configMade(origin)();
               if (config.kind !== "event") made = config;
-              else
+              else {
+                const { config: latest, retained } = config.event;
                 made = {
                   ...captured,
-                  event: { ...event, coldConfig: config.event.config },
+                  event: { ...event, coldConfig: { config: latest, retained } },
                 };
+              }
             } else made = { ...captured, event };
           } else made = captured;
         } catch (thrown) {
           made = failureOf(thrown);
         }
         if (made.kind !== "event") {
-          if (starting) endedStart({ kind: "threw", failure: made });
+          if (starting) endedStart(made);
           return { event: null, slotted: unanswered(made, queuedMs) };
         }
         if (

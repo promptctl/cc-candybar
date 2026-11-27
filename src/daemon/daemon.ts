@@ -866,10 +866,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     deliver: (event) => {
       const session =
         event.kind === "retire" ? event.session : event.worldState.session;
-      if (event.kind === "retire")
+      if (event.kind === "retire") {
+        configDiscovery.retire(session);
         clock.detach("retire shared session", () =>
           stores.retire(session, publishSession("host")),
         );
+      }
       const route = routes.get(session);
       const renderer = (renderers.get(nameOf(session)) ?? primary).renderer;
       return renderer
@@ -1149,6 +1151,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
 
     if (route === undefined || order >= route.order) {
+      configDiscovery.route(session, name, request.requested);
       routes.set(session, { name, order });
       if (route !== undefined && route.name !== name) {
         // Routing changes the aggregate even when neither renderer's

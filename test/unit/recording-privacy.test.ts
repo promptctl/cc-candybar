@@ -356,6 +356,9 @@ test("action overlays are refused before raw layer, plugin or retained config by
   };
   for (const event of [
     input({ kind: "config", origin, config: snapshot(ACTION_CONFIG) }),
+    input({ kind: "config", origin, config: safe, retained: snapshot(ACTION_CONFIG) }),
+    input({ kind: "context", context: checked().req, worldState: facts(),
+      handoff: { config: safe, retained: snapshot(ACTION_CONFIG) } }),
     input({
       kind: "click", placementSeed: "test-click",
       click: admitClick(
@@ -364,7 +367,7 @@ test("action overlays are refused before raw layer, plugin or retained config by
         TEST_SIGNER,
       ).click,
       context: heardContextOf(checked().req),
-      coldConfig: snapshot(ACTION_CONFIG),
+      coldConfig: { config: safe, retained: snapshot(ACTION_CONFIG) },
     }),
     input({ kind: "config", origin, config: { ...safe, plugins: [plugin] } }),
     input({

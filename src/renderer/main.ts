@@ -79,6 +79,7 @@ import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import {
   isCommand,
   type Command,
+  type ConfigOffer,
   type Effect,
   type TurnFailure,
   type TurnFinalizer,
@@ -151,6 +152,42 @@ export function mainRenderer(
     opening.delete(session);
   };
 
+  // [LAW:no-ambient-temporal-coupling] Every cold entry first tries the
+  // admitted selection. Even a build that rejects it must try the latest
+  // offer and report its own selection and diagnostics.
+  const configure = (
+    origin: RenderOrigin,
+    { config, retained }: ConfigOffer,
+  ): void => {
+    if (typeof retained !== "object") {
+      parts.renderCache.configure(
+        origin,
+        config,
+        retained === "current" ? "offered" : "previous",
+      );
+      return;
+    }
+    runEach([
+      () => {
+        parts.renderCache.configure(origin, retained, "offered");
+        parts.renderCache.getOrCreate(origin);
+      },
+      () => parts.renderCache.configure(origin, config),
+    ]);
+  };
+
+  const reconfigure = (origin: RenderOrigin, offer: ConfigOffer): void => {
+    runEach([
+      () => configure(origin, offer),
+      () =>
+        runEach(
+          parts.edits
+            .configured(origin, offer.config)
+            .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
+        ),
+    ]);
+  };
+
   // [LAW:types-are-the-program] Every command has a handler with its own
   // input and required reply. Notification handlers cannot answer a command.
   const commands: {
@@ -217,18 +254,7 @@ export function mainRenderer(
           const offer = configs.get(key);
           if (offer === undefined) return;
           configs.delete(key);
-          const { origin, config, retained } = offer;
-          // [LAW:no-ambient-temporal-coupling] The latest offer is recorded
-          // whatever building the retained input threw, since the host does
-          // not send it again.
-          runEach([
-            () => {
-              if (typeof retained !== "object") return;
-              parts.renderCache.configure(origin, retained);
-              parts.renderCache.getOrCreate(origin);
-            },
-            () => parts.renderCache.configure(origin, config),
-          ]);
+          configure(offer.origin, offer);
         };
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
@@ -267,6 +293,7 @@ export function mainRenderer(
         const session = context.hookData.session_id;
         const previous = parts.worldStates.contextOf(session);
         const origin = context.requested;
+        if (event.handoff !== undefined) reconfigure(origin, event.handoff);
         contextFacts(context, record);
         noteFacts(record, { encoding: context.encoding });
         // Historical wires proposed recency from the renderer. Live stores
@@ -299,13 +326,7 @@ export function mainRenderer(
             originKey(parts.worldStates.requestOf(session).requested) === key,
         );
         runEach([
-          () => parts.renderCache.configure(event.origin, event.config),
-          () =>
-            runEach(
-              parts.edits
-                .configured(event.origin, event.config)
-                .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
-            ),
+          () => reconfigure(event.origin, event),
           ...sessions.map(openWaiting),
         ]);
         return;
@@ -405,7 +426,7 @@ export function mainRenderer(
               offered !== undefined &&
               originKey(offered) === originKey(origin)
             )
-              parts.renderCache.configure(origin, event.coldConfig);
+              configure(origin, event.coldConfig);
           }
           if (!parts.renderCache.holdsConfig(origin))
             throw new Error(
@@ -600,6 +621,7 @@ export function mainRenderer(
     collect("subscriptions", () =>
       declare(
         event.kind === "config" ||
+          (event.kind === "context" && event.handoff !== undefined) ||
           (event.kind === "click" && event.coldConfig !== undefined),
       ),
     );

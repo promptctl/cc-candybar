@@ -8,7 +8,10 @@
 // and watch, until the last renderer lets it go.
 
 import { originKey, type RenderOrigin } from "../../config-hint.js";
-import type { ConfigSelection } from "../../renderer-interface/interface.js";
+import type {
+  ConfigOffer,
+  ConfigSelection,
+} from "../../renderer-interface/interface.js";
 import {
   retainsConfig,
   revisionOf,
@@ -40,6 +43,7 @@ import { directoryEntries } from "../../utils/directory-entry.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
+import type { SessionId } from "../foundations/session-id.js";
 import type { Timekeeper } from "../../time.js";
 import {
   watchFault,
@@ -53,6 +57,17 @@ import {
 interface ObservedConfig extends ConfigRevision {
   readonly origin: RenderOrigin;
   readonly managedFolders: ReadonlySet<string>;
+}
+
+function stillAdmitted(
+  previous: ObservedConfig,
+  current: ObservedConfig,
+): boolean {
+  return retainsConfig(
+    current.origin.target,
+    previous.snapshot.repo,
+    current.snapshot.repo,
+  );
 }
 
 // One origin followed: what discovery found there last, and the watch over
@@ -75,15 +90,25 @@ interface DiscoveryBatch {
   readonly landingPath: (file: string) => string;
 }
 
+// Sessions at one origin in a renderer share its one committed cache entry.
+// Their hold outlives that worker's demand and owns no filesystem watch.
+interface SessionHold {
+  count: number;
+  selection: ObservedConfig | null | undefined;
+  incoming?: ObservedConfig | null;
+}
+
 // The config facts available to one renderer and the demands it can replace.
 export interface RendererConfigs {
   follow(origins: readonly RenderOrigin[]): void;
   snapshotOf(origin: RenderOrigin): ConfigSnapshot | null;
   selected(
     entries: readonly ConfigSelection[],
-    delivered: (origin: RenderOrigin) => ConfigSnapshot | undefined,
+    delivered: (origin: RenderOrigin) => ConfigOffer | undefined,
   ): void;
   retainedOf(origin: RenderOrigin): ConfigSnapshot | "current" | undefined;
+  handoffOf(origin: RenderOrigin): ConfigOffer | undefined;
+  received(origin: RenderOrigin, offer: ConfigOffer): void;
   path(origin: RenderOrigin, role: LayerRole): string | null | undefined;
   repoDir(origin: RenderOrigin): string | null | undefined;
   readText(file: string): string | null;
@@ -116,6 +141,14 @@ interface Failed {
 
 export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
+  private readonly sessions = new Map<
+    SessionId,
+    { key: string; renderer: RendererName }
+  >();
+  private readonly sessionHolds = new Map<
+    string,
+    Map<RendererName, SessionHold>
+  >();
   // [LAW:carrying-cost] Reuse discovery's digest for an immutable offered
   // snapshot. A weak key cannot hold an old revision after its last owner.
   private readonly observations = new WeakMap<ConfigSnapshot, ObservedConfig>();
@@ -137,6 +170,54 @@ export class ConfigDiscovery {
     });
   }
 
+  // [LAW:no-ambient-temporal-coupling] Transfer the live session's selection
+  // before its former renderer can retire. The last session releases it.
+  route(
+    session: SessionId,
+    renderer: RendererName,
+    origin: RenderOrigin,
+  ): void {
+    if (this.closed) return;
+    const key = originKey(origin);
+    const prior = this.sessions.get(session);
+    if (prior?.key === key && prior.renderer === renderer) return;
+    const former =
+      prior?.key === key
+        ? this.sessionHolds.get(key)?.get(prior.renderer)
+        : undefined;
+    const carried =
+      former?.incoming === undefined ? former?.selection : former.incoming;
+    this.retire(session);
+    const holders =
+      this.sessionHolds.get(key) ?? new Map<RendererName, SessionHold>();
+    let hold = holders.get(renderer);
+    if (hold === undefined) {
+      const selected = this.followed.get(key)?.selected;
+      hold = {
+        count: 0,
+        selection: selected?.has(renderer) ? selected.get(renderer) : carried,
+      };
+      holders.set(renderer, hold);
+      this.sessionHolds.set(key, holders);
+    } else if (hold.selection === undefined) hold.selection = carried;
+    if (carried !== undefined) {
+      if (carried?.digest === hold.selection?.digest) delete hold.incoming;
+      else hold.incoming = carried;
+    }
+    hold.count++;
+    this.sessions.set(session, { key, renderer });
+  }
+
+  retire(session: SessionId): void {
+    const prior = this.sessions.get(session);
+    if (prior === undefined) return;
+    this.sessions.delete(session);
+    const holders = this.sessionHolds.get(prior.key)!;
+    const hold = holders.get(prior.renderer)!;
+    if (--hold.count === 0) holders.delete(prior.renderer);
+    if (holders.size === 0) this.sessionHolds.delete(prior.key);
+  }
+
   // [LAW:single-enforcer] Use the same holder to name demands, send a config
   // turn and resolve edits. A queued reload for a dropped origin cannot read
   // through another renderer's hold.
@@ -151,6 +232,28 @@ export class ConfigDiscovery {
       selected: (entries, delivered) =>
         this.select(renderer, entries, delivered),
       retainedOf: (origin) => this.retainedOf(renderer, origin),
+      handoffOf: (origin) => {
+        const key = originKey(origin);
+        const followed = this.followed.get(key);
+        if (!followed?.renderers.has(renderer)) return undefined;
+        const retained = this.incomingOf(
+          followed,
+          this.sessionHolds.get(key)?.get(renderer),
+        );
+        return retained ? { config: followed.snapshot, retained } : undefined;
+      },
+      received: (origin, offer) => {
+        const hold = this.sessionHolds.get(originKey(origin))?.get(renderer);
+        if (hold?.incoming === undefined) return;
+        if (
+          (hold.incoming === null && offer.retained === "current") ||
+          (hold.incoming !== null &&
+            (hold.incoming.snapshot === offer.retained ||
+              hold.incoming.digest ===
+                this.observations.get(offer.config)?.digest))
+        )
+          delete hold.incoming;
+      },
       path: (origin, role) => {
         const snapshot = held(origin);
         return snapshot === undefined
@@ -200,10 +303,9 @@ export class ConfigDiscovery {
       if (wanted.size === 0) break;
       if (!followed.renderers.has(renderer)) continue;
       take(followed.managedFolders);
-      const retained = this.retainedOf(renderer, followed.origin);
-      if (retained === "current" || retained === undefined) continue;
-      const observation = this.observations.get(retained);
-      if (observation !== undefined) take(observation.managedFolders);
+      const selected = followed.selected.get(renderer);
+      if (selected && stillAdmitted(selected, followed))
+        take(selected.managedFolders);
     }
     return admitted;
   }
@@ -257,7 +359,7 @@ export class ConfigDiscovery {
   private select(
     renderer: RendererName,
     entries: readonly ConfigSelection[],
-    delivered: (origin: RenderOrigin) => ConfigSnapshot | undefined,
+    delivered: (origin: RenderOrigin) => ConfigOffer | undefined,
   ): void {
     if (this.closed) return;
     const next = new Map<string, ObservedConfig | null>();
@@ -272,16 +374,18 @@ export class ConfigDiscovery {
       }
       const previous = followed.selected.get(renderer);
       const offered = delivered(origin);
-      const observation =
-        previous?.digest === digest
-          ? previous
-          : offered === undefined
-            ? undefined
-            : this.observations.get(offered);
-      if (
-        observation?.digest !== digest ||
-        originKey(observation.origin) !== key
-      )
+      const observation = [
+        previous,
+        offered && this.observations.get(offered.config),
+        typeof offered?.retained === "object" &&
+          this.observations.get(offered.retained),
+      ].find(
+        (candidate): candidate is ObservedConfig =>
+          !!candidate &&
+          candidate.digest === digest &&
+          originKey(candidate.origin) === key,
+      );
+      if (observation === undefined)
         throw new Error(`selected config revision was not delivered: ${key}`);
       const shared = [...followed.selected.values()].find(
         (held) => held?.digest === digest,
@@ -291,7 +395,11 @@ export class ConfigDiscovery {
     for (const [key, { selected }] of this.followed) {
       const observation = next.get(key);
       if (observation === undefined) selected.delete(renderer);
-      else selected.set(renderer, observation);
+      else {
+        selected.set(renderer, observation);
+        const hold = this.sessionHolds.get(key)?.get(renderer);
+        if (hold !== undefined) hold.selection = observation;
+      }
     }
   }
 
@@ -299,17 +407,37 @@ export class ConfigDiscovery {
     renderer: RendererName,
     origin: RenderOrigin,
   ): ConfigSnapshot | "current" | undefined {
-    const followed = this.followed.get(originKey(origin));
-    const old = followed?.selected.get(renderer);
-    if (followed === undefined || old === undefined) return undefined;
+    const key = originKey(origin);
+    const followed = this.followed.get(key);
+    if (!followed?.renderers.has(renderer)) return undefined;
+    const hold = this.sessionHolds.get(key)?.get(renderer);
+    const incoming = this.incomingOf(followed, hold);
+    if (incoming) return incoming;
+    const old = followed.selected.has(renderer)
+      ? followed.selected.get(renderer)
+      : hold?.selection;
+    if (old === undefined) return undefined;
     if (old === null || old.digest === followed.digest) return "current";
-    return retainsConfig(
-      origin.target,
-      old.snapshot.repo,
-      followed.snapshot.repo,
+    return stillAdmitted(old, followed) ? old.snapshot : "current";
+  }
+
+  // [LAW:single-enforcer] A warm entry can have seen only the broken file
+  // for a different session. Offer the incoming choice once, subject to
+  // today's project authority, whether the recipient is starting or live.
+  private incomingOf(
+    followed: Followed,
+    hold: SessionHold | undefined,
+  ): ConfigOffer["retained"] {
+    if (hold?.incoming === undefined) return undefined;
+    const { incoming } = hold;
+    if (
+      incoming !== null &&
+      incoming.digest !== followed.digest &&
+      stillAdmitted(incoming, followed)
     )
-      ? old.snapshot
-      : "current";
+      return incoming.snapshot;
+    hold.incoming = null;
+    return "current";
   }
 
   // Rediscover origins watching a file the turn wrote or could not restore.
@@ -340,6 +468,8 @@ export class ConfigDiscovery {
     this.invalidated.clear();
     for (const { watch } of this.followed.values()) watch.handle.release();
     this.followed.clear();
+    this.sessions.clear();
+    this.sessionHolds.clear();
     this.texts.clear();
   }
 

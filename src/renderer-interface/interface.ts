@@ -53,7 +53,7 @@ import type { RegionalSettings } from "../utils/region.js";
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 32;
+export const RENDERER_WIRE_VERSION = 33;
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
@@ -176,6 +176,13 @@ export interface SessionConfig {
   readonly worldState: WorldState;
 }
 
+// [LAW:one-source-of-truth] The latest observation and the admitted input
+// from which a new cache can reconstruct the last working configuration.
+export interface ConfigOffer {
+  readonly config: ConfigSnapshot;
+  readonly retained?: "current" | ConfigSnapshot;
+}
+
 // [LAW:types-are-the-program] A command expects a reply of its own kind.
 // A notification carries no command reply.
 export type Command =
@@ -227,37 +234,34 @@ export type Notification =
       readonly sessions: readonly SessionConfig[];
       // The host's current shared snapshots, once per origin. Retained
       // origins can outlive their last session and reopen their cached state.
-      readonly configs: ReadonlyArray<{
-        readonly origin: RenderOrigin;
-        readonly config: ConfigSnapshot;
-        // A committed cache entry: reconstruct from this previously selected
-        // observed input, or from the current observation offered above.
-        readonly retained?: "current" | ConfigSnapshot;
-      }>;
+      readonly configs: ReadonlyArray<
+        ConfigOffer & { readonly origin: RenderOrigin }
+      >;
     }
   | {
       // A request's opening turn, delivered ahead of it: the session's
       // context as its newest request names it. Its turn opens the session's
       // view, so the output names what the view reads before the request
-      // waits on it. It carries no config: that is its origin's, which the
-      // renderer subscribes (`Subscriptions.configs`).
+      // waits on it. The renderer subscribes to its origin's configuration.
       readonly kind: "context";
       readonly context: CheckedRenderRequest;
+      // A peer already serving this origin can have a different last working
+      // entry. Try the transferred selection before opening the switched view.
+      readonly handoff?: ConfigOffer;
       // [LAW:one-source-of-truth] The world state read at this context's own
       // keys: a session's context and its world state reach the renderer as
       // one value, so a renderer never holds a context beside a document read
       // at another request's keys.
       readonly worldState: WorldState;
     }
-  | {
+  | (ConfigOffer & {
       // [LAW:one-source-of-truth] What discovery found at `origin`, which the
       // renderer's subscriptions name: a fact about the origin, shared by
       // every session there. Handed in when the origin is first named, in the
       // slot of the turn that named it, and again whenever it moves.
       readonly kind: "config";
       readonly origin: RenderOrigin;
-      readonly config: ConfigSnapshot;
-    }
+    })
   | {
       // A request of a session whose `context` came before it, delivered once
       // its wait on the session's world state has ended in the host: the
@@ -295,7 +299,7 @@ export type Notification =
       // The host owns the identity from which this click mints placement IDs.
       readonly placementSeed: string;
       // The host's snapshot when this origin has yet to be delivered.
-      readonly coldConfig?: ConfigSnapshot;
+      readonly coldConfig?: ConfigOffer;
       // The host pinned the displayed context when it admitted this control.
       readonly displayed?: DisplayedConfig;
       // A scoped click's context, once the host has heard from its session.

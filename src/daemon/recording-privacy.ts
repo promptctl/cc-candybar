@@ -34,6 +34,7 @@ import type { WorldState } from "../facts/world-state.js";
 import { configSessionDecision } from "../renderer-interface/interface.js";
 import type { WireFrame } from "../render/frame.js";
 import type {
+  ConfigOffer,
   EventInput,
   RendererBoot,
   RendererOutput,
@@ -145,6 +146,13 @@ function configProblem({ chain, plugins }: ConfigSnapshot): string | null {
   return null;
 }
 
+function offerProblem({ config, retained }: ConfigOffer): string | null {
+  return (
+    configProblem(config) ??
+    (typeof retained === "object" ? configProblem(retained) : null)
+  );
+}
+
 // [LAW:single-enforcer] Every input kind has one export disposition. The
 // check reads the checked renderer input, never the host's environment book.
 export function recordingInputProblem(
@@ -157,25 +165,27 @@ export function recordingInputProblem(
         const problem = worldProblem(worldState) ?? contextProblem(context);
         if (problem !== null) return problem;
       }
-      for (const { config, retained } of event.configs) {
-        const problem =
-          configProblem(config) ??
-          (typeof retained === "object" ? configProblem(retained) : null);
+      for (const offer of event.configs) {
+        const problem = offerProblem(offer);
         if (problem !== null) return problem;
       }
       return null;
     case "context":
-      return worldProblem(event.worldState) ?? contextProblem(event.context);
+      return (
+        worldProblem(event.worldState) ??
+        contextProblem(event.context) ??
+        (event.handoff ? offerProblem(event.handoff) : null)
+      );
     case "world-state":
       return worldProblem(event.worldState);
     case "effect-done":
       return isEnvironmentOutput(event.outcome) ? ENVIRONMENT_OUTPUT : null;
     case "config":
-      return configProblem(event.config);
+      return offerProblem(event);
     case "request":
       return contextProblem(event.context);
     case "click": {
-      const problem = event.coldConfig && configProblem(event.coldConfig);
+      const problem = event.coldConfig && offerProblem(event.coldConfig);
       if (problem) return problem;
       const live = event.context?.live;
       const problemAtClick = live == null ? null : contextProblem(live);

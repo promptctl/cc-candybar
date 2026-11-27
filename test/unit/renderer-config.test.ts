@@ -502,7 +502,7 @@ test("a click on a session with no live context uses its cold config in the clic
     await handIn(r, {
       kind: "click", placementSeed: "test-click",
       click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER).click,
-      coldConfig: snapshotOf(CONFIG),
+      coldConfig: { config: snapshotOf(CONFIG) },
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },
     }),

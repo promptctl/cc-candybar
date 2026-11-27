@@ -504,8 +504,8 @@ test("renderers hold only their own selected shared config observations", () => 
   second.follow([origin]);
   const original = first.snapshotOf(origin);
   if (original === null) throw new Error("missing first observation");
-  first.selected([{ origin, digest: digestOf(original) }], () => original);
-  second.selected([{ origin, digest: digestOf(original) }], () => original);
+  first.selected([{ origin, digest: digestOf(original) }], () => ({ config: original }));
+  second.selected([{ origin, digest: digestOf(original) }], () => ({ config: original }));
   expect(first.retainedOf(origin)).toBe("current");
 
   fs.writeFileSync(file, "{ globals: { padding: 4 } }");
@@ -515,10 +515,10 @@ test("renderers hold only their own selected shared config observations", () => 
   expect(second.snapshotOf(origin)).toBe(current);
   expect(first.retainedOf(origin)).toBe(original);
   expect(second.retainedOf(origin)).toBe(original);
-  expect(() => first.selected([{ origin, digest: digestOf(current) }], () => original))
+  expect(() => first.selected([{ origin, digest: digestOf(current) }], () => ({ config: original })))
     .toThrow("selected config revision was not delivered");
   expect(first.retainedOf(origin)).toBe(original);
-  second.selected([{ origin, digest: digestOf(current) }], () => current);
+  second.selected([{ origin, digest: digestOf(current) }], () => ({ config: current }));
   expect(second.retainedOf(origin)).toBe("current");
   expect(first.retainedOf(origin)).toBe(original);
 
@@ -530,6 +530,45 @@ test("renderers hold only their own selected shared config observations", () => 
   expect(first.snapshotOf(origin)).toBe(current);
   service.close();
   expect(first.snapshotOf(origin)).toBeNull();
+});
+
+test("a live session carries its selection past the last watch, and releases it at retirement", () => {
+  const { origin, file } = named("selection-handoff");
+  const { service, discovery: first } = discoveryRig();
+  const session = sessionIdOf("moving");
+  const sibling = sessionIdOf("staying");
+  const peer = rendererNameOf("peer");
+  const second = service.forRenderer(peer);
+  service.route(session, MAIN_RENDERER, origin);
+  service.route(sibling, MAIN_RENDERER, origin);
+  first.follow([origin]);
+  const good = first.snapshotOf(origin)!;
+  first.selected([{ origin, digest: digestOf(good) }], () => ({ config: good }));
+  first.follow([]);
+  fs.writeFileSync(file, "{broken");
+  service.route(session, peer, origin);
+  expect(second.retainedOf(origin)).toBeUndefined();
+  second.follow([origin]);
+  const latest = second.snapshotOf(origin)!;
+  expect(latest).not.toEqual(good);
+  expect(second.retainedOf(origin)).toBe(good);
+  expect(() => second.selected([{ origin, digest: digestOf(good) }], () => ({ config: latest })))
+    .toThrow("selected config revision was not delivered");
+  second.selected([{ origin, digest: digestOf(good) }], () => ({ config: latest, retained: good }));
+  // An independent build can choose bundled content. Its other peer keeps
+  // the selection for the session still using that origin there.
+  second.selected([{ origin, digest: null }], () => ({ config: latest }));
+  first.follow([origin]);
+  expect(first.retainedOf(origin)).toBe(good);
+  expect(second.retainedOf(origin)).toBe("current");
+  second.follow([]);
+  service.retire(session);
+  second.follow([origin]);
+  expect(second.retainedOf(origin)).toBeUndefined();
+  first.follow([]);
+  service.retire(sibling);
+  first.follow([origin]);
+  expect(first.retainedOf(origin)).toBeUndefined();
 });
 
 test("a previously selected project input cannot be restored after approval is withdrawn", () => {
@@ -545,14 +584,20 @@ test("a previously selected project input cannot be restored after approval is w
   };
   const book = repoConfigs(state);
   writeStatePlan(book.plan(() => ({ [dir]: "approved" })));
-  const { discovery } = discoveryRig(diskFiles, systemTimekeeper, state);
+  const { discovery, service } = discoveryRig(diskFiles, systemTimekeeper, state);
+  const session = sessionIdOf("project-handoff");
+  service.route(session, MAIN_RENDERER, layered);
   discovery.follow([layered, isolated]);
   const previous = discovery.snapshotOf(layered);
   if (previous === null) throw new Error("missing approved input");
   expect(previous.repo).toMatchObject({ dir, standing: "approved" });
   expect(previous.plugins.map(({ scope }) => scope)).toContain("repo");
-  discovery.selected([{ origin: layered, digest: digestOf(previous) }], () => previous);
+  discovery.selected([{ origin: layered, digest: digestOf(previous) }], () => ({ config: previous }));
   expect(discovery.retainedOf(isolated)).toBeUndefined();
+  const name = rendererNameOf("replacement");
+  service.route(session, name, layered);
+  const replacement = service.forRenderer(name);
+  replacement.follow([layered]);
 
   for (const answers of [{ [dir]: "declined" as const }, {}]) {
     writeStatePlan(book.plan(() => answers));
@@ -560,6 +605,7 @@ test("a previously selected project input cannot be restored after approval is w
     expect(discovery.snapshotOf(layered)?.plugins.map(({ scope }) => scope))
       .not.toContain("repo");
     expect(discovery.retainedOf(layered)).toBe("current");
+    expect(replacement.retainedOf(layered)).toBe("current");
     expect(discovery.retainedOf(isolated)).toBeUndefined();
   }
 });
@@ -933,7 +979,7 @@ test("managed folders are admitted by each renderer's own discoveries and remain
   if (observed === null) throw new Error("main config was not discovered");
   main.selected(
     [{ origin: a.origin, digest: digestOf(observed) }],
-    () => observed,
+    () => ({ config: observed }),
   );
   fs.writeFileSync(a.file, "{ broken");
   service.again("bad edit");

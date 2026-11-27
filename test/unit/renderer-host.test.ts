@@ -788,7 +788,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
         retainedOf: (of) =>
           of.cwd === origin.cwd && selected ? "current" : undefined,
         selected: (entries, delivered) => {
-          if (entries.length > 0) expect(delivered(origin)).toBe(config);
+          if (entries.length > 0) expect(delivered(origin)?.config).toBe(config);
           selected = entries.length > 0;
         },
         snapshotOf: ({ cwd }) => {
