@@ -4,15 +4,22 @@
     {
       "version": "pr-986",
       "ref": "refs/pull/986/merge",
-      "sha": "c911c2ffdd31d5e745b2e1144288897b399a9e32",
-      "timestamp": "2026-11-27T20:24:46.964Z",
+      "sha": "1fa4cec905d9eec1c61c3e56ded9ff94e352d0b2",
+      "timestamp": "2026-11-27T20:28:51.721Z",
       "commits": [
         {
-          "sha": "c911c2ffdd31d5e745b2e1144288897b399a9e32",
+          "sha": "1fa4cec905d9eec1c61c3e56ded9ff94e352d0b2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T20:23:43Z",
-          "message": "Merge 28a3a5c1192822d638e5d4bf3795a07e4e1fde2e into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+          "timestamp": "2026-11-27T20:27:49Z",
+          "message": "Merge 90cdf0c3f26275552470135976509c655941c4ed into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+        },
+        {
+          "sha": "90cdf0c3f26275552470135976509c655941c4ed",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T13:27:36-07:00",
+          "message": "fix(renderer): require history for every attempted feed frame\n"
         },
         {
           "sha": "28a3a5c1192822d638e5d4bf3795a07e4e1fde2e",

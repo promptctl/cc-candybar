@@ -107887,10 +107887,6 @@ var HostFeedHistory = class {
               `feed for ${session} reported a schedule without viewers`
             );
           const frame2 = frames.get(session);
-          if (changed !== void 0 !== (frame2 !== void 0))
-            throw new Error(
-              `feed for ${session} did not pair its draw with a comparison`
-            );
           let rates = history?.rates ?? {};
           if (update.viewers || changed?.length) {
             const kept2 = {};
