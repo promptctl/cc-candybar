@@ -424,7 +424,8 @@ function guard(state: LaunchState, group: number): void {
 function unguard(state: LaunchState, group: number): void {
   state.liveGroups.delete(group);
   state.lifeline?.pipe.write(`- ${group}\n`);
-  if (state.scope.signal.aborted && state.liveGroups.size === 0) endLifeline(state);
+  if (state.scope.signal.aborted && state.liveGroups.size === 0)
+    endLifeline(state);
 }
 
 // A closed owner's lifeline goes with it: the EOF a dying launcher gives it, on
@@ -849,7 +850,16 @@ async function launchPiped(
           awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
-      afterExit(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS));
+      afterExit(tasks.groupEnd, () => {
+        if (settled) return;
+        // On an ordinary exit give the pipes their initial I/O turn. During
+        // termination a pending signal makes the group check due at exit.
+        if (terminated !== null) awaitGroupEnd(GROUP_END_POLL_MIN_MS);
+        else
+          groupEndTimer = clock.defer(tasks.groupEnd, () =>
+            awaitGroupEnd(GROUP_END_POLL_MIN_MS),
+          );
+      });
     }
 
     // [LAW:types-are-the-program] Do NOT settle here. We signal and let
