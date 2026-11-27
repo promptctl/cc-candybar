@@ -13,16 +13,34 @@ export interface OwnedSource {
   readonly environment: "node" | "jest" | "browser";
 }
 
-function nodeEntry(file: string): boolean {
+// A direct interpreter, or the program in a plain env invocation, is known.
+// env may also interpret options, quoted strings and substitutions. An opaque
+// delegation must receive a coverage decision instead of guessing its program.
+function needsInterpreterClassification(line: string): boolean {
+  if (!line.startsWith("#!")) return false;
+  const [interpreter, ...args] = line.slice(2).trim().split(/\s+/);
+  const isNode = (name: string) =>
+    ["node", "nodejs"].includes(path.basename(name));
+  if (!interpreter || path.basename(interpreter) !== "env")
+    return isNode(interpreter ?? "");
+  if (args[0] === "-S" || args[0] === "--split-string") args.shift();
+  for (const arg of args) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=[\w./:-]*$/.test(arg)) continue;
+    if (!/^[\w./][\w./+-]*$/.test(arg) || path.basename(arg) === "env")
+      return true;
+    return isNode(arg);
+  }
+  return true;
+}
+
+function executableNeedsCoverage(file: string): boolean {
   const fd = fs.openSync(file, "r");
   try {
     // A kernel shebang must fit in its first block. Read no program body.
     const buffer = Buffer.alloc(512);
     const count = fs.readSync(fd, buffer);
     const firstLine = buffer.toString("utf8", 0, count).split("\n", 1)[0]!;
-    return /^#!\s*(?:\S*\/)?(?:node(?:js)?(?:\s|$)|env\s+(?:(?:-S|--split-string|-i|--ignore-environment|--|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*(?:\S*\/)?node(?:js)?(?:\s|$))/.test(
-      firstLine,
-    );
+    return needsInterpreterClassification(firstLine);
   } finally {
     fs.closeSync(fd);
   }
@@ -46,7 +64,7 @@ export function inventory(root: string): readonly OwnedSource[] {
         path.extname(file) ||
         !entry.isFile() ||
         !(entry.mode & 0o111) ||
-        !nodeEntry(absolute)
+        !executableNeedsCoverage(absolute)
       )
         continue;
     }

@@ -3,6 +3,7 @@
 import { ESLint } from "eslint";
 
 import { inventory, type OwnedSource } from "./lib/code-inventory.js";
+import { filewideDisableLine } from "./lib/filewide-disable.js";
 import { typeCoverageFailures } from "./lib/type-coverage.js";
 
 async function lint(
@@ -35,6 +36,9 @@ async function lint(
       cwd: root,
       overrideConfigFile: config,
       globInputPaths: false,
+      overrideConfig: {
+        linterOptions: { reportUnusedDisableDirectives: "warn" },
+      },
     });
     for (const file of files) {
       const effective = await eslint.calculateConfigForFile(file.path);
@@ -47,7 +51,16 @@ async function lint(
     const formatter = await eslint.loadFormatter("stylish");
     const formatted = await formatter.format(results);
     if (formatted) process.stdout.write(formatted);
-    if (results.some((result) => result.errorCount > 0)) passed = false;
+    for (const result of results) {
+      if (result.errorCount) passed = false;
+      const line = filewideDisableLine(result);
+      if (line !== undefined) {
+        console.error(
+          `${result.filePath}:${line}: File-wide eslint-disable bypasses source coverage. Narrow the directive or declare its exemption and reason in scripts/import-zones.mjs.`,
+        );
+        passed = false;
+      }
+    }
   }
   return passed;
 }
