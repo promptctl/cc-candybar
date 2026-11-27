@@ -135,9 +135,10 @@ export function rangeSpans(tableBody) {
   if (body.replace(RANGE_PAIR, "").replace(/[\s,]/g, "") !== "") return null;
   const value = (s) => Number(s.replace(/_/g, ""));
   const pairs = [...body.matchAll(RANGE_PAIR)]
-    .map((m) => [value(m[1]), value(m[2])])
+    .map((m) => /** @type {[number, number]} */ ([value(m[1]), value(m[2])]))
     .sort((a, b) => a[0] - b[0]);
   if (pairs.length === 0 || pairs.some(([lo, hi]) => !(lo <= hi))) return null;
+  /** @type {[number, number][]} */
   const spans = [];
   for (const [lo, hi] of pairs) {
     const last = spans.at(-1);

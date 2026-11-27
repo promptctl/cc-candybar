@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
     "lib": ["ESNext"],
-    "target": "ES2022", 
+    "target": "ES2022",
     "module": "ESNext",
     "moduleDetection": "force",
     "isolatedModules": true,
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
 
     "moduleResolution": "bundler",
@@ -13,7 +14,7 @@
     "esModuleInterop": true,
 
     "strict": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "forceConsistentCasingInFileNames": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
@@ -26,6 +27,14 @@
 
     "types": ["node"]
   },
-  "include": ["src/**/*", "site/**/*", "scripts/**/*", "proto-looks/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*", "site/**/*", "scripts/**/*", "proto-looks/**/*",
+    ".github/scripts/**/*", "tsdown.config.ts", "candybar-lite.mjs"
+  ],
+  "exclude": [
+    "node_modules", "dist",
+    "scripts/bar-web/**/*.js", "scripts/bar-web/**/*.jsx",
+    "scripts/bar-web/**/*.mjs", "scripts/bar-web/**/*.cjs",
+    "scripts/bar-web/**/*.d.ts", "scripts/bar-web/**/*.d.mts", "scripts/bar-web/**/*.d.cts"
+  ]
 }

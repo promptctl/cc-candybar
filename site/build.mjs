@@ -12,7 +12,8 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shim = (f) => path.join(here, "shims", f);
 const alias = {};
-for (const [mods, file] of [
+/** @type {[string[], string][]} */
+const shimGroups = [
   [["fs"], "fs.ts"],
   [["fs/promises"], "fs-promises.ts"],
   [["os"], "os.ts"],
@@ -23,7 +24,8 @@ for (const [mods, file] of [
   [["process"], "process.ts"],
   [["child_process"], "child_process.ts"],
   [["net", "https", "http", "readline", "module", "stream/consumers", "v8", "worker_threads", "tty"], "unavailable.ts"],
-]) for (const m of mods) { alias[m] = shim(file); alias[`node:${m}`] = shim(file); }
+];
+for (const [mods, file] of shimGroups) for (const m of mods) { alias[m] = shim(file); alias[`node:${m}`] = shim(file); }
 alias.path = alias["node:path"] = "path-browserify";
 alias.events = alias["node:events"] = "events";
 alias.stream = alias["node:stream"] = "readable-stream";

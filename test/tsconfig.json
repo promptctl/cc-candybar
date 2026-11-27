@@ -3,5 +3,6 @@
   "compilerOptions": {
     "types": ["node", "jest"]
   },
-  "include": ["**/*", "../audits/**/*", "../src/**/*.d.ts", "../site/**/*.d.ts"]
+  "include": ["**/*", "../audits/**/*", "../src/**/*.d.ts", "../site/**/*.d.ts"],
+  "exclude": ["../audits/jest.config.js"]
 }

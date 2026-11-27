@@ -20,6 +20,7 @@ class FixtureEnvironment extends TestEnvironment {
   // [LAW:no-ambient-temporal-coupling] The sandbox is per file, and this runs
   // after its last test and hook, where an `afterAll` would run before the
   // file's own: its fixtures end here, and the sandbox goes even when one fails.
+  /** @override */
   async teardown() {
     const releases = await Promise.allSettled(
       this.fixtureReleases.map((release) => Promise.resolve().then(release)),
