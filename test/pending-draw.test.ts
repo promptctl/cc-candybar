@@ -44,6 +44,8 @@ import { lastBinding } from "./helpers/render-binding";
 import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
+import { observable, runInAction } from "mobx";
+import type { RunFact } from "../src/facts/world-state";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { collectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
 import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
@@ -53,8 +55,8 @@ const S = sessionIdOf("s");
 const AT = 1_800_000_000 as Instant;
 
 // `doc` is a json source that never answers on its own (its command outlives
-// the test), so the test answers for it through the store, and takes the
-// answer back to pending as a re-read under a new key will (step 3, part 3).
+// the test). Its host observations are supplied at the same input as the
+// other file and command readings, including a fresh read with no predecessor.
 const config = (rest: string, variables = ""): ValidatedConfig =>
   parseAndValidate(
     "<test>",
@@ -94,6 +96,16 @@ function renderer(cfg: ValidatedConfig) {
     clock,
   });
   const runs = collectedRuns(sourceRuns, registry, TEST_ENVIRONMENT);
+  const document = observable.box<RunFact | null>(null, { deep: false });
+  const readings = {
+    ...runs.readings,
+    run: (digest: string) => {
+      const selected = registry.namedRuns().get("doc");
+      const scripted = selected?.digest === digest ? document.get() : null;
+      if (scripted) return scripted;
+      return runs.readings.run(digest);
+    },
+  };
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,
@@ -107,8 +119,10 @@ function renderer(cfg: ValidatedConfig) {
     },
     // The base palette the latest frame wore.
     palette: () => drawn().look!.basePalette,
-    answer: (value: JsonValue) => store.setDocument("doc", ok(value)),
-    unanswer: () => store.setDocument("doc", pendingOf("unread")),
+    answer: (value: JsonValue) =>
+      runInAction(() => document.set({ reading: { ...ok(value), at: AT }, fault: null })),
+    unanswer: () =>
+      runInAction(() => document.set({ reading: pendingOf("unread"), fault: null, beforeRead: null })),
     draw: (width = 160, state?: {visible: boolean; effects: SessionEffects<RenderedLine>; elapsed: number; record?: DrawnFrame["memory"]["record"]}): Drawn => {
       const { frame, warnings, memory } = drawPayload(
         cfg,
@@ -125,7 +139,7 @@ function renderer(cfg: ValidatedConfig) {
           width,
         },
         selectionFor(cfg, state && {effects: state.effects, record: state.record, transitions: true}),
-        runs.readings,
+        readings,
       );
       return {
         frame,
