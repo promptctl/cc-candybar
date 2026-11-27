@@ -2,13 +2,6 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import {
-  paneOn,
-  paneOff,
-  type BarPaneEdge,
-  type BarPaneHost,
-} from "../src/daemon/lane-setup";
-import { barPanesOf } from "../src/daemon/lane-edge";
 import { attachCommandLine } from "../src/attach-launcher";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { TmuxHint } from "../src/tmux-hint";
@@ -23,52 +16,6 @@ const TMUX: TmuxHint = {
   pane: "%7",
   truecolor: null,
 };
-const HOST: BarPaneHost = {
-  bundle: "/opt/candybar/dist/index.mjs",
-  node: ["/usr/bin/node"],
-  socket: "/tmp/cc-candybar-1/socket",
-};
-
-function fakeEdge(overrides: Partial<BarPaneEdge> = {}) {
-  const did: string[] = [];
-  const edge: BarPaneEdge = {
-    barPanes: async () => [],
-    openBarPane: async (hint, argv, env) => {
-      did.push(
-        `open under ${hint.pane}: ${argv.join(" ")} ${JSON.stringify(env)}`,
-      );
-      return "%9";
-    },
-    closePane: async (_hint, pane) => void did.push(`close ${pane}`),
-    ...overrides,
-  };
-  return { edge, did };
-}
-
-describe("the tmux bar pane", () => {
-  test("on opens a bar pane under the session's pane, following this daemon", async () => {
-    const { edge, did } = fakeEdge();
-    expect(await paneOn(TMUX, HOST, edge)).toBe("opened bar pane %9 under %7");
-    expect(did).toEqual([
-      `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
-    ]);
-  });
-
-  test("on with a bar pane already open opens no second one", async () => {
-    const { edge, did } = fakeEdge({ barPanes: async () => ["%9"] });
-    expect(await paneOn(TMUX, HOST, edge)).toBe(
-      "bar pane %9 already draws %7's bar",
-    );
-    expect(did).toEqual([]);
-  });
-
-  test("off closes every bar pane drawing the session's bar", async () => {
-    const { edge, did } = fakeEdge({ barPanes: async () => ["%9", "%11"] });
-    expect(await paneOff(TMUX, edge)).toBe("closed bar pane %9, %11");
-    expect(did).toEqual(["close %9", "close %11"]);
-  });
-});
-
 const SHELLS = [
   "/bin/sh",
   "/opt/homebrew/bin/zsh",
@@ -117,29 +64,12 @@ describe("the manual attached statusline command", () => {
   );
 });
 
-describe("the production edge's readers", () => {
-  test("barPanesOf names the panes started to draw the session's pane's bar", async () => {
-    const listPanes = [
-      "%1 ",
-      '%9 /usr/bin/node /x/cli.js bar-pane "%7"',
-      "%10 node cli.js bar-pane %8",
-      "%11 node cli.js bar-pane %7",
-      "%12 node cli.js bar-pane \\%7",
-      "%13 vim notes",
-      "%14 node cli.js bar-pane %70",
-    ].join("\n");
-    expect(barPanesOf(listPanes, "%7")).toEqual(["%9", "%11", "%12"]);
-  });
-});
-
 const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
 
 describe("tmux pane effects", () => {
   let ids = 0;
   const performer = (
-    edge: BarPaneEdge,
     input: Partial<ClaudeInputEdge> = {},
-    host = HOST,
     closing = () => false,
   ) => {
     const logs: string[] = [];
@@ -157,7 +87,6 @@ describe("tmux pane effects", () => {
         },
       }),
       run: missing,
-      barPane: { edge, host },
       closing,
       log: (level, msg) => void logs.push(`${level} ${msg}`),
     });
@@ -167,7 +96,7 @@ describe("tmux pane effects", () => {
   test("one pane's slash lines are typed one at a time, each after the last has finished", async () => {
     const typing: string[] = [];
     let typed!: () => void;
-    const { acts } = performer(fakeEdge().edge, {
+    const { acts } = performer({
       type: async (_pane, line) => {
         typing.push(`start ${line}`);
         await new Promise<void>((r) => (typed = r));
@@ -207,23 +136,8 @@ describe("tmux pane effects", () => {
     const splitStarted = new Promise<void>((resolve) => {
       started = resolve;
     });
-    const { edge } = fakeEdge({
-      openBarPane: () => {
-        started();
-        return new Promise((resolve) => {
-          releaseSplit = resolve;
-        });
-      },
-      closePane: removed,
-    });
-    const { acts } = performer(
-      edge,
-      { read: reads, type: typed },
-      HOST,
-      () => closing,
-    );
-
-    const opening = acts.setBarPane(TMUX, true);
+    const {acts}=performer({read:reads,type:typed},()=>closing);
+    const opening=acts.inPaneTurn(TMUX,()=>{started();return new Promise<string>(r=>{releaseSplit=r;});});
     await splitStarted;
     const slash = acts.perform({
       kind: "type-slash",
@@ -232,13 +146,13 @@ describe("tmux pane effects", () => {
       pane: TMUX,
       line: "/compact" as never,
     });
-    const cleanup = expect(acts.setBarPane(TMUX, false)).rejects.toThrow(
+    const cleanup = expect(acts.inPaneTurn(TMUX,removed)).rejects.toThrow(
       "the daemon closed",
     );
     closing = true;
     releaseSplit("%9");
 
-    await expect(opening).resolves.toBe("opened bar pane %9 under %7");
+    await expect(opening).resolves.toBe("%9");
     await expect(slash).resolves.toMatchObject({ kind: "closing" });
     await cleanup;
     expect(reads).not.toHaveBeenCalled();
@@ -248,11 +162,8 @@ describe("tmux pane effects", () => {
 
   test("a slash line while a bar pane opens under its pane is typed, after the split", async () => {
     let split!: () => void;
-    const { edge } = fakeEdge({
-      openBarPane: () => new Promise((r) => (split = () => r("%9"))),
-    });
-    const { acts } = performer(edge);
-    const opening = acts.setBarPane(TMUX, true);
+    const {acts}=performer();
+    const opening=acts.inPaneTurn(TMUX,()=>new Promise<void>(r=>{split=r;}));
     await new Promise((r) => setImmediate(r));
     const slash = acts.perform({
       kind: "type-slash",

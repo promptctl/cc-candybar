@@ -62,6 +62,9 @@ export interface Subscriber {
   readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
   readonly drawing: () => boolean;
+  // An enrolled pane keeps its handoff while hidden. Only a shown, current
+  // assignment can confirm that its physical display took an offered frame.
+  readonly presenting?: () => boolean;
 }
 
 export interface FeedDeps<Req> {
@@ -135,8 +138,12 @@ interface Watched {
 // when that owner ends the one that spoke before it owns the pointer again.
 function ownerOf(watched: Watched): HeldPointer | null {
   let found: HeldPointer | null = null;
-  for (const { owner } of watched.followers.values())
-    if (owner !== null && (found === null || owner.said > found.said))
+  for (const [sub, { owner }] of watched.followers)
+    if (
+      sub.presenting?.() !== false &&
+      owner !== null &&
+      (found === null || owner.said > found.said)
+    )
       found = owner;
   return found;
 }
@@ -276,7 +283,27 @@ export class FrameFeeds<Req> {
   // lane is switched off while it streams is ended as the renderer's output
   // says so (`switched`). A session with no view yet is admitted, and the
   // switches its view opens with decide.
-  subscribe(sessionId: SessionId, sub: Subscriber): () => void {
+  private moving = false;
+  subscribe(
+    sessionId: SessionId,
+    sub: Subscriber,
+    replaces?: () => void,
+  ): () => void {
+    if (replaces === undefined) return this.join(sessionId, sub);
+    // [LAW:no-ambient-temporal-coupling] A physical pane changing sessions
+    // exposes only the complete move to even a synchronous viewer reader.
+    this.moving = true;
+    try {
+      const leave = this.join(sessionId, sub);
+      replaces();
+      return leave;
+    } finally {
+      this.moving = false;
+      this.announce();
+    }
+  }
+
+  private join(sessionId: SessionId, sub: Subscriber): () => void {
     if (this.delivery === "closed") {
       // [LAW:nothing-unseen] Said, so a subscribe never vanishes from the log.
       this.deps.log(
@@ -361,8 +388,11 @@ export class FrameFeeds<Req> {
     | { readonly kind: "ok" }
     | { readonly kind: "refused"; readonly reason: string } {
     const watched = this.watched.get(sessionId);
-    const reporting = [...(watched?.followers.values() ?? [])].filter(
-      (follower) => follower.owner?.id === owner.id,
+    const reporting = [...(watched?.followers ?? [])].flatMap(
+      ([sub, follower]) =>
+        follower.owner?.id === owner.id && sub.presenting?.() !== false
+          ? [follower]
+          : [],
     );
     if (watched === undefined || reporting.length === 0)
       return {
@@ -437,7 +467,9 @@ export class FrameFeeds<Req> {
         }),
       ),
       pointer: ownerOf(watched)?.pointer ?? null,
-      shown: this.shown(sessionId),
+      shown: [...watched.followers.keys()].some(
+        (sub) => sub.presenting?.() ?? this.shown(sessionId),
+      ),
       joined: watched.frameDemand,
     };
   }
@@ -448,7 +480,7 @@ export class FrameFeeds<Req> {
   // poll that found every pane as it was). A delivery that failed is made
   // good by the next announcement.
   announce(): void {
-    if (this.delivery !== "current") return;
+    if (this.moving || this.delivery !== "current") return;
     if (JSON.stringify(this.viewers()) === this.handed) return;
     this.delivery = "owed";
     void this.deps
@@ -659,7 +691,7 @@ export class FrameFeeds<Req> {
       follower.confirmed !== null &&
       covers(follower.confirmed, answer)
     ) {
-      done?.(sub.drawing());
+      done?.(sub.presenting?.() ?? sub.drawing());
       return;
     }
     const write: PendingWrite = { answer, done };
@@ -670,7 +702,7 @@ export class FrameFeeds<Req> {
       // [LAW:effects-at-boundaries] A refusal can detach the subscription
       // while the socket flushes its previous frame. That confirmed write
       // still carried the daemon's event, even after the view receipt ended.
-      const displayed = delivered && sub.drawing();
+      const displayed = delivered && (sub.presenting?.() ?? sub.drawing());
       if (displayed && answer.displayedEvents !== undefined)
         this.deps.acknowledgeDisplayed(answer.displayedEvents);
       if (!follower.writes.delete(write)) return;

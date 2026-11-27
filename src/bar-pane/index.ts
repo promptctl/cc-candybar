@@ -1,126 +1,35 @@
-// `cc-candybar bar-pane <pane>`: the bar of the Claude Code session in tmux
-// pane <pane>, drawn in the pane this runs in as the daemon pushes it — lane C
-// of the animation epic (candybar-animation-wbxz.oy3), behind its toggle,
-// `🧪 tmux pane (C)` (src/config/lanes.ts).
-//
-// Claude Code reruns its statusline once a second at best, so an effect or a
-// menu opened by a click moves at that rate there. Here the frames are the
-// daemon's push (src/daemon/frame-feed.ts): the statusline's own render of the
-// session's own data, sent the moment it changes, through the same
-// `planOutcome` the statusline prints with. They are written to a pane, where
-// the terminal draws their links as it does the statusline's, so a click works
-// the same.
-
-import { randomUUID } from "node:crypto";
 import process from "node:process";
-import { parseArgs as parseCliArgs } from "node:util";
 import {
   renderOutcomeOf,
   tryClickViaDaemon,
   tryPointerViaDaemon,
-  trySessionInPane,
 } from "../daemon/client";
 import { describeFailure } from "../daemon/client-transport";
-import { followFrames, type FrameFollower } from "../daemon/frame-follow";
+import { followPane } from "./follow.js";
+import {
+  INSTANCE,
+  PANE_ID,
+  parsePaneHello,
+  type PanePlacement,
+} from "../daemon/pane-subscription.js";
 import { socketPath } from "../daemon/paths";
 import { planOutcome } from "../outcome-plan";
-import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
+import { detectTmuxHint } from "../tmux-hint";
 import type { World } from "../host";
-import { sleep, type Timekeeper } from "../time";
+import { type Timekeeper } from "../time";
 import { runTmuxAsync, type TmuxRun } from "../proc/tmux";
-import {
-  LIST_CLIENTS_FORMAT,
-  controlledSessions,
-  shownPanes,
-} from "../daemon/pane-visibility";
 import { DRAWING, RESTORED, paint, paintedLines } from "./paint";
 import { readMouse } from "./mouse";
 import { reportPointer, type Followed } from "./report";
 import { singleFlight } from "./single-flight";
 import { touchOf } from "./hit-test";
-import { BAR_PANE_FORMAT, deliveredIn } from "./pointer";
-import type { Delivered } from "../click/gesture";
+import { deliveredWithMouse } from "./pointer";
 import type { OwnerFacts } from "../daemon/foundations/protocol";
 import type { HitMap } from "../render/hit-map";
 
-// How stale the pane's placement and its session may be: a window switched to
-// waits this long for its first frame, and a /clear this long for its new
-// session's.
-const TICK_MS = 500;
-// How long a tmux call may go unanswered (tmuxPatience).
 const TMUX_PATIENCE_MS = 5000;
-const USAGE = "usage: cc-candybar bar-pane <claude-code-pane-id, e.g. %3>";
-
-// [LAW:types-are-the-program] Where the bar pane stands. `shown`: a client
-// shows it — frames are seen where they are drawn, so a frame drawn while it is
-// not is seen by nobody (Brandon: "if we can find some way of not rendering
-// terminals that aren't visible that would be great"). `zoomed`: it is shown as
-// the zoomed pane, which a resize would unzoom. `gone`: the session's pane has
-// closed, and with it the bar this pane draws.
-export type Placement =
-  | { readonly kind: "shown"; readonly zoomed: boolean }
-  | { readonly kind: "hidden" }
-  | { readonly kind: "gone" };
-
-// [LAW:one-source-of-truth] Whether the bar pane is shown is the daemon's own
-// rule for a session's pane (src/daemon/pane-visibility.ts), over tmux's answers
-// in its formats: `list-panes` for the session's pane and the bar pane (`own`),
-// one line per session holding the pane's window, and `list-clients`.
-// [LAW:effects-at-boundaries] Pure.
-export function placementFrom(
-  listPanes: string,
-  listClients: string,
-  pane: string,
-  own: string,
-): Placement {
-  const lines = listPanes.split("\n").map((line) => line.trim().split(" "));
-  if (!lines.some(([id]) => id === pane)) return { kind: "gone" };
-  if (!shownPanes(listPanes, controlledSessions(listClients)).has(own))
-    return { kind: "hidden" };
-  return {
-    kind: "shown",
-    zoomed: lines.some(([id, , , , zoomed]) => id === own && zoomed === "1"),
-  };
-}
-
+const USAGE = "usage: cc-candybar bar-pane <source pane> <managed instance>";
 type TmuxMissed = Exclude<TmuxRun, { kind: "ok" }>;
-
-async function askPlacement(
-  world: World,
-  tmux: TmuxHint,
-  pane: string,
-): Promise<
-  | {
-      readonly kind: "ok";
-      readonly placement: Placement;
-      // What this pane's pointer delivers, by tmux's `mouse` option now.
-      readonly delivered: readonly Delivered[];
-    }
-  | TmuxMissed
-> {
-  const [panes, clients] = await Promise.all([
-    runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
-      "list-panes",
-      "-a",
-      "-f",
-      `#{||:#{==:#{pane_id},${pane}},#{==:#{pane_id},${tmux.pane}}}`,
-      "-F",
-      BAR_PANE_FORMAT,
-    ]),
-    runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
-      "list-clients",
-      "-F",
-      LIST_CLIENTS_FORMAT,
-    ]),
-  ]);
-  if (panes.kind !== "ok") return panes;
-  if (clients.kind !== "ok") return clients;
-  return {
-    kind: "ok",
-    placement: placementFrom(panes.stdout, clients.stdout, pane, tmux.pane),
-    delivered: deliveredIn(panes.stdout, tmux.pane),
-  };
-}
 
 // [LAW:one-type-per-behavior] How long one tmux call may go unanswered before
 // the bar pane gives up: a loaded machine misses a call now and then, a tmux
@@ -151,19 +60,20 @@ export function tmuxPatience(
   };
 }
 
-export function parseArgs(argv: readonly string[]): { pane: string } {
-  // Strict: an unknown flag is refused, never run past.
-  const { positionals } = (() => {
-    try {
-      return parseCliArgs({ args: [...argv], allowPositionals: true });
-    } catch (e) {
-      throw new Error(`${(e as Error).message}\n${USAGE}`);
-    }
-  })();
-  const [pane, ...extra] = positionals;
-  if (pane === undefined || extra.length > 0 || !/^%\d+$/.test(pane))
+export function parseArgs(argv: readonly string[]): {
+  pane: string;
+  instance: string;
+} {
+  const [pane, instance] = argv;
+  if (
+    argv.length !== 2 ||
+    !pane ||
+    !PANE_ID.test(pane) ||
+    !instance ||
+    !INSTANCE.test(instance)
+  )
     throw new Error(USAGE);
-  return { pane };
+  return { pane, instance };
 }
 
 // The subcommand's own exit code: its failures are the bar pane's, named as
@@ -185,7 +95,7 @@ async function drawBarPane(
   argv: readonly string[],
   world: World,
 ): Promise<void> {
-  const { pane } = parseArgs(argv);
+  const { pane, instance } = parseArgs(argv);
   const tmux = detectTmuxHint(world.host.env);
   if (tmux === null)
     throw new Error("cc-candybar bar-pane runs in a tmux pane");
@@ -193,13 +103,17 @@ async function drawBarPane(
     throw new Error(
       "cc-candybar bar-pane draws on, and reads the mouse from, its pane's terminal",
     );
-  // [LAW:no-silent-failure] A pane id this tmux server does not have is a
-  // mistake to say, not a pane that closed.
-  const first = await askPlacement(world, tmux, pane);
-  if (first.kind !== "ok") throw new Error(first.reason);
-  let placement = first.placement;
-  if (placement.kind === "gone")
-    throw new Error(`no pane ${pane} on this tmux server (${tmux.socket})`);
+  const serverPid = Number(world.host.env.TMUX?.split(",").at(-2));
+  const hello = parsePaneHello({
+    socket: tmux.socket,
+    source: pane,
+    drawing: tmux.pane,
+    serverPid,
+    followerPid: process.pid,
+    instance,
+  });
+  if (!hello) throw new Error("invalid managed tmux pane identity");
+  let placement: PanePlacement | null = null;
 
   process.stdout.write(DRAWING);
   // [LAW:effects-at-boundaries] The terminal's mouse reports are read raw and
@@ -223,57 +137,38 @@ async function drawBarPane(
     process.exit(1);
   };
 
-  // The session's frames while the bar pane is shown: one follower, for the
-  // session tmux pane `pane` holds now, and the last thing it said. Hidden, it
-  // follows nothing, so the daemon draws nothing for it.
-  let following:
-    | (Followed & {
-        readonly said: { latest: string | null; hits: HitMap | null };
-        readonly say: (line: string) => void;
-        readonly follower: FrameFollower;
-      })
-    | null = null;
-  // [LAW:one-source-of-truth] What this pane says of its pointer: who it is,
-  // what its terminal delivers, and the action the pointer last stood on. The
-  // host holds the latest of it, and a stream that opens restates it.
-  const owner = randomUUID();
-  let delivered = first.delivered;
+  let following: Followed | null = null;
+  let frame: string | null = null;
+  let hits: HitMap | null = null;
   let hover: string | null = null;
   const facts = (): OwnerFacts => ({
-    id: owner,
-    gestures: [...delivered],
+    id: placement!.owner,
+    gestures: [...deliveredWithMouse(placement?.mouse ?? false)],
     hover,
   });
   // [LAW:no-ambient-temporal-coupling] One report at a time, of the facts and
   // the session as they stand when it is sent: changes that arrive while one is
   // in flight are the one report after it, so the host never ends on an older
   // one and a burst is not a queue of identical requests.
-  const report = singleFlight(
-    () =>
-      reportPointer(
-        following,
-        (sessionId, owned) => tryPointerViaDaemon(world, sessionId, owned),
-        facts,
-        fail,
-      ),
-    die,
-  );
-
-  // What the loop last learned of the pane's session, shown until its follower
-  // says something.
-  let status = `waiting for pane ${pane}'s bar`;
-  // [LAW:one-source-of-truth] What the pane shows is derived, never set: a
-  // lookup that fails beside a live follower cannot cover its frames.
-  const text = (): string => following?.said.latest ?? status;
-  // [LAW:no-silent-failure] A failure to reach the daemon is said as the
-  // follower's own faults are: it is what the pane paints until the next frame
-  // replaces it, never a line written over the bar.
+  const report = singleFlight(async () => {
+    const owner = placement?.owner;
+    await reportPointer(
+      following,
+      (sessionId, owned) => tryPointerViaDaemon(world, sessionId, owned),
+      facts,
+      (message) => {
+        if (placement?.owner === owner && following?.wire.attached)
+          fail(message);
+      },
+    );
+  }, die);
+  let status = "waiting for the managed pane subscription";
+  const text = () => frame ?? status;
   const fail = (message: string): void => {
-    const line = `cc-candybar bar-pane: ${message}`;
-    if (following === null) {
-      status = line;
-      redraw();
-    } else following.say(line);
+    frame = null;
+    hits = null;
+    status = "cc-candybar bar-pane: " + message;
+    redraw();
   };
 
   // What the pane last painted. A resize disturbs the pane, and makes the next
@@ -284,17 +179,18 @@ async function drawBarPane(
   // zoomed pane, which a resize would unzoom. The height compared is the
   // pane's own, so an unzoom or a hand resize is put right too.
   const drawOnce = async (): Promise<void> => {
-    if (placement.kind !== "shown") return;
+    if (!placement?.shown) return;
     const next = paint(text());
     if (next.rows !== process.stdout.rows && !placement.zoomed)
       // Missed: the pane keeps its height, and the next draw asks again.
       resizeAnswered(
         await runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
-          "resize-pane",
+          "if-shell",
+          "-F",
           "-t",
           tmux.pane,
-          "-y",
-          String(next.rows),
+          "#{==:#{window_zoomed_flag},0}",
+          `resize-pane -t ${tmux.pane} -y ${next.rows}`,
         ]),
       );
     if (next.bytes !== painted) process.stdout.write(next.bytes);
@@ -317,7 +213,9 @@ async function drawBarPane(
   const focusAnswered = tmuxPatience(world.clock);
   let pressing: Promise<void> = Promise.resolve();
   const press = (link: string | undefined): void => {
+    const owner = placement?.owner;
     pressing = pressing.then(async () => {
+      if (owner !== placement?.owner) return;
       if (link !== undefined) {
         const sent = await tryClickViaDaemon(world, link);
         if (sent.kind !== "ok") fail(`click failed: ${describeFailure(sent)}`);
@@ -343,12 +241,9 @@ async function drawBarPane(
     if (chunk.includes("\x03")) process.exit(130);
     const read = readMouse(unread + chunk);
     unread = read.rest;
+    if (!following?.wire.attached || !placement?.shown) return;
     for (const event of read.events) {
-      const touch = touchOf(
-        following?.said.hits ?? [],
-        process.stdout.rows,
-        event,
-      );
+      const touch = touchOf(hits ?? [], process.stdout.rows, event);
       if (touch === null) continue;
       // [LAW:single-enforcer] Hover is where the pointer last was, whatever
       // moved it there: only a change of action is reported, so moving within
@@ -361,97 +256,50 @@ async function drawBarPane(
     }
   });
 
-  const follow = (sessionId: string | null): void => {
-    if (following?.sessionId === sessionId) return;
-    following?.follower.close();
-    // The pointer has not been seen over the session about to be drawn.
-    hover = null;
-    if (sessionId === null) {
-      following = null;
-      return;
-    }
-    const said: { latest: string | null; hits: HitMap | null } = {
-      latest: null,
-      hits: null,
-    };
-    // [LAW:one-source-of-truth] What a press can open is what the line said
-    // it can: a frame brings its hit map, cut to the lines the pane paints
-    // of it, and anything else the pane says (a refusal, a fault) has none.
-    const say = (line: string, hits: HitMap | null = null): void => {
-      said.latest = line;
-      said.hits = hits?.slice(0, paintedLines(line).length) ?? null;
-      redraw();
-    };
-    // A frame is the host's word that it holds the stream, and the facts the
-    // subscribe carried may be older than the pane's now: the first of each
-    // stream restates them.
-    const wire = { attached: false };
-    following = {
-      sessionId,
-      wire,
-      said,
-      say,
-      follower: followFrames(world, socketPath(world.host), sessionId, "pane", {
-        frame: (resp) => {
-          if (!wire.attached) {
-            wire.attached = true;
-            report();
-          }
-          const outcome = renderOutcomeOf(resp);
-          say(
-            planOutcome(outcome, world.host.env.XDG_STATE_HOME).output,
-            outcome.kind === "ok" && resp.ok && "hits" in resp
-              ? (resp.hits ?? null)
-              : null,
-          );
-        },
-        off: (resp) => {
-          wire.attached = false;
-          say(resp.error);
-        },
-        fault: (reason) => {
-          wire.attached = false;
-          say(reason);
-        },
-        exit: (reason) => die(new Error(reason)),
-        owner: facts,
-      }),
-    };
-  };
-
-  // [LAW:no-ambient-temporal-coupling] This loop is the one clock for where
-  // the pane is and whose bar it shows; the frames arrive on their own.
-  const placementAnswered = tmuxPatience(world.clock);
-  while (placement.kind !== "gone") {
-    if (placement.kind === "hidden") {
-      follow(null);
-    } else {
-      const found = await trySessionInPane(world, tmux.socket, pane);
-      if (found.kind === "ok") {
-        follow(found.value);
-        status =
-          found.value === null
-            ? `waiting for pane ${pane}'s statusline to render on ${socketPath(world.host)}`
-            : `waiting for pane ${pane}'s bar`;
-      } else {
-        status = describeFailure(found);
-      }
-    }
-    redraw();
-    await sleep(world.clock, "bar pane tick", TICK_MS);
-    const asked = await askPlacement(world, tmux, pane);
-    placementAnswered(asked);
-    if (asked.kind === "ok") {
-      placement = asked.placement;
-      // tmux's `mouse` option was switched: what the pane delivers changed,
-      // and a pointer it no longer sees is over nothing.
-      if (asked.delivered.join(" ") !== delivered.join(" ")) {
-        delivered = asked.delivered;
-        hover = null;
-        report();
-      }
-    }
-  }
-  follow(null);
-  process.stderr.write(`cc-candybar bar-pane: pane ${pane} closed\n`);
+  await new Promise<void>((resolve) => {
+    const stream = followPane(
+      socketPath(world.host),
+      hello,
+      world.clock,
+      ({ placement: next, frame: response }) => {
+        const changed = placement?.session !== next.session;
+        const pointerChanged =
+          placement?.owner !== next.owner ||
+          changed ||
+          placement?.mouse !== next.mouse ||
+          !following?.wire.attached;
+        if (changed) {
+          hits = null;
+          frame = null;
+          status = "waiting for pane " + pane + "'s bar";
+        }
+        if (!placement?.shown && next.shown) painted = "";
+        placement = next;
+        following = { sessionId: next.session, wire: { attached: next.shown } };
+        if (pointerChanged) {
+          hover = null;
+          if (next.shown) report();
+        }
+        if (response) {
+          const outcome = renderOutcomeOf(response);
+          frame = planOutcome(outcome, world.host.env.XDG_STATE_HOME).output;
+          hits =
+            outcome.kind === "ok" && response.ok && "hits" in response
+              ? (response.hits?.slice(0, paintedLines(frame).length) ?? null)
+              : null;
+        }
+        redraw();
+      },
+      (reason) => {
+        if (following) following.wire.attached = false;
+        fail(reason);
+      },
+      (reason) => {
+        stream.close();
+        process.stderr.write("cc-candybar bar-pane: " + reason + "\n");
+        process.stdin.pause();
+        resolve();
+      },
+    );
+  });
 }

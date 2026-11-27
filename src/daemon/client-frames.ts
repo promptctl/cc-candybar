@@ -11,6 +11,7 @@ import {
   parseResponse,
   type OwnerFacts,
   type Response,
+  type PaneEnrollment,
   type SubscribeRequest,
 } from "./foundations/protocol";
 import type { Lane } from "../config/lanes";
@@ -55,16 +56,8 @@ export function openFrameStream(
   // window receives frames solely to learn when the inset fits again.
   interest?: OwnerFacts | "measure-window",
 ): FrameStream {
-  let end: StreamEnd | null = null;
-  const finish = (why: StreamEnd): void => {
-    if (end !== null) return;
-    end = why;
-    sock.destroy();
-    onEnd(why);
-  };
   if (interest === "measure-window" && lane !== "window")
     throw new Error("Only the window lane can measure an inset");
-  const sock = net.createConnection({ path: sockPath });
   const subscribe: SubscribeRequest =
     interest === "measure-window"
       ? {
@@ -80,6 +73,33 @@ export function openFrameStream(
           lane,
           ...(interest !== undefined && { owner: interest }),
         };
+  return openStream(
+    sockPath,
+    subscribe,
+    (raw) => {
+      const resp = parseResponse(raw);
+      if (isRefusal(resp)) return resp;
+      onFrame(resp);
+      return null;
+    },
+    onEnd,
+  );
+}
+
+export function openStream(
+  sockPath: string,
+  subscribe: SubscribeRequest | PaneEnrollment,
+  read: (raw: unknown) => Refusal | null,
+  onEnd: (end: StreamEnd) => void,
+): FrameStream {
+  let end: StreamEnd | null = null;
+  const finish = (why: StreamEnd): void => {
+    if (end !== null) return;
+    end = why;
+    sock.destroy();
+    onEnd(why);
+  };
+  const sock = net.createConnection({ path: sockPath });
   sock.once("connect", () => sock.write(encodeFrame(subscribe)));
   sock.on(
     "data",
@@ -87,12 +107,8 @@ export function openFrameStream(
       (frame) => {
         // [LAW:parse-dont-validate] A frame that is no response throws its
         // ProtocolError into the failure below, as a malformed frame does.
-        const resp = parseResponse(frame);
-        if (isRefusal(resp)) finish({ kind: "refused", resp });
-        // [LAW:no-silent-failure] A consumer that cannot take a frame ends
-        // the stream it reads: the reader hands its throw to the failure
-        // below as its own, never as a malformed frame's.
-        else onFrame(resp);
+        const refusal = read(frame);
+        if (refusal) finish({ kind: "refused", resp: refusal });
         // [LAW:single-enforcer] An ended stream reads no more, so nothing
         // reaches `onFrame` after `onEnd`.
         return end === null ? "more" : "done";

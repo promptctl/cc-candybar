@@ -8,7 +8,7 @@ import {
   parseGesture,
 } from "../../src/click/gesture";
 import { MOUSE_OFF, MOUSE_ON, readMouse } from "../../src/bar-pane/mouse";
-import { deliveredIn } from "../../src/bar-pane/pointer";
+import { deliveredWithMouse } from "../../src/bar-pane/pointer";
 
 describe("what a surface delivers", () => {
   it("is every button with each subset of the modifiers, once, in canonical spelling", () => {
@@ -41,18 +41,14 @@ describe("what a surface delivers", () => {
   });
 
   it("follows tmux's mouse option: every gesture tmux forwards and hover while it is on, the plain click while off", () => {
-    // tmux's `#{mouse}` after the daemon's six fields, on the pane's own line.
-    const listed = (own: string, mouse: string): string =>
-      `%3 $1 1 1 0 1 1\n${own} $1 1 1 0 0 ${mouse}\n`;
     // tmux's default binding opens its pane menu on alt+right: the pane never
     // sees it, so it is not claimed.
-    expect(deliveredIn(listed("%4", "1"), "%4")).toEqual([
+    expect(deliveredWithMouse(true)).toEqual([
       ...ALL_GESTURES.filter((g) => g !== "alt+right"),
       "hover",
     ]);
-    expect(deliveredIn(listed("%4", "1"), "%4")).toContain("alt+left");
-    expect(deliveredIn(listed("%4", "0"), "%4")).toEqual(["left"]);
-    expect(deliveredIn("", "%4")).toEqual(["left"]);
+    expect(deliveredWithMouse(true)).toContain("alt+left");
+    expect(deliveredWithMouse(false)).toEqual(["left"]);
   });
 });
 

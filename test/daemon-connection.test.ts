@@ -25,11 +25,7 @@ import {
   type Request,
   type Response,
 } from "../src/daemon/foundations/protocol";
-import {
-  replyOf,
-  type HandledRequest,
-  type Reply,
-} from "../src/daemon/reply";
+import { replyOf, type HandledRequest, type Reply } from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { barOf } from "./helpers/drawn-frame";
@@ -139,6 +135,9 @@ describe("a connection over a stream", () => {
     log: () => {},
     clock: systemTimekeeper,
     handle: async () => replyWith(),
+    enroll: () => {
+      throw new Error("unexpected physical enrollment");
+    },
     subscribe: (_sessionId, subscriber) => {
       subscriptions.push(subscriber);
       return unsubscribe;
@@ -330,7 +329,9 @@ describe("a connection over a stream", () => {
     const ids = requests.map((r) => r.accepted().id);
     expect(new Set(ids).size).toBe(2);
     expect(clients.map((c) => c.received)).toEqual(
-      ids.map((request) => [expect.objectContaining({ code: "TIMEOUT", request })]),
+      ids.map((request) => [
+        expect.objectContaining({ code: "TIMEOUT", request }),
+      ]),
     );
   });
 
@@ -385,9 +386,7 @@ describe("a connection over a stream", () => {
     const daemon = standIn({ handle: request.handle });
     const { client, received } = open(daemon);
     client.allowHalfOpen = true;
-    client.write(
-      encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }),
-    );
+    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     await settled();
     request.answer(landedAnswer(landing));
     await settled();
@@ -636,7 +635,11 @@ describe("a connection over a stream", () => {
     const { client, received, ended } = open(standIn({ handle }));
     client.write(Buffer.concat([encodeFrame(STATS), encodeFrame(STATS)]));
     await settled();
-    expect({ handled: handle.mock.calls.length, received, ended: ended() }).toEqual({
+    expect({
+      handled: handle.mock.calls.length,
+      received,
+      ended: ended(),
+    }).toEqual({
       handled: 1,
       received: [ANSWER],
       ended: true,
@@ -743,7 +746,11 @@ describe("a connection over a stream", () => {
     const { send, received, ended } = open(daemon);
     send(STATS);
     await settled();
-    expect({ received, ended: ended(), inFlight: daemon.stats.inFlight }).toEqual({
+    expect({
+      received,
+      ended: ended(),
+      inFlight: daemon.stats.inFlight,
+    }).toEqual({
       received: [
         expect.objectContaining({
           ok: false,
@@ -822,6 +829,68 @@ describe("a connection over a stream", () => {
       exits: [],
       inFlight: 0,
       logged: [["error", expect.stringContaining("the handler broke")]],
+    });
+  });
+
+  describe("a physical pane enrollment", () => {
+    const hello = {
+      socket: "/fixture/tmux",
+      source: "%0",
+      drawing: "%1",
+      serverPid: 11,
+      followerPid: 12,
+      instance: "71c4f55c-bd24-4d12-8ae4-1558f57efa7c",
+    };
+    const request = {
+      v: PROTOCOL_VERSION,
+      kind: "pane-enroll",
+      ...hello,
+    } as const;
+    const handled = { kind: "pane-enroll", hello } as const;
+
+    test("carries positive assignment and a new session's frame until the physical peer hangs up", async () => {
+      const placement = {
+        owner: hello.instance,
+        session: sessionIdOf("first"),
+        shown: true,
+        zoomed: false,
+        mouse: true,
+      };
+      const next = { ...placement, session: sessionIdOf("second") };
+      const leave = jest.fn();
+      const conn = open(
+        standIn({
+          handle: async () => handled,
+          enroll: (identity, stream) => {
+            expect(identity).toEqual(hello);
+            stream.update(placement, null);
+            stream.update(next, JSON.stringify(ANSWER));
+            return leave;
+          },
+        }),
+      );
+      conn.send(request);
+      await settled();
+      expect(conn.received).toEqual([
+        { kind: "pane-state", ...placement, frame: null },
+        { kind: "pane-state", ...next, frame: ANSWER },
+      ]);
+      conn.client.destroy();
+      await settled();
+      expect(leave).toHaveBeenCalledTimes(1);
+    });
+
+    test("a hello answered after its peer hangs up never acquires ownership", async () => {
+      const pending = held();
+      const enroll = jest.fn();
+      const conn = open(standIn({ handle: pending.handle, enroll }));
+      conn.send(request);
+      await settled();
+      conn.client.destroy();
+      await settled();
+      pending.answer(handled);
+      await settled();
+      expect(enroll).not.toHaveBeenCalled();
     });
   });
 
@@ -1068,13 +1137,20 @@ describe("a connection over a stream", () => {
       const confirmed = new Map<string, boolean>();
       const frame = (name: string): void => {
         const resp: Response = { ok: true, output: name.repeat(128 * 1024) };
-        subscriptions[0]!.frame(JSON.stringify(resp), (ok) => confirmed.set(name, ok));
+        subscriptions[0]!.frame(JSON.stringify(resp), (ok) =>
+          confirmed.set(name, ok),
+        );
       };
       ["a", "b", "c", "d"].forEach(frame);
       await settled();
       client.resume();
       await until(() => received.length >= 2, "the newest frame");
-      expect(Object.fromEntries(confirmed)).toEqual({ a: true, b: false, c: false, d: true });
+      expect(Object.fromEntries(confirmed)).toEqual({
+        a: true,
+        b: false,
+        c: false,
+        d: true,
+      });
 
       expect(received.map((r) => "output" in r && r.output[0])).toEqual([
         "a",

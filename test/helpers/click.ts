@@ -43,7 +43,6 @@ import type {
 import { ActsOnTheirWay } from "../../src/renderer/acts";
 import { Acts, outlives, type ActPrograms, type ActDeps } from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
-import type { BarPaneEdge, BarPaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
 import {
   heardContextOf,
@@ -408,14 +407,6 @@ export function testActs(
     detach: systemTimekeeper.detach,
     programsFor: () => ({ launch, claudeInput }),
     run: missing("run"),
-    barPane: {
-      edge: new Proxy({} as BarPaneEdge, {
-        get: (_, k) => missing(`lane ${String(k)}`),
-      }),
-      host: new Proxy({} as BarPaneHost, {
-        get: (_, k) => missing(`lane ${String(k)}`),
-      }),
-    },
     closing: () => false,
     log,
     ...rest,

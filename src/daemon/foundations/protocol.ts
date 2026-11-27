@@ -539,7 +539,19 @@ export interface PaneSessionRequest {
   pane: string;
 }
 
+export interface PaneHello {
+  readonly socket: string;
+  readonly source: string;
+  readonly drawing: string;
+  readonly serverPid: number;
+  readonly followerPid: number;
+  readonly instance: string;
+}
+
+export type PaneEnrollment = PaneHello & { v: number; kind: "pane-enroll" };
+
 export type Request =
+  | PaneEnrollment
   | ReaderRenderRequest
   | SessionRenderRequest
   | SubscribeRequest
