@@ -75,7 +75,7 @@ import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, readingsAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
-import type { SessionStores } from "./host-sessions.js";
+import type { PublishedSession, SessionStores } from "./host-sessions.js";
 import {
   reportLine,
   reportText,
@@ -521,6 +521,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
   const stores = inputs.sessionStores(log);
+
   const sessionWriters = new KeyedSerialQueue<SessionId>(
     clock.detach,
     (session) => `session ${session} writer`,
@@ -531,6 +532,30 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     inputs.rendererEntry ?? bundle.path,
   );
   const renderers = new Map<RendererName, RendererRuntime>();
+  const publishSession =
+    (writer: string): PublishedSession =>
+    (revision, accepted) => {
+      const commit = encodeSessionCommit({
+        kind: "session-commit",
+        revision,
+        writes: accepted,
+        ...readingsAt(clock),
+      });
+      const recipients: string[] = [];
+      for (const [peer, target] of renderers) {
+        const generation = target.link.observe(commit);
+        if (generation !== null) recipients.push(`${peer}[${generation}]`);
+      }
+      log(
+        "info",
+        eventLine("session commit", [
+          ["revision", String(revision)],
+          ["writer", writer],
+          ["bytes", String(commit.bytes)],
+          ["recipients", recipients.join(",") || "-"],
+        ]),
+      );
+    };
   // [LAW:one-source-of-truth] A session's accepted render request selects
   // the renderer that receives its subsequent world state and viewer inputs.
   const routes = new Map<
@@ -841,6 +866,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     deliver: (event) => {
       const session =
         event.kind === "retire" ? event.session : event.worldState.session;
+      if (event.kind === "retire")
+        clock.detach("retire shared session", () =>
+          stores.retire(session, publishSession("host")),
+        );
       const route = routes.get(session);
       const renderer = (renderers.get(nameOf(session)) ?? primary).renderer;
       return renderer
@@ -1013,33 +1042,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           frameFeeds.took(name, routed, settled);
         },
         prepare: (writes, heard) =>
-          stores.prepare(
-            writes,
-            (revision, accepted) => {
-              const commit = encodeSessionCommit({
-                kind: "session-commit",
-                revision,
-                writes: accepted,
-                ...readingsAt(clock),
-              });
-              const recipients: string[] = [];
-              for (const [peer, target] of renderers) {
-                const generation = target.link.observe(commit);
-                if (generation !== null)
-                  recipients.push(`${peer}[${generation}]`);
-              }
-              log(
-                "info",
-                eventLine("session commit", [
-                  ["revision", String(revision)],
-                  ["writer", name],
-                  ["bytes", String(commit.bytes)],
-                  ["recipients", recipients.join(",") || "-"],
-                ]),
-              );
-            },
-            heard,
-          ),
+          stores.prepare(writes, publishSession(name), heard),
         holding: (session) => collector.holding(session),
         recorded: () => {},
       },

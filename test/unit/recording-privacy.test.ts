@@ -772,3 +772,79 @@ test("recording inspects each end of a Back visit, including visits ahead of the
     ]),
   ).toBeNull();
 });
+
+test("recordings inspect the pinned draft, staged files, private redo and future Back visits", () => {
+  const base = {
+    origin: { projectDir: ROOT, cwd: ROOT, target: { source: "search" } },
+    chain: [],
+  } as const;
+  const draft = {
+    base,
+    picks: {},
+    files: {},
+    history: { past: [], future: [] },
+    navigation: { visits: [], cursor: 0 },
+  };
+  const boot = (
+    value: NonNullable<RendererBoot["stored"]["drafts"]>[typeof SESSION],
+  ) =>
+    recordingBootProblem({
+      ...BOOT,
+      stored: { ...BOOT.stored, drafts: { [SESSION]: value } },
+    });
+  expect(boot({...draft,picks:{[EDIT_MODE_KEY]:"arrange"}})).toBeNull();
+  expect(boot({...draft,picks:{[EDIT_MODE_KEY]:SECRET}})).toMatch(/unknown origin/);
+  expect(
+    boot({ ...draft, base: { ...base, chain: snapshot(ACTION_CONFIG).chain } }),
+  ).toMatch(/environment/);
+  expect(boot({ ...draft, files: { "/p": ACTION_CONFIG } })).toMatch(
+    /environment/,
+  );
+  expect(
+    boot({
+      ...draft,
+      history: {
+        past: [],
+        future: [
+          [
+            {
+              kind: "session",
+              key: "private-pick",
+              before: null,
+              after: SECRET,
+            },
+          ],
+        ],
+      },
+    }),
+  ).toMatch(/unknown origin/);
+  expect(
+    boot({
+      ...draft,
+      navigation: {
+        cursor: 0,
+        visits: [[{ key: SETTINGS_ANCHOR, from: SECRET, to: DISCLOSURE_OPEN }]],
+      },
+    }),
+  ).toMatch(/unknown origin/);
+  expect(
+    recordingWritesProblem([
+      {
+        store: "draft",
+        key: SESSION,
+        kind: "modify",
+        changes: [{ kind: "pick", key: "secret-key" }],
+      },
+    ]),
+  ).toMatch(/unknown origin/);
+  expect(
+    recordingWritesProblem([
+      {
+        store: "draft",
+        key: SESSION,
+        kind: "modify",
+        changes: [{ kind: "file", key: "/p", value: ACTION_CONFIG }],
+      },
+    ]),
+  ).toMatch(/environment/);
+});

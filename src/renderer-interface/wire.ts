@@ -23,6 +23,7 @@ import { failureOf } from "../daemon/foundations/host-failure.js";
 import type { Crosses } from "./crosses.js";
 import type { LogLine } from "../utils/logger.js";
 import {
+  RENDERER_WIRE_VERSION,
   type RendererBoot,
   type RendererDiagnostics,
   type RendererOutput,
@@ -34,10 +35,7 @@ import {
   type SessionObservation,
 } from "./interface.js";
 
-// [LAW:one-source-of-truth] Change this when the private renderer transport
-// becomes incompatible. A build digest identifies a build, and carries no
-// compatibility decision.
-export const RENDERER_WIRE_VERSION = 31;
+export { RENDERER_WIRE_VERSION } from "./interface.js";
 export const SESSION_DELIVERY_LIMIT = {
   revisions: 256,
   bytes: 1024 * 1024,
@@ -71,7 +69,8 @@ type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 function isRendererWrite(raw: unknown) {
   return (
     isStoreWrite(raw) &&
-    (raw.kind === "patch" ||
+    (raw.store === "draft" ||
+      raw.kind === "patch" ||
       raw.kind === "navigate" ||
       (raw.kind === "steps" &&
         raw.edits.length > 0 &&

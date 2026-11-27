@@ -158,6 +158,7 @@ export class SettingsHistory {
     private readonly logger: DaemonLogger,
     loaded: StoredState["history"] = {},
     private readonly owner: CapacityOwner | "private" = "renderer",
+    private readonly privateEdits?: (edits: readonly HistoryEdit[]) => void,
   ) {
     if (owner !== "host") this.index = new HistoryIndex(true);
     runInAction(() => {
@@ -189,7 +190,10 @@ export class SettingsHistory {
   }
 
   private record(session: SessionId, edits: readonly HistoryEdit[]): void {
-    if (this.owner === "private") return;
+    if (this.owner === "private") {
+      this.privateEdits?.(edits);
+      return;
+    }
     this.moved.put(session);
     if (this.index && !this.held.has(session))
       this.edits.set(session, [{ kind: "clear" }]);

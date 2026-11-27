@@ -13,6 +13,7 @@ import {
   stageNavigation,
   type Timeline,
 } from "../renderer-interface/navigation.js";
+import { DraftBook } from "../renderer-interface/draft.js";
 import { RecencyMap } from "../utils/recency.js";
 import {
   durableHistory,
@@ -127,6 +128,7 @@ function publicEdits(
 export class HostSessionImage {
   private readonly picks = new RecencyMap<SessionId, Map<string, string>>();
   private readonly histories: HistoryIndex;
+  private readonly drafts = new DraftBook();
   private readonly navigation = new RecencyMap<SessionId, Timeline>();
   constructor(seed: StoredState, purpose: "live" | "recovery" = "live") {
     this.histories = new HistoryIndex(purpose === "live");
@@ -134,6 +136,10 @@ export class HostSessionImage {
       this.picks.set(id as SessionId, new Map(Object.entries(picks)));
     for (const [id, history] of Object.entries(seed.history))
       this.setHistory(id as SessionId, history);
+  }
+
+  hasDraft(session: SessionId): boolean {
+    return this.drafts.get(session) !== undefined;
   }
 
   snapshot(scope: "live"): LiveSessionState;
@@ -154,7 +160,9 @@ export class HostSessionImage {
       const kept = scope === "live" ? value : durableHistory(value);
       if (kept !== null) history.set(id, kept);
     }
+    const drafts = scope === "live" ? this.drafts.snapshot() : undefined;
     return {
+      ...(drafts && { drafts }),
       sessions: Object.fromEntries(sessions),
       history: Object.fromEntries(history),
       ...(scope === "live" &&
@@ -241,6 +249,9 @@ export class HostSessionImage {
     // One bad peer message cannot land half a transaction.
     const staged = new Map<SessionId, SessionHistory>();
     const histories: Array<{ next: SessionHistory; edits: DurableEdit[] }> = [];
+    const applyDrafts = this.drafts.prepare(
+      writes.filter((w) => w.store === "draft"),
+    );
     const navigation = stageNavigation(
       writes,
       (key) => this.navigation.get(key) ?? EMPTY_TIMELINE,
@@ -259,6 +270,7 @@ export class HostSessionImage {
       histories.push({ next: prior, edits });
     }
     return () => {
+      applyDrafts();
       const durable = this.apply(writes, histories, navigation);
       const expired = this.bound();
       if (!expired.writes.length) return { writes, durable };
@@ -277,7 +289,7 @@ export class HostSessionImage {
     let at = 0;
     const durable: DurableWrite[] = [];
     for (const write of writes) {
-      if (write.store === "navigation") continue;
+      if (write.store === "navigation" || write.store === "draft") continue;
       const heard = {
         kind: "heard",
         store: write.store,

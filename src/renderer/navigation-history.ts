@@ -99,6 +99,7 @@ export class NavigationHistory {
   constructor(
     private readonly shared = false,
     initial: Readonly<Record<SessionId, Timeline>> = {},
+    private readonly localEdit?: (edit: NavigationEdit) => void,
   ) {
     runInAction(() => {
       for (const [id, timeline] of Object.entries(initial))
@@ -268,7 +269,10 @@ export class NavigationHistory {
         if (this.shared) {
           if (!this.prior.has(move.key)) this.prior.set(move.key, before);
           this.pending.push(move);
-        } else this.timelines.delete(move.key);
+        } else {
+          this.localEdit?.(move.edit);
+          this.timelines.delete(move.key);
+        }
         this.install(move.key, navigationAfter(before, move.edit));
       }
       if (!this.shared)

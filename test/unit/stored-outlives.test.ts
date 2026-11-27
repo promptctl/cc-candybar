@@ -39,7 +39,7 @@ test("a session's picks load without each key this build reads nothing of, and n
     value: {
       value: { [live]: "applyTheme", theme: "nord" },
       dropped: [
-        { part: EDIT_MODE_KEY, why: "no edit outlives the renderer" },
+        { part: EDIT_MODE_KEY, why: "edit-mode picks belong to the live draft" },
         {
           part: "menus.picker.applyTheme",
           why: "no menu is keyed that way in this build",
@@ -62,7 +62,7 @@ test("a session holding only what this build reads nothing of takes no slot", ()
     SESSION_STATE_FILE.parse({ [EDIT_CONFIGURE_KEY]: "default:clock" }),
   ).toEqual({
     kind: "failed",
-    reason: `holds only picks this build reads nothing of: ${EDIT_CONFIGURE_KEY} (no edit outlives the renderer)`,
+    reason: `holds only picks this build reads nothing of: ${EDIT_CONFIGURE_KEY} (edit-mode picks belong to the live draft)`,
   });
 });
 

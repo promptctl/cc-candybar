@@ -1723,6 +1723,9 @@ function journaled<C extends DaemonContext>(
   // original draft and its undo and redo history.
   const consequence = (_effects: Effect[], sessionCommitted?: true): void => {
     if (requested.finish === "save" && saved === null) return;
+    // The host has already decided a guarded Save, including ending the
+    // draft. Its receipt can arrive after a peer has opened the next edit.
+    if (sessionCommitted && saved !== null && ctx.edits.shared) return;
     const failed: unknown[] = [];
     let visits: EndedVisits = new Map();
     try {
@@ -1754,7 +1757,8 @@ function journaled<C extends DaemonContext>(
         // (one drawn before its edit closed) has no edit for those writes to
         // mean anything in.
         if (entering) {
-          ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
+          if (!(sessionCommitted && ctx.edits.shared))
+            ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
         } else if (edited.size > 0) failed.push(staleEdit(edited.keys()));
       } else if (saved !== null) {
@@ -1779,6 +1783,18 @@ function journaled<C extends DaemonContext>(
   try {
     ctx.configWrites.seal(effects, sid, consequence, () => [
       ...((saved ?? (edit === undefined ? journal : null))?.proposed() ?? []),
+      ...(saved !== null
+        ? ctx.edits.closing(sid)
+        : edit === undefined &&
+            origin !== null &&
+            aside.held(sid).get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE
+          ? ctx.edits.opening(
+              sid,
+              origin,
+              ctx.snapshotFor(origin),
+              aside.held(sid),
+            )
+          : []),
       ...(edit === undefined
         ? navigation.proposed()
         : saved !== null

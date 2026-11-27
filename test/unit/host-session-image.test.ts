@@ -1,3 +1,5 @@
+import { HostSessions } from "../../src/daemon/host-sessions";
+import { rendererNameOf } from "../../src/daemon/foundations/renderer-name";
 import { HostSessionImage } from "../../src/daemon/host-session-image";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import {
@@ -211,4 +213,110 @@ test("Back history is live across peers, its cap drops the oldest session, and a
   ).toThrow(/expected cursor 2/);
   expect(host.snapshot("live").sessions).toEqual({});
   expect(host.snapshot("live").navigation![newest]?.cursor).toBe(1);
+});
+
+test("open drafts preserve explicit absence and private history only until the host lifetime ends", () => {
+  const host = new HostSessionImage(EMPTY_STORED_STATE);
+  const base = {
+    origin: { projectDir: "/p", cwd: "/p", target: { source: "search" } },
+    chain: [
+      {
+        role: "user",
+        path: "/p/bar.json",
+        content: { kind: "text", text: "{}" },
+      },
+    ],
+  } as const;
+  const take = (...writes: StoreWrite[]) => host.prepare(writes)();
+  expect(
+    take({ store: "draft", kind: "open", key: a, base, picks: {} }).durable,
+  ).toEqual([]);
+  expect(
+    take({
+      store: "draft",
+      kind: "modify",
+      key: a,
+      changes: [
+        { kind: "file", key: "/p/bar.json", value: null },
+        { kind: "pick", key: "theme", value: null },
+        {
+          kind: "history",
+          edit: { kind: "append", step: [change("theme", "private-secret")] },
+        },
+        { kind: "history", edit: { kind: "undo" } },
+      ],
+    }).durable,
+  ).toEqual([]);
+  const before = host.snapshot("live");
+  expect(before.drafts?.[a]?.files).toEqual({ "/p/bar.json": null });
+  expect(before.drafts?.[a]?.history.future).toEqual([
+    [change("theme", "private-secret")],
+  ]);
+  expect(() =>
+    take(
+      {
+        store: "session-state",
+        kind: "patch",
+        key: b,
+        changes: { foo: "refused" },
+      },
+      {
+        store: "draft",
+        kind: "modify",
+        key: a,
+        changes: [
+          { kind: "pick", key: "theme", value: "refused" },
+          { kind: "history", edit: { kind: "undo" } },
+        ],
+      },
+    ),
+  ).toThrow();
+  expect(host.snapshot("live")).toEqual(before);
+  expect(
+    take({
+      store: "draft",
+      kind: "modify",
+      key: a,
+      changes: [
+        { kind: "file", key: "/p/bar.json" },
+        { kind: "pick", key: "theme" },
+      ],
+    }).durable,
+  ).toEqual([]);
+  expect(host.snapshot("live").drafts?.[a]).toMatchObject({
+    files: {},
+    picks: {},
+  });
+  expect(host.snapshot("durable")).toEqual(EMPTY_STORED_STATE);
+  expect(take({ store: "draft", kind: "close", key: a }).durable).toEqual([]);
+  expect(host.snapshot("live")).toEqual(EMPTY_STORED_STATE);
+});
+
+test("session retirement closes an unsaved edit even when there is no renderer to answer", () => {
+  const sessions = new HostSessions();
+  sessions.load();
+  sessions.take([
+    {
+      store: "draft",
+      kind: "open",
+      key: a,
+      base: {
+        origin: { projectDir: "/p", cwd: "/p", target: { source: "search" } },
+        chain: [],
+      },
+      picks: {},
+    },
+  ]);
+  const seen = jest.fn();
+  sessions.retire(b, seen);
+  expect(seen).not.toHaveBeenCalled();
+  sessions.retire(a, seen);
+  expect(seen).toHaveBeenCalledWith(2, [
+    { store: "draft", kind: "close", key: a },
+  ]);
+  expect(
+    sessions.current(rendererNameOf("replacement")).state.drafts,
+  ).toBeUndefined();
+  sessions.retire(a, seen);
+  expect(seen).toHaveBeenCalledTimes(1);
 });

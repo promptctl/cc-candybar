@@ -30,12 +30,17 @@ export interface SessionPersistence {
   ): Promise<void>;
 }
 
+export type PublishedSession = (
+  revision: number,
+  writes: readonly StoreWrite[],
+) => void;
 export interface SessionStores {
+  retire(session: SessionId, published: PublishedSession): void;
   load(): readonly StoreReport[];
   current(name: RendererName): SessionCheckpoint<LiveSessionState>;
   prepare(
     writes: readonly StoreWrite[],
-    published?: (revision: number, writes: readonly StoreWrite[]) => void,
+    published?: PublishedSession,
     heard?: SessionId,
   ): () => void;
   close(): Promise<void>;
@@ -102,15 +107,19 @@ export class HostSessions implements SessionStores {
     if (!this.closed)
       this.disk?.append(this.revision, durable, this.checkpoint);
   }
-  take(
-    writes: readonly StoreWrite[],
-    published?: (revision: number, writes: readonly StoreWrite[]) => void,
-  ): void {
+  // Only the collector ends the session. A renderer releasing its surface
+  // or failing to answer cannot discard the user's edit.
+  retire(session: SessionId, published: PublishedSession): void {
+    if (this.image?.hasDraft(session))
+      this.take([{ store: "draft", kind: "close", key: session }], published);
+  }
+
+  take(writes: readonly StoreWrite[], published?: PublishedSession): void {
     this.prepare(writes, published)();
   }
   prepare(
     writes: readonly StoreWrite[],
-    published?: (revision: number, writes: readonly StoreWrite[]) => void,
+    published?: PublishedSession,
     heard?: SessionId,
   ): () => void {
     if (!this.image)

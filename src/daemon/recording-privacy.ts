@@ -1,3 +1,4 @@
+import type { DraftBase, DraftChange } from "../renderer-interface/draft.js";
 import type { Visit } from "../renderer-interface/navigation.js";
 import { VERB_SET_STATE } from "../click/wire.js";
 import type { SessionId } from "./foundations/session-id.js";
@@ -5,6 +6,11 @@ import type { DrawnEffect } from "../render/drawn-link.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import { HOVER_KEY, NO_HOVER } from "../config/click-mode.js";
 import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
+import {
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../config/loader/edit-mode.js";
+import { DISCLOSURE_CLOSED } from "../config/disclosure.js";
 import { DIAGNOSTICS_CLOSED } from "../config/door.js";
 import {
   FIRST_PAGE,
@@ -340,11 +346,69 @@ function visitProblem(
   return null;
 }
 
+function pinnedProblem(base: DraftBase): string | null {
+  for (const { content } of base.chain) {
+    if (content.kind === "unreadable") return UNKNOWN_CONFIG;
+    if (content.kind === "text") {
+      const problem = configTextProblem(content.text);
+      if (problem !== null) return problem;
+    }
+  }
+  return null;
+}
+
+// The editor's own mode has a fixed public vocabulary. Other edit keys can
+// contain placement names or freely authored picks and need provenance.
+const publicEditMode = (key: string, value: string | null): boolean =>
+  key === EDIT_MODE_KEY &&
+  (value === null ||
+    value === EDIT_MODE_ARRANGE ||
+    value === DISCLOSURE_CLOSED);
+
+function draftChangeProblem(
+  change: DraftChange,
+  offered: (key: string, value: string | null) => boolean,
+): string | null {
+  switch (change.kind) {
+    case "history":
+      return editsProblem([change.edit]);
+    case "navigation":
+      return change.edit.kind === "visit"
+        ? visitProblem(change.edit.changes, offered)
+        : null;
+    case "file":
+      return typeof change.value === "string"
+        ? configTextProblem(change.value)
+        : null;
+    case "pick":
+      return knownPick(change.key, change.value ?? null) ||
+        offered(change.key, change.value ?? null)
+        ? null
+        : UNKNOWN_PROFILE;
+  }
+}
+
 export function recordingWritesProblem(
   writes: readonly StoreWrite[],
   controls?: RecordingControls,
 ): string | null {
   for (const write of writes) {
+    if (write.store === "draft") {
+      const offered = (key: string, value: string | null) =>
+        publicEditMode(key, value) ||
+        controls?.offers(write.key, key, value) === true;
+      if (write.kind === "open") {
+        const problem =
+          pinnedProblem(write.base) ?? picksProblem(write.picks, offered);
+        if (problem) return problem;
+      } else if (write.kind === "modify") {
+        for (const change of write.changes) {
+          const problem = draftChangeProblem(change, offered);
+          if (problem) return problem;
+        }
+      }
+      continue;
+    }
     const problem =
       write.kind === "navigate" && write.edit.kind === "visit"
         ? visitProblem(
@@ -460,6 +524,20 @@ function editsProblem(edits: readonly HistoryEdit[]): string | null {
 // [LAW:single-enforcer] Starting a capture and appending a turn inspect the
 // same state, including names of erased picks and both sides of an undo.
 export function recordingBootProblem({ stored }: RendererBoot): string | null {
+  for (const draft of Object.values(stored.drafts ?? {})) {
+    const problem =
+      pinnedProblem(draft.base) ??
+      picksProblem(draft.picks, publicEditMode) ??
+      stepsProblem(draft.history.past) ??
+      stepsProblem(draft.history.future);
+    if (problem) return problem;
+    for (const text of Object.values(draft.files)) {
+      const fileProblem = text === null ? null : configTextProblem(text);
+      if (fileProblem) return fileProblem;
+    }
+    for (const visit of draft.navigation.visits)
+      if (visitProblem(visit) !== null) return UNKNOWN_PROFILE;
+  }
   for (const timeline of Object.values(stored.navigation ?? {}))
     for (const visit of timeline.visits)
       if (visitProblem(visit) !== null) return UNKNOWN_PROFILE;

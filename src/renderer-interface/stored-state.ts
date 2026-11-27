@@ -15,6 +15,12 @@ import {
   type NavigationWrite,
   type Timeline,
 } from "./navigation.js";
+import {
+  isDraftWrite,
+  parseDraft,
+  type DraftWrite,
+  type DraftSnapshot,
+} from "./draft.js";
 import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
 import { kept, type Kept } from "../daemon/foundations/stored-file";
@@ -39,6 +45,7 @@ export interface StoredState {
 // [LAW:types-are-the-program] A peer boot also carries the host's live
 // navigation. The durable profile has no field that can store its visits.
 export interface LiveSessionState extends StoredState {
+  readonly drafts?: Readonly<Record<SessionId, DraftSnapshot>>;
   readonly navigation?: Readonly<Record<SessionId, Timeline>>;
 }
 
@@ -65,7 +72,7 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
 // never cleared, so it would sit in the profile for good; a click error that
 // does not parse would throw in every render of its session.
 function retiredBecause(key: string, value: string): string | undefined {
-  if (isEditModeKey(key)) return "no edit outlives the renderer";
+  if (isEditModeKey(key)) return "edit-mode picks belong to the live draft";
   // [LAW:one-source-of-truth] Keep the two key/value pairs the old release saved.
   // Both keys still serve other members. Changing today's shared-menu key
   // encoder cannot change the spelling on an old profile's disk.
@@ -149,6 +156,9 @@ export function liveSessionStateOf(raw: unknown): LiveSessionState {
   const fields = profileFields(raw);
   return {
     ...profileOf(fields),
+    ...(fields.drafts !== undefined && {
+      drafts: sessionsOf(fields.drafts, "drafts", parseDraft),
+    }),
     ...(fields.navigation !== undefined && {
       navigation: sessionsOf(fields.navigation, "navigation", parseTimeline),
     }),
@@ -246,9 +256,10 @@ export function isProfileWrite<E>(
   );
 }
 
-export type StoreWrite = ProfileWrite | NavigationWrite;
+export type StoreWrite = ProfileWrite | NavigationWrite | DraftWrite;
 
 export function isStoreWrite(raw: unknown): raw is StoreWrite {
+  if (isPlainObject(raw) && raw.store === "draft") return isDraftWrite(raw);
   if (!isPlainObject(raw) || raw.store !== "navigation")
     return isProfileWrite(raw, isHistoryEdit);
   return (

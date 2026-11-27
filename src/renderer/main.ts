@@ -88,6 +88,7 @@ import {
   type PushedFrame,
   type ReplyTo,
   type Renderer,
+  RENDERER_WIRE_VERSION,
   type RendererBoot,
   type RendererConstruction,
   type SessionRenderer,
@@ -683,21 +684,14 @@ function closeIdleMenus(
 export function mainRendererOf(
   inputs: RendererBoot,
   identifyCompile?: StateDeps["identifyCompile"],
-  capacity: CapacityOwner = "host",
-  sharedNavigation = true,
+  wireVersion: number = RENDERER_WIRE_VERSION,
 ): RendererConstruction {
   const turnLog = new TurnLog();
   return turnLog.during<RendererConstruction>(() => {
     try {
       return {
         kind: "built",
-        renderer: build(
-          inputs,
-          turnLog,
-          identifyCompile,
-          capacity,
-          sharedNavigation,
-        ),
+        renderer: build(inputs, turnLog, identifyCompile, wireVersion),
       };
     } catch (thrown) {
       return { kind: "refused", failure: rendererFailureOf(thrown) };
@@ -709,9 +703,11 @@ function build(
   inputs: RendererBoot,
   turnLog: TurnLog,
   identifyCompile: StateDeps["identifyCompile"],
-  capacity: CapacityOwner,
-  sharedNavigation: boolean,
+  wireVersion: number,
 ): SessionRenderer {
+  // [LAW:one-source-of-truth] Replay uses the ownership contract of the
+  // recorded wire. Live construction always selects the current contract.
+  const capacity: CapacityOwner = wireVersion < 29 ? "renderer" : "host";
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
@@ -723,7 +719,14 @@ function build(
     inputs.stored.sessions,
     capacity === "host" ? "host" : undefined,
   );
-  const edits = new EditTransactions(store, log);
+  const edits: EditTransactions = new EditTransactions(
+    store,
+    log,
+    wireVersion >= 32,
+    inputs.stored.drafts,
+    (origin) =>
+      renderCache.holdsConfig(origin) ? renderCache.snapshotFor(origin) : null,
+  );
   // [LAW:one-source-of-truth] Every reader takes the session as its open
   // edit shows it.
   const sessionState = edits.view;
@@ -742,7 +745,7 @@ function build(
     holdClickError(sessionState, session, reason, now());
   const acts = new ActsOnTheirWay(mint, actFailed);
   const navigationHistory = new NavigationHistory(
-    sharedNavigation,
+    wireVersion >= 31,
     inputs.stored.navigation,
   );
   const worldStates = new WorldStates();
@@ -881,6 +884,7 @@ function build(
       "session-state": store,
       "settings-history": settingsHistory,
       navigation: navigationHistory,
+      draft: edits,
     },
   );
   let revision = inputs.sessionRevision;
@@ -912,11 +916,15 @@ function build(
           const navigation = stageNavigation(commit.writes, (key) =>
             navigationHistory.beforeCommit(key),
           );
+          const applyDrafts = edits.prepare(
+            commit.writes.filter((w) => w.store === "draft"),
+          );
           return feeds.observe(() =>
             runInAction(() => {
               let at = 0;
               for (const write of commit.writes) {
-                if (write.store === "navigation") continue;
+                if (write.store === "navigation" || write.store === "draft")
+                  continue;
                 else if (write.store === "session-state") store.observe(write);
                 else if (write.kind === "heard")
                   settingsHistory.observeHearing(write.key);
@@ -924,7 +932,15 @@ function build(
               }
               for (const [key, timeline] of navigation)
                 navigationHistory.observe(key, timeline);
+              const refreshed = applyDrafts();
               revision = commit.revision;
+              for (const sid of refreshed) {
+                renderCache.refreshEditedView(sid);
+                // A passive peer can hear an entire edit without ever
+                // owning this session's view. Release its local revision
+                // when the edit ends, just as a view retirement would.
+                if (worldStates.contextOf(sid) === null) edits.retire(sid);
+              }
             }),
           );
         }),

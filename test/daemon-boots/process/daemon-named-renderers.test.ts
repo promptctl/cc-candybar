@@ -333,12 +333,13 @@ test("a successful file change remains undoable when its issuing worker dies at 
           wider: { persist: "padding", min: 0, max: 4, by: 1, layer: "user" },
         },
         segments: {
+          extra: {template:"extra cell"},
           choice: {
             template:
               'padding={{ .padding.effective }} {{ action "wider" "WIDER" }}',
           },
         },
-        root: { h: ["choice"] },
+        root: { h: ["choice","extra"] },
       }),
     );
     // Only this isolated host writes this file. Termination follows the
@@ -446,6 +447,57 @@ test("a successful file change remains undoable when its issuing worker dies at 
     expect(textOf(await draw(true, retained!))).toContain("padding=3");
     await click(isolated.sockPath, undoOnPeer(retained!));
     expect(textOf(await draw(true, retained!))).toContain("padding=1");
+    // Save decides both the durable layout and the lifetime of the private
+    // draft. Kill its worker before any receipt can close the edit locally.
+    await until(
+      () => /renderer main\[2\] started pid=/.test(log()),
+      "first issuer has restarted before testing a second worker loss",
+      8000,
+    );
+    const editing = sessionIdOf("save-at-rename");
+    const bar = (named: boolean) => draw(named, editing);
+    await click(
+      isolated.sockPath,
+      urlWriting(await bar(true), SETTINGS_ANCHOR, SETTINGS_OPEN),
+    );
+    await click(
+      isolated.sockPath,
+      urlWriting(await bar(true), EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
+    );
+    const remove = encodeLayoutOp({ op: "remove", target: "extra" });
+    const removing = findUrl(
+      linksOf(await bar(true)).map((item) => item.url),
+      (effects) =>
+        effects.some(
+          (e) => e.verb === VERB_APPLY_LAYOUT_OP && e.args[3] === remove,
+        ),
+    );
+    if (!removing)
+      throw new Error("missing remove-extra control in the peer draft");
+    await click(isolated.sockPath, removing);
+    const saving = linksOf(await bar(true)).find(
+      (item) => item.text === "✓ save",
+    );
+    if (!saving) throw new Error("the edited peer did not offer Save");
+    const named = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+    if (!named) throw new Error("missing isolated named worker PID");
+    fs.writeFileSync(arm, named[1]!);
+    await click(isolated.sockPath, saving.url);
+    expect(fs.existsSync(arm)).toBe(false);
+    const landed = textOf(await bar(false));
+    expect(landed).toContain("padding=1");
+    expect(landed).not.toContain("✓ save");
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).root).toEqual({
+      h: ["choice"],
+    });
+    const undoSave = drawnLink(
+      isolated.sockPath,
+      effectsUrl([{ verb: VERB_UNDO, args: [editing] }]),
+      { renderer: MAIN_RENDERER, session: editing },
+    );
+    await click(isolated.sockPath, undoSave);
+    expect(textOf(await bar(false))).toContain("extra cell");
+
   } finally {
     try {
       await daemon?.stop();
@@ -834,6 +886,139 @@ test("two named renderer processes draw separately and share config, transcript 
     await daemon?.stop();
     isolated.removeTmpDirs();
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an edit, its private Back and Undo, and its pinned layer survive route switches and renderer death", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-peer-draft", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "draft-"));
+    const file = path.join(dir, "bar.json5");
+    const original = JSON.stringify({
+      segments: {
+        first: { template: 'live-first {{ action "edit.toggle" "ARRANGE" }}' },
+        second: { template: "live-second" },
+      },
+      root: { h: ["first", "second"] },
+    });
+    fs.writeFileSync(file, original);
+    const read = () => fs.readFileSync(file, "utf8");
+    const draw = (named: boolean) =>
+      frameRequest(daemon.sockPath, {
+        ...renderBody("draft-switch", dir, {}, [
+          "cc-candybar",
+          "--config-only",
+          file,
+        ]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const press = async (named: boolean, label: string, index = 0) => {
+      const frame = await draw(named);
+      const link = linksOf(frame).filter((item) => item.text === label)[index];
+      if (!link)
+        throw new Error(`missing ${label} #${index} in ${textOf(frame)}`);
+      await click(daemon.sockPath, link.url);
+    };
+    const remove = async (named: boolean, target: string) => {
+      const frame = await draw(named);
+      const op = encodeLayoutOp({ op: "remove", target });
+      const url = findUrl(
+        linksOf(frame).map((link) => link.url),
+        (effects) =>
+          effects.some(
+            (e) => e.verb === VERB_APPLY_LAYOUT_OP && e.args[3] === op,
+          ),
+      );
+      if (!url)
+        throw new Error("missing remove " + target + " in " + textOf(frame));
+      await click(daemon.sockPath, url);
+    };
+    await draw(true);
+    await click(
+      daemon.sockPath,
+      urlWriting(await draw(false), SETTINGS_ANCHOR, SETTINGS_OPEN),
+    );
+    await click(
+      daemon.sockPath,
+      urlWriting(await draw(false), EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
+    );
+    expect(textOf(await draw(true))).toContain("✓ done");
+    await press(true, "✚");
+    expect(textOf(await draw(false))).toContain("directory ");
+    await press(false, "◁");
+    expect(textOf(await draw(true))).not.toContain("directory ");
+    await remove(true, "second");
+    expect(textOf(await draw(false))).toContain("✓ save");
+    expect(read()).toBe(original);
+    await press(false, "↶");
+    const log = () =>
+      fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8");
+    const pid = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+    if (!pid) throw new Error("missing isolated peer pid");
+    process.kill(Number(pid[1]), "SIGKILL");
+    await until(
+      () => /renderer worktree\[2\] started pid=/.test(log()),
+      "replacement peer boots with the private redo stack",
+      8000,
+    );
+    const restored = textOf(await draw(true));
+    expect(restored).toContain("✓ done");
+    expect(restored).toContain("second");
+    await press(true, "↷");
+    expect(textOf(await draw(false))).not.toContain("second");
+    expect(read()).toBe(original);
+    // A disjoint external change survives Save against the pinned base.
+    const external = { ...JSON.parse(original), globals: { padding: 2 } };
+    fs.writeFileSync(file, JSON.stringify(external));
+    await press(false, "✓ save");
+    expect(textOf(await draw(true))).toContain("live-first");
+    expect(JSON5.parse(read())).toMatchObject({
+      globals: { padding: 2 },
+      root: { h: ["first"] },
+    });
+    const saved = read();
+    await press(true, "ARRANGE");
+    await remove(false, "first");
+    const savedAt = async () =>
+      linksOf(await draw(true)).find((link) => link.text === "✓ save")?.url;
+    const oldSave = await savedAt();
+    expect(oldSave).toBeDefined();
+    const backup = path.join(dir, "original.json5"),
+      replacement = path.join(dir, "replacement.json5"),
+      pending = path.join(dir, "new-link");
+    fs.linkSync(file, backup);
+    fs.writeFileSync(replacement, saved);
+    fs.symlinkSync(replacement, pending);
+    fs.renameSync(pending, file);
+    let redrawn: string | undefined;
+    await until(
+      async () => {
+        redrawn = await savedAt();
+        return redrawn !== undefined && redrawn !== oldSave;
+      },
+      "a newly signed Save from the replacement destination",
+      8000,
+    );
+    expect(await sendClick(daemon.sockPath, redrawn!)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("changed while editing"),
+    });
+    expect(fs.readFileSync(backup, "utf8")).toBe(saved);
+    expect(fs.readFileSync(replacement, "utf8")).toBe(saved);
+    const preview = await draw(true);
+    const rewind = findUrl(
+      linksOf(preview).map((link) => link.url),
+      (effects) => effects.some((e) => e.verb === VERB_REWIND),
+    );
+    if (!rewind) throw new Error("missing Cancel in " + textOf(preview));
+    await click(daemon.sockPath, rewind);
+    expect(textOf(await draw(false))).toContain("live-first");
+    expect(read()).toBe(saved);
+  } finally {
+    await daemon.cleanup();
   }
 });
 

@@ -125,11 +125,14 @@ export function isNavigationEdit(raw: unknown): raw is NavigationEdit {
   );
 }
 
-export function parseTimeline(raw: unknown): Asked<Timeline> {
+export function parseTimeline(
+  raw: unknown,
+  allowEmpty = false,
+): Asked<Timeline> {
   return isPlainObject(raw) &&
     Object.keys(raw).length === 2 &&
     Array.isArray(raw.visits) &&
-    raw.visits.length > 0 &&
+    (allowEmpty || raw.visits.length > 0) &&
     raw.visits.length <= MAX_VISITS &&
     raw.visits.every(isVisit) &&
     typeof raw.cursor === "number" &&

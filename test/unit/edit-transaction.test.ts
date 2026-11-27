@@ -123,3 +123,75 @@ test("one draft pick invalidates only its own reader, including a clear and a re
     for (const stop of stops) stop();
   }
 });
+
+test("the live draft projection transfers a single changed override without the base or any unrelated pick", () => {
+  const first = new SessionState(),
+    second = new SessionState();
+  first.set(sid, "pick.17", "committed");
+  second.set(sid, "pick.17", "committed");
+  const original = snapshot("approved");
+  const a = new EditTransactions(
+    first,
+    () => {},
+    true,
+    {},
+    () => original,
+  );
+  const b = new EditTransactions(
+    second,
+    () => {},
+    true,
+    {},
+    () => original,
+  );
+  a.open(
+    sid,
+    origin,
+    original,
+    new Map(Array.from({ length: 128 }, (_, i) => ["pick." + i, "staged"])),
+  );
+  const opens = a.drain();
+  a.prepare(opens)();
+  b.prepare(opens)();
+  const evaluations: number[] = Array(128).fill(0);
+  const stops = evaluations.map((_, i) =>
+    autorun(() => {
+      evaluations[i]!++;
+      b.view.get(sid, "pick." + i);
+    }),
+  );
+  try {
+    evaluations.fill(0);
+    a.view.clear(sid, "pick.17");
+    const clear = a.drain();
+    expect(clear).toEqual([
+      {
+        store: "draft",
+        kind: "modify",
+        key: sid,
+        changes: [{ kind: "pick", key: "pick.17", value: null }],
+      },
+    ]);
+    a.prepare(clear)();
+    b.prepare(clear)();
+    expect(b.view.get(sid, "pick.17")).toBeNull();
+    expect(evaluations.reduce((sum, n) => sum + n)).toBe(1);
+    a.view.set(sid, "pick.17", "committed");
+    const release = a.drain();
+    expect(release).toEqual([
+      {
+        store: "draft",
+        kind: "modify",
+        key: sid,
+        changes: [{ kind: "pick", key: "pick.17" }],
+      },
+    ]);
+    b.prepare(release)();
+    second.set(sid, "pick.17", "latest");
+    expect(b.view.get(sid, "pick.17")).toBe("latest");
+    expect(b.view.get(sid, "pick.18")).toBe("staged");
+    expect(b.drain()).toEqual([]);
+  } finally {
+    for (const stop of stops) stop();
+  }
+});

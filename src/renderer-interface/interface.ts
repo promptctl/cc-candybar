@@ -50,6 +50,11 @@ import type { Locations } from "../config/loader/chain-places";
 import type { LiveSessionState, StoreWrite } from "./stored-state";
 import type { RegionalSettings } from "../utils/region.js";
 
+// [LAW:one-source-of-truth] Change this when the private renderer transport
+// becomes incompatible. A build digest identifies a build, and carries no
+// compatibility decision.
+export const RENDERER_WIRE_VERSION = 32;
+
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
 export interface RendererBoot {
@@ -268,8 +273,8 @@ export type Notification =
       readonly worldState: WorldState;
     }
   | {
-      // The host ended the session: the renderer lets go of what it holds
-      // of it, and its document goes however the turn ends, answered or
+      // The host released this renderer's view. The shared draft follows
+      // host session commits. The document goes however the turn ends, answered or
       // threw, so the host's next record for the session starts again at
       // seq 1.
       readonly kind: "retire";

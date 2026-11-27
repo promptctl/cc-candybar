@@ -15,13 +15,20 @@ export interface DisplayedConfig {
   readonly files: DisplayDigest;
 }
 
+export function isDisplayDigest(value: unknown): value is DisplayDigest {
+  return (
+    typeof value === "string" &&
+    value.length === DISPLAY_DIGEST_HEX &&
+    /^[0-9a-f]+$/.test(value)
+  );
+}
+
 export function displayedConfigFromHex(
   hex: string,
 ): DisplayedConfig | undefined {
-  if (hex.length !== DISPLAY_DIGEST_HEX * 2 || !/^[0-9a-f]+$/.test(hex))
-    return undefined;
-  return {
-    origin: hex.slice(0, DISPLAY_DIGEST_HEX) as DisplayDigest,
-    files: hex.slice(DISPLAY_DIGEST_HEX) as DisplayDigest,
-  };
+  const origin = hex.slice(0, DISPLAY_DIGEST_HEX),
+    files = hex.slice(DISPLAY_DIGEST_HEX);
+  return isDisplayDigest(origin) && isDisplayDigest(files)
+    ? { origin, files }
+    : undefined;
 }

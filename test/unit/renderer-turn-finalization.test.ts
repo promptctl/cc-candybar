@@ -89,6 +89,7 @@ function rig(
     },
     {
       navigation: { drain: () => [] },
+      draft: { drain: () => [] },
       "session-state": {
         heard: (session) => state.heard(session),
         drain: () => {
