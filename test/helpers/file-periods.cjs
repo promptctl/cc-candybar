@@ -10,8 +10,10 @@ function trackFilePeriods(sandbox, file, filename) {
   const periods = new Map();
   const hook = createHook({
     init(id, type, _trigger, handle) {
-      if (type !== "Timeout" || !(handle._repeat > 0)) return;
-      const callback = handle._onTimeout;
+      if (type !== "Timeout" || !("_repeat" in handle) ||
+          typeof handle._repeat !== "number" || handle._repeat <= 0) return;
+      const callback = "_onTimeout" in handle && typeof handle._onTimeout === "function"
+        ? handle._onTimeout : undefined;
       const origin = new Error(
         `${callback?.name || "<anonymous>"} (${handle._repeat} ms)`,
       );
@@ -19,7 +21,7 @@ function trackFilePeriods(sandbox, file, filename) {
       // intervals. A Node helper may supply its own callback for a test.
       if (
         callback instanceof sandbox.Function ||
-        origin.stack.includes(filename)
+        origin.stack?.includes(filename)
       ) {
         periods.set(id, { handle, origin });
       }

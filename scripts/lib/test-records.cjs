@@ -36,8 +36,8 @@ const NO_TEST_MESSAGE = "Your test suite must contain at least one test.";
 
 /** @param {string} file path relative to the repository root @returns {string} */
 function layerOf(file) {
-  const parts = file.split(path.sep);
-  return parts[0] === "test" && parts.length > 2 ? parts[1] : ROOT_LAYER;
+  const [root, layer, child] = file.split(path.sep);
+  return root === "test" && child !== undefined ? (layer ?? ROOT_LAYER) : ROOT_LAYER;
 }
 
 /**

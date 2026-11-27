@@ -46,7 +46,9 @@ function edgeLabel(s, rec) {
 // A breadth-first walk from the requested holders. V8 stores each node's
 // outgoing edges contiguously; the incoming edge recorded at discovery is
 // enough to reconstruct the first path, with no reverse graph per instance.
-export function retainerPaths(s, re, limit, { strong = false, fromRoot } = {}) {
+/** @param {{strong?: boolean, fromRoot?: RegExp}} options */
+export function retainerPaths(s, re, limit, options = {}) {
+  const { strong = false, fromRoot } = options;
   const first = new Uint32Array(s.nodeCount + 1);
   const parent = new Int32Array(s.nodeCount).fill(-1);
   const via = new Uint32Array(s.nodeCount);
@@ -69,7 +71,9 @@ export function retainerPaths(s, re, limit, { strong = false, fromRoot } = {}) {
   const awaitingOtherHalf = new Map();
   for (let i = 0; i < queue.length; i++) {
     const from = queue[i];
-    for (let rec = first[from]; rec < first[from + 1]; rec++) {
+    const start = first[from], end = first[from + 1];
+    if (start === undefined || end === undefined) throw new Error(`invalid heap node ${from}`);
+    for (let rec = start; rec < end; rec++) {
       const off = rec * s.edgeStride;
       const to = s.edges[off + s.edgeToIdx] / s.nodeStride;
       if (parent[to] !== -1) continue;
@@ -99,8 +103,13 @@ export function retainerPaths(s, re, limit, { strong = false, fromRoot } = {}) {
     traced++;
     if (parent[target] === -1) continue;
     const chain = [nodeLabel(s, target)];
-    for (let to = target; parent[to] !== to; to = parent[to]) {
-      chain.push(`${nodeLabel(s, parent[to])} --${edgeLabel(s, via[to])}-->`);
+    let to = target;
+    for (;;) {
+      const owner = parent[to];
+      if (owner === to) break;
+      if (owner === undefined || owner < 0) throw new Error(`missing parent for heap node ${to}`);
+      chain.push(`${nodeLabel(s, owner)} --${edgeLabel(s, via[to])}-->`);
+      to = owner;
     }
     paths.push(chain.reverse());
   }

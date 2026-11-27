@@ -1,18 +1,32 @@
 "use strict";
-const bar = document.querySelector("main");
+function barElement() {
+  const main = document.querySelector("main");
+  if (!main) throw new Error("Missing main element in the bar window");
+  return main;
+}
+const bar = barElement();
+/** @param {import("../../src/bar-window/panel-protocol.js").PanelEvent} message */
 const tell = message => window.webkit.messageHandlers.panel.postMessage(message);
 let revision = 0;
+/** @type {{ x: number, y: number } | null} */
 let pointer = null;
+/** @type {string | null} */
 let lastHover = null;
 
+/** @param {EventTarget | null} element */
 function hit(element) {
-  const item = element?.closest("[data-run]");
-  return item ? { row: Number(item.parentElement.dataset.row), run: Number(item.dataset.run) } : null;
+  const item = element instanceof Element ? element.closest("[data-run]") : null;
+  if (!(item instanceof HTMLElement) || !item.parentElement) return null;
+  return {
+    at: { row: Number(item.parentElement.dataset.row), run: Number(item.dataset.run) },
+    action: item.dataset.action || null,
+  };
 }
 
 function hover() {
-  const at = pointer ? hit(document.elementFromPoint(pointer.x, pointer.y)) : null;
-  const action = at ? bar.children[at.row].children[at.run].dataset.action || null : null;
+  const target = pointer ? hit(document.elementFromPoint(pointer.x, pointer.y)) : null;
+  const at = target?.at ?? null;
+  const action = target?.action ?? null;
   if (action !== lastHover) {
     lastHover = action;
     tell({ kind: "hover", revision, at });
@@ -24,11 +38,11 @@ window.present = function(frame) {
   for (const [y, row] of frame.rows.entries()) {
     const line = document.createElement("div");
     line.className = "row";
-    line.dataset.row = y;
+    line.dataset.row = String(y);
     for (const [x, run] of row.runs.entries()) {
       const part = document.createElement("span");
       part.textContent = run.text;
-      part.dataset.run = x;
+      part.dataset.run = String(x);
       if (run.action) part.dataset.action = run.action;
       if (run.clickable) part.setAttribute("role", "button");
       const attrs = run.attrs || [];
@@ -60,9 +74,9 @@ bar.addEventListener("mousemove", event => { pointer = { x: event.clientX, y: ev
 document.documentElement.addEventListener("mouseleave", () => { pointer = null; hover(); });
 bar.addEventListener("contextmenu", event => event.preventDefault());
 bar.addEventListener("mousedown", event => {
-  const at = hit(event.target);
-  if (!at) return;
+  const target = hit(event.target);
+  if (!target) return;
   event.preventDefault();
-  tell({ kind: "press", revision, at, button: event.button, ctrl: event.ctrlKey,
+  tell({ kind: "press", revision, at: target.at, button: event.button, ctrl: event.ctrlKey,
          alt: event.altKey, shift: event.shiftKey });
 });

@@ -9,7 +9,7 @@ import * as nodeModule from "node:module";
 import * as nodeProcess from "node:process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
+import { APP_FILES, APP_JAVASCRIPT, APP_TYPESCRIPT, CODE_GLOB, coverageOf, isApplicationZone, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -87,7 +87,10 @@ const HOST_PROPERTIES = [
 ];
 // [LAW:single-enforcer] Ownership is keyed by resolved module and export.
 // File globs and the spelling of the edge do not identify the resource it grants.
-const inApp = (file) => file.startsWith("src/");
+const inApp = (file) => {
+  const source = coverageOf(file);
+  return source && "zone" in source && isApplicationZone(source.zone);
+};
 const outsideProc = (file) => inApp(file) && !file.startsWith("src/proc/");
 const except =
   (scope, ...owners) =>
@@ -332,7 +335,8 @@ const importDirection = {
           }),
       };
     }
-    const fromZone = zoneOf(from);
+    const caller = coverageOf(file);
+    const fromZone = caller && "zone" in caller ? caller.zone : zoneOf(from);
     if (fromZone === NO_ZONE) {
       return {
         Program: (node) =>
@@ -928,12 +932,12 @@ export default [
   // one Node, the browser page or the bundle provides, `typeof` included, so
   // nothing reaches for a global only a test's environment installs.
   {
-    files: [`src/${TS_GLOB}`],
+    files: APP_TYPESCRIPT,
     rules: { "no-undef": ["error", { typeof: true }] },
   },
   {
-    files: [`src/${JS_GLOB}`],
-    languageOptions: { ecmaVersion: "latest", sourceType: "module", globals: globals.node },
+    files: APP_JAVASCRIPT,
+    languageOptions: { ecmaVersion: "latest", sourceType: "module", parserOptions: { ecmaFeatures: { jsx: true } }, globals: globals.node },
     rules: { "no-undef": ["error", { typeof: true }] },
   },
   prettierConfig,
@@ -941,7 +945,7 @@ export default [
   // `detach` runs it and reports what it throws, so `void` is no way out, and
   // a promise handed where a callback's return is dropped is refused too.
   {
-    files: [`src/${TS_GLOB}`],
+    files: APP_TYPESCRIPT,
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -957,14 +961,14 @@ export default [
     },
   },
   {
-    files: [`src/${CODE_GLOB}`],
+    files: APP_FILES,
     plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },
   // The property rule also catches the destructured spelling (`const { env } = process`); an
   // alias of `process` itself is the one it cannot see.
   {
-    files: [`src/${TS_GLOB}`],
+    files: APP_TYPESCRIPT,
     ignores: [...HOST_READERS, CLOCK_FILE, ...KILL_OWNERS],
     rules: {
       "no-restricted-properties": [
@@ -1001,7 +1005,7 @@ export default [
   // argument. The blocks after this one repeat CLOCK_SYNTAX and CLOCK_GLOBALS
   // beside their own, because a later block replaces the rule.
   {
-    files: [`src/${TS_GLOB}`],
+    files: APP_TYPESCRIPT,
     ignores: [CLOCK_FILE],
     rules: {
       "no-restricted-globals": ["error", ...CLOCK_GLOBALS],
@@ -1074,13 +1078,6 @@ export default [
     },
   },
   {
-    ignores: [
-      "node_modules/",
-      "dist/",
-      "**/*.d.ts",
-      "**/*.js",
-      "!src/**/*.js",
-      "!eslint.config.mjs",
-    ],
+    ignores: ["node_modules/", "dist/"],
   },
 ];

@@ -42,11 +42,13 @@ export function registryState(pkgName, version) {
       ? { kind: "serves" }
       : { kind: "absent", reason: `registry answered ${out || "(nothing)"}` };
   } catch (e) {
-    const said = `${e.stderr ?? ""}${e.stdout ?? ""}`;
+    const stderr = e && typeof e === "object" && "stderr" in e ? e.stderr : "";
+    const stdout = e && typeof e === "object" && "stdout" in e ? e.stdout : "";
+    const said = `${stderr ?? ""}${stdout ?? ""}`;
     if (said.includes("E404")) {
       return { kind: "absent", reason: "404 — no such version" };
     }
-    return { kind: "unchecked", reason: firstLine(said) || String(e.message) };
+    return { kind: "unchecked", reason: firstLine(said) || (e instanceof Error ? e.message : String(e)) };
   }
 }
 
@@ -72,11 +74,13 @@ function firstLine(s) {
 // The budget and the poll interval are parameters, not constants, so the
 // timed-out arm is reachable in a second by a caller who wants to see it — a
 // failure path nobody can reach cheaply is a failure path nobody has read.
+/** @param {{ budgetMs: number, pollMs: number, log?: (message: string) => void }} options */
 export function awaitRegistryVisibility(
   pkgNames,
   version,
-  { budgetMs, pollMs, log = () => {} },
+  options,
 ) {
+  const { budgetMs, pollMs, log = () => {} } = options;
   const deadline = Date.now() + budgetMs;
   for (;;) {
     const pending = pkgNames

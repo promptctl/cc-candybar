@@ -92,3 +92,7 @@ Each area is one document with the same sections, written to stand alone against
 | [clicks](areas/clicks.md) | Names, the minter, the handler, routing |
 | [lifetime](areas/lifetime.md) | Starting, supervising, versioning, memory |
 | [tmux events](areas/tmux-events.md) | The control connection, the hidden bar pane, the off-screen rate |
+
+## Checking a new source root
+
+Run `pnpm lint` and `pnpm typecheck` when adding JavaScript or TypeScript. The ownership table in `scripts/import-zones.mjs` assigns each source to its runtime environment. Lint checks tracked files and new, nonignored files. If it reports an unowned path, declare the file or directory in that table and include it in the owning TypeScript project. Tools run with Node globals, tests can use Jest, and the browser panel uses WebKit and DOM types. A source with an independent build or a distinct execution contract has a named exemption with its reason in the same table.

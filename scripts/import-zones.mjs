@@ -11,6 +11,8 @@ import { isBuiltin } from "node:module";
 // share lives in scripts/lib/, which imports only the app and itself, so it
 // never loads a tool's entry. The tests may import the tools they test.
 // Jest's packages are the test zone's too (packageZoneOf).
+const PANEL_ROOT = "resources/bar-window/";
+const BAR_WEB_ROOT = "scripts/bar-web/";
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -56,6 +58,12 @@ const ZONE_ROWS = {
   // The nightly audits run under Jest, over the suite's helpers.
   "audits/": "test",
   "scripts/lib/": "lib",
+  "scripts/import-zones.mjs": "lib",
+  ".github/scripts/": "tools",
+  "candybar-lite.mjs": "tools",
+  "tsdown.config.ts": "tools",
+  [PANEL_ROOT]: "tools",
+  [BAR_WEB_ROOT]: "tools",
   "scripts/": "tools",
   "site/": "tools",
   "proto-looks/": "tools",
@@ -78,23 +86,79 @@ export const ZONE_IMPORTS = {
 // The zone of a path no row names: no zone imports it.
 export const NO_ZONE = "unlisted";
 
-// The directories of code that runs outside Jest beside the app: the tools,
-// and what they share with the tests. eslint.tools.config.mjs lints them.
-export const OUTSIDE_JEST_ROOTS = Object.entries(ZONE_ROWS)
-  .filter(([, zone]) => zone === "tools" || zone === "lib")
-  .map(([row]) => row);
-
-// [LAW:one-source-of-truth] The extensions of code: every glob a lint config
-// runs over, and every key the zone rule strips, spell them from here.
-const TS_EXTENSIONS = ["ts", "mts", "cts"];
-const JS_EXTENSIONS = ["js", "mjs", "cjs"];
+// [LAW:one-source-of-truth] All source forms have one extension vocabulary.
+const TS_EXTENSIONS = ["ts", "mts", "cts", "tsx"];
+export const JS_EXTENSIONS = ["js", "mjs", "cjs", "jsx"];
 export const CODE_EXTENSIONS = [...TS_EXTENSIONS, ...JS_EXTENSIONS];
 const globOf = (extensions) => `**/*.{${extensions.join(",")}}`;
 export const CODE_GLOB = globOf(CODE_EXTENSIONS);
 export const TS_GLOB = globOf(TS_EXTENSIONS);
 export const JS_GLOB = globOf(JS_EXTENSIONS);
 const CODE_EXTENSION = new RegExp(`\\.(?:${CODE_EXTENSIONS.join("|")})$`);
+export const isCodeFile = (file) => CODE_EXTENSION.test(file);
 export const withoutExtension = (p) => p.replace(CODE_EXTENSION, "");
+const JS_EXTENSION = new RegExp(`\\.(?:${JS_EXTENSIONS.join("|")})$`);
+export const isJavaScript = (file) => JS_EXTENSION.test(file);
+const WEB_DECLARATION = /\.d\.[cm]?ts$/;
+export const BROWSER_FILES = [
+  PANEL_ROOT + CODE_GLOB, BAR_WEB_ROOT + JS_GLOB, BAR_WEB_ROOT + "**/*.d.{ts,mts,cts}",
+];
+
+// Exact bootstrap configs are executed by their runners. Jest config can
+// import worker paths before Jest globals exist. None is an importable tool.
+const jestConfig = "Jest reads this bootstrap before installing its worker globals.";
+const lintConfig = "ESLint loads its own flat configuration to construct the rules.";
+const exemptions = {
+  "jest.config.js": jestConfig,
+  "jest.worker.config.js": jestConfig,
+  "jest.unit.config.js": jestConfig,
+  "jest.process.config.js": jestConfig,
+  "jest.launcher-fixtures.config.js": jestConfig,
+  "jest.unit-fixtures.config.js": jestConfig,
+  "audits/jest.config.js": jestConfig,
+  "eslint.config.mjs": lintConfig,
+  "eslint.tests.config.mjs": lintConfig,
+  "eslint.tools.config.mjs": lintConfig,
+  "design-docs/peer-exploration/5-landscape/explorer/": "The independently built design explorer has its own package, generated examples and TypeScript project.",
+  "docs/design/probes/": "Standalone design experiments, outside the application's dependency graph.",
+  "vendor/cc-extra/": "Vendored upstream package maintained by scripts/vendor-cc-extra.mjs.",
+  "bin/cc-candybar": "Extensionless Node shim exercised as both a packaged ES module and a staged CommonJS entry.",
+};
+
+const ownershipRows = Object.entries(ZONE_ROWS).map(([row, zone]) => ({ row, zone }));
+const table = [
+  ...ownershipRows,
+  ...Object.entries(exemptions).map(([row, reason]) => ({ row, reason })),
+].sort((a, b) => b.row.length - a.row.length);
+if (new Set(table.map(({row}) => row)).size !== table.length)
+  throw new Error("scripts/import-zones.mjs: multiple coverage declarations for one path");
+
+// Source files match physical filenames. Import specifiers below can name the
+// same module by an emitted extension or an extensionless directory index.
+export const coverageOf = (file) =>
+  table.find(({row}) => row.endsWith("/") ? file.startsWith(row) : file === row);
+
+export function environmentOf(file, zone) {
+  if (file.startsWith(PANEL_ROOT) ||
+      (file.startsWith(BAR_WEB_ROOT) && (isJavaScript(file) || WEB_DECLARATION.test(file))))
+    return "browser";
+  return zone === "test" ? "jest" : "node";
+}
+
+const tools = ownershipRows.filter(({zone}) => zone === "tools" || zone === "lib");
+const globsOf = (rows, glob) => rows.map(({row}) => row.endsWith("/") ? row + glob : row);
+const application = ownershipRows.filter(({row, zone}) => APP.includes(zone) && (row.endsWith("/") || isCodeFile(row)));
+export const APP_FILES = globsOf(application, CODE_GLOB);
+export const APP_TYPESCRIPT = APP_FILES.map((pattern) => [pattern, TS_GLOB]);
+export const APP_JAVASCRIPT = APP_FILES.map((pattern) => [pattern, JS_GLOB]);
+export const isApplicationZone = (zone) => APP.includes(zone);
+export const TOOL_FILES = globsOf(tools, CODE_GLOB);
+export const LIB_FILES = globsOf(ownershipRows.filter(({zone}) => zone === "lib"), CODE_GLOB);
+// Directory probes belonging to the Node project. Exact files and browser
+// roots have their own real-file probes.
+export const OUTSIDE_JEST_ROOTS = tools.map(({row}) => row)
+  .filter((row) => row.endsWith("/") && row !== PANEL_ROOT && row !== BAR_WEB_ROOT);
+
 const ZONE_KEYS = Object.entries(ZONE_ROWS)
   .map(([row, zone]) => ({
     row: row.endsWith("/") ? row : withoutExtension(row),
@@ -130,7 +194,7 @@ export const mayImport = (from, to) => ZONE_IMPORTS[from].includes(to);
 // [LAW:no-silent-failure] Every zone a row or a package names is one the
 // table says the imports of, or the table refuses to load.
 const unknown = [...Object.values(ZONE_ROWS), packageZoneOf("jest")].filter(
-  (zone) => !(zone in ZONE_IMPORTS),
+  (zone) => zone === null || !(zone in ZONE_IMPORTS),
 );
 if (unknown.length > 0)
   throw new Error(`scripts/import-zones.mjs: no zone ${[...new Set(unknown)].join(", ")}`);

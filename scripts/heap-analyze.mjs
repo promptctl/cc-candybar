@@ -253,6 +253,7 @@ export function diff(before, after) {
 
 function parseArgs(argv) {
   const positional = [];
+  /** @type {{top: number, match: RegExp | null, json: boolean}} */
   const opts = { top: 40, match: null, json: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];

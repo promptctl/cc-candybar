@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": [
+    "resources/bar-window/**/*",
+    "scripts/bar-web/**/*.js", "scripts/bar-web/**/*.jsx",
+    "scripts/bar-web/**/*.mjs", "scripts/bar-web/**/*.cjs",
+    "scripts/bar-web/**/*.d.ts", "scripts/bar-web/**/*.d.mts", "scripts/bar-web/**/*.d.cts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

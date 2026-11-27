@@ -6,6 +6,7 @@ import {
   PLAIN_CLICK,
   gestureName,
 } from "../click/gesture.js";
+import type { PanelEvent, PanelFrame } from "./panel-protocol.js";
 import type { Run, WireFrame } from "../render/frame.js";
 
 type Frame = WireFrame<string>;
@@ -25,25 +26,11 @@ export function readMessage(line: string): Message {
   return data;
 }
 
-interface Cell {
-  row: number;
-  run: number;
-}
 export type NativeEvent =
   | Availability
+  | PanelEvent
   | { kind: "owned" | "ready" }
-  | { kind: "hidden" | "unavailable"; reason: string }
-  | { kind: "presented"; revision: number }
-  | { kind: "hover"; revision: number; at: Cell | null }
-  | {
-      kind: "press";
-      revision: number;
-      at: Cell;
-      button: number;
-      ctrl: boolean;
-      alt: boolean;
-      shift: boolean;
-    };
+  | { kind: "hidden" | "unavailable"; reason: string };
 
 const index = (n: unknown): n is number =>
   typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
@@ -130,7 +117,7 @@ export class Presentation {
           action: run.region?.name,
         })),
       })),
-    });
+    } satisfies PanelFrame);
   }
 
   presented(number: unknown): void {
