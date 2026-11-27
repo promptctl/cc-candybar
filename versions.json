@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "381022e93253b0c5cb6870ad8f26b4c1c80dde27",
-      "timestamp": "2026-11-27T12:16:50.592Z",
+      "sha": "f7be96a940c3997ccbb5d75d6d08f3746681fcf6",
+      "timestamp": "2026-11-27T12:20:58.073Z",
       "commits": [
         {
-          "sha": "381022e93253b0c5cb6870ad8f26b4c1c80dde27",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:15:43-07:00",
-          "message": "fix(renderer): report the state actually lost on restart (#983)\n\n* fix(renderer): report the state actually lost on restart\n\n* fix(renderer): distinguish restart behavior from confirmed loss"
+          "sha": "f7be96a940c3997ccbb5d75d6d08f3746681fcf6",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T12:19:35Z",
+          "message": "chore(release): set `package.json` to 1.244.3\n\n## [1.244.3](https://github.com/promptctl/cc-candybar/compare/v1.244.2...v1.244.3) (2026-11-27)\n\n### Bug Fixes\n\n* **renderer:** report the state actually lost on restart ([#983](https://github.com/promptctl/cc-candybar/issues/983)) ([381022e](https://github.com/promptctl/cc-candybar/commit/381022e93253b0c5cb6870ad8f26b4c1c80dde27))\n"
         }
       ]
     }
