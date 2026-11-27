@@ -274,6 +274,31 @@ describe("a launch over a scripted OS", () => {
 });
 
 describe("an owner's launcher over a scripted OS", () => {
+  test("a job whose native spawn cannot allocate stdio returns a failure and consumes the native error", async () => {
+    const r = rig();
+    const spawner: Spawner = {
+      ...r.spawner,
+      spawn(bin, args, options) {
+        const child = r.spawner.spawn(bin, args, options);
+        // The unscripted fake emits its native spawn error on the next turn.
+        return Object.assign(child, { stdin: null });
+      },
+    };
+    const launcher = createOneShotLauncher(
+      { inherited: {}, signal: r.ownerSignal },
+      r.clock,
+      spawner,
+    );
+    const result = launcher.launchJobSync(sh("unused"), {
+      stdout: "unused.out",
+      stderr: "unused.err",
+      status: "unused.status",
+    });
+    expect(result).toMatchObject({ ok: false, reason: "spawn-error" });
+    await r.advance(1);
+    expect(await launcher.settled()).toEqual({ unreaped: [] });
+  });
+
   test.each([false, true])(
     "retires a terminated group while a pipe is still held (member outlives leader: %s)",
     async (memberSurvives) => {

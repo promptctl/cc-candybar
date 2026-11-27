@@ -1172,50 +1172,79 @@ function launchJob(
   stats?.onEnd(opts.category, elapsedMs(clock, t0));
   // An async spawn failure has no pid; its `error` needs a listener or Node
   // crashes the launcher, and the missing pid already says it failed.
-  child.once("error", () => {});
+  child.once("error", ignoreJobStreamError);
   const pid = child.pid;
-  const gate = child.stdin as Socket;
-  // [LAW:no-silent-failure] exception: a write to a sh that already died
-  // fails EPIPE, and that death is said where every reader looks, in the job's
-  // missing verdict, which reads as lost.
-  gate.on("error", () => {});
-  if (pid === undefined) {
-    gate.destroy();
+  const gate = child.stdin as Socket | null;
+  // A failed native spawn may publish neither pid nor stdio before its
+  // asynchronous error. There is no job or grant to give the caller.
+  if (!gate || pid === undefined) {
+    gate?.on("error", ignoreJobStreamError);
+    gate?.destroy();
     return {
       ok: false,
       reason: "spawn-error",
-      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`,
+      error: "spawn(/bin/sh): no job pid or input pipe",
     };
   }
+  // An EPIPE means the shell exited before its grant; its missing verdict
+  // identifies the lost job to the caller.
+  gate.on("error", ignoreJobStreamError);
   child.unref();
   gate.unref();
-  // [LAW:no-ambient-temporal-coupling] A gated job belongs to its launcher
-  // until release transfers it. Closing the owner before that transfer sends
-  // EOF with no grant, and settlement waits for the unopened gate to exit.
-  const closed = new Promise<void>((resolve) =>
-    child.once("close", () => {
-      state.inFlight.delete(withdraw);
-      state.ending.delete(closed);
-      resolve();
-    }),
-  );
+
+  // Before release the shell is blocked on its gate and has not started
+  // the command. EOF withdraws permission; even a stopped shell is reaped.
   const withdraw = () => {
     if (!state.inFlight.delete(withdraw)) return;
+    child.off("close", forgotten);
     child.ref();
-    state.ending.add(closed);
+    const ended = Promise.withResolvers<void>();
+    const cancel = clock.after(
+      "unreleased job termination",
+      TIMEOUT_KILL_GRACE_MS,
+      () => {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        try {
+          state.spawner.signalGroup(pid, "SIGKILL");
+        } catch (error) {
+          child.unref();
+          state.unreaped.set(child, opts.category);
+          ended.resolve();
+          throw error;
+        }
+      },
+    );
+    child.once("close", () => {
+      cancel();
+      state.unreaped.delete(child);
+      ended.resolve();
+    });
+    state.scope.clock.detach("unreleased job close", () =>
+      track(state, ended.promise),
+    );
     gate.end();
   };
+  const forgotten = () => {
+    state.inFlight.delete(withdraw);
+  };
+  child.once("close", forgotten);
   state.inFlight.add(withdraw);
   if (state.scope.signal.aborted) withdraw();
   return {
     ok: true,
     pid,
     release() {
-      if (state.inFlight.delete(withdraw)) gate.end("go\n");
+      if (!state.inFlight.delete(withdraw)) return;
+      child.off("close", forgotten);
+      gate.end("go\n");
     },
     withdraw,
   };
 }
+
+// A released job can outlive this launcher. Its error listeners must have
+// no reference to the launch scope. The job files carry its eventual verdict.
+function ignoreJobStreamError(): void {}
 
 // The job's verdict, or null while it has none. [LAW:no-silent-failure] A
 // status this module did not write is an error, never an end.

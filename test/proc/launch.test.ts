@@ -1151,7 +1151,7 @@ describe("a launcher's scope", () => {
     expect(fs.existsSync(marker)).toBe(false);
   });
 
-  it("closing an unreleased job withdraws its start gate", async () => {
+  it.each([false, true])("closing an unreleased job withdraws its start gate (stopped shell: %s)", async (stopped) => {
     const ending = new AbortController();
     scoped({}, ending);
     const marker = path.join(scratch, "withdrawn");
@@ -1162,6 +1162,7 @@ describe("a launcher's scope", () => {
     };
     const job = launchJobSync(touching(marker), files);
     if (!job.ok) throw new Error(job.error);
+    if (stopped) process.kill(job.pid, "SIGSTOP");
     ending.abort();
     job.release();
     expect(await launcher.settled()).toEqual({ unreaped: [] });
