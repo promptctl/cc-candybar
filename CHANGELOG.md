@@ -1,3 +1,9 @@
+## [1.245.0](https://github.com/promptctl/cc-candybar/compare/v1.244.3...v1.245.0) (2026-11-27)
+
+### Features
+
+* **renderer:** ship one portable renderer for Node and WebKit ([#984](https://github.com/promptctl/cc-candybar/issues/984)) ([50d61ab](https://github.com/promptctl/cc-candybar/commit/50d61ab26aab8ee41974c2498d25ce000c6a6635))
+
 ## [1.244.3](https://github.com/promptctl/cc-candybar/compare/v1.244.2...v1.244.3) (2026-11-27)
 
 ### Bug Fixes
