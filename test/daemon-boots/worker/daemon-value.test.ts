@@ -8,7 +8,7 @@ import {
   type ReportingClock,
 } from "../../../src/daemon/task-throws";
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
-import { linkSignerOver } from "../../../src/click/link-signer";
+import { linkSignerOver, type FrameSource } from "../../../src/click/link-signer";
 import { createHook } from "node:async_hooks";
 import { hostOf } from "../../../scripts/lib/host";
 import type { Host } from "../../../src/host";
@@ -51,7 +51,6 @@ import { fakeSpawner, hangs, readsStdin, shell } from "../../../src/proc/spawner
 import { processProbe } from "../../helpers/host";
 import {
   daemonPaths,
-  sessionStatePath,
   settingsHistoryPath,
 } from "../../../src/daemon/paths";
 import {
@@ -158,10 +157,10 @@ describe("the daemon is a value", () => {
     );
   // A link as this test's daemon draws it: signed with the key in its state
   // directory.
-  const drawnHere = (link: string): string =>
+  const drawnHere = (link: string, source?: FrameSource): string =>
     linkSignerOver(
       linkKeyFromFile(linkKeyFile(daemonPaths(hostNow()).state)),
-    ).signLink(link);
+    ).signLink(link, source);
 
   const construct = (
     inputs: {
@@ -306,8 +305,7 @@ describe("the daemon is a value", () => {
     }
     // A live scope would refuse the next test's daemon; this file runs one at a
     // time, so what is left here is the case's own.
-    rmSync(sessionStatePath(hostNow()), { force: true });
-    rmSync(settingsHistoryPath(hostNow()), { force: true });
+    rmSync(daemonPaths(hostNow()).state, { recursive: true, force: true });
     // A case's daemon that priced an entry left a fresh table here, which the
     // next case's would read in place of its own fetch.
     rmSync(daemonPaths(hostNow()).pricingCache, { force: true });
@@ -401,6 +399,49 @@ describe("the daemon is a value", () => {
     await Promise.all(openLogs.map((log) => log.drained()));
     const log = readFileSync(daemonPaths(hostNow()).log, "utf8");
     expect(log).not.toMatch(/worktree close-(journal|views) failed/);
+  });
+
+  test("competing renderers admit the same session in order while an unrelated session can click on the waiting peer", async () => {
+    writeConfig(PADDED);
+    const shared = sessionIdOf("admitted-on-two-renderers");
+    const other = sessionIdOf("independent-writer");
+    const entered = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    const observed: string[] = [];
+    const port: RendererPort = prepared => inProcessRenderer(core => ({
+      answer: async input => {
+        if (input.event.kind === "click") {
+          const session = input.event.click.session;
+          observed.push(prepared.name + "/" + session);
+          if (prepared.name === MAIN_RENDERER && session === shared) {
+            entered.resolve();
+            await released.promise;
+          }
+        }
+        return core.answer(input);
+      },
+    }))(prepared);
+    const daemon = construct({ renderer: port });
+    await frameOf(daemon, renderRequest(shared));
+    await frameOf(daemon, worktreeRequest(shared));
+    await frameOf(daemon, worktreeRequest(other));
+    const write = (source: FrameSource, value: string) => clickLink(daemon, drawnHere(
+      effectsUrl([{ verb: VERB_SET_STATE, args: [source.session, "padding", value] }]),
+      source,
+    ));
+    const first = write({ renderer: MAIN_RENDERER, session: shared }, "3");
+    await entered.promise;
+    const second = write({ renderer: WORKTREE, session: shared }, "4");
+    try {
+      expect(await write({ renderer: WORKTREE, session: other }, "2")).toMatchObject({ ok: true });
+      expect(observed).toEqual(["main/" + shared, "worktree/" + other]);
+    } finally {
+      released.resolve();
+      expect(await Promise.all([first, second])).toEqual([
+        expect.objectContaining({ ok: true }), expect.objectContaining({ ok: true }),
+      ]);
+    }
+    expect(observed.at(-1)).toBe("worktree/" + shared);
   });
 
   test("the drain refuses pending work while another renderer flushes its journal", async () => {

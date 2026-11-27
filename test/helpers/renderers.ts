@@ -74,6 +74,7 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 // name, its renderer names no origin, the daemon is not closing, and an act's
 // failure no bar holds would be the rig's bug.
 export const NO_ACTS: HostWorld = {
+  sessionWriter: (_session, land) => land(),
   authorizeRun: (request, captures) =>
     authorizeRun(TEST_SIGNER, request, captures),
   perform: async (act) => ({

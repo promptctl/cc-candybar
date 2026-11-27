@@ -93,6 +93,7 @@ import {
   type RendererName,
 } from "./foundations/renderer-name.js";
 import type { SessionId } from "./foundations/session-id.js";
+import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import type {
   RendererBoot,
   RequestId,
@@ -508,6 +509,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
   const stores = inputs.sessionStores(log);
+  const sessionWriters = new KeyedSerialQueue<SessionId>(
+    clock.detach,
+    (session) => `session ${session} writer`,
+  );
   const primaryPrepared = prepareRenderer(
     inputs.rendererName,
     bundle.path,
@@ -992,6 +997,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         recorded: () => {},
       },
       {
+        sessionWriter: (session, land) => sessionWriters.run(session, land),
         authorizeRun: (request, captures) =>
           authorizeRun(linkSigner, request, captures),
         perform: (act) => acts.perform(act),

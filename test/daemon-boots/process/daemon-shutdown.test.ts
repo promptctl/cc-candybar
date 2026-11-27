@@ -1,12 +1,23 @@
 import type { ChildProcess } from "node:child_process";
 import { hostOf } from "../../../scripts/lib/host";
-import { existsSync, mkdirSync, readFileSync, rmdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmdirSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
-import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
+import {
+  effectsUrl,
+  VERB_SET_CONFIG,
+  VERB_SET_STATE,
+} from "../../../src/click/wire";
 import { sessionStatePath } from "../../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { click, render, drawnLink } from "../../helpers/daemon-e2e";
+import { sendClick } from "../../../scripts/lib/daemon/requests";
 import {
   type IsolatedDaemonHandle,
   type RunningDaemon,
@@ -258,4 +269,61 @@ describe("daemon shutdown contract", () => {
       isolated.removeTmpDirs();
     }
   });
+
+  test.each([
+    ["session pick", VERB_SET_STATE, ["padding", "4"]],
+    [
+      "config file with an undo step",
+      VERB_SET_CONFIG,
+      ["user", "palette", "nord"],
+    ],
+  ] as const)(
+    "a refused journal write reaches the caller of a %s click",
+    async (_label, verb, args) => {
+      const { env, sockPath, stateDir, removeTmpDirs } =
+        prepareIsolatedDaemonEnv("ccb-refused-write");
+      const root = path.dirname(sessionStatePath(hostOf(env)));
+      const journal = path.join(root, "shared-session", "changes");
+      const sid = "refused-commit";
+      let daemon: RunningDaemon | undefined;
+      try {
+        const config = path.join(stateDir, "settings.json5");
+        writeFileSync(
+          config,
+          JSON.stringify({
+            actions: { pal: { persist: "palette", from: "themes" } },
+            segments: {
+              choice: { template: '{{ action "pal" "palette" "nord" }}' },
+            },
+            root: { h: ["choice"] },
+          }),
+        );
+        daemon = await spawnDaemonWithEnv(env);
+        await render(sockPath, sid, stateDir, {}, [
+          "node",
+          "--config-only",
+          config,
+        ]);
+        mkdirSync(journal);
+        const response = await sendClick(
+          sockPath,
+          drawnLink(sockPath, effectsUrl([{ verb, args: [sid, ...args] }])),
+        );
+        expect(response).toMatchObject({
+          ok: false,
+          code: "RENDER_FAILED",
+          error: expect.stringContaining("session journal"),
+        });
+        rmdirSync(journal);
+        expect(await daemon.stop("SIGTERM")).toEqual({ code: 0, signal: null });
+        const saved = JSON.parse(
+          readFileSync(path.join(root, "settings-history.json"), "utf8"),
+        );
+        expect(saved[sid].past).toHaveLength(1);
+      } finally {
+        await daemon?.stop();
+        removeTmpDirs();
+      }
+    },
+  );
 });

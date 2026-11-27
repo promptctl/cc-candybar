@@ -146,6 +146,8 @@ type MadeClick =
 // the daemon's close has begun, and where an act's failure goes that no
 // session's bar can hold.
 export interface HostWorld {
+  // All renderer mailboxes draw their session writer from the same daemon.
+  sessionWriter<T>(session: SessionId, land: () => Promise<T>): Promise<T>;
   readonly authorizeRun: (
     request: RequestedRun,
     captures: readonly RunEvidence[],
@@ -358,24 +360,26 @@ export function rendererHost(
   const inMailbox = <T>(
     slot: (queuedMs: number, holds: (input: string) => void) => Promise<T>,
     at: Place = "last",
+    writer: SessionId | null = null,
   ): Promise<T> => {
     const asked = clock.monotonic();
     queued++;
-    return mailbox.run(
-      name,
-      async () => {
-        queued--;
-        const queuedMs = elapsedMs(clock, asked);
-        const held = { input: "-", since: clock.monotonic() };
-        holder = held;
-        try {
-          return await slot(queuedMs, (input) => void (held.input = input));
-        } finally {
-          holder = null;
-        }
-      },
-      at,
-    );
+    const land = async () => {
+      queued--;
+      const queuedMs = elapsedMs(clock, asked);
+      const held = { input: "-", since: clock.monotonic() };
+      holder = held;
+      try {
+        return await slot(queuedMs, (input) => void (held.input = input));
+      } finally {
+        holder = null;
+      }
+    };
+    const enter = () => mailbox.run(name, land, at);
+    // [LAW:no-ambient-temporal-coupling] Wait for this session outside the
+    // renderer mailbox. Another session can use the idle peer while the
+    // first gesture commits. Outliving desktop acts settle after this slot.
+    return writer === null ? enter() : world.sessionWriter(writer, enter);
   };
 
   // A turn no renderer answered: nothing of it was taken, so the
@@ -548,11 +552,22 @@ export function rendererHost(
       event.kind === "click" && event.coldConfig !== undefined
         ? (event.context?.durable.origin ?? null)
         : requested;
+    // [LAW:no-silent-failure] The renderer's answer is a proposal. A click
+    // that changed history can only report success after its host write.
+    // Wake the next turn even if storage or a later collector fails.
+    if (startFailure === null)
+      recordTaken("wake declaration", () => wake.declare(output.wake));
+    const owed: Array<Promise<HostOutcome | readonly HostOutcome[]>> = [];
+    try {
+      collector.stored(output.stored);
+    } catch (thrown) {
+      const failure = failureOf(thrown);
+      notTaken("stored writes", failure);
+      owed.push(Promise.resolve({ kind: "failed", reason: failure.message }));
+    }
     const followed = took(
       output.subscriptions,
-      output.wake,
       output.frames,
-      output.stored,
       retryOrigin,
       receipt,
     );
@@ -585,7 +600,6 @@ export function rendererHost(
     for (const origin of moved)
       reloaded.push((await configInSlot(origin, "config-landed")).settled);
 
-    const owed: Array<Promise<HostOutcome>> = [];
     const acts: HostAct[] = [];
     for (const effect of output.effects) {
       if (effect.kind === "present") {
@@ -657,7 +671,7 @@ export function rendererHost(
       Promise.all(waited),
       Promise.all(reloaded),
       Promise.all(owed),
-    ]).then(([caused, , own]) => [...caused.flat(), ...own]);
+    ]).then(([caused, , own]) => [...caused.flat(), ...own.flat()]);
     for (const origin of unreceived) markUnreceived(origin);
     return { settled, configFailure };
   };
@@ -723,17 +737,13 @@ export function rendererHost(
     }
   };
 
-  // [LAW:single-enforcer] Every output is taken here, the wake first, so a
-  // taker that throws leaves the renderer's next turn armed. Taking never
-  // fails a turn that answered: its effects are still owed their
-  // `effect-done`. Answers the origins the output names that the renderer
-  // was not served, which discovery now follows.
+  // [LAW:single-enforcer] Publish the frames and follow the declarations.
+  // A failed replacement still owes its frames their receipts while the
+  // predecessor's demand stays in place.
   // [LAW:no-silent-failure] A taker's throw is the daemon's, on every bar.
   const took = (
     subscriptions: Subscriptions,
-    nextWake: RendererOutput["wake"],
     frames: readonly PushedFrame[],
-    stored: readonly StoreWrite[],
     requested: RenderOrigin | null,
     receipt: SettlePresentation,
   ): ConfigFollowing => {
@@ -741,9 +751,6 @@ export function rendererHost(
     // collected writes and effects. Its view and wake declarations cannot
     // replace the predecessor's, including during effect settlement.
     const adoptDemand = startFailure === null;
-    if (adoptDemand)
-      recordTaken("wake declaration", () => wake.declare(nextWake));
-    recordTaken("stored writes", () => collector.stored(stored));
     if (frames.length > 0) {
       const owed = new Set(
         frames.flatMap(({ frame }) =>
@@ -978,11 +985,13 @@ export function rendererHost(
   const settleInSlot = async (
     effect: Effect,
     outcome: EffectOutcome,
-  ): Promise<{ readonly settled: Promise<EffectOutcome> }> => {
+  ): Promise<{ readonly settled: Promise<readonly HostOutcome[]> }> => {
     const input = stamped(doneOf(effect, outcome));
     const { turn, settled } = await inSlot(input, 0);
     record(input.event, [["effect", String(effect.id)]], turn);
-    return { settled: settled.then(() => outcome) };
+    // A file can land while its undo step, emitted by this receipt, fails to
+    // reach the journal. Both outcomes belong to the originating click.
+    return { settled: settled.then((children) => [outcome, ...children]) };
   };
 
   // A turn's line, when it learned something or failed: `event` is null when
@@ -1038,7 +1047,7 @@ export function rendererHost(
       held.count++;
       pendingClicks.set(held.session, held);
     }
-    return inMailbox(async (queuedMs, holds) => {
+    const slot = async (queuedMs: number, holds: (input: string) => void) => {
       let restore: Subscriptions["configs"] | undefined;
       try {
         // [LAW:no-silent-failure] A make that threw is the turn's failure.
@@ -1118,7 +1127,8 @@ export function rendererHost(
         if (held !== null && --held.count === 0)
           pendingClicks.delete(held.session);
       }
-    }, at);
+    };
+    return inMailbox(slot, at, click);
   };
   // One input from its arrival to its settling: its acts settled after its
   // slot.
