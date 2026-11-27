@@ -14,7 +14,12 @@ import {
   VERB_SET_CONFIG,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
-import { sessionStatePath } from "../../../src/daemon/paths";
+import {
+  daemonPaths,
+  profilePaths,
+  sessionStatePath,
+} from "../../../src/daemon/paths";
+import { rendererNameOf } from "../../../src/daemon/foundations/renderer-name";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { click, render, drawnLink } from "../../helpers/daemon-e2e";
 import { sendClick } from "../../../scripts/lib/daemon/requests";
@@ -242,20 +247,18 @@ describe("daemon shutdown contract", () => {
 
   test("an unsuccessful legacy export exits nonzero and the next host finishes the handoff", async () => {
     const isolated = prepareIsolatedDaemonEnv("ccb-export-retry");
-    const { env, sockPath, stateDir } = isolated;
-    const file = sessionStatePath(hostOf(env));
+    const { env } = isolated;
+    const paths = daemonPaths(hostOf(env));
+    const file = paths.sessionState;
+    const named = profilePaths(paths, rendererNameOf("prior")).sessionState;
     const sid = "interrupted-export";
     let daemon: RunningDaemon | undefined;
     try {
+      // Import an existing pick. Publishing it into the base profile now
+      // requires a real legacy write when this host shuts down.
+      mkdirSync(path.dirname(named), { recursive: true });
+      writeFileSync(named, JSON.stringify({ [sid]: { padding: "4" } }));
       daemon = await spawnDaemonWithEnv(env);
-      await render(sockPath, sid, stateDir);
-      await click(
-        sockPath,
-        drawnLink(
-          sockPath,
-          effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "padding", "4"] }]),
-        ),
-      );
       mkdirSync(file);
       expect(await daemon.stop("SIGTERM")).toEqual({ code: 1, signal: null });
       rmdirSync(file);
