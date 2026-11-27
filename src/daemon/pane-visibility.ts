@@ -120,6 +120,10 @@ export class PaneVisibility {
     return !view || view.panes.get(hint.pane)?.shown === true;
   }
 
+  unavailable(socket: string): boolean {
+    return this.servers.get(socket)?.reason != null;
+  }
+
   reconcile(wanted: ReadonlySet<string>, retrySocket?: string): void {
     for (const [socket, observation] of this.servers) {
       if (wanted.has(socket)) continue;

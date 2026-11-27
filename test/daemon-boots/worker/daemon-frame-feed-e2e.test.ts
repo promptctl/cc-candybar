@@ -14,7 +14,6 @@ import { parseAndValidate } from "../../../scripts/lib/draw-fixtures/parse-and-v
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -282,19 +281,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-feed-e2e-"));
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
-    // A tmux first on the daemon's PATH whose server shows no pane: pane %7's
-    // session has no client attached.
-    const bin = path.join(projectDir, "bin");
-    mkdirSync(bin);
-    writeFileSync(
-      path.join(bin, "tmux"),
-      `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 $1 0 1 0 1\\n' ;; *) printf 'stub\\n' ;; esac\n`,
-    );
-    chmodSync(path.join(bin, "tmux"), 0o755);
-    daemon = startDaemon({
-      ...prepared.env,
-      PATH: `${bin}:${prepared.env.PATH ?? ""}`,
-    }, { watchDirectory: systemWatchDirectory });
+    daemon = startDaemon(prepared.env, {
+      watchDirectory: systemWatchDirectory,
+      tmuxObserver: () => ({
+        observe(_socket, events) {
+          // The source exists in a detached session and has no viewer.
+          events.snapshot("B 10\nP %7 $1 0 1 0 1 0 22 /dev/tty7\nE 10");
+          return () => {};
+        },
+      }),
+    });
     await daemon.listen(sockPath);
   });
 
@@ -677,7 +673,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       const answers = (): string[] =>
         logLines(env).filter((l) => l.includes(server));
       await waitFor(
-        () => answers().some((l) => l.includes(`${server}shown=-`)),
+        () => answers().some((l) => l.includes(server) && l.includes(" shown=-")),
         () =>
           `the pane's server saying it shows no pane; its lines:\n${answers().join("\n")}`,
         10_000,

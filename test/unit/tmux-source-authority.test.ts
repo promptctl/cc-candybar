@@ -151,11 +151,14 @@ test("only foreground descendants on the full source tty can own the pane", () =
 
 test("candidate interest survives unknown topology but ends on positive removal or release", async () => {
   const { authority: a } = fixture();
+  await a.report(source, A, undefined, "/c");
+  expect([...a.candidates(source)]).toEqual([A]);
+  expect([...a.candidates(source, true)]).toEqual([]);
   a.observed(source.socket, view(1));
   await a.report(source, A, undefined, "/c");
   expect([...a.candidates(source)]).toEqual([A]);
   a.observed(source.socket, null);
-  expect([...a.candidates(source)]).toEqual([A]);
+  expect([...a.candidates(source, true)]).toEqual([A]);
   a.observed(source.socket, { serverPid: 1, panes: new Map() });
   expect([...a.candidates(source)]).toEqual([]);
   a.release(source);

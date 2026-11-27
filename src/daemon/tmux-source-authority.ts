@@ -48,6 +48,7 @@ interface Held {
   readonly claims: Map<string, SourceClaim>;
   readonly watches: Map<string, () => void>;
   physical: Physical | null;
+  located: boolean;
   owner: ({ sid: SessionId } & Physical) | null;
   version: number;
   running: Promise<void> | null;
@@ -81,10 +82,16 @@ export class TmuxSourceAuthority {
   // until it is positively absent or no interested session claims it.
   candidates(
     source: Pick<TmuxHint, "socket" | "pane">,
+    unavailable = false,
   ): ReadonlySet<SessionId> {
     const held = this.held.get(paneKey(source));
     const view = this.views.get(source.socket);
-    if (!held || (view && !view.panes.has(source.pane))) return new Set();
+    if (
+      !held ||
+      (view && !view.panes.has(source.pane)) ||
+      (unavailable && !held.located)
+    )
+      return new Set();
     const sessions = new Set([...held.claims.values()].map((c) => c.sid));
     if (held.owner) sessions.add(held.owner.sid);
     return sessions;
@@ -123,6 +130,7 @@ export class TmuxSourceAuthority {
         claims: new Map(),
         watches: new Map(),
         physical: null,
+        located: false,
         owner: null,
         version: 0,
         running: null,
@@ -161,6 +169,7 @@ export class TmuxSourceAuthority {
 
   private locate(held: Held, view: ServerView | null): void {
     const pane = view?.panes.get(held.source.pane);
+    if (view) held.located = pane !== undefined;
     const previous = held.physical;
     if (
       view &&

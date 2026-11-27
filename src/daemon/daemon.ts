@@ -764,7 +764,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     for (const [key, pane] of previous) {
       if (
         !sources.has(key) &&
-        [...authority.candidates(pane)].some((sid) => enabledPanes.has(sid))
+        [
+          ...authority.candidates(
+            pane,
+            paneVisibility.unavailable(pane.socket),
+          ),
+        ].some((sid) => enabledPanes.has(sid))
       )
         sources.set(key, pane);
     }
