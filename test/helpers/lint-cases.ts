@@ -76,10 +76,52 @@ console.log(JSON.stringify(OUTSIDE_JEST_ROOTS ?? null));`,
   return roots;
 }
 
+// Check the policy against real exports. lintText intentionally accepts
+// snippets that TypeScript has never resolved and cannot catch a stale name.
+export function missingOwnedExports(): unknown {
+  return nodeJson(
+    `
+    import path from "node:path";
+    import { createRequire, isBuiltin } from "node:module";
+    import ts from "typescript";
+    import { moduleOwnership } from "./eslint.config.mjs";
+    const rows = Object.values(moduleOwnership).flat().filter(row => row.names !== null);
+    const modules = new Set(rows.flatMap(row => row.modules));
+    const options = {module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext};
+    const files = new Map();
+    for (const id of modules) {
+      if (isBuiltin(id)) continue;
+      const match = ts.resolveModuleName("./"+id,path.resolve("eslint.config.mjs"),options,ts.sys).resolvedModule;
+      if (!match) throw new Error("No such owned module: "+id);
+      files.set(id,match.resolvedFileName);
+    }
+    const program = ts.createProgram([...files.values()],options);
+    const checker = program.getTypeChecker();
+    const native = createRequire(import.meta.url);
+    const missing = [];
+    for (const id of modules) {
+      const file = files.get(id) && program.getSourceFile(files.get(id));
+      const available = isBuiltin(id) ? Object.keys(native(id)) :
+        checker.getExportsOfModule(checker.getSymbolAtLocation(file)).map(symbol=>symbol.name);
+      for (const row of rows.filter(row=>row.modules.includes(id))) {
+        for (const name of row.names) if (!available.includes(name)) missing.push(id+"."+name);
+      }
+    }
+    console.log(JSON.stringify(missing));
+  `,
+    [],
+    REPO,
+  );
+}
+
 // The JSON a module script prints, run in a node of its own; one that has not
 // answered within the time a file's lint takes is a failure, not a hang.
 const NODE_WAIT_MS = 60_000;
-function nodeJson(script: string, args: readonly string[], cwd: string): unknown {
+function nodeJson(
+  script: string,
+  args: readonly string[],
+  cwd: string,
+): unknown {
   return JSON.parse(
     execFileSync(
       process.execPath,

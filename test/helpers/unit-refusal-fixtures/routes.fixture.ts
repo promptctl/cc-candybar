@@ -20,6 +20,8 @@ for (const [, name, guarding] of MODULES) {
   for (const route of routesIn(name, real, guarding)) {
     if (FS_DESCRIPTOR_OPS.has(route.path.at(-1) ?? "")) continue;
     test(route.call, () => {
+      // This fixture exercises Jest's real require for each builtin in the guard table.
+      // eslint-disable-next-line zones/import-direction
       const target = at(require(name), route.path) as (...args: unknown[]) => unknown;
       if (route.kind === "class") Reflect.construct(target, [arg]);
       else target(arg);

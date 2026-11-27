@@ -5,7 +5,10 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import globals from "globals";
 import fs from "node:fs";
+import * as nodeModule from "node:module";
+import * as nodeProcess from "node:process";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
@@ -13,19 +16,10 @@ import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZ
 // Launcher, which reaches the OS through that Spawner. This rule keeps the
 // invariant load-bearing: a future regression fails lint, not just a manual grep.
 const SPAWNER_FILE = "src/proc/spawner.ts";
-const CHILD_PROCESS_PATHS = ["child_process", "node:child_process"].map(
-  (name) => ({
-    name,
-    message:
-      "Launch through a Launcher from src/proc/launch instead. [LAW:single-enforcer] (kz8.2)",
-  }),
-);
-
 // [LAW:effects-at-boundaries] [LAW:single-enforcer] The real clock, the timer
 // globals and the loop's turn are read in src/time.ts alone; everything else is
-// handed a Timekeeper. Flat config replaces a rule per file block, so each rule
-// below is built as a function of the file and spread into every block that
-// sets it, and no block drops the clock when it adds its own restrictions.
+// handed a Timekeeper. Global and property checks use the same diagnostic as
+// the clock module ownership at the import boundary.
 const CLOCK_FILE = "src/time.ts";
 const CLOCK_MESSAGE =
   "Take the clock you are handed (src/time.ts): it alone reads the real one. [LAW:effects-at-boundaries]";
@@ -78,172 +72,6 @@ const CLOCK_GLOBALS = [
   "clearInterval",
   "clearImmediate",
 ].map((name) => ({ name, message: CLOCK_MESSAGE }));
-const CLOCK_IMPORT_PATHS = [
-  "node:timers",
-  "timers",
-  "node:timers/promises",
-  "timers/promises",
-  "node:perf_hooks",
-  "perf_hooks",
-].map((name) => ({ name, message: CLOCK_MESSAGE }));
-
-// [LAW:single-enforcer] Names only their owners may import, so what makes a
-// launch ownerless, or a path ambient, cannot be reached for by accident. Daemon
-// work holds its daemon's launcher: an owner's close is what refuses its
-// launches, and none reaches work that went around it. A daemon is handed its
-// adapters and its paths (src/daemon/production-adapters.ts builds the real
-// ones, src/daemon/server.ts reads the environment's), so `createDaemon` names
-// neither.
-const PATHS = [
-  "**/daemon/paths",
-  "**/daemon/paths.js",
-  "**/paths",
-  "**/paths.js",
-];
-
-// [LAW:single-enforcer] A fake exists to be scripted by a test; no src file
-// names one, so a stand-in cannot reach a daemon that runs for a person.
-const FAKE_IMPORTS = [
-  {
-    group: [
-      "**/spawner-fake",
-      "**/spawner-fake.js",
-      "**/process-probe-fake",
-      "**/process-probe-fake.js",
-    ],
-    message: "A fake is a test's: src never imports one. [LAW:single-enforcer]",
-  },
-];
-
-const OWNED_IMPORTS = {
-  // The process's one launcher, built beside the host it inherits from: a
-  // process main takes it from `processWorld`, and everything else is handed it.
-  systemOneShotLauncher: {
-    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
-    owners: ["src/host.ts"],
-    message:
-      "The process has its one-shot launcher: take the one you are given.",
-  },
-  // The composition root of the one owner that is not the process.
-  systemLauncher: {
-    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A Launcher is an owner's: take the one you are handed.",
-  },
-  // A launcher over a Spawner other than the machine's is a test's to build.
-  createOneShotLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: [],
-    message: "A launcher over the machine is system-launcher's to build.",
-  },
-  createLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: [],
-    message: "A launcher over the machine is system-launcher's to build.",
-  },
-  // The machine's bare timers, which report nothing a task throws: the process
-  // world builds its one clock over them, and everything else is handed it.
-  systemTimers: {
-    group: ["**/time", "**/time.js"],
-    owners: ["src/host.ts"],
-    message: "The process world (src/host.ts) builds its clock over src/time.ts's machine timers: take the clock you are given.",
-  },
-  // The real adapters a daemon is handed.
-  productionClaudeInputEdge: {
-    group: ["**/claude-input/edge", "**/claude-input/edge.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  productionLaneEdge: {
-    group: ["**/lane-edge", "**/lane-edge.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  realLimitsDeps: {
-    group: ["**/limits", "**/limits.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  fileStorage: {
-    group: ["**/file-storage", "**/file-storage.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  fetchPricing: {
-    group: ["**/pricing-fetch", "**/pricing-fetch.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  linkSignerFromKeyFile: {
-    group: ["**/link-key", "**/link-key.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its link signer (production-adapters.ts).",
-  },
-  // Where files are, read from the environment by a process's entry point and
-  // handed down. The daemon process reads it once, in server.ts.
-  daemonPaths: {
-    group: PATHS,
-    owners: [
-      "src/daemon/server.ts",
-      "src/renderer-process.ts",
-    ],
-    message: "A daemon is handed its paths: take the value you are given.",
-  },
-  stateDir: {
-    group: PATHS,
-    owners: [],
-    message: "A daemon is handed its paths: take the value you are given.",
-  },
-  ...Object.fromEntries(
-    ["socketPath", "defaultSocketPath"].map((name) => [
-      name,
-      {
-        group: PATHS,
-        owners: [
-          "src/frames-cli.ts",
-          "src/ssh-cli.ts",
-          "src/bar-pane/index.ts",
-          "src/bar-window/index.ts",
-          "src/daemon/client-transport.ts",
-          "src/daemon/acquire.ts",
-        ],
-        message:
-          "Only a client of the daemon reads its socket from the environment.",
-      },
-    ]),
-  ),
-  ...Object.fromEntries(
-    ["daemonDir", "spawnLockPath", "spawnCooldownPath", "spawnBackoffPath"].map(
-      (name) => [
-        name,
-        {
-          group: PATHS,
-          owners: ["src/daemon/acquire.ts"],
-          message: "Only the client that spawns a daemon reads these.",
-        },
-      ],
-    ),
-  ),
-  ...Object.fromEntries(
-    [
-      "cacheDir",
-      "logPath",
-      "leasePath",
-      "sessionStatePath",
-      "settingsHistoryPath",
-      "daemonRegistryDir",
-      "watchProbeDir",
-    ].map((name) => [
-      name,
-      {
-        group: PATHS,
-        owners: [],
-        message: "A daemon is handed its paths: take the value you are given.",
-      },
-    ]),
-  ),
-};
-
 // [LAW:effects-at-boundaries] [LAW:single-enforcer] The environment, the home
 // directory (`os.homedir` reads `HOME`) and the temporary directory
 // (`os.tmpdir` reads `TMPDIR`) are read once, by `processWorld` in
@@ -257,18 +85,166 @@ const HOST_PROPERTIES = [
   { object: "os", property: "homedir", message: HOST_READ_MESSAGE },
   { object: "os", property: "tmpdir", message: HOST_READ_MESSAGE },
 ];
-const HOST_NAMED_IMPORTS = [
-  {
-    group: ["os", "node:os"],
-    importNames: ["homedir", "tmpdir"],
-    message: HOST_READ_MESSAGE,
-  },
-  {
-    group: ["process", "node:process"],
-    importNames: ["env"],
-    message: HOST_READ_MESSAGE,
-  },
-];
+// [LAW:single-enforcer] Ownership is keyed by resolved module and export.
+// File globs and the spelling of the edge do not identify the resource it grants.
+const inApp = (file) => file.startsWith("src/");
+const outsideProc = (file) => inApp(file) && !file.startsWith("src/proc/");
+const except =
+  (scope, ...owners) =>
+  (file) =>
+    scope(file) && !owners.includes(file);
+const composition = "src/daemon/production-adapters.ts";
+const launcher = "src/proc/system-launcher";
+const paths = "src/daemon/paths";
+const nativeLauncherMessage =
+  "Script the program on a fake launcher (scripts/lib/draw-fixtures/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
+const owned = (modules, names, applies, message) => ({
+  modules,
+  names,
+  applies,
+  message,
+});
+const named = (module, names, message, ...owners) =>
+  owned(
+    [module],
+    names,
+    except(outsideProc, ...owners),
+    `${message} [LAW:single-enforcer]`,
+  );
+export const moduleOwnership = {
+  app: [
+    owned(
+      ["node:child_process"],
+      null,
+      except(inApp, SPAWNER_FILE),
+      "Launch through a Launcher from src/proc/launch instead. [LAW:single-enforcer] (kz8.2)",
+    ),
+    owned(
+      ["node:timers", "node:timers/promises", "node:perf_hooks"],
+      null,
+      except(inApp, CLOCK_FILE),
+      CLOCK_MESSAGE,
+    ),
+    owned(
+      ["node:fs", "node:fs/promises"],
+      null,
+      (file) => file.startsWith("src/renderer/"),
+      "The renderer opens no file: what it reads is handed in (config snapshots, world state). [LAW:effects-at-boundaries]",
+    ),
+    owned(
+      ["node:fs", "node:fs/promises"],
+      null,
+      (file) => file === "src/daemon/daemon.ts",
+      "Take the disk from the daemon's inputs.",
+    ),
+    owned(
+      ["src/proc/spawner-fake", "src/daemon/process-probe-fake"],
+      null,
+      inApp,
+      "A fake is a test's: src never imports one. [LAW:single-enforcer]",
+    ),
+    owned(
+      ["node:os"],
+      ["homedir", "tmpdir"],
+      except(inApp, ...HOST_READERS),
+      HOST_READ_MESSAGE,
+    ),
+    owned(
+      ["node:process"],
+      ["env"],
+      except(inApp, ...HOST_READERS),
+      HOST_READ_MESSAGE,
+    ),
+    owned(
+      ["src/time"],
+      ["systemTimers"],
+      except(inApp, "src/host.ts"),
+      "The process world (src/host.ts) builds its clock over src/time.ts's machine timers: take the clock you are given. [LAW:single-enforcer]",
+    ),
+    named(
+      launcher,
+      ["systemOneShotLauncher"],
+      "The process has its one-shot launcher: take the one you are given.",
+      "src/host.ts",
+    ),
+    named(
+      launcher,
+      ["systemLauncher"],
+      "A Launcher is an owner's: take the one you are handed.",
+      composition,
+    ),
+    named(
+      "src/proc/launch",
+      ["createLauncher", "createOneShotLauncher"],
+      "A launcher over the machine is system-launcher's to build.",
+    ),
+    ...[
+      ["src/claude-input/edge", "productionClaudeInputEdge"],
+      ["src/daemon/lane-edge", "productionBarPaneEdge"],
+      ["src/daemon/limits", "realLimitsDeps"],
+      ["src/daemon/file-storage", "fileStorage"],
+      ["src/daemon/cache/pricing-fetch", "fetchPricing"],
+    ].map(([module, name]) =>
+      named(
+        module,
+        [name],
+        "A daemon is handed its adapters (production-adapters.ts).",
+        composition,
+      ),
+    ),
+    named(
+      "src/daemon/link-key",
+      ["linkKeyFromFile"],
+      "A daemon is handed its link signer (production-adapters.ts).",
+      composition,
+    ),
+    named(
+      paths,
+      ["daemonPaths"],
+      "A daemon is handed its paths: take the value you are given.",
+      "src/daemon/server.ts",
+      "src/renderer-process.ts",
+    ),
+    named(
+      paths,
+      [
+        "stateDir",
+        "cacheDir",
+        "logPath",
+        "sessionStatePath",
+        "settingsHistoryPath",
+        "daemonRegistryDir",
+        "watchProbeDir",
+      ],
+      "A daemon is handed its paths: take the value you are given.",
+    ),
+    named(
+      paths,
+      ["socketPath", "defaultSocketPath"],
+      "Only a client of the daemon reads its socket from the environment.",
+      "src/frames-cli.ts",
+      "src/ssh-cli.ts",
+      "src/bar-pane/index.ts",
+      "src/bar-window/index.ts",
+      "src/daemon/client-transport.ts",
+      "src/daemon/acquire.ts",
+    ),
+    named(
+      paths,
+      ["daemonDir", "spawnLockPath", "spawnCooldownPath", "spawnBackoffPath"],
+      "Only the client that spawns a daemon reads these.",
+      "src/daemon/acquire.ts",
+    ),
+  ],
+  // The suite config applies this policy outside its native launcher adapters.
+  suite: [
+    ["test/helpers/host", ["processLauncher", "fixtureLauncher"]],
+    [launcher, ["systemLauncher", "systemOneShotLauncher"]],
+    ["src/proc/spawner", ["systemSpawner"]],
+  ].map(([module, names]) =>
+    owned([module], names, () => true, nativeLauncherMessage),
+  ),
+};
 
 // [LAW:one-source-of-truth] Why an edge is refused, by what it reaches: what
 // the zone it imports holds decides it, whichever zone imports it.
@@ -299,18 +275,32 @@ if (unexplained.length > 0)
 // import (`../verbs`) is its index's. Relative to this file, not ESLint's cwd,
 // so an editor or runner started in a subdirectory keys the same modules.
 const REPO_ROOT = fs.realpathSync(import.meta.dirname);
-const moduleKey = (abs) => withoutExtension(path.relative(REPO_ROOT, abs));
-// A directory's real path, through its nearest ancestor on disk, so an unsaved
-// buffer in a directory not yet made keys like its saved self.
-const realDir = (dir) =>
-  fs.existsSync(dir)
-    ? fs.realpathSync(dir)
-    : path.join(realDir(path.dirname(dir)), path.basename(dir));
+// The caller and its target use the same physical checkout. For an emitted
+// extension or an unsaved editor buffer, resolve the nearest existing ancestor.
+const physicalPath = (file) =>
+  fs.existsSync(file)
+    ? fs.realpathSync(file)
+    : path.join(physicalPath(path.dirname(file)), path.basename(file));
+const moduleKey = (file) =>
+  withoutExtension(path.relative(REPO_ROOT, physicalPath(file)));
+
+// Node exposes its native default through named exports too (notably Module).
+// Derive namespace projections from the public objects the runtime supplies.
+const selfExports = (namespace) =>
+  new Set(
+    Object.keys(namespace).filter(
+      (name) => namespace[name] === namespace.default,
+    ),
+  );
+const moduleSelf = selfExports(nodeModule);
+const processSelf = selfExports(nodeProcess);
 
 const CLOCK_KEY = withoutExtension(CLOCK_FILE);
 // Whether an import brings in types alone, which carry no clock.
 const typeOnly = (node) =>
   node.type === "TSImportType" ||
+  (node.type === "TSExternalModuleReference" &&
+    node.parent.importKind === "type") ||
   node.importKind === "type" ||
   node.exportKind === "type" ||
   (node.specifiers?.length > 0 &&
@@ -319,12 +309,17 @@ const typeOnly = (node) =>
     ));
 
 const importDirection = {
-  meta: { type: "problem", schema: [] },
+  meta: { type: "problem", schema: [{ enum: ["suite"] }] },
   create(context) {
-    // Through the real path of the file's directory, so a file reached by a
-    // symlinked path keys as the module it is.
-    const dir = realDir(path.resolve(path.dirname(context.filename)));
-    const from = moduleKey(path.join(dir, path.basename(context.filename)));
+    const filename = physicalPath(path.resolve(context.filename));
+    const dir = path.dirname(filename);
+    const file = path.relative(REPO_ROOT, filename);
+    const from = withoutExtension(file);
+    const policy = context.options[0] ?? "app";
+    const directions = policy !== "suite";
+    const ownedHere = moduleOwnership[policy].filter((rule) =>
+      rule.applies(file),
+    );
     // [LAW:no-silent-failure] A key outside the repo is in no zone, so the rule
     // refuses it rather than calling it rest and passing every edge.
     const outside = (key) => key.startsWith("..") || path.isAbsolute(key);
@@ -341,17 +336,38 @@ const importDirection = {
     if (fromZone === NO_ZONE) {
       return {
         Program: (node) =>
-          context.report({ node, message: `${from}: ${REFUSAL[NO_ZONE]} [LAW:one-way-deps]` }),
+          context.report({
+            node,
+            message: `${from}: ${REFUSAL[NO_ZONE]} [LAW:one-way-deps]`,
+          }),
       };
     }
-    const rendering = fromZone === "renderer" || fromZone === "start" || fromZone === "renderer-process";
+    const rendering =
+      fromZone === "renderer" ||
+      fromZone === "start" ||
+      fromZone === "renderer-process";
     // Where an edge's source leads: a package, whose zone is the one that
     // owns it or none; a path in the repo, whose zone is its row's; or a path
     // outside the repo, which is in no zone.
-    const targetOf = (source, base) => {
-      if (!source.startsWith(".") && !path.isAbsolute(source))
+    const targetOf = (source, base, esm) => {
+      const fileURL = esm && /^file:/i.test(source);
+      const relative = /^(?:\.\.?)(?:\/|$)/.test(source);
+      if (!fileURL && !relative && !path.isAbsolute(source))
         return { kind: "package", name: source, zone: packageZoneOf(source) };
-      const key = moduleKey(path.resolve(base, source));
+      if (relative && base === null) return null;
+      let filename;
+      if (esm) {
+        // URL resolution strips query/fragment and decodes the pathname
+        // only on ESM edges. The same characters name literal files in CJS.
+        try {
+          filename = fileURLToPath(
+            new URL(source, pathToFileURL((base ?? dir) + path.sep)),
+          );
+        } catch {
+          return null;
+        }
+      } else filename = path.resolve(base ?? dir, source);
+      const key = moduleKey(filename);
       return {
         kind: "path",
         name: key,
@@ -360,7 +376,7 @@ const importDirection = {
     };
     // `base` is the directory a relative source resolves from: this file's,
     // or null for a loader built on a base no lint can read.
-    const check = (node, source, base = dir) => {
+    const check = (node, source, base = dir, esm = false) => {
       if (source === null) {
         context.report({
           node,
@@ -368,14 +384,37 @@ const importDirection = {
         });
         return;
       }
-      if (base === null && (source.startsWith(".") || path.isAbsolute(source))) {
+      const to = targetOf(source, base, esm);
+      if (to === null) {
         context.report({
           node,
-          message: `A loader whose base is computed loads ${source} from no place a lint can read. [LAW:one-way-deps]`,
+          message:
+            base === null
+              ? `A loader whose base is computed loads ${source} from no place a lint can read. [LAW:one-way-deps]`
+              : `The module URL ${source} resolves to no readable file. [LAW:one-way-deps]`,
         });
         return;
       }
-      const to = targetOf(source, base);
+      const module =
+        to.kind === "path"
+          ? to.name
+          : nodeModule.isBuiltin(source)
+            ? `node:${source.replace(/^node:/, "")}`
+            : null;
+      const rules = ownedHere.filter((rule) => rule.modules.includes(module));
+      const loaders = nativeLoaders[module];
+      if (rules.length || loaders) {
+        const names = exportNames(node, to.kind === "package", loaders);
+        const refused = rules.filter(
+          (rule) =>
+            rule.names === null ||
+            names.has(null) ||
+            rule.names.some((name) => names.has(name)),
+        );
+        for (const message of new Set(refused.map((r) => r.message)))
+          context.report({ node, message: `${source}: ${message}` });
+      }
+      if (!directions) return;
       // [LAW:one-way-deps] One judgment of every edge, a package's as a
       // path's: Jest's packages are the test zone's.
       if (to.zone !== null && !mayImport(fromZone, to.zone)) {
@@ -385,7 +424,10 @@ const importDirection = {
         });
       }
       if (!rendering || typeOnly(node)) return;
-      if (to.kind === "package" && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
+      if (
+        to.kind === "package" &&
+        !mayLoadRendererModule(source, fromZone === "renderer-process")
+      ) {
         context.report({
           node,
           message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
@@ -409,17 +451,19 @@ const importDirection = {
         : node.type === "TemplateLiteral" && node.expressions.length === 0
           ? node.quasis[0].value.cooked
           : null;
-    const fromSource = (node) =>
-      node.source && check(node, sourceOf(node.source));
+    const fromSource = (node) => {
+      if (!node.source) return;
+      const source = staticLocation(node.source);
+      check(node, source instanceof URL ? source.href : source, dir, true);
+    };
     // [LAW:one-way-deps] What a loader Node hands code loads is an edge like
     // an import's: `require`, `module.require`, `process.getBuiltinModule`,
     // and the loader `createRequire` makes, under whatever name it is bound
     // to. A loader it reads is used by a call with its source, which is
     // judged, or by `.resolve`, which locates and loads nothing. Any other use
-    // (an alias, `.call`, an export) carries it where no lint follows, so it
-    // is refused. A loader reached by a name it does not read (an alias of
-    // `module` or `process`, `Module._load`, `globalThis`, `eval`) is not
-    // judged.
+    // (such as `.call` or an export) carries it where no lint follows, so it
+    // is refused. Namespace projections follow their lexical bindings.
+    // Reflection and evaluation of assembled code are outside this rule.
     const refuseUse = (node, what) =>
       context.report({
         node,
@@ -427,78 +471,324 @@ const importDirection = {
       });
     // Each read of a variable a declaration binds, by its name in the
     // declaration.
-    const readsOf = (declaration, name) =>
+    const readsOf = (declaration, name, valuesOnly = false) =>
       context.sourceCode
         .getDeclaredVariables(declaration)
         .filter((variable) => variable.name === name)
         .flatMap((variable) => variable.references)
-        .filter((reference) => !reference.init)
+        .filter(
+          (reference) =>
+            !reference.init &&
+            (!valuesOnly || reference.isValueReference !== false),
+        )
         .map((reference) => reference.identifier);
     const calledAs = (node) =>
       node.parent.type === "CallExpression" && node.parent.callee === node;
+    const exportedBinding = (declaration) =>
+      declaration.type === "VariableDeclarator"
+        ? declaration.parent.parent.type === "ExportNamedDeclaration"
+        : declaration.parent.type === "ExportNamedDeclaration";
+    // An exported binding escapes this file and may still be used within it.
+    // Visit each lexical read once, even when a var aliases itself.
+    const followLoader = (start, what, use) => {
+      const reads = new Set([start]);
+      for (const node of reads) {
+        const declaration = node.parent;
+        if (
+          declaration.type === "VariableDeclarator" &&
+          declaration.init === node &&
+          declaration.id.type === "Identifier"
+        ) {
+          if (exportedBinding(declaration)) refuseUse(node, what);
+          for (const read of readsOf(declaration, declaration.id.name, true))
+            reads.add(read);
+        } else use(node);
+      }
+    };
     // An expression whose value is a loader, judged where it stands.
-    const loaderUse = (node, base, what) => {
-      const { parent } = node;
-      if (calledAs(node)) {
-        check(parent, parent.arguments[0] ? sourceOf(parent.arguments[0]) : null, base);
-        return;
-      }
-      if (
-        parent.type === "MemberExpression" &&
-        parent.object === node &&
-        !parent.computed &&
-        parent.property.name === "resolve" &&
-        calledAs(parent)
-      )
-        return;
-      if (
-        parent.type === "VariableDeclarator" &&
-        parent.init === node &&
-        parent.id.type === "Identifier" &&
-        parent.parent.parent.type !== "ExportNamedDeclaration"
+    const loaderUse = (start, base, what, builtinsOnly = false) =>
+      followLoader(start, what, (node) => {
+        const { parent } = node;
+        if (calledAs(node)) {
+          const source = parent.arguments[0]
+            ? sourceOf(parent.arguments[0])
+            : null;
+          // getBuiltinModule returns undefined for file and package specifiers.
+          if (!builtinsOnly || source === null || nodeModule.isBuiltin(source))
+            check(parent, source, base);
+          return;
+        }
+        if (
+          parent.type === "MemberExpression" &&
+          parent.object === node &&
+          !parent.computed &&
+          parent.property.name === "resolve" &&
+          calledAs(parent)
+        )
+          return;
+        refuseUse(node, what);
+      });
+    // A createRequire loader resolves relative sources from the declared
+    // file or directory when its path or file URL is known.
+    const isGlobal = (node, name) => {
+      if (node?.type !== "Identifier" || node.name !== name) return false;
+      for (
+        let scope = context.sourceCode.getScope(node);
+        scope;
+        scope = scope.upper
       ) {
-        for (const read of readsOf(parent, parent.id.name)) loaderUse(read, base, what);
-        return;
+        const variable = scope.set.get(name);
+        if (variable)
+          return variable.scope.type === "global" && variable.defs.length === 0;
       }
-      refuseUse(node, what);
+      return true;
     };
-    // A `createRequire` call resolves relative sources from its base: this
-    // file's directory when the base names this file, and none a lint can
-    // read otherwise.
+    const staticLocation = (node) => {
+      if (!node) return null;
+      const literal = sourceOf(node);
+      if (literal !== null) return literal;
+      if (isGlobal(node, "__filename"))
+        return path.join(dir, path.basename(file));
+      if (
+        node.type === "MemberExpression" &&
+        node.object.type === "MetaProperty" &&
+        node.object.meta.name === "import" &&
+        node.object.property.name === "meta" &&
+        keyOf(node.property, node.computed) === "url"
+      )
+        return pathToFileURL(path.join(dir, path.basename(file)));
+      if (
+        node.type === "NewExpression" &&
+        isGlobal(node.callee, "URL") &&
+        node.arguments.length <= 2
+      ) {
+        const [where, from] = node.arguments;
+        const input = staticLocation(where),
+          parent = staticLocation(from);
+        if (input === null || (from && parent === null)) return null;
+        try {
+          return new URL(input, parent ?? undefined);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
     const baseOf = (call) => {
-      const [at] = call.arguments;
-      const namesThisFile =
-        (at?.type === "MemberExpression" &&
-          at.object.type === "MetaProperty" &&
-          at.property.name === "url") ||
-        (at?.type === "Identifier" && at.name === "__filename");
-      return namesThisFile ? dir : null;
+      const value = staticLocation(call.arguments[0]);
+      if (value === null) return null;
+      let filename;
+      if (typeof value === "string" && path.isAbsolute(value)) filename = value;
+      else {
+        try {
+          filename = fileURLToPath(value);
+        } catch {
+          return null;
+        }
+      }
+      return filename.endsWith(path.sep) ? filename : path.dirname(filename);
     };
-    const makerUse = (node) =>
-      calledAs(node)
-        ? loaderUse(node.parent, baseOf(node.parent), "A `createRequire` loader")
-        : refuseUse(node, "`createRequire`");
-    const builtinUse = (node) => loaderUse(node, dir, "`getBuiltinModule`");
+    const makerUse = (start) =>
+      followLoader(start, "`createRequire`", (node) => {
+        if (calledAs(node))
+          loaderUse(
+            node.parent,
+            baseOf(node.parent),
+            "A `createRequire` loader",
+          );
+        else refuseUse(node, "`createRequire`");
+      });
+    const builtinUse = (node) =>
+      loaderUse(node, dir, "`getBuiltinModule`", true);
     // A key's name: an identifier's, or a string's when computed.
     const keyOf = (key, computed) =>
-      !computed && key.type === "Identifier"
-        ? key.name
-        : key.type === "Literal" && typeof key.value === "string"
-          ? key.value
-          : null;
-    const LOADER_USES = { createRequire: makerUse, getBuiltinModule: builtinUse };
-    // A loader destructured out of its module or of `process`, bound by a
-    // declaration whose reads are followed; destructured anywhere else (a
-    // parameter, a nested pattern, an assignment), it is not followed.
-    const fromPattern = (property, name) => {
-      const pattern = property.parent;
-      const declarator = pattern.parent;
-      if (pattern.type !== "ObjectPattern") return;
-      if (declarator.type !== "VariableDeclarator" || property.value.type !== "Identifier") {
-        refuseUse(property, `\`${name}\``);
-        return;
+      !computed && key.type === "Identifier" ? key.name : sourceOf(key);
+    // [LAW:parse-dont-validate] Every loader yields the same resource: its
+    // module namespace. Observe literal projections through lexical bindings.
+    // Passing a namespace on grants all its exports; an awaited dynamic import
+    // grants the namespace, while passing its promise on does the same.
+    const exportNames = (edge, builtin, native) => {
+      const names = new Set();
+      const seen = new Set();
+      const all = () => names.add(null);
+      const escape = (value) => {
+        all();
+        if (native && !typeOnly(edge))
+          for (const name of Object.keys(native.methods))
+            refuseUse(value, `\`${name}\``);
+      };
+      const binding = (declaration, id, promise = false) => {
+        if (exportedBinding(declaration)) escape(id);
+        const reads = readsOf(declaration, id.name);
+        if (!reads.length) all();
+        for (const read of reads) use(read, promise);
+      };
+      const select = (name, next, access) => {
+        if (access && native && Object.hasOwn(native.methods, name))
+          access(native.methods[name]);
+        if (builtin && (name === "default" || native?.self.has(name))) next();
+        else names.add(name);
+      };
+      const pattern = (id, declaration, promise) => {
+        if (id.type === "Identifier") return binding(declaration, id, promise);
+        if (promise || id.type !== "ObjectPattern") return escape(id);
+        for (const property of id.properties) {
+          if (property.type !== "Property") escape(property);
+          else
+            select(
+              keyOf(property.key, property.computed),
+              () => pattern(property.value, declaration, false),
+              (act) => {
+                if (property.value.type !== "Identifier")
+                  return refuseUse(
+                    property,
+                    `\`${keyOf(property.key, property.computed)}\``,
+                  );
+                if (exportedBinding(declaration))
+                  refuseUse(
+                    property,
+                    `\`${keyOf(property.key, property.computed)}\``,
+                  );
+                for (const read of readsOf(
+                  declaration,
+                  property.value.name,
+                  true,
+                ))
+                  act(read);
+              },
+            );
+        }
+      };
+      const use = (value, promise = false) => {
+        if (seen.has(value)) return;
+        seen.add(value);
+        const parent = value.parent;
+        // Loading only for side effects names no export, as in a bare ESM import.
+        if (
+          parent.type === "ExpressionStatement" ||
+          (parent.type === "UnaryExpression" &&
+            ["void", "typeof"].includes(parent.operator))
+        )
+          return;
+        if (
+          parent.type === "AwaitExpression" ||
+          [
+            "ChainExpression",
+            "TSAsExpression",
+            "TSTypeAssertion",
+            "TSNonNullExpression",
+            "TSSatisfiesExpression",
+          ].includes(parent.type)
+        )
+          return use(parent, parent.type !== "AwaitExpression" && promise);
+        if (parent.type === "VariableDeclarator" && parent.init === value)
+          return pattern(parent.id, parent, promise);
+        if (
+          !promise &&
+          parent.type === "MemberExpression" &&
+          parent.object === value
+        )
+          return select(
+            keyOf(parent.property, parent.computed),
+            () => use(parent),
+            (act) => act(parent),
+          );
+        if (
+          !promise &&
+          parent.type === "TSQualifiedName" &&
+          parent.left === value
+        )
+          return select(parent.right.name, () => use(parent));
+        if (
+          !promise &&
+          parent.type === "TSTypeQuery" &&
+          parent.exprName === value
+        )
+          return use(parent);
+        if (
+          !promise &&
+          parent.type === "TSIndexedAccessType" &&
+          parent.objectType === value
+        ) {
+          const key = parent.indexType;
+          return select(
+            key.type === "TSLiteralType" ? keyOf(key.literal, true) : null,
+            () => use(parent),
+          );
+        }
+        // An opaque consumer of an object may read any owned export. Only a
+        // statically selected loader, or a namespace granted across a module
+        // boundary, proves the file passed on a native loader.
+        if (
+          parent.type === "ExportDefaultDeclaration" ||
+          (parent.type === "ExportSpecifier" &&
+            !typeOnly(parent) &&
+            !typeOnly(parent.parent))
+        )
+          escape(value);
+        else all();
+      };
+      if (edge.type === "ImportDeclaration") {
+        for (const spec of edge.specifiers) {
+          if (spec.type === "ImportNamespaceSpecifier")
+            binding(spec, spec.local);
+          else {
+            const name =
+              spec.type === "ImportDefaultSpecifier"
+                ? "default"
+                : keyOf(spec.imported, false);
+            select(
+              name,
+              () => binding(spec, spec.local),
+              (act) => {
+                if (typeOnly(edge) || spec.importKind === "type") return;
+                for (const read of readsOf(spec, spec.local.name, true))
+                  act(read);
+              },
+            );
+          }
+        }
+      } else if (edge.type === "ExportNamedDeclaration") {
+        for (const spec of edge.specifiers) {
+          const erased = typeOnly(edge) || typeOnly(spec);
+          select(
+            keyOf(spec.local, false),
+            () => (erased ? all() : escape(spec)),
+            (act) => {
+              if (!erased) act(spec.local);
+            },
+          );
+        }
+      } else if (edge.type === "TSImportType") {
+        let qualifier = edge.qualifier;
+        while (qualifier?.type === "TSQualifiedName")
+          qualifier = qualifier.left;
+        if (qualifier) select(qualifier.name, () => use(qualifier));
+        else use(edge);
+      } else if (edge.type === "TSExternalModuleReference") {
+        const declaration = edge.parent;
+        binding(declaration, declaration.id);
+      } else if (
+        edge.type === "Identifier" ||
+        edge.type === "CallExpression" ||
+        edge.type === "ImportExpression"
+      ) {
+        use(edge, edge.type === "ImportExpression");
+      } else {
+        if (edge.type === "ExportAllDeclaration" && !typeOnly(edge))
+          escape(edge);
+        else all(); // Type-only re-export or triple-slash reference.
       }
-      for (const read of readsOf(declarator, property.value.name)) LOADER_USES[name](read);
+      return names;
+    };
+    // Native loader identity flows from Node's namespace through its
+    // projections and lexical bindings. A same-named method on data is data.
+    const nativeLoaders = {
+      "node:module": { self: moduleSelf, methods: { createRequire: makerUse } },
+      "node:process": {
+        self: processSelf,
+        methods: { getBuiltinModule: builtinUse },
+      },
     };
     // The spellings of an edge it reads: `import`, `export … from`,
     // `import()`, the type `import("…").T`, `import x = require("…")`, a
@@ -506,15 +796,18 @@ const importDirection = {
     return {
       Program: () => {
         for (const comment of context.sourceCode.getAllComments()) {
-          const reference = /^\/\s*<reference\s+(types|path)\s*=\s*["']([^"']+)["']/.exec(
-            comment.value,
-          );
+          const reference =
+            /^\/\s*<reference\s+(types|path)\s*=\s*["']([^"']+)["']/.exec(
+              comment.value,
+            );
           if (comment.type !== "Line" || reference === null) continue;
           const [, kind, source] = reference;
           // A path reference is relative whether or not it says so.
           check(
             comment,
-            kind === "path" && !source.startsWith(".") && !path.isAbsolute(source)
+            kind === "path" &&
+              !source.startsWith(".") &&
+              !path.isAbsolute(source)
               ? `./${source}`
               : source,
           );
@@ -522,149 +815,56 @@ const importDirection = {
         // Node's `require` and `module`, wherever this file reads them.
         for (const scope of context.sourceCode.scopeManager.scopes) {
           for (const { identifier, resolved } of scope.references) {
-            if (resolved !== null && resolved.scope.type !== "global") continue;
-            if (identifier.name === "require") loaderUse(identifier, dir, "`require`");
+            if (
+              resolved &&
+              (resolved.scope.type !== "global" || resolved.defs.length)
+            )
+              continue;
+            if (identifier.name === "process")
+              exportNames(identifier, true, nativeLoaders["node:process"]);
+            if (identifier.name === "require")
+              loaderUse(identifier, dir, "`require`");
             const { parent } = identifier;
             if (
               identifier.name === "module" &&
               parent.type === "MemberExpression" &&
               parent.object === identifier &&
-              parent.property.name === "require"
+              keyOf(parent.property, parent.computed) === "require"
             )
               loaderUse(parent, dir, "`module.require`");
           }
         }
       },
       ImportDeclaration: fromSource,
-      ExportNamedDeclaration: (node) => {
-        fromSource(node);
-        if (!LOADER_MODULES.includes(node.source?.value)) return;
-        for (const specifier of node.specifiers)
-          if (specifier.local.name === "createRequire") makerUse(specifier.local);
-      },
-      ExportAllDeclaration: (node) => {
-        fromSource(node);
-        if (LOADER_MODULES.includes(node.source.value)) refuseUse(node, "`createRequire`");
-      },
+      ExportNamedDeclaration: fromSource,
+      ExportAllDeclaration: fromSource,
       ImportExpression: fromSource,
-      TSImportType: (node) => check(node, sourceOf(node.source)),
+      TSImportType: (node) => {
+        const source = sourceOf(node.source);
+        check(node, source, dir, true);
+        const annotation =
+          node.parent.type === "TSTypeQuery" ? node.parent.parent : node.parent;
+        const pattern =
+          annotation.type === "TSTypeAnnotation" && annotation.parent;
+        const loaders = nativeLoaders["node:" + source?.replace(/^node:/, "")];
+        if (loaders && pattern?.type === "ObjectPattern") {
+          for (const prop of pattern.properties) {
+            if (prop.type !== "Property") continue;
+            const name = keyOf(prop.key, prop.computed);
+            if (Object.hasOwn(loaders.methods, name) || loaders.self.has(name))
+              refuseUse(prop, `\`${name}\``);
+          }
+        }
+      },
       TSExternalModuleReference: (node) =>
         check(node, sourceOf(node.expression)),
-      "ImportSpecifier[imported.name='createRequire']": (node) => {
-        if (!LOADER_MODULES.includes(node.parent.source.value)) return;
-        for (const read of readsOf(node, node.local.name)) makerUse(read);
-      },
-      MemberExpression: (node) => {
-        const name = keyOf(node.property, node.computed);
-        if (Object.hasOwn(LOADER_USES, name)) LOADER_USES[name](node);
-      },
-      Property: (node) => {
-        const name = keyOf(node.key, node.computed);
-        if (Object.hasOwn(LOADER_USES, name)) fromPattern(node, name);
-      },
     };
   },
 };
 
-// The module whose `createRequire` makes a loader.
-const LOADER_MODULES = ["module", "node:module"];
-
 // The one import-direction rule: src's config runs it, and so does the tools'
 // (eslint.tools.config.mjs). [LAW:single-enforcer]
 export const zonesPlugin = { rules: { "import-direction": importDirection } };
-
-// [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
-// arrives in its inputs, so a renderer that opened one would read a disk its
-// host never chose and no snapshot recorded.
-const RENDERER_GLOB = `src/renderer/${TS_GLOB}`;
-const RENDERER_FS_PATHS = [
-  "fs",
-  "node:fs",
-  "fs/promises",
-  "node:fs/promises",
-].map((name) => ({
-  name,
-  message:
-    "The renderer opens no file: what it reads is handed in (config snapshots, world state). [LAW:effects-at-boundaries]",
-}));
-const zonePathsOf = (file) =>
-  file.startsWith("src/renderer/") ? RENDERER_FS_PATHS : [];
-
-const ownedPattern = (name) => ({
-  group: OWNED_IMPORTS[name].group,
-  importNames: [name],
-  message: `${OWNED_IMPORTS[name].message} [LAW:single-enforcer]`,
-});
-
-// A file's whole rule: flat config replaces a rule per file rather than merging
-// it, so each block carries the child_process paths and every name but its own.
-// `patterns`, not `paths`: a path matches only the literal import string, and
-// these are imported by relative spellings that differ file to file. A
-// renderer file's block carries the disk's paths beside them.
-function restrictedImports(file, zonePaths = []) {
-  return [
-    "error",
-    {
-      paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS, ...zonePaths],
-      patterns: [
-        ...Object.keys(OWNED_IMPORTS)
-          .filter((name) => !OWNED_IMPORTS[name].owners.includes(file))
-          .map(ownedPattern),
-        ...HOST_NAMED_IMPORTS,
-        ...FAKE_IMPORTS,
-      ],
-    },
-  ];
-}
-
-function ownedImportBlocks() {
-  const owners = [
-    ...new Set(Object.values(OWNED_IMPORTS).flatMap((o) => o.owners)),
-  ];
-  return [
-    {
-      files: [`src/${TS_GLOB}`],
-      ignores: ["src/proc/**", CLOCK_FILE],
-      rules: { "no-restricted-imports": restrictedImports(null) },
-    },
-    {
-      files: [RENDERER_GLOB],
-      rules: {
-        "no-restricted-imports": restrictedImports(null, RENDERER_FS_PATHS),
-      },
-    },
-    // src/proc/spawner.ts alone may import child_process, so the rest of
-    // src/proc keeps it with the clock's paths, and the spawner only the clock's.
-    {
-      files: [`src/proc/${TS_GLOB}`],
-      ignores: [SPAWNER_FILE],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          {
-            paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS],
-            patterns: [...FAKE_IMPORTS, ownedPattern("systemTimers")],
-          },
-        ],
-      },
-    },
-    {
-      files: [SPAWNER_FILE],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          { paths: CLOCK_IMPORT_PATHS, patterns: [ownedPattern("systemTimers")] },
-        ],
-      },
-    },
-    ...owners.map((file) => ({
-      files: [file],
-      rules: {
-        "no-restricted-imports": restrictedImports(file, zonePathsOf(file)),
-      },
-    })),
-  ];
-}
 
 export default [
   js.configs.recommended,
@@ -737,7 +937,6 @@ export default [
     rules: { "no-undef": ["error", { typeof: true }] },
   },
   prettierConfig,
-  ...ownedImportBlocks(),
   // [LAW:no-silent-failure] A promise nobody awaits is a task: the clock's
   // `detach` runs it and reports what it throws, so `void` is no way out, and
   // a promise handed where a callback's return is dropped is refused too.
@@ -762,9 +961,7 @@ export default [
     plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },
-  // `no-restricted-properties` is its own rule, so the per-file replacement of
-  // `no-restricted-imports` and `no-restricted-syntax` above leaves it alone.
-  // It also catches the destructured spelling (`const { env } = process`); an
+  // The property rule also catches the destructured spelling (`const { env } = process`); an
   // alias of `process` itself is the one it cannot see.
   {
     files: [`src/${TS_GLOB}`],
@@ -858,10 +1055,6 @@ export default [
         {
           selector: "Identifier[name='runTmux']",
           message: "A path the daemon serves awaits `runTmuxAsync`.",
-        },
-        {
-          selector: "ImportDeclaration[source.value=/^(node:)?fs$/]",
-          message: "Take the disk from the daemon's inputs.",
         },
         ...CLOCK_SYNTAX,
       ],
