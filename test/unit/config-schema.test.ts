@@ -23,6 +23,7 @@ import {
 } from "../../src/config/dsl-loader";
 import { mergeWithDefault } from "../../src/config/loader/merge";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { createKeyspace } from "../../src/daemon/foundations/validator-registry";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 
 const SCHEMA_PATH = path.resolve(
@@ -245,9 +246,6 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     `{ root: { kind: 'container' } }`,
   ],
   ["bare segment node (missing name)", `{ root: { kind: 'segment' } }`],
-  // Schema-checkable cycle shape: type + minItems. (Uniqueness/emptiness/slash
-  // are loader refinements the schema mirrors structurally where JSON Schema
-  // can express them.)
   [
     "one-member cycle",
     `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: ['solo'] } }, root: { h: ['t'] } }`,
@@ -354,4 +352,97 @@ describe("config JSON Schema", () => {
       expect(loaderAccepts(source)).toBe(true);
     }
   });
+});
+
+describe("authored picker values and their click destinations", () => {
+  const samples = [
+    { value: "canary red", valid: true },
+    { value: "group:detail", valid: true },
+    { value: "insert:segment:anchor:before", valid: true },
+    { value: "", valid: false },
+    { value: "alpha/beta", valid: false },
+    { value: "trailing\n", valid: false },
+    { value: "line\rbreak", valid: false },
+  ];
+  test.each(samples)(
+    "ordinary wire value $value is admitted consistently",
+    ({ value, valid }) => {
+      const option = { label: "Mode", domain: [value], default: value };
+      const configs = [
+        { actions: { pick: { set: "picked", to: value } } },
+        { actions: { pick: { set: value, to: "chosen" } } },
+        { styles: { [value]: {} } },
+        { presets: { [value]: { globals: { updateNotice: false } } } },
+        {
+          segments: {
+            mypicker: { template: "picker", settings: { mode: option } },
+          },
+          root: "mypicker",
+        },
+      ];
+      for (const config of configs) {
+        const source = JSON.stringify(config);
+        expect([source, schemaAccepts(source), loaderAccepts(source)]).toEqual([
+          source,
+          valid,
+          valid,
+        ]);
+      }
+      const keys = createKeyspace(
+        { unrestricted: (raw) => ({ ok: true, value: raw }) },
+        "state",
+        () => [],
+      );
+      expect(keys.gateFor({}).validate("unrestricted", value).ok).toBe(valid);
+      if (valid) {
+        keys.register("picked", [value]);
+        expect(keys.gateFor({}).validate("picked", value)).toEqual({
+          ok: true,
+          value,
+        });
+      } else {
+        expect(() => keys.register("picked", [value])).toThrow();
+        expect(() => keys.register(value, ["chosen"])).toThrow();
+      }
+    },
+  );
+
+  test.each(samples)(
+    "a placement component $value has its own delimiter rules",
+    ({ value, valid }) => {
+      const source = JSON.stringify({
+        segments: { marker: { template: "marker" } },
+        root: { seg: "marker", id: value },
+      });
+      const admitted = valid && !value.includes(":");
+      expect([schemaAccepts(source), loaderAccepts(source)]).toEqual([
+        admitted,
+        admitted,
+      ]);
+    },
+  );
+
+  test.each(["_ok2", "2bad", "name\n"])(
+    "a row and a segment setting use the same identifier grammar for %j",
+    (name) => {
+      const admitted = name === "_ok2";
+      const segment = {
+        template: "marker",
+        settings: { [name]: { label: "Name", domain: "bool", default: true } },
+      };
+      for (const config of [
+        {
+          root: { rows: { [name]: "marker" } },
+          segments: { marker: { template: "marker" } },
+        },
+        { segments: { marker: segment }, root: "marker" },
+      ]) {
+        const source = JSON.stringify(config);
+        expect([schemaAccepts(source), loaderAccepts(source)]).toEqual([
+          admitted,
+          admitted,
+        ]);
+      }
+    },
+  );
 });

@@ -1,3 +1,4 @@
+import { IDENTIFIER } from "../ident.js";
 // [LAW:single-enforcer] The validation engine's primitives: the shared
 // ValidateCtx every per-type validator threads, the field-combinators
 // (requireString / optionalEnum / …) they compose from, and the type-describe
@@ -652,7 +653,7 @@ export function optionalStringSpec(): FieldSpec<string> {
 
 // [LAW:one-source-of-truth] An environment variable's name as a shell
 // spells one.
-export const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const ENV_NAME = IDENTIFIER;
 
 // [LAW:parse-dont-validate] An optional list of environment variable names:
 // what a shell source's command reads, beyond the base set. Present-and-wrong

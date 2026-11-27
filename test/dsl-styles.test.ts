@@ -86,7 +86,7 @@ describe("styles block — loader validation", () => {
 
   test("a slash-bearing style name is rejected with the wire-shape reason", () => {
     expect(parseIssues(`{ styles: { "a/b": {} } }`)).toContain(
-      'style name "a/b" must be non-empty and slash-free',
+      'style name "a/b" must be non-empty, slash-free, and newline-free',
     );
   });
 

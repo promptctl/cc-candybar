@@ -1,3 +1,5 @@
+import { clickValue, layoutComponent } from "../../click/wire-value.js";
+import { IDENTIFIER } from "../ident.js";
 // [LAW:types-are-the-program] Per-placement settings at the load boundary
 // (brandon-segment-settings-i4n): a segment's `settings` DECLARATION, and the
 // two fields a placement in `root` may carry — its `id` and its setting
@@ -27,7 +29,7 @@ import {
 
 // A setting's name is read in a template as `.settings.<name>`, so it must be
 // a field name the template engine parses.
-const SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const SETTING_NAME = IDENTIFIER;
 const SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
 
 const SETTING_VALUE_JSON = {
@@ -45,7 +47,7 @@ const SETTING_DECL_JSON = {
         { const: "bool" },
         {
           type: "array",
-          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
+          items: clickValue.json,
           minItems: 1,
           uniqueItems: true,
         },
@@ -107,14 +109,12 @@ function parseDomain(
     // values and splits on "/" — and display text spliced into a template
     // string, which a newline would leave unterminated. The rule preset names
     // keep (presets.ts), for the same two reasons.
-    const unwritable = words.filter(
-      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w),
-    );
+    const unwritable = words.filter((w) => clickValue.parse(w) === null);
     if (unwritable.length > 0) {
       return issue(
         ctx,
         path,
-        `a list domain's words must be non-empty, slash-free, and newline-free — configure mode writes each on the set-state wire — got ${JSON.stringify(unwritable)}`,
+        `a list domain's words ${clickValue.rule} — configure mode writes each on the set-state wire — got ${JSON.stringify(unwritable)}`,
       );
     }
     return words;
@@ -281,24 +281,22 @@ export function placementIdSpec(): FieldSpec<string> {
   return {
     required: false,
     json: {
-      type: "string",
-      minLength: 1,
-      pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`,
+      ...layoutComponent.json,
+      not: { pattern: `^(?:${RESERVED_ID_JSON})` },
     },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (v === undefined) return undefined;
       if (
         typeof v === "string" &&
-        v.length > 0 &&
-        !/[:/]/.test(v) &&
+        layoutComponent.parse(v) !== null &&
         !isReservedName(v)
       )
         return v;
       return issue(
         ctx,
         `${path}.${field}`,
-        `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`,
+        `a placement "id" ${layoutComponent.rule}, outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`,
       );
     },
   };

@@ -38,6 +38,7 @@ const ZONE_ROWS = {
   "src/terminal-hint.ts": "shared",
   "src/tmux-hint.ts": "shared",
   "src/click/wire.ts": "shared",
+  "src/click/wire-value.ts": "shared",
   "src/click/link-signer.ts": "shared",
   "src/click/gesture.ts": "shared",
   "src/cli-flags.ts": "shared",

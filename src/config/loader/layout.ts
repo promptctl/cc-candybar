@@ -1,3 +1,4 @@
+import { clickValue } from "../../click/wire-value.js";
 // [LAW:one-source-of-truth] The ONE layout authoring surface is the A-grammar
 // (a bare string = segment ref; { seg, when? } = segment ref with predicate;
 // { h: [...], when? } = horizontal container; { v: [...], when? } = vertical
@@ -656,14 +657,14 @@ function groupNameSpec(): FieldSpec<string> {
 function groupKeySpec(): FieldSpec<string> {
   return {
     required: false,
-    json: { type: "string", minLength: 1 },
+    json: clickValue.json,
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (v === undefined) return undefined;
-      if (typeof v !== "string" || v === "" || v.includes("/")) {
+      if (typeof v !== "string" || clickValue.parse(v) === null) {
         ctx.issues.push({
           path: `${path}.${field}`,
-          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
+          message: `a group "key" ${clickValue.rule} (a SessionState key), got ${describeValue(v)}`,
           line: findKeyLine(ctx.source, ["root"]),
         });
         return undefined;

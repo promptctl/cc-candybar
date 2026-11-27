@@ -1,3 +1,4 @@
+import { clickValue } from "../../click/wire-value.js";
 // [LAW:one-type-per-behavior] The keyed-validator ALGEBRA, extracted from
 // state-validators.ts (candybar-config-engine-71o.2) so it has exactly ONE
 // implementation shared by two independent keyspaces: SessionState writes
@@ -85,30 +86,13 @@ export function makeAllowListValidator(
   label: string,
   wire: string = "set-state",
 ): KeyValidator {
-  // [LAW:types-are-the-program] The factory's contract is "options = allow
-  // list" — every value the picker can RENDER must also be a value the wire
-  // can DELIVER. Two structural reasons a declared option can't reach the
-  // validator as itself: (1) the wire splits the tail on "/"; (2) the
-  // validator's empty-input rejection fires before the allow-list check, so
-  // an "" in the allow list would be listed-but-undeliverable. Catching at
-  // factory-build time (config-load) surfaces a misconfigured option list
-  // immediately, not on the operator's first click.
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
+  // A picker can offer only values the click wire can deliver unchanged.
+  // Check the list when the gate is built, before its first click.
+  const refused = allowed.filter((option) => clickValue.parse(option) === null);
+  if (refused.length)
     throw new Error(
-      `makeAllowListValidator(${label}): values contain "/" — the ${wire} ` +
-        `wire shape splits values on "/" so slash-bearing options cannot ` +
-        `be addressed. Offending values: ${slashOffenders.join(", ")}`,
+      `makeAllowListValidator(${label}): options ${clickValue.rule} on the ${wire} wire. Offending values: ${refused.map((option) => JSON.stringify(option)).join(", ")}`,
     );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label}): empty string is not a writable ` +
-        `option — the validator rejects empty input before the allow-list ` +
-        `check, so an "" in the allowed list could be rendered but never ` +
-        `delivered. Remove "" from the allowed list.`,
-    );
-  }
   const allowedSet: ReadonlySet<string> = new Set(allowed);
   const allowedList = [...allowed];
   return (raw) => {
@@ -328,16 +312,10 @@ function createGate(
     ...derived,
   ];
   for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    // [LAW:types-are-the-program] The wire splits its tail on `/`, so a
-    // slash-bearing key can never be addressed — listing it would be
-    // gate-vs-wire drift.
-    if (key.includes("/")) {
+    if (clickValue.parse(key) === null)
       throw new Error(
-        `${noun} gate: key "${key}" contains "/" — the wire shape splits on ` +
-          `"/" so a slash-bearing key cannot be addressed. Use a slash-free key.`,
+        `${noun} gate: key is required and ${clickValue.rule}, got ${JSON.stringify(key)}`,
       );
-    }
     if (Object.hasOwn(baseline, key)) {
       throw new Error(
         `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be ` +
@@ -358,6 +336,11 @@ function createGate(
           reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`,
         };
       }
+      if (clickValue.parse(rawValue) === null)
+        return {
+          ok: false,
+          reason: `${noun} value is required and ${clickValue.rule}`,
+        };
       return validator(rawValue);
     },
     listKeys: () => [...validators.keys()],

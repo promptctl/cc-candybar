@@ -31,8 +31,7 @@ export type LayoutOp =
 
 // [LAW:single-enforcer] THE codec for a LayoutOp crossing the click wire as
 // one opaque string. `:` is the delimiter
-// (loader/actions.ts's segmentNameSpec rejects `:` and `/` in every name an
-// op can carry, so decode is unambiguous — a plain split, no escaping).
+// (the layoutComponent grammar excludes it from each authored component).
 // Encode and decode live together so the format cannot drift between the
 // validator gate (config-validators.ts, which encodes the ONE token a
 // declared action allows), the render side (which emits that same token),
