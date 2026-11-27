@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "90d265cab09e4d71ab46d30287a5944220706931",
-      "timestamp": "2026-11-27T22:44:38.354Z",
+      "sha": "dfd45a29e6c86fc420ccaa588ea8bd9796bf270c",
+      "timestamp": "2026-11-27T22:49:02.508Z",
       "commits": [
         {
-          "sha": "90d265cab09e4d71ab46d30287a5944220706931",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T15:43:26-07:00",
-          "message": "fix(ssh-links): a forwarded click's own failure is told as itself; desktop acts go through the one performer (#987)\n\n* fix(ssh-links): tell a forwarded click's own failure as itself, and hand desktop acts through the one performer\n\nA click that arrived down an ssh forward and then failed on its own verb,\nhaving asked no copy or open, was answered as a failed response, which the\nURL handler words as a dead forward or a refused link. A landed click is now\nalways answered as taken, with its acts and its failure beside them.\n\nA copy or open for the desktop is decided by the act performer like every\nother act, so it is refused once the daemon is closing and its act line is\nwritten, including when the path check throws.\n\nWhere a click's acts go is a required argument of answerClick; nothing in the\nhost defaults it to the daemon's machine.\n\n* fix(ssh-links): tell a daemon-spoken click failure as the daemon's, not a dead forward\n\nThe URL handler worded every failed verdict as a forward that took nothing, so a\nclick the daemon answered it could not take (no renderer, an oversized verdict)\nblamed the ssh connection. A failure the daemon said is now told with its reason;\nonly a frame that never reached the daemon blames the forward.\n\nAlso: the performer's table can no longer end an act as handed to the desktop,\nthe desktop act line cites its law again, a failure beside a malformed acts list\nor a non-string failure is kept by the URL handler, and the stale verdict\ncomments say what the code does.\n\n* fix(ssh-links): word a click's own failure as the click's, and test how a verdict is told\n\nA failure after the acts a click asked is told as the click's failure, not as an\nact left undone. A failure with no acts key is a malformed verdict, not an older\ndaemon. The verdict-to-forward mapping moves beside the verdict parser so the\ncheck asserts it. The performer loses its test-only overload, and the comments\nthat claimed a failed response means the click never ran say what is true."
+          "sha": "dfd45a29e6c86fc420ccaa588ea8bd9796bf270c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T22:47:18Z",
+          "message": "chore(release): set `package.json` to 1.245.2\n\n## [1.245.2](https://github.com/promptctl/cc-candybar/compare/v1.245.1...v1.245.2) (2026-11-27)\n\n### Bug Fixes\n\n* **ssh-links:** a forwarded click's own failure is told as itself; desktop acts go through the one performer ([#987](https://github.com/promptctl/cc-candybar/issues/987)) ([90d265c](https://github.com/promptctl/cc-candybar/commit/90d265cab09e4d71ab46d30287a5944220706931))\n"
         }
       ]
     },
