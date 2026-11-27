@@ -2,6 +2,11 @@
 // failure, which the host says on every bar, and the write is still held.
 
 import { HeldStores, type ProfileStorage } from "../../src/daemon/held-stores";
+import { commandTray } from "../../src/config/command-tray";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../src/config/door";
+import { EDIT_MODE_KEY } from "../../src/config/reserved-names";
+import { EDIT_MODE_ARRANGE } from "../../src/config/loader/edit-mode";
+import { SessionState } from "../../src/renderer/session-state";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { heldClock } from "../helpers/held-clock";
@@ -24,6 +29,22 @@ function held(storage: Partial<ProfileStorage>): HeldStores {
   stores.load();
   return stores;
 }
+
+test("a replacement restores a committed menu and confirmation without restoring edit-mode keys", () => {
+  const stores = held({});
+  const first = new SessionState(stores.current().sessions);
+  first.set(S1, SETTINGS_ANCHOR, SETTINGS_OPEN);
+  const arm = commandTray("commands.").actions["commands.clear.arm"]!;
+  if (!("set" in arm && "to" in arm)) throw new Error("Expected a set action");
+  first.set(S1, arm.set, arm.to);
+  first.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  stores.take(first.drain());
+
+  const replacement = new SessionState(stores.current().sessions);
+  expect(replacement.get(S1, SETTINGS_ANCHOR)).toBe(SETTINGS_OPEN);
+  expect(replacement.get(S1, arm.set)).toBe(arm.to);
+  expect(replacement.get(S1, EDIT_MODE_KEY)).toBeNull();
+});
 
 test("a history its file refuses throws, and the step is still held", () => {
   const stores = held({
