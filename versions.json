@@ -4,15 +4,22 @@
     {
       "version": "pr-982",
       "ref": "refs/pull/982/merge",
-      "sha": "356c69e7c1ca66fbaf3153b76b5fae8ec99bcbe0",
-      "timestamp": "2026-11-27T05:16:56.746Z",
+      "sha": "97a50300fc529f8db0456d8a370ced8a287ee962",
+      "timestamp": "2026-11-27T05:18:15.521Z",
       "commits": [
         {
-          "sha": "356c69e7c1ca66fbaf3153b76b5fae8ec99bcbe0",
+          "sha": "97a50300fc529f8db0456d8a370ced8a287ee962",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T22:15:46-07:00",
-          "message": "Merge 2d378ac3d5498ddf87d3e348cf56c53d9b47b054 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+          "timestamp": "2026-11-27T05:16:41Z",
+          "message": "Merge f746b7f30864b1698abd8e2b17754bd46d4f7209 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+        },
+        {
+          "sha": "f746b7f30864b1698abd8e2b17754bd46d4f7209",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:16:16-07:00",
+          "message": "Verify real source coverage and derive app rule selection from its rows\n"
         },
         {
           "sha": "2d378ac3d5498ddf87d3e348cf56c53d9b47b054",
