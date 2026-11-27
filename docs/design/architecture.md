@@ -73,6 +73,10 @@ The host maintains the tmux pane from effective settings. The ordinary statuslin
 
 `createDaemon` prepares the shared host. In production the socket owner calls `serve()` to load the stores and obtain the request-capable daemon, then arms the background work. Shutdown seals admission, drains the renderer journal, and cancels remaining work before releasing the shared resources.
 
+Every launcher has an owner whose lifetime ends its running commands and unreleased job gates. Releasing a job transfers its lifetime to the detached job. Each launch chooses its working directory and environment separately. Owner inheritance uses the current directory and the owner’s live environment at spawn, after removing repository-specific variables. A supplied environment can be empty. The child receives its environment overlay after that choice.
+
+The host binds fixed desktop tools and Claude input to the reporting session’s directory and environment. Those fixed tools can use the host context before a session reports or for a sessionless desktop link. Configured programs require the session’s reported context. [LAW:single-enforcer]
+
 The render checkpoint accepts an absolute `workspace.current_dir`. If the hook omits it, the host uses the checked cwd reported by the client. A relative workspace directory is refused before checkout observation. The renderer receives the checked workspace directory and the host's checkout observation. [LAW:single-enforcer]
 
 ## Areas

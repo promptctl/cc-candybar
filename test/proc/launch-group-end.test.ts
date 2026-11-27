@@ -9,10 +9,7 @@ import {
   MAX_CAPTURED_BYTES,
   type TestableLauncher,
 } from "../../src/proc/launch";
-import {
-  type LaunchCategory,
-  type WarningChange,
-} from "../../src/proc/launcher";
+import { OWNER_CONTEXT, type LaunchCategory, type WarningChange } from "../../src/proc/launcher.js";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
 import { heldGrandchild } from "../helpers/held-grandchild";
@@ -67,10 +64,14 @@ beforeEach(() => {
     systemTimekeeper,
   );
 });
-afterEach(() => ending.abort());
+afterEach(async () => {
+  ending.abort();
+  expect(await launcher.settled()).toEqual({ unreaped: [] });
+});
 
 const launch = (run: { bin: string; args: string[] }, timeoutMs?: number) =>
   launcher.launch({
+    ...OWNER_CONTEXT,
     category: "user-shell",
     bin: run.bin,
     args: run.args,
@@ -139,7 +140,7 @@ describe("a launch whose child ends with a descendant outside its group", () => 
   it("reports an abort received after the process group exits and before its result settles", async () => {
     const abort = new AbortController();
     const shell = "/bin/sh";
-    const observed = createLauncher(
+    launcher = createLauncher(
       { inherited: process.env, signal: ending.signal },
       systemTimekeeper,
       {
@@ -153,7 +154,8 @@ describe("a launch whose child ends with a descendant outside its group", () => 
         },
       },
     );
-    const result = await observed.launch({
+    const result = await launcher.launch({
+      ...OWNER_CONTEXT,
       category: "user-shell",
       bin: shell,
       args: ["-c", "exit 0"],

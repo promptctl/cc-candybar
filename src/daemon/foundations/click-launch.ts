@@ -3,7 +3,7 @@
 import {
   failureText,
   type LaunchCategory,
-  type Launcher,
+  type ContextualLauncher,
   type LaunchResult,
 } from "../../proc/launcher";
 import { DaemonClosing } from "./verb-error";
@@ -25,7 +25,7 @@ export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 // click is answered only once its act has ended, so the bound is no option.
 // It is what lets the click be answered.
 export const clickLaunchVia =
-  (launcher: Pick<Launcher, "launch">) =>
+  (launcher: ContextualLauncher) =>
   (launch: ClickLaunch): Promise<LaunchResult> =>
     launcher.launch({
       ...launch,

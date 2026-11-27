@@ -26,7 +26,7 @@ import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { locations } from "../src/daemon/paths";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, boldUrls } from "./helpers/frame";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";

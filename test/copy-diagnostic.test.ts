@@ -4,8 +4,8 @@
 // short, and a key that draw does not list is refused loudly.
 
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
-import { type LaunchOpts } from "../src/proc/launcher";
-import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+import type { ContextualLauncher } from "../src/proc/launcher";
+
 import { aboutSubject } from "../src/config/about";
 import {
   collectDiagnostics,
@@ -25,10 +25,9 @@ import { CrossedFailure } from "../src/daemon/foundations/verb-error";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-const launched: LaunchOpts[] = [];
-const recording = {
-  ...unscriptedLauncher,
-  launch: async (opts: LaunchOpts) => {
+const launched: Parameters<ContextualLauncher["launch"]>[0][] = [];
+const recording: ContextualLauncher = {
+  launch: async (opts) => {
     launched.push(opts);
     return { ok: true as const, exitCode: 0, stdout: "", stderr: "" };
   },

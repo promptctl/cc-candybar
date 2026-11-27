@@ -7,6 +7,10 @@
 
 import {
   failureText,
+  launcherIn,
+  OWNER_CONTEXT,
+  type LaunchContext,
+  type ContextualLauncher,
   type LaunchCategory,
   type LaunchOpts,
   type LaunchResult,
@@ -34,7 +38,7 @@ function invocation(
   category: LaunchCategory,
   args: readonly string[],
   stdinInput?: string,
-): LaunchOpts {
+): Omit<LaunchOpts, keyof LaunchContext> {
   return {
     bin: "tmux",
     args: ["-S", hint.socket, ...args],
@@ -71,6 +75,22 @@ function tmuxRun(
 // One tmux invocation, off the loop.
 export async function runTmuxAsync(
   launcher: Pick<Launcher, "launch">,
+  hint: Pick<TmuxHint, "socket">,
+  category: LaunchCategory,
+  args: readonly string[],
+  stdinInput?: string,
+): Promise<TmuxRun> {
+  return runTmuxIn(
+    launcherIn(launcher, OWNER_CONTEXT),
+    hint,
+    category,
+    args,
+    stdinInput,
+  );
+}
+
+export async function runTmuxIn(
+  launcher: ContextualLauncher,
   hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],

@@ -1,6 +1,7 @@
+import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import fs from "node:fs";
 import { hostOf } from "../scripts/lib/host";
-import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+
 import os from "node:os";
 import path from "node:path";
 
@@ -115,7 +116,7 @@ describe("a daemon aimed by its paths value", () => {
       const limits = adapters.limits({
         startedAtMs: 0,
         exit: () => {},
-        launcher: unscriptedLauncher,
+        launcher: unscriptedLauncher(),
         log: () => {},
       });
       limits.writeMemoryReport(

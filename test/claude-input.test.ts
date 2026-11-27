@@ -4,8 +4,10 @@
 // held clock and a scripted spawner. It records every command and its input,
 // including a read to which no keystroke may follow. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
+
+import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
+import { OWNER_CONTEXT } from "../src/proc/launcher";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
-import { fakeLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { instantAt } from "../src/utils/instant";
 import { heldClock } from "./helpers/held-clock";
 import { exits } from "../src/proc/spawner-fake";
@@ -173,10 +175,10 @@ const HINT: TmuxHint = {
   truecolor: null,
 };
 let clock: ReturnType<typeof heldClock>;
-let programs: ReturnType<typeof fakeLauncher>;
+let programs: ReturnType<typeof fixtureFakeLauncher>;
 beforeEach(() => {
   clock = heldClock(new Date(1_000_000));
-  programs = fakeLauncher(clock);
+  programs = fixtureFakeLauncher(clock, {});
   programs.spawner.program(
     (bin, args) => bin === "tmux" && args[2] === "load-buffer",
     exits(),
@@ -192,7 +194,7 @@ function serve(screen: readonly string[], inMode = false): void {
 const typing = () => ({
   claudeInput: productionClaudeInputEdge({
     launch: (opts) => {
-      const result = programs.launcher.launch(opts);
+      const result = programs.launcher.launch({ ...opts, ...OWNER_CONTEXT });
       clock.advance(0);
       return result;
     },

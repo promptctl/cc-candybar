@@ -7,8 +7,8 @@
 // no validation error and no error cell (⚠) in the output — so any future drift
 // fails CI, not a user's status line.
 
+import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
-import { fakeLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { hangs } from "../src/proc/spawner-fake";
 import { NO_PROJECT } from "./helpers/no-project";
 import { textOf } from "../src/render/frame";
@@ -64,7 +64,7 @@ describe("shipped examples load and render through the real cascade", () => {
     const store = new VariableStore(systemTimekeeper);
     // The draw below is the first one: every shell source is still reading, as
     // it is to the real launcher until a process answers.
-    const { launcher, spawner } = fakeLauncher(systemTimekeeper);
+    const { launcher, spawner } = fixtureFakeLauncher(systemTimekeeper, {});
     spawner.program(() => true, hangs());
     const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {

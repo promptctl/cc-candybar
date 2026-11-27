@@ -14,7 +14,11 @@ import {
   type LaunchScope,
   type TestableLauncher,
 } from "../../src/proc/launch";
-import { type LaunchCategory, type Launcher } from "../../src/proc/launcher";
+import {
+  OWNER_CONTEXT,
+  type LaunchCategory,
+  type Launcher,
+} from "../../src/proc/launcher.js";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../../scripts/lib/until";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
@@ -96,11 +100,17 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 // a lifeline behind it.
 let launcher: TestableLauncher & OneShotLauncher;
 let ending: AbortController;
-const scoped = (scope: Partial<LaunchScope>): void => {
+const scopes: Array<{ owner: AbortController; launcher: TestableLauncher }> =
+  [];
+const scoped = (
+  scope: Partial<Pick<LaunchScope, "stats" | "observeWarnings">>,
+  owner = ending,
+): void => {
   launcher = systemOneShotLauncher(
-    { inherited: process.env, signal: ending.signal, ...scope },
+    { inherited: process.env, signal: owner.signal, ...scope },
     systemTimekeeper,
   );
+  scopes.push({ owner, launcher });
 };
 const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
 const launchSync: OneShotLauncher["launchSync"] = (opts) =>
@@ -118,13 +128,23 @@ beforeEach(() => {
   scoped({});
 });
 
-afterEach(() => {
-  ending.abort();
+afterEach(async () => {
+  const owned = scopes.splice(0);
+  for (const { owner } of owned) owner.abort();
+  for (const { launcher } of owned) {
+    // EPERM cases keep the refused child running until the test releases it.
+    // Wait for its OS exit to reach the launcher before ending this case.
+    await until(
+      async () => (await launcher.settled()).unreaped.length === 0,
+      "the case's launcher to reap its last child",
+    );
+  }
 });
 
 describe("launch (async)", () => {
   it("captures stdout from a zero-exit binary", async () => {
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["hi"],
       category: "user-shell",
@@ -140,6 +160,7 @@ describe("launch (async)", () => {
     const write = (bytes: string) =>
       `process.stdout.write(${bytes}); process.stderr.write(${bytes});`;
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: process.execPath,
       args: [
         "-e",
@@ -169,6 +190,7 @@ describe("launch (async)", () => {
     }) as typeof cp.spawn);
     try {
       const r = await launch({
+        ...OWNER_CONTEXT,
         bin: process.execPath,
         args: ["-e", "process.stdout.write('x'); setInterval(() => {}, 1000);"],
         category: "user-shell",
@@ -189,6 +211,7 @@ describe("launch (async)", () => {
       it("is ended at the bound: output-limit, the first MAX_CAPTURED_BYTES kept, the child gone", async () => {
         const pidFile = path.join(scratch, `endless-${stream}`);
         const r = await launch({
+          ...OWNER_CONTEXT,
           bin: process.execPath,
           args: [
             "-e",
@@ -213,6 +236,7 @@ describe("launch (async)", () => {
     // The child ignores SIGTERM, so chunks past the first overflow keep coming
     // through the kill grace.
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: process.execPath,
       args: [
         "-e",
@@ -229,6 +253,7 @@ describe("launch (async)", () => {
 
   it("keeps a child whose output is exactly the bound ok, and ends one that exits past it", async () => {
     const write = (bytes: number) => ({
+      ...OWNER_CONTEXT,
       bin: process.execPath,
       args: ["-e", `process.stdout.write(Buffer.alloc(${bytes}, 97));`],
       category: "user-shell" as const,
@@ -243,6 +268,7 @@ describe("launch (async)", () => {
 
   it("reports non-zero exits as data, not throws", async () => {
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "exit 7"],
       category: "user-shell",
@@ -256,6 +282,7 @@ describe("launch (async)", () => {
 
   it("reports spawn-error for a nonexistent binary", async () => {
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "/nonexistent/binary-x9k7",
       category: "user-shell",
     });
@@ -272,6 +299,7 @@ describe("launch (async)", () => {
     const { sent, restore } = recordGroupSignals();
     try {
       const r = await launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: ["-c", "sleep 5"],
         timeoutMs: 50,
@@ -300,6 +328,7 @@ describe("launch (async)", () => {
     const { sent, restore } = recordGroupSignals();
     try {
       const pending = launch({
+        ...OWNER_CONTEXT,
         ...ignoringChild(marker),
         category: "user-shell",
         signal: controller.signal,
@@ -322,6 +351,7 @@ describe("launch (async)", () => {
     await using child = await heldGrandchild();
     const controller = new AbortController();
     const pending = launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", child.command],
       category: "user-shell",
@@ -344,6 +374,7 @@ describe("launch (async)", () => {
     const { sent, restore } = recordGroupSignals();
     try {
       const pending = launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: ["-c", "sleep 5"],
         timeoutMs: 50,
@@ -363,6 +394,7 @@ describe("launch (async)", () => {
     setTimeout(() => controller.abort(), 20);
     const t0 = Date.now();
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "sleep 5"],
       timeoutMs: 5000,
@@ -382,6 +414,7 @@ describe("launch (async)", () => {
     });
     try {
       const r = await launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: ["-c", "sleep 0.4"],
         timeoutMs: 50,
@@ -406,6 +439,7 @@ describe("launch (async)", () => {
     const decoded = jest.spyOn(StringDecoder.prototype, "write");
     try {
       const r = await launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: [
           "-c",
@@ -446,6 +480,7 @@ describe("launch (async)", () => {
     try {
       const controller = new AbortController();
       const run = launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: ["-c", "sleep 0.1"],
         category: "user-shell",
@@ -467,6 +502,7 @@ describe("launch (async)", () => {
     const { handle, starts } = makeSpyHandle();
     scoped({ stats: handle });
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "echo ran"],
       category: "user-shell",
@@ -480,6 +516,7 @@ describe("launch (async)", () => {
     // Child kills itself with SIGTERM; no timeout was set, so the close
     // must surface as "signal", not "timeout".
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "kill -TERM $$; sleep 1"],
       category: "user-shell",
@@ -493,6 +530,7 @@ describe("launch (async)", () => {
 
   it("pipes stdinInput to the child", async () => {
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/cat",
       stdinInput: "via stdin",
       category: "user-shell",
@@ -505,6 +543,7 @@ describe("launch (async)", () => {
 
   it("keeps stdinInput whole for a descendant that reads it after the child exits", async () => {
     const r = await launch({
+      ...OWNER_CONTEXT,
       bin: "sh",
       // dash points a background job's stdin at /dev/null before its own
       // redirections, so the input goes through an fd of its own.
@@ -546,6 +585,7 @@ describe("launch (async)", () => {
     const kill = refusingSignals();
     try {
       const pending = launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: ["-c", `${gate.command}; wc -c > "$1"`, "sh", counted],
         stdinInput: "x".repeat(1024 * 1024),
@@ -554,7 +594,10 @@ describe("launch (async)", () => {
       });
       const read = await gate.started();
       stop.abort();
-      expect(await pending).toMatchObject({ ok: false, reason: "signal-refused" });
+      expect(await pending).toMatchObject({
+        ok: false,
+        reason: "signal-refused",
+      });
       // stdout, stderr and the input.
       expect(drains.opened).toHaveLength(3);
       read();
@@ -577,10 +620,11 @@ describe("launch (async)", () => {
     const stop = new AbortController();
     const closing = new AbortController();
     const drains = meteringDrains();
-    scoped({ stats: drains.handle, signal: closing.signal });
+    scoped({ stats: drains.handle }, closing);
     const kill = refusingSignals();
     try {
       const pending = launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         // Holds its input unread, so only the close can free it.
         args: ["-c", child.command],
@@ -590,7 +634,10 @@ describe("launch (async)", () => {
       });
       await child.started();
       stop.abort();
-      expect(await pending).toMatchObject({ ok: false, reason: "signal-refused" });
+      expect(await pending).toMatchObject({
+        ok: false,
+        reason: "signal-refused",
+      });
       // stdout, stderr and the input.
       const held = drains.opened.length;
       expect(held).toBe(3);
@@ -608,10 +655,20 @@ describe("launch (async)", () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });
     // A launcher's first launch also starts its lifeline, a spawn of its own.
-    await launch({ bin: "/bin/echo", args: ["up"], category: "git" });
+    await launch({
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      args: ["up"],
+      category: "git",
+    });
     starts.length = 0;
     ends.length = 0;
-    await launch({ bin: "/bin/echo", args: ["x"], category: "git" });
+    await launch({
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      args: ["x"],
+      category: "git",
+    });
     expect(starts).toEqual(["git"]);
     expect(ends).toHaveLength(1);
     expect(ends[0]?.category).toBe("git");
@@ -622,6 +679,7 @@ describe("launch (async)", () => {
 describe("launchSync", () => {
   it("captures stdout from a zero-exit binary", () => {
     const r = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["sync"],
       category: "user-shell",
@@ -634,6 +692,7 @@ describe("launchSync", () => {
 
   it("reports non-zero exits as data", () => {
     const r = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "exit 3"],
       category: "user-shell",
@@ -647,7 +706,12 @@ describe("launchSync", () => {
   it("meters via the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });
-    launchSync({ bin: "/bin/echo", args: ["m"], category: "user-shell" });
+    launchSync({
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      args: ["m"],
+      category: "user-shell",
+    });
     expect(starts).toEqual(["user-shell"]);
     expect(ends).toHaveLength(1);
     expect(ends[0]?.category).toBe("user-shell");
@@ -657,6 +721,7 @@ describe("launchSync", () => {
 describe("launchDetachedSync", () => {
   it("returns ok synchronously and does not wait for the child", () => {
     const r = launchDetachedSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "sleep 5"],
       category: "daemon-spawn",
@@ -669,6 +734,7 @@ describe("launchDetachedSync", () => {
 
   it("returns spawn-error synchronously when the binary does not exist", () => {
     const r = launchDetachedSync({
+      ...OWNER_CONTEXT,
       bin: "/nonexistent/daemon-x9k7",
       category: "daemon-spawn",
     });
@@ -682,6 +748,7 @@ describe("launchDetachedSync", () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });
     launchDetachedSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "true"],
       category: "daemon-spawn",
@@ -699,6 +766,7 @@ describe("launchDetachedSync", () => {
 describe("launch — per-category rate-limit", () => {
   it("rejects a second click.pbcopy spawn inside the min interval", () => {
     const first = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["x"],
       category: "click.pbcopy",
@@ -706,6 +774,7 @@ describe("launch — per-category rate-limit", () => {
     expect(first.ok).toBe(true);
 
     const second = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["y"],
       category: "click.pbcopy",
@@ -719,6 +788,7 @@ describe("launch — per-category rate-limit", () => {
 
   it("rate-limits click.open the same way", () => {
     const first = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["x"],
       category: "click.open",
@@ -726,6 +796,7 @@ describe("launch — per-category rate-limit", () => {
     expect(first.ok).toBe(true);
 
     const second = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["y"],
       category: "click.open",
@@ -736,11 +807,13 @@ describe("launch — per-category rate-limit", () => {
 
   it("does not rate-limit categories without a configured policy", () => {
     const first = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["x"],
       category: "user-shell",
     });
     const second = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["y"],
       category: "user-shell",
@@ -751,12 +824,14 @@ describe("launch — per-category rate-limit", () => {
 
   it("rate-limit applies to async launch as well as sync", async () => {
     const first = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["x"],
       category: "click.pbcopy",
     });
     expect(first.ok).toBe(true);
     const second = await launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/echo",
       args: ["y"],
       category: "click.pbcopy",
@@ -768,8 +843,18 @@ describe("launch — per-category rate-limit", () => {
   it("rate-limited rejection does NOT record stats (no spawn happened)", () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });
-    launchSync({ bin: "/bin/echo", args: ["x"], category: "click.pbcopy" });
-    launchSync({ bin: "/bin/echo", args: ["y"], category: "click.pbcopy" });
+    launchSync({
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      args: ["x"],
+      category: "click.pbcopy",
+    });
+    launchSync({
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      args: ["y"],
+      category: "click.pbcopy",
+    });
     // Only the first spawn went through onStart/onEnd. The second is data,
     // not a process, and must not pollute the histograms or per-category
     // counts.
@@ -782,6 +867,7 @@ describe("launch — per-category rate-limit", () => {
     // arms the rate-limit timer. Second call must short-circuit with
     // "rate-limited" — proving the gate runs before spawn-error attribution.
     const first = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/nonexistent/binary-rate-x9k7",
       category: "click.pbcopy",
     });
@@ -789,6 +875,7 @@ describe("launch — per-category rate-limit", () => {
     if (!first.ok) expect(first.reason).toBe("spawn-error");
 
     const second = launchSync({
+      ...OWNER_CONTEXT,
       bin: "/nonexistent/binary-rate-x9k7",
       category: "click.pbcopy",
     });
@@ -802,6 +889,7 @@ describe("launch — per-category rate-limit", () => {
 // gives it, however the process died; the daemon e2e kills a real launcher.
 describe("the lifeline", () => {
   const shell = (command: string) => ({
+    ...OWNER_CONTEXT,
     bin: "/bin/sh",
     args: ["-c", `${command}; echo late`],
     category: "user-shell" as const,
@@ -860,6 +948,7 @@ describe("the lifeline", () => {
 // daemon left running is ended here, whichever owner's work it was.
 describe("a launcher's scope", () => {
   const touching = (file: string) => ({
+    ...OWNER_CONTEXT,
     bin: "/usr/bin/touch",
     args: [file],
     category: "user-shell" as const,
@@ -867,7 +956,7 @@ describe("a launcher's scope", () => {
 
   it("refuses every kind of launch once its signal has aborted, spawning nothing", async () => {
     const closing = new AbortController();
-    scoped({ signal: closing.signal });
+    scoped({}, closing);
     closing.abort(new Error("the daemon closed"));
     const marker = path.join(scratch, "scope-refused");
 
@@ -897,9 +986,10 @@ describe("a launcher's scope", () => {
 
   it("terminates a launch in flight that has no signal of its own", async () => {
     const closing = new AbortController();
-    scoped({ signal: closing.signal });
+    scoped({}, closing);
     const marker = path.join(scratch, "scope-started");
     const pending = launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", `touch '${marker}'; exec sleep 30`],
       category: "user-shell",
@@ -915,9 +1005,14 @@ describe("a launcher's scope", () => {
   // launches in flight share one listener on it, however many there are.
   it("ends every launch in flight through one listener on its signal", async () => {
     const closing = new AbortController();
-    scoped({ signal: closing.signal });
+    scoped({}, closing);
     const pending = Array.from({ length: 12 }, () =>
-      launch({ bin: "/bin/sleep", args: ["30"], category: "user-shell" }),
+      launch({
+        ...OWNER_CONTEXT,
+        bin: "/bin/sleep",
+        args: ["30"],
+        category: "user-shell",
+      }),
     );
     expect(getEventListeners(closing.signal, "abort")).toHaveLength(1);
 
@@ -930,8 +1025,9 @@ describe("a launcher's scope", () => {
   it("a launch that outlasts its daemon's close reports to that daemon, not the next", async () => {
     const closing = new AbortController();
     const closed = makeSpyHandle();
-    scoped({ stats: closed.handle, signal: closing.signal });
+    scoped({ stats: closed.handle }, closing);
     const pending = launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sleep",
       args: ["30"],
       category: "user-shell",
@@ -940,7 +1036,7 @@ describe("a launcher's scope", () => {
     closing.abort();
     const next = new AbortController();
     const successor = makeSpyHandle();
-    scoped({ stats: successor.handle, signal: next.signal });
+    scoped({ stats: successor.handle }, next);
     await pending;
 
     expect(closed.ends.map((end) => end.category)).toEqual([
@@ -961,7 +1057,11 @@ describe("a launcher's scope", () => {
     closing.abort();
     const next = makeSpyHandle();
     scoped({ stats: next.handle });
-    const echo = { bin: "/bin/echo", category: "user-shell" } as const;
+    const echo = {
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      category: "user-shell",
+    } as const;
 
     expect(await launch(echo)).toMatchObject({ ok: true });
     expect(await first.launch(echo)).toMatchObject({
@@ -985,7 +1085,11 @@ describe("a launcher's scope", () => {
   });
 
   it("a launcher's rate limits are its own", () => {
-    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    const once = {
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      category: "click.open",
+    } as const;
     expect(launcher.launchSync(once)).toMatchObject({ ok: true });
     expect(launcher.launchSync(once)).toMatchObject({
       ok: false,
@@ -1004,8 +1108,12 @@ describe("a launcher's scope", () => {
   it("every form meters its refusal, closed or rate-limited", async () => {
     const closing = new AbortController();
     const { handle, refused, starts } = makeSpyHandle();
-    scoped({ stats: handle, signal: closing.signal });
-    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    scoped({ stats: handle }, closing);
+    const once = {
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      category: "click.open",
+    } as const;
     expect(launchSync(once)).toMatchObject({ ok: true });
     expect(launchSync(once)).toMatchObject({ reason: "rate-limited" });
     expect(refused).toEqual(["click.open"]);
@@ -1032,6 +1140,7 @@ describe("a launcher's scope", () => {
 
     expect(
       await launch({
+        ...OWNER_CONTEXT,
         ...touching(marker),
         signal: AbortSignal.abort(new Error("superseded")),
       }),
@@ -1042,9 +1151,32 @@ describe("a launcher's scope", () => {
     expect(fs.existsSync(marker)).toBe(false);
   });
 
+  it.each([false, true])("closing an unreleased job withdraws its start gate (stopped shell: %s)", async (stopped) => {
+    const ending = new AbortController();
+    scoped({}, ending);
+    const marker = path.join(scratch, "withdrawn");
+    const files = {
+      stdout: marker + ".out",
+      stderr: marker + ".err",
+      status: marker + ".status",
+    };
+    const job = launchJobSync(touching(marker), files);
+    if (!job.ok) throw new Error(job.error);
+    if (stopped) process.kill(job.pid, "SIGSTOP");
+    ending.abort();
+    job.release();
+    expect(await launcher.settled()).toEqual({ unreaped: [] });
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(fs.existsSync(files.status)).toBe(false);
+  });
+
   it("a refused job says what refused it", () => {
     scoped({});
-    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    const once = {
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      category: "click.open",
+    } as const;
     const files = {
       stdout: path.join(scratch, "limited.out"),
       stderr: path.join(scratch, "limited.err"),
@@ -1064,18 +1196,28 @@ describe("a launcher's scope", () => {
   it("a retired lifeline records no fault, and nothing starts another while the scope refuses", async () => {
     const heard: Array<string | null> = [];
     const closing = new AbortController();
-    scoped({
-      signal: closing.signal,
-      observeWarnings: (change) => {
-        if (change.kind === "lifeline") heard.push(change.fault);
+    scoped(
+      {
+        observeWarnings: (change) => {
+          if (change.kind === "lifeline") heard.push(change.fault);
+        },
       },
+      closing,
+    );
+    await launch({
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      category: "user-shell",
     });
-    await launch({ bin: "/bin/echo", category: "user-shell" });
     const { pid } = lifeline();
     expect(pid).toBeDefined();
 
     closing.abort();
-    await launch({ bin: "/bin/echo", category: "user-shell" });
+    await launch({
+      ...OWNER_CONTEXT,
+      bin: "/bin/echo",
+      category: "user-shell",
+    });
 
     expect(lifeline().pid).toBeUndefined();
     await until(() => processEnded(pid!), "the lifeline exiting");
@@ -1117,6 +1259,7 @@ describe("launch input a child does not read", () => {
     "preserves the sync and async verdict when the child %s",
     async (_, script, exit) => {
       const opts = {
+        ...OWNER_CONTEXT,
         category: "user-shell" as const,
         bin: "sh",
         args: ["-c", script],
@@ -1130,6 +1273,7 @@ describe("launch input a child does not read", () => {
 
   it("reports a timeout as a timeout", async () => {
     const r = await launch({
+      ...OWNER_CONTEXT,
       category: "user-shell",
       bin: "sleep",
       args: ["5"],
@@ -1146,6 +1290,7 @@ describe("launch input a child does not read", () => {
 
   it("names the bound when the blocking launch times out", () => {
     const r = launchSync({
+      ...OWNER_CONTEXT,
       category: "user-shell",
       bin: "sleep",
       args: ["5"],

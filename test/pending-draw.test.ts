@@ -1,3 +1,4 @@
+import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] brandon-unfiled-3248.8ro6 step 3, part 2: a value
 // whose source has not answered yet is its own state, never drawn as an answer.
@@ -13,7 +14,6 @@ import {
   segmentErrorsOf,
 } from "../scripts/lib/draw-fixtures/draw-payload";
 import {
-  fakeLauncher,
   turns,
 } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
@@ -73,7 +73,7 @@ interface Drawn {
 function renderer(cfg: ValidatedConfig) {
   const compiled = compileDslConfig(compileInputOf(cfg));
   const clock = heldClock(new Date(AT * 1000));
-  const { launcher, spawner } = fakeLauncher(clock);
+  const { launcher, spawner } = fixtureFakeLauncher(clock, {});
   // The two commands the configs here run: one never answers, one answers empty
   // after a moment.
   spawner.program(shell("sleep 60"), hangs());

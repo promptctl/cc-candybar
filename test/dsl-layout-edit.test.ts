@@ -3,7 +3,7 @@ import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 // [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
 // the real spine (mirroring dsl-persist-actions.test.ts's model one arm
 // over), re-aimed at the config FILE as the one durable store

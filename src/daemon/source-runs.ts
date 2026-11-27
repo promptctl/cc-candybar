@@ -87,7 +87,7 @@ const whereOf = (read: SourceRead): string =>
     : `"${read.path}"`;
 
 function shellReader(
-  launcher: Launcher,
+  launcher: Pick<Launcher, "launch">,
   read: Extract<SourceRead, { kind: "shell" }>,
   env: Environment,
   signal: AbortSignal,
@@ -149,7 +149,7 @@ function fileReader(
 
 function readerOf(
   files: SourceFiles,
-  launcher: Launcher,
+  launcher: Pick<Launcher, "launch">,
   { run: { identity }, env }: SessionRun,
   signal: AbortSignal,
 ): SourceReader {
@@ -338,7 +338,7 @@ export interface SourceLane {
 
 export interface SourceRunsDeps {
   // Who a shell run's program belongs to.
-  readonly launcher: Launcher;
+  readonly launcher: Pick<Launcher, "launch">;
   // What the periods are armed and the refreshes timed on: the daemon's.
   readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every" | "detach">;
   readonly logger?: DaemonLogger;

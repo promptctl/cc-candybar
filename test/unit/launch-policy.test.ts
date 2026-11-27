@@ -1,10 +1,15 @@
+import { fixtureFakeLauncher } from "../helpers/scripted-launcher";
 import {
   createOneShotLauncher,
   MAX_CAPTURED_BYTES,
 } from "../../src/proc/launch";
 import { EventEmitter } from "node:events";
 import type { Spawner } from "../../src/proc/spawner";
-import { type LaunchResult } from "../../src/proc/launcher";
+import {
+  OWNER_CONTEXT,
+  type LaunchResult,
+  type LaunchContext,
+} from "../../src/proc/launcher.js";
 import {
   exits,
   floods,
@@ -19,13 +24,40 @@ import {
 } from "../../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "../helpers/held-clock";
 
+// The compiler rejects both an omitted choice and an explicit undefined.
+type ExplicitContext<T extends LaunchContext> = T;
+// @ts-expect-error a directory also requires an environment
+type NoEnvironment = ExplicitContext<{ cwd: string }>;
+// @ts-expect-error an environment also requires a directory
+type NoDirectory = ExplicitContext<{ environment: {} }>;
+// @ts-expect-error undefined cannot stand for inheritance
+type UndefinedDirectory = ExplicitContext<{ cwd: undefined; environment: {} }>;
+// @ts-expect-error undefined cannot stand for inheritance
+type UndefinedEnvironment = ExplicitContext<{
+  cwd: string;
+  environment: undefined;
+}>;
+type ExplicitOwner<T extends Parameters<typeof createOneShotLauncher>[0]> = T;
+// @ts-expect-error a component must supply its lifetime
+type NoLifetime = ExplicitOwner<{ inherited: {} }>;
+type ScriptedOwner<T extends Parameters<typeof fakeLauncher>[1]> = T;
+// @ts-expect-error a scripted OS has the same required lifetime
+type NoScriptedLifetime = ScriptedOwner<{ inherited: {} }>;
+
+type BoundTools<
+  T extends import("../../src/proc/launcher").ContextualLauncher,
+> = T;
+type RawTools = Pick<import("../../src/proc/launcher").Launcher, "launch">;
+// @ts-expect-error fixed desktop tools need a launcher bound to a context
+type UnboundTools = BoundTools<RawTools>;
+
 // [LAW:behavior-not-structure] What a launch promises its caller, proved on the
 // production launcher over a scripted OS and a held clock: no process starts, no
 // time passes, and the cases that used to sleep for a timeout run at once.
 
 function rig() {
   const clock = heldClock(new Date(1_000_000));
-  const fake = fakeLauncher(clock);
+  const fake = fixtureFakeLauncher(clock, {});
   const advance = async (ms: number) => {
     clock.advance(ms);
     await turns();
@@ -37,6 +69,7 @@ const sh = (
   command: string,
   extra: { timeoutMs?: number; signal?: AbortSignal } = {},
 ) => ({
+  ...OWNER_CONTEXT,
   bin: "/bin/sh",
   args: ["-c", command],
   category: "user-shell" as const,
@@ -75,11 +108,12 @@ describe("a launch over a scripted OS", () => {
           spawnSync: () => ({ ...raw, status, signal }),
         };
         const launcher = createOneShotLauncher(
-          { inherited: {} },
+          { inherited: {}, signal: r.ownerSignal },
           r.clock,
           spawner,
         );
         return launcher.launchSync({
+          ...OWNER_CONTEXT,
           ...sh("closed reader"),
           stdinInput: "unread",
         });
@@ -208,6 +242,7 @@ describe("a launch over a scripted OS", () => {
     const r = rig();
     r.spawner.program(shell("pbcopy"), exits(0));
     const click = {
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", "pbcopy"],
       category: "click.pbcopy" as const,
@@ -239,6 +274,84 @@ describe("a launch over a scripted OS", () => {
 });
 
 describe("an owner's launcher over a scripted OS", () => {
+  test("a job whose native spawn cannot allocate stdio returns a failure and consumes the native error", async () => {
+    const r = rig();
+    const spawner: Spawner = {
+      ...r.spawner,
+      spawn(bin, args, options) {
+        const child = r.spawner.spawn(bin, args, options);
+        // The unscripted fake emits its native spawn error on the next turn.
+        return Object.assign(child, { stdin: null });
+      },
+    };
+    const launcher = createOneShotLauncher(
+      { inherited: {}, signal: r.ownerSignal },
+      r.clock,
+      spawner,
+    );
+    const result = launcher.launchJobSync(sh("unused"), {
+      stdout: "unused.out",
+      stderr: "unused.err",
+      status: "unused.status",
+    });
+    expect(result).toMatchObject({ ok: false, reason: "spawn-error" });
+    await r.advance(1);
+    expect(await launcher.settled()).toEqual({ unreaped: [] });
+  });
+
+  test("a refused escalation reports the unreaped gate until its child closes", async () => {
+    const clock = heldClock(new Date(1000));
+    const owner = new AbortController();
+    const { spawner } = fakeLauncher(clock, {
+      inherited: {},
+      signal: owner.signal,
+    });
+    spawner.program((bin) => bin === "/bin/sh", runsFor(1000, exits(0)));
+    const cause = Object.assign(new Error("operation not permitted"), {
+      code: "EPERM",
+    });
+    const signalGroup = jest.fn(() => {
+      throw cause;
+    });
+    const warn = jest
+      .spyOn(process, "emitWarning")
+      .mockImplementation(() => {});
+    try {
+      const launcher = createOneShotLauncher(
+        { inherited: {}, signal: owner.signal },
+        clock,
+        { ...spawner, signalGroup },
+      );
+      const job = launcher.launchJobSync(sh("never started"), {
+        stdout: "unused.out",
+        stderr: "unused.err",
+        status: "unused.status",
+      });
+      if (!job.ok) throw new Error(job.error);
+      owner.abort();
+      job.release();
+      const settlement = launcher.settled();
+      // The held clock uses the process reporter: a throw from this callback
+      // would escape advance and terminate an ordinary launcher process.
+      expect(() => clock.advance(250)).not.toThrow();
+      expect(signalGroup.mock.calls).toEqual([[job.pid, "SIGKILL"]]);
+      expect(await settlement).toEqual({ unreaped: ["user-shell"] });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("operation not permitted"),
+          cause,
+        }),
+      );
+      clock.advance(750);
+      expect(await launcher.settled()).toEqual({ unreaped: [] });
+      expect(spawner.spawned[0]!.stdin).toBe("");
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test.each([false, true])(
     "retires a terminated group while a pipe is still held (member outlives leader: %s)",
     async (memberSurvives) => {
@@ -274,7 +387,7 @@ describe("an owner's launcher over a scripted OS", () => {
         },
       };
       const launcher = createOneShotLauncher(
-        { inherited: {} },
+        { inherited: {}, signal: r.ownerSignal },
         r.clock,
         spawner,
       );
@@ -303,6 +416,7 @@ describe("an owner's launcher over a scripted OS", () => {
     const clock = heldClock(new Date(1_000_000));
     const closing = new AbortController();
     const { launcher, spawner, started } = fakeLauncher(clock, {
+      inherited: {},
       signal: closing.signal,
     });
     spawner.program(shell("sleep 60"), hangs());
@@ -322,4 +436,21 @@ describe("an owner's launcher over a scripted OS", () => {
     });
     expect(started()).toHaveLength(1);
   });
+});
+
+test("closing a scripted fixture reaps its TERM-ignoring child and lifeline while another fixture remains usable", async () => {
+  const first = rig();
+  first.spawner.program(shell("work"), ignoring(["SIGTERM"], hangs()));
+  const work = first.launcher.launch(sh("work"));
+  await turns();
+  await first.close();
+  expect(await work).toMatchObject({ reason: "aborted", signal: "SIGKILL" });
+  expect(first.spawner.spawned.every((child) => child.ended !== null)).toBe(
+    true,
+  );
+  const second = rig();
+  second.spawner.program(shell("work"), exits(0, "next"));
+  expect(
+    await settled(second, second.launcher.launch(sh("work"))),
+  ).toMatchObject({ ok: true, stdout: "next" });
 });

@@ -2,7 +2,12 @@ import { observable, runInAction } from "mobx";
 import { SOURCE_PANE_CLOSED } from "../bar-window/exit.js";
 import type { WindowPlacement } from "../config/lanes.js";
 import { lineSplitter } from "../renderer-interface/wire.js";
-import { whyFailed, type Launcher, type Channel } from "../proc/launcher.js";
+import {
+  OWNER_CONTEXT,
+  whyFailed,
+  type Launcher,
+  type Channel,
+} from "../proc/launcher.js";
 import type { Timekeeper } from "../time.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -133,6 +138,7 @@ export class WindowFollowers {
     const termination = new AbortController();
     let cancelDeadline: (() => void) | undefined;
     const channel = this.launcher.launchChannel({
+      ...OWNER_CONTEXT,
       signal: termination.signal,
       bin: this.host.node[0]!,
       args: [

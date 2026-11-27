@@ -1,5 +1,6 @@
+import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import { until } from "../scripts/lib/until";
-import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+
 import {
   makeLimits,
   type LimitsDeps,
@@ -1138,7 +1139,7 @@ describe("post-mortems", () => {
     try {
       const lister = (snapshotDir: string) =>
         realLimitsDeps(0, () => {}, {
-          launcher: unscriptedLauncher,
+          launcher: unscriptedLauncher(),
           log: () => {},
           clock: systemTimekeeper,
           snapshotDir,

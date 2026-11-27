@@ -10,7 +10,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { createOneShotLauncher } from "../../src/proc/launch";
-import type { LaunchOpts } from "../../src/proc/launcher";
+import {
+  launcherIn,
+  INHERIT_FROM_OWNER,
+  OWNER_CONTEXT,
+  type LaunchOpts,
+} from "../../src/proc/launcher.js";
 import { systemSpawner, type Spawner } from "../../src/proc/spawner";
 import { REPOSITORY_SCOPED_ENV } from "../../src/repository-cli";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
@@ -54,36 +59,42 @@ const scoped = (env: Record<string, string | undefined>) =>
 async function withLauncher(
   use: (
     launcher: ReturnType<typeof createOneShotLauncher>,
-    handed: ReadonlyArray<{ bin: string; env: NodeJS.ProcessEnv | undefined }>,
+    handed: ReadonlyArray<{
+      bin: string;
+      cwd: unknown;
+      env: NodeJS.ProcessEnv | undefined;
+    }>,
     owner: NodeJS.ProcessEnv,
   ) => Promise<void> | void,
 ): Promise<void> {
   const owner: NodeJS.ProcessEnv = { ...OWNER_ENV };
-  const handed: Array<{ bin: string; env: NodeJS.ProcessEnv | undefined }> = [];
+  const handed: Array<{
+    bin: string;
+    cwd: unknown;
+    env: NodeJS.ProcessEnv | undefined;
+  }> = [];
   const recording: Spawner = {
     ...systemSpawner,
     spawn: (bin, args, options) => {
-      handed.push({ bin, env: options.env });
+      handed.push({ bin, env: options.env, cwd: options.cwd });
       return systemSpawner.spawn(bin, args, options);
     },
     spawnSync: (bin, args, options) => {
-      handed.push({ bin, env: options.env });
+      handed.push({ bin, env: options.env, cwd: options.cwd });
       return systemSpawner.spawnSync(bin, args, options);
     },
   };
   const ending = new AbortController();
+  const launcher = createOneShotLauncher(
+    { inherited: owner, signal: ending.signal },
+    systemTimekeeper,
+    recording,
+  );
   try {
-    await use(
-      createOneShotLauncher(
-        { inherited: owner, signal: ending.signal },
-        systemTimekeeper,
-        recording,
-      ),
-      handed,
-      owner,
-    );
+    await use(launcher, handed, owner);
   } finally {
     ending.abort();
+    expect(await launcher.settled()).toEqual({ unreaped: [] });
   }
 }
 
@@ -91,7 +102,11 @@ describe("a child that inherits its owner's environment", () => {
   it("gets what the owner sets after its launcher is built, still lacking the rest", () =>
     withLauncher(async (launcher, _handed, owner) => {
       owner.LATE = "late";
-      const r = await launcher.launch({ ...printsEnv(), category: "git" });
+      const r = await launcher.launch({
+        ...OWNER_CONTEXT,
+        ...printsEnv(),
+        category: "git",
+      });
       const env = parsed(r.stdout);
       expect(env.LATE).toBe("late");
       expect(scoped(env)).toEqual([]);
@@ -99,7 +114,11 @@ describe("a child that inherits its owner's environment", () => {
 
   it("lacks every repository-scoped name, by launch", () =>
     withLauncher(async (launcher) => {
-      const r = await launcher.launch({ ...printsEnv(), category: "git" });
+      const r = await launcher.launch({
+        ...OWNER_CONTEXT,
+        ...printsEnv(),
+        category: "git",
+      });
       expect(r.ok).toBe(true);
       const env = parsed(r.stdout);
       expect(scoped(env)).toEqual([]);
@@ -108,7 +127,11 @@ describe("a child that inherits its owner's environment", () => {
 
   it("lacks them by launchSync", () =>
     withLauncher((launcher) => {
-      const r = launcher.launchSync({ ...printsEnv(), category: "plugin.git" });
+      const r = launcher.launchSync({
+        ...OWNER_CONTEXT,
+        ...printsEnv(),
+        category: "plugin.git",
+      });
       expect(r.ok).toBe(true);
       const env = parsed(r.stdout);
       expect(scoped(env)).toEqual([]);
@@ -120,6 +143,7 @@ describe("a child that inherits its owner's environment", () => {
       const out = path.join(scratch, "detached.json");
       expect(
         launcher.launchDetachedSync({
+          ...OWNER_CONTEXT,
           ...printsEnv(out),
           category: "daemon-spawn",
         }).ok,
@@ -138,7 +162,7 @@ describe("a child that inherits its owner's environment", () => {
         status: path.join(scratch, "job.status"),
       };
       const job = launcher.launchJobSync(
-        { ...printsEnv(), category: "user-shell" },
+        { ...OWNER_CONTEXT, ...printsEnv(), category: "user-shell" },
         files,
       );
       if (!job.ok) throw new Error(`job refused: ${job.error}`);
@@ -153,6 +177,7 @@ describe("a child that inherits its owner's environment", () => {
     withLauncher(async (launcher) => {
       let said = "";
       const channel = launcher.launchChannel({
+        ...OWNER_CONTEXT,
         ...printsEnv(),
         category: "renderer",
         heard: { stdout: (text) => (said += text), stderr: () => {} },
@@ -166,7 +191,11 @@ describe("a child that inherits its owner's environment", () => {
 
   it("lacks them as the lifeline", () =>
     withLauncher(async (launcher, handed) => {
-      await launcher.launch({ ...printsEnv(), category: "git" });
+      await launcher.launch({
+        ...OWNER_CONTEXT,
+        ...printsEnv(),
+        category: "git",
+      });
       const env = handed.find(({ bin }) => bin === "awk")?.env;
       if (env === undefined)
         throw new Error("the lifeline was handed no environment");
@@ -179,6 +208,7 @@ describe("a child that inherits its owner's environment", () => {
   it("gets one its overlay names, and still lacks the rest", () =>
     withLauncher(async (launcher) => {
       const r = await launcher.launch({
+        ...OWNER_CONTEXT,
         ...printsEnv(),
         envOverlay: { GIT_DIR: "/overlaid" },
         category: "git",
@@ -198,6 +228,7 @@ describe("a child launched in a session's own environment", () => {
         GH_REPO: "o/session",
       };
       const r = await launcher.launch({
+        cwd: INHERIT_FROM_OWNER,
         ...printsEnv(),
         environment: session,
         category: "user-shell",
@@ -225,3 +256,55 @@ describe("the repository-scoped variables", () => {
     ).toEqual([]);
   });
 });
+
+it("keeps an empty supplied environment and an explicit directory separate from the lifeline's context", () =>
+  withLauncher(async (launcher, handed) => {
+    const result = await launcher.launch({
+      bin: process.execPath,
+      args: ["-p", "JSON.stringify([process.cwd(), process.env.KEPT ?? null])"],
+      category: "user-shell",
+      cwd: scratch,
+      environment: {},
+    });
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(result.stdout)).toEqual([fs.realpathSync(scratch), null]);
+    const lifeline = handed.find(({ bin }) => bin === "awk");
+    expect(lifeline).toMatchObject({ cwd: undefined, env: { KEPT: "kept" } });
+    expect(scoped(lifeline!.env!)).toEqual([]);
+    const inherited = launcher.launchSync({
+      ...OWNER_CONTEXT,
+      bin: process.execPath,
+      args: ["-p", "JSON.stringify([process.cwd(), process.env.KEPT])"],
+      category: "user-shell",
+    });
+    expect(JSON.parse(inherited.stdout)).toEqual([process.cwd(), "kept"]);
+  }));
+
+it("applies the bound directory and environment after command reuse, then overlays a private copy", () =>
+  withLauncher(async (launcher, handed) => {
+    const supplied = Object.freeze({ KEEP: "supplied", REMOVE: "before" });
+    const overlay = Object.freeze({ REMOVE: null, ADD: "after" });
+    const stale = {
+      ...OWNER_CONTEXT,
+      ...printsEnv(),
+      envOverlay: overlay,
+      category: "git" as const,
+    };
+    const run = await launcherIn(launcher, {
+      cwd: scratch,
+      environment: supplied,
+    }).launch(stale);
+    expect(run.ok).toBe(true);
+    const env = parsed(run.stdout);
+    expect(env).toMatchObject({ KEEP: "supplied", ADD: "after" });
+    expect(env.REMOVE).toBeUndefined();
+    expect(env.KEPT).toBeUndefined();
+    const native = handed.find(({ bin }) => bin === process.execPath);
+    expect(native?.cwd).toBe(scratch);
+    expect(native?.env).toStrictEqual({
+      KEEP: "supplied",
+      REMOVE: undefined,
+      ADD: "after",
+    });
+    expect(supplied).toEqual({ KEEP: "supplied", REMOVE: "before" });
+  }));

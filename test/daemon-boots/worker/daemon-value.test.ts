@@ -42,7 +42,7 @@ import {
   type RendererName,
 } from "../../../src/daemon/foundations/renderer-name";
 import { type RendererBoot } from "../../../src/renderer-interface/interface";
-import type { LaunchResult } from "../../../src/proc/launcher";
+import { OWNER_CONTEXT, type LaunchResult } from "../../../src/proc/launcher.js";
 import { type Timekeeper } from "../../../src/time";
 import { daemonClock } from "../../../src/host";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
@@ -724,7 +724,7 @@ describe("the daemon is a value", () => {
     const daemon = construct();
     let ready!: () => void;
     const listening = new Promise<void>((resolve) => { ready = resolve; });
-    const child = daemon.launcher.launchChannel({
+    const child = daemon.launcher.launchChannel({ ...OWNER_CONTEXT,
       bin: "/bin/sh", args: ["-c", "echo ready; exec cat"],
       category: "user-shell",
       heard: { stdout: ready, stderr: () => {} },
@@ -737,7 +737,7 @@ describe("the daemon is a value", () => {
     await close(daemon);
     expect(await child.ended).toMatchObject({ ok: false, reason: "aborted" });
     expect(processProbe.alive(child.pid!)).toBe(false);
-    expect(await daemon.launcher.launch({ bin: "/bin/echo", category: "user-shell" }))
+    expect(await daemon.launcher.launch({ ...OWNER_CONTEXT, bin: "/bin/echo", category: "user-shell" }))
       .toMatchObject({ ok: false, reason: "aborted" });
   });
 

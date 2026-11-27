@@ -1,3 +1,4 @@
+import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // The host's collector (src/daemon/collector.ts): one record per session the
 // host had a request from, holding the owners' entries at the keys the
@@ -12,7 +13,7 @@ import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-wa
 
 import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { observable, runInAction } from "mobx";
-import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -483,7 +484,7 @@ describe("the renderer's subscriptions", () => {
       ...owners,
       sourceRuns: new SourceRuns({
         watchers: manualWatcherRegistry(clock),
-        launcher: unscriptedLauncher,
+        launcher: unscriptedLauncher(),
         clock,
       }),
     });
@@ -727,7 +728,7 @@ describe("over the real repository owner", () => {
   });
 
   test("a held repo's PR is looked up with no draw, and the next request finds the repo's value stored", async () => {
-    const inner = new OneRepo(unscriptedLauncher);
+    const inner = new OneRepo(unscriptedLauncher());
     const git = new GitDataProvider({
       watchers: manualWatcherRegistry(systemTimekeeper),
       clock: systemTimekeeper,

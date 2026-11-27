@@ -4,7 +4,7 @@
 
 import { HOST } from "../scripts/lib/host";
 import { locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";

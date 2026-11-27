@@ -1,3 +1,4 @@
+import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:behavior-not-structure] The providers' one close, as steps of a
 // teardown: what a teardown that meets a throwing owner still ends, and what
@@ -11,10 +12,7 @@ import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { runTeardown } from "../src/utils/teardown";
 import { HOST } from "../scripts/lib/host";
-import {
-  unscriptedLauncher,
-  unscriptedRuns,
-} from "../scripts/lib/draw-fixtures/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 
 function providers() {
   const log = () => {};
@@ -26,7 +24,7 @@ function providers() {
   const built = createPayloadProviders({
     prices: settledPrices,
     clock: systemTimekeeper,
-    launcher: unscriptedLauncher,
+    launcher: unscriptedLauncher(),
     host: HOST,
     watchers,
     fileEvents: new FileEventDelivery({

@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { reservationLease, reservationPredicate } from "./reservation.js";
 import type { World } from "../host.js";
-import { whyFailed } from "../proc/launcher.js";
+import { OWNER_CONTEXT, whyFailed } from "../proc/launcher.js";
 import { runTmuxAsync, serverObserverHookPrefix } from "../proc/tmux.js";
 import { singleQuoted } from "../shell-word.js";
 import { lineSplitter } from "../renderer-interface/wire.js";
@@ -291,6 +291,7 @@ export function watchTmuxEvents(
         if (line !== "") detail = line;
       });
       const child = world.launcher.launchChannel({
+        ...OWNER_CONTEXT,
         bin: "/bin/bash",
         args: ["-c", WATCH, "window-geometry", socket],
         category: "bar-window.tmux",

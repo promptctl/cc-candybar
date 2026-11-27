@@ -1,4 +1,4 @@
-import { whyFailed } from "../proc/launcher.js";
+import { OWNER_CONTEXT, whyFailed } from "../proc/launcher.js";
 import {
   ATTACH_DIR,
   ATTACH_PRELOAD,
@@ -427,6 +427,7 @@ function buildUrlHandler(
     fs.writeFileSync(path.join(staging, "Contents", "Info.plist"), infoPlist());
 
     const signed = launcher.launchSync({
+      ...OWNER_CONTEXT,
       bin: "/usr/bin/codesign",
       args: ["--force", "--sign", "-", staging],
       category: "install.codesign",
@@ -450,6 +451,7 @@ function registerUrlHandler({ host, launcher }: InstallWorld): void {
   // here: the app is only ever ours, in our own home, so no other exit 1 cause
   // (another user's process) applies.
   const quit = launcher.launchSync({
+    ...OWNER_CONTEXT,
     bin: "/usr/bin/killall",
     args: [APP_NAME],
     category: "install.killall",
@@ -466,6 +468,7 @@ function registerUrlHandler({ host, launcher }: InstallWorld): void {
 
   process.stdout.write(`Registering ${URL_SCHEME}:// with Launch Services\n`);
   const lsr = launcher.launchSync({
+    ...OWNER_CONTEXT,
     bin: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
     args: ["-f", bundle],
     category: "install.lsregister",

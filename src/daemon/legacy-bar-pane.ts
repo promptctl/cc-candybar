@@ -2,7 +2,7 @@
 // environment once it started. Match every argv word before examining a peer.
 // tmux's pane_start_command renders argv with quotes and VIS escapes. Read
 // that representation as data, without evaluating it in a shell.
-import type { Launcher } from "../proc/launcher.js";
+import { OWNER_CONTEXT, type Launcher } from "../proc/launcher.js";
 
 export function matchesLegacyCommand(
   text: string,
@@ -51,6 +51,7 @@ export async function legacyPeerOn(
   if (process.platform !== "darwin" || followerPid === process.pid)
     return false;
   const got = await launcher.launch({
+    ...OWNER_CONTEXT,
     bin: "/usr/sbin/lsof",
     args: ["-anP", "-p", `${process.pid},${followerPid}`, "-U", "-F0pfdn"],
     timeoutMs: 2000,

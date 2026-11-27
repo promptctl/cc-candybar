@@ -13,7 +13,7 @@ import { linkUrls } from "./helpers/frame";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { HOST } from "../scripts/lib/host";
 import { WORLD, fixtureLauncher, locs, processLauncher } from "./helpers/host";
-import { type Launcher } from "../src/proc/launcher";
+import { INHERIT_FROM_OWNER, type Launcher } from "../src/proc/launcher.js";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
 import os from "node:os";
@@ -1050,7 +1050,7 @@ describe("the session's process environment", () => {
     const childSees = async (
       facts: SessionFacts,
     ): Promise<Record<string, string>> => {
-      const ran = await launcher.launch({
+      const ran = await launcher.launch({ cwd: INHERIT_FROM_OWNER,
         bin: "/usr/bin/env",
         environment: sessionEnvironment(reported, facts),
         category: "click.run",

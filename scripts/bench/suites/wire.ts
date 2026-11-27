@@ -10,12 +10,13 @@
 // out while it ran. A tick that was fast because it drew nothing is a failure.
 
 import fs from "node:fs";
-import { processWorld } from "../../../src/host.js";
 
-import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire.js";
 import { linksOf } from "../../../src/click/read.js";
-import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
-import { tryClickViaDaemon } from "../../../src/daemon/client.js";
+import { TAB_LABEL } from "../../../src/config/menu-places.js";
+import {
+  DOOR_CLOSE_GLYPH,
+  DOOR_GLYPH,
+} from "../../../src/config/disclosure.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
 import {
   rendererStatsOf,
@@ -148,7 +149,7 @@ const warmTick = (columns: number): Benchmark => ({
   about: `a tick of a settled session, ${columns} columns wide, one after another with no pause: the daemon's service time per tick. rtt is the client's round trip; took and queued are the daemon's own, in whole ms`,
   samples: 300,
   async run(plan) {
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, columns);
       let n = 100;
@@ -189,7 +190,7 @@ const concurrentTicks = (sessions: number): Benchmark => ({
   about: `${sessions} settled sessions, each in a checkout of its own, each ticking every ${PERIOD_MS} ms from its own offset (${((sessions * 1000) / PERIOD_MS).toFixed(0)} ticks a second asked of one daemon): what a tick waits behind. samples is ticks per session`,
   samples: 40,
   async run(plan) {
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       const all: Session[] = Array.from({ length: sessions }, (_, i) =>
         world.session(`s${i}`, SMALL_CHECKOUT, 300),
       );
@@ -259,7 +260,7 @@ const coldDaemon: Benchmark = {
     const boot: number[] = [];
     const cold: Cold = { firstTick: [], firstBar: [] };
     for (let i = 0; i < plan.samples; i++) {
-      await inWorld(async (world) => {
+      await inWorld(plan.world, async (world) => {
         const session = world.session("a", CHECKOUT, TURNS);
         const settled = await world.settle(session, DEFAULT_COLUMNS);
         boot.push(world.bootMs);
@@ -282,7 +283,7 @@ const coldSession: Benchmark = {
     "a new session in a checkout and config the daemon already draws: the first tick and the first bar with nothing pending",
   samples: 15,
   async run(plan) {
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       const base = world.session("base", CHECKOUT, TURNS);
       await world.settle(base, DEFAULT_COLUMNS);
       const cold: Cold = { firstTick: [], firstBar: [] };
@@ -306,7 +307,7 @@ const coldDirectory: Benchmark = {
     "a new session in a checkout the daemon has not seen, under a config it already compiled: the first tick and the first bar with nothing pending",
   samples: 12,
   async run(plan) {
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       await world.settle(
         world.session("base", CHECKOUT, TURNS),
         DEFAULT_COLUMNS,
@@ -377,7 +378,7 @@ const configReload = (entries: number): Benchmark => ({
   about: `the config file rewritten while the daemon draws ${entries} ${entries === 1 ? "checkout" : "checkouts"} under it: from the write to a bar drawn from the new config (visible), and the longest tick a probe session waited through meanwhile (stall)`,
   samples: entries === 1 ? 8 : 4,
   async run(plan) {
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       const sessions = Array.from({ length: entries }, (_, i) =>
         world.session(`e${i}`, SMALL_CHECKOUT, 300),
       );
@@ -425,9 +426,9 @@ const configReload = (entries: number): Benchmark => ({
 
 // ── a click ─────────────────────────────────────────────────────────────────
 
-async function click(url: string): Promise<number> {
+async function click(world: World, url: string): Promise<number> {
   const started = performance.now();
-  const outcome = await tryClickViaDaemon(processWorld(), url);
+  const outcome = await world.click(url);
   const ms = performance.now() - started;
   // [LAW:no-silent-failure] A click the daemon refused did nothing; its round
   // trip is not a click's.
@@ -437,6 +438,19 @@ async function click(url: string): Promise<number> {
   return ms;
 }
 
+async function drawnLink(
+  world: World,
+  session: Session,
+  tick: number,
+  text: string,
+): Promise<string> {
+  const frame = await world.frame(session, DEFAULT_COLUMNS, tick);
+  const link = linksOf(frame).find((link) => link.text === text);
+  if (!link)
+    throw new Error(`the bar did not draw the ${JSON.stringify(text)} link`);
+  return link.url;
+}
+
 const menuClicks: Benchmark = {
   id: "wire.click.menu",
   group: "wire",
@@ -444,13 +458,9 @@ const menuClicks: Benchmark = {
     "opening and closing the settings menu: the click's round trip, and the first tick after it, which draws the menu or releases it",
   samples: 30,
   async run(plan) {
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
-      const menu = (state: string): string =>
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [session.id, "candybar.menu", state] },
-        ]);
       const series: Record<
         "click-open" | "draw-open" | "click-close" | "draw-close",
         number[]
@@ -465,11 +475,13 @@ const menuClicks: Benchmark = {
         await world.tick(session, DEFAULT_COLUMNS, n++),
         "closed",
       ).output.split("\n").length;
+      const openDoor = await drawnLink(world, session, n++, DOOR_GLYPH);
+      let closeDoor: string | undefined;
       // One round before the first sample: what an open menu builds on its
       // first draw it holds from then on.
       for (let i = -1; i < plan.samples; i++) {
         const recorded = i >= 0;
-        const open = await click(menu("open"));
+        const open = await click(world, openDoor);
         const drawOpen = drawn(
           await world.tick(session, DEFAULT_COLUMNS, n++),
           "menu open",
@@ -478,7 +490,8 @@ const menuClicks: Benchmark = {
         if (drawOpen.output.split("\n").length <= closedLines) {
           throw new Error("the settings menu did not draw when clicked open");
         }
-        const close = await click(menu(DISCLOSURE_CLOSED));
+        closeDoor ??= await drawnLink(world, session, n++, DOOR_CLOSE_GLYPH);
+        const close = await click(world, closeDoor);
         const drawClose = drawn(
           await world.tick(session, DEFAULT_COLUMNS, n++),
           "menu closed",
@@ -501,16 +514,16 @@ const settingClick: Benchmark = {
   id: "wire.click.setting",
   group: "wire",
   about:
-    "a click that changes a setting and writes the config file (the preset stepper): the click's round trip, and the time from the click to a bar drawn from the new config (visible)",
+    "stepping the session's preset: the click's round trip and the time until the bar shows the changed preset",
   samples: 10,
   async run(plan) {
-    return inWorld(async (world) => {
+    return inWorld(plan.world, async (world) => {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
+      await click(world, await drawnLink(world, session, 98, DOOR_GLYPH));
       await click(
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [session.id, "candybar.menu", "open"] },
-        ]),
+        world,
+        await drawnLink(world, session, 99, TAB_LABEL.presets),
       );
       const clicks: number[] = [];
       const visible: number[] = [];
@@ -521,7 +534,7 @@ const settingClick: Benchmark = {
         const menu = await world.frame(session, DEFAULT_COLUMNS, n++);
         const step = linksOf(menu).find((l) => l.text === "▶");
         if (step === undefined) {
-          throw new Error("the open menu drew no ▶ preset stepper to click");
+          throw new Error("the presets tab did not draw its next-preset link");
         }
         let clickMs = 0;
         const changed = await untilChanged(
@@ -530,7 +543,7 @@ const settingClick: Benchmark = {
           composeBar(menu),
           n,
           async () => {
-            clickMs = await click(step.url);
+            clickMs = await click(world, step.url);
           },
         );
         n += 1000;

@@ -20,7 +20,8 @@ import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { environmentKey } from "../../../src/daemon/foundations/session-env";
 import { PROTOCOL_VERSION, URL_FRAME_VERSION } from "../../../src/daemon/foundations/protocol";
 import type { AsyncLaunchOpts } from "../../../src/proc/launcher";
-import { fakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
+import { exits } from "../../../src/proc/spawner-fake";
+import { fakeLauncher, type FakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
@@ -56,8 +57,9 @@ test("a click after a restart writes the session's own config, and types into no
       segments: {
         pin: { template: '{{ action "pinAndCopy" "PIN" }}' },
         compact: { template: '{{ action "compact" "COMPACT" }}' },
+        copy: { template: '{{ action "copyPath" "COPY" }}' },
       },
-      root: { h: ["pin", "compact"] },
+      root: { h: ["pin", "compact", "copy"] },
     }`,
   );
   // The panes each typed line went to.
@@ -79,8 +81,24 @@ test("a click after a restart writes the session's own config, and types into no
   } finally {
     await first.stop();
   }
-  const second = startDaemon(env, { claudeInput });
+  let fixed!: FakeLauncher;
+  const second = startDaemon(env, {
+    claudeInput,
+    launcher: (owner) => {
+      fixed = fakeLauncher(systemTimekeeper, {
+        ...owner,
+        inherited: { ...owner.inherited, DESKTOP_ONLY: "restored" },
+      });
+      fixed.spawner.program((bin) => bin === "/usr/bin/pbcopy", exits());
+      return fixed.launcher;
+    },
+  });
   try {
+    await click(second, linkTo(bar, "COPY"));
+    const copies = fixed.started().filter((start) => start.bin === "/usr/bin/pbcopy");
+    expect(copies).toHaveLength(1);
+    expect(copies[0]!.options.cwd).toBeUndefined();
+    expect(copies[0]!.options.env?.DESKTOP_ONLY).toBe("restored");
     // The Mac that sent the first click after restart receives its copy
     // only after the session's own config edit lands.
     const verdict = await sendDaemonRequest(second, {

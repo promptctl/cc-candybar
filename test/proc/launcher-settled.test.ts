@@ -1,6 +1,7 @@
 // A launcher's `settled`: what a close's value is made of. Each case aborts its
 // owner, as a close does, and reads what that left running.
 
+import { OWNER_CONTEXT } from "../../src/proc/launcher.js";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,13 +13,19 @@ import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
 const scope = () => {
   const closing = new AbortController();
-  return {
-    closing,
-    launcher: systemLauncher({ inherited: process.env, 
+  const launcher = systemLauncher(
+    {
+      inherited: process.env,
       signal: closing.signal,
       observeWarnings: () => {},
-    }, systemTimekeeper),
-  };
+    },
+    systemTimekeeper,
+  );
+  releaseTestFixture(async () => {
+    closing.abort();
+    expect(await launcher.settled()).toEqual({ unreaped: [] });
+  });
+  return { closing, launcher };
 };
 
 describe("a launcher settles", () => {
@@ -35,6 +42,7 @@ describe("a launcher settles", () => {
     const { closing, launcher } = scope();
     const up = path.join(dir, "up");
     const run = launcher.launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: ["-c", `trap '' TERM; touch '${up}'; exec sleep 30`],
       category: "user-shell",
@@ -54,6 +62,7 @@ describe("a launcher settles", () => {
     const { closing, launcher } = scope();
     const up = path.join(dir, "up");
     const run = launcher.launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: [
         "-c",
@@ -78,6 +87,7 @@ describe("a launcher settles", () => {
     const { closing, launcher } = scope();
     const pidFile = path.join(dir, "refused");
     const run = launcher.launch({
+      ...OWNER_CONTEXT,
       bin: "/bin/sh",
       args: [
         "-c",

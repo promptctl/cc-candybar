@@ -14,7 +14,7 @@ import { tryClickViaDaemon, tryPointerViaDaemon } from "../daemon/client.js";
 import { followFrames, type FrameFollower } from "../daemon/frame-follow.js";
 import { parseSessionId } from "../daemon/foundations/session-id.js";
 import { lineSplitter } from "../renderer-interface/wire.js";
-import { whyFailed } from "../proc/launcher.js";
+import { OWNER_CONTEXT, whyFailed } from "../proc/launcher.js";
 import { WindowLayout } from "./layout.js";
 import { WindowIssues } from "./issues.js";
 import { clientKey, type Availability, type Client } from "./availability.js";
@@ -114,6 +114,7 @@ export async function runBarWindow(
     }
   });
   const panel = world.launcher.launchChannel({
+    ...OWNER_CONTEXT,
     bin: windowHelper(bundle),
     args: [
       "panel",
@@ -253,6 +254,7 @@ export async function runBarWindow(
             } else {
               const url = new URL(link);
               const result = await world.launcher.launch({
+                ...OWNER_CONTEXT,
                 bin: "/usr/bin/open",
                 args: ["-u", url.href],
                 category: "click.open",
