@@ -4,15 +4,22 @@
     {
       "version": "pr-988",
       "ref": "refs/pull/988/merge",
-      "sha": "c24ea51978d6218a1b121f8ee3cf89e77a6754d3",
-      "timestamp": "2026-11-27T23:30:06.399Z",
+      "sha": "663b34ad4ba342926749b40b095a1c2358e8b588",
+      "timestamp": "2026-11-27T23:34:41.536Z",
       "commits": [
         {
-          "sha": "c24ea51978d6218a1b121f8ee3cf89e77a6754d3",
+          "sha": "663b34ad4ba342926749b40b095a1c2358e8b588",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T16:28:23-07:00",
-          "message": "Merge e683305c6c000cf673d66d629181cf71943c3d3f into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+          "timestamp": "2026-11-27T23:33:23Z",
+          "message": "Merge a8b1cf83f4ee1ff6be5389091189f30918bd66c1 into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+        },
+        {
+          "sha": "a8b1cf83f4ee1ff6be5389091189f30918bd66c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T16:33:08-07:00",
+          "message": "test(recording): the two-session recording case has the time a real daemon takes on CI\n\nIt ran 21 to 33 s on CI against the suite's 30 s; the host-bundle case, the\nsame kind, already has 60 s.\n"
         },
         {
           "sha": "e683305c6c000cf673d66d629181cf71943c3d3f",
