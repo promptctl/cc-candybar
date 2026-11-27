@@ -1,3 +1,9 @@
+## [1.243.1](https://github.com/promptctl/cc-candybar/compare/v1.243.0...v1.243.1) (2026-11-27)
+
+### Bug Fixes
+
+* **lifecycle:** retire settled launcher work and verify daemon shutdown ([#977](https://github.com/promptctl/cc-candybar/issues/977)) ([648ab81](https://github.com/promptctl/cc-candybar/commit/648ab81867f4dd06cace3a3aa26f10ed956a7050))
+
 ## [1.243.0](https://github.com/promptctl/cc-candybar/compare/v1.242.1...v1.243.0) (2026-11-26)
 
 ### Features
