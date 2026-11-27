@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-982",
+      "ref": "refs/pull/982/merge",
+      "sha": "356c69e7c1ca66fbaf3153b76b5fae8ec99bcbe0",
+      "timestamp": "2026-11-27T05:16:56.746Z",
+      "commits": [
+        {
+          "sha": "356c69e7c1ca66fbaf3153b76b5fae8ec99bcbe0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:15:46-07:00",
+          "message": "Merge 2d378ac3d5498ddf87d3e348cf56c53d9b47b054 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+        },
+        {
+          "sha": "2d378ac3d5498ddf87d3e348cf56c53d9b47b054",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:14:51-07:00",
+          "message": "Exercise normal typecheck across Node, Jest and WebKit sources\n"
+        },
+        {
+          "sha": "5a6d7a841f77199a8b150b828d6dfe7d01da6822",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:13:45-07:00",
+          "message": "style(window): use the project array types for the panel contract\n"
+        },
+        {
+          "sha": "958593914df7a68d30dd101a8b03546ac4e093ad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:12:49-07:00",
+          "message": "Inventory repository sources and dispatch their zone lint rules\n"
+        },
+        {
+          "sha": "797b0fbaa8d54a987607797dff7f0c16c6d96cd2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:12:39-07:00",
+          "message": "Check first-party source semantics in the owning type environment\n"
+        },
+        {
+          "sha": "a97b071d202b6d8e10bc0b05763d67d349fcecc1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:10:24-07:00",
+          "message": "test(coverage): verify the WebKit bridge and both Node entry layouts\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f0abfe24617b4d61ff9da09fa07d246e524d18fe",
