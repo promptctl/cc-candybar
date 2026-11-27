@@ -5,6 +5,7 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import globals from "globals";
 import fs from "node:fs";
+import { isBuiltin } from "node:module";
 import path from "node:path";
 import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
@@ -13,19 +14,10 @@ import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZ
 // Launcher, which reaches the OS through that Spawner. This rule keeps the
 // invariant load-bearing: a future regression fails lint, not just a manual grep.
 const SPAWNER_FILE = "src/proc/spawner.ts";
-const CHILD_PROCESS_PATHS = ["child_process", "node:child_process"].map(
-  (name) => ({
-    name,
-    message:
-      "Launch through a Launcher from src/proc/launch instead. [LAW:single-enforcer] (kz8.2)",
-  }),
-);
-
 // [LAW:effects-at-boundaries] [LAW:single-enforcer] The real clock, the timer
 // globals and the loop's turn are read in src/time.ts alone; everything else is
-// handed a Timekeeper. Flat config replaces a rule per file block, so each rule
-// below is built as a function of the file and spread into every block that
-// sets it, and no block drops the clock when it adds its own restrictions.
+// handed a Timekeeper. Global and property checks use the same diagnostic as
+// the clock module ownership at the import boundary.
 const CLOCK_FILE = "src/time.ts";
 const CLOCK_MESSAGE =
   "Take the clock you are handed (src/time.ts): it alone reads the real one. [LAW:effects-at-boundaries]";
@@ -78,172 +70,6 @@ const CLOCK_GLOBALS = [
   "clearInterval",
   "clearImmediate",
 ].map((name) => ({ name, message: CLOCK_MESSAGE }));
-const CLOCK_IMPORT_PATHS = [
-  "node:timers",
-  "timers",
-  "node:timers/promises",
-  "timers/promises",
-  "node:perf_hooks",
-  "perf_hooks",
-].map((name) => ({ name, message: CLOCK_MESSAGE }));
-
-// [LAW:single-enforcer] Names only their owners may import, so what makes a
-// launch ownerless, or a path ambient, cannot be reached for by accident. Daemon
-// work holds its daemon's launcher: an owner's close is what refuses its
-// launches, and none reaches work that went around it. A daemon is handed its
-// adapters and its paths (src/daemon/production-adapters.ts builds the real
-// ones, src/daemon/server.ts reads the environment's), so `createDaemon` names
-// neither.
-const PATHS = [
-  "**/daemon/paths",
-  "**/daemon/paths.js",
-  "**/paths",
-  "**/paths.js",
-];
-
-// [LAW:single-enforcer] A fake exists to be scripted by a test; no src file
-// names one, so a stand-in cannot reach a daemon that runs for a person.
-const FAKE_IMPORTS = [
-  {
-    group: [
-      "**/spawner-fake",
-      "**/spawner-fake.js",
-      "**/process-probe-fake",
-      "**/process-probe-fake.js",
-    ],
-    message: "A fake is a test's: src never imports one. [LAW:single-enforcer]",
-  },
-];
-
-const OWNED_IMPORTS = {
-  // The process's one launcher, built beside the host it inherits from: a
-  // process main takes it from `processWorld`, and everything else is handed it.
-  systemOneShotLauncher: {
-    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
-    owners: ["src/host.ts"],
-    message:
-      "The process has its one-shot launcher: take the one you are given.",
-  },
-  // The composition root of the one owner that is not the process.
-  systemLauncher: {
-    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A Launcher is an owner's: take the one you are handed.",
-  },
-  // A launcher over a Spawner other than the machine's is a test's to build.
-  createOneShotLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: [],
-    message: "A launcher over the machine is system-launcher's to build.",
-  },
-  createLauncher: {
-    group: ["**/proc/launch", "**/proc/launch.js"],
-    owners: [],
-    message: "A launcher over the machine is system-launcher's to build.",
-  },
-  // The machine's bare timers, which report nothing a task throws: the process
-  // world builds its one clock over them, and everything else is handed it.
-  systemTimers: {
-    group: ["**/time", "**/time.js"],
-    owners: ["src/host.ts"],
-    message: "The process world (src/host.ts) builds its clock over src/time.ts's machine timers: take the clock you are given.",
-  },
-  // The real adapters a daemon is handed.
-  productionClaudeInputEdge: {
-    group: ["**/claude-input/edge", "**/claude-input/edge.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  productionLaneEdge: {
-    group: ["**/lane-edge", "**/lane-edge.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  realLimitsDeps: {
-    group: ["**/limits", "**/limits.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  fileStorage: {
-    group: ["**/file-storage", "**/file-storage.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  fetchPricing: {
-    group: ["**/pricing-fetch", "**/pricing-fetch.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  linkSignerFromKeyFile: {
-    group: ["**/link-key", "**/link-key.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its link signer (production-adapters.ts).",
-  },
-  // Where files are, read from the environment by a process's entry point and
-  // handed down. The daemon process reads it once, in server.ts.
-  daemonPaths: {
-    group: PATHS,
-    owners: [
-      "src/daemon/server.ts",
-      "src/renderer-process.ts",
-    ],
-    message: "A daemon is handed its paths: take the value you are given.",
-  },
-  stateDir: {
-    group: PATHS,
-    owners: [],
-    message: "A daemon is handed its paths: take the value you are given.",
-  },
-  ...Object.fromEntries(
-    ["socketPath", "defaultSocketPath"].map((name) => [
-      name,
-      {
-        group: PATHS,
-        owners: [
-          "src/frames-cli.ts",
-          "src/ssh-cli.ts",
-          "src/bar-pane/index.ts",
-          "src/bar-window/index.ts",
-          "src/daemon/client-transport.ts",
-          "src/daemon/acquire.ts",
-        ],
-        message:
-          "Only a client of the daemon reads its socket from the environment.",
-      },
-    ]),
-  ),
-  ...Object.fromEntries(
-    ["daemonDir", "spawnLockPath", "spawnCooldownPath", "spawnBackoffPath"].map(
-      (name) => [
-        name,
-        {
-          group: PATHS,
-          owners: ["src/daemon/acquire.ts"],
-          message: "Only the client that spawns a daemon reads these.",
-        },
-      ],
-    ),
-  ),
-  ...Object.fromEntries(
-    [
-      "cacheDir",
-      "logPath",
-      "leasePath",
-      "sessionStatePath",
-      "settingsHistoryPath",
-      "daemonRegistryDir",
-      "watchProbeDir",
-    ].map((name) => [
-      name,
-      {
-        group: PATHS,
-        owners: [],
-        message: "A daemon is handed its paths: take the value you are given.",
-      },
-    ]),
-  ),
-};
-
 // [LAW:effects-at-boundaries] [LAW:single-enforcer] The environment, the home
 // directory (`os.homedir` reads `HOME`) and the temporary directory
 // (`os.tmpdir` reads `TMPDIR`) are read once, by `processWorld` in
@@ -257,18 +83,167 @@ const HOST_PROPERTIES = [
   { object: "os", property: "homedir", message: HOST_READ_MESSAGE },
   { object: "os", property: "tmpdir", message: HOST_READ_MESSAGE },
 ];
-const HOST_NAMED_IMPORTS = [
-  {
-    group: ["os", "node:os"],
-    importNames: ["homedir", "tmpdir"],
-    message: HOST_READ_MESSAGE,
-  },
-  {
-    group: ["process", "node:process"],
-    importNames: ["env"],
-    message: HOST_READ_MESSAGE,
-  },
-];
+// [LAW:single-enforcer] Ownership is keyed by resolved module and export.
+// File globs and the spelling of the edge do not identify the resource it grants.
+const inApp = (file) => file.startsWith("src/");
+const outsideProc = (file) => inApp(file) && !file.startsWith("src/proc/");
+const except =
+  (scope, ...owners) =>
+  (file) =>
+    scope(file) && !owners.includes(file);
+const composition = "src/daemon/production-adapters.ts";
+const launcher = "src/proc/system-launcher";
+const paths = "src/daemon/paths";
+const nativeLauncherMessage =
+  "Script the program on a fake launcher (scripts/lib/draw-fixtures/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
+const owned = (modules, names, applies, message) => ({
+  modules,
+  names,
+  applies,
+  message,
+});
+const named = (module, names, message, ...owners) =>
+  owned(
+    [module],
+    names,
+    except(outsideProc, ...owners),
+    `${message} [LAW:single-enforcer]`,
+  );
+const ownership = {
+  app: [
+    owned(
+      ["node:child_process"],
+      null,
+      except(inApp, SPAWNER_FILE),
+      "Launch through a Launcher from src/proc/launch instead. [LAW:single-enforcer] (kz8.2)",
+    ),
+    owned(
+      ["node:timers", "node:timers/promises", "node:perf_hooks"],
+      null,
+      except(inApp, CLOCK_FILE),
+      CLOCK_MESSAGE,
+    ),
+    owned(
+      ["node:fs", "node:fs/promises"],
+      null,
+      (file) => file.startsWith("src/renderer/"),
+      "The renderer opens no file: what it reads is handed in (config snapshots, world state). [LAW:effects-at-boundaries]",
+    ),
+    owned(
+      ["node:fs", "node:fs/promises"],
+      null,
+      (file) => file === "src/daemon/daemon.ts",
+      "Take the disk from the daemon's inputs.",
+    ),
+    owned(
+      ["src/proc/spawner-fake", "src/daemon/process-probe-fake"],
+      null,
+      inApp,
+      "A fake is a test's: src never imports one. [LAW:single-enforcer]",
+    ),
+    owned(
+      ["node:os"],
+      ["homedir", "tmpdir"],
+      except(inApp, ...HOST_READERS),
+      HOST_READ_MESSAGE,
+    ),
+    owned(
+      ["node:process"],
+      ["env"],
+      except(inApp, ...HOST_READERS),
+      HOST_READ_MESSAGE,
+    ),
+    owned(
+      ["src/time"],
+      ["systemTimers"],
+      except(inApp, "src/host.ts"),
+      "The process world (src/host.ts) builds its clock over src/time.ts's machine timers: take the clock you are given. [LAW:single-enforcer]",
+    ),
+    named(
+      launcher,
+      ["systemOneShotLauncher"],
+      "The process has its one-shot launcher: take the one you are given.",
+      "src/host.ts",
+    ),
+    named(
+      launcher,
+      ["systemLauncher"],
+      "A Launcher is an owner's: take the one you are handed.",
+      composition,
+    ),
+    named(
+      "src/proc/launch",
+      ["createLauncher", "createOneShotLauncher"],
+      "A launcher over the machine is system-launcher's to build.",
+    ),
+    ...[
+      ["src/claude-input/edge", "productionClaudeInputEdge"],
+      ["src/daemon/lane-edge", "productionLaneEdge"],
+      ["src/daemon/limits", "realLimitsDeps"],
+      ["src/daemon/file-storage", "fileStorage"],
+      ["src/daemon/cache/pricing-fetch", "fetchPricing"],
+    ].map(([module, name]) =>
+      named(
+        module,
+        [name],
+        "A daemon is handed its adapters (production-adapters.ts).",
+        composition,
+      ),
+    ),
+    named(
+      "src/daemon/link-key",
+      ["linkSignerFromKeyFile"],
+      "A daemon is handed its link signer (production-adapters.ts).",
+      composition,
+    ),
+    named(
+      paths,
+      ["daemonPaths"],
+      "A daemon is handed its paths: take the value you are given.",
+      "src/daemon/server.ts",
+      "src/renderer-process.ts",
+    ),
+    named(
+      paths,
+      [
+        "stateDir",
+        "cacheDir",
+        "logPath",
+        "leasePath",
+        "sessionStatePath",
+        "settingsHistoryPath",
+        "daemonRegistryDir",
+        "watchProbeDir",
+      ],
+      "A daemon is handed its paths: take the value you are given.",
+    ),
+    named(
+      paths,
+      ["socketPath", "defaultSocketPath"],
+      "Only a client of the daemon reads its socket from the environment.",
+      "src/frames-cli.ts",
+      "src/ssh-cli.ts",
+      "src/bar-pane/index.ts",
+      "src/bar-window/index.ts",
+      "src/daemon/client-transport.ts",
+      "src/daemon/acquire.ts",
+    ),
+    named(
+      paths,
+      ["daemonDir", "spawnLockPath", "spawnCooldownPath", "spawnBackoffPath"],
+      "Only the client that spawns a daemon reads these.",
+      "src/daemon/acquire.ts",
+    ),
+  ],
+  // The suite config applies this policy outside its native launcher adapters.
+  suite: [
+    ["test/helpers/host", ["processLauncher", "fixtureLauncher"]],
+    [launcher, ["systemLauncher", "systemOneShotLauncher"]],
+    ["src/proc/spawner", ["systemSpawner"]],
+  ].map(([module, names]) =>
+    owned([module], names, () => true, nativeLauncherMessage),
+  ),
+};
 
 // [LAW:one-source-of-truth] Why an edge is refused, by what it reaches: what
 // the zone it imports holds decides it, whichever zone imports it.
@@ -311,6 +286,7 @@ const CLOCK_KEY = withoutExtension(CLOCK_FILE);
 // Whether an import brings in types alone, which carry no clock.
 const typeOnly = (node) =>
   node.type === "TSImportType" ||
+  (node.type === "TSExternalModuleReference" && node.parent.importKind === "type") ||
   node.importKind === "type" ||
   node.exportKind === "type" ||
   (node.specifiers?.length > 0 &&
@@ -319,12 +295,16 @@ const typeOnly = (node) =>
     ));
 
 const importDirection = {
-  meta: { type: "problem", schema: [] },
+  meta: { type: "problem", schema: [{ enum: ["suite"] }] },
   create(context) {
     // Through the real path of the file's directory, so a file reached by a
     // symlinked path keys as the module it is.
     const dir = realDir(path.resolve(path.dirname(context.filename)));
-    const from = moduleKey(path.join(dir, path.basename(context.filename)));
+    const file = path.relative(REPO_ROOT, path.join(dir, path.basename(context.filename)));
+    const from = withoutExtension(file);
+    const policy = context.options[0] ?? "app";
+    const directions = policy !== "suite";
+    const ownedHere = ownership[policy].filter((rule) => rule.applies(file));
     // [LAW:no-silent-failure] A key outside the repo is in no zone, so the rule
     // refuses it rather than calling it rest and passing every edge.
     const outside = (key) => key.startsWith("..") || path.isAbsolute(key);
@@ -362,6 +342,7 @@ const importDirection = {
     // or null for a loader built on a base no lint can read.
     const check = (node, source, base = dir) => {
       if (source === null) {
+        if (!directions) return;
         context.report({
           node,
           message: `An import whose source is computed is in no zone. [LAW:one-way-deps]`,
@@ -369,6 +350,7 @@ const importDirection = {
         return;
       }
       if (base === null && (source.startsWith(".") || path.isAbsolute(source))) {
+        if (!directions) return;
         context.report({
           node,
           message: `A loader whose base is computed loads ${source} from no place a lint can read. [LAW:one-way-deps]`,
@@ -376,6 +358,25 @@ const importDirection = {
         return;
       }
       const to = targetOf(source, base);
+      const module =
+        to.kind === "path"
+          ? to.name
+          : isBuiltin(source)
+            ? `node:${source.replace(/^node:/, "")}`
+            : null;
+      const rules = ownedHere.filter((rule) => rule.modules.includes(module));
+      if (rules.length) {
+        const names = exportNames(node, to.kind === "package");
+        const refused = rules.filter(
+          (rule) =>
+            rule.names === null ||
+            names.has(null) ||
+            rule.names.some((name) => names.has(name)),
+        );
+        for (const message of new Set(refused.map((r) => r.message)))
+          context.report({ node, message: `${source}: ${message}` });
+      }
+      if (!directions) return;
       // [LAW:one-way-deps] One judgment of every edge, a package's as a
       // path's: Jest's packages are the test zone's.
       if (to.zone !== null && !mayImport(fromZone, to.zone)) {
@@ -421,7 +422,7 @@ const importDirection = {
     // `module` or `process`, `Module._load`, `globalThis`, `eval`) is not
     // judged.
     const refuseUse = (node, what) =>
-      context.report({
+      directions && context.report({
         node,
         message: `${what} is used other than by a call with its source, so what it loads no lint can place. [LAW:one-way-deps]`,
       });
@@ -481,11 +482,131 @@ const importDirection = {
     const builtinUse = (node) => loaderUse(node, dir, "`getBuiltinModule`");
     // A key's name: an identifier's, or a string's when computed.
     const keyOf = (key, computed) =>
-      !computed && key.type === "Identifier"
-        ? key.name
-        : key.type === "Literal" && typeof key.value === "string"
-          ? key.value
-          : null;
+      !computed && key.type === "Identifier" ? key.name : sourceOf(key);
+    // [LAW:parse-dont-validate] Every loader yields the same resource: its
+    // module namespace. Observe literal projections through lexical bindings.
+    // Passing a namespace on grants all its exports; an awaited dynamic import
+    // grants the namespace, while passing its promise on does the same.
+    const exportNames = (edge, builtin) => {
+      const names = new Set();
+      const seen = new Set();
+      const all = () => names.add(null);
+      const binding = (declaration, id, promise = false) => {
+        if (
+          declaration.type === "VariableDeclarator" &&
+          declaration.parent.parent.type === "ExportNamedDeclaration"
+        )
+          return all();
+        const reads = readsOf(declaration, id.name);
+        if (!reads.length) all();
+        for (const read of reads) use(read, promise);
+      };
+      const select = (name, next) => {
+        if (builtin && name === "default") next();
+        else names.add(name);
+      };
+      const pattern = (id, declaration, promise) => {
+        if (id.type === "Identifier") return binding(declaration, id, promise);
+        if (promise || id.type !== "ObjectPattern") return all();
+        for (const property of id.properties) {
+          if (property.type !== "Property") all();
+          else
+            select(keyOf(property.key, property.computed), () =>
+              pattern(property.value, declaration, false),
+            );
+        }
+      };
+      const use = (value, promise = false) => {
+        if (seen.has(value)) return;
+        seen.add(value);
+        const parent = value.parent;
+        // Loading only for side effects names no export, as in a bare ESM import.
+        if (
+          parent.type === "ExpressionStatement" ||
+          (parent.type === "UnaryExpression" && parent.operator === "void")
+        )
+          return;
+        if (
+          parent.type === "AwaitExpression" ||
+          [
+            "ChainExpression",
+            "TSAsExpression",
+            "TSTypeAssertion",
+            "TSNonNullExpression",
+            "TSSatisfiesExpression",
+          ].includes(parent.type)
+        )
+          return use(parent, parent.type !== "AwaitExpression" && promise);
+        if (parent.type === "VariableDeclarator" && parent.init === value)
+          return pattern(parent.id, parent, promise);
+        if (
+          !promise &&
+          parent.type === "MemberExpression" &&
+          parent.object === value
+        )
+          return select(keyOf(parent.property, parent.computed), () =>
+            use(parent),
+          );
+        if (
+          !promise &&
+          parent.type === "TSQualifiedName" &&
+          parent.left === value
+        )
+          return select(parent.right.name, () => use(parent));
+        if (
+          !promise &&
+          parent.type === "TSTypeQuery" &&
+          parent.exprName === value
+        )
+          return use(parent);
+        if (
+          !promise &&
+          parent.type === "TSIndexedAccessType" &&
+          parent.objectType === value
+        ) {
+          const key = parent.indexType;
+          return select(
+            key.type === "TSLiteralType" ? keyOf(key.literal, true) : null,
+            () => use(parent),
+          );
+        }
+        all();
+      };
+      if (edge.type === "ImportDeclaration") {
+        for (const spec of edge.specifiers) {
+          if (spec.type === "ImportNamespaceSpecifier")
+            binding(spec, spec.local);
+          else {
+            const name =
+              spec.type === "ImportDefaultSpecifier"
+                ? "default"
+                : keyOf(spec.imported, false);
+            select(name, () => binding(spec, spec.local));
+          }
+        }
+      } else if (edge.type === "ExportNamedDeclaration") {
+        for (const spec of edge.specifiers)
+          select(keyOf(spec.local, false), all);
+      } else if (edge.type === "TSImportType") {
+        let qualifier = edge.qualifier;
+        while (qualifier?.type === "TSQualifiedName")
+          qualifier = qualifier.left;
+        if (qualifier) select(qualifier.name, () => use(qualifier));
+        else use(edge);
+      } else if (edge.type === "TSExternalModuleReference") {
+        const declaration = edge.parent;
+        if (declaration.parent.type === "ExportNamedDeclaration") all();
+        else binding(declaration, declaration.id);
+      } else if (
+        edge.type === "CallExpression" ||
+        edge.type === "ImportExpression"
+      ) {
+        use(edge, edge.type === "ImportExpression");
+      } else {
+        all(); // Star re-export or triple-slash reference.
+      }
+      return names;
+    };
     const LOADER_USES = { createRequire: makerUse, getBuiltinModule: builtinUse };
     // A loader destructured out of its module or of `process`, bound by a
     // declaration whose reads are followed; destructured anywhere else (a
@@ -529,7 +650,7 @@ const importDirection = {
               identifier.name === "module" &&
               parent.type === "MemberExpression" &&
               parent.object === identifier &&
-              parent.property.name === "require"
+              keyOf(parent.property, parent.computed) === "require"
             )
               loaderUse(parent, dir, "`module.require`");
           }
@@ -572,99 +693,6 @@ const LOADER_MODULES = ["module", "node:module"];
 // The one import-direction rule: src's config runs it, and so does the tools'
 // (eslint.tools.config.mjs). [LAW:single-enforcer]
 export const zonesPlugin = { rules: { "import-direction": importDirection } };
-
-// [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
-// arrives in its inputs, so a renderer that opened one would read a disk its
-// host never chose and no snapshot recorded.
-const RENDERER_GLOB = `src/renderer/${TS_GLOB}`;
-const RENDERER_FS_PATHS = [
-  "fs",
-  "node:fs",
-  "fs/promises",
-  "node:fs/promises",
-].map((name) => ({
-  name,
-  message:
-    "The renderer opens no file: what it reads is handed in (config snapshots, world state). [LAW:effects-at-boundaries]",
-}));
-const zonePathsOf = (file) =>
-  file.startsWith("src/renderer/") ? RENDERER_FS_PATHS : [];
-
-const ownedPattern = (name) => ({
-  group: OWNED_IMPORTS[name].group,
-  importNames: [name],
-  message: `${OWNED_IMPORTS[name].message} [LAW:single-enforcer]`,
-});
-
-// A file's whole rule: flat config replaces a rule per file rather than merging
-// it, so each block carries the child_process paths and every name but its own.
-// `patterns`, not `paths`: a path matches only the literal import string, and
-// these are imported by relative spellings that differ file to file. A
-// renderer file's block carries the disk's paths beside them.
-function restrictedImports(file, zonePaths = []) {
-  return [
-    "error",
-    {
-      paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS, ...zonePaths],
-      patterns: [
-        ...Object.keys(OWNED_IMPORTS)
-          .filter((name) => !OWNED_IMPORTS[name].owners.includes(file))
-          .map(ownedPattern),
-        ...HOST_NAMED_IMPORTS,
-        ...FAKE_IMPORTS,
-      ],
-    },
-  ];
-}
-
-function ownedImportBlocks() {
-  const owners = [
-    ...new Set(Object.values(OWNED_IMPORTS).flatMap((o) => o.owners)),
-  ];
-  return [
-    {
-      files: [`src/${TS_GLOB}`],
-      ignores: ["src/proc/**", CLOCK_FILE],
-      rules: { "no-restricted-imports": restrictedImports(null) },
-    },
-    {
-      files: [RENDERER_GLOB],
-      rules: {
-        "no-restricted-imports": restrictedImports(null, RENDERER_FS_PATHS),
-      },
-    },
-    // src/proc/spawner.ts alone may import child_process, so the rest of
-    // src/proc keeps it with the clock's paths, and the spawner only the clock's.
-    {
-      files: [`src/proc/${TS_GLOB}`],
-      ignores: [SPAWNER_FILE],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          {
-            paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS],
-            patterns: [...FAKE_IMPORTS, ownedPattern("systemTimers")],
-          },
-        ],
-      },
-    },
-    {
-      files: [SPAWNER_FILE],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          { paths: CLOCK_IMPORT_PATHS, patterns: [ownedPattern("systemTimers")] },
-        ],
-      },
-    },
-    ...owners.map((file) => ({
-      files: [file],
-      rules: {
-        "no-restricted-imports": restrictedImports(file, zonePathsOf(file)),
-      },
-    })),
-  ];
-}
 
 export default [
   js.configs.recommended,
@@ -737,7 +765,6 @@ export default [
     rules: { "no-undef": ["error", { typeof: true }] },
   },
   prettierConfig,
-  ...ownedImportBlocks(),
   // [LAW:no-silent-failure] A promise nobody awaits is a task: the clock's
   // `detach` runs it and reports what it throws, so `void` is no way out, and
   // a promise handed where a callback's return is dropped is refused too.
@@ -762,9 +789,7 @@ export default [
     plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },
-  // `no-restricted-properties` is its own rule, so the per-file replacement of
-  // `no-restricted-imports` and `no-restricted-syntax` above leaves it alone.
-  // It also catches the destructured spelling (`const { env } = process`); an
+  // The property rule also catches the destructured spelling (`const { env } = process`); an
   // alias of `process` itself is the one it cannot see.
   {
     files: [`src/${TS_GLOB}`],
@@ -858,10 +883,6 @@ export default [
         {
           selector: "Identifier[name='runTmux']",
           message: "A path the daemon serves awaits `runTmuxAsync`.",
-        },
-        {
-          selector: "ImportDeclaration[source.value=/^(node:)?fs$/]",
-          message: "Take the disk from the daemon's inputs.",
         },
         ...CLOCK_SYNTAX,
       ],

@@ -201,7 +201,7 @@ mod tests {
     }
 
     // [LAW:single-enforcer] (kz8.6) The Rust mirror of the ESLint
-    // no-restricted-imports guard that pins child_process to src/proc/launch.ts.
+    // module ownership rule that pins child_process to src/proc/spawner.ts.
     // `std::process::Command` may be constructed only in launch.rs; any other
     // file growing a Command construction is a new unaudited spawn site, and —
     // since this module is the only place that knows the two sanctioned

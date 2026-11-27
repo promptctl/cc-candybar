@@ -85,5 +85,6 @@ export async function deliverPlan(
 }
 
 export async function exitWith(plan: CliPlan): Promise<never> {
-  process.exit(await deliverPlan(plan, process));
+  const { stdout, stderr } = process;
+  process.exit(await deliverPlan(plan, { stdout, stderr }));
 }

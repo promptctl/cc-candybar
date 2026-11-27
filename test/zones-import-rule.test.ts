@@ -259,7 +259,7 @@ describe("the zones import rule", () => {
         ).map(([name, messages]) => [
           name,
           messages
-            .filter((m) => m.ruleId === "zones/import-direction")
+            .filter((m) => m.ruleId === "zones/import-direction" && m.message.includes("[LAW:one-way-deps]"))
             .map((m) => m.message),
         ]),
       );

@@ -1,4 +1,5 @@
 import tsparser from "@typescript-eslint/parser";
+import { zonesPlugin } from "./eslint.config.mjs";
 
 // [LAW:effects-at-boundaries] [LAW:no-shared-mutable-globals] A test states the
 // machine it runs on by handing src a Host (scripts/lib/host.ts `hostOf`), and
@@ -78,9 +79,6 @@ const REAL_LAUNCHER_EXCEPTIONS = [
   "test/update-act.test.ts",
   "test/var-sources.test.ts",
 ];
-const REAL_LAUNCHER_MESSAGE =
-  "Script the program on a fake launcher (scripts/lib/draw-fixtures/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";
-
 // The suite, and what it shares with the tools.
 const SUITE = ["test/**/*.{ts,mts}", "scripts/lib/**/*.{ts,mts}"];
 
@@ -99,30 +97,7 @@ export default [
     files: SUITE,
     ignores: [...REAL_LAUNCHER_ADAPTERS, ...REAL_LAUNCHER_EXCEPTIONS],
     languageOptions: { parser: tsparser, ecmaVersion: "latest", sourceType: "module" },
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              // Every spelling of the module: a sibling helper reaches it as ./host.
-              group: ["**/helpers/host", "./host", "../host"],
-              importNames: ["processLauncher", "fixtureLauncher"],
-              message: REAL_LAUNCHER_MESSAGE,
-            },
-            {
-              group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
-              importNames: ["systemLauncher", "systemOneShotLauncher"],
-              message: REAL_LAUNCHER_MESSAGE,
-            },
-            {
-              group: ["**/proc/spawner", "**/proc/spawner.js"],
-              importNames: ["systemSpawner"],
-              message: REAL_LAUNCHER_MESSAGE,
-            },
-          ],
-        },
-      ],
-    },
+    plugins: { zones: zonesPlugin },
+    rules: { "zones/import-direction": ["error", "suite"] },
   },
 ];

@@ -1,8 +1,7 @@
 // [LAW:single-enforcer] The real clock, the timer globals and the loop's turn
-// are src/time.ts's alone. eslint.config.mjs builds each rule as a function of
-// the file because a later block replaces a rule rather than adding to it, so
-// the cases run the repo's own config over source text placed at a path in each
-// block, and every banned form must fail in every one.
+// are src/time.ts's alone. Each case runs the repository's ESLint configuration
+// at an actual scope of the module, property or syntax policy, so changing
+// any other rule for an owner cannot silently drop its clock restrictions.
 
 import path from "node:path";
 
@@ -68,15 +67,15 @@ const FORMS = {
   },
   "node:timers": {
     code: 'import { setImmediate } from "node:timers";\nexport { setImmediate };\n',
-    rule: "no-restricted-imports",
+    rule: "zones/import-direction",
   },
   "node:perf_hooks": {
     code: 'import { performance } from "node:perf_hooks";\nexport { performance };\n',
-    rule: "no-restricted-imports",
+    rule: "zones/import-direction",
   },
   "timers/promises": {
     code: 'import { setTimeout } from "timers/promises";\nexport { setTimeout };\n',
-    rule: "no-restricted-imports",
+    rule: "zones/import-direction",
   },
 } as const;
 
@@ -139,7 +138,7 @@ describe("the clock rules", () => {
     "%s may not import the machine's timers",
     (place) => {
       expect(found[`${place} / systemTimers`]).toEqual([
-        "no-restricted-imports",
+        "zones/import-direction",
       ]);
     },
   );
