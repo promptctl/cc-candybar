@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "648ab81867f4dd06cace3a3aa26f10ed956a7050",
-      "timestamp": "2026-11-27T03:58:26.741Z",
+      "sha": "957eac95789f30efd7fc089c422843cf36d06300",
+      "timestamp": "2026-11-27T04:02:13.415Z",
       "commits": [
         {
-          "sha": "648ab81867f4dd06cace3a3aa26f10ed956a7050",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:57:32-07:00",
-          "message": "fix(lifecycle): retire settled launcher work and verify daemon shutdown (#977)\n\n* test: retire failure quarantine and retain file-scoped fixture cleanup\n\n* test(daemon): verify host lifecycle from owned events\n\n* fix: preserve pipe exit verdicts and verify lifecycle contracts by delivery\n\n* test(plugins): establish the input for each native action check\n\n* test(persistence): drive pending session writes through flush and shutdown\n\n* fix(launcher): retire deferred group checks when a launch settles\n\n* test: report leaked periods in the Jest file that armed them\n\n* test: observe timer retirement after all fixture cleanups\n\n* fix(proc): close the fake child input when its reader exits\n\n* Stop polling terminated shell groups after daemon close\n\n* fix(launcher): retire an observed process group before draining its pipes\n\n* fix(launcher): retain the output drain turn on ordinary exit"
+          "sha": "957eac95789f30efd7fc089c422843cf36d06300",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T04:00:35Z",
+          "message": "chore(release): set `package.json` to 1.243.1\n\n## [1.243.1](https://github.com/promptctl/cc-candybar/compare/v1.243.0...v1.243.1) (2026-11-27)\n\n### Bug Fixes\n\n* **lifecycle:** retire settled launcher work and verify daemon shutdown ([#977](https://github.com/promptctl/cc-candybar/issues/977)) ([648ab81](https://github.com/promptctl/cc-candybar/commit/648ab81867f4dd06cace3a3aa26f10ed956a7050))\n"
         }
       ]
     }
