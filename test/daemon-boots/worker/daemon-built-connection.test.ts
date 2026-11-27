@@ -158,9 +158,12 @@ describe("a connection to a daemon built in this worker", () => {
   });
 
   test("a render is answered by the daemon's own handling", async () => {
-    expect(await rendered(start(), "connection-render")).toContain(
-      "a drawn mark",
-    );
+    const session = "connection-render";
+    expect(await rendered(start(), session)).toContain("a drawn mark");
+    const events = await landedEvents(process.env, session, 1);
+    const published = events[events.length - 1]!;
+    expect(field(published, "prompts")).toBe("-");
+    expect(field(published, "nonPrompts")).toBe("-");
   });
 
   test("a subscribe receives the frames the daemon draws", async () => {

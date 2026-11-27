@@ -671,12 +671,14 @@ describe("a renderer process's end", () => {
     link.arm();
     children[0]!.say(startedLine(9001));
     await settled();
-    children[0]!.exit(CRASHED);
+    clock.advance(2_000);
+    children[0]!.exit({ ...CRASHED, signal: "SIGKILL" });
     await settled();
     expect(ends).toHaveLength(1);
-    expect(ends[0]!.text).toMatch(/^renderer main\[1\] killed by SIGSEGV;/);
+    expect(logs).toContain("renderer main[1] killed by SIGKILL after 2 s; next start in 1 s");
+    expect(ends[0]!.text).toMatch(/^renderer main\[1\] killed by SIGKILL;/);
     await expect(link.renderer.answer(pin)).rejects.toThrow(
-      new RendererDown("renderer main is down: killed by SIGSEGV"),
+      new RendererDown("renderer main is down: killed by SIGKILL"),
     );
     await expect(link.renderer.answer(pin)).rejects.toThrow(RendererDown);
     // It lived under a minute, so the next waits the first backoff.

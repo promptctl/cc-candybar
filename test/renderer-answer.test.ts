@@ -10,6 +10,9 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import { fakeMetrics } from "../scripts/lib/draw-fixtures/payload-owners";
+import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
+import { requestEvent } from "../src/daemon/foundations/request-event";
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
@@ -816,6 +819,40 @@ describe("a statusline request", () => {
     // The turn's record is the draw's half of the render event.
     expect(new Map(record).has("at")).toBe(true);
   });
+
+  test.each([true, false])(
+    "a render event reports the transcript counts when the hook carries cost: %s",
+    async (withCost) => {
+      const t = renderer();
+      const session = checked();
+      const { cost: _cost, ...hookData } = session.hookData;
+      const context = withCost ? session : { ...session, hookData };
+      const transcript = path.join(dir, "counts.jsonl");
+      const line = (extra: object) => JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "go" },
+        timestamp: "2025-01-01T00:00:00Z",
+        ...extra,
+      });
+      fs.writeFileSync(transcript, [
+        line({ origin: { kind: "human" } }),
+        line({ isMeta: true }),
+        line({ origin: { kind: "task-notification" } }),
+      ].join("\n") + "\n");
+      const provider = new MetricsProvider({ clock: systemTimekeeper });
+      const fold = await provider.refresh(SESSION, transcript, "change");
+      t.rig.providers.metricsProvider = fakeMetrics(() => fold);
+      await t.rig.providers.metricsProvider.refresh(SESSION, transcript);
+      await configure(t, context);
+
+      const turn = await handIn(t.r, { kind: "request", id: REQUEST, context });
+      const { record } = answered(turn);
+      const event = requestEvent("render", [...record], { kind: "ok" }, 0);
+      expect(event.line).toContain(
+        withCost ? " prompts=1 nonPrompts=2 " : " prompts=- nonPrompts=- ",
+      );
+    },
+  );
 
   // A restarted renderer: the host releases whatever its first output does
   // not name, a tmux status row included.
