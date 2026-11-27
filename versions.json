@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-987",
+      "ref": "refs/pull/987/merge",
+      "sha": "270cb512fc619464332e8760c3bbdcb31d2e1839",
+      "timestamp": "2026-11-27T22:15:13.918Z",
+      "commits": [
+        {
+          "sha": "270cb512fc619464332e8760c3bbdcb31d2e1839",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T15:14:04-07:00",
+          "message": "Merge 7d2c35229b36a951587f255e66d3f02859148d38 into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+        },
+        {
+          "sha": "7d2c35229b36a951587f255e66d3f02859148d38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T15:13:44-07:00",
+          "message": "fix(ssh-links): tell a forwarded click's own failure as itself, and hand desktop acts through the one performer\n\nA click that arrived down an ssh forward and then failed on its own verb,\nhaving asked no copy or open, was answered as a failed response, which the\nURL handler words as a dead forward or a refused link. A landed click is now\nalways answered as taken, with its acts and its failure beside them.\n\nA copy or open for the desktop is decided by the act performer like every\nother act, so it is refused once the daemon is closing and its act line is\nwritten, including when the path check throws.\n\nWhere a click's acts go is a required argument of answerClick; nothing in the\nhost defaults it to the daemon's machine.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-986",
       "ref": "refs/pull/986/merge",
       "sha": "1fa4cec905d9eec1c61c3e56ded9ff94e352d0b2",
