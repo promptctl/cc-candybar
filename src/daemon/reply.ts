@@ -470,16 +470,9 @@ export async function replyTo(
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,
       });
-    return stay({
-      ok: true,
-      paneSession: frameFeeds.newestWhere(
-        ({ hints: { tmux } }) =>
-          tmux !== null &&
-          tmux !== undefined &&
-          tmux.socket === socket &&
-          tmux.pane === pane,
-      ),
-    });
+    const paneSession = parts.paneSession({ socket, pane });
+    frameFeeds.notePaneLookup(paneSession);
+    return stay({ ok: true, paneSession });
   }
 
   if (req.kind === "pointer") {

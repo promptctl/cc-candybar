@@ -14,6 +14,8 @@ import { systemLauncher } from "../proc/system-launcher";
 import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
+import { productionTmuxServerObserver } from "./tmux-server-observer.js";
+import { createTmuxSourceEdges } from "./tmux-source-authority.js";
 import { productionBarPaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
@@ -47,6 +49,8 @@ export function productionAdapters(
     linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),
     claudeInput: productionClaudeInputEdge,
     barPaneEdge: productionBarPaneEdge,
+    tmuxObserver: productionTmuxServerObserver,
+    tmuxSourceEdges: createTmuxSourceEdges,
     nativeWindowSupported: process.platform === "darwin",
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {

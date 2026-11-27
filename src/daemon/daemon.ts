@@ -49,11 +49,13 @@ import { makeLimits, type LimitsDeps } from "./limits";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
 import { FrameFeeds } from "./frame-feed.js";
+import { PaneVisibility } from "./pane-visibility.js";
+import type { TmuxServerObserver } from "./tmux-server-observer.js";
 import {
-  LIST_CLIENTS_FORMAT,
-  LIST_PANES_FORMAT,
-  PaneVisibility,
-} from "./pane-visibility.js";
+  TmuxSourceAuthority,
+  type createTmuxSourceEdges,
+} from "./tmux-source-authority.js";
+import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import { RetiredTmuxStatus } from "./retired-tmux-status.js";
 import type { BarPaneEdge } from "./lane-setup.js";
@@ -153,6 +155,13 @@ export interface DaemonAdapters {
   readonly claudeInput: (launcher: Pick<Launcher, "launch">) => ClaudeInputEdge;
   readonly nativeWindowSupported: boolean;
   readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
+  readonly tmuxObserver: (
+    launcher: Launcher,
+    node: readonly string[],
+    bundle: string,
+    tmp: string,
+  ) => TmuxServerObserver;
+  readonly tmuxSourceEdges: typeof createTmuxSourceEdges;
   // [LAW:one-source-of-truth] The host uses one key to publish and admit
   // terminal clicks.
   readonly linkKey: () => Asked<Buffer>;
@@ -247,6 +256,7 @@ export interface ServedDaemon extends DaemonResources {
     clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];
+  readonly enroll: DeclaredSurfaces["enroll"];
   // The site resets a simulated file that its watches cannot hear.
   readonly rediscover: () => void;
   // Only the socket owner arms production watchers and the renderer process.
@@ -608,16 +618,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       });
     },
     run: (run) => runs.start(run),
-    barPane: {
-      edge: inputs.barPaneEdge(launcher),
-      // A bar pane runs this bundle under the node running it now, with the
-      // flags it runs with (tsx's loader, under the test harness).
-      host: {
-        bundle: bundle.path,
-        node: bundle.node,
-        socket: paths.socket,
-      },
-    },
     // [LAW:single-enforcer] The pane queue reads the same phase as ingress
     // before any new operation reaches tmux.
     closing: () => !serving(),
@@ -637,29 +637,53 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     log,
     inputs.nativeWindowSupported,
   );
-  const declaredSurfaces = new DeclaredSurfaces(
-    (sessionId) => {
-      const latest = frameFeeds.latestWithOrder(sessionId);
-      const pane = latest?.req.hints.tmux;
-      return latest !== undefined && pane != null
-        ? { pane, order: latest.order }
-        : undefined;
+  // A physical follower can reconnect before a new renderer declaration.
+  // Retain the server until its last physical or rendering consumer leaves.
+  const physical = new Map<TmuxHint, number>();
+  let enabledPanes: readonly SessionId[] = [];
+  let interestedSources = new Map<string, TmuxHint>();
+  const declaredSurfaces = new DeclaredSurfaces({
+    paneOf: (session) => frameFeeds.latest(session)?.hints.tmux ?? undefined,
+    host: { bundle: bundle.path, node: bundle.node, socket: paths.socket },
+    edge: inputs.barPaneEdge(launcher),
+    inPane: (source, act) => acts.inPaneTurn(source, act),
+    interest: (source) => {
+      physical.set(source, (physical.get(source) ?? 0) + 1);
+      reconcileTmux(source.socket);
+      return () => {
+        const count = physical.get(source);
+        if (count === undefined) return;
+        if (count === 1) physical.delete(source);
+        else physical.set(source, count - 1);
+        reconcileTmux();
+      };
     },
-    (pane, on) => acts.setBarPane(pane, on),
+    subscribe: (session, subscriber, replaces) =>
+      frameFeeds.subscribe(session, subscriber, replaces),
+    announce: () => frameFeeds.announce(),
+    windows: (desired) => windowFollowers.declare(desired),
     clock,
     log,
-    (desired) => windowFollowers.declare(desired),
-  );
+  });
+  const authority = new TmuxSourceAuthority({
+    ...inputs.tmuxSourceEdges(launcher, watcherRegistry),
+    confirmed: (source, session, serverPid) =>
+      declaredSurfaces.confirmed(source, session, serverPid),
+    log,
+  });
   // Who watches each session's frames (candybar-animation-wbxz.jmm.usl),
   // handed to the renderer, whose feeds draw them, and what each subscriber
   // was sent.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     publishFrame,
     acknowledgeDisplayed,
-    requestChanged: (session, previous) =>
-      declaredSurfaces.reported(session, previous?.hints.tmux ?? null),
+    requestChanged: (session) => {
+      declaredSurfaces.reported();
+      const req = frameFeeds.latest(session);
+      reconcileTmux(req?.hints.tmux?.socket, req ?? undefined);
+    },
     shown: (req) => paneVisibility.shown(req.hints.tmux),
-    watching: () => paneVisibility.follow(),
+    watchingChanged: () => reconcileTmux(),
     deliver: async (make) => {
       const sent = await Promise.all(
         [...renderers.values()].map(({ renderer }) =>
@@ -679,37 +703,56 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     },
     log,
   });
-  // Which watched sessions' panes are on a screen, asked of their tmux servers
-  // once a second while some feed exists: a session nobody can see is drawn at
-  // the still rate however its bar moves, and one that comes into view is drawn
-  // at once.
-  const paneVisibility: PaneVisibility = new PaneVisibility({
-    clock,
-    listPanes: (socket) =>
-      runTmuxAsync(launcher, { socket }, "frames.visibility", [
-        "list-panes",
-        "-a",
-        "-F",
-        LIST_PANES_FORMAT,
-      ]),
-    listClients: (socket) =>
-      runTmuxAsync(launcher, { socket }, "frames.visibility", [
-        "list-clients",
-        "-F",
-        LIST_CLIENTS_FORMAT,
-      ]),
-    // The servers of the sessions someone is watching.
-    sockets: () => new Set(frameFeeds.watchedRequests().flatMap(tmuxServersOf)),
-    onChange: () => frameFeeds.announce(),
-    intervalMs: 1000,
+  const paneVisibility = new PaneVisibility(
+    inputs.tmuxObserver(launcher, bundle.node, bundle.path, host.tmp),
+    (socket, view) => {
+      authority.observed(socket, view);
+      declaredSurfaces.observed(socket, view);
+      frameFeeds.announce();
+    },
     log,
-  });
-  // [LAW:one-source-of-truth] The tmux server a session's bar is on, as the
-  // servers it is on: none outside tmux or from a client too old to say.
-  function tmuxServersOf({
-    hints: { tmux },
-  }: CheckedRenderRequest): readonly string[] {
-    return tmux === null || tmux === undefined ? [] : [tmux.socket];
+  );
+
+  function reportSource(req: CheckedRenderRequest): void {
+    const pane = req.hints.tmux;
+    if (
+      pane &&
+      req.sourceConfigDir !== undefined &&
+      interestedSources.has(paneKey(pane))
+    )
+      authority.report(
+        pane,
+        req.hookData.session_id,
+        req.hints.parentPid,
+        req.sourceConfigDir,
+      );
+  }
+
+  function reconcileTmux(retry?: string, changed?: CheckedRenderRequest): void {
+    if (!serving()) return;
+    const sources = new Map<string, TmuxHint>();
+    for (const pane of physical.keys()) sources.set(paneKey(pane), pane);
+    for (const sid of enabledPanes) {
+      const pane = frameFeeds.latest(sid)?.hints.tmux;
+      if (pane) sources.set(paneKey(pane), pane);
+    }
+    const previous = interestedSources;
+    interestedSources = sources;
+    for (const [key, pane] of previous)
+      if (!sources.has(key)) authority.release(pane);
+    const sockets = new Set([...sources.values()].map((pane) => pane.socket));
+    for (const req of frameFeeds.watchedRequests()) {
+      if (req.hints.tmux) sockets.add(req.hints.tmux.socket);
+    }
+    paneVisibility.reconcile(sockets, retry);
+    // A saved switch or a returning physical hello can arrive after the
+    // render. Replay cached candidates only when their source gains interest.
+    if ([...sources.keys()].some((key) => !previous.has(key))) {
+      for (const req of frameFeeds.knownRequests()) {
+        if (req.hints.tmux && !previous.has(paneKey(req.hints.tmux)))
+          reportSource(req);
+      }
+    } else if (changed) reportSource(changed);
   }
   const binaryWatch = makeBinaryWatch({
     clock,
@@ -793,8 +836,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
     managedStorage.follow(folders);
     collector.subscribed({ sources });
-    frameFeeds.switched(lanes);
+    enabledPanes = (Object.keys(lanes) as SessionId[]).filter(
+      (sid) => lanes[sid]?.pane,
+    );
     declaredSurfaces.declare(lanes);
+    frameFeeds.switched(lanes);
+    reconcileTmux();
   };
 
   function prepareRenderer(
@@ -1061,6 +1108,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     runs,
     sourceRuns,
     retiredTmuxStatus,
+    paneSession: (source) => authority.session(source),
     frameFeeds,
     limits,
     collector,
@@ -1126,6 +1174,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           subscriber.refused(
             failedWith(new DaemonClosing("subscribe").message),
           );
+          return () => {};
+        },
+      ),
+    enroll: (hello, stream) =>
+      admit(
+        () => declaredSurfaces.enroll(hello, stream),
+        () => {
+          stream.refused(new DaemonClosing("pane subscription").message);
           return () => {};
         },
       ),
@@ -1217,6 +1273,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
       ...rendererSteps("close-journal"),
+      ["pane subscribers close", () => declaredSurfaces.close()],
+      ["pane authority close", () => authority.close()],
+      ["tmux observations close", () => paneVisibility.reconcile(new Set())],
       ["window followers close", () => windowFollowers.close()],
       // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
       // is in flight is terminated, whichever owner's work it was, and the

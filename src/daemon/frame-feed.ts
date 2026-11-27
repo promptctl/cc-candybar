@@ -75,9 +75,8 @@ export interface FeedDeps<Req> {
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
-  // The first session watched: whatever runs only while someone watches
-  // starts, and the returned stop is called when the last stops.
-  watching(): () => void;
+  // A session gained its first subscriber or lost its last one.
+  watchingChanged(session: SessionId, watching: boolean): void;
   // [LAW:single-enforcer] Hands the renderer every session's viewers, as
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
@@ -235,9 +234,6 @@ export class FrameFeeds<Req> {
   // The lanes each session with a view switches on, as the renderer's last
   // output said: a subscriber is gated by its lane.
   private lanes: Readonly<Record<SessionId, LaneSwitches>> = {};
-  // [LAW:no-ambient-temporal-coupling] The stop of what runs while anyone
-  // watches: held exactly from the first session watched to the last.
-  private stopWatching: (() => void) | null = null;
   private delivery: Delivery = "current";
   // The viewers as the renderer was last handed them, serialized; null when
   // what it holds is unknown (a delivery failed).
@@ -302,7 +298,7 @@ export class FrameFeeds<Req> {
         pushed: 0,
       };
       this.watched.set(sessionId, watched);
-      this.stopWatching ??= this.deps.watching();
+      this.deps.watchingChanged(sessionId, true);
     }
     if (watched.followers.has(sub))
       return () => this.unsubscribe(sessionId, sub);
@@ -570,16 +566,10 @@ export class FrameFeeds<Req> {
       this.send(session, watched, sub, encoded, done);
   }
 
-  // The session of the newest request `match` accepts, among the latest
-  // request of each session the daemon holds, or null when none does.
-  newestWhere(match: (req: Req) => boolean): SessionId | null {
-    let newest: { sessionId: SessionId; order: number } | null = null;
-    for (const [sessionId, { req, order }] of this.requests)
-      if (match(req) && (newest === null || order > newest.order))
-        newest = { sessionId, order };
+  // Keep the published feed counters for the legacy pane-session wire query.
+  notePaneLookup(session: SessionId | null): void {
     this.lookups++;
-    if (newest !== null) this.found++;
-    return newest?.sessionId ?? null;
+    if (session !== null) this.found++;
   }
 
   // The latest request the daemon holds of `sessionId`, or null when it
@@ -588,10 +578,8 @@ export class FrameFeeds<Req> {
     return this.requests.get(sessionId)?.req ?? null;
   }
 
-  // The latest request and its arrival order, for consumers reconciling
-  // declarations from sessions that have reported the same pane.
-  latestWithOrder(sessionId: SessionId): Noted<Req> | undefined {
-    return this.requests.get(sessionId);
+  *knownRequests(): IterableIterator<Req> {
+    for (const { req } of this.requests.values()) yield req;
   }
 
   // The frames each renderer drew are its own count, on its panel.
@@ -630,10 +618,7 @@ export class FrameFeeds<Req> {
         "info",
         `feed sid=${JSON.stringify(sessionId)} unwatched pushed=${watched.pushed}`,
       );
-      if (this.watched.size === 0) {
-        this.stopWatching?.();
-        this.stopWatching = null;
-      }
+      this.deps.watchingChanged(sessionId, false);
     }
     this.announce();
     const writes = [...follower.writes];
