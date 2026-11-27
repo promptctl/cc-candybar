@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "50d61ab26aab8ee41974c2498d25ce000c6a6635",
-      "timestamp": "2026-11-27T13:11:13.346Z",
+      "sha": "548e226f061ed34d6a5b0709990e5f93952efa9f",
+      "timestamp": "2026-11-27T13:15:10.180Z",
       "commits": [
         {
-          "sha": "50d61ab26aab8ee41974c2498d25ce000c6a6635",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T06:10:00-07:00",
-          "message": "feat(renderer): ship one portable renderer for Node and WebKit (#984)\n\n* feat(renderer): ship one portable renderer for Node and WebKit\n\n* fix(build): keep the patch lock compatible with CI pnpm\n\n* fix(renderer): bind installed generations and preserve diagnostic and replay failures\n\n* fix(renderer): enforce the import boundary and isolate malformed turns"
+          "sha": "548e226f061ed34d6a5b0709990e5f93952efa9f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T13:13:32Z",
+          "message": "chore(release): set `package.json` to 1.245.0\n\n## [1.245.0](https://github.com/promptctl/cc-candybar/compare/v1.244.3...v1.245.0) (2026-11-27)\n\n### Features\n\n* **renderer:** ship one portable renderer for Node and WebKit ([#984](https://github.com/promptctl/cc-candybar/issues/984)) ([50d61ab](https://github.com/promptctl/cc-candybar/commit/50d61ab26aab8ee41974c2498d25ce000c6a6635))\n"
         }
       ]
     }
