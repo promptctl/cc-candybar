@@ -96338,8 +96338,6 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
   };
 }
 function landedReply(parts, { desktop, outcome }) {
-  if (desktop.length === 0 && outcome.kind !== "ok")
-    return stay(clickReply(outcome));
   const reply = replyOf(
     {
       ok: true,
@@ -96349,10 +96347,14 @@ function landedReply(parts, { desktop, outcome }) {
     },
     null,
     (taken2) => {
-      if (!taken2 && desktop.length > 0)
+      const lost = [
+        ...desktop.length > 0 ? [`${desktop.length} copy or open act(s)`] : [],
+        ...outcome.kind === "ok" ? [] : ["the click's failure"]
+      ];
+      if (!taken2 && lost.length > 0)
         parts.log(
           "warn",
-          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`
+          `${lost.join(" and ")} for the machine the URL handler runs on did not reach it: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`
         );
     }
   );
@@ -96398,10 +96400,10 @@ async function handleClick(parts, {
   if (session !== null) parts.collector.clicked(session);
   const delivered = await target.answerClick(
     session,
+    actsOn,
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
       runEvidence,
-      actsOn,
       event: {
         kind: "click",
         click: admitted,
@@ -103924,19 +103926,26 @@ var Acts = class {
       )
     );
   }
-  // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
-  // throw is classified once, here: a refusal the user can act on, the
-  // daemon's close, or a failure.
-  async perform(act) {
-    const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act);
+  // [LAW:dataflow-not-control-flow] One act, by its kind's performer, or
+  // handed to the desktop when its click's writer runs there. A throw is
+  // classified once, here: a refusal the user can act on, the daemon's close,
+  // or a failure.
+  async perform(act, actsOn) {
+    const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act, actsOn);
     this.deps.log(
-      outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
+      outcome.kind === "ok" || outcome.kind === "closing" || outcome.kind === "desktop" ? "info" : "warn",
       actLine(act, outcome.kind, said3)
     );
-    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act)}: ${outcome.reason}` };
+    return outcome.kind === "ok" || outcome.kind === "desktop" ? outcome : { ...outcome, reason: `${nameOf2(act)}: ${outcome.reason}` };
   }
-  async performed(act) {
+  async performed(act, actsOn) {
     try {
+      const desktop = actsOn === ACTS_ON_DESKTOP ? await desktopActOf(act) : null;
+      if (desktop !== null)
+        return {
+          outcome: { kind: "desktop", act: desktop },
+          said: "handed to the desktop"
+        };
       return await this.performers[act.kind](act);
     } catch (thrown2) {
       const failure2 = failureOf(thrown2);
@@ -105504,7 +105513,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const problem = inspectionPayloadProblem(reply);
     if (problem !== null) throw new Error(`${label2} returned ${problem}`);
   };
-  const inSlot = async (input, queuedMs, captures = [], actsOn = "daemon") => {
+  const inSlot = async (input, queuedMs, actsOn, captures = []) => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
     const session = sessionOfEvent(input.event);
@@ -105653,15 +105662,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           );
       } else acts.push(effect);
     }
-    const performed = async (act) => {
-      const desktop = actsOn === "desktop" ? await desktopActOf(act) : null;
-      if (desktop === null) return world.perform(act);
-      log("info", actLine(act, "desktop", "handed to the desktop"));
-      return Promise.resolve({ kind: "desktop", act: desktop });
-    };
     let before = Promise.resolve();
     for (const act of acts) {
-      const acted = configOutcome.kind === "ok" ? before.then(() => performed(act)).catch(
+      const acted = configOutcome.kind === "ok" ? before.then(() => world.perform(act, actsOn)).catch(
         (error) => ({
           kind: "failed",
           reason: failureOf(error).detail
@@ -105833,7 +105836,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         settled: Promise.resolve([{ kind: "failed", reason: made.message }])
       };
     const input = stamped(made);
-    const { received, turn, settled: settled3 } = await inSlot(input, 0);
+    const { received, turn, settled: settled3 } = await inSlot(input, 0, ACTS_ON_DAEMON);
     record3(input.event, [["why", why]], turn);
     const threw2 = turn.kind === "threw" ? [
       {
@@ -105891,7 +105894,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const settleInSlot = async (effect, outcome) => {
     const input = stamped(doneOf(effect, outcome));
-    const { turn, settled: settled3 } = await inSlot(input, 0);
+    const { turn, settled: settled3 } = await inSlot(input, 0, ACTS_ON_DAEMON);
     record3(input.event, [["effect", String(effect.id)]], turn);
     return { settled: settled3.then(() => outcome) };
   };
@@ -105921,7 +105924,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         );
     }
   };
-  const throughSlot = (make, at, click2 = null) => {
+  const throughSlot = (make, actsOn, at, click2 = null) => {
     const held = click2 === null ? null : pendingClicks.get(click2) ?? { session: click2, count: 0 };
     if (held !== null) {
       held.count++;
@@ -105973,8 +105976,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          made.event.kind === "click" ? made.runEvidence : void 0,
-          made.event.kind === "click" ? made.actsOn : void 0
+          actsOn,
+          made.event.kind === "click" ? made.runEvidence : void 0
         );
         if (starting && slotted.turn.kind === "answered") restore = void 0;
         if (made.event.kind === "click" && restore !== void 0)
@@ -105990,17 +105993,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       }
     }, at);
   };
-  const taken2 = async (make, at = "last", click2 = null) => {
-    const { event, slotted } = await throughSlot(make, at, click2);
+  const taken2 = async (make, actsOn, at = "last", click2 = null) => {
+    const { event, slotted } = await throughSlot(make, actsOn, at, click2);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled }
     };
   };
-  const answer2 = async (make) => (await taken2(make)).turn;
-  const answerClick = async (session, make) => (await taken2(make, "last", session)).turn;
+  const answer2 = async (make) => (await taken2(make, ACTS_ON_DAEMON)).turn;
+  const answerClick = async (session, actsOn, make) => (await taken2(make, actsOn, "last", session)).turn;
   const recorded2 = (at) => async (make, about) => {
-    const { event, turn } = await taken2(make, at);
+    const { event, turn } = await taken2(make, ACTS_ON_DAEMON, at);
     record3(event, about, turn);
     return turn;
   };
@@ -106016,7 +106019,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         message: "its asker stopped waiting",
         detail: `${commandLabel(event)} was not made: its asker stopped waiting`
       };
-    });
+    }, ACTS_ON_DAEMON);
     if (!made) throw until2?.reason;
     if (turn.kind === "threw") {
       const label2 = commandLabel(event);
@@ -106062,6 +106065,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
             pendingClicks: [...pendingClicks.keys()]
           }
         },
+        ACTS_ON_DAEMON,
         "scheduled"
       );
       unawaited("due acts", () => settled3);
@@ -108171,7 +108175,7 @@ function createDaemon(inputs) {
       },
       {
         authorizeRun: (request2, captures) => authorizeRun(linkSigner2, request2, captures),
-        perform: (act) => acts.perform(act),
+        perform: (act, actsOn) => acts.perform(act, actsOn),
         stateDir: paths2.state,
         configs: configDiscovery.forRenderer(name),
         writeConfigFile: inputs.writeConfigFile,
