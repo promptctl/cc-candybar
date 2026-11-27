@@ -7,6 +7,7 @@ import globals from "globals";
 import fs from "node:fs";
 import { isBuiltin } from "node:module";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
@@ -109,7 +110,7 @@ const named = (module, names, message, ...owners) =>
     except(outsideProc, ...owners),
     `${message} [LAW:single-enforcer]`,
   );
-const ownership = {
+export const moduleOwnership = {
   app: [
     owned(
       ["node:child_process"],
@@ -178,7 +179,7 @@ const ownership = {
     ),
     ...[
       ["src/claude-input/edge", "productionClaudeInputEdge"],
-      ["src/daemon/lane-edge", "productionLaneEdge"],
+      ["src/daemon/lane-edge", "productionBarPaneEdge"],
       ["src/daemon/limits", "realLimitsDeps"],
       ["src/daemon/file-storage", "fileStorage"],
       ["src/daemon/cache/pricing-fetch", "fetchPricing"],
@@ -192,7 +193,7 @@ const ownership = {
     ),
     named(
       "src/daemon/link-key",
-      ["linkSignerFromKeyFile"],
+      ["linkKeyFromFile"],
       "A daemon is handed its link signer (production-adapters.ts).",
       composition,
     ),
@@ -209,7 +210,6 @@ const ownership = {
         "stateDir",
         "cacheDir",
         "logPath",
-        "leasePath",
         "sessionStatePath",
         "settingsHistoryPath",
         "daemonRegistryDir",
@@ -304,7 +304,7 @@ const importDirection = {
     const from = withoutExtension(file);
     const policy = context.options[0] ?? "app";
     const directions = policy !== "suite";
-    const ownedHere = ownership[policy].filter((rule) => rule.applies(file));
+    const ownedHere = moduleOwnership[policy].filter((rule) => rule.applies(file));
     // [LAW:no-silent-failure] A key outside the repo is in no zone, so the rule
     // refuses it rather than calling it rest and passing every edge.
     const outside = (key) => key.startsWith("..") || path.isAbsolute(key);
@@ -328,10 +328,25 @@ const importDirection = {
     // Where an edge's source leads: a package, whose zone is the one that
     // owns it or none; a path in the repo, whose zone is its row's; or a path
     // outside the repo, which is in no zone.
-    const targetOf = (source, base) => {
-      if (!source.startsWith(".") && !path.isAbsolute(source))
+    const targetOf = (source, base, esm) => {
+      const fileURL = esm && /^file:/i.test(source);
+      const relative = /^(?:\.\.?)(?:\/|$)/.test(source);
+      if (!fileURL && !relative && !path.isAbsolute(source))
         return { kind: "package", name: source, zone: packageZoneOf(source) };
-      const key = moduleKey(path.resolve(base, source));
+      if (relative && base === null) return null;
+      let filename;
+      if (esm) {
+        // URL resolution strips query/fragment and decodes the pathname
+        // only on ESM edges. The same characters name literal files in CJS.
+        try {
+          filename = fileURLToPath(
+            new URL(source, pathToFileURL((base ?? dir) + path.sep)),
+          );
+        } catch {
+          return null;
+        }
+      } else filename = path.resolve(base ?? dir, source);
+      const key = moduleKey(filename);
       return {
         kind: "path",
         name: key,
@@ -340,24 +355,25 @@ const importDirection = {
     };
     // `base` is the directory a relative source resolves from: this file's,
     // or null for a loader built on a base no lint can read.
-    const check = (node, source, base = dir) => {
+    const check = (node, source, base = dir, esm = false) => {
       if (source === null) {
-        if (!directions) return;
         context.report({
           node,
           message: `An import whose source is computed is in no zone. [LAW:one-way-deps]`,
         });
         return;
       }
-      if (base === null && (source.startsWith(".") || path.isAbsolute(source))) {
-        if (!directions) return;
+      const to = targetOf(source, base, esm);
+      if (to === null) {
         context.report({
           node,
-          message: `A loader whose base is computed loads ${source} from no place a lint can read. [LAW:one-way-deps]`,
+          message:
+            base === null
+              ? `A loader whose base is computed loads ${source} from no place a lint can read. [LAW:one-way-deps]`
+              : `The module URL ${source} resolves to no readable file. [LAW:one-way-deps]`,
         });
         return;
       }
-      const to = targetOf(source, base);
       const module =
         to.kind === "path"
           ? to.name
@@ -365,8 +381,9 @@ const importDirection = {
             ? `node:${source.replace(/^node:/, "")}`
             : null;
       const rules = ownedHere.filter((rule) => rule.modules.includes(module));
-      if (rules.length) {
-        const names = exportNames(node, to.kind === "package");
+      const loaders = nativeLoaders[module];
+      if (rules.length || loaders) {
+        const names = exportNames(node, to.kind === "package", loaders);
         const refused = rules.filter(
           (rule) =>
             rule.names === null ||
@@ -386,7 +403,10 @@ const importDirection = {
         });
       }
       if (!rendering || typeOnly(node)) return;
-      if (to.kind === "package" && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
+      if (
+        to.kind === "package" &&
+        !mayLoadRendererModule(source, fromZone === "renderer-process")
+      ) {
         context.report({
           node,
           message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
@@ -410,19 +430,21 @@ const importDirection = {
         : node.type === "TemplateLiteral" && node.expressions.length === 0
           ? node.quasis[0].value.cooked
           : null;
-    const fromSource = (node) =>
-      node.source && check(node, sourceOf(node.source));
+    const fromSource = (node) => {
+      if (!node.source) return;
+      const source = staticLocation(node.source);
+      check(node, source instanceof URL ? source.href : source, dir, true);
+    };
     // [LAW:one-way-deps] What a loader Node hands code loads is an edge like
     // an import's: `require`, `module.require`, `process.getBuiltinModule`,
     // and the loader `createRequire` makes, under whatever name it is bound
     // to. A loader it reads is used by a call with its source, which is
     // judged, or by `.resolve`, which locates and loads nothing. Any other use
     // (an alias, `.call`, an export) carries it where no lint follows, so it
-    // is refused. A loader reached by a name it does not read (an alias of
-    // `module` or `process`, `Module._load`, `globalThis`, `eval`) is not
-    // judged.
+    // is refused. Namespace projections follow their lexical bindings.
+    // Reflection and evaluation of assembled code are outside this rule.
     const refuseUse = (node, what) =>
-      directions && context.report({
+      context.report({
         node,
         message: `${what} is used other than by a call with its source, so what it loads no lint can place. [LAW:one-way-deps]`,
       });
@@ -438,10 +460,15 @@ const importDirection = {
     const calledAs = (node) =>
       node.parent.type === "CallExpression" && node.parent.callee === node;
     // An expression whose value is a loader, judged where it stands.
-    const loaderUse = (node, base, what) => {
+    const loaderUse = (node, base, what, builtinsOnly = false) => {
       const { parent } = node;
       if (calledAs(node)) {
-        check(parent, parent.arguments[0] ? sourceOf(parent.arguments[0]) : null, base);
+        const source = parent.arguments[0]
+          ? sourceOf(parent.arguments[0])
+          : null;
+        // getBuiltinModule returns undefined for file and package specifiers.
+        if (!builtinsOnly || source === null || isBuiltin(source))
+          check(parent, source, base);
         return;
       }
       if (
@@ -458,28 +485,82 @@ const importDirection = {
         parent.id.type === "Identifier" &&
         parent.parent.parent.type !== "ExportNamedDeclaration"
       ) {
-        for (const read of readsOf(parent, parent.id.name)) loaderUse(read, base, what);
+        for (const read of readsOf(parent, parent.id.name))
+          loaderUse(read, base, what, builtinsOnly);
         return;
       }
       refuseUse(node, what);
     };
-    // A `createRequire` call resolves relative sources from its base: this
-    // file's directory when the base names this file, and none a lint can
-    // read otherwise.
+    // A createRequire loader resolves relative sources from the declared
+    // file or directory when its path or file URL is known.
+    const isGlobal = (node, name) => {
+      if (node?.type !== "Identifier" || node.name !== name) return false;
+      for (
+        let scope = context.sourceCode.getScope(node);
+        scope;
+        scope = scope.upper
+      ) {
+        const variable = scope.set.get(name);
+        if (variable)
+          return variable.scope.type === "global" && variable.defs.length === 0;
+      }
+      return true;
+    };
+    const staticLocation = (node) => {
+      if (!node) return null;
+      const literal = sourceOf(node);
+      if (literal !== null) return literal;
+      if (isGlobal(node, "__filename"))
+        return path.join(dir, path.basename(file));
+      if (
+        node.type === "MemberExpression" &&
+        node.object.type === "MetaProperty" &&
+        node.object.meta.name === "import" &&
+        node.object.property.name === "meta" &&
+        keyOf(node.property, node.computed) === "url"
+      )
+        return pathToFileURL(path.join(dir, path.basename(file)));
+      if (
+        node.type === "NewExpression" &&
+        isGlobal(node.callee, "URL") &&
+        node.arguments.length <= 2
+      ) {
+        const [where, from] = node.arguments;
+        const input = staticLocation(where),
+          parent = staticLocation(from);
+        if (input === null || (from && parent === null)) return null;
+        try {
+          return new URL(input, parent ?? undefined);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
     const baseOf = (call) => {
-      const [at] = call.arguments;
-      const namesThisFile =
-        (at?.type === "MemberExpression" &&
-          at.object.type === "MetaProperty" &&
-          at.property.name === "url") ||
-        (at?.type === "Identifier" && at.name === "__filename");
-      return namesThisFile ? dir : null;
+      const value = staticLocation(call.arguments[0]);
+      if (value === null) return null;
+      let filename;
+      if (typeof value === "string" && path.isAbsolute(value)) filename = value;
+      else {
+        try {
+          filename = fileURLToPath(value);
+        } catch {
+          return null;
+        }
+      }
+      return filename.endsWith(path.sep) ? filename : path.dirname(filename);
     };
     const makerUse = (node) =>
       calledAs(node)
-        ? loaderUse(node.parent, baseOf(node.parent), "A `createRequire` loader")
+        ? loaderUse(
+            node.parent,
+            baseOf(node.parent),
+            "A `createRequire` loader",
+          )
         : refuseUse(node, "`createRequire`");
-    const builtinUse = (node) => loaderUse(node, dir, "`getBuiltinModule`");
+    const builtinUse = (node) =>
+      loaderUse(node, dir, "`getBuiltinModule`", true);
     // A key's name: an identifier's, or a string's when computed.
     const keyOf = (key, computed) =>
       !computed && key.type === "Identifier" ? key.name : sourceOf(key);
@@ -487,7 +568,7 @@ const importDirection = {
     // module namespace. Observe literal projections through lexical bindings.
     // Passing a namespace on grants all its exports; an awaited dynamic import
     // grants the namespace, while passing its promise on does the same.
-    const exportNames = (edge, builtin) => {
+    const exportNames = (edge, builtin, loaders) => {
       const names = new Set();
       const seen = new Set();
       const all = () => names.add(null);
@@ -501,7 +582,9 @@ const importDirection = {
         if (!reads.length) all();
         for (const read of reads) use(read, promise);
       };
-      const select = (name, next) => {
+      const select = (name, next, access) => {
+        if (access && loaders && Object.hasOwn(loaders, name))
+          access(loaders[name]);
         if (builtin && name === "default") next();
         else names.add(name);
       };
@@ -511,8 +594,18 @@ const importDirection = {
         for (const property of id.properties) {
           if (property.type !== "Property") all();
           else
-            select(keyOf(property.key, property.computed), () =>
-              pattern(property.value, declaration, false),
+            select(
+              keyOf(property.key, property.computed),
+              () => pattern(property.value, declaration, false),
+              (act) => {
+                if (property.value.type !== "Identifier")
+                  return refuseUse(
+                    property,
+                    `\`${keyOf(property.key, property.computed)}\``,
+                  );
+                for (const read of readsOf(declaration, property.value.name))
+                  act(read);
+              },
             );
         }
       };
@@ -544,8 +637,10 @@ const importDirection = {
           parent.type === "MemberExpression" &&
           parent.object === value
         )
-          return select(keyOf(parent.property, parent.computed), () =>
-            use(parent),
+          return select(
+            keyOf(parent.property, parent.computed),
+            () => use(parent),
+            (act) => act(parent),
           );
         if (
           !promise &&
@@ -581,12 +676,21 @@ const importDirection = {
               spec.type === "ImportDefaultSpecifier"
                 ? "default"
                 : keyOf(spec.imported, false);
-            select(name, () => binding(spec, spec.local));
+            select(
+              name,
+              () => binding(spec, spec.local),
+              (act) => {
+                if (typeOnly(edge) || spec.importKind === "type") return;
+                for (const read of readsOf(spec, spec.local.name)) act(read);
+              },
+            );
           }
         }
       } else if (edge.type === "ExportNamedDeclaration") {
         for (const spec of edge.specifiers)
-          select(keyOf(spec.local, false), all);
+          select(keyOf(spec.local, false), all, (act) => {
+            if (!typeOnly(edge)) act(spec.local);
+          });
       } else if (edge.type === "TSImportType") {
         let qualifier = edge.qualifier;
         while (qualifier?.type === "TSQualifiedName")
@@ -598,28 +702,24 @@ const importDirection = {
         if (declaration.parent.type === "ExportNamedDeclaration") all();
         else binding(declaration, declaration.id);
       } else if (
+        edge.type === "Identifier" ||
         edge.type === "CallExpression" ||
         edge.type === "ImportExpression"
       ) {
         use(edge, edge.type === "ImportExpression");
       } else {
         all(); // Star re-export or triple-slash reference.
+        if (edge.type === "ExportAllDeclaration" && !typeOnly(edge) && loaders)
+          for (const name of Object.keys(loaders))
+            refuseUse(edge, `\`${name}\``);
       }
       return names;
     };
-    const LOADER_USES = { createRequire: makerUse, getBuiltinModule: builtinUse };
-    // A loader destructured out of its module or of `process`, bound by a
-    // declaration whose reads are followed; destructured anywhere else (a
-    // parameter, a nested pattern, an assignment), it is not followed.
-    const fromPattern = (property, name) => {
-      const pattern = property.parent;
-      const declarator = pattern.parent;
-      if (pattern.type !== "ObjectPattern") return;
-      if (declarator.type !== "VariableDeclarator" || property.value.type !== "Identifier") {
-        refuseUse(property, `\`${name}\``);
-        return;
-      }
-      for (const read of readsOf(declarator, property.value.name)) LOADER_USES[name](read);
+    // Native loader identity flows from Node's namespace through its
+    // projections and lexical bindings. A same-named method on data is data.
+    const nativeLoaders = {
+      "node:module": { createRequire: makerUse },
+      "node:process": { getBuiltinModule: builtinUse },
     };
     // The spellings of an edge it reads: `import`, `export … from`,
     // `import()`, the type `import("…").T`, `import x = require("…")`, a
@@ -627,15 +727,18 @@ const importDirection = {
     return {
       Program: () => {
         for (const comment of context.sourceCode.getAllComments()) {
-          const reference = /^\/\s*<reference\s+(types|path)\s*=\s*["']([^"']+)["']/.exec(
-            comment.value,
-          );
+          const reference =
+            /^\/\s*<reference\s+(types|path)\s*=\s*["']([^"']+)["']/.exec(
+              comment.value,
+            );
           if (comment.type !== "Line" || reference === null) continue;
           const [, kind, source] = reference;
           // A path reference is relative whether or not it says so.
           check(
             comment,
-            kind === "path" && !source.startsWith(".") && !path.isAbsolute(source)
+            kind === "path" &&
+              !source.startsWith(".") &&
+              !path.isAbsolute(source)
               ? `./${source}`
               : source,
           );
@@ -643,8 +746,15 @@ const importDirection = {
         // Node's `require` and `module`, wherever this file reads them.
         for (const scope of context.sourceCode.scopeManager.scopes) {
           for (const { identifier, resolved } of scope.references) {
-            if (resolved !== null && resolved.scope.type !== "global") continue;
-            if (identifier.name === "require") loaderUse(identifier, dir, "`require`");
+            if (
+              resolved &&
+              (resolved.scope.type !== "global" || resolved.defs.length)
+            )
+              continue;
+            if (identifier.name === "process")
+              exportNames(identifier, true, nativeLoaders["node:process"]);
+            if (identifier.name === "require")
+              loaderUse(identifier, dir, "`require`");
             const { parent } = identifier;
             if (
               identifier.name === "module" &&
@@ -657,38 +767,30 @@ const importDirection = {
         }
       },
       ImportDeclaration: fromSource,
-      ExportNamedDeclaration: (node) => {
-        fromSource(node);
-        if (!LOADER_MODULES.includes(node.source?.value)) return;
-        for (const specifier of node.specifiers)
-          if (specifier.local.name === "createRequire") makerUse(specifier.local);
-      },
-      ExportAllDeclaration: (node) => {
-        fromSource(node);
-        if (LOADER_MODULES.includes(node.source.value)) refuseUse(node, "`createRequire`");
-      },
+      ExportNamedDeclaration: fromSource,
+      ExportAllDeclaration: fromSource,
       ImportExpression: fromSource,
-      TSImportType: (node) => check(node, sourceOf(node.source)),
+      TSImportType: (node) => {
+        const source = sourceOf(node.source);
+        check(node, source, dir, true);
+        const annotation =
+          node.parent.type === "TSTypeQuery" ? node.parent.parent : node.parent;
+        const pattern =
+          annotation.type === "TSTypeAnnotation" && annotation.parent;
+        const loaders = nativeLoaders["node:" + source?.replace(/^node:/, "")];
+        if (loaders && pattern?.type === "ObjectPattern") {
+          for (const prop of pattern.properties) {
+            if (prop.type !== "Property") continue;
+            const name = keyOf(prop.key, prop.computed);
+            if (Object.hasOwn(loaders, name)) refuseUse(prop, `\`${name}\``);
+          }
+        }
+      },
       TSExternalModuleReference: (node) =>
         check(node, sourceOf(node.expression)),
-      "ImportSpecifier[imported.name='createRequire']": (node) => {
-        if (!LOADER_MODULES.includes(node.parent.source.value)) return;
-        for (const read of readsOf(node, node.local.name)) makerUse(read);
-      },
-      MemberExpression: (node) => {
-        const name = keyOf(node.property, node.computed);
-        if (Object.hasOwn(LOADER_USES, name)) LOADER_USES[name](node);
-      },
-      Property: (node) => {
-        const name = keyOf(node.key, node.computed);
-        if (Object.hasOwn(LOADER_USES, name)) fromPattern(node, name);
-      },
     };
   },
 };
-
-// The module whose `createRequire` makes a loader.
-const LOADER_MODULES = ["module", "node:module"];
 
 // The one import-direction rule: src's config runs it, and so does the tools'
 // (eslint.tools.config.mjs). [LAW:single-enforcer]

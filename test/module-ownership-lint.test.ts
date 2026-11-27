@@ -1,9 +1,10 @@
 // Exercise the normal owner and caller configurations at the same paths the
 // application and test commands lint. The caller's alias never grants access.
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { REPO } from "../scripts/lib/repo.cjs";
-import { lintCases } from "./helpers/lint-cases";
+import { lintCases, missingOwnedExports } from "./helpers/lint-cases";
 
 const host = "src/daemon/acquire.ts";
 const processOwner =
@@ -30,6 +31,12 @@ const application = {
       types: '/// <reference types="node:child_process" />',
       factory:
         'import { createRequire as make } from "node:module"; const load = make(import.meta.url); load("child_process").spawn;',
+      namedBuiltin:
+        "import {getBuiltinModule as grab} from 'node:process'; export const run=grab('node:child_process').spawn;",
+      quotedMaker:
+        "import {'createRequire' as grab} from 'node:module'; export const run=grab(import.meta.url)('child_process').spawn;",
+      namespaceBuiltin:
+        "import * as p from 'process'; const other=p; export const run=other.getBuiltinModule('child_process').spawn;",
       builtin:
         'const {getBuiltinModule: load} = process; load("child_process").spawn;',
     }).map(([name, code]) => [name, [src(code), processOwner] as const]),
@@ -70,6 +77,60 @@ const application = {
       `export {systemTimers} from ${JSON.stringify(path.join(REPO, "src/time.ts"))};`,
     ),
     systemClock,
+  ],
+  qualifiedEsm: [
+    src(
+      'export async function read(){return (await import("../time.ts?source")).systemTimers;}',
+    ),
+    systemClock,
+  ],
+  encodedEsm: [
+    src('export {systemTimers} from "../%74ime.ts#copy";'),
+    systemClock,
+  ],
+  fileURL: [
+    src(
+      `export {systemTimers} from ${JSON.stringify(pathToFileURL(path.join(REPO, "src/time.ts")).href + "?source#copy")};`,
+    ),
+    systemClock,
+  ],
+  importURLObject: [
+    src(
+      "export async function read(){ return (await import(new URL('../time.ts?source',import.meta.url))).systemTimers; }",
+    ),
+    systemClock,
+  ],
+  commonJsQuestionMark: [
+    src('export const t=require("../time.ts?source").systemTimers;'),
+    null,
+  ],
+  commonJsFileURL: [
+    src(
+      `export const t=require(${JSON.stringify(pathToFileURL(path.join(REPO, "src/time.ts")).href)}).systemTimers;`,
+    ),
+    null,
+  ],
+  dataMethod: [
+    src(
+      "const tools={getBuiltinModule: (name:string)=>({version:name})}; export const v=tools.getBuiltinModule('child_process').version;",
+    ),
+    null,
+  ],
+  dataDestructure: [
+    src(
+      "const tools={createRequire: (name:string)=>name}; const {createRequire}=tools; export const v=createRequire('child_process');",
+    ),
+    null,
+  ],
+  shadowedProcess: [
+    src(
+      "function main(process:{getBuiltinModule:(name:string)=>unknown}) { return process.getBuiltinModule('child_process'); }",
+    ),
+    null,
+  ],
+  builtinOnly: [
+    src('export const absent=process.getBuiltinModule("../time.ts");'),
+    null,
   ],
   unrelatedBasename: [
     src('export const t = require("./not-our/time.js").systemTimers;'),
@@ -182,6 +243,25 @@ const application = {
     ),
     null,
   ],
+  realPaneAdapter: [
+    src("export {productionBarPaneEdge} from './lane-edge.js';"),
+    "A daemon is handed its adapters (production-adapters.ts).",
+  ],
+  actualLinkKey: [
+    src("export {linkKeyFromFile} from './link-key.js';"),
+    "A daemon is handed its link signer (production-adapters.ts).",
+  ],
+  adapterOwner: [
+    src(
+      "export {productionBarPaneEdge} from './lane-edge.js'; export {linkKeyFromFile} from './link-key.js';",
+      "src/daemon/production-adapters.ts",
+    ),
+    null,
+  ],
+  derivedLease: [
+    src("export {leasePathFor} from './paths.js';", "src/daemon/server.ts"),
+    null,
+  ],
   restrictedAdapter: [
     src('export {realLimitsDeps} from "./limits";'),
     "A daemon is handed its adapters (production-adapters.ts). [LAW:single-enforcer]",
@@ -211,6 +291,30 @@ const suite = {
     fakeLauncher,
   ],
   allowed: [testFile('const x = require("./helpers/host").hostOf;'), null],
+  urlBase: [
+    testFile(
+      "import {createRequire as make} from 'node:module'; const load=make(new URL(import.meta.url)); export const effect=load('../src/proc/system-launcher').systemLauncher;",
+    ),
+    fakeLauncher,
+  ],
+  relativeURLBase: [
+    testFile(
+      "import {createRequire} from 'node:module'; const load=createRequire(new URL('../src/daemon/some.js',import.meta.url)); export const effect=load('../proc/system-launcher').systemLauncher;",
+    ),
+    fakeLauncher,
+  ],
+  absoluteURLBase: [
+    testFile(
+      `import {createRequire} from 'node:module'; const load=createRequire(${JSON.stringify(pathToFileURL(path.join(REPO, "test/file.js")).href)}); export const effect=load('../src/proc/system-launcher').systemLauncher;`,
+    ),
+    fakeLauncher,
+  ],
+  relocatedBase: [
+    testFile(
+      "import {createRequire} from 'node:module'; const load=createRequire(new URL('../src/proc/',import.meta.url)); export const other=load('../src/proc/system-launcher').systemLauncher;",
+    ),
+    null,
+  ],
   scoped: [
     testFile(
       'const x = require("../helpers/host").fixtureLauncher;',
@@ -253,6 +357,10 @@ function verify(
   }
 }
 
+test("every named owner protects an export its module actually supplies", () => {
+  expect(missingOwnedExports()).toEqual([]);
+});
+
 test("the resolved module and its selected exports identify the owner", () =>
   verify(application, {}));
 test("suite ownership follows the same edges with its own native adapters", () =>
@@ -289,4 +397,32 @@ test("the native adapter still cannot mutate the worker environment", () => {
       message: expect.stringContaining("Hand src a Host"),
     }),
   );
+});
+
+test("a suite's recognized relative loader with unknown base has no accountable owner", () => {
+  const messages = lintCases(
+    {
+      unknown: testFile(
+        "import {createRequire} from 'node:module'; const load=createRequire(process.cwd()); export const x=load('./system-launcher').systemLauncher;",
+      ),
+      shadow: testFile(
+        "import {createRequire} from 'node:module'; export function f(URL:typeof globalThis.URL){return createRequire(new URL(import.meta.url))('./system-launcher').systemLauncher;}",
+      ),
+      absolute: testFile(
+        `import {createRequire} from 'node:module'; export const x=createRequire(process.cwd())(${JSON.stringify(path.join(REPO, "src/proc/system-launcher"))}).systemLauncher;`,
+      ),
+    },
+    { overrideConfigFile: "eslint.tests.config.mjs" },
+  );
+  for (const name of ["unknown", "shadow"] as const)
+    expect(
+      messages[name]
+        ?.filter((m) => m.ruleId === "zones/import-direction")
+        .map((m) => m.message),
+    ).toEqual([expect.stringContaining("A loader whose base is computed")]);
+  expect(
+    messages.absolute
+      ?.filter((m) => m.ruleId === "zones/import-direction")
+      .map((m) => m.message),
+  ).toEqual([expect.stringContaining(fakeLauncher)]);
 });

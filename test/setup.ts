@@ -21,9 +21,9 @@ process.env[PARENT_PID_ENV] = String(process.pid);
 // version (scripts/lib/version-stamp.cjs): this worker's own sandbox global, and —
 // through NODE_OPTIONS, inherited by every daemon a test spawns — each child's
 // too. Without it src/version.ts refuses to load.
-const stamp = createRequire(__filename)(
-  path.join(__dirname, "..", "scripts", "lib", "version-stamp.cjs"),
-) as { withStamp(nodeOptions: string | undefined): string };
+const stamp = createRequire(__filename)("../scripts/lib/version-stamp.cjs") as {
+  withStamp(nodeOptions: string | undefined): string;
+};
 process.env.NODE_OPTIONS = stamp.withStamp(process.env.NODE_OPTIONS);
 
 // [LAW:single-enforcer] Guard every Jest worker from accidentally touching the
