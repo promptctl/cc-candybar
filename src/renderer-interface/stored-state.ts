@@ -142,6 +142,12 @@ export type PickWrite =
       readonly key: SessionId;
     };
 
+export const durablePickValue = (
+  key: string,
+  value: string | null,
+): string | null =>
+  value === null || retiredBecause(key, value) !== undefined ? null : value;
+
 // [LAW:single-enforcer] Convert the live changes to a durable pick record
 // at the file or historical-recording boundary. Each new record stands alone
 // while an earlier snapshot may still be waiting for its write.
@@ -155,9 +161,9 @@ export function storedPicksAfter(
     prior,
   );
   for (const [key, value] of Object.entries(write.changes)) {
-    if (value === null || retiredBecause(key, value) !== undefined)
-      delete picks[key];
-    else picks[key] = value;
+    const kept = durablePickValue(key, value);
+    if (kept === null) delete picks[key];
+    else picks[key] = kept;
   }
   return Object.keys(picks).length ? picks : null;
 }

@@ -31,11 +31,22 @@ export function withRegularTextFile<T>(
   path: string,
   use: (file: RegularTextFile) => T,
 ): T {
+  return withRegularDescriptor(path, (fd, observed) =>
+    use({
+      observed,
+      stat: () => fstatSync(fd, { bigint: true }),
+      text: () => readFileSync(fd, "utf8"),
+    }),
+  );
+}
+
+function withRegularDescriptor<T>(
+  path: string,
+  use: (fd: number, observed: BigIntStats) => T,
+): T {
   const fd = openSync(path, READ_FLAGS);
   try {
-    const stat = () => fstatSync(fd, { bigint: true });
-    const observed = regular(stat());
-    return use({ observed, stat, text: () => readFileSync(fd, "utf8") });
+    return use(fd, regular(fstatSync(fd, { bigint: true })));
   } finally {
     // [LAW:no-silent-failure] A close error must not hide the read's result.
     try {
@@ -75,6 +86,16 @@ export function readTextIfPresent(
   path: string,
   read: (path: string) => string = readRegularTextSync,
 ): string | null {
+  return readIfPresent(path, read);
+}
+
+export function readBytesIfPresent(path: string): Buffer | null {
+  return readIfPresent(path, (file) =>
+    withRegularDescriptor(file, (fd) => readFileSync(fd)),
+  );
+}
+
+function readIfPresent<T>(path: string, read: (path: string) => T): T | null {
   try {
     return read(path);
   } catch (error) {

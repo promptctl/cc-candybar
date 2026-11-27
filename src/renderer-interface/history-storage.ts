@@ -52,6 +52,9 @@ export function historyTarget(change: Change): HistoryTarget {
     : { kind: "layer", role: change.role, digest: change.digest };
 }
 
+export const durableTarget = (target: HistoryTarget): boolean =>
+  target.kind === "layer" || isSettingKey(target.key);
+
 export const targetKey = (c: HistoryTarget): string =>
   c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
 
@@ -133,25 +136,46 @@ export function historyAfterEdits(
   return holdsNothing(next) ? null : next;
 }
 
-function isChange(v: unknown): v is Change {
-  if (v === null || typeof v !== "object") return false;
-  const o = v as Record<string, unknown>;
-  const state = (x: unknown) => x === null || typeof x === "string";
+export function isHistoryTarget(v: unknown): v is HistoryTarget {
   return (
-    ((o.kind === "session" && typeof o.key === "string") ||
-      (o.kind === "layer" &&
-        layerRoleOf(o.role) !== null &&
-        typeof o.digest === "string")) &&
-    state(o.before) &&
-    state(o.after)
+    isPlainObject(v) &&
+    ((v.kind === "session" && typeof v.key === "string") ||
+      (v.kind === "layer" &&
+        layerRoleOf(v.role) !== null &&
+        typeof v.digest === "string"))
   );
 }
-
-function isSteps(v: unknown): v is Step[] {
+function isChange(v: unknown): v is Change {
+  const text = (x: unknown) => x === null || typeof x === "string";
   return (
-    Array.isArray(v) &&
-    v.every((step) => Array.isArray(step) && step.every(isChange))
+    isPlainObject(v) && text(v.before) && text(v.after) && isHistoryTarget(v)
   );
+}
+const isStep = (v: unknown): v is Step => Array.isArray(v) && v.every(isChange);
+
+export function isHistoryEdit(v: unknown): v is HistoryEdit {
+  if (!isPlainObject(v)) return false;
+  switch (v.kind) {
+    case "clear":
+    case "undo":
+    case "redo":
+      return true;
+    case "append":
+      return isStep(v.step) && v.step.length > 0;
+    case "forget":
+      return Array.isArray(v.targets) && v.targets.every(isHistoryTarget);
+    case "trim":
+      return (
+        typeof v.count === "number" &&
+        Number.isSafeInteger(v.count) &&
+        v.count > 0
+      );
+    default:
+      return false;
+  }
+}
+function isSteps(v: unknown): v is Step[] {
+  return Array.isArray(v) && v.every(isStep);
 }
 
 // [LAW:parse-dont-validate] Only committed steps cross a restart. A stored
@@ -190,8 +214,8 @@ export function withoutRetiredChanges(
 ): Asked<Kept<SessionHistory>> {
   const retired = new Set<string>();
   const keep = (change: Change): boolean => {
-    if (change.kind === "layer" || isSettingKey(change.key)) return true;
-    retired.add(change.key);
+    if (durableTarget(change)) return true;
+    if (change.kind === "session") retired.add(change.key);
     return false;
   };
   const steps = (list: readonly Step[]): Step[] =>

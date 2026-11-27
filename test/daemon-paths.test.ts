@@ -1,3 +1,4 @@
+import { fileSessionStores } from "../src/daemon/session-journal";
 import { unscriptedLauncher } from "./helpers/scripted-launcher";
 import fs from "node:fs";
 import { hostOf } from "../scripts/lib/host";
@@ -65,28 +66,43 @@ describe("a daemon aimed by its paths value", () => {
     ).toEqual([]);
   });
 
-  // [LAW:one-source-of-truth] A renderer's profile is a function of its name:
-  // the main one keeps the state directory's own files, and any other writes
-  // under its own directory and nowhere else.
-  test("a profile under a second name writes only under its own directory", async () => {
+  test("every renderer boots from the same host state and gets a readable downgrade export", async () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
-    const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
-    const second = adapters.profile(rendererNameOf("second"), () => {});
-    second.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
-    await second.session.flush();
-    second.history.save(new Map());
-
-    const own = path.join(aimed.state, "renderers", "second", "state");
-    expect(tree(aimed.state).filter((f) => !f.startsWith("renderers"))).toEqual(
-      [],
-    );
-    expect(tree(own).sort()).toEqual(
-      [
+    try {
+      const stores = productionAdapters(
+        aimed,
+        daemonLog,
+        systemTimekeeper,
+        fileSessionStores(aimed, systemTimekeeper),
+      ).sessionStores(() => {});
+      stores.load();
+      const second = rendererNameOf("second");
+      stores.take([
+        {
+          store: "session-state",
+          kind: "patch",
+          key: sessionIdOf("s1"),
+          changes: { theme: "x" },
+        },
+      ]);
+      expect(stores.current(second)).toEqual(stores.current(MAIN_RENDERER));
+      expect(fs.existsSync(aimed.sessionState)).toBe(false);
+      await stores.close();
+      const named = path.join(
+        aimed.state,
+        "renderers",
+        second,
+        "state",
         path.basename(aimed.sessionState),
-        path.basename(aimed.settingsHistory),
-      ].sort(),
-    );
+      );
+      expect(fs.readFileSync(named, "utf8")).toBe(
+        fs.readFileSync(aimed.sessionState, "utf8"),
+      );
+      expect(ambient.flatMap(tree)).toEqual([]);
+    } finally {
+      daemonLog.dispose();
+    }
   });
 
   test("what its adapters write lands under the value, and the environment's directories stay empty", async () => {
@@ -99,7 +115,12 @@ describe("a daemon aimed by its paths value", () => {
     ).toEqual([]);
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     try {
-      const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
+      const adapters = productionAdapters(
+        aimed,
+        daemonLog,
+        systemTimekeeper,
+        fileSessionStores(aimed, systemTimekeeper),
+      );
 
       daemonLog.log("info", "a line");
       await daemonLog.drained();
@@ -108,10 +129,17 @@ describe("a daemon aimed by its paths value", () => {
       const retiredContents = '{"already recorded":"drawn"}\n';
       fs.mkdirSync(aimed.state, { recursive: true });
       fs.writeFileSync(retiredFile, retiredContents);
-      const storage = adapters.profile(MAIN_RENDERER, () => {});
-      storage.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
-      await storage.session.flush();
-      storage.history.save(new Map());
+      const storage = adapters.sessionStores(() => {});
+      storage.load();
+      storage.take([
+        {
+          kind: "patch",
+          store: "session-state",
+          key: sessionIdOf("s1"),
+          changes: { theme: "x" },
+        },
+      ]);
+      await storage.close();
       adapters.linkKey();
       const limits = adapters.limits({
         startedAtMs: 0,

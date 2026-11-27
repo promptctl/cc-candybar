@@ -311,10 +311,9 @@ export function daemonPaths(host: Host): DaemonPaths {
   };
 }
 
-// [LAW:one-source-of-truth] A renderer's profile: the files its stores are
-// kept in, a function of its name alone (docs/design/host-and-renderer.md,
-// ADR-6). The main renderer's is today's layout, so an installed bar keeps its
-// files; any other name's is its own directory under the state directory.
+// [LAW:one-source-of-truth] The preceding release reads and writes the base
+// files for main and one directory for every other name. Migration and
+// orderly downgrade export agree on those established paths.
 export interface ProfilePaths {
   readonly sessionState: string;
   readonly settingsHistory: string;

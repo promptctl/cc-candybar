@@ -75,7 +75,7 @@ import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
-import { HeldStores, type ProfileStorage } from "./held-stores.js";
+import type { SessionStores } from "./host-sessions.js";
 import {
   reportLine,
   reportText,
@@ -146,12 +146,8 @@ export interface DaemonAdapters {
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
   readonly launcher: (own: LaunchOwner) => TestableLauncher;
-  // [LAW:one-source-of-truth] Where the stores of the profile `name` derives
-  // are kept, which the daemon reads once it serves and is then their sole
-  // writer. Built over the daemon's log: a write in flight at the close
-  // finishes after it, and what it logs says so like any other line of the
-  // daemon's work.
-  readonly profile: (name: RendererName, log: DaemonLogger) => ProfileStorage;
+  // One host session store, opened once after winning the socket.
+  readonly sessionStores: (log: DaemonLogger) => SessionStores;
   // Where the host keeps its book of each session's durable context: the
   // host's own, whichever renderer it runs.
   readonly sessionBook: (
@@ -222,6 +218,7 @@ export interface DaemonInputs extends DaemonAdapters {
 }
 
 interface DaemonClose {
+  readonly failed: readonly string[];
   readonly settled: Promise<Settled>;
 }
 
@@ -510,6 +507,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
+  const stores = inputs.sessionStores(log);
   const primaryPrepared = prepareRenderer(
     inputs.rendererName,
     bundle.path,
@@ -853,7 +851,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   interface RendererRuntime {
     readonly reported: string;
     readonly entry: string;
-    readonly stores: HeldStores;
     readonly link: RendererLink;
     readonly renderer: RendererHost;
   }
@@ -899,10 +896,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
-    const stores = new HeldStores(inputs.profile(name, log), clock);
-    // [LAW:one-source-of-truth] Each start reads the latest held profile.
+    // [LAW:one-source-of-truth] Every generation starts from the host image.
     const boot = (): RendererBoot => ({
-      stored: stores.current(),
+      stored: stores.current(name),
       locations: locs,
       region: inputs.region,
       memoryLimitBytes,
@@ -914,14 +910,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       recording: () => recordings?.generation(name),
       node: bundle.node,
     });
-    return { name, reported, entry, stores, prepared };
+    return { name, reported, entry, prepared };
   }
 
   const connectRenderer = ({
     name,
     reported,
     entry,
-    stores,
     prepared,
   }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
     const link = prepared.start({
@@ -1022,7 +1017,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         },
       },
     );
-    return { reported, entry, stores, link, renderer };
+    return { reported, entry, link, renderer };
   };
 
   const primary = connectRenderer(primaryPrepared);
@@ -1083,7 +1078,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       target = connectRenderer(
         prepareRenderer(name, binding, canonicalEntry(name, binding)),
       );
-      storeReported(target.stores.load());
       target.link.serve();
       renderers.set(name, target);
       if (phase.kind === "armed") target.link.arm();
@@ -1263,7 +1257,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const starting: DaemonPhase = { kind: "starting" };
     phase = starting;
     try {
-      storeReported([...primary.stores.load(), sessionBook.load()]);
+      storeReported([...stores.load(), sessionBook.load()]);
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
@@ -1362,12 +1356,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ...attached.map(
-        ({ renderer, stores }): TeardownStep => [
-          `${renderer.name} stores close`,
-          () => stores.close(),
-        ],
-      ),
+      ["shared session stores close", () => stores.close()],
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
       // [LAW:no-ambient-temporal-coupling] A closed daemon holds no events: a
@@ -1397,9 +1386,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         ],
       ),
     ];
-    await runTeardown(teardown, log);
+    const failed = await runTeardown(teardown, log);
     phase = { kind: "closed", done };
-    return { settled: launcher.settled() };
+    return { failed, settled: launcher.settled() };
   }
 
   return { launcher, close, serve };

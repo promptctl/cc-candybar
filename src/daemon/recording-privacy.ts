@@ -41,7 +41,7 @@ const ACTION_ENVIRONMENT =
 const UNKNOWN_CONFIG =
   "config or plugin text could not be inspected for action environments; fix its syntax before recording";
 const UNKNOWN_PROFILE =
-  "saved renderer state contains values of unknown origin; record from a fresh renderer profile";
+  "saved renderer state contains values of unknown origin; record from a fresh daemon state directory";
 
 // [LAW:effects-at-boundaries] Export permits the original bytes or refuses the
 // capture. An environment reading can become arbitrary text in a frame,
@@ -381,7 +381,7 @@ function stepsProblem(steps: readonly Step[]): string | null {
         } else if (value !== null) {
           const problem = configTextProblem(value);
           if (problem !== null)
-            return `${problem} or use a fresh renderer profile`;
+            return `${problem} or use a fresh daemon state directory`;
         }
       }
       if (change.kind === "layer" && !isLayerDigest(change.digest))
