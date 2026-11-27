@@ -4,6 +4,7 @@ import path from "node:path";
 import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
 import { fileHistoryStorage } from "../src/daemon/history-file";
+import { writeAtomic } from "../src/utils/atomic-write";
 import { NO_LAYERS } from "./helpers/history-step";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -78,4 +79,38 @@ test("retired setting keys and the obsolete savepoint leave committed history", 
     { session: SID, part: "look", why },
     { session: SID, part: "progression", why },
   ]);
+});
+
+// [LAW:no-silent-failure] A write the disk refuses is told as every
+// per-session file's is, stays pending, and is told again when one lands.
+test("a history write the disk refuses is told, held for the next write, and told again when one lands", async () => {
+  const file = path.join(dir, "refused-history.json");
+  const refused = { value: true };
+  const storage = fileHistoryStorage(
+    file,
+    () => {},
+    (at, text, mode) => {
+      if (refused.value) throw new Error("ENOSPC: no space left on device");
+      writeAtomic(at, text, mode);
+    },
+  );
+  const told: Array<string | null> = [];
+  storage.landed((landed) =>
+    told.push(landed.ok ? null : landed.error.message),
+  );
+  storage.save(new Map([[SID, { past: [], future: [] }]]));
+  expect(told).toHaveLength(1);
+  expect(told[0]).toContain("ENOSPC");
+  // What is pending is what the close's flush writes, and a flush that cannot
+  // says so.
+  await expect(storage.flush()).rejects.toThrow("ENOSPC");
+  refused.value = false;
+  await storage.flush();
+  expect(told.at(-1)).toBeNull();
+  expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({
+    s1: { past: [], future: [] },
+  });
+  // Nothing pending is nothing to write, and nothing to tell.
+  await storage.flush();
+  expect(told).toHaveLength(3);
 });

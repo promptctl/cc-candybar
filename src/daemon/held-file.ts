@@ -13,7 +13,16 @@ import {
 } from "./session-state-file.js";
 import { asError } from "../utils/atomic-write.js";
 import { putNewest, toNewest } from "../utils/recency.js";
-import type { Found, StoreReport } from "./foundations/stored-file.js";
+import type {
+  Found,
+  StoreReport,
+  StoreStanding,
+} from "./foundations/stored-file.js";
+
+// What a failed write came to, as the same thing every time its cause is: a
+// system error's code, or the message of an error that has none.
+const causeOf = (error: Error): string =>
+  (error as NodeJS.ErrnoException).code ?? error.message;
 
 // [LAW:carrying-cost] How long a change of order alone waits for its write.
 // Order is what the bound reads after a restart, and a write on every
@@ -43,10 +52,11 @@ export class HeldFile<V> {
   // bound each run one way, whenever they come.
   private early: Array<HeldChange<V>> = [];
   // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
-  // as it stands: set by every change, cleared only once a save returns, so
-  // one that throws (history's) is still owed to the next change and to the
-  // close. Whether a write handed over lands is the storage's.
-  private behind = false;
+  // as it stands: set by every change, cleared once a save is made. Whether a
+  // write handed over lands is the storage's, and it tells us. A write it
+  // refuses is not owed again until the next change or the close, since a
+  // timer retrying a disk that keeps refusing is load for nothing.
+  private owed = false;
   private clearOrderTimer: (() => void) | null = null;
 
   constructor(
@@ -55,6 +65,10 @@ export class HeldFile<V> {
     private readonly storage: SessionFileStorage<V>,
     // The daemon's clock: the order period is the daemon's to hold.
     private readonly clock: Pick<Timekeeper, "after">,
+    // [LAW:no-silent-failure] Told after every write the storage makes: why
+    // the file is behind what is held, or that it is not. The one way a
+    // failed write behind reaches the bar.
+    told: (standing: StoreStanding) => void,
     // [LAW:carrying-cost] The most sessions it holds; past it the one heard
     // or written longest ago goes. A store whose renderer bounds it holds
     // what it is told.
@@ -62,7 +76,23 @@ export class HeldFile<V> {
     // Whether a value put is the one the session holds, which makes the put
     // a hearing: it moves only the session's place.
     private readonly same: (held: V, put: V) => boolean = Object.is,
-  ) {}
+  ) {
+    // [LAW:one-source-of-truth] The file's standing is held here, once: it is
+    // told when it changes, and a failure is the same standing while its
+    // cause is. The message is not the cause of a system error: a failed
+    // write's names a staged file unique to the attempt, so the code is.
+    let cause: string | null = null;
+    storage.landed((landed) => {
+      const now = landed.ok ? null : causeOf(landed.error);
+      if (now === cause) return;
+      cause = now;
+      told({
+        store,
+        file: storage.file,
+        behind: landed.ok ? null : landed.error,
+      });
+    });
+  }
 
   // [LAW:single-enforcer] Read once. A file that did not read is set aside by
   // the rule every state file keeps, before anything is written. What was
@@ -123,14 +153,14 @@ export class HeldFile<V> {
     let content = false;
     for (const change of changes)
       if (change.kind === "heard" || this.holds(change.key, change.value)) {
-        if (toNewest(this.held, change.key)) this.behind = true;
+        if (toNewest(this.held, change.key)) this.owed = true;
       } else if (putNewest(this.held, change.key, change.value)) {
         content = true;
-        this.behind = true;
+        this.owed = true;
       }
     const evicted = this.evict();
     if (content || evicted.length > 0) this.save();
-    else if (this.behind) this.orderDue();
+    else if (this.owed) this.orderDue();
     return evicted;
   }
 
@@ -148,10 +178,10 @@ export class HeldFile<V> {
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
   // is still owed is handed over now, what is pending lands, and what is
   // taken after it stays in memory.
-  // A save that throws (history's is synchronous) rejects the close.
+  // A save that throws rejects the close.
   async close(): Promise<void> {
     try {
-      if (this.behind) this.save();
+      if (this.owed) this.save();
     } finally {
       this.phase = "closed";
     }
@@ -168,7 +198,7 @@ export class HeldFile<V> {
     this.clearOrderTimer = null;
     if (this.phase !== "open") return;
     this.storage.save(this.held);
-    this.behind = false;
+    this.owed = false;
   }
 
   // [LAW:no-ambient-temporal-coupling] Only an open file is owed an order

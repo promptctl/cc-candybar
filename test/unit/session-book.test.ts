@@ -66,7 +66,7 @@ const storage = (held: ReadonlyMap<SessionId, DurableContext> = new Map()) =>
 // moves this clock.
 const CLOCK = heldClock(new Date(1_000_000));
 const bookOver = (kept: SessionFileStorage<DurableContext>): SessionBook =>
-  new SessionBook(kept, CLOCK);
+  new SessionBook(kept, CLOCK, () => {});
 
 // A book over `kept`, loaded as the daemon serves.
 function loaded(kept: SessionFileStorage<DurableContext>): SessionBook {

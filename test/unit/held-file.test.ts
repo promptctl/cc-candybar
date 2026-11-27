@@ -5,6 +5,7 @@ import { HeldFile, ORDER_PERIOD_MS } from "../../src/daemon/held-file";
 import {
   reportLine,
   reportText,
+  type StoreStanding,
 } from "../../src/daemon/foundations/stored-file";
 import {
   sessionIdOf,
@@ -23,13 +24,14 @@ function holder(
   options: Parameters<typeof heldStorage<string>>[1] = {},
   bound?: number,
   same?: (held: string, put: string) => boolean,
+  told: (standing: StoreStanding) => void = () => {},
 ) {
   const clock = heldClock(new Date(1_000_000));
   const kept = heldStorage<string>(read, { file: FILE, ...options });
   return {
     ...kept,
     clock,
-    held: new HeldFile("The store", kept.storage, clock, bound, same),
+    held: new HeldFile("The store", kept.storage, clock, told, bound, same),
   };
 }
 
@@ -313,5 +315,54 @@ describe("the order a restart reads", () => {
     held.take([{ kind: "heard", key: S1 }]);
     expect(held.take([{ kind: "put", key: S3, value: "c" }])).toEqual([S2]);
     expect([...saves.at(-1)!.keys()]).toEqual([S1, S3]);
+  });
+});
+
+// [LAW:no-silent-failure] What its storage tells of a write is the owner's to
+// hear: the file is behind with the error, or it is not.
+describe("a write its storage tells", () => {
+  const refused = (code: string, staged: string) =>
+    Object.assign(new Error(`${code}: open '${FILE}.${staged}.tmp'`), { code });
+
+  function standings() {
+    const told: StoreStanding[] = [];
+    const { held, land } = holder(
+      undefined,
+      {},
+      undefined,
+      undefined,
+      (standing) => told.push(standing),
+    );
+    held.load();
+    return { told, land };
+  }
+
+  test("is the file's standing: behind with the error whole, then not behind", () => {
+    const { told, land } = standings();
+    const error = refused("ENOSPC", "1");
+    land({ ok: false, error });
+    land({ ok: true });
+    expect(told).toEqual([
+      { store: "The store", file: FILE, behind: error },
+      { store: "The store", file: FILE, behind: null },
+    ]);
+  });
+
+  test("is told once while its cause stands, though each attempt's message differs, and again when the cause changes", () => {
+    const { told, land } = standings();
+    land({ ok: false, error: refused("EACCES", "1") });
+    land({ ok: false, error: refused("EACCES", "2") });
+    land({ ok: false, error: refused("ENOSPC", "3") });
+    expect(told.map((t) => (t.behind as NodeJS.ErrnoException).code)).toEqual([
+      "EACCES",
+      "ENOSPC",
+    ]);
+  });
+
+  test("tells nothing of a landing over a file that was not behind", () => {
+    const { told, land } = standings();
+    land({ ok: true });
+    land({ ok: true });
+    expect(told).toEqual([]);
   });
 });

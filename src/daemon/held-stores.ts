@@ -12,7 +12,7 @@ import type {
 } from "../renderer-interface/stored-state.js";
 import type { Timekeeper } from "../time.js";
 import { HeldFile, type HeldChange } from "./held-file.js";
-import type { StoreReport } from "./foundations/stored-file.js";
+import type { StoreReport, StoreStanding } from "./foundations/stored-file.js";
 
 // Where a profile's stores are kept: its files, or nowhere.
 export interface ProfileStorage {
@@ -30,9 +30,15 @@ export class HeldStores {
   constructor(
     private readonly storage: ProfileStorage,
     clock: Pick<Timekeeper, "after">,
+    told: (standing: StoreStanding) => void,
   ) {
-    this.sessions = new HeldFile("Session picks", storage.session, clock);
-    this.history = new HeldFile("Settings history", storage.history, clock);
+    this.sessions = new HeldFile("Session picks", storage.session, clock, told);
+    this.history = new HeldFile(
+      "Settings history",
+      storage.history,
+      clock,
+      told,
+    );
   }
 
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a
@@ -58,11 +64,12 @@ export class HeldStores {
   }
 
   // A turn's stored writes, in the order it made them, each store's saved
-  // once. [LAW:no-silent-failure] A save that throws (the history's, written
-  // at once) throws once every store has taken its share, so the host's
-  // taking says it on every bar; a write behind says its failure where it
-  // lands. The renderer holds the refused write too, and the store's next
-  // write saves the copy held here whole.
+  // once. [LAW:no-silent-failure] A write a file refuses is told by its
+  // storage where it lands (the history's at once, the others behind), and
+  // the file stands behind on every bar until a write lands. A store whose
+  // taking throws anyway throws once every store has taken its share. The
+  // renderer holds the refused write too, and the store's next write saves
+  // the copy held here whole.
   take(writes: readonly StoreWrite[]): void {
     const sessions: Array<HeldChange<SessionPicks>> = [];
     const history: Array<HeldChange<SessionHistory>> = [];

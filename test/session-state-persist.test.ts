@@ -56,6 +56,7 @@ describe("the session state's file", () => {
     const stores = new HeldStores(
       { session, history: ephemeralSessionFile() },
       clock,
+      () => {},
     );
     const [load] = stores.load();
     const state = new SessionState(stores.current().sessions, maxSessions);
@@ -560,6 +561,31 @@ describe("the session state's file", () => {
       expect(said).toMatch(/setting it aside failed \(EACCES/);
     },
   );
+
+  // [LAW:no-silent-failure] A write behind has no caller to throw into, so
+  // each write's outcome is told to whoever holds the file.
+  it("tells each write's outcome, a failure with its error, then a landing", async () => {
+    const refused = { value: true };
+    const failure = new Error("ENOSPC: no space left on device");
+    const told: Array<Error | null> = [];
+    const refusing = new SessionFile(
+      SESSION_STATE_FILE,
+      file,
+      systemTimekeeper,
+      0,
+      () => {},
+      async () => {
+        if (refused.value) throw failure;
+      },
+    );
+    refusing.landed((landed) => told.push(landed.ok ? null : landed.error));
+    refusing.save(new Map([[S1, { theme: "nord" }]]));
+    await expect(refusing.flush()).rejects.toThrow("ENOSPC");
+    expect(told).toEqual([failure]);
+    refused.value = false;
+    await refusing.flush();
+    expect(told.at(-1)).toBeNull();
+  });
 
   // [LAW:no-silent-failure] Only the file's JSON is read as corrupt: a throw
   // past it is a bug, and reaches the caller.

@@ -108,6 +108,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
       },
       // An order alone waits for a period no case here reaches.
       heldClock(new Date()),
+      () => {},
     );
     stores.load();
     return stores;

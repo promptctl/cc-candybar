@@ -77,9 +77,11 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
+  behindText,
   reportLine,
   reportText,
   type StoreReport,
+  type StoreStanding,
   type StoreUnsavedWarning,
 } from "./foundations/stored-file.js";
 import {
@@ -362,8 +364,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   );
   // A file nothing is saved to stands for as long as this daemon runs.
   const unsaved = new Map<string, StoreUnsavedWarning>();
-  // [LAW:single-enforcer] Every store's report reaches the log and the bar
-  // here, whichever store made it and whenever.
+  // [LAW:single-enforcer] A file whose last write failed stands until a write
+  // lands. Its own map beside `unsaved`, each with the one writer that sets
+  // and clears its rows.
+  const behind = new Map<string, StoreUnsavedWarning>();
+  // [LAW:single-enforcer] Every store's report on what it read reaches the log
+  // and the bar here, whichever store made it and whenever.
   const storeReported = (reports: readonly StoreReport[]): void => {
     for (const report of reports) {
       const { file, found } = report;
@@ -377,6 +383,26 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         restateOnceBuilt();
       } else storeLoads.occur({ file, text });
     }
+  };
+  // [LAW:no-silent-failure] A write a file refuses has no caller to throw
+  // into, so its holder tells it here whenever the file's standing changes,
+  // and the file stands behind on every bar until a write lands.
+  // [LAW:nothing-unseen] Both changes are logged: the bar alone would not say
+  // when a file went behind or caught up.
+  const storeStanding = ({
+    store,
+    file,
+    behind: error,
+  }: StoreStanding): void => {
+    if (error === null) {
+      behind.delete(file);
+      log("info", `${store} (${file}) is current again: a write landed`);
+    } else {
+      const message = behindText(store, file, error);
+      behind.set(file, { kind: "store-unsaved", file, message });
+      log("warn", message);
+    }
+    restateOnceBuilt();
   };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
@@ -408,7 +434,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        unsaved: [...unsaved.values()],
+        unsaved: [...unsaved.values(), ...behind.values()],
         held: [
           ...launchPipes.held(),
           ...heldBy("renderer-ended", rendererEnded),
@@ -506,7 +532,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
-  const sessionBook = new SessionBook(inputs.sessionBook(log), clock);
+  const sessionBook = new SessionBook(
+    inputs.sessionBook(log),
+    clock,
+    storeStanding,
+  );
   // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
@@ -899,7 +929,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
-    const stores = new HeldStores(inputs.profile(name, log), clock);
+    const stores = new HeldStores(
+      inputs.profile(name, log),
+      clock,
+      storeStanding,
+    );
     // [LAW:one-source-of-truth] Each start reads the latest held profile.
     const boot = (): RendererBoot => ({
       stored: stores.current(),
