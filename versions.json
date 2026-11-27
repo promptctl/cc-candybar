@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-988",
+      "ref": "refs/pull/988/merge",
+      "sha": "026a5c1b7517fda0434082af03a5686c00d49e14",
+      "timestamp": "2026-11-27T22:59:33.515Z",
+      "commits": [
+        {
+          "sha": "026a5c1b7517fda0434082af03a5686c00d49e14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T15:58:22-07:00",
+          "message": "Merge 981a59cda6ec187cf4d2c54eec94b97c2d2a268f into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+        },
+        {
+          "sha": "981a59cda6ec187cf4d2c54eec94b97c2d2a268f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T15:58:02-07:00",
+          "message": "fix(stored-state): a per-session file whose write fails stands behind on every bar\n\nA write behind has no caller to throw into, so its failure reached only the\ndaemon log. Each per-session storage now tells its holder what every write came\nto, and the daemon keeps one standing warning per file until a write lands.\nThe settings history writes at once but is told the same way, so its failure is\none row in the same words instead of a second act failure that left the bar\nwhen its hold ended.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "dfd45a29e6c86fc420ccaa588ea8bd9796bf270c",
