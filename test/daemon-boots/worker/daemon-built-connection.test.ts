@@ -166,6 +166,52 @@ describe("a connection to a daemon built in this worker", () => {
     expect(field(published, "nonPrompts")).toBe("-");
   });
 
+  test("a settled render publishes the prompt counts folded from its transcript", async () => {
+    const clock = heldClock(new Date(), reportingClock);
+    const session = "connection-counted";
+    const transcript = path.join(root, "counted.jsonl");
+    const countedConfig = path.join(root, "counted.json5");
+    writeFileSync(
+      countedConfig,
+      `{ segments: { msgs: { template: 'prompts {{ .metrics.messageCount }}' } }, root: { h: ['msgs'] } }`,
+    );
+    writeFileSync(
+      transcript,
+      [
+        { origin: { kind: "human" }, message: { role: "user", content: "go" } },
+        { isMeta: true, message: { role: "user", content: "Please continue" } },
+        {
+          origin: { kind: "task-notification" },
+          message: {
+            role: "user",
+            content: "<task-notification>done</task-notification>",
+          },
+        },
+      ]
+        .map((entry, i) =>
+          JSON.stringify({
+            type: "user",
+            timestamp: new Date(clock.now() - 3000 + i * 1000).toISOString(),
+            ...entry,
+          }),
+        )
+        .join("\n") + "\n",
+    );
+    const conn = openedOn(start(clock).connect());
+    const req = renderRequest(session, clock.now() + 2_000);
+    conn.send({
+      ...req,
+      args: ["cc-candybar", "--config", countedConfig],
+      hookData: { ...req.hookData, transcript_path: transcript },
+    });
+    expect(drawn(await answered(conn))).toContain("prompts 1");
+    const published = only(await landedEvents(process.env, session, 1));
+    expect(field(published, "ended")).toBe("settled");
+    expect(field(published, "owed")).toBe("-");
+    expect(field(published, "prompts")).toBe("1");
+    expect(field(published, "nonPrompts")).toBe("2");
+  });
+
   test("a subscribe receives the frames the daemon draws", async () => {
     const running = start();
     await rendered(running, "connection-feed");

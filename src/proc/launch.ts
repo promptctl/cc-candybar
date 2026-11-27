@@ -834,9 +834,9 @@ async function launchPiped(
         );
       };
       afterExit(tasks.groupEnd, () => {
-        // The pipe close can settle the launch before this exit continuation.
-        // All group checks, even the first deferred turn, share its lifetime.
-        if (!settled)
+        // Termination already owns a SIGKILL deadline and the child's close.
+        // Its late exit must not start an independent group-poll loop.
+        if (!settled && terminated === null)
           groupEndTimer = clock.defer(tasks.groupEnd, () =>
             awaitGroupEnd(GROUP_END_POLL_MIN_MS),
           );
@@ -868,6 +868,7 @@ async function launchPiped(
       }
       terminated = cause;
       timer?.();
+      groupEndTimer?.();
       unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
@@ -875,7 +876,8 @@ async function launchPiped(
         // Concluding here is not behind the group's end: a group holding an
         // unreaped zombie never reads as gone, and this is that launch's bound.
         killTimer = clock.after(tasks.killGrace, TIMEOUT_KILL_GRACE_MS, () => {
-          signal(pid, "SIGKILL");
+          // A group that has drained since SIGTERM no longer owns this pid.
+          if (!spawner.groupGone(pid)) signal(pid, "SIGKILL");
           afterExit(tasks.conclude, concludeNextTurn);
         });
         signal(pid, "SIGTERM");
