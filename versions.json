@@ -4,32 +4,32 @@
     {
       "version": "pr-988",
       "ref": "refs/pull/988/merge",
-      "sha": "139a8e55626e98895b2794dc48d824749a1058f1",
-      "timestamp": "2026-11-27T23:28:48.402Z",
+      "sha": "c24ea51978d6218a1b121f8ee3cf89e77a6754d3",
+      "timestamp": "2026-11-27T23:30:06.399Z",
       "commits": [
         {
-          "sha": "139a8e55626e98895b2794dc48d824749a1058f1",
+          "sha": "c24ea51978d6218a1b121f8ee3cf89e77a6754d3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T23:27:41Z",
-          "message": "Merge 40f427688ba7d69a1c496beeed74efbde321d234 into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+          "timestamp": "2026-11-27T16:28:23-07:00",
+          "message": "Merge e683305c6c000cf673d66d629181cf71943c3d3f into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
         },
         {
-          "sha": "40f427688ba7d69a1c496beeed74efbde321d234",
+          "sha": "e683305c6c000cf673d66d629181cf71943c3d3f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-27T16:27:27-07:00",
           "message": "fix(stored-state): HeldFile names what it owes apart from what the bar says is behind\n\nA refused write is owed again only by the next change or the close, and the\ne2e gives the book its own disk.\n"
         },
         {
-          "sha": "26cfd3805b0c22cb7042e0abedba51dbd0f49a41",
+          "sha": "7e90d19be758e59806fc2408a29bea5dbeb485b4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-27T16:18:34-07:00",
           "message": "fix(stored-state): a file's standing is kept by its cause, and told once per change\n\nA failed write's message names a staged file unique to the attempt, so a\nstanding compared by text restated the bar on every refusal. The holder\nkeeps the standing by the error's code and tells the daemon the error whole.\nThe history storage shares the one Landings the other storages tell through,\nthe write-failure rows have their own map, a standing's set and clear are\nlogged, and close and take keep their error boundaries.\n"
         },
         {
-          "sha": "981a59cda6ec187cf4d2c54eec94b97c2d2a268f",
+          "sha": "b4504405ed828e5e50c997a1a091445c8178c0cc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-27T15:58:02-07:00",
