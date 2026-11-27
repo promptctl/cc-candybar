@@ -4,15 +4,22 @@
     {
       "version": "pr-982",
       "ref": "refs/pull/982/merge",
-      "sha": "97a50300fc529f8db0456d8a370ced8a287ee962",
-      "timestamp": "2026-11-27T05:18:15.521Z",
+      "sha": "f1138b37bba4769689602445953f44f644083b7a",
+      "timestamp": "2026-11-27T05:19:39.462Z",
       "commits": [
         {
-          "sha": "97a50300fc529f8db0456d8a370ced8a287ee962",
+          "sha": "f1138b37bba4769689602445953f44f644083b7a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:16:41Z",
-          "message": "Merge f746b7f30864b1698abd8e2b17754bd46d4f7209 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+          "timestamp": "2026-11-27T05:18:49Z",
+          "message": "Merge 63c5c8c9c2ffe5d451cad3f84e3f3ead29a42ebf into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+        },
+        {
+          "sha": "63c5c8c9c2ffe5d451cad3f84e3f3ead29a42ebf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:18:35-07:00",
+          "message": "fix(types): preserve the full project environment for JavaScript\n"
         },
         {
           "sha": "f746b7f30864b1698abd8e2b17754bd46d4f7209",
