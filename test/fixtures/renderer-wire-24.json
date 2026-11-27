@@ -1,0 +1,1286 @@
+[
+  {
+    "kind": "boot",
+    "version": 1,
+    "wireVersion": 24,
+    "input": {
+      "stored": {
+        "sessions": {
+          "peer-replay": {
+            "endcaps": "round"
+          }
+        },
+        "history": {}
+      },
+      "locations": {
+        "home": "/offline",
+        "configHome": "/offline/config",
+        "dataHome": "/offline/data",
+        "dataDirs": []
+      },
+      "region": {
+        "locale": "en-US",
+        "timeZone": "UTC",
+        "integers": {
+          "digits": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9"
+          ],
+          "positive": [
+            "#",
+            "##",
+            "###",
+            "#,###",
+            "##,###",
+            "###,###",
+            "#,###,###",
+            "##,###,###",
+            "###,###,###",
+            "#,###,###,###",
+            "##,###,###,###",
+            "###,###,###,###",
+            "#,###,###,###,###",
+            "##,###,###,###,###",
+            "###,###,###,###,###",
+            "#,###,###,###,###,###"
+          ],
+          "negative": [
+            "-#",
+            "-##",
+            "-###",
+            "-#,###",
+            "-##,###",
+            "-###,###",
+            "-#,###,###",
+            "-##,###,###",
+            "-###,###,###",
+            "-#,###,###,###",
+            "-##,###,###,###",
+            "-###,###,###,###",
+            "-#,###,###,###,###",
+            "-##,###,###,###,###",
+            "-###,###,###,###,###",
+            "-#,###,###,###,###,###"
+          ]
+        }
+      },
+      "memoryLimitBytes": 1073741824
+    },
+    "result": {
+      "kind": "built"
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "start",
+        "viewers": {},
+        "sessions": [],
+        "configs": []
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [],
+      "record": [],
+      "frames": [],
+      "subscriptions": {
+        "sources": {},
+        "managedFolders": [],
+        "lanes": {},
+        "configs": [],
+        "configSelections": []
+      },
+      "wake": null,
+      "stored": []
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "click",
+        "placementSeed": "fixture",
+        "click": {
+          "scope": "session",
+          "verb": "set-state",
+          "session": "peer-replay",
+          "steps": [
+            {
+              "kind": "state-writes",
+              "writes": [
+                {
+                  "verb": "set-state",
+                  "args": [
+                    "padding",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "context": {
+          "session": "peer-replay",
+          "durable": {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            }
+          },
+          "live": null
+        },
+        "coldConfig": {
+          "chain": [
+            {
+              "role": "user",
+              "path": "/offline/config.json5",
+              "content": {
+                "kind": "text",
+                "text": "{\"actions\":{\"spacing\":{\"set\":\"padding\",\"to\":\"2\"},\"save\":{\"persist\":\"palette\",\"from\":\"themes\"}},\"segments\":{\"space\":{\"template\":\"space\"}},\"root\":{\"h\":[\"space\"]}}"
+              },
+              "listed": {}
+            }
+          ],
+          "repo": null,
+          "plugins": [],
+          "strays": [],
+          "checkout": {
+            "root": "/offline",
+            "git": false
+          },
+          "notices": [],
+          "watch": null
+        }
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [],
+      "record": [],
+      "frames": [],
+      "subscriptions": {
+        "sources": {},
+        "managedFolders": [],
+        "lanes": {},
+        "configs": [
+          {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          }
+        ],
+        "configSelections": [
+          {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "digest": "8bcae499082797a55273e8bf4b070a3d34e8c47eebcc98f50cffde611156b85b"
+          }
+        ]
+      },
+      "wake": null,
+      "stored": [
+        {
+          "kind": "put",
+          "store": "session-state",
+          "key": "peer-replay",
+          "value": {
+            "endcaps": "round",
+            "padding": "2"
+          }
+        },
+        {
+          "kind": "put",
+          "store": "settings-history",
+          "key": "peer-replay",
+          "value": {
+            "past": [
+              [
+                {
+                  "kind": "session",
+                  "key": "padding",
+                  "before": null,
+                  "after": "2"
+                }
+              ]
+            ],
+            "future": []
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "level": "info",
+          "line": "render-cache compile built key=9dc55f2ce0a7 compiles=1"
+        },
+        {
+          "level": "info",
+          "line": "config load /offline/config.json5: projections=today.cost,today.tokens,feeds.statusline.subscribers,feeds.statusline.fps,feeds.statusline.shown,feeds.pane.subscribers,feeds.pane.fps,feeds.pane.shown,feeds.window.subscribers,feeds.window.fps,feeds.window.shown,drawing.by,drawing.fps,surface,hover,diagnostics.label,diagnostics.fg,diagnostics.bg,diagnostics.open,git.timeSinceCommit,block.etaMinutes,weekly.etaMinutes instantSegments=model,gitaculous,today,block,weekly,burnrate,cacheTimer,candybar.menu,candybar.fps,candybar.clickMode,candybar.list.preset.1,candybar.list.variation.1,candybar.list.shade.1,candybar.experimentalStatusline,candybar.experimentalPane,candybar.experimentalWindow instantTemplates=18 plugins loaded=0 sources=0 pluginVariables=0 dropped=0 unplaced=0 checkout=dir:/offline"
+        },
+        {
+          "level": "info",
+          "line": "render-cache entry projectDir=/offline cwd=/offline compile=9dc55f2ce0a7 entries=1 compiles=1 accounted=15/672MB"
+        },
+        {
+          "level": "info",
+          "line": "config loaded projectDir=/offline cwd=/offline cause=open state=built files=/offline/config.json5 repo=- unproven=- error=none warnings=none"
+        },
+        {
+          "level": "info",
+          "line": "set-state: padding=2 (session=peer-replay)"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "click",
+        "placementSeed": "fixture",
+        "click": {
+          "scope": "session",
+          "verb": "set-config",
+          "session": "peer-replay",
+          "steps": [
+            {
+              "kind": "session",
+              "verb": "set-config",
+              "args": [
+                "user",
+                "palette",
+                "atom-one-dark"
+              ]
+            }
+          ]
+        },
+        "context": {
+          "session": "peer-replay",
+          "durable": {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            }
+          },
+          "live": null
+        },
+        "coldConfig": {
+          "chain": [
+            {
+              "role": "user",
+              "path": "/offline/config.json5",
+              "content": {
+                "kind": "text",
+                "text": "{\"actions\":{\"spacing\":{\"set\":\"padding\",\"to\":\"2\"},\"save\":{\"persist\":\"palette\",\"from\":\"themes\"}},\"segments\":{\"space\":{\"template\":\"space\"}},\"root\":{\"h\":[\"space\"]}}"
+              },
+              "listed": {}
+            }
+          ],
+          "repo": null,
+          "plugins": [],
+          "strays": [],
+          "checkout": {
+            "root": "/offline",
+            "git": false
+          },
+          "notices": [],
+          "watch": null
+        }
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [
+        {
+          "kind": "change",
+          "id": 1,
+          "session": "peer-replay",
+          "target": {
+            "kind": "layer",
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "role": "user"
+          },
+          "changes": [
+            {
+              "op": "insert",
+              "at": [
+                "globals"
+              ],
+              "text": "{\n  palette: \"atom-one-dark\",\n}",
+              "precedes": null
+            }
+          ]
+        }
+      ],
+      "record": [],
+      "frames": [],
+      "subscriptions": {
+        "sources": {},
+        "managedFolders": [],
+        "lanes": {},
+        "configs": [
+          {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          }
+        ],
+        "configSelections": [
+          {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "digest": "8bcae499082797a55273e8bf4b070a3d34e8c47eebcc98f50cffde611156b85b"
+          }
+        ]
+      },
+      "wake": null,
+      "stored": [],
+      "diagnostics": [
+        {
+          "level": "info",
+          "line": "set-config: palette=atom-one-dark → /offline/config.json5 (session=peer-replay)"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "config",
+        "origin": {
+          "projectDir": "/offline",
+          "cwd": "/offline",
+          "target": {
+            "source": "search"
+          }
+        },
+        "config": {
+          "chain": [
+            {
+              "role": "user",
+              "path": "/offline/config.json5",
+              "content": {
+                "kind": "text",
+                "text": "{\"actions\":{\"spacing\":{\"set\":\"padding\",\"to\":\"2\"},\"save\":{\"persist\":\"palette\",\"from\":\"themes\"}},\"segments\":{\"space\":{\"template\":\"space\"}},\"root\":{\"h\":[\"space\"]}, globals: {\n  palette: \"atom-one-dark\",\n}}"
+              },
+              "listed": {}
+            }
+          ],
+          "repo": null,
+          "plugins": [],
+          "strays": [],
+          "checkout": {
+            "root": "/offline",
+            "git": false
+          },
+          "notices": [],
+          "watch": null
+        }
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [],
+      "record": [],
+      "frames": [],
+      "subscriptions": {
+        "sources": {},
+        "managedFolders": [],
+        "lanes": {},
+        "configs": [
+          {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          }
+        ],
+        "configSelections": [
+          {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "digest": "3e481d1bb3117cd3c8649136bbfa4045af50dcbdd4b3f762b4930434ffa421f8"
+          }
+        ]
+      },
+      "wake": null,
+      "stored": [],
+      "diagnostics": [
+        {
+          "level": "info",
+          "line": "render-cache compile built key=31e5b55ad197 compiles=2"
+        },
+        {
+          "level": "info",
+          "line": "config load /offline/config.json5: projections=today.cost,today.tokens,feeds.statusline.subscribers,feeds.statusline.fps,feeds.statusline.shown,feeds.pane.subscribers,feeds.pane.fps,feeds.pane.shown,feeds.window.subscribers,feeds.window.fps,feeds.window.shown,drawing.by,drawing.fps,surface,hover,diagnostics.label,diagnostics.fg,diagnostics.bg,diagnostics.open,git.timeSinceCommit,block.etaMinutes,weekly.etaMinutes instantSegments=model,gitaculous,today,block,weekly,burnrate,cacheTimer,candybar.menu,candybar.fps,candybar.clickMode,candybar.list.preset.1,candybar.list.variation.1,candybar.list.shade.1,candybar.experimentalStatusline,candybar.experimentalPane,candybar.experimentalWindow instantTemplates=18 plugins loaded=0 sources=0 pluginVariables=0 dropped=0 unplaced=0 checkout=dir:/offline"
+        },
+        {
+          "level": "info",
+          "line": "config disposed reason=reload released=0 held=0"
+        },
+        {
+          "level": "info",
+          "line": "config loaded projectDir=/offline cwd=/offline cause=config state=built files=/offline/config.json5 repo=- unproven=- error=none warnings=none"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "effect-done",
+        "session": "peer-replay",
+        "of": 1,
+        "outcome": {
+          "kind": "ok"
+        }
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [],
+      "record": [],
+      "frames": [],
+      "subscriptions": {
+        "sources": {},
+        "managedFolders": [],
+        "lanes": {},
+        "configs": [
+          {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          }
+        ],
+        "configSelections": [
+          {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "digest": "3e481d1bb3117cd3c8649136bbfa4045af50dcbdd4b3f762b4930434ffa421f8"
+          }
+        ]
+      },
+      "wake": null,
+      "stored": [
+        {
+          "kind": "put",
+          "store": "settings-history",
+          "key": "peer-replay",
+          "value": {
+            "past": [
+              [
+                {
+                  "kind": "session",
+                  "key": "padding",
+                  "before": null,
+                  "after": "2"
+                }
+              ],
+              [
+                {
+                  "kind": "layer",
+                  "role": "user",
+                  "digest": "99bfac0385e1d6bdd3a80bd1185daa30eae2bec9996bcd645c71a27af8ca1d86",
+                  "before": "{\"actions\":{\"spacing\":{\"set\":\"padding\",\"to\":\"2\"},\"save\":{\"persist\":\"palette\",\"from\":\"themes\"}},\"segments\":{\"space\":{\"template\":\"space\"}},\"root\":{\"h\":[\"space\"]}}",
+                  "after": "{\"actions\":{\"spacing\":{\"set\":\"padding\",\"to\":\"2\"},\"save\":{\"persist\":\"palette\",\"from\":\"themes\"}},\"segments\":{\"space\":{\"template\":\"space\"}},\"root\":{\"h\":[\"space\"]}, globals: {\n  palette: \"atom-one-dark\",\n}}"
+                }
+              ]
+            ],
+            "future": []
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "context",
+        "context": {
+          "v": 3,
+          "kind": "render",
+          "cwd": "/offline",
+          "args": [
+            "cc-candybar"
+          ],
+          "termCols": 80,
+          "hookData": {
+            "hook_event_name": "Status",
+            "session_id": "peer-replay",
+            "transcript_path": "/offline/transcript.jsonl",
+            "cwd": "/offline",
+            "model": {
+              "id": "fixture",
+              "display_name": "Fixture"
+            },
+            "workspace": {
+              "current_dir": "/offline",
+              "project_dir": "/offline",
+              "added_dirs": []
+            }
+          },
+          "deadline": {
+            "kind": "unstated"
+          },
+          "encoding": "frame",
+          "hints": {
+            "termCols": 80
+          },
+          "rateLimits": "missing",
+          "requested": {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          },
+          "refusedArgs": []
+        },
+        "worldState": {
+          "v": 6,
+          "session": "peer-replay",
+          "seq": 1,
+          "builtins": {
+            "session": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "today": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "speed": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "context": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "metrics": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "activity": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "cache": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "autocompact": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "git": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "pr": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "tmux": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "hostName": {
+              "kind": "absent",
+              "at": 1700000000
+            },
+            "hostUser": {
+              "kind": "absent",
+              "at": 1700000000
+            }
+          },
+          "sources": {},
+          "runs": {},
+          "env": {},
+          "daemon": {
+            "fileEvents": [],
+            "launcher": null,
+            "unsaved": [],
+            "held": []
+          },
+          "stampFailure": null,
+          "transcriptLosses": []
+        }
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [],
+      "record": [
+        [
+          "sid",
+          "peer-replay"
+        ],
+        [
+          "termCols",
+          "80"
+        ],
+        [
+          "termRows",
+          "?"
+        ],
+        [
+          "refused",
+          "-"
+        ],
+        [
+          "badArgs",
+          "-"
+        ],
+        [
+          "client",
+          "unreported"
+        ],
+        [
+          "rateLimits",
+          "missing"
+        ],
+        [
+          "encoding",
+          "frame"
+        ]
+      ],
+      "frames": [],
+      "subscriptions": {
+        "sources": {
+          "peer-replay": []
+        },
+        "managedFolders": [],
+        "lanes": {
+          "peer-replay": {
+            "statusline": false,
+            "pane": false,
+            "window": false
+          }
+        },
+        "configs": [
+          {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          }
+        ],
+        "configSelections": [
+          {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "digest": "3e481d1bb3117cd3c8649136bbfa4045af50dcbdd4b3f762b4930434ffa421f8"
+          }
+        ]
+      },
+      "wake": null,
+      "stored": [],
+      "diagnostics": [
+        {
+          "level": "info",
+          "line": "session view opened sid=\"peer-replay\" by=request cwd=/offline views=1"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "request",
+        "id": 1,
+        "context": {
+          "v": 3,
+          "kind": "render",
+          "cwd": "/offline",
+          "args": [
+            "cc-candybar"
+          ],
+          "termCols": 80,
+          "hookData": {
+            "hook_event_name": "Status",
+            "session_id": "peer-replay",
+            "transcript_path": "/offline/transcript.jsonl",
+            "cwd": "/offline",
+            "model": {
+              "id": "fixture",
+              "display_name": "Fixture"
+            },
+            "workspace": {
+              "current_dir": "/offline",
+              "project_dir": "/offline",
+              "added_dirs": []
+            }
+          },
+          "deadline": {
+            "kind": "unstated"
+          },
+          "encoding": "frame",
+          "hints": {
+            "termCols": 80
+          },
+          "rateLimits": "missing",
+          "requested": {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          },
+          "refusedArgs": []
+        }
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [
+        {
+          "kind": "present",
+          "id": 2,
+          "session": "peer-replay",
+          "surface": "statusline",
+          "request": 1,
+          "frame": {
+            "depth": "truecolor",
+            "rows": [
+              {
+                "kind": "bar",
+                "runs": [
+                  {
+                    "text": "",
+                    "fg": "#b064c7",
+                    "attrs": [
+                      "reverse"
+                    ]
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#181b23",
+                    "bg": "#b064c7"
+                  },
+                  {
+                    "text": "🍫",
+                    "fg": "#181b23",
+                    "bg": "#b064c7",
+                    "link": {
+                      "kind": "action",
+                      "effects": [
+                        {
+                          "verb": "ring-state",
+                          "args": [
+                            "peer-replay",
+                            "candybar.menu.toggle",
+                            "1",
+                            ""
+                          ]
+                        },
+                        {
+                          "verb": "set-state",
+                          "args": [
+                            "peer-replay",
+                            "candybar.resetAll.armed",
+                            "disarmed"
+                          ]
+                        },
+                        {
+                          "verb": "set-state",
+                          "args": [
+                            "peer-replay",
+                            "candybar.commands.clear.armed",
+                            "disarmed"
+                          ]
+                        }
+                      ],
+                      "region": {
+                        "name": "candybar.menu",
+                        "gestures": {
+                          "alt+left": [
+                            {
+                              "verb": "ring-state",
+                              "args": [
+                                "peer-replay",
+                                "candybar.menu.toggle",
+                                "1",
+                                ""
+                              ]
+                            },
+                            {
+                              "verb": "set-state",
+                              "args": [
+                                "peer-replay",
+                                "candybar.resetAll.armed",
+                                "disarmed"
+                              ]
+                            },
+                            {
+                              "verb": "set-state",
+                              "args": [
+                                "peer-replay",
+                                "candybar.commands.clear.armed",
+                                "disarmed"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#181b23",
+                    "bg": "#b064c7"
+                  },
+                  {
+                    "text": "",
+                    "fg": "#b064c7",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#282c34",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": " polled",
+                    "fg": "#282c34",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#282c34",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": "",
+                    "fg": "#c678dd",
+                    "bg": "#db8cf2"
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#282c34",
+                    "bg": "#db8cf2"
+                  },
+                  {
+                    "text": "☝",
+                    "fg": "#282c34",
+                    "bg": "#db8cf2",
+                    "link": {
+                      "kind": "action",
+                      "effects": [
+                        {
+                          "verb": "ring-state",
+                          "args": [
+                            "peer-replay",
+                            "candybar.clickMode.cycle",
+                            "1",
+                            ""
+                          ]
+                        },
+                        {
+                          "verb": "set-state",
+                          "args": [
+                            "peer-replay",
+                            "candybar.hover",
+                            "candybar.none"
+                          ]
+                        }
+                      ],
+                      "region": {
+                        "name": "candybar.clickMode.toggle",
+                        "gestures": {
+                          "alt+left": [
+                            {
+                              "verb": "ring-state",
+                              "args": [
+                                "peer-replay",
+                                "candybar.clickMode.cycle",
+                                "1",
+                                ""
+                              ]
+                            },
+                            {
+                              "verb": "set-state",
+                              "args": [
+                                "peer-replay",
+                                "candybar.hover",
+                                "candybar.none"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#282c34",
+                    "bg": "#db8cf2"
+                  },
+                  {
+                    "text": "",
+                    "fg": "#db8cf2",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#282c34",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": "space",
+                    "fg": "#282c34",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": "  ",
+                    "fg": "#282c34",
+                    "bg": "#c678dd"
+                  },
+                  {
+                    "text": "",
+                    "fg": "#c678dd"
+                  }
+                ]
+              }
+            ],
+            "nextChange": null,
+            "motion": "still",
+            "pending": []
+          },
+          "awaiting": {
+            "kind": "settled",
+            "seq": 1
+          }
+        }
+      ],
+      "record": [
+        [
+          "at",
+          "1700000000.000"
+        ],
+        [
+          "lanes",
+          "-"
+        ],
+        [
+          "preset",
+          "default"
+        ],
+        [
+          "width",
+          "78"
+        ],
+        [
+          "sources",
+          "0"
+        ],
+        [
+          "sourcesPending",
+          "-"
+        ],
+        [
+          "sourcesFailed",
+          "-"
+        ],
+        [
+          "prompts",
+          "-"
+        ],
+        [
+          "nonPrompts",
+          "-"
+        ],
+        [
+          "pr",
+          "-"
+        ],
+        [
+          "feeds",
+          "-"
+        ],
+        [
+          "menuIdle",
+          "-"
+        ],
+        [
+          "faults",
+          "[{\"level\":\"warning\",\"kind\":\"stale\",\"subject\":\"endcaps\",\"message\":\"Setting endcaps holds \\\"round\\\", which it cannot hold, so the bar wears \\\"powerline\\\". It can hold one of 14 values, such as \\\"powerline\\\", \\\"prism\\\", \\\"slant\\\". Pick it again.\"}]"
+        ],
+        [
+          "effect",
+          "none"
+        ],
+        [
+          "effectT",
+          "0.000"
+        ],
+        [
+          "speed",
+          "1x"
+        ],
+        [
+          "effectRows",
+          "0made/0reused"
+        ],
+        [
+          "effectOwn",
+          "-"
+        ],
+        [
+          "fadeBasis",
+          "off"
+        ],
+        [
+          "stateRev",
+          "2"
+        ],
+        [
+          "fades",
+          "-"
+        ],
+        [
+          "leaves",
+          "-"
+        ],
+        [
+          "motion",
+          "still"
+        ],
+        [
+          "evaluated",
+          "20"
+        ],
+        [
+          "cellBreaks",
+          "0"
+        ],
+        [
+          "pending",
+          "-"
+        ],
+        [
+          "rules",
+          "-"
+        ],
+        [
+          "err",
+          "N"
+        ],
+        [
+          "clickError",
+          "-"
+        ],
+        [
+          "pipeEvent",
+          "-"
+        ],
+        [
+          "ask",
+          "0"
+        ],
+        [
+          "warn",
+          "stale:endcaps"
+        ],
+        [
+          "diag",
+          "0"
+        ],
+        [
+          "warnRecord",
+          "new"
+        ],
+        [
+          "viewer",
+          "-"
+        ],
+        [
+          "handoff",
+          "-"
+        ],
+        [
+          "owed",
+          "-"
+        ]
+      ],
+      "frames": [],
+      "subscriptions": {
+        "sources": {
+          "peer-replay": []
+        },
+        "managedFolders": [],
+        "lanes": {
+          "peer-replay": {
+            "statusline": false,
+            "pane": false,
+            "window": false
+          }
+        },
+        "configs": [
+          {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          }
+        ],
+        "configSelections": [
+          {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "digest": "3e481d1bb3117cd3c8649136bbfa4045af50dcbdd4b3f762b4930434ffa421f8"
+          }
+        ]
+      },
+      "wake": null,
+      "stored": []
+    }
+  },
+  {
+    "kind": "turn",
+    "input": {
+      "kind": "event",
+      "at": 1700000000,
+      "tick": 0,
+      "event": {
+        "kind": "effect-done",
+        "session": "peer-replay",
+        "of": 2,
+        "outcome": {
+          "kind": "ok"
+        }
+      }
+    },
+    "output": {
+      "kind": "answered",
+      "effects": [],
+      "record": [],
+      "frames": [],
+      "subscriptions": {
+        "sources": {
+          "peer-replay": []
+        },
+        "managedFolders": [],
+        "lanes": {
+          "peer-replay": {
+            "statusline": false,
+            "pane": false,
+            "window": false
+          }
+        },
+        "configs": [
+          {
+            "projectDir": "/offline",
+            "cwd": "/offline",
+            "target": {
+              "source": "search"
+            }
+          }
+        ],
+        "configSelections": [
+          {
+            "origin": {
+              "projectDir": "/offline",
+              "cwd": "/offline",
+              "target": {
+                "source": "search"
+              }
+            },
+            "digest": "3e481d1bb3117cd3c8649136bbfa4045af50dcbdd4b3f762b4930434ffa421f8"
+          }
+        ]
+      },
+      "wake": null,
+      "stored": []
+    }
+  },
+  {
+    "kind": "end",
+    "turns": 8
+  }
+]

@@ -19,7 +19,6 @@ import {
 } from "../daemon/foundations/durations.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
-  answerOf,
   MOVING_FPS,
   perLane,
   UNFOLLOWED,
@@ -45,7 +44,18 @@ import {
   type Tick,
 } from "../utils/instant.js";
 import { runEach } from "../utils/run-each.js";
-import { compareStructural } from "mobx";
+import {
+  changedDraw,
+  comparisonOf,
+  type FeedAdvance,
+  type FeedComparison,
+  type FeedSchedule,
+  type FeedHistory,
+  type FeedResume,
+  type FeedUpdate,
+  RATE_WINDOW_S,
+  activeTicks,
+} from "../renderer-interface/feed-history.js";
 
 // Milliseconds from the start of one frame to the next: the closest a feed
 // draws a bar on a screen, and the furthest apart it draws any bar — what a
@@ -78,9 +88,6 @@ export const WAKE_CAUSES = [
 ] as const;
 
 export type WakeCause = (typeof WAKE_CAUSES)[number];
-
-// The window a lane's frame rate is counted over, in seconds of ticks.
-const RATE_WINDOW_S = 1;
 
 // [LAW:no-ambient-temporal-coupling] How far after the due's wall instant the
 // change a frame was set for may lie, and the frame still be drawn for the
@@ -126,17 +133,6 @@ export interface FeedDeps {
   readonly periods: FeedPeriods;
 }
 
-// [LAW:no-ambient-temporal-coupling] One deadline, including a retry. Only an
-// ordinary scheduled frame can refer to the wall instant of a bar change.
-type FeedSchedule =
-  | { readonly kind: "waiting"; readonly next: null }
-  | {
-      readonly kind: "frame";
-      readonly next: Tick;
-      readonly change: Instant | null;
-    }
-  | { readonly kind: "retry"; readonly next: Tick };
-
 interface Feed {
   readonly sessionId: SessionId;
   viewers: SessionViewers;
@@ -144,7 +140,7 @@ interface Feed {
   // The tick the last frame was drawn at: what a wake is spaced from.
   last: Tick;
   // The last frame drawn, which a lane's rate counts changes against.
-  frame: FeedFrame<Frame> | null;
+  frame: FeedComparison | null;
   // The ticks at which each followed lane's answer changed, within the
   // window: a subscriber's hand-over on joining is not one.
   readonly rates: Map<Lane, Tick[]>;
@@ -170,30 +166,6 @@ interface Feed {
   readonly unpin: () => void;
 }
 
-// [LAW:one-source-of-truth] Sample the selected presentation without encoding
-// it. Timing, pending sources and row roles do not change the visible runs.
-// The host separately deduplicates the bytes it actually sends.
-function sameDraw(
-  previous: FeedFrame<Frame> | null,
-  next: FeedFrame<Frame>,
-  lane: Lane,
-): boolean {
-  if (next.kind === "failed")
-    return previous?.kind === "failed" && previous.message === next.message;
-  if (previous?.kind !== "drawn") return false;
-  const forLane = ({ bar, handoff }: typeof next) =>
-    answerOf({ resp: bar, statusline: handoff ?? bar }, lane);
-  const before = forLane(previous);
-  const after = forLane(next);
-  return (
-    before.depth === after.depth &&
-    before.rows.length === after.rows.length &&
-    before.rows.every(({ runs }, row) =>
-      compareStructural(runs, after.rows[row]?.runs),
-    )
-  );
-}
-
 // [LAW:one-source-of-truth] The frames a second a spacing allows: the most a
 // feed draws its bar at, never a time it measured.
 const paceOf = (period: number): number => Math.round(1000 / period);
@@ -203,8 +175,82 @@ const paceOf = (period: number): number => Math.round(1000 / period);
 export class Feeds {
   private readonly feeds = new Map<SessionId, Feed>();
   private drawnTotal = 0;
+  private observation?: { wake?: Tick; advances?: FeedAdvance[] };
+  private reportingTo?: { changes?: Map<SessionId, FeedUpdate> };
+  private sequence = 0;
+  private rebuilding?: ReadonlySet<SessionId>;
+
+  // A boot opens the same views and fires their initial data reactions.
+  // The host already supplied the deadline for those views. A waiting feed
+  // can still be awakened by its first available view, and a viewer change
+  // still wakes a scheduled feed.
+  rebuildViews(
+    resumes: readonly FeedResume[] | undefined,
+    open: () => void,
+  ): void {
+    if (!resumes?.length) return open();
+    const before = this.rebuilding;
+    this.rebuilding = new Set(
+      resumes
+        .filter((r) => r.history?.schedule.kind === "frame")
+        .map((r) => r.session),
+    );
+    try {
+      open();
+    } finally {
+      this.rebuilding = before;
+    }
+  }
+
+  // [LAW:effects-at-boundaries] The existing turn carries only the schedules
+  // that moved and which presentations changed. Its frames already carry
+  // every run the next draw must compare against.
+  reporting(): Disposable & { updates(): readonly FeedUpdate[] } {
+    const before = this.reportingTo;
+    const report: { changes?: Map<SessionId, FeedUpdate> } = {};
+    this.reportingTo = report;
+    return {
+      updates: () => (report.changes ? [...report.changes.values()] : []),
+      [Symbol.dispose]: () => {
+        this.reportingTo = before;
+      },
+    };
+  }
+
+  private report(feed: Feed, change?: Pick<FeedUpdate, "changed" | "viewers">) {
+    const sequence = ++this.sequence;
+    const report = this.reportingTo;
+    if (!report) return sequence;
+    const changes = (report.changes ??= new Map());
+    changes.set(feed.sessionId, {
+      ...changes.get(feed.sessionId),
+      sequence,
+      ...change,
+      session: feed.sessionId,
+      schedule: feed.schedule,
+    });
+    return sequence;
+  }
 
   constructor(private readonly deps: FeedDeps) {}
+
+  // [LAW:carrying-cost] Only a reaction which actually moves a feed's
+  // deadline contributes a wake. An unrelated commit visits no feed.
+  observe(
+    apply: () => void,
+    keepAdvances = false,
+  ): { readonly wake?: Tick; readonly advances?: readonly FeedAdvance[] } {
+    const advanced: { wake?: Tick; advances?: FeedAdvance[] } = keepAdvances
+      ? { advances: [] }
+      : {};
+    this.observation = advanced;
+    try {
+      apply();
+      return advanced.advances?.length === 0 ? {} : advanced;
+    } finally {
+      this.observation = undefined;
+    }
+  }
 
   // [LAW:one-source-of-truth] Who watches each session now, whole: a feed
   // opens for a session named and closes for one no longer named, and a feed
@@ -213,7 +259,14 @@ export class Feeds {
   // than this one.
   // Each feed is its own error boundary: one whose pin or unpin throws keeps
   // no other feed from opening or closing.
-  view(viewers: Viewers, tick: Tick): void {
+  view(
+    viewers: Viewers,
+    tick: Tick,
+    resumes: readonly FeedResume[] = [],
+  ): void {
+    const histories = new Map(
+      resumes.map(({ session, history }) => [session, history]),
+    );
     runEach([
       ...[...this.feeds.values()]
         .filter((feed) => !Object.hasOwn(viewers, feed.sessionId))
@@ -221,23 +274,49 @@ export class Feeds {
       ...(Object.entries(viewers) as Array<[SessionId, SessionViewers]>).map(
         ([sessionId, seen]) =>
           () =>
-            this.see(sessionId, seen, tick),
+            this.see(sessionId, seen, tick, histories.get(sessionId)),
       ),
     ]);
   }
 
-  private see(sessionId: SessionId, seen: SessionViewers, tick: Tick): void {
-    const feed = this.feeds.get(sessionId);
-    if (feed === undefined) {
-      this.open(sessionId, seen, tick);
-      return;
+  private see(
+    sessionId: SessionId,
+    seen: SessionViewers,
+    tick: Tick,
+    history?: FeedHistory | null,
+  ): void {
+    let feed = this.feeds.get(sessionId);
+    if (feed && history === null) {
+      this.close(feed, tick);
+      feed = undefined;
+    }
+    if (!feed) {
+      feed = this.open(sessionId, seen, tick);
+      if (!history) return;
+    }
+    if (history) {
+      feed.schedule = history.schedule;
+      feed.last = history.last ?? (-Infinity as Tick);
+      feed.frame = history.frame;
+      feed.viewers = history.viewers;
+      feed.rates.clear();
+      for (const [lane, ticks] of Object.entries(history.rates))
+        feed.rates.set(lane as Lane, activeTicks(ticks, tick));
+      this.report(feed, { viewers: true });
     }
     const before = feed.viewers;
     feed.viewers = seen;
     this.keepRates(feed);
-    if (before.shown !== seen.shown) this.wake(sessionId, "visibility", tick);
-    else if (JSON.stringify(before) !== JSON.stringify(seen))
-      this.wake(sessionId, "viewers", tick);
+    const cause =
+      before.shown !== seen.shown
+        ? "visibility"
+        : JSON.stringify(before) !== JSON.stringify(seen)
+          ? "viewers"
+          : null;
+    if (cause) {
+      this.wake(sessionId, cause, tick);
+      this.report(feed, { viewers: true });
+    }
   }
 
   // Something the session's bar shows changed, for `cause`: its next frame,
@@ -245,6 +324,11 @@ export class Feeds {
   wake(sessionId: SessionId, cause: WakeCause, tick: Tick): void {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
+    if (
+      (cause === "data" || cause === "reload") &&
+      this.rebuilding?.has(sessionId)
+    )
+      return;
     feed.woke[cause]++;
     const { kind, next } = feed.schedule;
     // [LAW:no-ambient-temporal-coupling] A visible control that changed in
@@ -252,7 +336,8 @@ export class Feeds {
     // animation is at its frame ceiling. Background data and animation keep
     // their budget. Several clicks before the draw share that draw.
     const soonest =
-      cause === "interaction" && feed.viewers.shown
+      (cause === "interaction" || this.observation !== undefined) &&
+      feed.viewers.shown
         ? tick
         : (Math.max(tick, feed.last + this.spacingOf(feed)) as Tick);
     if (kind === "retry" || (next !== null && next <= soonest)) {
@@ -260,6 +345,17 @@ export class Feeds {
       return;
     }
     feed.schedule = { kind: "frame", next: soonest, change: null };
+    const sequence = this.report(feed);
+    this.observation?.advances?.push({
+      sequence,
+      session: sessionId,
+      next: soonest,
+    });
+    if (
+      this.observation &&
+      (this.observation.wake === undefined || soonest < this.observation.wake)
+    )
+      this.observation.wake = soonest;
   }
 
   // The earliest tick a feed's next frame falls due, or null when none waits
@@ -299,6 +395,7 @@ export class Feeds {
               kind: "retry",
               next: (tick + this.deps.periods.still / 1000) as Tick,
             };
+            this.report(feed);
             throw thrown;
           }
         }),
@@ -375,10 +472,12 @@ export class Feeds {
     };
     this.feeds.set(sessionId, feed);
     this.keepRates(feed);
+    this.report(feed, { viewers: true });
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} opened lanes=${lanesOf(viewers)}`,
     );
+    return feed;
   }
 
   private close(feed: Feed, tick: Tick): void {
@@ -433,6 +532,7 @@ export class Feeds {
     if (drawn === null) {
       feed.noView++;
       feed.schedule = { kind: "waiting", next: null };
+      this.report(feed);
       return null;
     }
     feed.last = tick;
@@ -440,25 +540,31 @@ export class Feeds {
     this.drawnTotal++;
     feed.evaluated += drawn.evaluated;
     feed.cellBreaks += drawn.cellBreaks;
-    const before = feed.frame;
     const { frame } = drawn;
+    const comparison = comparisonOf(frame);
+    const changed = changedDraw(feed.frame, comparison);
     if (drawn.failure !== null) {
       feed.failed++;
       // [LAW:nothing-unseen] A failing frame's render event is logged when its
       // failure first shows: one that keeps throwing the same way draws the
       // same bytes, and the summary counts it.
-      if (!sameDraw(before, frame, "statusline"))
+      if (changed("statusline"))
         this.deps.log(drawn.failure.level, drawn.failure.line);
     }
-    for (const [lane, rate] of feed.rates)
-      if (!sameDraw(before, frame, lane)) noteSent(rate, tick);
-    feed.frame = frame;
+    const changes: Lane[] = [];
+    for (const [lane, rate] of feed.rates) {
+      if (!changed(lane)) continue;
+      noteSent(rate, tick);
+      changes.push(lane);
+    }
+    feed.frame = comparison;
     this.schedule(
       feed,
       frame.kind === "drawn" ? frame.bar.nextChange : Infinity,
       drawAt,
       tick,
     );
+    this.report(feed, { changed: changes });
     return { session: feed.sessionId, frame };
   }
 
@@ -515,7 +621,7 @@ export class Feeds {
 // window ending there, so a lane holds at most one window's worth however long
 // it runs.
 export function noteSent(rate: Tick[], tick: Tick): void {
-  const kept = rate.filter((sent) => sent > tick - RATE_WINDOW_S);
+  const kept = activeTicks(rate, tick);
   rate.splice(0, rate.length, ...kept, tick);
 }
 

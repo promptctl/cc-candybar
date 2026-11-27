@@ -449,7 +449,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
     {
       subscribed: (subscriptions) => void published.push(subscriptions),
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -1410,7 +1410,7 @@ describe("a feed's frame", () => {
         null,
         (candidate) => {
           candidates.push(candidate);
-          return parts.mint();
+          return {id: parts.mint()};
         },
       );
     const changedBefore = changed.length;

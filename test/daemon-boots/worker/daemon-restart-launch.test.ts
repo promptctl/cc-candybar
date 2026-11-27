@@ -5,6 +5,7 @@
 // the order a real process can never reach.
 
 import { OWNER_CONTEXT } from "../../../src/proc/launcher.js";
+import { HostSessions } from "../../../src/daemon/host-sessions";
 import {
   chmodSync,
   existsSync,
@@ -200,9 +201,9 @@ esac
       throw new Error("the daemon handed its storage no log");
     };
     const first = start({
-      profile: (log) => {
+      sessionStores: (log) => {
         storageLog = log;
-        return {};
+        return new HostSessions();
       },
     });
 

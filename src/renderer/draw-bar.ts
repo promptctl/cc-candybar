@@ -10,7 +10,8 @@ import {
   type DaemonEvent,
   type EventHold,
 } from "../utils/event-hold.js";
-import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type { DisplayedConfig } from "../config/displayed-config.js";
 import {
   refusedHints,
   refusedArgsError,
@@ -118,7 +119,12 @@ import {
   frameWarnings,
   warningChanges,
 } from "./render-warnings.js";
-import type { Acceptance, FrameCandidate } from "./presented-frames.js";
+import type {
+  Acceptance,
+  FrameCandidate,
+  PortableDraw,
+} from "./presented-frames.js";
+import type { ProposedPresentation } from "../renderer-interface/presentation.js";
 import {
   renderFailure,
   rendererFailureOf,
@@ -177,14 +183,16 @@ export function renderFrame(
       handedOffTo(lanes, following),
     );
     const handoff = statusline === bar ? null : statusline;
-    const receipt = prepare({
+    const { id: receipt, ...presentation } = prepare({
       candidate,
       clickShown: null,
     });
     return {
       frame: {
         kind: "drawn",
+        displayed: displayedConfig(setup),
         receipt,
+        ...presentation,
         bar,
         handoff,
         displayedEvents: eventsShown,
@@ -250,6 +258,19 @@ interface RenderSetup extends Disposable {
   readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
   readonly terminal?: TerminalSize;
+}
+
+function displayedConfig({
+  req,
+  entry,
+}: RenderSetup): DisplayedConfig | undefined {
+  const files =
+    entry.selected.kind === "authored"
+      ? entry.selected.fileBinding
+      : entry.revision.snapshot.fileBinding;
+  return req.displayOrigin !== undefined && files !== undefined
+    ? { origin: req.displayOrigin, files }
+    : undefined;
 }
 
 // What a render notes of the context it draws by.
@@ -864,6 +885,7 @@ export function drawRender(
       session: sessionId,
       by: drawing.by,
       target,
+      loadKey: state.loadKey,
       frame: {
         config,
         layout: { record: memory.record, segments },
@@ -1014,6 +1036,7 @@ interface DrawnBar {
 
 // A render request's answer: the bar drawn for its client.
 export interface RequestAnswer {
+  readonly displayed?: DisplayedConfig;
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
@@ -1066,6 +1089,7 @@ export function answerRequest(
   });
   return {
     frame,
+    displayed: displayedConfig(setup),
     displayedEvents: eventsShown,
     awaiting,
     delivery: {
@@ -1080,9 +1104,13 @@ export function answerRequest(
 export interface Delivery {
   readonly candidate: FrameCandidate;
   readonly clickShown: ClickErrorRecord | null;
+  readonly portable?: PortableDraw;
 }
 
-export type PrepareDelivery = (delivery: Delivery) => EffectId;
+export type PrepareDelivery = (delivery: Delivery) => {
+  id: EffectId;
+  proposal?: ProposedPresentation;
+};
 
 // [LAW:single-enforcer] Only the current surface's accepted receipt may
 // commit the renderer's layout or answer its session's click error.
@@ -1092,7 +1120,11 @@ export function deliver(
   delivery: Delivery,
 ): Acceptance | null {
   const { candidate, clickShown } = delivery;
-  const accepted = parts.renderCache.acceptFrame(id, candidate);
+  const accepted = parts.renderCache.acceptFrame(
+    id,
+    candidate,
+    delivery.portable,
+  );
   if (accepted === null) return null;
   if (clickShown !== null)
     answeredClickError(parts.sessionState, candidate.session, clickShown);

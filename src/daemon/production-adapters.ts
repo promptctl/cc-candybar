@@ -13,14 +13,13 @@ import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { systemLauncher } from "../proc/system-launcher";
 import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
-import { fileStorage } from "./file-storage";
 import { productionTmuxServerObserver } from "./tmux-server-observer.js";
 import { createTmuxSourceEdges } from "./tmux-source-authority.js";
 import { productionBarPaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
 import type { DaemonLog } from "./log";
-import { profilePaths, type DaemonPaths } from "./paths";
+import type { DaemonPaths } from "./paths";
 import { checkoutFiles } from "../utils/git-root.js";
 import { writeConfigFile } from "./file-rewrites.js";
 import { fetchPricing } from "./cache/pricing-fetch";
@@ -34,6 +33,7 @@ export function productionAdapters(
   paths: DaemonPaths,
   daemonLog: DaemonLog,
   machine: Timekeeper,
+  sessionStores: DaemonAdapters["sessionStores"],
 ): DaemonAdapters {
   let accountHome: string | undefined;
   return {
@@ -42,8 +42,7 @@ export function productionAdapters(
     accountHome: () => (accountHome ??= userInfo().homedir),
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
-    profile: (name, log) =>
-      fileStorage(profilePaths(paths, name), log, machine),
+    sessionStores,
     sessionBook: (log) =>
       new SessionFile(SESSION_BOOK_FILE, paths.sessionBook, machine, 500, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),

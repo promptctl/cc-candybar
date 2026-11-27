@@ -29,6 +29,11 @@ import type {
 import { kept } from "./foundations/stored-file.js";
 import type { Asked } from "../utils/outcome.js";
 import type { Timekeeper } from "../time.js";
+import {
+  displayDigestOf,
+  type DisplayDigest,
+} from "../config/displayed-config.js";
+import { RecencyMap } from "../utils/recency.js";
 import { HeldFile } from "./held-file.js";
 import type { StoreReport } from "./foundations/stored-file.js";
 
@@ -86,6 +91,9 @@ export class SessionBook {
   // [LAW:types-are-the-program] Insertion order is the order each session
   // was last heard in, which the bound drops the oldest of.
   private readonly book: HeldFile<DurableContext>;
+  // Keep historical contexts without retaining requests, pane hints or environments.
+  // Every session's latest durable context is also recoverable from its book.
+  private readonly displayed = new RecencyMap<string, DurableContext>();
   // The environment of each session heard since the daemon started.
   private readonly environments = new Map<
     SessionId,
@@ -103,6 +111,32 @@ export class SessionBook {
       MAX_SESSIONS,
       sameDurable,
     );
+  }
+
+  forDisplay(req: CheckedRenderRequest): CheckedRenderRequest {
+    const durable = durableOf(req);
+    const id = displayDigestOf(durable);
+    const key = `${req.hookData.session_id}/${id}`;
+    this.displayed.set(key, durable);
+    if (this.displayed.size > MAX_SESSIONS)
+      this.displayed.delete(this.displayed.oldest!);
+    return { ...req, displayOrigin: id };
+  }
+
+  displayedOrigin(
+    session: SessionId,
+    id: DisplayDigest,
+  ): DurableContext | null {
+    const key = `${session}/${id}`;
+    const held = this.displayed.get(key);
+    if (held !== undefined) {
+      this.displayed.touch(key);
+      return held;
+    }
+    const latest = this.book.get(session);
+    return latest !== undefined && displayDigestOf(latest) === id
+      ? latest
+      : null;
   }
 
   // Read once the daemon serves. A session heard before it is newer than

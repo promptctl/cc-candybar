@@ -18,7 +18,7 @@ import {
 
 // [LAW:parse-dont-validate] The history file's sessions: each history parsed
 // and stripped of the changes to keys this build has no setting for.
-const HISTORY_FILE: Pick<SessionFileKind<SessionHistory>, "parse"> = {
+export const HISTORY_FILE: Pick<SessionFileKind<SessionHistory>, "parse"> = {
   parse: (value) => {
     const parsed = parseSessionHistory(value);
     return parsed.kind === "failed"

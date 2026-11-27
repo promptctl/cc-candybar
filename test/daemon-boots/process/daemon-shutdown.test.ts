@@ -1,15 +1,37 @@
 import type { ChildProcess } from "node:child_process";
 import { hostOf } from "../../../scripts/lib/host";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmdirSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
-import { daemonAt } from "../../../scripts/lib/daemon/process";
 
-import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
-import { sessionStatePath } from "../../../src/daemon/paths";
+import {
+  effectsUrl,
+  VERB_SET_CONFIG,
+  VERB_SET_STATE,
+} from "../../../src/click/wire";
+import {
+  daemonPaths,
+  profilePaths,
+  sessionStatePath,
+} from "../../../src/daemon/paths";
+import { rendererNameOf } from "../../../src/daemon/foundations/renderer-name";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { click, render, drawnLink } from "../../helpers/daemon-e2e";
-import { type IsolatedDaemonHandle, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
-import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
+import { sendClick } from "../../../scripts/lib/daemon/requests";
+import {
+  type IsolatedDaemonHandle,
+  type RunningDaemon,
+} from "../../../scripts/lib/daemon/isolated";
+import {
+  prepareIsolatedDaemonEnv,
+  spawnDaemonWithEnv,
+  spawnIsolatedDaemon,
+} from "../../helpers/spawn-isolated-daemon";
 import {
   sendDaemonRequest,
   waitForExit,
@@ -129,36 +151,182 @@ describe("daemon shutdown contract", () => {
     }
   });
 
-  // [LAW:verifiable-goals] A signal, the memory backstop and the watchdog all
-  // end a daemon through one funnel, and a click's session write waits out the
-  // file's debounce. So the close in that funnel is what keeps a click a recycled
-  // daemon had not written yet, and only a real process has that funnel.
-  test("SIGTERM flushes a pending session write before the daemon exits", async () => {
+  // The running host journals a click before replying. SIGTERM additionally
+  // publishes the legacy JSON a pinned previous release will read.
+  test("SIGTERM exports an already journaled session write before the daemon exits", async () => {
     const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-shutdown",
     );
     const sessionId = "shutdown-write";
     let daemon: RunningDaemon | undefined;
     try {
-      daemon = await spawnDaemonWithEnv(env, daemonAt(path.resolve(__dirname, "../../fixtures/shutdown-pending.ts")));
+      daemon = await spawnDaemonWithEnv(env);
       await render(sockPath, sessionId, stateDir);
       await click(
         sockPath,
-        drawnLink(sockPath, effectsUrl([
-          { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
-        ])),
+        drawnLink(
+          sockPath,
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
+          ]),
+        ),
       );
       const file = sessionStatePath(hostOf(env));
-      expect(readFileSync(file + ".pending", "utf8")).toBe("session-state write");
+      expect(
+        readFileSync(
+          path.join(path.dirname(file), "shared-session", "changes"),
+          "utf8",
+        ),
+      ).toContain(sessionId);
       expect(existsSync(file)).toBe(false);
       expect(await daemon.stop("SIGTERM")).toEqual({ code: 0, signal: null });
-      expect(existsSync(file + ".pending")).toBe(false);
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
+      const saved = JSON.parse(
+        readFileSync(sessionStatePath(hostOf(env)), "utf8"),
+      );
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
       await daemon?.stop();
       removeTmpDirs();
     }
   });
+
+  test("two socket paths cannot acquire the same state directory, and a successor can recover after SIGKILL", async () => {
+    const first = prepareIsolatedDaemonEnv("ccb-state-owner");
+    const second = prepareIsolatedDaemonEnv("ccb-state-peer");
+    const peerEnv = { ...first.env, CC_CANDYBAR_SOCKET: second.sockPath };
+    const file = sessionStatePath(hostOf(first.env));
+    const journal = path.join(path.dirname(file), "shared-session", "changes");
+    let owner: RunningDaemon | undefined;
+    let successor: RunningDaemon | undefined;
+    try {
+      owner = await spawnDaemonWithEnv(first.env);
+      const sid = "surviving-owner";
+      await render(first.sockPath, sid, first.stateDir);
+      await click(
+        first.sockPath,
+        drawnLink(
+          first.sockPath,
+          effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "padding", "3"] }]),
+        ),
+      );
+      const committed = readFileSync(journal);
+      await expect(spawnDaemonWithEnv(peerEnv)).rejects.toThrow(
+        new RegExp("session state at .* is in use by pid=" + owner.child.pid),
+      );
+      expect(readFileSync(journal)).toEqual(committed);
+      expect(existsSync(file)).toBe(false);
+      const stats = await sendDaemonRequest(
+        first.sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "stats",
+        },
+        REPLY_BUDGET_MS,
+      );
+      expect(stats.ok).toBe(true);
+      expect(await owner.stop("SIGKILL")).toEqual({
+        code: null,
+        signal: "SIGKILL",
+      });
+      successor = await spawnDaemonWithEnv(peerEnv);
+      expect(await successor.stop("SIGTERM")).toEqual({
+        code: 0,
+        signal: null,
+      });
+      expect(JSON.parse(readFileSync(file, "utf8"))[sid]).toEqual({
+        padding: "3",
+      });
+    } finally {
+      await successor?.stop();
+      await owner?.stop();
+      second.removeTmpDirs();
+      first.removeTmpDirs();
+    }
+  });
+
+  test("an unsuccessful legacy export exits nonzero and the next host finishes the handoff", async () => {
+    const isolated = prepareIsolatedDaemonEnv("ccb-export-retry");
+    const { env } = isolated;
+    const paths = daemonPaths(hostOf(env));
+    const file = paths.sessionState;
+    const named = profilePaths(paths, rendererNameOf("prior")).sessionState;
+    const sid = "interrupted-export";
+    let daemon: RunningDaemon | undefined;
+    try {
+      // Import an existing pick. Publishing it into the base profile now
+      // requires a real legacy write when this host shuts down.
+      mkdirSync(path.dirname(named), { recursive: true });
+      writeFileSync(named, JSON.stringify({ [sid]: { padding: "4" } }));
+      daemon = await spawnDaemonWithEnv(env);
+      mkdirSync(file);
+      expect(await daemon.stop("SIGTERM")).toEqual({ code: 1, signal: null });
+      rmdirSync(file);
+      daemon = await spawnDaemonWithEnv(env);
+      expect(await daemon.stop("SIGTERM")).toEqual({ code: 0, signal: null });
+      expect(JSON.parse(readFileSync(file, "utf8"))[sid]).toEqual({
+        padding: "4",
+      });
+    } finally {
+      await daemon?.stop();
+      isolated.removeTmpDirs();
+    }
+  });
+
+  test.each([
+    ["session pick", VERB_SET_STATE, ["padding", "4"]],
+    [
+      "config file with an undo step",
+      VERB_SET_CONFIG,
+      ["user", "palette", "nord"],
+    ],
+  ] as const)(
+    "a refused journal write reaches the caller of a %s click",
+    async (_label, verb, args) => {
+      const { env, sockPath, stateDir, removeTmpDirs } =
+        prepareIsolatedDaemonEnv("ccb-refused-write");
+      const root = path.dirname(sessionStatePath(hostOf(env)));
+      const journal = path.join(root, "shared-session", "changes");
+      const sid = "refused-commit";
+      let daemon: RunningDaemon | undefined;
+      try {
+        const config = path.join(stateDir, "settings.json5");
+        writeFileSync(
+          config,
+          JSON.stringify({
+            actions: { pal: { persist: "palette", from: "themes" } },
+            segments: {
+              choice: { template: '{{ action "pal" "palette" "nord" }}' },
+            },
+            root: { h: ["choice"] },
+          }),
+        );
+        daemon = await spawnDaemonWithEnv(env);
+        await render(sockPath, sid, stateDir, {}, [
+          "node",
+          "--config-only",
+          config,
+        ]);
+        mkdirSync(journal);
+        const response = await sendClick(
+          sockPath,
+          drawnLink(sockPath, effectsUrl([{ verb, args: [sid, ...args] }])),
+        );
+        expect(response).toMatchObject({
+          ok: false,
+          code: "RENDER_FAILED",
+          error: expect.stringContaining("session journal"),
+        });
+        rmdirSync(journal);
+        expect(await daemon.stop("SIGTERM")).toEqual({ code: 0, signal: null });
+        const saved = JSON.parse(
+          readFileSync(path.join(root, "settings-history.json"), "utf8"),
+        );
+        expect(saved[sid].past).toHaveLength(1);
+      } finally {
+        await daemon?.stop();
+        removeTmpDirs();
+      }
+    },
+  );
 });

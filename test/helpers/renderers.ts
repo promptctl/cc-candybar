@@ -32,7 +32,7 @@ export const unfollowedCollector = (
   subscribed: collector.subscribed.bind(collector),
   holding: collector.holding.bind(collector),
   frames: () => {},
-  stored: () => {},
+  prepare: () => () => {},
   recorded: () => {},
 });
 
@@ -46,6 +46,8 @@ export function eventRenderer(
 // nothing.
 const noneStored = { heard: (): void => {}, drain: (): readonly [] => [] };
 export const NOTHING_STORED = {
+  navigation: noneStored,
+  draft: noneStored,
   "session-state": noneStored,
   "settings-history": noneStored,
 };
@@ -62,6 +64,8 @@ export const NO_CONFIGS: HostWorld["configs"] = {
   snapshotOf: () => null,
   selected: () => {},
   retainedOf: () => undefined,
+  handoffOf: () => undefined,
+  received: () => {},
   landed: () => [],
   path: () => undefined,
   repoDir: () => undefined,
@@ -74,6 +78,7 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 // name, its renderer names no origin, the daemon is not closing, and an act's
 // failure no bar holds would be the rig's bug.
 export const NO_ACTS: HostWorld = {
+  sessionWriter: (_session, land) => land(),
   authorizeRun: (request, captures) =>
     authorizeRun(TEST_SIGNER, request, captures),
   perform: async (act) => ({

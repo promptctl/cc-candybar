@@ -16,6 +16,8 @@ import type { SessionId } from "../daemon/foundations/session-id";
 import type { ClaudeHookData } from "../utils/claude";
 import type { Judged } from "../daemon/foundations/judge-run.js";
 
+import type { DisplayDigest } from "../config/displayed-config.js";
+
 // A render request that crossed the checkpoint: its hookData carries every
 // required field with its declared type and its cwd and workspace directories
 // are absolute. `hints` contains the parsed client hints. Its args are parsed
@@ -39,6 +41,7 @@ export type CheckedRenderRequest = Omit<
 > & {
   readonly hookData: CheckedHookData;
   readonly sourceConfigDir?: string;
+  readonly displayOrigin?: DisplayDigest;
   readonly deadline: ClientDeadline;
   readonly encoding: RenderEncoding;
   readonly hints: ClientHints;
@@ -107,6 +110,7 @@ export type DeclaredSources = ReadonlyMap<string, string>;
 export interface Subscribed {
   readonly plugins: DeclaredSources;
   readonly runs: ReadonlyMap<string, Judged>;
+  readonly documents?: ReadonlyMap<string, readonly string[]>;
   // The variables its `env` sources name, sorted.
   readonly env: readonly string[];
 }

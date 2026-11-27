@@ -115,7 +115,7 @@ class BoxNode implements VarNode {
 
   // A box written pending is not answered yet again: what its payload holds
   // is a source that has not answered (src/renderer/render-payload.ts).
-  set(value: VarValue | Pending): void {
+  set(value: VarValue | Pending, changedAt?: number): void {
     if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
     // [LAW:single-enforcer] ONE comparison decides both halves of a write:
     // whether observers hear about it (they do not, because an unchanged value is
@@ -126,7 +126,7 @@ class BoxNode implements VarNode {
     // that `equals` changed no test.
     if (compareStructural(this.cell.get(), value)) return;
     this.cell.set(value);
-    this.lastChangedAt = this.clock.now();
+    this.lastChangedAt = changedAt ?? this.clock.now();
   }
 
   lastUpdatedMs(): number | null {
@@ -333,7 +333,7 @@ class DocumentCell implements DocumentNode {
     return this.cell.get();
   }
 
-  set(value: DocumentReading): void {
+  set(value: DocumentReading, changedAt?: number): void {
     const next = shaped(value);
     // [LAW:single-enforcer] As in BoxNode: one comparison, and not writing IS
     // the notification rule. An unchanged rescan reaches no observer because the
@@ -341,7 +341,7 @@ class DocumentCell implements DocumentNode {
     // enforce what this line already decided.
     if (sameDocument(this.cell.get(), next)) return;
     this.cell.set(next);
-    this.lastChangedAt = this.clock.now();
+    this.lastChangedAt = changedAt ?? this.clock.now();
   }
 
   lastUpdatedMs(): number | null {
@@ -443,7 +443,7 @@ export class VariableStore {
   // [LAW:one-source-of-truth] `clock` stamps when each box and document last
   // changed; a child store reads the same one as its parent.
   constructor(
-    readonly clock: Pick<Timekeeper, "now" | "after">,
+    readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
     private readonly parent: VariableStore | null = null,
   ) {}
 
@@ -537,7 +537,7 @@ export class VariableStore {
     return (node as BoxNode).stored();
   }
 
-  setDocument(name: string, value: DocumentReading): void {
+  setDocument(name: string, value: DocumentReading, changedAt?: number): void {
     const node = this.requireOwn(name);
     if (!(node instanceof DocumentCell)) {
       throw new TypeError(
@@ -546,10 +546,10 @@ export class VariableStore {
           : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`,
       );
     }
-    mobxRunInAction(() => node.set(value));
+    mobxRunInAction(() => node.set(value, changedAt));
   }
 
-  setBox(name: string, value: VarValue | Pending): void {
+  setBox(name: string, value: VarValue | Pending, changedAt?: number): void {
     const node = this.requireOwn(name);
     if (node.kind !== "box") {
       throw new TypeError(
@@ -562,7 +562,7 @@ export class VariableStore {
     // computeds always do. Wrapping setBox here means callers do not
     // need to remember; runInAction stays useful for batching multiple
     // sets so dependents invalidate once.
-    mobxRunInAction(() => (node as BoxNode).set(value));
+    mobxRunInAction(() => (node as BoxNode).set(value, changedAt));
   }
 
   // Wrap multi-variable updates so dependents only invalidate once per

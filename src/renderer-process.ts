@@ -59,11 +59,17 @@ export function runRenderer(monotonic: () => Monotonic): void {
   for (const sig of ["SIGINT", "SIGHUP"] as const) process.on(sig, () => {});
   process.on("SIGTERM", () => leave(0));
 
-  let served: ((line: HostLine) => void) | null = null;
+  let served: ReturnType<typeof serveRenderer> | null = null;
   const heard = (text: string): void => {
     if (leaving) return;
     if (served !== null) {
-      served(JSON.parse(text) as HostLine);
+      const line = JSON.parse(text) as HostLine;
+      served(
+        line,
+        line.kind === "session-commit"
+          ? Buffer.byteLength(text) + 1
+          : undefined,
+      );
       return;
     }
     let result: RendererConstruction;
@@ -80,6 +86,7 @@ export function runRenderer(monotonic: () => Monotonic): void {
     }
     const { renderer, diagnostics } = result;
     served = serveRenderer({
+      observe: renderer.observe,
       // [LAW:single-enforcer] Each turn is timed in its own process.
       renderer: timed(renderer, monotonic, (message) => {
         process.stderr.write(`${message}\n`);

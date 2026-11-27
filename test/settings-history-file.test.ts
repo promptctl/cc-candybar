@@ -23,7 +23,7 @@ test("a lone step over the byte bound leaves no history behind, and the host is 
   big.sessionState.set(SID, "theme", "x".repeat(9 * 1024 * 1024));
   big.commit();
   expect(history.drain()).toEqual([
-    { kind: "put", store: "settings-history", key: SID, value: null },
+    { kind: "steps", store: "settings-history", key: SID, edits: [{ kind: "clear" }] },
   ]);
 });
 

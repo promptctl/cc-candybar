@@ -27,6 +27,44 @@ import { CrossedFailure } from "../../src/daemon/foundations/verb-error";
 import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { unexpectedTimingProblem } from "../helpers/renderers";
 
+test("a peer reports a changed deadline immediately and otherwise batches progress within the delivery window", () => {
+  const sent: RendererLine[] = [];
+  const wake = 3 as Tick;
+  const receive = serveRenderer({
+    renderer: talkingRenderer(),
+    send: (line) => sent.push(line),
+    observe: (commit) => (commit.revision === 2 ? { wake } : {}),
+    memory: () => ({ rss: 3, heapTotal: 2 }),
+    heapSnapshot: async () => {},
+  });
+  const commit = {
+    kind: "session-commit",
+    revision: 1,
+    at: 3 as Instant,
+    tick: wake,
+    writes: [
+      { kind: "heard", store: "session-state", key: sessionIdOf("sample") },
+    ],
+  } as const;
+  receive(commit);
+  expect(sent).toEqual([]);
+  receive({ ...commit, revision: 2 });
+  expect(sent).toEqual([{ kind: "observation", sessionRevision: 2, wake }]);
+  receive({ kind: "ping", n: 40 });
+  expect(sent[1]).toEqual({
+    kind: "ping",
+    n: 40,
+    sessionRevision: 2,
+    usage: { rss: 3, heapTotal: 2 },
+  });
+  for (let revision = 3; revision <= 302; revision++) receive({ ...commit, revision }, 100);
+  expect(sent.slice(2)).toEqual([66, 130, 194, 258].map(sessionRevision => ({
+    kind: "observation", sessionRevision,
+  })));
+  receive({ ...commit, revision: 303 }, 256 * 1024);
+  expect(sent.at(-1)).toEqual({ kind: "observation", sessionRevision: 303 });
+});
+
 // A renderer that answers with a diagnostic. Its turns
 // take no time, so both ends time them alike.
 function talkingRenderer(): TimedRenderer {
@@ -71,12 +109,14 @@ function linesOver(
   const crossed = <T>(line: T): T => JSON.parse(JSON.stringify(line)) as T;
   let toRenderer: (line: HostLine) => void = () => {};
   const lines = rendererOverLines({
+    observed: () => {},
     send: (line) => queueMicrotask(() => toRenderer(crossed(line))),
     fault: (message) => {
       throw new Error(message);
     },
   });
   toRenderer = serveRenderer({
+    observe: () => { throw new Error("unexpected session commit"); },
     renderer: options.renderer ?? talkingRenderer(),
     send: (line) => {
       const received = crossed(line);
@@ -140,6 +180,14 @@ test("both presentation paths carry the displayed event in their turn's answer",
         awaiting: { kind: "settled", seq: 1 },
       },
     ],
+    feedUpdates: [
+      {
+        sequence: 1,
+        session,
+        schedule: { kind: "frame", next: 1 as Tick, change: null },
+        changed: ["pane"],
+      },
+    ],
     frames: [
       {
         session,
@@ -171,6 +219,28 @@ test("both presentation paths carry the displayed event in their turn's answer",
   });
   expect(answer).toEqual({ ...output, turnMs: 0 });
   expect(heard).toMatchObject([{ kind: "output", output }]);
+  for (const invalid of [
+    { ...output, feedUpdates: undefined },
+    { ...output, frames: [] },
+    { ...output, frames: [...output.frames, ...output.frames] },
+  ]) {
+    const broken = linesOver(undefined, {
+      renderer: timed(
+        { answer: async () => invalid },
+        () => 0,
+        unexpectedTimingProblem,
+      ),
+      heard: [],
+    });
+    await expect(
+      broken.renderer.answer({
+        kind: "event",
+        event: { kind: "due" },
+        at: 7 as Instant,
+        tick: 0 as Tick,
+      }),
+    ).rejects.toThrow("invalid feed updates");
+  }
 });
 
 function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
@@ -271,6 +341,7 @@ test("a replacement process sends the same nonempty declaration on its first ans
 test("reusing a declaration before the first replacement rejects the turn", async () => {
   let asked: HostLine | undefined;
   const wire = rendererOverLines({
+    observed: () => {},
     send: (line) => (asked = line),
     fault: (message) => {
       throw new Error(message);
@@ -313,6 +384,7 @@ describe("a renderer's boot line", () => {
     stored,
     region: SAMPLE_REGION,
     memoryLimitBytes: Number.MAX_SAFE_INTEGER * 1024 * 1024,
+    sessionRevision: 17,
   };
   const read = (value: unknown) =>
     rendererBootFrom({
@@ -409,6 +481,7 @@ describe("the renderer over lines", () => {
   test("a line heard after the renderer's end reaches nothing, and is said", () => {
     const faults: string[] = [];
     const lines = rendererOverLines({
+      observed: () => {},
       send: () => {},
       fault: (message) => faults.push(message),
     });
@@ -421,7 +494,7 @@ describe("the renderer over lines", () => {
 
   test("a malformed input rejects just its turn and the worker answers the next ping", async () => {
     const output: RendererLine[] = [];
-    const receive = serveRenderer({ renderer: talkingRenderer(), send: line => output.push(line),
+    const receive = serveRenderer({ observe: () => { throw new Error("unexpected session commit"); }, renderer: talkingRenderer(), send: line => output.push(line),
       memory: () => ({ rss: 1, heapTotal: 1 }), heapSnapshot: async () => {} });
     receive({ kind: "input", n: 15, input: { kind: "event" } } as HostLine);
     await Promise.resolve();
@@ -452,4 +525,40 @@ describe("the renderer over lines", () => {
     split.end();
     expect(heard).toEqual(['{"a":1}', '{"b":2}', '{"c"']);
   });
+});
+
+test("peer proposals cannot evict a session or manufacture a hearing", async () => {
+  const key = sessionIdOf("session");
+  for (const write of [
+    { kind: "drop", store: "session-state", key },
+    { kind: "heard", store: "settings-history", key },
+    {
+      kind: "steps",
+      store: "settings-history",
+      key,
+      edits: [{ kind: "trim", count: 1 }],
+    },
+    {
+      kind: "steps",
+      store: "settings-history",
+      key,
+      edits: [{ kind: "clear" }],
+    },
+  ] as const) {
+    const transport = linesOver(undefined, {
+      renderer: timed(
+        {
+          answer: async (input) => ({
+            ...(await talkingRenderer().answer(input)),
+            stored: [write],
+          }),
+        },
+        () => 0,
+        unexpectedTimingProblem,
+      ),
+    });
+    await expect(
+      transport.renderer.answer(command("close-journal")),
+    ).rejects.toThrow("invalid session writes");
+  }
 });

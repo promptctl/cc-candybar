@@ -117,6 +117,7 @@ function hostOver(
       return { kind: "ok" };
     },
     stateDir: path.join(dir, "state"),
+    sessionWriter: (_session, land) => land(),
     // The origin's one layer is the test's file.
     configs: {
       ...NO_CONFIGS,
@@ -148,7 +149,7 @@ function hostOver(
       subscribed: () => {},
       frames: () => {},
       holding: () => () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
     },
     world,

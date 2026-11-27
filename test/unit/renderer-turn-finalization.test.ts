@@ -88,6 +88,8 @@ function rig(
       configWrites: { close: () => fault.closeJournal?.(say) },
     },
     {
+      navigation: { drain: () => [] },
+      draft: { drain: () => [] },
       "session-state": {
         heard: (session) => state.heard(session),
         drain: () => {
@@ -107,6 +109,7 @@ function rig(
   // Events and commands go through the actual negotiated JSON
   // transport before the same mailbox that lands production output.
   const pipe = rendererOverLines({
+    observed: () => {},
     send: (input) => receive(JSON.parse(JSON.stringify(input))),
     fault: (message) => {
       throw new Error(message);
@@ -115,6 +118,7 @@ function rig(
   const lines: RendererLine[] = [];
   const logged: LogLine[] = [];
   const receive = serveRenderer({
+    observe: () => { throw new Error("unexpected session commit"); },
     renderer: timed(renderer, fault.rendererClock ?? clock.monotonic, (line) => {
       logged.push({ level: "warn", line });
     }),
@@ -139,7 +143,7 @@ function rig(
     (level, line) => logged.push({ level, line }),
     {
       subscribed: (next) => subscriptions.push(next),
-      stored: (writes) => stored.push(writes),
+      prepare: (writes) => () => stored.push(writes),
       holding: () => () => {},
       recorded: () => {},
       frames: () => {},
@@ -206,8 +210,8 @@ test("a failed body keeps its classification and the writes already drained", as
   historyFailed = false;
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
   expect(fixture.stored).toEqual([
-    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
-    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "dracula" } }],
+    [{ kind: "patch", store: "session-state", key: SESSION, changes: { theme: "nord" } }],
+    [{ kind: "patch", store: "session-state", key: SESSION, changes: { theme: "dracula" } }],
     [],
   ]);
 });
@@ -226,7 +230,7 @@ test("a failed end-clock read logs a transport warning and leaves semantic diagn
   });
   expect(result).toMatchObject({ kind: "answered", turnMs: null });
   expect(fixture.stored).toEqual([
-    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "patch", store: "session-state", key: SESSION, changes: { theme: "nord" } }],
   ]);
   const line = fixture.lines[0];
   expect(line?.kind === "output" && line.output.diagnostics).toEqual([
@@ -347,14 +351,8 @@ test("the first failure in collection still lands history, holds subscriptions, 
   });
   expect(fixture.stored[1]).toEqual([
     {
-      kind: "put", store: "settings-history",
-      key: SESSION,
-      value: {
-        past: [
-          [{ kind: "session", key: "theme", before: null, after: "nord" }],
-        ],
-        future: [],
-      },
+      kind: "steps", store: "settings-history", key: SESSION,
+      edits: [{ kind: "append", step: [{ kind: "session", key: "theme", before: null, after: "nord" }] }],
     },
   ]);
   expect(fixture.subscriptions.map(({ sources }) => sources)).toEqual([
@@ -369,7 +367,7 @@ test("the first failure in collection still lands history, holds subscriptions, 
   // from the successful part of the failed turn.
   await fixture.host.command({ kind: "close-journal" });
   expect(fixture.stored.slice(2)).toEqual([
-    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "patch", store: "session-state", key: SESSION, changes: { theme: "nord" } }],
     [],
   ]);
   fixture.host.closeWake();
@@ -419,7 +417,7 @@ test("a failed command lands writes and carries both failures without runtime fr
   );
   expect(failureOf(primary).detail).toContain("\n    at ");
   expect(fixture.stored).toEqual([
-    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "patch", store: "session-state", key: SESSION, changes: { theme: "nord" } }],
   ]);
 });
 
@@ -496,7 +494,7 @@ test("a successful command reports its first finalizer failure and lands its suc
     kind: "close-journal",
   });
   expect(fixture.stored).toEqual([
-    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "patch", store: "session-state", key: SESSION, changes: { theme: "nord" } }],
     [],
   ]);
 });

@@ -546,6 +546,7 @@ export class FrameFeeds<Req> {
         encoded = encodeFeed(frame, this.deps.publishFrame, {
           renderer,
           session,
+          displayed: frame.kind === "drawn" ? frame.displayed : undefined,
         });
         // [LAW:no-silent-failure] The answers this frame is about to be offered
         // are built here, where a failure is this frame's, not a later

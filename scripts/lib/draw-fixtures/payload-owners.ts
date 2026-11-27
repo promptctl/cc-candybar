@@ -41,7 +41,7 @@ import type { DaySums } from "../../../src/daemon/cache/session-usage-store";
 import type { SpeedObservation } from "../../../src/facts/world-state";
 import type { TranscriptLoss } from "../../../src/utils/transcript-loss";
 import type { AutoCompactWindow } from "../../../src/segments/autocompact";
-import type { Instant } from "../../../src/utils/instant";
+import type { Instant, Tick } from "../../../src/utils/instant";
 import {
   ABSENT,
   isPending,
@@ -179,7 +179,7 @@ export function documentOf(inputs: LanedInputs) {
     inputs.hookData.session_id,
     readingsOf(inputs, inputs.lanes()),
     daemonFactsOf(),
-    instantOf(new Date(0)),
+    { at: instantOf(new Date(0)), tick: 0 as Tick },
   );
 }
 

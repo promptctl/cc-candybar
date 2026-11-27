@@ -27,11 +27,12 @@ const USER = `{
   actions: {
     pad: { persist: 'padding', min: 0, max: 4, by: 1, layer: 'user' },
     interval: { persist: 'menuTimeout', min: 15, max: 60, by: 1, layer: 'project' },
-    combined: { do: ['pad', 'interval'] },
+    open: { set: 'nav.menu', to: 'open' },
+    combined: { do: ['open', 'pad', 'interval'] },
   },
-  variables: { undoDepth: { kind: 'input', path: 'history.undo', type: 'number' } },
+  variables: { undoDepth: { kind: 'input', path: 'history.undo', type: 'number' }, backDepth: {kind:'input',path:'navigation.back',type:'number'}, menu:{kind:'state',key:'nav.menu',default:'closed'} },
   segments: {
-    saved: { template: 'padding={{ .padding.effective }} undo={{ .undoDepth }}' },
+    saved: { template: 'padding={{ .padding.effective }} undo={{ .undoDepth }} back={{ .backDepth }} menu={{ .menu }}' },
     write: { template: '{{ action "combined" "WRITE BOTH" }}' },
   },
   root: { h: ['saved', 'write'] },
@@ -51,7 +52,7 @@ test.each(["restored", "unrestored"] as const)(
       fs.mkdtempSync(path.join(os.tmpdir(), "ccb-rollback-repo-")),
     );
     const userFile = path.join(
-      env.XDG_CONFIG_HOME!,
+      fs.realpathSync.native(env.XDG_CONFIG_HOME!),
       "cc-candybar",
       "config.json5",
     );
@@ -113,8 +114,12 @@ test.each(["restored", "unrestored"] as const)(
 
       const padding = restore === "restored" ? 1 : 2;
       const [writer, observer] = await Promise.all([draw(), draw(true)]);
-      expect(textOf(writer)).toContain(`padding=${padding} undo=0`);
-      expect(textOf(observer)).toContain(`padding=${padding} undo=0`);
+      expect(textOf(writer)).toContain(
+        `padding=${padding} undo=0 back=0 menu=closed`,
+      );
+      expect(textOf(observer)).toContain(
+        `padding=${padding} undo=0 back=0 menu=closed`,
+      );
       const messages = (
         await readDiagnostics(running, "writer", project, writer)
       )

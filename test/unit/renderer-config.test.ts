@@ -63,7 +63,6 @@ import { heldClock } from "../helpers/held-clock";
 import { unexpectedTimingProblem } from "../helpers/renderers";
 import {
   oversizedRendererHistory,
-  oversizedSession,
 } from "../helpers/oversized-renderer-history";
 
 const SAID = "said-by-the-snapshot";
@@ -97,6 +96,7 @@ function rendererLines(send: (bytes: string) => void) {
       }
       const { renderer: core, ...outcome } = built;
       const receive = serveRenderer({
+        observe: core.observe,
         renderer: timed(core, () => 0, unexpectedTimingProblem),
         send: (line) => send(lineBytes(line)),
         memory: () => {
@@ -137,6 +137,7 @@ async function recordedRenderer(boot: RendererBoot) {
     child.take(bytes);
   };
   const host = rendererOverLines({
+    observed: () => {},
     send,
     fault: (reason) => {
       throw new Error(reason);
@@ -234,6 +235,7 @@ test("rotating an in-process renderer disposes its previous view before serving 
     cores.push(core);
     return core;
   })({ name: MAIN_RENDERER, boot: bootOf, entry: "/nowhere/renderer", node: [] }).start({
+    observed: () => {},
     clock: heldClock(new Date(AT * 1000)),
     log: (level, line) => logged.push({ level, line }),
     start: async () => {},
@@ -292,14 +294,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     kind: "boot", version: RECORDING_VERSION, wireVersion: RENDERER_WIRE_VERSION,
     input: boot, result: live.construction,
   }];
-  const bootDiagnostic = {
-    level: "info",
-    line: `settings-history: trimmed an old step for session ${oversizedSession}`,
-  };
-  expect(live.construction).toEqual({
-    kind: "built",
-    diagnostics: [bootDiagnostic],
-  });
+  expect(live.construction).toEqual({ kind: "built" });
   const config = JSON.stringify({
     globals: { experimentalPane: true },
     actions: {
@@ -339,12 +334,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   ]);
   expect(started.subscriptions.configs).toEqual([origin]);
   expect(started.subscriptions.lanes[session]?.pane).toBe(true);
-  expect(started.stored).toContainEqual({
-    kind: "put", store: "settings-history",
-    key: oversizedSession,
-    value: null,
-  });
-  expect(started.diagnostics).not.toContainEqual(bootDiagnostic);
+  expect(started.stored).toEqual([]);
   const first = presentOf(answered(await turn(
     { kind: "request", id: 1 as RequestId, context },
     10,
@@ -394,9 +384,9 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   answered(await acknowledge(changed.id));
   const remembered = answered(await sendClick(click("remember")));
   expect(remembered.stored).toContainEqual({
-    kind: "put", store: "session-state",
+    kind: "patch", store: "session-state",
     key: session,
-    value: { remembered: "remembered by click" },
+    changes: { remembered: "remembered by click" },
   });
   const watching = answered(await turn({
     kind: "viewers",
@@ -453,7 +443,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
 
   const recordedTurns = recording.length - 1;
   const replayed: RendererOutput[] = [];
-  const lines = [...recording, { kind: "end", turns: recordedTurns }].map((entry) => JSON.stringify(entry));
+  const lines = [...recording, { kind: "end", turns: recordedTurns, sessionRevision: boot.sessionRevision }].map((entry) => JSON.stringify(entry));
   expect(await replayRecording(lines, (_input, output) => replayed.push(output))).toEqual({ turns: recordedTurns });
   expect(replayed.flatMap((answer) => answer.frames).filter(({ frame }) => frame.kind === "drawn")).toHaveLength(2);
   expect(replayed.flatMap((answer) => answer.effects).some((effect) => effect.kind === "change")).toBe(true);
@@ -512,7 +502,7 @@ test("a click on a session with no live context uses its cold config in the clic
     await handIn(r, {
       kind: "click", placementSeed: "test-click",
       click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER).click,
-      coldConfig: snapshotOf(CONFIG),
+      coldConfig: { config: snapshotOf(CONFIG) },
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },
     }),

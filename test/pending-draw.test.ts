@@ -28,8 +28,11 @@ import {
   declareDslVariables,
   EVERY_SCOPE,
   type RenderWarning,
+  type DrawnFrame,
 } from "../src/dsl/render";
-import { LOADING_GLYPH } from "../src/dsl/node-registry";
+import { LOADING_GLYPH, type RenderedLine } from "../src/dsl/node-registry";
+import { holdMotion, restoreMotion, SessionEffects } from "../src/render/effect";
+import { holdLayout, restoreLayout } from "../src/render/held-layout";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { THEME_FLOOR } from "../src/themes/policy";
@@ -41,6 +44,8 @@ import { lastBinding } from "./helpers/render-binding";
 import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
+import { observable, runInAction } from "mobx";
+import type { RunFact } from "../src/facts/world-state";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { collectedRuns } from "../scripts/lib/draw-fixtures/held-runs";
 import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
@@ -50,8 +55,8 @@ const S = sessionIdOf("s");
 const AT = 1_800_000_000 as Instant;
 
 // `doc` is a json source that never answers on its own (its command outlives
-// the test), so the test answers for it through the store, and takes the
-// answer back to pending as a re-read under a new key will (step 3, part 3).
+// the test). Its host observations are supplied at the same input as the
+// other file and command readings, including a fresh read with no predecessor.
 const config = (rest: string, variables = ""): ValidatedConfig =>
   parseAndValidate(
     "<test>",
@@ -66,6 +71,7 @@ const config = (rest: string, variables = ""): ValidatedConfig =>
 
 interface Drawn {
   readonly frame: Frame;
+  readonly memory: DrawnFrame["memory"];
   readonly text: string;
   readonly errors: readonly string[];
   readonly warnings: readonly RenderWarning[];
@@ -90,6 +96,16 @@ function renderer(cfg: ValidatedConfig) {
     clock,
   });
   const runs = collectedRuns(sourceRuns, registry, TEST_ENVIRONMENT);
+  const document = observable.box<RunFact | null>(null, { deep: false });
+  const readings = {
+    ...runs.readings,
+    run: (digest: string) => {
+      const selected = registry.namedRuns().get("doc");
+      const scripted = selected?.digest === digest ? document.get() : null;
+      if (scripted) return scripted;
+      return runs.readings.run(digest);
+    },
+  };
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,
@@ -103,16 +119,18 @@ function renderer(cfg: ValidatedConfig) {
     },
     // The base palette the latest frame wore.
     palette: () => drawn().look!.basePalette,
-    answer: (value: JsonValue) => store.setDocument("doc", ok(value)),
-    unanswer: () => store.setDocument("doc", pendingOf("unread")),
-    draw: (width = 160): Drawn => {
-      const { frame, warnings } = drawPayload(
+    answer: (value: JsonValue) =>
+      runInAction(() => document.set({ reading: { ...ok(value), at: AT }, fault: null })),
+    unanswer: () =>
+      runInAction(() => document.set({ reading: pendingOf("unread"), fault: null, beforeRead: null })),
+    draw: (width = 160, state?: {visible: boolean; effects: SessionEffects<RenderedLine>; elapsed: number; record?: DrawnFrame["memory"]["record"]}): Drawn => {
+      const { frame, warnings, memory } = drawPayload(
         cfg,
         compiled,
         store,
         registry,
-        { session_id: "s" },
-        AT,
+        { session_id: "s", visible: state?.visible ?? true },
+        (AT + (state?.elapsed ?? 0)) as Instant,
         {
           endcaps: "plain",
           colorCompatibility: "truecolor",
@@ -120,11 +138,12 @@ function renderer(cfg: ValidatedConfig) {
           padding: 1,
           width,
         },
-        selectionFor(cfg),
-        runs.readings,
+        selectionFor(cfg, state && {effects: state.effects, record: state.record, transitions: true}),
+        readings,
       );
       return {
         frame,
+        memory,
         text: textOf(frame).split("\n").at(-1)!,
         errors: segmentErrorsOf(warnings),
         warnings,
@@ -137,6 +156,42 @@ function renderer(cfg: ValidatedConfig) {
     },
   };
 }
+
+test("a fresh narrow peer holds a pending cell at its drawn width during a neighboring dissolve", () => {
+  const content = `segments: {
+    pending: { template: '{{ .doc.label }}' },
+    ghost: { template: 'DEPARTING', when: '{{ .visible }}' },
+    right: { template: 'right edge' },
+  }, root: {h: ['pending','ghost','right']}`;
+  const flag = 'visible: {kind:"input", path:"visible", type:"boolean"}';
+  const home = renderer(config(content, flag));
+  const reload = config(content, flag);
+  const peer = renderer(reload);
+  const effects = new SessionEffects<RenderedLine>("s");
+  try {
+    home.answer({label: "wide resolved cell"});
+    home.draw(34, {visible: true, effects, elapsed: 0});
+    const accepted = home.draw(34, {visible: false, effects, elapsed: 1});
+    expect(accepted.frame.rows.length).toBeGreaterThan(1);
+    expect(textOf(accepted.frame)).toContain("DEPARTING");
+    home.unanswer();
+    peer.unanswer();
+    const saved = {layout: holdLayout(accepted.memory.record, "resolved"), motion: holdMotion(accepted.memory.motion)};
+    const restored: typeof saved = JSON.parse(JSON.stringify(saved));
+    const now = {visible: false, elapsed: 8};
+    const expected = home.draw(34, {...now, effects});
+    const actual = peer.draw(34, {...now, effects: new SessionEffects("s", restoreMotion(restored.motion)),
+      record: restoreLayout(restored.layout, {config: reload, loadKey: "resolved"})});
+    expect(actual.frame.pending).toContain("doc");
+    expect(textOf(actual.frame)).toContain(LOADING_GLYPH);
+    expect(textOf(actual.frame)).toContain("DEPARTING");
+    expect(actual.frame).toEqual(expected.frame);
+    expect(actual.memory.motion.frame.leaves).toEqual([{placement: "ghost", t: 7}]);
+  } finally {
+    home.dispose();
+    peer.dispose();
+  }
+});
 
 // The cell `id` draws between the plain separators either side of it, padding
 // included: what a row of `left | id | right` holds in that place.

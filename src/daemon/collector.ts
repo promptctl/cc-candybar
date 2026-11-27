@@ -38,11 +38,12 @@ import {
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import type { Timekeeper } from "../time.js";
-import { instantAt, type Instant } from "../utils/instant.js";
+import { readingsAt, type Readings as StampTime } from "../utils/instant.js";
 import { Holds } from "../utils/holds.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { failed, ok, type Failed, type Ok } from "../utils/outcome.js";
 import { assembleFacts, failedStamp } from "./facts-assembly.js";
+import { releasedDocuments } from "./document-settlement.js";
 import {
   declareLanes,
   readingsOf,
@@ -80,7 +81,7 @@ export interface CollectorDeps {
   // change restamps every session.
   readonly windowIssue?: (session: SessionId) => string | undefined;
   readonly daemon: () => DaemonFacts;
-  readonly clock: Pick<Timekeeper, "now" | "every" | "detach">;
+  readonly clock: Pick<Timekeeper, "now" | "monotonic" | "every" | "detach">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // frame feeds are the one record of who is watching.
   readonly watched: (session: SessionId) => boolean;
@@ -124,6 +125,7 @@ export type Moved =
 interface Stamped {
   document: WorldState;
   from: StampInputs;
+  released?: WorldState["runs"];
 }
 
 // What a session reads: the holds its declaration took, and what the owners
@@ -204,6 +206,13 @@ const sourcesOf = (
         : [],
     ),
   ),
+  documents: new Map(
+    subscriptions.flatMap((s) =>
+      s.kind === "run" && s.documents?.length
+        ? [[s.run.digest, s.documents] as const]
+        : [],
+    ),
+  ),
   env: [
     ...new Set(
       subscriptions.flatMap((s) => (s.kind === "env" ? [s.name] : [])),
@@ -218,6 +227,10 @@ const sameSources = (a: Subscribed, b: Subscribed): boolean =>
   [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) &&
   a.runs.size === b.runs.size &&
   [...a.runs.keys()].every((digest) => b.runs.has(digest)) &&
+  (a.documents?.size ?? 0) === (b.documents?.size ?? 0) &&
+  [...(a.documents ?? [])].every(([digest, names]) =>
+    compareStructural(names, b.documents?.get(digest)),
+  ) &&
   a.env.length === b.env.length &&
   a.env.every((name, i) => b.env[i] === name);
 
@@ -334,10 +347,14 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     }
     runInAction(() => {
       for (const record of this.records.values()) {
-        const next = sourcesOf(
-          sources.get(record.session) ?? [],
-          record.subscriptions,
-        );
+        const declaration = sources.get(record.session);
+        if (!declaration && record.subscriptions.runs.size > 0)
+          record.stamped.released = releasedDocuments(
+            record.stamped.document.runs,
+          );
+        if (declaration && !declaration.some((source) => source.kind === "run"))
+          delete record.stamped.released;
+        const next = sourcesOf(declaration ?? [], record.subscriptions);
         if (sameSources(next, record.subscriptions)) continue;
         // [LAW:nothing-unseen] A refusal is logged once, as its run joins
         // the set; a set that keeps it says nothing more.
@@ -442,7 +459,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
         session,
         first.owners.value,
         first.daemon,
-        instantAt(this.deps.clock),
+        readingsAt(this.deps.clock),
         first.windowIssue,
       );
     } catch (e) {
@@ -620,8 +637,9 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
             prior,
             owners.value,
             daemon,
-            instantAt(this.deps.clock),
+            readingsAt(this.deps.clock),
             moved.windowIssue,
+            stamped.released,
           );
     const failure = next === prior ? null : next.stampFailure;
     // [LAW:no-silent-failure] Told to the log as well as to the bar.
@@ -631,6 +649,12 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
         `world state sid=${JSON.stringify(session)}: ${failure}`,
       );
     stamped.document = next;
+    if (
+      stamped.released &&
+      next.stampFailure === null &&
+      Object.keys(next.runs).length > 0
+    )
+      delete stamped.released;
     stamped.from = moved;
     return next !== prior;
   }
@@ -639,8 +663,9 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     prior: WorldState,
     readings: Readings,
     daemon: DaemonFacts,
-    at: Instant,
+    time: StampTime,
     windowIssue?: string,
+    released?: WorldState["runs"],
   ): WorldState {
     try {
       return assembleFacts(
@@ -648,8 +673,9 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
         prior.session,
         readings,
         daemon,
-        at,
+        time,
         windowIssue,
+        released,
       );
     } catch (e) {
       return failedStamp(

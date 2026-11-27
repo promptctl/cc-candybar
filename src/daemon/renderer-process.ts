@@ -30,6 +30,7 @@ import {
   type EffectId,
   type EventInput,
   type RendererBoot,
+  type SessionObservation,
   type Timed,
   type TimedRenderer,
   type RendererOutput,
@@ -52,9 +53,14 @@ import {
 } from "./foundations/verb-error.js";
 import { failureOf } from "./foundations/host-failure.js";
 import type { RendererName } from "./foundations/renderer-name.js";
+import {
+  SessionDelivery,
+  type EncodedSessionCommit,
+} from "./session-delivery.js";
 
 // What the host holds of its renderer, whichever link it runs over.
 export interface RendererLink {
+  observe(commit: EncodedSessionCommit): number | null;
   readonly renderer: TimedRenderer;
   // The daemon serves: in process, the renderer is built now, from the stored
   // state the host holds; a process is built at each spawn.
@@ -132,6 +138,7 @@ export function processPort(
 // follows it as a change, and none can repeat or contradict it.
 export interface LinkOwner {
   readonly log: DaemonLogger;
+  readonly observed: (observation: SessionObservation) => void;
   readonly clock: Timekeeper;
   readonly start: () => Promise<void>;
   readonly ended: (event: HeldEvent) => void;
@@ -202,6 +209,7 @@ export function backoffMs(failed: number): number {
 
 // One renderer process, from its spawn to its end.
 interface Link {
+  readonly sessions: SessionDelivery;
   readonly generation: number;
   readonly channel: Channel;
   // What the renderer says, and what is owed it.
@@ -362,6 +370,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       ended(link, link.endReason ?? (result.ok ? "exited" : whyFailed(result)));
     });
     const link: Link = {
+      sessions: new SessionDelivery(boot.sessionRevision),
       recording,
       recordingBoot: recording?.snapshot(boot),
       generation: generationOf,
@@ -377,6 +386,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       stopping: null,
       reported,
       lines: rendererOverLines({
+        observed: (note) => {
+          if (
+            (phase.kind === "live" || phase.kind === "closing") &&
+            phase.link === link
+          )
+            own.observed(note);
+        },
         send: (line) => write(channel, line),
         fault: (message) => {
           recording?.fail(
@@ -417,6 +433,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         `renderer ${name}[${link.generation}] sent a non-object line`,
       );
       return;
+    }
+    if (
+      (raw.kind === "output" ||
+        raw.kind === "ping" ||
+        raw.kind === "observation") &&
+      raw.sessionRevision !== undefined
+    ) {
+      try {
+        link.sessions.confirm(raw.sessionRevision);
+      } catch (error) {
+        endWith(link, failureOf(error).message);
+        return;
+      }
     }
     if (phase.kind === "starting" && phase.link === link) {
       // The peer may speak an older protocol. Only the boot answer is
@@ -882,6 +911,40 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   };
   return {
     renderer: { answer },
+    observe: (commit) => {
+      if (
+        phase.kind !== "live" &&
+        phase.kind !== "starting" &&
+        phase.kind !== "closing"
+      )
+        return null;
+      const { link } = phase;
+      try {
+        link.sessions.offer(commit);
+      } catch (error) {
+        endWith(link, failureOf(error).message);
+        return null;
+      }
+      const send = () => {
+        try {
+          link.channel.write(commit.line);
+          link.recording?.observed(commit);
+          return link.generation;
+        } catch (error) {
+          endWith(
+            link,
+            `session commit ${commit.value.revision} could not be sent: ${failureOf(error).message}`,
+          );
+          return null;
+        }
+      };
+      if (phase.kind === "starting")
+        phase.queued.push((result) => {
+          if (!(result instanceof Error)) send();
+        });
+      else return send();
+      return link.generation;
+    },
     restart,
     serve: () => {},
     arm: () => {

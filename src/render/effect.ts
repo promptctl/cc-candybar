@@ -21,7 +21,7 @@ import {
   TerminalTheme,
   Timeline,
   confined,
-  type ColorRgba,
+  ColorRgba,
   type Effect,
   type EffectFrame as CellFrame,
   type LoopName,
@@ -38,12 +38,13 @@ import {
 } from "../themes/policy.js";
 import type { AnimationTime, Instant } from "../utils/instant.js";
 import { CLOSING_FLASH, flashBegins } from "../config/menu-timeout.js";
-import type {
-  Drawing,
-  FrameRecord,
-  FrameSource,
-  Passage,
-  Returned,
+import {
+  rgbaOf,
+  type Drawing,
+  type FrameRecord,
+  type FrameSource,
+  type Passage,
+  type Returned,
 } from "./frame-memory.js";
 
 // [LAW:types-are-the-program] The placement a laid cell belongs to, its
@@ -144,8 +145,8 @@ export type MenuFlash = null | {
 // An effect made for one row — the bar's, or one placement's on that row — and
 // the name it was made for.
 interface RowEffect {
-  readonly name: EffectName;
-  readonly effect: Effect;
+  readonly name: LoopName;
+  readonly z: number;
 }
 
 // When an effect came into force: its own t = 0, on the animation clock.
@@ -223,10 +224,9 @@ interface Placed<Line> {
 }
 
 // [LAW:types-are-the-program] Whose effect a part of a row is: the bar's, or
-// the placement's of that id. The bar's is a symbol, which no placement id can
-// equal — a placement is free to be named `bar`.
-const BAR_SCOPE = Symbol("bar");
-type Scope = typeof BAR_SCOPE | string;
+// the placement's of that id. A placement may be named `bar`.
+const BAR_SCOPE = null;
+type Scope = null | string;
 
 // Which effect of a row a cell is drawn under, and on which clock.
 interface Part {
@@ -326,6 +326,36 @@ function noiseOffset(text: string): number {
 // rows of one bar and two sessions' bars are unrelated stretches of it.
 const NOISE_DEPTH = 4096;
 
+// [LAW:one-source-of-truth] Accepted motion contains the catalogue inputs.
+// Each renderer constructs its executable effects once for each live input.
+export class CompiledEffects {
+  private readonly loops = new WeakMap<RowEffect, Effect>();
+  private readonly passages = new WeakMap<
+    Passage,
+    { effect: Effect; done(t: number): boolean }
+  >();
+
+  loop(input: RowEffect): Effect {
+    const held = this.loops.get(input);
+    if (held) return held;
+    const effect = EFFECT_CATALOGUE.loops[input.name]({ z: input.z });
+    this.loops.set(input, effect);
+    return effect;
+  }
+
+  passage(input: Passage) {
+    const held = this.passages.get(input);
+    if (held) return held;
+    const begun = EFFECT_CATALOGUE.transitions[input.name]({ z: input.z });
+    const result = {
+      effect: fromGround(begun.effect, new ColorRgba(...input.ground)),
+      done: (t: number) => begun.done(t),
+    };
+    this.passages.set(input, result);
+    return result;
+  }
+}
+
 // [LAW:one-source-of-truth] An idle period's flash (`CLOSING_FLASH`) as one
 // animation of what a menu row's cells are drawn in, from the idle period's
 // start: dark, as drawn, until the flash `begins` seconds in, then its holds —
@@ -356,7 +386,7 @@ function closingFlash(
 // [LAW:types-are-the-program] A session's motion as its last kept frame left
 // it: one value a frame reads and returns its successor of. It is the
 // session's, not a surface's: every surface of a session animates in phase.
-export interface SessionMotion {
+interface MotionState {
   // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
   // changed to its current value: the effect's own t = 0 is a recorded fact,
   // never inferred from when renders happened to arrive.
@@ -379,8 +409,48 @@ export interface SessionMotion {
   // being drawn (a menu closed) takes its effects and their settled shares with
   // it.
   readonly made: ReadonlyMap<string, ReadonlyMap<Scope, RowEffect>>;
+}
+
+export interface SessionMotion extends MotionState {
   // [LAW:nothing-unseen] What the latest frame wore, for the render's event.
   readonly frame: EffectFrame;
+}
+
+// Only these facts affect the next draw. Per-draw timing and diagnostics
+// belong to the turn that produced them.
+export interface HeldMotion extends Pick<MotionState, "anchor" | "inForce"> {
+  readonly placements: ReadonlyArray<readonly [string, InForce]>;
+  readonly made: ReadonlyArray<
+    readonly [string, ReadonlyArray<readonly [Scope, RowEffect]>]
+  >;
+}
+
+export function holdMotion({
+  anchor,
+  inForce,
+  placements,
+  made,
+}: MotionState): HeldMotion {
+  return {
+    anchor,
+    inForce,
+    placements: [...placements],
+    made: [...made].map(([row, scopes]) => [row, [...scopes]]),
+  };
+}
+
+export function restoreMotion({
+  anchor,
+  inForce,
+  placements,
+  made,
+}: HeldMotion): MotionState {
+  return {
+    anchor,
+    inForce,
+    placements: new Map(placements),
+    made: new Map(made.map(([row, scopes]) => [row, new Map(scopes)])),
+  };
 }
 
 const NO_MOTION: SessionMotion = {
@@ -411,14 +481,16 @@ const NO_MOTION: SessionMotion = {
 export class SessionEffects<Line> {
   constructor(
     private readonly key: string,
-    private kept: SessionMotion = NO_MOTION,
+    private kept: MotionState &
+      Partial<Pick<SessionMotion, "frame">> = NO_MOTION,
+    private readonly compiled = new CompiledEffects(),
   ) {}
 
   // The latest frame's effects: the bar's, at what t, how many of its rows'
   // effects were made fresh rather than reused — one made every frame pays
   // rich-js's share settling every frame — and each placement's own.
   lastFrame(): EffectFrame {
-    return this.kept.frame;
+    return this.kept.frame ?? NO_MOTION.frame;
   }
 
   // The effects this session holds: the ones its latest frame drew.
@@ -443,7 +515,10 @@ export class SessionEffects<Line> {
   clockAt(at: Instant, speed: number): FrameClock {
     return {
       wall: at,
-      timeline: Timeline.withRate(this.kept.anchor, at, speed),
+      timeline:
+        this.kept.anchor.rate === speed
+          ? this.kept.anchor
+          : Timeline.withRate(this.kept.anchor, at, speed),
     };
   }
 
@@ -531,18 +606,14 @@ export class SessionEffects<Line> {
       transition: TransitionName,
       id: string,
       { ground }: Drawing<Line>,
-    ): Passage => {
-      const begun = EFFECT_CATALOGUE.transitions[transition]({
-        z: noiseOffset(`${this.key}@${id}`) * NOISE_DEPTH,
-      });
-      return {
-        name: transition,
-        since: at,
-        done: (t) => begun.done(t),
-        effect: fromGround(begun.effect, ground),
-      };
-    };
-    const over = ({ since, done }: Passage): boolean => done(at - since);
+    ): Passage => ({
+      name: transition,
+      since: at,
+      ground: rgbaOf(ground),
+      z: noiseOffset(`${this.key}@${id}`) * NOISE_DEPTH,
+    });
+    const over = (passage: Passage): boolean =>
+      this.compiled.passage(passage).done(at - passage.since);
 
     // [LAW:types-are-the-program] What a placement passes through in this
     // frame, settled once, where the walk reaches it. One drawn now fades in
@@ -623,21 +694,24 @@ export class SessionEffects<Line> {
       const row = made.get(rowKey) ?? new Map<Scope, RowEffect>();
       made.set(rowKey, row);
       const current = row.get(part.scope);
-      if (current !== undefined) return current.effect;
+      if (current !== undefined) return this.compiled.loop(current);
       const last = known.get(rowKey)?.get(part.scope);
       const reuse = last?.name === part.name;
       // [LAW:one-source-of-truth] The bar's noise offset is its row's, as it
       // was before any placement wore its own, so a cell following the bar
       // draws the bytes it always drew.
-      const z = noiseOffset(
-        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`,
-      );
-      const effect = reuse
-        ? last.effect
-        : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
+      const input = reuse
+        ? last
+        : {
+            name: part.name,
+            z:
+              noiseOffset(
+                part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`,
+              ) * NOISE_DEPTH,
+          };
       frame[reuse ? "reused" : "made"]++;
-      row.set(part.scope, { name: part.name, effect });
-      return effect;
+      row.set(part.scope, input);
+      return this.compiled.loop(input);
     };
 
     // [LAW:one-type-per-behavior] A row's parts by scope: each effect the row
@@ -674,7 +748,10 @@ export class SessionEffects<Line> {
           : [
               {
                 timeline: onSession(at - passage.since),
-                effect: confined(passage.effect, ...owners),
+                effect: confined(
+                  this.compiled.passage(passage).effect,
+                  ...owners,
+                ),
               },
             ];
       });

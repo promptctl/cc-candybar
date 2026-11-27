@@ -11,11 +11,18 @@ import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { heldClock } from "../helpers/held-clock";
 import { heldStorage } from "../helpers/held-storage";
-import type { SessionHistory } from "../../src/renderer-interface/history-storage";
+import type {
+  HistoryEdit,
+  SessionHistory,
+} from "../../src/renderer-interface/history-storage";
 
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
-const STEP = { past: [], future: [] };
+const step = [
+  { kind: "session", key: "theme", before: null, after: "nord" },
+] as const;
+const append = { kind: "append", step } as const;
+const STEP = { past: [step], future: [] };
 
 function held(storage: Partial<ProfileStorage>): HeldStores {
   const stores = new HeldStores(
@@ -56,12 +63,54 @@ test("a history its file refuses throws, and the step is still held", () => {
   });
   expect(() =>
     stores.take([
-      { kind: "put", store: "settings-history", key: S1, value: STEP },
-      { kind: "put", store: "session-state", key: S1, value: { pick: "a" } },
+      { kind: "steps", store: "settings-history", key: S1, edits: [append] },
+      {
+        kind: "patch",
+        store: "session-state",
+        key: S1,
+        changes: { pick: "a" },
+      },
     ]),
   ).toThrow("ENOSPC: no space left on device");
   expect(stores.current().history[S1]).toEqual(STEP);
   expect(stores.current().sessions[S1]).toEqual({ pick: "a" });
+});
+
+test("undoing a private step keeps the preceding public change on the durable undo stack", () => {
+  const history = heldStorage<SessionHistory>();
+  const stores = held({ history: history.storage });
+  const privateChange = {
+    kind: "session",
+    key: EDIT_MODE_KEY,
+    before: null,
+    after: EDIT_MODE_ARRANGE,
+  } as const;
+  const mixed = [...step, privateChange];
+  const apply = (...edits: HistoryEdit[]) =>
+    stores.take([{ kind: "steps", store: "settings-history", key: S1, edits }]);
+  apply(
+    { kind: "append", step: mixed },
+    { kind: "append", step: [privateChange] },
+  );
+  apply({ kind: "undo" });
+  expect(stores.current().history[S1]).toEqual({
+    past: [mixed],
+    future: [[privateChange]],
+  });
+  expect(history.saves.at(-1)?.get(S1)).toEqual(STEP);
+  apply({ kind: "undo" });
+  expect(history.saves.at(-1)?.get(S1)).toEqual({ past: [], future: [step] });
+  apply({ kind: "redo" }, { kind: "redo" });
+  expect(stores.current().history[S1]).toEqual({
+    past: [mixed, [privateChange]],
+    future: [],
+  });
+  const saved = history.saves.at(-1)!;
+  const reloaded = held({
+    history: heldStorage<SessionHistory>({ kind: "ok", sessions: saved })
+      .storage,
+  });
+  expect(reloaded.current().history[S1]).toEqual(STEP);
 });
 
 // [LAW:no-silent-failure] A shutdown that lost state says so.
@@ -82,7 +131,7 @@ test("writes taken after the close are held, and none is written", async () => {
   const stores = held({ history: history.storage });
   await stores.close();
   stores.take([
-    { kind: "put", store: "settings-history", key: S1, value: STEP },
+    { kind: "steps", store: "settings-history", key: S1, edits: [append] },
   ]);
   expect(history.saves).toHaveLength(0);
   expect(stores.current().history[S1]).toEqual(STEP);
@@ -100,8 +149,8 @@ test("each store hears only its own writes, in the order the turn made them", ()
   const stores = held({ session: session.storage, history: history.storage });
   stores.take([
     { kind: "heard", store: "session-state", key: S1 },
-    { kind: "put", store: "settings-history", key: S2, value: STEP },
-    { kind: "put", store: "session-state", key: S2, value: { pick: "c" } },
+    { kind: "steps", store: "settings-history", key: S2, edits: [append] },
+    { kind: "patch", store: "session-state", key: S2, changes: { pick: "c" } },
   ]);
   expect([...session.saves.at(-1)!]).toEqual([
     [S1, { pick: "a" }],

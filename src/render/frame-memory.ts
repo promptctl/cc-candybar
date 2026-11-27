@@ -16,8 +16,21 @@
 // what only one of them draws.
 
 import type { AnimationTime } from "../utils/instant.js";
-import type { ColorRgba, Effect, TransitionName } from "@promptctl/rich-js";
+import type { ColorRgba, TransitionName } from "@promptctl/rich-js";
 import type { ExpressionSlot } from "../themes/policy.js";
+
+export type Rgba = readonly [
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+];
+export const rgbaOf = ({ red, green, blue, alpha }: ColorRgba): Rgba => [
+  red,
+  green,
+  blue,
+  alpha,
+];
 
 // What a frame is drawn from. A placement appears only between two frames
 // drawn from the same config — one object per load, so a reload is another —
@@ -64,15 +77,13 @@ export type PlacementRecord<Line> =
   | { readonly kind: "hidden" };
 
 // A placement passing through a transition: a `fade` in as it appears, a
-// `dissolve` out as it leaves. Since the instant it began, its own t = 0, made
-// once. [LAW:types-are-the-program] It keeps when the transition is over and
-// the one effect to draw, veiling toward the placement's ground; the
-// transition as made veils toward the terminal's, so it is not kept.
+// `dissolve` out as it leaves. The original ground survives a palette
+// change and all four channels survive a trip across the private wire.
 export interface Passage {
   readonly name: TransitionName;
   readonly since: AnimationTime;
-  readonly done: (t: number) => boolean;
-  readonly effect: Effect;
+  readonly ground: Rgba;
+  readonly z: number;
 }
 
 export interface FrameRecord<Line> {

@@ -9,6 +9,7 @@ import type { Advisory } from "./loader/diagnostics.js";
 import type { Checkout } from "../utils/git-root.js";
 import type { ConfigTarget } from "../config-hint.js";
 import { digestOf } from "../utils/plain.js";
+import type { DisplayDigest } from "./displayed-config.js";
 
 export type { LayerRole } from "./layer-role.js";
 export type { Checkout } from "../utils/git-root.js";
@@ -16,6 +17,9 @@ export type { Checkout } from "../utils/git-root.js";
 // [LAW:types-are-the-program] It holds every fact a load learns from the
 // filesystem, so the loader never asks the disk for one.
 export interface ConfigSnapshot {
+  // The host's opaque identity for the files each writable role resolves to.
+  // Older recordings contain only the logical layer paths.
+  readonly fileBinding?: DisplayDigest;
   readonly chain: readonly Layer[]; // lowest precedence first; every layer in it is writable
   readonly repo: RepoQuestion | null; // null: the origin's directories hold nothing to ask about
   readonly plugins: readonly PluginFile[]; // installed and the approved repository's, one per scope and name
@@ -55,17 +59,17 @@ export interface Layer {
 
 // [LAW:one-source-of-truth] The chain identifies a layer by its resolved
 // role or the authored path it already holds.
-export function layerForRole(
-  chain: readonly Layer[],
+export function layerForRole<T extends Pick<Layer, "role">>(
+  chain: readonly T[],
   role: LayerRole,
-): Layer | undefined {
+): T | undefined {
   return chain.find((layer) => layer.role === role);
 }
 
-export function layerAtPath(
-  chain: readonly Layer[],
+export function layerAtPath<T extends Pick<Layer, "path">>(
+  chain: readonly T[],
   path: string,
-): Layer | undefined {
+): T | undefined {
   return chain.find((layer) => layer.path === path);
 }
 

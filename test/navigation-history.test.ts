@@ -5,7 +5,6 @@
 
 import { SessionState } from "../src/renderer/session-state";
 import { BadVerbArgs } from "../src/renderer/verbs";
-import { stateGate } from "./helpers/gates";
 import {
   encodeSegments,
   effectsUrl,
@@ -23,7 +22,6 @@ import {
 } from "./helpers/click";
 import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
-import { NavigationHistory } from "../src/renderer/navigation-history";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
@@ -128,20 +126,18 @@ describe("back", () => {
     expect(sessionState.get(S1, TAB)).toBe("b");
   });
 
-  test("a key one click writes twice goes back to its value before the click, unset included", () => {
-    const store = new SessionState();
-    const history = new NavigationHistory();
-    const config = configWithTabs("a", "b");
-    const context = { gate: stateGate(config) };
-    const choose = store.setBatch.bind(store);
-    const visit = history.begin(store, choose);
-    visit.choose(S1, [{ key: MENU, value: "open" }], () => context);
-    visit.choose(S1, [{ key: MENU, value: "closed" }], () => context);
-    visit.commit();
-    const back = history.begin(store, choose);
-    back.back(S1, context);
-    back.commit();
-    expect(store.get(S1, MENU)).toBeNull();
+  test("a key one click writes twice goes back to its value before the click, unset included", async () => {
+    const { ctx, sessionState, back } = setup();
+    await clickUrl(
+      effectsUrl([
+        { verb: VERB_SET_STATE, args: [S1, MENU, "open"] },
+        { verb: VERB_SET_STATE, args: [S1, MENU, "closed"] },
+      ]),
+      ctx,
+    );
+    expect(sessionState.get(S1, MENU)).toBe("closed");
+    await back();
+    expect(sessionState.get(S1, MENU)).toBeNull();
   });
 
   test("a step over state something else has since rewritten is discarded, not replayed", async () => {
@@ -206,6 +202,24 @@ describe("back", () => {
     expect(sessionState.get(S1, PAGE)).toBe("1");
     expect(sessionState.get(S1, MENU)).toBe("open");
     expect(sessionState.get(S1, TAB)).toBe("a");
+  });
+
+  test("Back depth reads only keys a visit moved", async () => {
+    const { ctx, sessionState, set } = setup();
+    await set(MENU, "open");
+    const keys: string[] = [];
+    const view = {
+      get: (sid: typeof S1, key: string) => {
+        keys.push(key);
+        return sessionState.get(sid, key);
+      },
+    };
+    expect(
+      ctx.navigation.depth(S1, view, {
+        gate: ctx.gates.state.gateFor(configWithTabs("a", "b")),
+      }),
+    ).toBe(1);
+    expect(keys).toEqual([MENU]);
   });
 
   test("a click that changes only a setting is no step", async () => {

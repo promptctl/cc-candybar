@@ -65,12 +65,21 @@ import {
   type ParserId,
   type ReadMode,
   type Run,
+  type RunSubscription,
   type RunRefresh,
   type SourceRead,
 } from "../facts/source-identity.js";
-import { UNREAD_ENV, UNREAD_RUN, type RunFact } from "../facts/world-state.js";
+import {
+  TORN_WRITE_SETTLE_MS,
+  UNREAD_ENV,
+  UNREAD_RUN,
+  type DocumentSettlement,
+  type RunFact,
+} from "../facts/world-state.js";
 import type { Fact } from "../facts/fact.js";
+import type { Instant } from "../utils/instant.js";
 import { awaits } from "../facts/awaited.js";
+import { digestOf, ownValue } from "../utils/plain.js";
 
 export type { ReadMode } from "../facts/source-identity.js";
 
@@ -81,10 +90,6 @@ export type { ReadMode } from "../facts/source-identity.js";
 export type SourceRun = Present<Run, PendingWhy>;
 
 type SourceKey = string | readonly VariableKey[];
-
-// How long text that is not a document may be a write still in progress
-// before it shows as the failure it is (documentPublisher).
-export const TORN_WRITE_SETTLE_MS = 250;
 
 // ─── CachePolicy ─────────────────────────────────────────────────────────────
 
@@ -161,9 +166,8 @@ export interface TimeOptions {
   readonly varDefault?: string;
 }
 
-// [LAW:one-source-of-truth] state vars read through to SessionState; the
-// reactive contract is owned by SessionState's internal atom. The computed
-// reads the bound view's session and dispatches through SessionStateReader.get.
+// [LAW:one-source-of-truth] The bound session and its observable pick are
+// the inputs to a state variable. SessionStateReader.get owns that lookup.
 //
 // `read` is the variable's view of what the session holds at `key` (null:
 // nothing): a plain `state` variable's stored value over its default, a
@@ -182,8 +186,13 @@ type Told =
   | {
       readonly kind: "answer";
       readonly reading: Exclude<RunFact["reading"], Pending>;
+      readonly settling?: DocumentSettlement;
     }
-  | { readonly kind: "unanswered"; readonly reading: Pending | Failed };
+  | {
+      readonly kind: "unanswered";
+      readonly reading: Pending | Failed;
+      readonly reset?: boolean;
+    };
 
 // The write half of a source, closed over its store node. `unanswered` is told
 // only before the first answer (`declareSource`): pending for what the run
@@ -191,7 +200,10 @@ type Told =
 // what the run yielded, parsed, and writes the node — value or fallback.
 interface Publisher {
   unanswered(reading: Pending | Failed): void;
-  answered(outcome: Outcome<unknown>): void;
+  answered(
+    reading: Exclude<RunFact["reading"], Pending>,
+    settling?: DocumentSettlement,
+  ): void;
 }
 
 // [LAW:one-source-of-truth] The parser's identity, without its default: what
@@ -413,16 +425,27 @@ export class SourceRegistry {
   // declares in. Computed and observed for the registry's life (the
   // constructor), so a turn in which nothing moved sorts nothing: a computed
   // read outside a reaction is derived again on every read.
-  private readonly subscriptionsNow = computed((): readonly Run[] =>
-    [
-      ...new Map(
-        [...this.namedNow.get().values()].map((run) => [run.digest, run]),
-      ),
-    ]
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([, run]) => run),
+  private readonly keyedDocuments = new Map<string, string>();
+  private readonly subscriptionsNow = computed(
+    (): readonly RunSubscription[] => {
+      const grouped = new Map<string, { run: Run; documents: string[] }>();
+      for (const [name, run] of this.namedNow.get()) {
+        let group = grouped.get(run.digest);
+        if (!group) grouped.set(run.digest, (group = { run, documents: [] }));
+        const document = this.keyedDocuments.get(name);
+        if (document) group.documents.push(document);
+      }
+      return [...grouped.keys()].sort().map((digest) => {
+        const { run, documents } = grouped.get(digest)!;
+        return {
+          kind: "run",
+          run,
+          ...(documents.length && { documents: documents.sort() }),
+        };
+      });
+    },
   );
-  subscriptions(): readonly Run[] {
+  subscriptions(): readonly RunSubscription[] {
     return this.subscriptionsNow.get();
   }
   // [LAW:one-source-of-truth] What this registry's inputs are derived from
@@ -491,6 +514,7 @@ export class SourceRegistry {
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
+    private readonly sourceTime: (at: Instant) => number = (at) => at * 1000,
   ) {
     this.calendar = parent?.calendar ?? new ZonedCalendar(region.timeZone);
     this.engine = createCcCandybarEngine({ drawnAt: this.drawnAt, region });
@@ -514,6 +538,7 @@ export class SourceRegistry {
       this.defaultEmptyValue,
       this.sessionState,
       this,
+      this.sourceTime,
     );
   }
 
@@ -626,6 +651,7 @@ export class SourceRegistry {
           this.store.setBox(
             name,
             fact.kind === "pending" ? fact : orElse(fact, fallback),
+            fact.kind === "pending" ? undefined : this.sourceTime(fact.at),
           );
         },
         { fireImmediately: true },
@@ -679,6 +705,12 @@ export class SourceRegistry {
     const publisher = this.publisherFor(name, parse);
     let answered = false;
     const refreshOf = this.registerCachePolicy(name, cache);
+    const document =
+      parse.kind === "json" &&
+      (cache.kind === "key" || cache.kind === "depends_on")
+        ? digestOf({ name, read, cache, parse })
+        : undefined;
+    if (document) this.keyedDocuments.set(name, document);
     // [LAW:single-enforcer] The one place a source's run is named: its digest
     // is taken here, as its identity moves. Equal by digest, so a source whose
     // run did not move keeps it, and its publish reaction is untouched.
@@ -719,11 +751,12 @@ export class SourceRegistry {
             this.runFaults,
             name,
             fault === null ? ok(undefined) : failed(fault, "read"),
+            this.runFact(name)?.faultAt,
           ),
         { fireImmediately: true },
       ),
       reaction(
-        () => this.toldOf(run),
+        () => this.toldOf(run, document),
         (told) => {
           // [LAW:types-are-the-program] exception: whether this source has
           // answered is the effect's own memory, as a run's last key is
@@ -732,17 +765,25 @@ export class SourceRegistry {
           // value like any answer.
           if (told.kind === "answer") {
             answered = true;
-            // The instant the reading first differed is the world state's;
-            // the store holds what the run answered.
-            const { at: _at, ...outcome } = told.reading;
-            publisher.answered(outcome);
-          } else if (!answered) publisher.unanswered(told.reading);
+            publisher.answered(told.reading, told.settling);
+          } else if (!answered || told.reset) {
+            answered = false;
+            publisher.unanswered(told.reading);
+          }
         },
         {
           fireImmediately: true,
           // The tellings are stable values (a run, a fact), told apart by what
           // they are, never walked: a source's value can be large JSON.
-          equals: (a, b) => a.kind === b.kind && a.reading === b.reading,
+          equals: (a, b) =>
+            a.kind === b.kind &&
+            a.reading === b.reading &&
+            (a.kind !== "unanswered" ||
+              b.kind !== "unanswered" ||
+              a.reset === b.reset) &&
+            (a.kind !== "answer" ||
+              b.kind !== "answer" ||
+              a.settling === b.settling),
         },
       ),
     );
@@ -751,13 +792,25 @@ export class SourceRegistry {
   // What the run `name` names says to its node: the host's reading of the run
   // when it names one, else why it names none (a key over a value not answered
   // yet, a key that failed before it ever answered).
-  private toldOf(named: IComputedValue<SourceRun>): Told {
+  private toldOf(named: IComputedValue<SourceRun>, document?: string): Told {
     const run = named.get();
     if (run.kind !== "ok") return { kind: "unanswered", reading: run };
-    const reading = this.inputs.get().run(run.value.digest).reading;
+    const fact = this.inputs.get().run(run.value.digest);
+    const bound =
+      document && fact.documents
+        ? ownValue(fact.documents, document)
+        : undefined;
+    const prior = bound ? bound.beforeRead : fact.beforeRead;
+    const settling =
+      prior?.settling ?? (bound ? bound.settling : fact.settling);
+    const raw = prior?.reading ?? fact.reading;
+    const reading =
+      bound?.at !== undefined && !prior && raw.kind !== "pending"
+        ? { ...raw, at: bound.at }
+        : raw;
     return reading.kind === "pending"
-      ? { kind: "unanswered", reading }
-      : { kind: "answer", reading };
+      ? { kind: "unanswered", reading, reset: prior === null }
+      : { kind: "answer", reading, settling };
   }
 
   // The reading of the run `name` names, or nothing while its policy names
@@ -803,9 +856,13 @@ export class SourceRegistry {
           reading.kind === "pending" ? reading : fallback,
         );
       },
-      answered: (outcome) => {
-        this.noteOutcome(name, outcome);
-        this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
+      answered: (reading) => {
+        this.noteOutcome(name, reading);
+        this.store.setBox(
+          name,
+          orElse(reading as Outcome<string>, fallback),
+          this.sourceTime(reading.at),
+        );
       },
     };
   }
@@ -845,33 +902,64 @@ export class SourceRegistry {
     let showingRead = false;
     this.cleanups.push(() => clearSettling?.());
     return {
-      unanswered: (reading) =>
+      unanswered: (reading) => {
+        clearSettling?.();
+        showingRead = false;
         this.store.setDocument(
           name,
           reading.kind === "pending" ? reading : standIn(reading),
-        ),
-      answered: (raw) => {
+        );
+      },
+      answered: (reading, settling) => {
         clearSettling?.();
-        const outcome = raw as Outcome<JsonValue>;
-        this.noteOutcome(name, outcome);
+        const { at, ...outcome } = reading;
+        this.noteOutcome(name, reading);
         const readText =
           outcome.kind === "ok" ||
           (outcome.kind === "failed" && outcome.failedAt === "parse");
         const next = readText ? outcome : standIn(outcome);
-        const torn = showingRead && readText && outcome.kind !== "ok";
+        // Wires before 35 observed the grace interval in each view, starting
+        // at receipt. Current source observations carry the original deadline.
+        const legacyHold =
+          !settling &&
+          showingRead &&
+          outcome.kind === "failed" &&
+          outcome.failedAt === "parse";
+        const previous = settling?.previous;
+        const remaining = previous
+          ? settling.until * 1000 - this.store.clock.monotonic()
+          : legacyHold
+            ? TORN_WRITE_SETTLE_MS
+            : 0;
+        const changedAt =
+          this.sourceTime(at) + (previous ? TORN_WRITE_SETTLE_MS : 0);
         const show = () => {
           showingRead = outcome.kind === "ok";
-          this.store.setDocument(name, next);
-        };
-        if (torn) {
-          clearSettling = this.store.clock.after(
-            `torn write settle ${name}`,
-            TORN_WRITE_SETTLE_MS,
-            show,
+          this.store.setDocument(
+            name,
+            next,
+            legacyHold ? this.store.clock.now() : changedAt,
           );
-        } else {
+        };
+        // [LAW:no-ambient-temporal-coupling] A turn after expiry publishes
+        // the failure directly. A joining peer waits only the time left.
+        if (remaining <= 0) {
           show();
+          return;
         }
+        if (previous) {
+          this.store.setDocument(
+            name,
+            ok(previous.value),
+            this.sourceTime(previous.at),
+          );
+          showingRead = true;
+        }
+        clearSettling = this.store.clock.after(
+          `torn write settle ${name}`,
+          remaining,
+          show,
+        );
       },
     };
   }
@@ -959,12 +1047,6 @@ export class SourceRegistry {
     });
   }
 
-  // state: read-through to SessionState. The computed reads two deps — the
-  // bound view's session (`session()`) and SessionState itself (MobX-tracked
-  // via its internal atom). A click verb that mutates SessionState
-  // invalidates this computed.
-  // Persistence rides on SessionState's disk backing — no extra wiring.
-  //
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
   // determine the result, never whether code runs.
   declareState(name: string, opts: StateOptions): void {
@@ -1234,9 +1316,13 @@ export class SourceRegistry {
     }
   }
 
-  private recordError(name: string, message: string): void {
+  private recordError(
+    name: string,
+    message: string,
+    timestamp = this.store.clock.now(),
+  ): void {
     this.lastErrors.set(name, {
-      timestamp: this.store.clock.now(),
+      timestamp,
       message,
     });
   }
@@ -1249,12 +1335,14 @@ export class SourceRegistry {
     faults: ObservableMap<string, LastError>,
     name: string,
     outcome: Reading<unknown, PendingWhy>,
+    at?: Instant,
   ): void {
     runInAction(() => {
       if (outcome.kind !== "failed") faults.delete(name);
       else if (faults.get(name)?.message !== outcome.reason)
         faults.set(name, {
-          timestamp: this.store.clock.now(),
+          timestamp:
+            at === undefined ? this.store.clock.now() : this.sourceTime(at),
           message: outcome.reason,
         });
     });
@@ -1264,7 +1352,7 @@ export class SourceRegistry {
   // variable's error record. A pending or successful read ends an old error.
   private noteOutcome(
     name: string,
-    outcome: Reading<unknown>,
+    outcome: Fact<unknown>,
     absentReason = "no value",
   ): void {
     if (outcome.kind === "ok" || outcome.kind === "pending")
@@ -1273,6 +1361,7 @@ export class SourceRegistry {
       this.recordError(
         name,
         outcome.kind === "failed" ? outcome.reason : absentReason,
+        this.sourceTime(outcome.at),
       );
   }
 }

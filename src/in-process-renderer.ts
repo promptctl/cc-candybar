@@ -15,12 +15,13 @@ import {
 import { readingsAt } from "./utils/instant.js";
 import { writeLogLines } from "./utils/logger.js";
 import { runTeardown, type TeardownStep } from "./utils/teardown.js";
+import { SessionDelivery } from "./daemon/session-delivery.js";
 
 export function inProcessRenderer(
   decorate: (renderer: Renderer) => Renderer = (renderer) => renderer,
 ): RendererPort {
   return ({ name, boot, recording }) => ({
-    start: ({ clock, log, start }) =>
+    start: ({ clock, log, start, observed }) =>
       localLink(
         name,
         () => {
@@ -43,15 +44,34 @@ export function inProcessRenderer(
             () => clock.monotonic(),
             (message) => log("warn", message),
           );
-          if (capture === undefined) return core;
           return {
+            sessions: new SessionDelivery(input.sessionRevision),
+            interrupted: () => capture?.interrupted(),
+            observe: (commit) => {
+              try {
+                observed(result.renderer.observe(commit.value));
+              } catch (error) {
+                capture?.fail(
+                  "renderer could not observe a recorded session commit",
+                );
+                throw error;
+              }
+              capture?.observed(commit);
+            },
             answer: (event) =>
-              capture.active
+              capture?.active
                 ? capture.turn(event, core.answer)
                 : core.answer(event),
           };
         },
         () => clock.detach(`renderer ${name} restart`, start),
+        (error, restart) => {
+          log(
+            "error",
+            `renderer ${name} could not apply a session commit: ${String(error)}`,
+          );
+          clock.detach(`renderer ${name} resynchronize`, restart);
+        },
         async (previous) => {
           // [LAW:no-ambient-temporal-coupling] No old turn remains in flight
           // in the recording slot. Close its local ownership before building
@@ -78,50 +98,112 @@ export function inProcessRenderer(
   });
 }
 
+type LocalSessionRenderer = TimedRenderer & {
+  readonly sessions: SessionDelivery;
+  interrupted(): void;
+  observe(commit: Parameters<RendererLink["observe"]>[0]): void;
+};
+
 function localLink(
   name: RendererName,
-  build: () => TimedRenderer,
+  build: () => LocalSessionRenderer,
   restore: () => void,
+  failed: (error: unknown, restart: () => Promise<void>) => void,
   retire: (previous: TimedRenderer) => Promise<void>,
 ): RendererLink {
   // [LAW:no-ambient-temporal-coupling] None until the daemon serves: an input
   // before it fails as no renderer's.
-  let built: TimedRenderer | null = null;
-  const live = (): TimedRenderer => {
-    if (built === null)
-      throw new RendererDown(`renderer ${name} has not started`);
-    return built;
-  };
+  let built: LocalSessionRenderer | null = null;
+  let generation = 0;
+  let closing = false;
   // [LAW:no-ambient-temporal-coupling] An input reaches the renderer once
   // the stack that sent it has unwound, as it does over a process's lines.
   // The host hands some in from inside its own MobX action, and one store
   // runs both: a turn begun there would leave its views' reactions to run as
   // the host's action ends, after the turn, with no time to read.
-  const crossed = async (): Promise<void> => {};
+  let pending: Promise<void> = Promise.resolve();
+  const enqueue = <T>(work: () => T | Promise<T>): Promise<T> => {
+    const next = pending.then(work);
+    pending = next.then(
+      () => {},
+      () => {},
+    );
+    return next;
+  };
   const renderer: TimedRenderer = {
-    answer: async (input) => {
-      await crossed();
-      return live().answer(input);
+    answer: (input) => {
+      const target = built;
+      return enqueue(() => {
+        if (target === null || built !== target)
+          throw new RendererDown(
+            `renderer ${name} is unavailable for this input`,
+          );
+        return target.answer(input);
+      });
     },
+  };
+  const serve = () => {
+    if (built !== null || closing) return;
+    built = build();
+    generation++;
+    pending = Promise.resolve();
+  };
+  const restart = async () => {
+    const previous = built;
+    built = null;
+    if (previous !== null) await retire(previous);
+    if (closing || built !== null) return;
+    serve();
+    restore();
+  };
+  const replace = (target: LocalSessionRenderer, error: unknown) => {
+    if (built !== target) return;
+    built = null;
+    target.interrupted();
+    const drain = pending;
+    failed(error, async () => {
+      // An old generation can still be inside its decorated answer. Release
+      // it after its queued inputs drain, independently of the new boot.
+      const retired = drain.then(() => retire(target));
+      try {
+        if (built === null && !closing) await restart();
+      } finally {
+        await retired;
+      }
+    });
   };
   return {
     renderer,
+    observe: (commit) => {
+      const target = built;
+      if (target === null) return null;
+      try {
+        target.sessions.offer(commit);
+      } catch (error) {
+        replace(target, error);
+        return null;
+      }
+      void enqueue(() => {
+        if (built !== target) return;
+        target.observe(commit);
+        target.sessions.confirm(commit.value.revision);
+      }).catch((error: unknown) => replace(target, error));
+      return generation;
+    },
     // [LAW:single-enforcer] Each turn timed around its answer, on the host's
     // clock, which the renderer's process is.
-    serve: () => {
-      built ??= build();
-    },
+    serve,
     arm: () => {},
-    restart: async () => {
-      const previous = built;
-      built = null;
-      if (previous !== null) await retire(previous);
-      built = build();
-      restore();
-    },
+    restart,
     // Only a renderer already built by serve can take the close's steps.
-    beginClose: () => (built === null ? "closed" : "closing"),
-    close: async () => {},
+    beginClose: () => {
+      closing = true;
+      return built === null ? "closed" : "closing";
+    },
+    close: async () => {
+      closing = true;
+      built = null;
+    },
     // Its memory is the host process's, and charged as the host's.
     process: () => ({ kind: "in-host" }),
   };

@@ -30,7 +30,12 @@ import {
 } from "../config/config-snapshot.js";
 import type { Drawing, LaneSwitches } from "../config/lanes.js";
 import { laneDefaultsAfterReset } from "./lane-handoff.js";
-import { PresentedFrames, type FrameCandidate } from "./presented-frames.js";
+import {
+  PresentedFrames,
+  type FrameCandidate,
+  type PortableDraw,
+} from "./presented-frames.js";
+import type { PresentedSession } from "../renderer-interface/presentation.js";
 import type { EffectId } from "../renderer-interface/interface.js";
 import {
   loadSnapshot,
@@ -85,6 +90,7 @@ import {
 } from "../config/loader/plugins.js";
 import { ownedBy, pluginNs } from "../config/loader/plugin-scope.js";
 import { projectionsOf } from "../config/loader/projections.js";
+import type { Instant } from "../utils/instant.js";
 import type { TurnClock } from "./turn-time";
 import type { RenderCacheStats } from "../renderer-interface/renderer-stats";
 
@@ -165,7 +171,7 @@ const MAX_UNPINNED_FAILURES = 256;
 export interface RenderDeps<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
-> extends Pick<StateDeps, "region"> {
+> extends Pick<StateDeps, "region" | "identifyCompile" | "sourceTime"> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;
   // Where the user's home is, which a `~` in a plugin's data path names
@@ -193,6 +199,8 @@ export interface RenderDeps<
 
 // What building one config's state needs.
 export interface StateDeps {
+  // Historical recording wires dated a source publication by its receiving turn.
+  readonly sourceTime?: (at: Instant) => number;
   readonly region: RegionalSettings;
   // The clock its variables' ages run on, and its sources' held work: the
   // renderer's turn time, or the clock of a command that draws once.
@@ -207,6 +215,7 @@ export interface StateDeps {
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
   readonly compile?: CompileProvider;
+  readonly identifyCompile?: (input: CompileInput) => string;
 }
 
 // [LAW:no-ambient-temporal-coupling] The cache's outward lifecycle signal. A
@@ -470,6 +479,7 @@ type SelectedState =
       readonly kind: "authored";
       readonly state: DslRenderState;
       readonly digest: string;
+      readonly fileBinding?: ConfigSnapshot["fileBinding"];
       readonly repo: RepoQuestion | null;
     }
   | { readonly kind: "bundled"; readonly state: DslRenderState };
@@ -752,6 +762,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
+    deps.sourceTime,
   );
 
   let registration: Registration;
@@ -766,6 +777,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       cwd,
       deps.compile ?? compileAlone,
       DIRECTORY_SCOPE,
+      deps.identifyCompile,
     );
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
     // declaration failures that didn't abort the load) flow through the
@@ -1131,9 +1143,7 @@ const subscriptionsOf = ({
 export const registrySubscriptions = (
   registry: Pick<SourceRegistry, "subscriptions" | "envSubscriptions">,
 ): Subscription[] => [
-  ...registry
-    .subscriptions()
-    .map((run): Subscription => ({ kind: "run", run })),
+  ...registry.subscriptions(),
   ...registry
     .envSubscriptions()
     .map((name): Subscription => ({ kind: "env", name })),
@@ -1193,6 +1203,20 @@ export class RenderCache<
       view.presentationTargets.feed = Symbol();
     }
   });
+  private readonly restoring = new Map<
+    SessionId,
+    { saved: PresentedSession; revision: number; localRevision: number }
+  >();
+
+  resumePresentation(
+    saved: PresentedSession,
+    revision: number,
+    localRevision: number,
+  ): void {
+    const view = this.views.get(saved.session);
+    if (view) this.presentations.resume(saved, view, revision, localRevision);
+    else this.restoring.set(saved.session, { saved, revision, localRevision });
+  }
   // Every view the cache serves or served, until reclaimed.
   private readonly viewHolds = new Map<SessionView<S, F>, ViewHold>();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -1234,15 +1258,27 @@ export class RenderCache<
   // A `config` turn: what discovery found at `origin` now. The offer is
   // recorded before its entry, when it has one, reconciles with it, so a load
   // that throws leaves the offer for the next event that uses the entry.
-  configure(origin: RenderOrigin, snapshot: ConfigSnapshot): void {
+  configure(
+    origin: RenderOrigin,
+    snapshot: ConfigSnapshot,
+    basis: "previous" | "offered" = "previous",
+  ): void {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
     const revision = revisionOf(snapshot);
     runInAction(() => {
       this.configDeliveries.set(key, revision);
       const entry = this.entries.get(key);
-      if (entry !== undefined)
-        this.reconcile(entry, revision, { kind: "config" });
+      if (entry === undefined) return;
+      // [LAW:one-source-of-truth] The session brought a selected input.
+      // A cached entry for an unrelated session cannot supply its fallback.
+      if (
+        basis === "offered" &&
+        entry.selected.kind === "authored" &&
+        entry.selected.digest !== revision.digest
+      )
+        this.reloadInto(entry, revision, { kind: "config" }, null);
+      else this.reconcile(entry, revision, { kind: "config" });
     });
   }
 
@@ -1630,6 +1666,16 @@ export class RenderCache<
     }
     this.openFailures.delete(sessionId);
     runInAction(() => this.views.set(sessionId, view));
+    const saved = this.restoring.get(sessionId);
+    if (saved) {
+      this.presentations.resume(
+        saved.saved,
+        view,
+        saved.revision,
+        saved.localRevision,
+      );
+      this.restoring.delete(sessionId);
+    }
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
@@ -1699,6 +1745,7 @@ export class RenderCache<
   // [LAW:single-enforcer] The host ended the session (its collector's
   // sweep): its view closes, and the failure no feed shows goes with it.
   retireSession(sessionId: SessionId): void {
+    this.restoring.delete(sessionId);
     this.openFailures.delete(sessionId);
     const view = this.views.get(sessionId);
     if (view !== undefined) this.retireView(view, "idle");
@@ -1799,7 +1846,13 @@ export class RenderCache<
     if (loaded.state !== null)
       return {
         loaded,
-        selected: { kind: "authored", state: loaded.state, digest, repo },
+        selected: {
+          kind: "authored",
+          state: loaded.state,
+          digest,
+          repo,
+          fileBinding: snapshot.fileBinding,
+        },
       };
     if (retained !== null) return { loaded, selected: retained };
     // [LAW:carrying-cost] The same load identity keeps the bundled state and
@@ -2038,6 +2091,7 @@ export class RenderCache<
     entry: CacheEntry,
     revision: ConfigRevision,
     cause: LoadCause,
+    previous: SelectedState | null = entry.selected,
   ): void {
     // [LAW:no-ambient-temporal-coupling] Retry only the failures held before
     // this observation. A successor that fails here waits for a new one.
@@ -2056,7 +2110,7 @@ export class RenderCache<
     // (`reconcile`).
     let chosen: ReturnType<typeof this.enter>;
     try {
-      chosen = this.enter(entry.origin, revision, entry.selected);
+      chosen = this.enter(entry.origin, revision, previous);
     } catch (error) {
       // [LAW:one-source-of-truth] The bar says what the turn's failure says.
       const fault = rendererFailureOf(error).message;
@@ -2122,10 +2176,14 @@ export class RenderCache<
 
   // [LAW:single-enforcer] Receipt targets live as long as their view and
   // surface do. The owner accepts only an observation from the current one.
-  acceptFrame(id: EffectId, candidate: FrameCandidate) {
+  acceptFrame(
+    id: EffectId,
+    candidate: FrameCandidate,
+    portable?: PortableDraw,
+  ) {
     const { session, by, target } = candidate;
     return this.views.get(session)?.presentationTargets[by] === target
-      ? this.presentations.accept(id, candidate)
+      ? this.presentations.accept(id, candidate, portable)
       : null;
   }
 

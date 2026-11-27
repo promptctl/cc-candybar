@@ -13,9 +13,11 @@ export type PublishFrame = (
 // terminal as drawn. The caller supplies the daemon or preview signer.
 export function publishingFrames(
   signer: Pick<LinkSigner, "sign" | "signLink">,
+  admit?: (source: FrameSource) => void,
 ) {
   return (wire: WireFrame, source?: FrameSource): Frame<string> => {
     const frame = parseFrame(wire);
+    let admitted = false;
     return {
       ...frame,
       rows: frame.rows.map((row) => ({
@@ -29,6 +31,10 @@ export function publishingFrames(
             typeof link !== "string" && link.kind !== "href"
               ? source
               : undefined;
+          if (!admitted && issuer !== undefined) {
+            admit?.(issuer);
+            admitted = true;
+          }
           const published = (url: string): string =>
             isBarLink(url) ? signer.signLink(url, issuer) : url;
           return {

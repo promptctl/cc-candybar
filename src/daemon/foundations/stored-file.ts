@@ -64,6 +64,7 @@ export const kept = <V>(
 // that read (and what of it this build dropped), or one that did not, set
 // aside under `to`, or left where it is because setting it aside failed.
 export type Found =
+  | { readonly kind: "reconciled"; readonly message: string }
   | { readonly kind: "absent" }
   | {
       readonly kind: "read";
@@ -102,6 +103,8 @@ export interface StoreUnsavedWarning {
 // every session is one line. An unread reason already names its file.
 export function reportText({ store, file, found }: StoreReport): string | null {
   switch (found.kind) {
+    case "reconciled":
+      return `${store} (${file}): ${found.message}`;
     case "absent":
       return null;
     case "set-aside":
@@ -120,6 +123,8 @@ export function reportText({ store, file, found }: StoreReport): string | null {
 export function reportLine(report: StoreReport): string {
   const { store, file, found } = report;
   switch (found.kind) {
+    case "reconciled":
+      return `${store} (${file}): ${found.message}`;
     case "absent":
       return `${store}: no file at ${file}, holding nothing`;
     case "read":

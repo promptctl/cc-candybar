@@ -276,3 +276,115 @@ test("a click in either session uses its environment for desktop tools and both 
     fs.rmSync(project, { recursive: true, force: true });
   }
 });
+
+const PADDING_CONFIG = JSON.stringify({
+  globals: { padding: 1 },
+  actions: {
+    wider: { persist: "padding", min: 0, max: 6, by: 1, layer: "user" },
+  },
+  segments: { choice: { template: '{{ action "wider" "WIDER" }}' } },
+  root: { h: ["choice"] },
+});
+
+test("after restart a superseded displayed config is stale and its current neighbor remains usable", async () => {
+  const isolated = prepareIsolatedDaemonEnv("ccb-stale-display");
+  const first = path.join(isolated.root, "first.json5");
+  const second = path.join(isolated.root, "second.json5");
+  const body = PADDING_CONFIG;
+  fs.writeFileSync(first, body);
+  fs.writeFileSync(second, body);
+  let daemon = startDaemon(isolated.env);
+  try {
+    const draw = async (file: string) =>
+      linkTo(
+        await render(daemon, SID, isolated.root, {}, [
+          "cc-candybar",
+          "--config-only",
+          file,
+        ]),
+        "WIDER",
+      );
+    const stale = await draw(first);
+    const current = await draw(second);
+    await daemon.stop();
+    daemon = startDaemon(isolated.env);
+    expect(await sendClick(daemon, stale)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("control is stale"),
+    });
+    expect(fs.readFileSync(first, "utf8")).toBe(body);
+    expect(fs.readFileSync(second, "utf8")).toBe(body);
+    await click(daemon, current);
+    expect(JSON5.parse(fs.readFileSync(second, "utf8")).globals.padding).toBe(
+      2,
+    );
+    expect(fs.readFileSync(first, "utf8")).toBe(body);
+  } finally {
+    await daemon.stop();
+    isolated.removeTmpDirs();
+  }
+});
+
+test("a held control refuses a different file discovered for the same user layer", async () => {
+  const isolated = prepareIsolatedDaemonEnv("ccb-rebound-user-config");
+  const folder = path.join(isolated.env.XDG_CONFIG_HOME!, "cc-candybar");
+  fs.mkdirSync(folder, { recursive: true });
+  const original = path.join(folder, "config.json");
+  const preferred = path.join(folder, "config.json5");
+  const body = PADDING_CONFIG;
+  fs.writeFileSync(original, body);
+  let daemon = startDaemon(isolated.env);
+  try {
+    const draw = async () =>
+      linkTo(await render(daemon, SID, isolated.root), "WIDER");
+    const old = await draw();
+    await daemon.stop();
+    fs.writeFileSync(preferred, body);
+    daemon = startDaemon(isolated.env);
+    const current = await draw();
+    expect(await sendClick(daemon, old)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("stale"),
+    });
+    expect(fs.readFileSync(preferred, "utf8")).toBe(body);
+    expect(fs.readFileSync(original, "utf8")).toBe(body);
+    await click(daemon, current);
+    await click(daemon, current);
+    expect(
+      JSON5.parse(fs.readFileSync(preferred, "utf8")).globals.padding,
+    ).toBe(3);
+    expect(fs.readFileSync(original, "utf8")).toBe(body);
+  } finally {
+    await daemon.stop();
+    isolated.removeTmpDirs();
+  }
+});
+
+test("retargeting a displayed layer's symlink refuses a held edit before the next draw", async () => {
+  const isolated = prepareIsolatedDaemonEnv("ccb-retargeted-user-config");
+  const first = path.join(isolated.root, "first.json5");
+  const second = path.join(isolated.root, "second.json5");
+  const link = path.join(isolated.root, "current.json5");
+  fs.writeFileSync(first, PADDING_CONFIG);
+  fs.writeFileSync(second, PADDING_CONFIG);
+  fs.symlinkSync(first, link);
+  const daemon = startDaemon(isolated.env);
+  try {
+    const bar = await render(daemon, SID, isolated.root, {}, [
+      "cc-candybar",
+      "--config-only",
+      link,
+    ]);
+    fs.unlinkSync(link);
+    fs.symlinkSync(second, link);
+    expect(await sendClick(daemon, linkTo(bar, "WIDER"))).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("stale"),
+    });
+    expect(fs.readFileSync(first, "utf8")).toBe(PADDING_CONFIG);
+    expect(fs.readFileSync(second, "utf8")).toBe(PADDING_CONFIG);
+  } finally {
+    await daemon.stop();
+    isolated.removeTmpDirs();
+  }
+});

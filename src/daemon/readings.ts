@@ -170,6 +170,8 @@ export interface Lanes {
 export interface RunReading {
   readonly reading: Current<JsonValue>;
   readonly fault: string | null;
+  readonly documentRun?: string;
+  readonly documents?: readonly string[];
 }
 
 // [LAW:one-source-of-truth] Everything a session's readers read of its owners
@@ -338,6 +340,7 @@ export function declareLanes(
       environment,
       (digest, take) => ({
         digest,
+        documents: sources.documents?.get(digest),
         fault: () => null,
         ...declare(`run ${shortDigest(digest)}`, take),
       }),
@@ -417,7 +420,12 @@ export function readingsOf(
         return [
           digest,
           environmentOutput(
-            { reading, fault: lane.fault() },
+            {
+              reading,
+              fault: lane.fault(),
+              documentRun: lane.documentRun,
+              documents: lane.documents,
+            },
             (reading.kind === "ok" || reading.kind === "failed") &&
               isEnvironmentOutput(lane),
           ),

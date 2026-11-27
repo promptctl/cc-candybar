@@ -10,6 +10,7 @@
 // comments included.
 
 import JSON5 from "json5";
+import { samePlainValue } from "../utils/plain.js";
 import {
   deleteValue,
   holdsNoValue,
@@ -117,37 +118,9 @@ function readOf(text: string, node: Node | undefined): Read {
 
 function sameRead(a: Read, b: Read): boolean {
   if (a.kind === "value" && b.kind === "value")
-    return sameValue(JSON5.parse(a.text), JSON5.parse(b.text));
+    return samePlainValue(JSON5.parse(a.text), JSON5.parse(b.text));
   if (a.kind === "file" && b.kind === "file") return a.text === b.text;
   return a.kind === "absent" && b.kind === "absent";
-}
-
-// Two decoded JSON5 values are the same value. A JSON5 value is null, a
-// boolean, a number (NaN equal to itself), a string, an array or a plain
-// object, so this needs no runtime's deep equality.
-function sameValue(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
-  if (
-    typeof a !== "object" ||
-    typeof b !== "object" ||
-    a === null ||
-    b === null ||
-    Array.isArray(a) !== Array.isArray(b)
-  )
-    return false;
-  const ak = Object.keys(a);
-  const bk = Object.keys(b);
-  return (
-    ak.length === bk.length &&
-    ak.every(
-      (k) =>
-        Object.hasOwn(b, k) &&
-        sameValue(
-          (a as Record<string, unknown>)[k],
-          (b as Record<string, unknown>)[k],
-        ),
-    )
-  );
 }
 
 /**

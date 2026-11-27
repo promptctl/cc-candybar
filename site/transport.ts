@@ -18,6 +18,7 @@ import {
   linksOf,
 } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
+import { HostSessions } from "../src/daemon/host-sessions";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
@@ -111,6 +112,7 @@ const adapters = productionAdapters(
   paths,
   new DaemonLog(paths.log, WORLD.clock),
   WORLD.clock,
+  () => new HostSessions(),
 );
 const pageDaemon = createDaemon({
   region: systemRegion(),
@@ -125,12 +127,6 @@ const pageDaemon = createDaemon({
     targets: [],
   },
   rendererName: MAIN_RENDERER,
-  // Its picks and history live only as long as the page.
-  profile: (name, log) => ({
-    ...adapters.profile(name, log),
-    session: ephemeralSessionFile(),
-    history: ephemeralSessionFile(),
-  }),
   // Its sessions are the page's own, for as long as it is open.
   sessionBook: () => ephemeralSessionFile(),
   memoryLimitBytes: memoryLimitBytes(HOST.env),

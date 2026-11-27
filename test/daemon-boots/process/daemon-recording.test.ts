@@ -93,6 +93,19 @@ test("the running host records two independent renderer sessions for offline rep
       bin: process.execPath,
       args: daemonArgs(BUNDLE, env),
     }));
+    await command("record", "start", refusedCapture, "--renderer", "private");
+    let current = "";
+    await until(async () => {
+      current = textOf(await draw("recorded-private", privateConfig, "private"));
+      return current.includes(`private=${ENV_VALUE}`);
+    }, () => `the configured env variable in the live bar (${current})`);
+    await expect(command("record", "stop", "--renderer", "private")).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringMatching(/env/i),
+    });
+    expect(fs.existsSync(refusedCapture)).toBe(false);
+    expect(textOf(await draw("recorded-private", privateConfig, "private"))).toContain(`private=${ENV_VALUE}`);
+
     const primarySession = "recorded-primary";
     const namedSession = "recorded-worktree";
     expect(textOf(await draw(primarySession))).toContain("recorded-source padding=1");
@@ -104,6 +117,7 @@ test("the running host records two independent renderer sessions for offline rep
     const frame = await draw(primarySession);
     expect(textOf(frame)).toContain("recorded-source padding=1");
     expect(textOf(frame)).toContain(LOCALIZED);
+    expect(textOf(await draw(primarySession))).toContain("recorded-source padding=1");
     const afterStart = mainStarts();
     expect(afterStart).toHaveLength(2);
     expect(afterStart[1]).not.toBe(first[0]);
@@ -117,7 +131,16 @@ test("the running host records two independent renderer sessions for offline rep
     if (wider === undefined || remember === undefined)
       throw new Error("recorded statusline showed no config or state control");
     await click(isolated.sockPath, wider.url);
+    await command("record", "stop");
+    const observerCapture = path.join(dir, "observer.jsonl");
+    await command("record", "start", observerCapture, "--renderer", "observer");
+    await draw("observer-session", config, "observer");
     await click(isolated.sockPath, remember.url);
+    await expect(command("record", "stop", "--renderer", "observer")).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringMatching(/saved renderer state contains values of unknown origin/),
+    });
+    expect(fs.existsSync(observerCapture)).toBe(false);
     const edited = fs.readFileSync(config, "utf8");
     expect(parseJson5Syntax(edited)).toMatchObject({ kind: "parsed", value: { globals: { padding: 2 } } });
     const pane = observePane(isolated.sockPath, namedSession);
@@ -136,29 +159,20 @@ test("the running host records two independent renderer sessions for offline rep
     await until(() => liveLog().includes(`feed sid="${namedSession}" closed`), "the closing pane's renderer diagnostic");
 
     await command("record", "stop", "--renderer", "worktree");
-    await command("record", "stop");
     expect(mainStarts()).toEqual(afterStart);
     const captured = fs.readFileSync(namedCapture, "utf8");
     expect(captured).not.toContain(ENV_NAME);
     expect(captured).not.toContain(ENV_VALUE);
 
-    await command("record", "start", refusedCapture, "--renderer", "private");
-    let current = "";
-    await until(async () => {
-      current = textOf(await draw("recorded-private", privateConfig, "private"));
-      return current.includes(`private=${ENV_VALUE}`);
-    }, () => `the configured env variable in the live bar (${current})`);
-    await expect(command("record", "stop", "--renderer", "private")).rejects.toMatchObject({
-      code: 1,
-      stderr: expect.stringMatching(/env/i),
+    // A new generation on a different renderer name sees the authored pick.
+    // Its recording has no preceding frame with provenance for that value.
+    const unknown = path.join(dir,"unknown.jsonl");
+    await command("record","start",unknown,"--renderer","late");
+    await draw("late-observer",config,"late");
+    await expect(command("record","stop","--renderer","late")).rejects.toMatchObject({
+      code:1,stderr:expect.stringMatching(/saved renderer state contains values of unknown origin/),
     });
-    expect(fs.existsSync(refusedCapture)).toBe(false);
-    expect(textOf(await draw("recorded-private", privateConfig, "private"))).toContain(`private=${ENV_VALUE}`);
-
-    const shutdownCapture = path.join(dir, "shutdown.jsonl");
-    await command("record", "start", shutdownCapture);
-    expect(textOf(await draw(primarySession))).toContain("reloaded-source");
-    expect(fs.existsSync(shutdownCapture)).toBe(false);
+    expect(fs.existsSync(unknown)).toBe(false);
 
     // The replay bundle runs from another directory, after the host and its
     // authored inputs are gone. It can only draw from the recorded turns.
@@ -173,9 +187,14 @@ test("the running host records two independent renderer sessions for offline rep
       timeout: 10_000,
     });
     const primaryReplay = await replay(mainCapture, alternate);
-    const shutdownReplay = await replay(shutdownCapture, alternate);
-    expect(replayedFrames(shutdownReplay.stdout).some(({ frame }) => textOf(frame).includes("reloaded-source"))).toBe(true);
     const primaryFrames = replayedFrames(primaryReplay.stdout);
+    const primaryRecords: RecordingEntry[] = fs.readFileSync(mainCapture, "utf8").trimEnd().split("\n").map(line => JSON.parse(line));
+    const firstReceipt = primaryRecords.findIndex(entry => entry.kind === "turn" && entry.input.event.kind === "effect-done");
+    expect(firstReceipt).toBeGreaterThan(0);
+    const repeatedContexts = primaryRecords.slice(firstReceipt + 1).flatMap(entry =>
+      entry.kind === "turn" && entry.input.event.kind === "context" ? [entry.input] : []);
+    expect(repeatedContexts.length).toBeGreaterThan(0);
+    expect(repeatedContexts.some(input => input.presentation?.sessions.some(s => s.resume))).toBe(false);
     expect(new Set(primaryFrames.map(({ session }) => session))).toEqual(new Set([primarySession]));
     expect(primaryFrames.some(({ frame }) => textOf(frame).includes("recorded-source padding=1"))).toBe(true);
     expect(primaryFrames.some(({ frame }) => textOf(frame).includes(LOCALIZED))).toBe(true);
@@ -199,7 +218,10 @@ test("the running host records two independent renderer sessions for offline rep
     expect(decodeFromCompressedBase64(histogram).totalCount).toBeGreaterThan(0);
     // The checked-in core and the shipped bundle must agree on the actual
     // diagnostic bytes, including the closed pane's encoded distribution.
-    await expect(replayRecording(captured.trimEnd().split("\n"))).resolves.toEqual({ turns: records.length - 2 });
+    expect(records.some((record) => record.kind === "session-commit")).toBe(true);
+    await expect(replayRecording(captured.trimEnd().split("\n"))).resolves.toEqual({
+      turns: records.filter((record) => record.kind === "turn").length,
+    });
     const firstDraw = records.findIndex((entry) => entry.kind === "turn" && entry.output.effects.some(({ kind }) => kind === "present"));
     const entry = records[firstDraw];
     if (entry?.kind !== "turn") throw new Error("the recording contains no statusline presentation");
@@ -211,7 +233,7 @@ test("the running host records two independent renderer sessions for offline rep
     await expect(replay(bad, BUNDLE)).rejects.toMatchObject({
       code: 1,
       stdout: "",
-      stderr: expect.stringContaining(`recording turn ${firstDraw} differs at output.wake`),
+      stderr: expect.stringContaining(`recording turn ${records.slice(0, firstDraw + 1).filter((record) => record.kind === "turn").length} differs at output.wake`),
     });
   } finally {
     try {
@@ -221,4 +243,22 @@ test("the running host records two independent renderer sessions for offline rep
       isolated.removeTmpDirs();
     }
   }
+});
+
+test("an orderly shutdown publishes a verifiable capture with its final frame", async()=>{
+  const isolated=prepareIsolatedDaemonEnv("ccb-record-shutdown");
+  const file=path.join(isolated.stateDir,"shutdown.jsonl");
+  let daemon:Awaited<ReturnType<typeof spawnDaemonWithEnv>>|undefined;
+  try {
+    daemon=await spawnDaemonWithEnv(isolated.env,env=>({bin:process.execPath,args:daemonArgs(BUNDLE,env)}));
+    await exec(process.execPath,[BUNDLE,"record","start",file],{env:isolated.env});
+    const config=path.join(isolated.stateDir,"draw.json5");
+    fs.writeFileSync(config,JSON.stringify({segments:{value:{template:"final frame"}},root:{h:["value"]}}));
+    const frame=await frameRequest(isolated.sockPath,renderBody("shutdown-record",isolated.stateDir,{},["cc-candybar","--config-only",config]));
+    expect(textOf(frame)).toContain("final frame");
+    expect(fs.existsSync(file)).toBe(false);
+    expect(await daemon.stop("SIGHUP")).toEqual({code:0,signal:null});
+    const replay=await exec(process.execPath,[BUNDLE,"replay",file,"--frames"],{env:isolated.env});
+    expect(replayedFrames(replay.stdout).some(({frame})=>textOf(frame).includes("final frame"))).toBe(true);
+  } finally {await daemon?.stop();isolated.removeTmpDirs();}
 });

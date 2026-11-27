@@ -329,6 +329,10 @@ const derived = (filePath: string): PathsWatch =>
 // its watch's fault, read the same way; and the digest, for the record.
 export interface SourceLane {
   readonly digest: string;
+  // [LAW:one-source-of-truth] Only the actual run knows which environment
+  // its parsed document came from. This identity stays in the host.
+  readonly documentRun?: string;
+  readonly documents?: readonly string[];
   current(): Current<JsonValue>;
   // Why the run cannot be trusted to answer: the judge refused it, or its
   // watch may be missing changes to its path. `null` when the run was
@@ -454,6 +458,12 @@ export class SourceRuns {
     return environmentOutput(
       {
         digest,
+        ...(held.run.identity.parse.kind === "json" && {
+          documentRun:
+            held.run.identity.refresh.kind === "key"
+              ? digestOf({ read: held.run.identity.read, env: held.env })
+              : held.digest,
+        }),
         current: () => lane.current(),
         fault: () => this.faults.get(held.digest) ?? null,
       },

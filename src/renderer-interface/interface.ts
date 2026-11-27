@@ -15,13 +15,14 @@
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
+import type { DisplayedConfig } from "../config/displayed-config.js";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { AdmittedClick } from "../click/wire";
 import {
   rendererFailureOf,
   type Failure,
 } from "../daemon/foundations/verb-error";
-import type { Run } from "../facts/source-identity";
+import type { RunSubscription } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
 import type { Awaiting } from "../facts/awaited";
@@ -46,13 +47,25 @@ import type { RenderOrigin } from "../config-hint";
 import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
 import type { Locations } from "../config/loader/chain-places";
-import type { StoredState, StoreWrite } from "./stored-state";
+import type { FeedAdvance, FeedResume, FeedUpdate } from "./feed-history.js";
+import type { LiveSessionState, StoreWrite } from "./stored-state";
 import type { RegionalSettings } from "../utils/region.js";
+import type {
+  IdleUpdate,
+  PresentationInput,
+  ProposedPresentation,
+} from "./presentation.js";
+
+// [LAW:one-source-of-truth] Change this when the private renderer transport
+// becomes incompatible. A build digest identifies a build, and carries no
+// compatibility decision.
+export const RENDERER_WIRE_VERSION = 36;
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
 export interface RendererBoot {
-  readonly stored: StoredState;
+  readonly sessionRevision: number;
+  readonly stored: LiveSessionState;
   readonly locations: Locations;
   readonly region: RegionalSettings;
   readonly memoryLimitBytes: number;
@@ -60,7 +73,7 @@ export interface RendererBoot {
 
 export type RendererConstruction = RendererDiagnostics &
   (
-    | { readonly kind: "built"; readonly renderer: Renderer }
+    | { readonly kind: "built"; readonly renderer: SessionRenderer }
     | { readonly kind: "refused"; readonly failure: Failure }
   );
 
@@ -78,6 +91,23 @@ export type EffectId = number & { readonly [EFFECT_ID]: true };
 // both take the same ordinary input and answer with the same data.
 export interface Renderer {
   answer(input: EventInput): Promise<RendererOutput>;
+}
+
+export interface SessionCommit extends Readings {
+  readonly kind: "session-commit";
+  readonly revision: number;
+  readonly writes: readonly StoreWrite[];
+}
+
+// Observation changes the read projection. This channel cannot return
+// a frame, action, file write or another proposed commit.
+export interface SessionRenderer extends Renderer {
+  observe(commit: SessionCommit): SessionObservation;
+}
+
+export interface SessionObservation extends RendererDiagnostics {
+  readonly advances?: readonly FeedAdvance[];
+  readonly wake?: Tick;
 }
 
 // A completed answer whose transport timing failed has no duration.
@@ -118,6 +148,8 @@ export function timed(
 export interface EventInput extends Readings {
   readonly kind: "event";
   readonly event: Event;
+  readonly presentation?: PresentationInput;
+  readonly feedResumes?: readonly FeedResume[];
 }
 
 // [LAW:one-source-of-truth] The same event session is held while the turn
@@ -151,6 +183,13 @@ export function sessionOfEvent(event: Event): SessionId | null {
 export interface SessionConfig {
   readonly context: CheckedRenderRequest;
   readonly worldState: WorldState;
+}
+
+// [LAW:one-source-of-truth] The latest observation and the admitted input
+// from which a new cache can reconstruct the last working configuration.
+export interface ConfigOffer {
+  readonly config: ConfigSnapshot;
+  readonly retained?: "current" | ConfigSnapshot;
 }
 
 // [LAW:types-are-the-program] A command expects a reply of its own kind.
@@ -204,37 +243,34 @@ export type Notification =
       readonly sessions: readonly SessionConfig[];
       // The host's current shared snapshots, once per origin. Retained
       // origins can outlive their last session and reopen their cached state.
-      readonly configs: ReadonlyArray<{
-        readonly origin: RenderOrigin;
-        readonly config: ConfigSnapshot;
-        // A committed cache entry: reconstruct from this previously selected
-        // observed input, or from the current observation offered above.
-        readonly retained?: "current" | ConfigSnapshot;
-      }>;
+      readonly configs: ReadonlyArray<
+        ConfigOffer & { readonly origin: RenderOrigin }
+      >;
     }
   | {
       // A request's opening turn, delivered ahead of it: the session's
       // context as its newest request names it. Its turn opens the session's
       // view, so the output names what the view reads before the request
-      // waits on it. It carries no config: that is its origin's, which the
-      // renderer subscribes (`Subscriptions.configs`).
+      // waits on it. The renderer subscribes to its origin's configuration.
       readonly kind: "context";
       readonly context: CheckedRenderRequest;
+      // A peer already serving this origin can have a different last working
+      // entry. Try the transferred selection before opening the switched view.
+      readonly handoff?: ConfigOffer;
       // [LAW:one-source-of-truth] The world state read at this context's own
       // keys: a session's context and its world state reach the renderer as
       // one value, so a renderer never holds a context beside a document read
       // at another request's keys.
       readonly worldState: WorldState;
     }
-  | {
+  | (ConfigOffer & {
       // [LAW:one-source-of-truth] What discovery found at `origin`, which the
       // renderer's subscriptions name: a fact about the origin, shared by
       // every session there. Handed in when the origin is first named, in the
       // slot of the turn that named it, and again whenever it moves.
       readonly kind: "config";
       readonly origin: RenderOrigin;
-      readonly config: ConfigSnapshot;
-    }
+    })
   | {
       // A request of a session whose `context` came before it, delivered once
       // its wait on the session's world state has ended in the host: the
@@ -250,8 +286,8 @@ export type Notification =
       readonly worldState: WorldState;
     }
   | {
-      // The host ended the session: the renderer lets go of what it holds
-      // of it, and its document goes however the turn ends, answered or
+      // The host released this renderer's view. The shared draft follows
+      // host session commits. The document goes however the turn ends, answered or
       // threw, so the host's next record for the session starts again at
       // seq 1.
       readonly kind: "retire";
@@ -272,7 +308,9 @@ export type Notification =
       // The host owns the identity from which this click mints placement IDs.
       readonly placementSeed: string;
       // The host's snapshot when this origin has yet to be delivered.
-      readonly coldConfig?: ConfigSnapshot;
+      readonly coldConfig?: ConfigOffer;
+      // The host pinned the displayed context when it admitted this control.
+      readonly displayed?: DisplayedConfig;
       // A scoped click's context, once the host has heard from its session.
       readonly context: SessionContext | null;
     }
@@ -327,7 +365,7 @@ export function followingOf(viewers: SessionViewers | undefined): Set<Lane> {
 }
 
 export type EffectOutcome =
-  | { readonly kind: "ok" }
+  | { readonly kind: "ok"; readonly sessionCommitted?: true }
   | { readonly kind: "failed"; readonly reason: string }
   // Refused before it acted: a change to a setting that moved since the
   // renderer read it, so nothing made over that reading can land; or an act
@@ -346,9 +384,11 @@ export type EffectOutcome =
 // for a subscriber leaves as `RendererOutput.frames`, which the host publishes.
 export interface Present {
   readonly kind: "present";
+  readonly proposal?: ProposedPresentation;
   readonly id: EffectId;
   readonly session: SessionId;
   readonly surface: "statusline";
+  readonly displayed?: DisplayedConfig;
   readonly request: RequestId;
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
@@ -372,6 +412,7 @@ export interface ConfigChange {
   readonly session: SessionId;
   readonly target: ChangeTarget;
   readonly changes: readonly Change[];
+  readonly onApplied?: readonly StoreWrite[];
 }
 
 export interface ChangeTarget {
@@ -432,6 +473,7 @@ export type Act = { readonly id: EffectId } & (
       // changes: the trust book is the host's. `dir` is the one its signed
       // link asked about, which must still be `origin`'s repository.
       readonly kind: "approve-repo";
+      readonly onApplied?: readonly StoreWrite[];
       readonly session: SessionId;
       readonly origin: RenderOrigin;
       readonly dir: string;
@@ -444,6 +486,20 @@ export type ActRequest = Unnamed<Act>;
 type Unnamed<A> = A extends unknown ? Omit<A, "id"> : never;
 
 export type Effect = Present | ConfigChange | Act;
+
+// [LAW:one-source-of-truth] The first member of a guarded config batch
+// carries the session decision once, including when later members share it.
+export function configSessionDecision(
+  effects: readonly Effect[],
+): readonly StoreWrite[] | undefined {
+  for (const effect of effects)
+    if (
+      (effect.kind === "change" || effect.kind === "approve-repo") &&
+      effect.onApplied !== undefined
+    )
+      return effect.onApplied;
+  return undefined;
+}
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.
@@ -465,7 +521,7 @@ export type Subscription =
       readonly source: SourceId;
       readonly folder: string;
     }
-  | { readonly kind: "run"; readonly run: Run }
+  | RunSubscription
   // A variable an `env` source reads, from the session's environment, which
   // the host holds and hands in as that one variable's value.
   | { readonly kind: "env"; readonly name: string };
@@ -515,6 +571,8 @@ interface RendererDeclaration extends RendererDiagnostics {
 export type FeedFrame<Body = WireFrame> =
   | {
       readonly kind: "drawn";
+      readonly proposal?: ProposedPresentation;
+      readonly displayed?: DisplayedConfig;
       readonly receipt: EffectId;
       readonly bar: Body;
       readonly handoff: Body | null;
@@ -573,5 +631,7 @@ export type TurnOutcome = {
 // write answers nothing, so it is no effect, and no `effect-done` comes back.
 export type RendererOutput = TurnOutcome &
   RendererDeclaration & {
+    readonly idle?: readonly IdleUpdate[];
+    readonly feedUpdates?: readonly FeedUpdate[];
     readonly frames: readonly PushedFrame[];
   };

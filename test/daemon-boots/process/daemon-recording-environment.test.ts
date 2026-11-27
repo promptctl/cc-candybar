@@ -178,20 +178,20 @@ test("the running host refuses shell stdout and stderr derived from an environme
     await host.refused("stderr", stderrCapture);
   }));
 
-test("failed action stderr is refused live, after persistence, and after a renderer replacement", () =>
+async function startFailingAction(host: Awaited<ReturnType<typeof hostOf>>,renderer:string,file:string,env:Record<string,string>) {
+  const drawn=await host.draw(renderer,file,env);
+  const action=linksOf(drawn).find(({text})=>text==="FAIL");
+  if(action===undefined)throw new Error("the statusline drew no run target");
+  await click(host.socket,action.url);
+}
+
+test("failed action stderr is refused live and after persistence", () =>
   withHost(async (host) => {
     const name = "action";
     const config = host.config(name, failure(failAfterReadingEnvironment));
     const env = { [VARIABLE]: ENV_VALUE };
-    const startClick = async (renderer: string, file: string) => {
-      const drawn = await host.draw(renderer, file, env);
-      const action = linksOf(drawn).find(({ text }) => text === "FAIL");
-      if (action === undefined)
-        throw new Error("the statusline drew no run target");
-      await click(host.socket, action.url);
-    };
     const live = await host.open(name);
-    await startClick(name, config);
+    await startFailingAction(host, name, config, env);
     await until(
       async () => textOf(await host.draw(name, config, env)).includes("⚠"),
       "the failed action reaching the live renderer",
@@ -205,12 +205,17 @@ test("failed action stderr is refused live, after persistence, and after a rende
       /saved renderer state contains values of unknown origin/,
     );
 
+  }));
+
+test("failed action stderr arriving after renderer replacement is refused by the new capture", () =>
+  withHost(async (host) => {
+    const env = { [VARIABLE]: ENV_VALUE };
     const fifo = path.join(host.dir, "let-action-finish");
     await exec("/usr/bin/mkfifo", [fifo], { timeout: 2_000 });
     const started = path.join(host.dir, "action-running");
     const script = `/usr/bin/touch '${started}'; read value < '${fifo}'; ${failAfterReadingEnvironment}`;
     const delayed = host.config("outlived", failure(script));
-    await startClick("outlived", delayed);
+    await startFailingAction(host, "outlived", delayed, env);
     await until(
       () => fs.existsSync(started),
       "the original worker's action reaching its barrier",

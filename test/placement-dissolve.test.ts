@@ -20,7 +20,9 @@ import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import type { RenderedLine } from "../src/dsl/node-registry";
-import { SessionEffects } from "../src/render/effect";
+import { SessionEffects, holdMotion, restoreMotion } from "../src/render/effect";
+import type { FrameRecord } from "../src/render/frame-memory";
+import { holdLayout, restoreLayout } from "../src/render/held-layout";
 import { decideEffectName, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
@@ -84,14 +86,13 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
     padding: 1,
     width: 160,
   };
-  return {
-    session,
-    render: (
+  const draw = (
       { shown, when, width = 160, dark = false }: Frame,
       effects: SessionEffects<RenderedLine>,
       transitions: boolean,
       bar: EffectName = "none",
-    ): DrawnFrame =>
+      record?: FrameRecord<RenderedLine>,
+    ) =>
       drawPayload(
         cfg,
         compiled,
@@ -100,13 +101,50 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
         { session_id: "s", shown, dark },
         when,
         { ...opts, width },
-        selectionFor(cfg, { effect: decideEffectName(bar), effects, transitions }),
-      ).frame,
+        selectionFor(cfg, { effect: decideEffectName(bar), effects, transitions, record }),
+      );
+  return {
+    session,
+    draw,
+    render: (...args: Parameters<typeof draw>): DrawnFrame => draw(...args).frame,
     dispose: () => registry.dispose(),
   };
 }
 
 const firstRow = (out: DrawnFrame): readonly Run[] => out.rows[0]!.runs;
+
+test("a new renderer resumes a narrow dissolving row at its accepted phase", () => {
+  const home = renderer(config("segment"));
+  const reload = config("segment");
+  const peer = renderer(reload);
+  const homeFx = new SessionEffects<RenderedLine>("s");
+  const visible = { shown: true, width: 34, when: at(0) };
+  const gone = { ...visible, shown: false, when: at(S) };
+  try {
+    expect(linkUrls(home.render(visible, homeFx, true, "shimmer"))).toContain(LINK);
+    const leaving = home.draw(gone, homeFx, true, "shimmer");
+    expect(leaving.frame.rows.length).toBeGreaterThan(1);
+    const held = { layout: holdLayout(leaving.memory.record, "same load"), motion: holdMotion(leaving.memory.motion) };
+    const wire = JSON.stringify(held);
+    expect(wire).not.toContain(LINK);
+    const arrived: typeof held = JSON.parse(wire);
+    expect(restoreLayout(arrived.layout, {config: reload, loadKey: "other load"})).toBeUndefined();
+    const predecessor = restoreLayout(arrived.layout, {config: reload, loadKey: "same load"});
+    const peerFx = new SessionEffects<RenderedLine>("s", restoreMotion(arrived.motion));
+    for (const elapsed of [7, 15, 30]) {
+      const input = { ...gone, when: at(S + elapsed) };
+      const expected = home.render(input, homeFx, true, "shimmer");
+      const actual = peer.render(input, peerFx, true, "shimmer", elapsed === 7 ? predecessor : undefined);
+      expect(textOf(actual).includes("MIDDLE")).toBe(elapsed < 30);
+      expect(linkUrls(actual)).not.toContain(LINK);
+      expect(actual).toEqual(expected);
+      expect(peerFx.lastFrame()).toEqual(homeFx.lastFrame());
+    }
+  } finally {
+    home.dispose();
+    peer.dispose();
+  }
+});
 
 // Each screen cell of a line: its glyph and the colours it is drawn in.
 function screenCells(line: readonly Run[]): string[] {

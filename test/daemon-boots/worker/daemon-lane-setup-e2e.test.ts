@@ -1,3 +1,5 @@
+import {hostOf} from "../../../scripts/lib/host";
+import {stateDir} from "../../../src/daemon/paths";
 import { decodeAnsi } from "@promptctl/rich-js";
 import { textOf, type Frame } from "../../../src/render/frame";
 import {
@@ -419,17 +421,12 @@ describe("tmux panes follow effective display settings", () => {
       const written = (): bigint => statSync(cfg, { bigint: true }).mtimeNs;
       const unwritten = written();
       await switchLanes(`${sid}-0`, true, "pane");
-      const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
-      // The click's one file write, landed: a save after the click wrote a
-      // snapshot taken after its pick.
-      await until(() => {
-        const lines = logLines(env);
-        const at = lines.findIndex((l) => l.includes(clicked));
-        return (
-          at >= 0 &&
-          lines.slice(at).some((l) => l.includes(" session-state saved "))
-        );
-      }, "the session-state save after the click");
+      // A successful click has journaled the pick before replying.
+      const journal = path.join(stateDir(hostOf(env)),"shared-session","changes");
+      const changes = readFileSync(journal,"utf8").trimEnd().split("\n").flatMap(line=>JSON.parse(line.slice(65)).writes);
+      expect(changes).toContainEqual(expect.objectContaining({
+        kind:"patch",store:"session-state",key:`${sid}-0`,changes:expect.objectContaining({[LANES.pane.switch.setting]:"true"}),
+      }));
       expect(written()).toBe(unwritten);
       const causes = (d: string): string[] =>
         logLines(env)

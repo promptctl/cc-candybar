@@ -1,3 +1,5 @@
+import { oversizedRendererHistory, oversizedSession } from "../helpers/oversized-renderer-history";
+import wire24 from "../fixtures/renderer-wire-24.json";
 import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type { EventInput, RendererBoot } from "../../src/renderer-interface/interface";
 import { RECORDING_VERSION, type RecordingEntry } from "../../src/renderer-interface/recording";
@@ -8,6 +10,7 @@ import { replayRecording } from "../../src/renderer/replay";
 import type { Instant, Tick } from "../../src/utils/instant";
 
 const settings: RendererBoot = {
+  sessionRevision: 0,
   stored: EMPTY_STORED_STATE,
   locations: { home: "/offline", configHome: "/offline/config", dataHome: "/offline/data", dataDirs: [] },
   region: SAMPLE_REGION,
@@ -17,8 +20,54 @@ const boot = {
   kind: "boot", version: RECORDING_VERSION, wireVersion: RENDERER_WIRE_VERSION,
   input: settings, result: { kind: "built" },
 } as const satisfies RecordingEntry;
-const end = { kind: "end", turns: 0 } as const satisfies RecordingEntry;
+const oldEnd = { kind: "end", turns: 0 } as const;
+const end = { ...oldEnd, sessionRevision: 0 } as const satisfies RecordingEntry;
 const linesOf = (...entries: unknown[]) => entries.map((entry) => JSON.stringify(entry));
+
+test("the final revision verifies changes received between turns, including the last change", async () => {
+  const checkpoint = { ...boot, input: { ...settings, sessionRevision: 40 } };
+  const change = {
+    kind: "session-commit",
+    at: 15,
+    tick: 1,
+    revision: 41,
+    writes: [
+      {
+        kind: "patch",
+        store: "session-state",
+        key: "sample",
+        changes: { padding: "4" },
+      },
+    ],
+  };
+  const deletion = {
+    ...change,
+    revision: 42,
+    writes: [
+      {
+        kind: "patch",
+        store: "session-state",
+        key: "sample",
+        changes: { padding: null },
+      },
+    ],
+  };
+  const footer = { ...end, sessionRevision: 42 };
+  const action = jest.fn();
+  await expect(
+    replayRecording(linesOf(checkpoint, change, deletion, footer), action),
+  ).resolves.toEqual({ turns: 0 });
+  expect(action).not.toHaveBeenCalled();
+  await expect(
+    replayRecording(linesOf(checkpoint, deletion, footer)),
+  ).rejects.toThrow("out-of-order session commit");
+  await expect(
+    replayRecording(linesOf(checkpoint, change, footer)),
+  ).rejects.toThrow("wrong terminal session revision");
+  await expect(
+    replayRecording(linesOf(checkpoint, change, deletion, oldEnd)),
+  ).rejects.toThrow("invalid end fields");
+});
 
 async function recordedStats() {
   const built = mainRendererOf(settings);
@@ -80,7 +129,7 @@ test.each([
 test("historical wire 22 recordings replay until an insertion needs its missing seed", async () => {
   const historical = { ...boot, wireVersion: 22, input: { ...settings, region: { locale: "en-US", timeZone: "UTC" } } };
   const stats = await recordedStats();
-  await expect(replayRecording(linesOf(historical, stats, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  await expect(replayRecording(linesOf(historical, stats, { ...oldEnd, turns: 1 }))).resolves.toEqual({ turns: 1 });
   const input = { ...stats.input, event: { kind: "click", context: null, click: {
     scope: "session", session: "session", verb: "apply-layout-op", steps: [
       { kind: "session", verb: "apply-layout-op", args: ["user", "presets.default.root", "insert:added:anchor:after"] },
@@ -91,17 +140,92 @@ test("historical wire 22 recordings replay until an insertion needs its missing 
   if (live.kind !== "built") throw new Error("renderer refused construction");
   const actual = await live.renderer.answer({ ...input, event: { ...input.event, placementSeed: "new" } } as EventInput);
   expect(actual.kind).toBe("threw");
-  await expect(replayRecording(linesOf(historical, { ...stats, input, output: actual }, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  const stored = [{ kind: "put", store: "session-state", key: "session", value: {
+    "candybar.clickError": JSON.stringify({
+      text: "apply-layout-op: session session has not rendered yet — no config to act on",
+      at: 1, revision: 1, answered: false,
+    }),
+  } }];
+  await expect(replayRecording(linesOf(historical, { ...stats, input, output: { ...actual, stored } }, { ...oldEnd, turns: 1 }))).resolves.toEqual({ turns: 1 });
   for (const placementSeed of [undefined, "", 42])
     await expect(replayRecording(linesOf(boot, { ...stats, input: { ...input, event: { ...input.event, placementSeed } } }, { ...end, turns: 1 }))).rejects.toThrow("invalid click placement seed");
-  await expect(replayRecording(linesOf(historical, {...stats, input}, { ...end, turns: 1 })))
+  await expect(replayRecording(linesOf(historical, {...stats, input}, { ...oldEnd, turns: 1 })))
     .rejects.toThrow("this historical insertion had no recorded placement seed");
 });
 
 test.each([22, 23])("wire %d requires reconstructible number data", async wireVersion => {
   const recording = (locale: string) => linesOf({ ...boot, wireVersion, input: {
     ...settings, region: { locale, timeZone: "UTC" },
-  } }, end);
+  } }, oldEnd);
   await expect(replayRecording(recording("en-US"))).resolves.toEqual({ turns: 0 });
   await expect(replayRecording(recording("zz-ZZ"))).rejects.toThrow("invalid renderer boot input");
+});
+
+// Captured from the published 1.245.1 renderer. One click changes a pick
+// beside an untouched pick. A second writes a file, receives its completion,
+// records a durable undo step, and the next request draws the applied config.
+test("wire 24 verifies a complete pick record, a file change and the following draw", async () => {
+  const lines = linesOf(...wire24);
+  await expect(replayRecording(lines)).resolves.toEqual({ turns: 8 });
+  const alter = (turn: number, from: string, to: string) => {
+    expect(lines[turn]).toContain(from);
+    return lines.with(turn, lines[turn]!.replace(from, to));
+  };
+  await expect(replayRecording(alter(2, '"endcaps":"round"', '"endcaps":"wrong"')))
+    .rejects.toThrow("recording turn 2 differs at output.stored[0].value");
+  await expect(replayRecording(alter(5, '"role":"user"', '"role":"project"')))
+    .rejects.toThrow("recording turn 5 differs at output.stored[0].value");
+  await expect(replayRecording(alter(7, '"text":"space"', '"text":"wrong"')))
+    .rejects.toThrow("recording turn 7 differs at output.effects");
+});
+
+// The same inputs through the released pre-integer-table renderer produced
+// these two compile digests. Every other recorded output field was identical.
+test.each([22, 23])("wire %d reproduces the cache identity of both captured configs", async wireVersion => {
+  const [first, ...rest] = wire24;
+  if (first?.kind !== "boot" || first.input?.region === undefined) throw new Error("expected wire 24 boot");
+  const {locale, timeZone} = first.input.region;
+  const lines = linesOf({
+    ...first, wireVersion, input: {...first.input, region: {locale, timeZone}},
+  }, ...rest).map(line => line.replaceAll("9dc55f2ce0a7", "86b51f35df7a").replaceAll("31e5b55ad197", "06621d1d8302"));
+  await expect(replayRecording(lines)).resolves.toEqual({turns: 8});
+  const altered = lines.with(2, lines[2]!.replace("86b51f35df7a", "000000000000"));
+  await expect(replayRecording(altered)).rejects.toThrow("recording turn 2 differs at output.diagnostics");
+});
+
+test("wire 25 compares sparse picks alongside the full recorded undo history", async () => {
+  const lines = linesOf(...wire24);
+  const bootEntry = JSON.parse(lines[0]!);
+  const turn = JSON.parse(lines[2]!);
+  expect(turn.output.stored[0]).toEqual({kind: "put", store: "session-state", key: "peer-replay", value: {padding: "2", endcaps: "round"}});
+  turn.output.stored[0] = {kind: "patch", store: "session-state", key: "peer-replay", changes: {padding: "2"}};
+  lines[0] = JSON.stringify({...bootEntry, wireVersion: 25});
+  lines[2] = JSON.stringify(turn);
+  await expect(replayRecording(lines)).resolves.toEqual({turns: 8});
+  const altered = lines.with(5, lines[5]!.replace('"role":"user"', '"role":"project"'));
+  await expect(replayRecording(altered)).rejects.toThrow("recording turn 5 differs at output.stored[0].value");
+});
+
+test("wire 28 reproduces its renderer-owned startup trim before the first input", async () => {
+  const result = {
+    kind: "built",
+    diagnostics: [
+      {
+        level: "info",
+        line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+      },
+    ],
+  };
+  const checkpoint = {
+    ...boot,
+    wireVersion: 28,
+    input: { ...settings, stored: oversizedRendererHistory() },
+    result,
+  };
+  await expect(replayRecording(linesOf(checkpoint, end))).resolves.toEqual({
+    turns: 0,
+  });
+  await expect(
+    replayRecording(linesOf({ ...checkpoint, result: { kind: "built" } }, end)),
+  ).rejects.toThrow("recording boot differs at result.diagnostics");
 });

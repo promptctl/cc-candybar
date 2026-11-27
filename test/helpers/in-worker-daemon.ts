@@ -1,3 +1,4 @@
+import { fileSessionStores } from "../../src/daemon/session-journal";
 import { manualDirectoryWatches } from "../../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:one-source-of-truth] The tests' one composition root for a daemon in a
 // jest worker. It is the shell a process puts over the daemon, and no more: the
@@ -21,14 +22,11 @@ import {
   type PreparedDaemon,
   type RunningBundle,
 } from "../../src/daemon/daemon";
-import type { ProfileStorage } from "../../src/daemon/held-stores";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { memoryLimitBytes } from "../../src/daemon/limits";
-import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
 import {
   daemonPaths,
-  profilePaths,
   type DaemonPaths,
 } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
@@ -44,7 +42,6 @@ import { parseFrame, type Frame } from "../../src/render/frame";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { daemonClock } from "../../src/host";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
-import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "../../scripts/lib/daemon/wire";
 import type { StartBarDaemon } from "../../scripts/lib/drive-bar";
 import { memoryConnection } from "./memory-connection";
@@ -60,11 +57,8 @@ const REPO_PRICES = fs.readFileSync(
 );
 const repoPricing: FetchPricing = () => Promise.resolve(ok(REPO_PRICES));
 
-export type DaemonOverrides = Partial<
-  Omit<DaemonInputs, "profile" | "paths">
-> & {
+export type DaemonOverrides = Partial<Omit<DaemonInputs, "paths">> & {
   readonly paths?: DaemonPaths;
-  readonly profile?: (log: DaemonLogger) => Partial<ProfileStorage>;
 };
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
@@ -124,7 +118,7 @@ export function prepareDaemon(
   try {
     const daemon = createDaemon({
       region: systemRegion(),
-      ...productionAdapters(paths, daemonLog, clock),
+      ...productionAdapters(paths, daemonLog, clock, fileSessionStores(paths, clock)),
       watchDirectory: manualDirectoryWatches().open,
       tmuxObserver: () => ({
         observe(_socket, events) {
@@ -147,10 +141,6 @@ export function prepareDaemon(
       ...overrides,
       paths,
       daemonLog,
-      profile: (name, log) => ({
-        ...fileStorage(profilePaths(paths, name), log, clock),
-        ...overrides.profile?.(log),
-      }),
     });
     return { daemon, daemonLog, paths };
   } catch (e) {

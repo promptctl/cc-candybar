@@ -77,7 +77,7 @@ function hostOver(
     {
       subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: (frames) => void framed.push(...frames),
-      stored: (writes) => void stored.push(...writes),
+      prepare: (writes) => () => void stored.push(...writes),
       recorded: () => {},
       holding: () => {
         throw new Error("a command holds no session");
@@ -107,10 +107,10 @@ const offeredEffect: Effect = {
   text: "an unrelated effect",
 };
 const offeredWrite: StoreWrite = {
-  kind: "put",
+  kind: "patch",
   store: "session-state",
   key: commandSession,
-  value: { menu: "closed" },
+  changes: { menu: "closed" },
 };
 
 test("a command takes its own reply, writes and subscriptions", async () => {
@@ -274,7 +274,7 @@ test("a command whose asker stopped waiting before its slot is not made, and rej
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -313,7 +313,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -354,7 +354,7 @@ test("every turn's record reaches `recorded`, whatever input it took and however
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: (record) =>
         void records.push(record.map(([k, v]) => `${k}=${v}`).join(" ")),
       holding: () => () => {},
@@ -400,7 +400,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -461,7 +461,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
         throw new Error("the collector broke");
       },
       frames: (taken) => void frames.push(...taken),
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -508,7 +508,7 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
     }),
     () => {},
     {
-      subscribed: () => {}, stored: () => {}, recorded: () => {},
+      subscribed: () => {}, prepare: () => () => {}, recorded: () => {},
       holding: () => () => {},
       frames: (frames, settle) => {
         for (const frame of frames) writes.push(ok => settle(frame, ok));
@@ -565,7 +565,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {
         throw new Error("record sink failed");
       },
@@ -633,7 +633,7 @@ test("a config named by a command reaches the renderer before the next queued ev
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -698,10 +698,10 @@ test("failed replacement starts leave the accepted declaration until a complete 
   const recorded: string[] = [];
   const performed: string[] = [];
   const write: StoreWrite = {
-    kind: "put",
+    kind: "patch",
     store: "session-state",
     key: sessionIdOf("kept"),
-    value: { "open-menu": "before failing" },
+    changes: { "open-menu": "before failing" },
   };
   const read: string[] = [];
   const discoveries: string[] = [];
@@ -759,7 +759,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
     {
       subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: () => {},
-      stored: (writes) => void stored.push(...writes),
+      prepare: (writes) => () => void stored.push(...writes),
       recorded: (record) =>
         void recorded.push(...record.map(([key, value]) => `${key}=${value}`)),
       holding: () => () => {},
@@ -788,7 +788,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
         retainedOf: (of) =>
           of.cwd === origin.cwd && selected ? "current" : undefined,
         selected: (entries, delivered) => {
-          if (entries.length > 0) expect(delivered(origin)).toBe(config);
+          if (entries.length > 0) expect(delivered(origin)?.config).toBe(config);
           selected = entries.length > 0;
         },
         snapshotOf: ({ cwd }) => {
@@ -906,7 +906,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -959,7 +959,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -1015,7 +1015,7 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
     {
       subscribed: () => {},
       frames: () => {},
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },
@@ -1099,7 +1099,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
       frames: (frames) => {
         if (frames.some((frame) => frame.session === session)) receivedAt.push(traffic);
       },
-      stored: () => {},
+      prepare: () => () => {},
       recorded: () => {},
       holding: () => () => {},
     },

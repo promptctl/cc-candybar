@@ -14,7 +14,14 @@ import {
 } from "./statusline-answer.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
 import type { EffectOutcome } from "../renderer-interface/interface.js";
-import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type {
+  CheckedRenderRequest,
+  DurableContext,
+} from "../renderer-interface/request-context.js";
+import type {
+  DisplayedConfig,
+  DisplayDigest,
+} from "../config/displayed-config.js";
 import {
   PROTOCOL_VERSION,
   SESSION_RENDER_KIND,
@@ -641,31 +648,32 @@ export async function replyTo(
       let answered: StatuslineAnswer | undefined;
       try {
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
+        const context = parts.sessionBook.forDisplay(checked.req);
         const renderer =
-          parts.rendererFor?.(checked.req, checked.environment, order) ??
+          parts.rendererFor?.(context, checked.environment, order) ??
           parts.renderer;
-        sighted(checked.req, "drawing");
+        sighted(context, "drawing");
         // [LAW:one-source-of-truth] A request past the checkpoint is the
         // session's data from now on; a followed session's next frame is drawn
         // from it, brought forward as its view takes it up. Its answer is its
         // own client's, drawn for a request and never pushed: its `encoding`
         // says how that answer is spelled, and no feed reads it
         // (src/daemon/frame-feed.ts).
-        frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+        frameFeeds.note(context.hookData.session_id, context, order);
         // [LAW:one-source-of-truth] The book keeps what the newest request says,
         // never one that arrived behind it.
-        if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
+        if (frameFeeds.latest(context.hookData.session_id) === context)
           parts.sessionBook.heard(
-            checked.req,
+            context,
             checked.registration ?? checked.environment,
           );
-        const tmux = checked.req.hints.tmux;
+        const tmux = context.hints.tmux;
         if (tmux != null)
           clock.detach(`tmux status observe ${tmux.socket}`, () =>
             parts.retiredTmuxStatus.observe(tmux.socket),
           );
         const { waitEndsAt, clientEndsAt } = renderDeadlines(
-          checked.req.deadline,
+          context.deadline,
           accepted.at,
           { epochMs: started.getTime(), monoMs: t0 },
         );
@@ -677,11 +685,11 @@ export async function replyTo(
           parts.closing,
           parts.log,
           parts.checkoutLocation,
-          checked.req,
+          context,
           // [LAW:one-source-of-truth] The book's, the newest request's, so a
           // request that arrived behind a newer one runs nothing in its older
           // environment.
-          parts.sessionBook.environmentOf(checked.req.hookData.session_id),
+          parts.sessionBook.environmentOf(context.hookData.session_id),
           order,
           {
             waitEndsAt,
@@ -1069,7 +1077,14 @@ function landedReply(parts: DaemonParts, { desktop, outcome }: Clicked): Reply {
 
 type ClickLink = Extract<ReadClick, { kind: "link" }>;
 type RoutedClick =
-  | (ClickLink & { readonly target: RendererHost; readonly actsOn: ActsOn })
+  | (ClickLink & {
+      readonly target: RendererHost;
+      readonly actsOn: ActsOn;
+      readonly displayed?: {
+        readonly config: DisplayedConfig;
+        readonly durable: DurableContext;
+      };
+    })
   | {
       readonly kind: "refused";
       readonly failure: Failure;
@@ -1095,17 +1110,34 @@ function routeClick(
   const { source } = read;
   if (source === undefined) return { ...read, target: parts.renderer, actsOn };
   const target = parts.rendererForClick(source.renderer);
-  return target === undefined
-    ? {
-        kind: "refused",
-        failure: failureOf(
-          new RendererDown(
-            `renderer ${source.renderer} has no statusline client's bundle`,
-          ),
+  if (target === undefined)
+    return {
+      kind: "refused",
+      failure: failureOf(
+        new RendererDown(
+          `renderer ${source.renderer} has no statusline client's bundle`,
         ),
-        signed: { link: read.link, verb: read.click.verb },
-      }
-    : { ...read, target, actsOn };
+      ),
+      signed: { link: read.link, verb: read.click.verb },
+    };
+  if (source.displayed === undefined) return { ...read, target, actsOn };
+  // Pin the host-admitted origin before the URL handler acknowledges the
+  // click or a session writer waits. No later route can substitute a context.
+  const displayed = parts.sessionBook.displayedOrigin(
+    source.session,
+    source.displayed.origin,
+  );
+  if (displayed === null)
+    return refusedClick(
+      "This control is stale because its displayed configuration is no longer available. Redraw the bar and try again.",
+      { link: read.link, verb: read.click.verb },
+    );
+  return {
+    ...read,
+    target,
+    actsOn,
+    displayed: { config: source.displayed, durable: displayed },
+  };
 }
 
 // [LAW:types-are-the-program] A refused click has an outcome already.
@@ -1126,6 +1158,17 @@ async function ranClick(
   }
 }
 
+// An older displayed origin may still resolve its files. Only current live
+// hints can identify the pane a session occupies now.
+function liveAtDisplay(
+  parts: DaemonParts,
+  session: SessionId,
+  id: DisplayDigest,
+) {
+  const live = parts.frameFeeds.latest(session);
+  return live?.displayOrigin === id ? live : null;
+}
+
 // [LAW:single-enforcer] A click that runs a verb is one turn of the renderer,
 // which decides what it means and acts on it (src/renderer/click.ts); the
 // host parses its session at the one session-id checkpoint, holds the session
@@ -1141,6 +1184,7 @@ async function handleClick(
     runEvidence,
     actsOn,
     target,
+    displayed,
   }: Extract<RoutedClick, { kind: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
@@ -1166,10 +1210,21 @@ async function handleClick(
             context:
               admitted.scope === "global"
                 ? null
-                : parts.sessionBook.contextOf(
-                    admitted.session,
-                    parts.frameFeeds.latest(admitted.session),
-                  ),
+                : displayed !== undefined
+                  ? {
+                      session: admitted.session,
+                      durable: displayed.durable,
+                      live: liveAtDisplay(
+                        parts,
+                        admitted.session,
+                        displayed.config.origin,
+                      ),
+                    }
+                  : parts.sessionBook.contextOf(
+                      admitted.session,
+                      parts.frameFeeds.latest(admitted.session),
+                    ),
+            ...(displayed !== undefined && { displayed: displayed.config }),
           },
         },
   );

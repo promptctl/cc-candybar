@@ -1,3 +1,5 @@
+import { fileSessionStores } from "./session-journal";
+import { claimSessionState } from "./session-state-lease";
 import { systemRegion } from "../utils/region.js";
 import fs from "node:fs";
 import net from "node:net";
@@ -41,10 +43,10 @@ import { mb } from "./foundations/memory-limit";
 import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
 
-// Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
-// single-instance enforcer (two daemons cannot both bind the same path; the
-// kernel makes duplicate-daemon unrepresentable). Listens for one request per
-// connection. Any uncaught error exits non-zero; the next client obtains a
+// Daemon entry point. Atomic bind selects the listener for a socket path.
+// The state-directory lease selects the writer when socket paths differ.
+// The server handles one request per connection. On an uncaught error
+// the daemon exits non-zero and the next client obtains a
 // fresh daemon via a later ordinary statusline tick in src/daemon/acquire.ts.
 // [LAW:one-source-of-truth] Our own kernel start-time, read once at startup and
 // stamped into our lease so a future daemon's arbitration can prove whether our
@@ -60,6 +62,7 @@ let myStartTime = "";
 // on shutdown so a graceful exit frees its slot immediately rather than
 // waiting for the next boot's stale-sweep.
 let breakerRegistryPath: string | null = null;
+let releaseSessionState: (() => void) | undefined;
 
 // [LAW:effects-at-boundaries] The daemon the process owns during bind and
 // service. Close is available even when bind never succeeds.
@@ -207,7 +210,12 @@ async function boot(): Promise<void> {
     region: systemRegion(),
     rendererName: MAIN_RENDERER,
     rendererEntry: processEntry(),
-    ...productionAdapters(paths, daemonLog, world.clock),
+    ...productionAdapters(
+      paths,
+      daemonLog,
+      world.clock,
+      fileSessionStores(paths, world.clock),
+    ),
     // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
     // launched through the process's launcher: the daemon's close aborts its
     // own launches before the renderer's last steps of it.
@@ -280,7 +288,9 @@ function bindOrAttachAndExit(
     }
     handleAddressInUse(daemon, server, sockPath).catch(refuseBoot);
   });
-  server.listen(sockPath, () => onListening(daemon, server, sockPath));
+  server.listen(sockPath, () => {
+    startup = onListening(daemon, server, sockPath).catch(refuseBoot);
+  });
 }
 
 // [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
@@ -339,11 +349,11 @@ async function handleAddressInUse(
   bindOrAttachAndExit(daemon, server, sockPath, /* retried */ true);
 }
 
-function onListening(
+async function onListening(
   daemon: PreparedDaemon,
   server: net.Server,
   sockPath: string,
-): void {
+): Promise<void> {
   if (shuttingDown) return;
   // [LAW:no-ambient-temporal-coupling] Capture the bound socket's kernel
   // identity (dev+ino) as the fingerprint the ownership self-check re-stats
@@ -396,9 +406,33 @@ function onListening(
   }
   // [LAW:no-ambient-temporal-coupling] A socket becomes a request entry
   // point only after its owner loads the renderer and arms production work.
-  const served = daemon.serve();
-  served.arm();
-  if (shuttingDown) return;
+  const { world, paths } = daemonProcess();
+  const ready = claimSessionState(
+    paths.state,
+    { pid: process.pid, startTime: myStartTime },
+    systemProbe(world.launcher),
+  ).then((release) => {
+    releaseSessionState = release;
+    if (shuttingDown) return null;
+    const live = daemon.serve();
+    live.arm();
+    return live;
+  });
+  // Connections may arrive while the kernel identity of a previous owner
+  // is being checked. The socket stays paused until the loaded host takes it.
+  const waiting = (sock: net.Socket) => {
+    void ready.then(
+      (live) => {
+        if (live && !shuttingDown && !sock.destroyed)
+          handleConnection(live, sock);
+        else sock.destroy();
+      },
+      () => sock.destroy(),
+    );
+  };
+  server.on("connection", waiting);
+  const served = await ready.finally(() => server.off("connection", waiting));
+  if (!served || shuttingDown) return;
   server.on("connection", (sock) => handleConnection(served, sock));
   serverLog(
     "info",
@@ -503,8 +537,8 @@ function shutdown(code: number): void {
   daemonProcess().world.clock.throws.close((reported) =>
     serverLog("error", thrownText(reported).logged),
   );
-  // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
-  // ONLY mutex preventing duplicate daemons. The previous shape unlinked
+  // [LAW:single-enforcer] The socket binding must last through shutdown,
+  // including the handoff under the state-directory lease. Earlier code unlinked
   // the socket file FIRST, then spent O(100ms) closing watchers, flushing
   // session state, and tearing down log streams before process.exit().
   // The unlink frees the path the instant it runs; the listening FD stays
@@ -529,10 +563,20 @@ async function closeThenExit(code: number): Promise<void> {
   // a close that failed still gives up the registry slot. A throw past the
   // daemon's close is the clock's to report, which says it in daemon.log, and
   // the backstop's SIGKILL ends a close that never settles.
-  await runTeardown(
+  const failed = await runTeardown(
     [
       ["finish admission", () => startup ?? undefined],
-      ["close", () => prepared?.close()],
+      [
+        "close",
+        async () => {
+          const closed = await prepared?.close();
+          if (closed?.failed.length)
+            throw new Error(
+              `daemon close failed in ${closed.failed.join(", ")}`,
+            );
+        },
+      ],
+      ["session state release", () => releaseSessionState?.()],
       // [LAW:single-enforcer] The lease stays, as the socket path does (writeLease).
       [
         "registry release",
@@ -546,5 +590,5 @@ async function closeThenExit(code: number): Promise<void> {
   );
   // The log writes every line still waiting as the process exits (log.ts), so
   // the death line lands without a flush here.
-  process.exit(code);
+  process.exit(code || (failed.length ? 1 : 0));
 }

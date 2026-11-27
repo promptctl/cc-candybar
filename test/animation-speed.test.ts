@@ -62,6 +62,21 @@ const everySpeed = <Row extends readonly unknown[]>(
 ) => ANIMATION_SPEED_NAMES.map((speed) => [speed, ...rows[speed]] as const);
 
 describe("the bar's loop runs at the session's animation speed", () => {
+  test("repeated draws and a fresh peer use the same anchor until the playback rate changes", () => {
+    const active = new SessionEffects<string>("s");
+    const start = active.clockAt(at(0), 5);
+    const first = active.motion("shimmer", start, STILL_FRAME).memory().motion;
+    active.keep(first);
+    const peer = new SessionEffects<string>("s", { ...first, anchor: JSON.parse(JSON.stringify(start.timeline)) });
+    for (let frame = 1; frame <= 120; frame++) {
+      const when = at(frame / 60);
+      const clock = active.clockAt(when, 5);
+      expect(clock.timeline).toBe(start.timeline);
+      active.keep(active.motion("shimmer", clock, STILL_FRAME).memory().motion);
+    }
+    expect(active.clockAt(at(2), 20)).toEqual(peer.clockAt(at(2), 20));
+    expect(active.clockAt(at(2), 20).timeline).not.toBe(start.timeline);
+  });
   test.each(
     everySpeed({
       "1x": [10],

@@ -32,7 +32,7 @@ import {
 } from "./reply.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
-import type { DaemonLogger } from "../utils/logger";
+import { writeLogLines, type DaemonLogger } from "../utils/logger";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { createPayloadProviders } from "./payload-providers";
 import { Pricing, type FetchPricing } from "./cache/pricing";
@@ -73,9 +73,12 @@ import { linkSignerOver } from "../click/link-signer.js";
 import { authorizeRun } from "./foundations/run-authorization.js";
 import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
-import { instantAt, type Instant } from "../utils/instant.js";
+import { instantAt, readingsAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
-import { HeldStores, type ProfileStorage } from "./held-stores.js";
+import { HostFeedHistory } from "./host-feed-history.js";
+import { HostPresentations } from "./host-presentations.js";
+import { PresentationPrivacy } from "./recording-privacy.js";
+import type { PublishedSession, SessionStores } from "./host-sessions.js";
 import {
   reportLine,
   reportText,
@@ -93,6 +96,7 @@ import {
   type RendererName,
 } from "./foundations/renderer-name.js";
 import type { SessionId } from "./foundations/session-id.js";
+import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import type {
   RendererBoot,
   RequestId,
@@ -100,6 +104,8 @@ import type {
   Viewers,
 } from "../renderer-interface/interface.js";
 import type { RendererLink, RendererPort } from "./renderer-process.js";
+import { encodeSessionCommit } from "./session-delivery.js";
+import { eventLine } from "../utils/logfmt.js";
 import {
   variableOf,
   type SessionEnvironment,
@@ -146,12 +152,8 @@ export interface DaemonAdapters {
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
   readonly launcher: (own: LaunchOwner) => TestableLauncher;
-  // [LAW:one-source-of-truth] Where the stores of the profile `name` derives
-  // are kept, which the daemon reads once it serves and is then their sole
-  // writer. Built over the daemon's log: a write in flight at the close
-  // finishes after it, and what it logs says so like any other line of the
-  // daemon's work.
-  readonly profile: (name: RendererName, log: DaemonLogger) => ProfileStorage;
+  // One host session store, opened once after winning the socket.
+  readonly sessionStores: (log: DaemonLogger) => SessionStores;
   // Where the host keeps its book of each session's durable context: the
   // host's own, whichever renderer it runs.
   readonly sessionBook: (
@@ -222,6 +224,7 @@ export interface DaemonInputs extends DaemonAdapters {
 }
 
 interface DaemonClose {
+  readonly failed: readonly string[];
   readonly settled: Promise<Settled>;
 }
 
@@ -505,17 +508,62 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
-  const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log), clock);
+  const publishFrame = publishingFrames(linkSigner, (source) => {
+    // [LAW:effects-at-boundaries] A renderer can echo an origin the host
+    // admitted for this session. A frame cannot introduce a new file target.
+    if (
+      !source.displayed ||
+      !sessionBook.displayedOrigin(source.session, source.displayed.origin)
+    )
+      throw new Error(
+        "the frame's displayed configuration origin is unavailable",
+      );
+  });
   // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
+  const stores = inputs.sessionStores(log);
+
+  const sessionWriters = new KeyedSerialQueue<SessionId>(
+    clock.detach,
+    (session) => `session ${session} writer`,
+  );
   const primaryPrepared = prepareRenderer(
     inputs.rendererName,
     bundle.path,
     inputs.rendererEntry ?? bundle.path,
   );
   const renderers = new Map<RendererName, RendererRuntime>();
+  const presentations = new HostPresentations();
+  const feedHistory = new HostFeedHistory();
+  const publishSession =
+    (writer: string): PublishedSession =>
+    (revision, accepted) => {
+      presentations.changed(revision, accepted);
+      const commit = encodeSessionCommit({
+        kind: "session-commit",
+        revision,
+        writes: accepted,
+        ...readingsAt(clock),
+      });
+      const recipients: string[] = [];
+      for (const [peer, target] of renderers) {
+        const generation = target.link.observe(commit);
+        if (generation !== null)
+          target.privacy.committed(accepted, (sid) => stores.holds(sid));
+        if (generation !== null) recipients.push(`${peer}[${generation}]`);
+      }
+      log(
+        "info",
+        eventLine("session commit", [
+          ["revision", String(revision)],
+          ["writer", writer],
+          ["bytes", String(commit.bytes)],
+          ["recipients", recipients.join(",") || "-"],
+        ]),
+      );
+    };
   // [LAW:one-source-of-truth] A session's accepted render request selects
   // the renderer that receives its subsequent world state and viewer inputs.
   const routes = new Map<
@@ -701,7 +749,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       reconcileTmux(req?.hints.tmux?.socket, req ?? undefined);
     },
     shown: (req) => paneVisibility.shown(req.hints.tmux),
-    watchingChanged: () => reconcileTmux(),
+    watchingChanged: (session, watching) => {
+      feedHistory.watching(session, watching);
+      if (!watching) presentations.stopFeed(session);
+      reconcileTmux();
+    },
     deliver: async (make) => {
       const sent = await Promise.all(
         [...renderers.values()].map(({ renderer }) =>
@@ -826,6 +878,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     deliver: (event) => {
       const session =
         event.kind === "retire" ? event.session : event.worldState.session;
+      if (event.kind === "retire") {
+        presentations.retire(session);
+        feedHistory.watching(session, false);
+        configDiscovery.retire(session);
+        clock.detach("retire shared session", () =>
+          stores.retire(session, publishSession("host")),
+        );
+      }
       const route = routes.get(session);
       const renderer = (renderers.get(nameOf(session)) ?? primary).renderer;
       return renderer
@@ -851,9 +911,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
 
   interface RendererRuntime {
+    readonly privacy: PresentationPrivacy;
     readonly reported: string;
     readonly entry: string;
-    readonly stores: HeldStores;
     readonly link: RendererLink;
     readonly renderer: RendererHost;
   }
@@ -899,14 +959,20 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
-    const stores = new HeldStores(inputs.profile(name, log), clock);
-    // [LAW:one-source-of-truth] Each start reads the latest held profile.
-    const boot = (): RendererBoot => ({
-      stored: stores.current(),
-      locations: locs,
-      region: inputs.region,
-      memoryLimitBytes,
-    });
+    const privacy = new PresentationPrivacy();
+    // [LAW:one-source-of-truth] Every generation starts from the host image.
+    const boot = (): RendererBoot => {
+      const { revision, state } = stores.current(name);
+      const input = {
+        stored: state,
+        sessionRevision: revision,
+        locations: locs,
+        region: inputs.region,
+        memoryLimitBytes,
+      };
+      privacy.boot(input);
+      return input;
+    };
     const prepared = inputs.renderer({
       name,
       entry,
@@ -914,19 +980,25 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       recording: () => recordings?.generation(name),
       node: bundle.node,
     });
-    return { name, reported, entry, stores, prepared };
+    return { name, reported, entry, prepared, privacy };
   }
 
   const connectRenderer = ({
     name,
     reported,
     entry,
-    stores,
     prepared,
+    privacy,
   }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
+    let feedReader = {};
     const link = prepared.start({
       log,
       clock,
+      observed: ({ wake, diagnostics, advances }) => {
+        if (advances) feedHistory.advanced(feedReader, advances);
+        if (wake !== undefined) renderer.advance(wake);
+        if (diagnostics !== undefined) writeLogLines(log, diagnostics);
+      },
       // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
       // mailbox and only rebuilds the sessions currently routed to it.
       start: async () => {
@@ -968,7 +1040,21 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const renderer = rendererHost(
       name,
       clock,
-      link.renderer,
+      {
+        answer: async (input) => {
+          if (input.event.kind === "start") feedReader = {};
+          const feed = feedHistory.turn(
+            input,
+            feedReader,
+            (sid) => nameOf(sid) === name,
+          );
+          privacy.input(feed.input);
+          const output = await link.renderer.answer(feed.input);
+          privacy.output(feed.input, output);
+          feed.took(output, (sid) => privacy.problem(sid));
+          return output;
+        },
+      },
       log,
       {
         subscribed: (subscriptions) => {
@@ -992,11 +1078,22 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           });
           frameFeeds.took(name, routed, settled);
         },
-        stored: (writes) => stores.take(writes),
+        prepare: (writes, heard) =>
+          stores.prepare(writes, publishSession(name), heard),
         holding: (session) => collector.holding(session),
         recorded: () => {},
       },
       {
+        sessionWriter: (session, land) => sessionWriters.run(session, land),
+        presentationTurn: (input, observed) =>
+          presentations.turn(
+            input,
+            observed,
+            () =>
+              Object.keys(viewersOf(name, frameFeeds.viewers())) as SessionId[],
+            (sid) => privacy.problem(sid),
+            (sid) => nameOf(sid) === name,
+          ),
         authorizeRun: (request, captures) =>
           authorizeRun(linkSigner, request, captures),
         perform: (act) => acts.perform(act),
@@ -1022,7 +1119,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         },
       },
     );
-    return { reported, entry, stores, link, renderer };
+    return { reported, entry, link, renderer, privacy };
   };
 
   const primary = connectRenderer(primaryPrepared);
@@ -1083,7 +1180,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       target = connectRenderer(
         prepareRenderer(name, binding, canonicalEntry(name, binding)),
       );
-      storeReported(target.stores.load());
       target.link.serve();
       renderers.set(name, target);
       if (phase.kind === "armed") target.link.arm();
@@ -1099,12 +1195,20 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
 
     if (route === undefined || order >= route.order) {
+      // A subscriber may already be waiting on the default renderer before
+      // the session selects its first renderer. That live feed moves too.
+      const previous = nameOf(session);
+      configDiscovery.route(session, name, request.requested);
       routes.set(session, { name, order });
-      if (route !== undefined && route.name !== name) {
+      if (
+        previous !== name &&
+        (route !== undefined || frameFeeds.isWatched(session))
+      ) {
+        feedHistory.moved(session);
         // Routing changes the aggregate even when neither renderer's
         // declarations moved. Apply the existing plans under the new owner.
         aggregate();
-        const former = renderers.get(route.name);
+        const former = renderers.get(previous);
         if (former !== undefined)
           clock.detach(
             `renderer ${former.renderer.name} retire ${session}`,
@@ -1263,7 +1367,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const starting: DaemonPhase = { kind: "starting" };
     phase = starting;
     try {
-      storeReported([...primary.stores.load(), sessionBook.load()]);
+      storeReported([...stores.load(), sessionBook.load()]);
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
@@ -1362,12 +1466,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ...attached.map(
-        ({ renderer, stores }): TeardownStep => [
-          `${renderer.name} stores close`,
-          () => stores.close(),
-        ],
-      ),
+      ["shared session stores close", () => stores.close()],
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
       // [LAW:no-ambient-temporal-coupling] A closed daemon holds no events: a
@@ -1397,9 +1496,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         ],
       ),
     ];
-    await runTeardown(teardown, log);
+    const failed = await runTeardown(teardown, log);
     phase = { kind: "closed", done };
-    return { settled: launcher.settled() };
+    return { failed, settled: launcher.settled() };
   }
 
   return { launcher, close, serve };

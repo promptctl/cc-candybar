@@ -13,9 +13,12 @@ import type {
   Timed,
 } from "../../src/renderer-interface/interface";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import { encodeSessionCommit } from "../../src/daemon/session-delivery";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import type { Instant, Tick } from "../../src/utils/instant";
 
 const boot: RendererBoot = {
+  sessionRevision: 0,
   stored: EMPTY_STORED_STATE,
   locations: {
     home: "/home/u",
@@ -102,10 +105,45 @@ test("each generation publishes its construction and completed inputs from send 
       input: { ...input, event: { kind: "due", pendingClicks: [] } },
       output: expect.not.objectContaining({ turnMs: expect.anything() }),
     },
-    { kind: "end", turns: 1 },
+    { kind: "end", turns: 1, sessionRevision: 0 },
   ]);
   expect(file.publish).toHaveBeenCalledTimes(1);
   expect(queries).toEqual(["due"]);
+});
+
+test("a change delivered while an input is in flight follows that turn on disk", async () => {
+  const { capture, lines } = recording();
+  capture.constructed(boot, { kind: "built" });
+  const turn = capture.turn(input, async () => output);
+  const commit = encodeSessionCommit({
+    kind: "session-commit",
+    at: input.at,
+    tick: input.tick,
+    revision: 1,
+    writes: [
+      {
+        kind: "patch",
+        store: "session-state",
+        key: sessionIdOf("test"),
+        changes: { padding: "4" },
+      },
+    ],
+  });
+  capture.observed(commit);
+  await turn;
+  await capture.finish();
+  expect(lines.map((line) => JSON.parse(line).kind)).toEqual([
+    "boot",
+    "turn",
+    "session-commit",
+    "end",
+  ]);
+  expect(lines[2]).toBe(commit.line);
+  expect(JSON.parse(lines[3]!)).toEqual({
+    kind: "end",
+    turns: 1,
+    sessionRevision: 1,
+  });
 });
 
 test("a failed write preserves a real renderer answer and stop reports why nothing was published", async () => {

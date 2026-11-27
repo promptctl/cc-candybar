@@ -3,8 +3,24 @@
 // as the renderer is built, and which changes only by the writes the
 // renderer's turns return.
 
-import { sessionIdOf, type SessionId } from "../daemon/foundations/session-id";
+import {
+  parseSessionId,
+  sessionIdOf,
+  type SessionId,
+} from "../daemon/foundations/session-id";
 import { isPlainObject } from "../config/loader/validate-core";
+import {
+  isNavigationEdit,
+  parseTimeline,
+  type NavigationWrite,
+  type Timeline,
+} from "./navigation.js";
+import {
+  isDraftWrite,
+  parseDraft,
+  type DraftWrite,
+  type DraftSnapshot,
+} from "./draft.js";
 import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
 import { kept, type Kept } from "../daemon/foundations/stored-file";
@@ -14,8 +30,9 @@ import { CLICK_ERROR_KEY, isMenuStateKey } from "../config/reserved-names";
 import { isClickErrorRecord } from "../daemon/foundations/click-error";
 import {
   parseSessionHistory,
+  isHistoryEdit,
   type HistoryState,
-  type SessionHistory,
+  type HistoryEdit,
 } from "./history-storage";
 
 // [LAW:one-source-of-truth] Every store the profile holds, as it stands: each
@@ -23,6 +40,13 @@ import {
 export interface StoredState {
   readonly sessions: Readonly<Record<SessionId, SessionPicks>>;
   readonly history: HistoryState;
+}
+
+// [LAW:types-are-the-program] A peer boot also carries the host's live
+// navigation. The durable profile has no field that can store its visits.
+export interface LiveSessionState extends StoredState {
+  readonly drafts?: Readonly<Record<SessionId, DraftSnapshot>>;
+  readonly navigation?: Readonly<Record<SessionId, Timeline>>;
 }
 
 export type SessionPicks = Readonly<Record<string, string>>;
@@ -48,7 +72,7 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
 // never cleared, so it would sit in the profile for good; a click error that
 // does not parse would throw in every render of its session.
 function retiredBecause(key: string, value: string): string | undefined {
-  if (isEditModeKey(key)) return "no edit outlives the renderer";
+  if (isEditModeKey(key)) return "edit-mode picks belong to the live draft";
   // [LAW:one-source-of-truth] Keep the two key/value pairs the old release saved.
   // Both keys still serve other members. Changing today's shared-menu key
   // encoder cannot change the spelling on an old profile's disk.
@@ -91,31 +115,53 @@ export function withoutRetiredKeys(
 
 // [LAW:parse-dont-validate] A replacement can run a different build. A boot
 // admits the complete profile or gives the host a reason it could not start.
-export function storedStateOf(raw: unknown): StoredState {
+function profileFields(raw: unknown) {
   if (!isPlainObject(raw))
     throw new Error("renderer boot has no stored profile");
-  const sessionsOf = <V>(
-    name: keyof StoredState,
-    parse: (value: unknown) => Asked<V>,
-  ): Readonly<Record<SessionId, V>> => {
-    const entries = raw[name];
-    if (!isPlainObject(entries))
-      throw new Error(`renderer boot stored.${name} must be an object`);
-    return Object.fromEntries(
-      Object.entries(entries).map(([key, value]) => {
-        const session = sessionIdOf(key);
-        const result = parse(value);
-        if (result.kind === "failed")
-          throw new Error(
-            `renderer boot stored.${name} entry ${session} ${result.reason}`,
-          );
-        return [session, result.value];
-      }),
-    );
-  };
+  return raw;
+}
+
+function sessionsOf<V>(
+  entries: unknown,
+  name: keyof LiveSessionState,
+  parse: (value: unknown) => Asked<V>,
+): Readonly<Record<SessionId, V>> {
+  if (!isPlainObject(entries))
+    throw new Error(`renderer boot stored.${name} must be an object`);
+  return Object.fromEntries(
+    Object.entries(entries).map(([key, value]) => {
+      const session = sessionIdOf(key);
+      const result = parse(value);
+      if (result.kind === "failed")
+        throw new Error(
+          `renderer boot stored.${name} entry ${session} ${result.reason}`,
+        );
+      return [session, result.value];
+    }),
+  );
+}
+
+function profileOf(fields: Record<string, unknown>): StoredState {
   return {
-    sessions: sessionsOf("sessions", parseSessionPicks),
-    history: sessionsOf("history", parseSessionHistory),
+    sessions: sessionsOf(fields.sessions, "sessions", parseSessionPicks),
+    history: sessionsOf(fields.history, "history", parseSessionHistory),
+  };
+}
+
+export function storedStateOf(raw: unknown): StoredState {
+  return profileOf(profileFields(raw));
+}
+
+export function liveSessionStateOf(raw: unknown): LiveSessionState {
+  const fields = profileFields(raw);
+  return {
+    ...profileOf(fields),
+    ...(fields.drafts !== undefined && {
+      drafts: sessionsOf(fields.drafts, "drafts", parseDraft),
+    }),
+    ...(fields.navigation !== undefined && {
+      navigation: sessionsOf(fields.navigation, "navigation", parseTimeline),
+    }),
   };
 }
 
@@ -125,23 +171,56 @@ export const EMPTY_STORED_STATE: StoredState = {
   history: {},
 };
 
-// [LAW:types-are-the-program] One entry of one store as a turn left it: a
-// session's picks or history written, which null drops, or the session heard
-// by a render, which moves it without changing what it holds. Either moves
-// the entry to the end of its store's recency order, as the renderer's own
-// store moved it.
-export type StoreWrite =
+// [LAW:types-are-the-program] A null pick erases that key. Dropping the
+// session also erases keys the receiver held before this turn.
+export type ChangedPicks = Readonly<Record<string, string | null>>;
+
+export type PickWrite =
   | {
-      readonly kind: "put";
+      readonly kind: "patch";
       readonly store: "session-state";
       readonly key: SessionId;
-      readonly value: SessionPicks | null;
+      readonly changes: ChangedPicks;
     }
   | {
-      readonly kind: "put";
+      readonly kind: "drop";
+      readonly store: "session-state";
+      readonly key: SessionId;
+    };
+
+export const durablePickValue = (
+  key: string,
+  value: string | null,
+): string | null =>
+  value === null || retiredBecause(key, value) !== undefined ? null : value;
+
+// [LAW:single-enforcer] Convert the live changes to a durable pick record
+// at the file or historical-recording boundary. Each new record stands alone
+// while an earlier snapshot may still be waiting for its write.
+export function storedPicksAfter(
+  prior: SessionPicks | undefined,
+  write: PickWrite,
+): SessionPicks | null {
+  if (write.kind === "drop") return null;
+  const picks: Record<string, string> = Object.assign(
+    Object.create(null),
+    prior,
+  );
+  for (const [key, value] of Object.entries(write.changes)) {
+    const kept = durablePickValue(key, value);
+    if (kept === null) delete picks[key];
+    else picks[key] = kept;
+  }
+  return Object.keys(picks).length ? picks : null;
+}
+
+export type ProfileWrite<Edit = HistoryEdit> =
+  | PickWrite
+  | {
+      readonly kind: "steps";
       readonly store: "settings-history";
       readonly key: SessionId;
-      readonly value: SessionHistory | null;
+      readonly edits: readonly Edit[];
     }
   | {
       readonly kind: "heard";
@@ -149,7 +228,51 @@ export type StoreWrite =
       readonly key: SessionId;
     };
 
+// [LAW:parse-dont-validate] The process wire and the durable journal share
+// the pick vocabulary. Only a journal also accepts privacy-preserving cuts.
+export function isProfileWrite<E>(
+  v: unknown,
+  edit: (raw: unknown) => raw is E,
+): v is ProfileWrite<E> {
+  if (!isPlainObject(v) || !parseSessionId(v.key).ok) return false;
+  const fields = Object.keys(v).length;
+  if (v.store === "settings-history")
+    return (
+      (v.kind === "heard" && fields === 3) ||
+      (v.kind === "steps" &&
+        fields === 4 &&
+        Array.isArray(v.edits) &&
+        v.edits.every(edit))
+    );
+  return (
+    v.store === "session-state" &&
+    (((v.kind === "drop" || v.kind === "heard") && fields === 3) ||
+      (v.kind === "patch" &&
+        fields === 4 &&
+        isPlainObject(v.changes) &&
+        Object.values(v.changes).every(
+          (value) => value === null || typeof value === "string",
+        )))
+  );
+}
+
+export type StoreWrite = ProfileWrite | NavigationWrite | DraftWrite;
+
+export function isStoreWrite(raw: unknown): raw is StoreWrite {
+  if (isPlainObject(raw) && raw.store === "draft") return isDraftWrite(raw);
+  if (!isPlainObject(raw) || raw.store !== "navigation")
+    return isProfileWrite(raw, isHistoryEdit);
+  return (
+    parseSessionId(raw.key).ok &&
+    (raw.kind === "drop"
+      ? Object.keys(raw).length === 3
+      : raw.kind === "navigate" &&
+        Object.keys(raw).length === 4 &&
+        isNavigationEdit(raw.edit))
+  );
+}
+
 // [LAW:types-are-the-program] Plain data, so a boot and a turn's output carry
 // them as they are.
-export const STORED_CROSSES: Crosses<StoredState> = true;
+export const STORED_CROSSES: Crosses<LiveSessionState> = true;
 export const WRITES_CROSS: Crosses<StoreWrite> = true;

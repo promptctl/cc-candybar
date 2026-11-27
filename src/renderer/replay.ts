@@ -1,10 +1,15 @@
+import {
+  historyAfterEdits,
+  durableHistory,
+  type SessionHistory,
+} from "../renderer-interface/history-storage.js";
 import { VERB_APPLY_LAYOUT_OP } from "../click/wire.js";
 import { decodeLayoutOp } from "../config/layout-ops.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import type {
   Event,
   EventInput,
-  Renderer,
+  SessionRenderer,
   RendererOutput,
 } from "../renderer-interface/interface.js";
 import {
@@ -13,10 +18,21 @@ import {
 } from "../renderer-interface/recording.js";
 import {
   rendererBootFrom,
+  sessionCommitOf,
   RENDERER_WIRE_VERSION,
 } from "../renderer-interface/wire.js";
+import { sha256Text } from "../utils/sha256.js";
+import type { CompileInput } from "../dsl/render.js";
 import { regionFor } from "../utils/region.js";
 import { ownValue } from "../utils/plain.js";
+import {
+  storedPicksAfter,
+  withoutRetiredKeys,
+  type SessionPicks,
+  type StoredState,
+} from "../renderer-interface/stored-state.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
+import { validFeedResumes } from "../renderer-interface/feed-history.js";
 import { mainRendererOf } from "./main.js";
 
 // [LAW:parse-dont-validate] Admit known event arms with their required
@@ -95,8 +111,9 @@ function requireFields(
   entry: Record<string, unknown>,
   kind: keyof typeof ENTRY_FIELDS,
   line: number,
+  extra: readonly string[] = [],
 ): void {
-  const fields = ENTRY_FIELDS[kind];
+  const fields = [...ENTRY_FIELDS[kind], ...extra];
   if (
     Object.keys(entry).length !== fields.length ||
     fields.some((field) => !Object.hasOwn(entry, field))
@@ -119,7 +136,7 @@ function lineEntry(raw: string, line: number): Record<string, unknown> {
 function inputOf(
   value: unknown,
   line: number,
-  historical: boolean,
+  wireVersion: number,
 ): EventInput {
   if (
     !isPlainObject(value) ||
@@ -130,11 +147,28 @@ function inputOf(
     !Number.isFinite(value.tick) ||
     !isPlainObject(value.event) ||
     typeof value.event.kind !== "string" ||
-    Object.keys(value).length !== 4
+    Object.keys(value).length !==
+      4 +
+        Number(wireVersion >= 34 && Object.hasOwn(value, "presentation")) +
+        Number(wireVersion >= 36 && Object.hasOwn(value, "feedResumes"))
   ) {
     throw new Error(`recording line ${line} has an invalid renderer input`);
   }
   const { event } = value;
+  if (
+    Object.hasOwn(value, "presentation") &&
+    (!isPlainObject(value.presentation) ||
+      !Number.isSafeInteger(value.presentation.order) ||
+      Number(value.presentation.order) <= 0 ||
+      !Array.isArray(value.presentation.sessions))
+  )
+    throw new Error(`recording line ${line} has an invalid presentation input`);
+  if (
+    Object.hasOwn(value, "feedResumes") &&
+    ((event.kind !== "start" && event.kind !== "viewers") ||
+      !validFeedResumes(value.feedResumes))
+  )
+    throw new Error(`recording line ${line} has an invalid feed handoff`);
   const fields = ownValue(EVENT_FIELDS, value.event.kind);
   if (
     fields === undefined ||
@@ -142,7 +176,9 @@ function inputOf(
   )
     throw new Error(`recording line ${line} has an invalid renderer event`);
   if (event.kind === "click") {
-    if (historical && !Object.hasOwn(event, "placementSeed")) {
+    if (wireVersion < 33 && Object.hasOwn(event, "coldConfig"))
+      event.coldConfig = { config: event.coldConfig };
+    if (wireVersion === 22 && !Object.hasOwn(event, "placementSeed")) {
       // The historical click may have been refused before it needed an ID.
       // An empty seed fails only when the renderer actually mints a placement.
       event.placementSeed = "";
@@ -200,6 +236,7 @@ function verify<T>(
   label: string,
   field: string,
   note = "",
+  compareAs?: (output: T) => unknown,
 ): T {
   let value: unknown;
   try {
@@ -207,16 +244,103 @@ function verify<T>(
   } catch {
     throw new Error(`${label} could not be encoded as JSON`);
   }
-  const changed = firstDifference(expected, value, field);
+  const changed = firstDifference(
+    expected,
+    compareAs ? compareAs(value as T) : value,
+    field,
+  );
   if (changed !== undefined)
     throw new Error(`${label} differs at ${changed}${note}`);
   // This detached copy was encoded from the typed production result.
   return value as T;
 }
 
+// [LAW:one-source-of-truth] Historical captures described each durable pick
+// map in full. Reconstruct it from the boot and the actual changes alone;
+// a wrong key, value, deletion or order must still show up in verification.
+function historicalOutputs(
+  stored: StoredState,
+  wireVersion: number,
+): (output: RendererOutput) => unknown {
+  const histories = new Map(
+    Object.entries(stored.history) as Array<[SessionId, SessionHistory]>,
+  );
+  const picks = new Map<SessionId, SessionPicks>();
+  for (const [id, values] of Object.entries(stored.sessions)) {
+    const kept = withoutRetiredKeys(values);
+    if (kept.kind === "ok") picks.set(id as SessionId, kept.value.value);
+  }
+  return (output) => ({
+    ...output,
+    subscriptions:
+      wireVersion >= 35
+        ? output.subscriptions
+        : {
+            ...output.subscriptions,
+            sources: Object.fromEntries(
+              Object.entries(output.subscriptions.sources).map(
+                ([sid, entries]) => [
+                  sid,
+                  entries.map((source) =>
+                    source.kind === "run"
+                      ? { kind: source.kind, run: source.run }
+                      : source,
+                  ),
+                ],
+              ),
+            ),
+          },
+    effects: output.effects.map((effect) => {
+      if (
+        wireVersion >= 28 ||
+        (effect.kind !== "change" && effect.kind !== "approve-repo")
+      )
+        return effect;
+      const { onApplied: _hostDecision, ...historical } = effect;
+      return historical;
+    }),
+    stored: output.stored.map((write) => {
+      if (wireVersion >= 26) return write;
+      if (
+        write.store === "draft" ||
+        write.store === "navigation" ||
+        write.kind === "heard"
+      )
+        return write;
+      if (write.store === "settings-history") {
+        const next = historyAfterEdits(histories.get(write.key), write.edits);
+        if (next === null) histories.delete(write.key);
+        else histories.set(write.key, next);
+        return {
+          kind: "put",
+          store: write.store,
+          key: write.key,
+          value: next && durableHistory(next),
+        };
+      }
+      if (wireVersion >= 25) return write;
+      const value = storedPicksAfter(picks.get(write.key), write);
+      if (value === null) picks.delete(write.key);
+      else picks.set(write.key, value);
+      return { kind: "put", store: write.store, key: write.key, value };
+    }),
+  });
+}
+
+// Wires 22 and 23 included the locale and zone in their compile identity.
+// Hash the actual compiler input in that spelling so cache and diagnostic
+// comparisons still catch a different config. Drawing uses the restored facts.
+function legacyCompileKey(input: CompileInput): string {
+  const { locale, timeZone } = input.region;
+  return sha256Text(JSON.stringify({ ...input, region: { locale, timeZone } }));
+}
+
 function constructionOf(entry: Record<string, unknown>): {
   readonly result: RecordedConstruction;
-  readonly renderer: Renderer | null;
+  readonly wireVersion: number;
+  readonly sessionRevision: number;
+  readonly renderer: SessionRenderer | null;
+  readonly compareAs?: (output: RendererOutput) => unknown;
 } {
   if (entry.version !== RECORDING_VERSION)
     throw new Error(
@@ -224,14 +348,22 @@ function constructionOf(entry: Record<string, unknown>): {
     );
   // Older recordings only carry a locale name. Recover its presentation at
   // the offline boundary. Whole-output verification still detects any drift.
-  const legacyRegion = entry.wireVersion === 22 || entry.wireVersion === 23;
-  if (!legacyRegion && entry.wireVersion !== RENDERER_WIRE_VERSION)
+  const wireVersion = entry.wireVersion;
+  if (
+    typeof wireVersion !== "number" ||
+    !Number.isInteger(wireVersion) ||
+    wireVersion < 22 ||
+    wireVersion > RENDERER_WIRE_VERSION
+  )
     throw new Error(
       `recording line 1 needs renderer wire version ${RENDERER_WIRE_VERSION}`,
     );
+  const legacyRegion = wireVersion <= 23;
   let boot;
   try {
     let input = entry.input;
+    if (wireVersion < 27 && isPlainObject(input))
+      input = { ...input, sessionRevision: 0 };
     if (legacyRegion && isPlainObject(input) && isPlainObject(input.region)) {
       const { locale, timeZone } = input.region;
       if (typeof locale === "string" && typeof timeZone === "string")
@@ -245,10 +377,29 @@ function constructionOf(entry: Record<string, unknown>): {
   } catch {
     throw new Error("recording line 1 has an invalid renderer boot input");
   }
-  const built = mainRendererOf(boot);
-  if (built.kind === "refused") return { result: built, renderer: null };
+  const built = mainRendererOf(
+    boot,
+    legacyRegion ? legacyCompileKey : undefined,
+    wireVersion,
+  );
+  if (built.kind === "refused")
+    return {
+      result: built,
+      wireVersion,
+      renderer: null,
+      sessionRevision: boot.sessionRevision,
+    };
   const { renderer, ...result } = built;
-  return { result, renderer };
+  return {
+    result,
+    wireVersion,
+    renderer,
+    sessionRevision: boot.sessionRevision,
+    compareAs:
+      wireVersion === RENDERER_WIRE_VERSION
+        ? undefined
+        : historicalOutputs(boot.stored, wireVersion),
+  };
 }
 
 // [LAW:effects-at-boundaries] The caller supplies the lines and can inspect a
@@ -259,8 +410,10 @@ export async function replayRecording(
   lines: AsyncIterable<string> | Iterable<string>,
   onTurn?: (input: EventInput, output: RendererOutput) => void,
 ): Promise<{ turns: number }> {
-  let renderer: Renderer | null = null;
-  let historical = false;
+  let renderer: SessionRenderer | null = null;
+  let sessionRevision: number | undefined;
+  let wireVersion: number = RENDERER_WIRE_VERSION;
+  let compareAs: ((output: RendererOutput) => unknown) | undefined;
   let ended = false;
   let line = 0;
   let turns = 0;
@@ -274,16 +427,32 @@ export async function replayRecording(
         throw new Error("recording line 1 must be a boot entry");
       requireFields(entry, "boot", line);
       const boot = constructionOf(entry);
-      historical = entry.wireVersion === 22;
+      wireVersion = boot.wireVersion;
+      sessionRevision = wireVersion >= 27 ? boot.sessionRevision : undefined;
       verify(entry.result, boot.result, "recording boot", "result");
       renderer = boot.renderer;
+      compareAs = boot.compareAs;
+    } else if (
+      entry.kind === "session-commit" &&
+      sessionRevision !== undefined &&
+      renderer !== null
+    ) {
+      try {
+        const commit = sessionCommitOf(entry);
+        renderer.observe(commit);
+        sessionRevision = commit.revision;
+      } catch {
+        throw new Error(
+          `recording line ${line} has an invalid or out-of-order session commit`,
+        );
+      }
     } else if (entry.kind === "turn") {
       requireFields(entry, "turn", line);
       if (renderer === null)
         throw new Error(
           `recording line ${line} has a turn after refused construction`,
         );
-      const input = inputOf(entry.input, line, historical);
+      const input = inputOf(entry.input, line, wireVersion);
       turns++;
       let actual: RendererOutput;
       try {
@@ -309,10 +478,20 @@ export async function replayRecording(
           )
           ? " (this historical insertion had no recorded placement seed)"
           : "",
+        compareAs,
       );
       onTurn?.(input, output);
     } else if (entry.kind === "end") {
-      requireFields(entry, "end", line);
+      requireFields(
+        entry,
+        "end",
+        line,
+        sessionRevision === undefined ? [] : ["sessionRevision"],
+      );
+      if (entry.sessionRevision !== sessionRevision)
+        throw new Error(
+          `recording line ${line} has the wrong terminal session revision (expected ${sessionRevision})`,
+        );
       if (entry.turns !== turns)
         throw new Error(
           `recording line ${line} has the wrong terminal turn count (expected ${turns})`,

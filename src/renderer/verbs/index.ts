@@ -583,7 +583,8 @@ function changeLanded(
       failed.push(rendererFailureOf(e).message);
     }
   };
-  if (outcome.kind === "ok") step(() => consequence(effects));
+  if (outcome.kind === "ok")
+    step(() => consequence(effects, outcome.sessionCommitted));
   else if (outcome.kind === "closing") return;
   else failed.push(outcome.reason);
   if (failed.length === 0) return;
@@ -1681,7 +1682,7 @@ function journaled<C extends DaemonContext>(
   // edit holds its own Back steps, which end with it; outside one, Back sees
   // the journal, which no edit-mode key reaches.
   const navigation = (edit?.navigation ?? ctx.navigation).begin(
-    journal.sessionState,
+    journal,
     sessionState.setBatch,
   );
   try {
@@ -1720,26 +1721,31 @@ function journaled<C extends DaemonContext>(
   // [LAW:no-ambient-temporal-coupling] Save releases the draft only in the
   // host's successful acknowledgement turn. Conflict and failure keep the
   // original draft and its undo and redo history.
-  const consequence = (): void => {
+  const consequence = (_effects: Effect[], sessionCommitted?: true): void => {
     if (requested.finish === "save" && saved === null) return;
+    // The host has already decided a guarded Save, including ending the
+    // draft. Its receipt can arrive after a peer has opened the next edit.
+    if (sessionCommitted && saved !== null && ctx.edits.shared) return;
     const failed: unknown[] = [];
     let visits: EndedVisits = new Map();
     try {
-      visits = navigation.commit();
+      visits = navigation.commit(sessionCommitted && edit === undefined);
     } catch (e) {
       failed.push(e);
     }
     // The one way an edit ends: its Back steps land outside it, and its view
     // is redrawn without it.
     const end = (): void => {
-      ctx.navigation.landOutsideEdit(visits);
+      ctx.navigation.landOutsideEdit(visits, sessionCommitted);
       ctx.edits.close(sid);
       ctx.editViewChanged(sid);
     };
     try {
       if (edit === undefined) {
         const clicked = new Map([
-          ...(journal.commit().get(sid) ?? []),
+          ...(sessionCommitted
+            ? journal.writes(sid)
+            : (journal.commit().get(sid) ?? [])),
           ...aside.held(sid),
         ]);
         const entering =
@@ -1751,11 +1757,12 @@ function journaled<C extends DaemonContext>(
         // (one drawn before its edit closed) has no edit for those writes to
         // mean anything in.
         if (entering) {
-          ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
+          if (!(sessionCommitted && ctx.edits.shared))
+            ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
         } else if (edited.size > 0) failed.push(staleEdit(edited.keys()));
       } else if (saved !== null) {
-        saved.commit();
+        if (!sessionCommitted) saved.commit();
         end();
       } else {
         const { moved, clicked } = edit.commit();
@@ -1774,7 +1781,26 @@ function journaled<C extends DaemonContext>(
     throwAll(failed);
   };
   try {
-    ctx.configWrites.seal(effects, sid, consequence);
+    ctx.configWrites.seal(effects, sid, consequence, () => [
+      ...((saved ?? (edit === undefined ? journal : null))?.proposed() ?? []),
+      ...(saved !== null
+        ? ctx.edits.closing(sid)
+        : edit === undefined &&
+            origin !== null &&
+            aside.held(sid).get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE
+          ? ctx.edits.opening(
+              sid,
+              origin,
+              ctx.snapshotFor(origin),
+              aside.held(sid),
+            )
+          : []),
+      ...(edit === undefined
+        ? navigation.proposed()
+        : saved !== null
+          ? ctx.navigation.proposedOutside(navigation.visits())
+          : []),
+    ]);
   } catch (e) {
     failures.push(e);
   }

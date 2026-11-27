@@ -1,3 +1,4 @@
+import type { JsonValue } from "../../src/var-system/types";
 import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type {
   ConfigSnapshot,
@@ -8,6 +9,8 @@ import {
   HOVER_KEY,
   NO_HOVER,
 } from "../../src/config/click-mode";
+import { EDIT_MODE_KEY } from "../../src/config/reserved-names";
+import { digestOf } from "../../src/utils/plain";
 import { DISCLOSURE_OPEN } from "../../src/config/disclosure";
 import { SETTINGS_ANCHOR } from "../../src/config/door";
 import {
@@ -31,9 +34,12 @@ import {
 } from "../../src/daemon/session-state-file";
 import type { RunReading } from "../../src/daemon/readings";
 import {
+  RecordingControls,
+  PresentationPrivacy,
   recordingBootProblem,
   recordingInputProblem,
   recordingOutputProblem,
+  recordingWritesProblem,
 } from "../../src/daemon/recording-privacy";
 import type { WorldState } from "../../src/facts/world-state";
 import { parseFrame, textOf } from "../../src/render/frame";
@@ -46,6 +52,7 @@ import {
 } from "../../src/renderer-interface/interface";
 import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import type { HistoryTarget } from "../../src/renderer-interface/history-storage";
 import { mainRendererOf } from "../../src/renderer/main";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, failed, ok } from "../../src/utils/outcome";
@@ -59,6 +66,7 @@ const ROOT = "/nowhere/project";
 const HOOK = viewFacts(ROOT, SESSION).hookData;
 const AT = instantOf(new Date(1_700_000_000_000));
 const BOOT: RendererBoot = {
+  sessionRevision: 0,
   stored: EMPTY_STORED_STATE,
   locations: {
     home: "/nowhere/home",
@@ -137,7 +145,7 @@ function facts(
       losses: [],
     },
     daemonFactsOf(),
-    AT,
+    { at: AT, tick: 0 as Tick },
   );
 }
 
@@ -223,6 +231,19 @@ test("a selected environment value that the real renderer echoes disqualifies it
   }
 });
 
+test("a resumed surface keeps the refusal of an earlier private source after its value leaves the world", () => {
+  const proof = new PresentationPrivacy();
+  proof.boot(BOOT);
+  const context = checked().req;
+  const secret = facts(new Map([[SELECTED, variableOf({[SELECTED]: SECRET}, SELECTED)]]));
+  proof.input(input({kind: "context", context, worldState: secret}));
+  proof.input(input({kind: "world-state", worldState: facts()}));
+  const reason = proof.problem(SESSION);
+  expect(reason).toMatch(/environment source supplied a value/);
+  expect(reason).not.toContain(SECRET);
+  expect(proof.problem(sessionIdOf("other"))).toBeNull();
+});
+
 test("an environment declaration without a value is recordable, including absent, pending and failed facts", () => {
   const context = checked().req;
   for (const reading of [
@@ -267,6 +288,19 @@ test("equal shell output keeps its wire bytes when newly bound environment makes
   expect(facts(undefined, new Map([["run", inherited]]), tainted)).toBe(
     tainted,
   );
+});
+
+test("an outstanding document read keeps the export refusal of its preceding shell output", () => {
+  const from = (reading: Current<JsonValue>, documentRun: string, privateOutput: boolean, prior?: WorldState) =>
+    facts(undefined, new Map([["doc", environmentOutput({ reading, fault:null, documentRun }, privateOutput)]]), prior);
+  const good = from(ok({ text:SECRET }), "old environment", true);
+  const rejected = from(failed("incomplete JSON", "parse"), "old environment", true, good);
+  const rereading = from(pending("unread"), "old environment", false, rejected);
+  expect(JSON.stringify(rereading.runs)).toContain(SECRET);
+  expect(recordingInputProblem(input({kind:"world-state", worldState:rereading}))).toMatch(/command returned data/);
+  const replaced = from(pending("unread"), "different environment", false, rereading);
+  expect(JSON.stringify(replaced.runs)).not.toContain(SECRET);
+  expect(recordingInputProblem(input({kind:"world-state", worldState:replaced}))).toBeNull();
 });
 
 test("a daemon task's throw refuses the capture while every bar holds it, and allows it once it has left", () => {
@@ -350,6 +384,9 @@ test("action overlays are refused before raw layer, plugin or retained config by
   };
   for (const event of [
     input({ kind: "config", origin, config: snapshot(ACTION_CONFIG) }),
+    input({ kind: "config", origin, config: safe, retained: snapshot(ACTION_CONFIG) }),
+    input({ kind: "context", context: checked().req, worldState: facts(),
+      handoff: { config: safe, retained: snapshot(ACTION_CONFIG) } }),
     input({
       kind: "click", placementSeed: "test-click",
       click: admitClick(
@@ -358,7 +395,7 @@ test("action overlays are refused before raw layer, plugin or retained config by
         TEST_SIGNER,
       ).click,
       context: heardContextOf(checked().req),
-      coldConfig: snapshot(ACTION_CONFIG),
+      coldConfig: { config: safe, retained: snapshot(ACTION_CONFIG) },
     }),
     input({ kind: "config", origin, config: { ...safe, plugins: [plugin] } }),
     input({
@@ -437,6 +474,110 @@ test("the output check sees the evaluated run environment in ordinary and pane f
     });
     expect(problem).toMatch(/run action supplies environment/);
     expect(problem).not.toContain(ACTION_SECRET);
+  }
+});
+
+test("only an earlier captured control in the same session identifies an authored pick", async () => {
+  const controls = new RecordingControls();
+  const { output } = await draw(JSON.stringify({
+    actions: { save: { set: "choice", to: "displayed" } },
+    segments: { item: { template: '{{ action "save" "choose" }}' } },
+    root: { h: ["item"] },
+  }));
+  const patch = { kind: "patch", store: "session-state", key: SESSION, changes: { choice: "displayed" } } as const;
+  const decision = { ...output, effects: [{
+    kind: "change" as const, session: SESSION, id: 1 as EffectId, changes: [],
+    target: { kind: "layer" as const, origin: checked().req.requested, role: "user" as const }, onApplied: [patch],
+  }] };
+  const click = (value: string) => input({
+    kind: "click", placementSeed: "seed", context: null,
+    click: admitClick(VERB_SET_STATE, encodeSegments([SESSION, "choice", value]), TEST_SIGNER).click,
+  });
+  expect(recordingInputProblem(click("displayed"), controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem(decision, controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem({ ...output, stored: [patch] }, controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem(output, controls)).toBeNull();
+  expect(recordingOutputProblem(decision, controls)).toBeNull();
+  expect(recordingInputProblem(click("displayed"), controls)).toBeNull();
+  expect(recordingInputProblem(click(SECRET), controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem({ ...output, stored: [patch] }, controls)).toBeNull();
+  expect(recordingOutputProblem({ ...output, stored: [{ ...patch, key: sessionIdOf("other") }] }, controls))
+    .toMatch(/unknown origin/);
+  recordingInputProblem(input({kind: "retire", session: SESSION}), controls);
+  expect(recordingInputProblem(click("displayed"), controls)).toMatch(/unknown origin/);
+});
+
+test("turn recordings inspect live pick values, erased key names and undo history", async () => {
+  const { output } = await draw("{}");
+  const patchProblem = (changes: Record<string, string | null>) =>
+    recordingOutputProblem({
+      ...output,
+      stored: [
+        { kind: "patch", store: "session-state", key: SESSION, changes },
+      ],
+    });
+  expect(patchProblem({ padding: "2", [HOVER_KEY]: null })).toBeNull();
+  const privateChanges: Array<Record<string, string | null>> = [
+    { [EDIT_MODE_KEY]: SECRET },
+    { [SECRET]: null },
+    { padding: SECRET },
+  ];
+  for (const changes of privateChanges) {
+    const problem = patchProblem(changes);
+    expect(problem).toMatch(/unknown origin/);
+    expect(problem).not.toContain(SECRET);
+  }
+  expect(
+    recordingOutputProblem({
+      ...output,
+      stored: [
+        {
+          kind: "steps",
+          store: "settings-history",
+          key: SESSION,
+          edits: [
+            {
+              kind: "append",
+              step: [
+                {
+                  kind: "layer",
+                  role: "user",
+                  digest: digestOf("/offline/layer"),
+                  before: ACTION_CONFIG,
+                  after: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  ).toMatch(/run action supplies environment/);
+  const forgotten = (...targets: HistoryTarget[]) =>
+    recordingOutputProblem({
+      ...output,
+      stored: [
+        {
+          kind: "steps",
+          store: "settings-history",
+          key: SESSION,
+          edits: [{ kind: "forget", targets }],
+        },
+      ],
+    });
+  expect(
+    forgotten(
+      { kind: "session", key: "padding" },
+      { kind: "layer", role: "user", digest: digestOf("/offline/layer") },
+    ),
+  ).toBeNull();
+  for (const target of [
+    { kind: "session", key: SECRET },
+    { kind: "layer", role: "user", digest: SECRET },
+  ] as const) {
+    const problem = forgotten(target);
+    expect(problem).toMatch(/unknown origin/);
+    expect(problem).not.toContain(SECRET);
   }
 });
 
@@ -580,7 +721,7 @@ test("boot preserves built-in state and layer history and refuses unsupported hi
               {
                 kind: "layer" as const,
                 role: "user" as const,
-                digest: "same-layer",
+                digest: digestOf("/offline/layer"),
                 before: "{}",
                 after: "{ globals: { padding: 2 } }",
               },
@@ -614,7 +755,7 @@ test("boot preserves built-in state and layer history and refuses unsupported hi
               {
                 kind: "layer",
                 role: "user",
-                digest: "same-layer",
+                digest: digestOf("/offline/layer"),
                 before: ACTION_CONFIG,
                 after: "{}",
               },
@@ -626,4 +767,115 @@ test("boot preserves built-in state and layer history and refuses unsupported hi
   });
   expect(oldLayer).toMatch(/run action supplies environment/);
   expect(oldLayer).not.toContain(ACTION_SECRET);
+});
+
+test("recording inspects each end of a Back visit, including visits ahead of the cursor", () => {
+  const visit = [
+    { key: SETTINGS_ANCHOR, from: "private-destination", to: DISCLOSURE_OPEN },
+  ];
+  const restored = {
+    ...BOOT,
+    stored: {
+      ...BOOT.stored,
+      navigation: { [SESSION]: { visits: [visit], cursor: 0 } },
+    },
+  };
+  expect(recordingBootProblem(restored)).toMatch(/unknown origin/);
+  expect(
+    recordingWritesProblem([
+      {
+        store: "navigation",
+        kind: "navigate",
+        key: SESSION,
+        edit: { kind: "visit", changes: visit },
+      },
+    ]),
+  ).toMatch(/unknown origin/);
+  const allowed = [{ ...visit[0]!, from: null }];
+  expect(
+    recordingWritesProblem([
+      {
+        store: "navigation",
+        kind: "navigate",
+        key: SESSION,
+        edit: { kind: "visit", changes: allowed },
+      },
+    ]),
+  ).toBeNull();
+});
+
+test("recordings inspect the pinned draft, staged files, private redo and future Back visits", () => {
+  const base = {
+    origin: { projectDir: ROOT, cwd: ROOT, target: { source: "search" } },
+    chain: [],
+  } as const;
+  const draft = {
+    base,
+    picks: {},
+    files: {},
+    history: { past: [], future: [] },
+    navigation: { visits: [], cursor: 0 },
+  };
+  const boot = (
+    value: NonNullable<RendererBoot["stored"]["drafts"]>[typeof SESSION],
+  ) =>
+    recordingBootProblem({
+      ...BOOT,
+      stored: { ...BOOT.stored, drafts: { [SESSION]: value } },
+    });
+  expect(boot({...draft,picks:{[EDIT_MODE_KEY]:"arrange"}})).toBeNull();
+  expect(boot({...draft,picks:{[EDIT_MODE_KEY]:SECRET}})).toMatch(/unknown origin/);
+  expect(
+    boot({ ...draft, base: { ...base, chain: snapshot(ACTION_CONFIG).chain } }),
+  ).toMatch(/environment/);
+  expect(boot({ ...draft, files: { "/p": ACTION_CONFIG } })).toMatch(
+    /environment/,
+  );
+  expect(
+    boot({
+      ...draft,
+      history: {
+        past: [],
+        future: [
+          [
+            {
+              kind: "session",
+              key: "private-pick",
+              before: null,
+              after: SECRET,
+            },
+          ],
+        ],
+      },
+    }),
+  ).toMatch(/unknown origin/);
+  expect(
+    boot({
+      ...draft,
+      navigation: {
+        cursor: 0,
+        visits: [[{ key: SETTINGS_ANCHOR, from: SECRET, to: DISCLOSURE_OPEN }]],
+      },
+    }),
+  ).toMatch(/unknown origin/);
+  expect(
+    recordingWritesProblem([
+      {
+        store: "draft",
+        key: SESSION,
+        kind: "modify",
+        changes: [{ kind: "pick", key: "secret-key" }],
+      },
+    ]),
+  ).toMatch(/unknown origin/);
+  expect(
+    recordingWritesProblem([
+      {
+        store: "draft",
+        key: SESSION,
+        kind: "modify",
+        changes: [{ kind: "file", key: "/p", value: ACTION_CONFIG }],
+      },
+    ]),
+  ).toMatch(/environment/);
 });

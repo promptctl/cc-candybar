@@ -302,7 +302,7 @@ describe("RenderCache", () => {
         );
         return held.view.registry
           .subscriptions()
-          .map(({ identity }) => identity.read);
+          .map(({ run }) => run.identity.read);
       };
       expect(cwdOf(a, "s-a")).toEqual([
         { kind: "shell", command: "pwd -P", cwd: a, env: shellEnvOf() },

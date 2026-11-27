@@ -13,9 +13,10 @@ import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { rendererStatsOf } from "../../../src/daemon/foundations/stats-snapshot";
 import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
-import { click, findUrl, frameRequest, hookData, observePane, renderBody, renderRequest, urlWriting, urlsOfAnsi } from "../../helpers/daemon-e2e";
+import { click, drawnLink, findUrl, frameRequest, hookData, observePane, renderBody, renderRequest, urlWriting, urlsOfAnsi } from "../../helpers/daemon-e2e";
 import { saidOf, sendClick } from "../../../scripts/lib/daemon/requests";
 import {
+  effectsUrl,
   VERB_APPLY_LAYOUT_OP,
   VERB_REDO,
   VERB_REPO_CONFIG,
@@ -44,7 +45,8 @@ import {
 } from "../../../src/daemon/config-discovery/repo-configs";
 import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
-import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
+import { MAIN_RENDERER, rendererNameOf } from "../../../src/daemon/foundations/renderer-name";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 
 const BUNDLE = path.resolve("dist/index.mjs");
 const builtDaemon = (env: NodeJS.ProcessEnv) => ({
@@ -79,6 +81,510 @@ function cacheEntry(id: string, timestamp: string): string {
     }) + "\n"
   );
 }
+
+test("a subscriber waiting before the first request follows that request to an already running named renderer", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-waiting-peer", builtDaemon);
+  const session = "waiting-for-first-request";
+  const config = path.join(daemon.stateDir, "feed.json5");
+  const draw = (sid: string) => frameRequest(daemon.sockPath, {
+    ...renderBody(sid, daemon.stateDir, {}, ["cc-candybar", "--config-only", config]),
+    env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+    client: { kind: "node", bundle: worktreeBuilt, source: null },
+  });
+  try {
+    fs.writeFileSync(config, JSON.stringify({
+      globals: { experimentalPane: true },
+      segments: { status: { template: "named subscription" } },
+      root: { h: ["status"] },
+    }));
+    await draw("warm-peer");
+    const pane = observePane(daemon.sockPath, session);
+    try {
+      await until(
+        () => fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8")
+          .includes(`feed sid="${session}" opened`),
+        "the default renderer holding the subscription before its first request",
+      );
+      await draw(session);
+      await pane.waitFor(line => line.includes("named subscription"), "the first named frame on the existing connection");
+    } finally {
+      pane.close();
+    }
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
+test("live renderer processes observe a signed click and one undo step across a route switch", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-live-session", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "project-"));
+    const config = path.join(dir, "bar.json5");
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { padding: 1, experimentalPane: true },
+        actions: {
+          four: { set: "padding", to: "4" },
+          back: { undo: true },
+          again: { redo: true },
+        },
+        segments: {
+          choice: {
+            template:
+              'pick={{ .padding.effective }} {{ action "four" "FOUR" }} {{ action "back" "UNDO" }} {{ action "again" "REDO" }}',
+          },
+        },
+        root: { h: ["choice"] },
+      }),
+    );
+    const session = sessionIdOf("live-picks");
+    const peer = rendererNameOf("worktree");
+    const draw = (named: boolean) =>
+      frameRequest(daemon.sockPath, {
+        ...renderBody(session, dir, {}, [
+          "cc-candybar",
+          "--config-only",
+          config,
+        ]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: peer },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const main = await draw(false);
+    const set = findUrl(
+      linksOf(main).map((l) => l.url),
+      (effects) =>
+        effects.some(
+          (e) =>
+            e.verb === VERB_SET_STATE &&
+            e.args[1] === "padding" &&
+            e.args[2] === "4",
+        ),
+    );
+    if (!set) throw new Error("missing signed control in " + textOf(main));
+    expect(textOf(await draw(true))).toContain("pick=1");
+    const pane = observePane(daemon.sockPath, session);
+    try {
+      await pane.waitFor(
+        (line) => line.includes("pick=1"),
+        "the named renderer's first pane frame",
+      );
+      // Stop only the worker this isolated host launched. Its pane cannot
+      // acknowledge the revision before the click on main has completed.
+      const log = () =>
+        fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8");
+      const peerPid = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+      if (!peerPid)
+        throw new Error("the isolated host never launched the named renderer");
+      const pid = Number(peerPid[1]);
+      process.kill(pid, "SIGSTOP");
+      try {
+        await click(daemon.sockPath, set);
+        await until(
+          () => /session commit revision=\d+ writer=main bytes=[1-9]\d* recipients=main\[1\],worktree\[1\]/.test(log()),
+          "the daemon log flushing the revision, byte count and both recipient generations",
+        );
+      } finally {
+        process.kill(pid, "SIGCONT");
+      }
+      await pane.waitFor(
+        (line) => line.includes("pick=4"),
+        "the named pane updating from the main renderer's click",
+      );
+    } finally {
+      pane.close();
+    }
+    expect(textOf(await draw(true))).toContain("pick=4");
+    const undo = drawnLink(
+      daemon.sockPath,
+      effectsUrl([{ verb: VERB_UNDO, args: [session] }]),
+      { renderer: peer, session },
+    );
+    await click(daemon.sockPath, undo);
+    expect(textOf(await draw(false))).toContain("pick=1");
+    const empty = await sendClick(daemon.sockPath, undo);
+    expect(empty).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("nothing to undo"),
+    });
+    const redo = drawnLink(
+      daemon.sockPath,
+      effectsUrl([{ verb: VERB_REDO, args: [session] }]),
+      { renderer: MAIN_RENDERER, session },
+    );
+    await click(daemon.sockPath, redo);
+    expect(textOf(await draw(true))).toContain("pick=4");
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
+test("peers and a replacement share Back visits and the cursor after a guarded menu gesture", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-peer-back", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "project-"));
+    const config = path.join(dir, "bar.json5");
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { padding: 1 },
+        actions: {
+          open: { set: "nav.menu", to: "open" },
+          close: { set: "nav.menu", to: "closed" },
+          back: { back: true },
+          wider: { persist: "padding", by: 1, min: 0, max: 5, layer: "user" },
+          enter: { do: ["open", "wider"] },
+        },
+        variables: {
+          menu: { kind: "state", key: "nav.menu", default: "closed" },
+          depth: {
+            kind: "input",
+            path: "navigation.back",
+            type: "number",
+            default: 0,
+          },
+        },
+        segments: {
+          nav: {
+            template:
+              'menu={{ .menu }} depth={{ .depth }} {{ action "enter" "ENTER" }} {{ action "close" "CLOSE" }} {{ action "back" "BACK" }}',
+          },
+        },
+        root: { h: ["nav"] },
+      }),
+    );
+    const sid = sessionIdOf("back-across-peers");
+    const draw = (named: boolean) =>
+      frameRequest(daemon.sockPath, {
+        ...renderBody(sid, dir, {}, ["cc-candybar", "--config-only", config]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const press = async (named: boolean, label: string) => {
+      const bar = await draw(named);
+      const control = linksOf(bar).find((link) => link.text === label);
+      if (!control) throw new Error("missing " + label + " in " + textOf(bar));
+      await click(daemon.sockPath, control.url);
+    };
+    expect(textOf(await draw(true))).toContain("menu=closed depth=0");
+    await press(false, "ENTER");
+    expect(textOf(await draw(true))).toContain("menu=open depth=1");
+    await press(true, "CLOSE");
+    expect(textOf(await draw(false))).toContain("menu=closed depth=2");
+    await press(false, "BACK");
+    expect(textOf(await draw(true))).toContain("menu=open depth=1");
+    const log = () =>
+      fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8");
+    const pid = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+    if (!pid) throw new Error("the named renderer did not start");
+    process.kill(Number(pid[1]), "SIGKILL");
+    await until(
+      () => /renderer worktree\[2\] started pid=/.test(log()),
+      "the replacement renderer starts",
+      8000,
+    );
+    expect(textOf(await draw(true))).toContain("menu=open depth=1");
+    await press(true, "BACK");
+    expect(textOf(await draw(false))).toContain("menu=closed depth=0");
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
+      2,
+    );
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
+test("a renderer switch keeps the last working bar and the latest rejected config", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-config-handoff", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "config-"));
+    const file = path.join(dir, "bar.json5");
+    const install = (label: string) =>
+      fs.writeFileSync(file, JSON.stringify({
+        segments: { marker: { template: label } },
+        root: { h: ["marker"] },
+      }));
+    const draw = async (name: string, session = "moving", at = file) =>
+      textOf(await frameRequest(daemon.sockPath, {
+        ...renderBody(session, dir, {}, ["cc-candybar", "--config-only", at]),
+        env: { ...TEST_ENV, CC_CANDYBAR_NAME: name },
+        client: { kind: "node", bundle: BUNDLE, source: null },
+      }));
+    install("first-working-bar");
+    expect(await draw("main")).toContain("first-working-bar");
+    const warmFile = path.join(dir, "other.json5");
+    fs.copyFileSync(file, warmFile);
+    expect(await draw("warm", "other-session", warmFile)).toContain("first-working-bar");
+    fs.writeFileSync(file, "{ rejected: ");
+    await until(async () => (await draw("main")).includes("⚠"), "issuer rejects the edited config");
+    // This process already serves the broken origin for an unrelated session.
+    const rejected = await draw("resident", "already-here");
+    expect(rejected).toContain("⚠");
+    expect(rejected).not.toContain("first-working-bar");
+    expect(await draw("fallback", "no-authored-config")).not.toContain("first-working-bar");
+    for (const renderer of ["warm", "cold", "resident"]) {
+      const frame = await draw(renderer);
+      expect(frame).toContain("first-working-bar");
+      expect(frame).toContain("⚠");
+    }
+    const bundled = await draw("main", "no-authored-config");
+    expect(bundled).toContain("⚠");
+    expect(bundled).not.toContain("first-working-bar");
+    install("corrected-bar");
+    await until(async () => (await draw("cold")).includes("corrected-bar"), "peer loads the repair");
+    expect(await draw("main")).toContain("corrected-bar");
+    expect(await draw("warm", "other-session", warmFile)).toContain("first-working-bar");
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
+test("a held file control stays bound to its displayed origin across config and peer switches", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-pinned-origin", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "origins-"));
+    const first = path.join(dir, "first.json5"),
+      second = path.join(dir, "second.json5");
+    const body = JSON.stringify({
+      globals: { padding: 1 },
+      actions: {
+        wider: { persist: "padding", min: 0, max: 8, by: 1, layer: "user" },
+      },
+      segments: {
+        choice: {
+          template:
+            'padding={{ .padding.effective }} {{ action "wider" "WIDER" }}',
+        },
+      },
+      root: { h: ["choice"] },
+    });
+    for (const file of [first, second]) fs.writeFileSync(file, body);
+    const sid = sessionIdOf("held-origin");
+    const draw = async (file: string, named = false) => {
+      const frame = await frameRequest(daemon.sockPath, {
+        ...renderBody(sid, dir, {}, ["cc-candybar", "--config-only", file]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+      const link = linksOf(frame).find((l) => l.text === "WIDER");
+      if (!link)
+        throw new Error("the selected file drew no control: " + textOf(frame));
+      return link.url;
+    };
+    const oldLink = await draw(first);
+    expect(await draw(first)).toBe(oldLink);
+    const currentLink = await draw(second);
+    await draw(second, true);
+    await click(daemon.sockPath, oldLink);
+    const padding = (file: string) =>
+      JSON5.parse(fs.readFileSync(file, "utf8")).globals.padding;
+    expect([padding(first), padding(second)]).toEqual([2, 1]);
+    expect(currentLink).not.toBe(oldLink);
+    await click(daemon.sockPath, currentLink);
+    expect([padding(first), padding(second)]).toEqual([2, 2]);
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
+test("a successful file change remains undoable when its issuing worker dies at the rename", async () => {
+  const isolated = prepareIsolatedDaemonEnv("ccb-config-issuer");
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "ccb-config-issuer-")),
+  );
+  const config = path.join(root, "bar.json5");
+  const arm = path.join(root, "issuer-pid");
+  const probe = path.join(root, "after-rename.cjs");
+  let daemon: RunningDaemon | undefined;
+  try {
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { padding: 1 },
+        actions: {
+          wider: { persist: "padding", min: 0, max: 4, by: 1, layer: "user" },
+        },
+        segments: {
+          extra: {template:"extra cell"},
+          choice: {
+            template:
+              'padding={{ .padding.effective }} {{ action "wider" "WIDER" }}',
+          },
+        },
+        root: { h: ["choice","extra"] },
+      }),
+    );
+    // Only this isolated host writes this file. Termination follows the
+    // real rename before the host can send its first config or effect receipt.
+    fs.writeFileSync(
+      probe,
+      `
+      const fs = require("node:fs");
+      const rename = fs.renameSync;
+      fs.renameSync = (...args) => {
+        const result = rename(...args);
+        if (args[1] === ${JSON.stringify(config)} && fs.existsSync(${JSON.stringify(arm)})) {
+          const pid = Number(fs.readFileSync(${JSON.stringify(arm)}, "utf8"));
+          fs.unlinkSync(${JSON.stringify(arm)});
+          process.kill(pid, "SIGKILL");
+        }
+        return result;
+      };
+      require("node:module").syncBuiltinESMExports();
+    `,
+    );
+    const prior = Array.from({ length: 32 }, (_, i) =>
+      sessionIdOf("prior-" + i),
+    );
+    fs.writeFileSync(
+      path.join(isolated.stateDir, "session-state.json"),
+      JSON.stringify(
+        Object.fromEntries(prior.map((id) => [id, { padding: "3" }])),
+      ),
+    );
+    fs.writeFileSync(
+      path.join(isolated.stateDir, "settings-history.json"),
+      JSON.stringify(
+        Object.fromEntries(
+          prior.map((id) => [
+            id,
+            {
+              past: [
+                [{ kind: "session", key: "padding", before: null, after: "3" }],
+              ],
+              future: [],
+            },
+          ]),
+        ),
+      ),
+    );
+    daemon = await spawnDaemonWithEnv(
+      {
+        ...isolated.env,
+        NODE_OPTIONS: [isolated.env.NODE_OPTIONS, `--require=${probe}`]
+          .filter(Boolean)
+          .join(" "),
+      },
+      builtDaemon,
+    );
+    const sid = sessionIdOf("saved-file");
+    const peer = rendererNameOf("worktree");
+    const draw = (named: boolean, session = sid) =>
+      frameRequest(isolated.sockPath, {
+        ...renderBody(session, root, {}, ["cc-candybar", "--config", config]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: peer },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const frame = await draw(false);
+    const wider = linksOf(frame).find((link) => link.text === "WIDER");
+    if (!wider) throw new Error("the issuer never drew its file control");
+    expect(textOf(await draw(true))).toContain("padding=1");
+    const log = () =>
+      fs.readFileSync(path.join(isolated.stateDir, "daemon.log"), "utf8");
+    const issuer = /renderer main\[1\] started pid=(\d+)/.exec(log());
+    if (!issuer) throw new Error("the isolated host never launched the issuer");
+    fs.writeFileSync(arm, issuer[1]!);
+    await click(isolated.sockPath, wider.url);
+    expect(fs.existsSync(arm)).toBe(false);
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
+      2,
+    );
+    const undoOnPeer = (session: typeof sid) =>
+      drawnLink(
+        isolated.sockPath,
+        effectsUrl([{ verb: VERB_UNDO, args: [session] }]),
+        { renderer: peer, session },
+      );
+    const undo = undoOnPeer(sid);
+    await click(isolated.sockPath, undo);
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
+      1,
+    );
+    expect(await sendClick(isolated.sockPath, undo)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("nothing to undo"),
+    });
+    // The surviving worker took the host's eviction with the file decision.
+    // The adjacent session retained the same pick and its usable Undo.
+    const [evicted, retained] = prior;
+    expect(textOf(await draw(true, evicted!))).toContain("padding=3");
+    expect(
+      await sendClick(isolated.sockPath, undoOnPeer(evicted!)),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("nothing to undo"),
+    });
+    expect(textOf(await draw(true, retained!))).toContain("padding=3");
+    await click(isolated.sockPath, undoOnPeer(retained!));
+    expect(textOf(await draw(true, retained!))).toContain("padding=1");
+    // Save decides both the durable layout and the lifetime of the private
+    // draft. Kill its worker before any receipt can close the edit locally.
+    await until(
+      () => /renderer main\[2\] started pid=/.test(log()),
+      "first issuer has restarted before testing a second worker loss",
+      8000,
+    );
+    const editing = sessionIdOf("save-at-rename");
+    const bar = (named: boolean) => draw(named, editing);
+    await click(
+      isolated.sockPath,
+      urlWriting(await bar(true), SETTINGS_ANCHOR, SETTINGS_OPEN),
+    );
+    await click(
+      isolated.sockPath,
+      urlWriting(await bar(true), EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
+    );
+    const remove = encodeLayoutOp({ op: "remove", target: "extra" });
+    const removing = findUrl(
+      linksOf(await bar(true)).map((item) => item.url),
+      (effects) =>
+        effects.some(
+          (e) => e.verb === VERB_APPLY_LAYOUT_OP && e.args[3] === remove,
+        ),
+    );
+    if (!removing)
+      throw new Error("missing remove-extra control in the peer draft");
+    await click(isolated.sockPath, removing);
+    const saving = linksOf(await bar(true)).find(
+      (item) => item.text === "✓ save",
+    );
+    if (!saving) throw new Error("the edited peer did not offer Save");
+    const named = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+    if (!named) throw new Error("missing isolated named worker PID");
+    fs.writeFileSync(arm, named[1]!);
+    await click(isolated.sockPath, saving.url);
+    expect(fs.existsSync(arm)).toBe(false);
+    const landed = textOf(await bar(false));
+    expect(landed).toContain("padding=1");
+    expect(landed).not.toContain("✓ save");
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).root).toEqual({
+      h: ["choice"],
+    });
+    const undoSave = drawnLink(
+      isolated.sockPath,
+      effectsUrl([{ verb: VERB_UNDO, args: [editing] }]),
+      { renderer: MAIN_RENDERER, session: editing },
+    );
+    await click(isolated.sockPath, undoSave);
+    expect(textOf(await bar(false))).toContain("extra cell");
+
+  } finally {
+    try {
+      await daemon?.stop();
+    } finally {
+      isolated.removeTmpDirs();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
 
 test("two named renderer processes draw separately and share config, transcript and plugin-source reads", async () => {
   const isolated = prepareIsolatedDaemonEnv("ccb-named");
@@ -458,6 +964,139 @@ test("two named renderer processes draw separately and share config, transcript 
     await daemon?.stop();
     isolated.removeTmpDirs();
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an edit, its private Back and Undo, and its pinned layer survive route switches and renderer death", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-peer-draft", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "draft-"));
+    const file = path.join(dir, "bar.json5");
+    const original = JSON.stringify({
+      segments: {
+        first: { template: 'live-first {{ action "edit.toggle" "ARRANGE" }}' },
+        second: { template: "live-second" },
+      },
+      root: { h: ["first", "second"] },
+    });
+    fs.writeFileSync(file, original);
+    const read = () => fs.readFileSync(file, "utf8");
+    const draw = (named: boolean) =>
+      frameRequest(daemon.sockPath, {
+        ...renderBody("draft-switch", dir, {}, [
+          "cc-candybar",
+          "--config-only",
+          file,
+        ]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const press = async (named: boolean, label: string, index = 0) => {
+      const frame = await draw(named);
+      const link = linksOf(frame).filter((item) => item.text === label)[index];
+      if (!link)
+        throw new Error(`missing ${label} #${index} in ${textOf(frame)}`);
+      await click(daemon.sockPath, link.url);
+    };
+    const remove = async (named: boolean, target: string) => {
+      const frame = await draw(named);
+      const op = encodeLayoutOp({ op: "remove", target });
+      const url = findUrl(
+        linksOf(frame).map((link) => link.url),
+        (effects) =>
+          effects.some(
+            (e) => e.verb === VERB_APPLY_LAYOUT_OP && e.args[3] === op,
+          ),
+      );
+      if (!url)
+        throw new Error("missing remove " + target + " in " + textOf(frame));
+      await click(daemon.sockPath, url);
+    };
+    await draw(true);
+    await click(
+      daemon.sockPath,
+      urlWriting(await draw(false), SETTINGS_ANCHOR, SETTINGS_OPEN),
+    );
+    await click(
+      daemon.sockPath,
+      urlWriting(await draw(false), EDIT_MODE_KEY, EDIT_MODE_ARRANGE),
+    );
+    expect(textOf(await draw(true))).toContain("✓ done");
+    await press(true, "✚");
+    expect(textOf(await draw(false))).toContain("directory ");
+    await press(false, "◁");
+    expect(textOf(await draw(true))).not.toContain("directory ");
+    await remove(true, "second");
+    expect(textOf(await draw(false))).toContain("✓ save");
+    expect(read()).toBe(original);
+    await press(false, "↶");
+    const log = () =>
+      fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8");
+    const pid = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+    if (!pid) throw new Error("missing isolated peer pid");
+    process.kill(Number(pid[1]), "SIGKILL");
+    await until(
+      () => /renderer worktree\[2\] started pid=/.test(log()),
+      "replacement peer boots with the private redo stack",
+      8000,
+    );
+    const restored = textOf(await draw(true));
+    expect(restored).toContain("✓ done");
+    expect(restored).toContain("second");
+    await press(true, "↷");
+    expect(textOf(await draw(false))).not.toContain("second");
+    expect(read()).toBe(original);
+    // A disjoint external change survives Save against the pinned base.
+    const external = { ...JSON.parse(original), globals: { padding: 2 } };
+    fs.writeFileSync(file, JSON.stringify(external));
+    await press(false, "✓ save");
+    expect(textOf(await draw(true))).toContain("live-first");
+    expect(JSON5.parse(read())).toMatchObject({
+      globals: { padding: 2 },
+      root: { h: ["first"] },
+    });
+    const saved = read();
+    await press(true, "ARRANGE");
+    await remove(false, "first");
+    const savedAt = async () =>
+      linksOf(await draw(true)).find((link) => link.text === "✓ save")?.url;
+    const oldSave = await savedAt();
+    expect(oldSave).toBeDefined();
+    const backup = path.join(dir, "original.json5"),
+      replacement = path.join(dir, "replacement.json5"),
+      pending = path.join(dir, "new-link");
+    fs.linkSync(file, backup);
+    fs.writeFileSync(replacement, saved);
+    fs.symlinkSync(replacement, pending);
+    fs.renameSync(pending, file);
+    let redrawn: string | undefined;
+    await until(
+      async () => {
+        redrawn = await savedAt();
+        return redrawn !== undefined && redrawn !== oldSave;
+      },
+      "a newly signed Save from the replacement destination",
+      8000,
+    );
+    expect(await sendClick(daemon.sockPath, redrawn!)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("changed while editing"),
+    });
+    expect(fs.readFileSync(backup, "utf8")).toBe(saved);
+    expect(fs.readFileSync(replacement, "utf8")).toBe(saved);
+    const preview = await draw(true);
+    const rewind = findUrl(
+      linksOf(preview).map((link) => link.url),
+      (effects) => effects.some((e) => e.verb === VERB_REWIND),
+    );
+    if (!rewind) throw new Error("missing Cancel in " + textOf(preview));
+    await click(daemon.sockPath, rewind);
+    expect(textOf(await draw(false))).toContain("live-first");
+    expect(read()).toBe(saved);
+  } finally {
+    await daemon.cleanup();
   }
 });
 

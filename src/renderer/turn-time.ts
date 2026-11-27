@@ -14,6 +14,7 @@ import {
   type Tick,
 } from "../utils/instant.js";
 import { runEach } from "../utils/run-each.js";
+import type { Monotonic } from "../time.js";
 
 interface Deferral {
   readonly until: Tick;
@@ -27,6 +28,7 @@ interface Deferral {
 // the turn's own throw is, so the name goes no further.
 export interface TurnClock {
   now(): number;
+  monotonic(): Monotonic;
   after(task: string, ms: number, run: () => void): () => void;
 }
 
@@ -104,6 +106,7 @@ export class TurnTime {
   // epoch milliseconds, and its held work.
   readonly clock: TurnClock = {
     now: () => this.at * 1000,
+    monotonic: () => (this.tick * 1000) as Monotonic,
     after: (task, ms, run) => this.after(task, ms, run),
   };
 }

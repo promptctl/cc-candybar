@@ -4,21 +4,21 @@
 // so the host's copy keeps the store's recency order.
 
 import type { SessionId } from "../daemon/foundations/session-id";
-import { putNewest } from "../utils/recency";
+import { RecencyMap } from "../utils/recency";
 
 export type Moved = "put" | "heard";
 
 export class StoredMoves {
-  private readonly moved = new Map<SessionId, Moved>();
+  private readonly moved = new RecencyMap<SessionId, Moved>();
 
   put(session: SessionId): void {
-    putNewest(this.moved, session, "put");
+    this.moved.set(session, "put");
   }
 
   // A hearing after a put in the same turn is carried by the put, which
   // moves the entry to the newest end as the hearing did.
   heard(session: SessionId): void {
-    putNewest(this.moved, session, this.moved.get(session) ?? "heard");
+    this.moved.set(session, this.moved.get(session) ?? "heard");
   }
 
   drain<W>(write: (session: SessionId, moved: Moved) => W): W[] {

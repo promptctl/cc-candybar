@@ -14,6 +14,7 @@
 // read, which origins' config the renderer holds, and when it next wants a
 // turn, as they stand once the turn's act has landed.
 
+import type { CapacityOwner } from "../renderer-interface/session-capacity.js";
 import {
   answerRequest,
   deliver,
@@ -23,6 +24,7 @@ import {
   retireSession,
   viewLanes,
   type Delivery,
+  type PrepareDelivery,
   type RendererParts,
 } from "./draw-bar.js";
 import { TurnTime } from "./turn-time.js";
@@ -41,6 +43,11 @@ import {
   type MainRendererParts,
 } from "./verbs/port.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
+import type { PresentationInput } from "../renderer-interface/presentation.js";
+import {
+  historyAfter,
+  type SessionHistory,
+} from "../renderer-interface/history-storage.js";
 import { createGates } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -53,6 +60,7 @@ import { floorOf } from "../config/globals-fields.js";
 import { EditTransactions } from "./edit-transaction.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
+import { stageNavigation } from "../renderer-interface/navigation.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
@@ -60,6 +68,7 @@ import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
   RenderCache,
+  type StateDeps,
   renderCacheBudget,
 } from "./render-cache.js";
 import {
@@ -72,6 +81,7 @@ import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import {
   isCommand,
   type Command,
+  type ConfigOffer,
   type Effect,
   type TurnFailure,
   type TurnFinalizer,
@@ -81,10 +91,13 @@ import {
   type PushedFrame,
   type ReplyTo,
   type Renderer,
+  RENDERER_WIRE_VERSION,
   type RendererBoot,
   type RendererConstruction,
+  type SessionRenderer,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
+import type { FeedResume } from "../renderer-interface/feed-history.js";
 import { ConfigWrites } from "./config-writes.js";
 import { Kept } from "../var-system/store.js";
 import { compareStructural, computed, reaction, runInAction } from "mobx";
@@ -103,7 +116,7 @@ type ReplyByKind = { [K in CommandKind]: ReplyTo<K> };
 // it: a request moves its session to the newest end, and the turn's writes
 // are what moved since the last drain.
 interface HeldStore {
-  heard(session: SessionId): void;
+  heard?(session: SessionId): void;
   drain(): readonly StoreWrite[];
 }
 type Stores = Readonly<Record<StoreWrite["store"], HeldStore>>;
@@ -111,6 +124,7 @@ type Stores = Readonly<Record<StoreWrite["store"], HeldStore>>;
 export function mainRenderer(
   parts: MainRendererParts,
   stores: Stores,
+  wireVersion: number = RENDERER_WIRE_VERSION,
 ): Renderer {
   const { time, turnLog, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -118,11 +132,21 @@ export function mainRenderer(
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, Delivery>();
-  const prepare = (delivery: Delivery): EffectId => {
-    const id = parts.mint();
-    deliveries.set(id, delivery);
-    return id;
-  };
+  const prepareFor =
+    (input?: PresentationInput): PrepareDelivery =>
+    (delivery) => {
+      const id = parts.mint();
+      if (input === undefined) {
+        deliveries.set(id, delivery);
+        return { id };
+      }
+      const { portable, proposal } = parts.renderCache.presentations.propose(
+        delivery.candidate,
+        input,
+      );
+      deliveries.set(id, { ...delivery, portable });
+      return { id, proposal };
+    };
   // The subscriptions this renderer last returned: none before its first turn.
   let subscriptions: Subscriptions = {
     sources: {},
@@ -140,6 +164,42 @@ export function mainRenderer(
   const openWaiting = (session: SessionId) => () => {
     openSession(parts, session);
     opening.delete(session);
+  };
+
+  // [LAW:no-ambient-temporal-coupling] Every cold entry first tries the
+  // admitted selection. Even a build that rejects it must try the latest
+  // offer and report its own selection and diagnostics.
+  const configure = (
+    origin: RenderOrigin,
+    { config, retained }: ConfigOffer,
+  ): void => {
+    if (typeof retained !== "object") {
+      parts.renderCache.configure(
+        origin,
+        config,
+        retained === "current" ? "offered" : "previous",
+      );
+      return;
+    }
+    runEach([
+      () => {
+        parts.renderCache.configure(origin, retained, "offered");
+        parts.renderCache.getOrCreate(origin);
+      },
+      () => parts.renderCache.configure(origin, config),
+    ]);
+  };
+
+  const reconfigure = (origin: RenderOrigin, offer: ConfigOffer): void => {
+    runEach([
+      () => configure(origin, offer),
+      () =>
+        runEach(
+          parts.edits
+            .configured(origin, offer.config)
+            .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
+        ),
+    ]);
   };
 
   // [LAW:types-are-the-program] Every command has a handler with its own
@@ -194,6 +254,8 @@ export function mainRenderer(
     record: RequestFacts,
     effects: Effect[],
     frames: PushedFrame[],
+    prepare: PrepareDelivery,
+    feedResumes?: readonly FeedResume[],
   ): void => {
     switch (event.kind) {
       case "start": {
@@ -208,49 +270,41 @@ export function mainRenderer(
           const offer = configs.get(key);
           if (offer === undefined) return;
           configs.delete(key);
-          const { origin, config, retained } = offer;
-          // [LAW:no-ambient-temporal-coupling] The latest offer is recorded
-          // whatever building the retained input threw, since the host does
-          // not send it again.
-          runEach([
-            () => {
-              if (typeof retained !== "object") return;
-              parts.renderCache.configure(origin, retained);
-              parts.renderCache.getOrCreate(origin);
-            },
-            () => parts.renderCache.configure(origin, config),
-          ]);
+          configure(offer.origin, offer);
         };
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
         // each whatever another's opening, its offer, or a feed, threw.
-        runEach([
-          () => feeds.view(event.viewers, time.tick),
-          // A session's offer and its opening are steps of their own: an
-          // offer that throws still records the latest config, and the
-          // session's context still opens over it.
-          ...event.sessions.flatMap(({ context, worldState }) => [
-            () => offered(context.requested),
+        const open = () =>
+          runEach([
+            () => feeds.view(event.viewers, time.tick, feedResumes),
+            // A session's offer and its opening are steps of their own: an
+            // offer that throws still records the latest config, and the
+            // session's context still opens over it.
+            ...event.sessions.flatMap(({ context, worldState }) => [
+              () => offered(context.requested),
+              () =>
+                notify(
+                  { kind: "context", context, worldState },
+                  record,
+                  effects,
+                  frames,
+                  prepare,
+                ),
+            ]),
+            // A live session gets its cache entry before idle entries warm,
+            // so they cannot take the budget a pinned view needs.
             () =>
-              notify(
-                { kind: "context", context, worldState },
-                record,
-                effects,
-                frames,
+              runEach(
+                [...configs.values()].map(({ origin, retained }) => () => {
+                  offered(origin);
+                  if (retained !== undefined)
+                    parts.renderCache.getOrCreate(origin);
+                }),
               ),
-          ]),
-          // A live session gets its cache entry before idle entries warm,
-          // so they cannot take the budget a pinned view needs.
-          () =>
-            runEach(
-              [...configs.values()].map(({ origin, retained }) => () => {
-                offered(origin);
-                if (retained !== undefined)
-                  parts.renderCache.getOrCreate(origin);
-              }),
-            ),
-        ]);
+          ]);
+        feeds.rebuildViews(feedResumes, open);
         return;
       }
       case "context": {
@@ -258,11 +312,12 @@ export function mainRenderer(
         const session = context.hookData.session_id;
         const previous = parts.worldStates.contextOf(session);
         const origin = context.requested;
+        if (event.handoff !== undefined) reconfigure(origin, event.handoff);
         contextFacts(context, record);
         noteFacts(record, { encoding: context.encoding });
-        // [LAW:one-source-of-truth] Recency is the session's last request or
-        // write, so the bound drops the one idle longest.
-        for (const store of Object.values(stores)) store.heard(session);
+        // Historical wires proposed recency from the renderer. Live stores
+        // defer to the host that received the request.
+        for (const store of Object.values(stores)) store.heard?.(session);
         // [LAW:one-source-of-truth] A view cannot observe a new context
         // while it is still bound to the previous origin's config.
         runInAction(() => {
@@ -290,13 +345,7 @@ export function mainRenderer(
             originKey(parts.worldStates.requestOf(session).requested) === key,
         );
         runEach([
-          () => parts.renderCache.configure(event.origin, event.config),
-          () =>
-            runEach(
-              parts.edits
-                .configured(event.origin, event.config)
-                .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
-            ),
+          () => reconfigure(event.origin, event),
           ...sessions.map(openWaiting),
         ]);
         return;
@@ -315,21 +364,18 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery, displayedEvents, awaiting } = answerRequest(
-          parts,
-          current,
-          event.context.hints,
-          record,
-        );
+        const { frame, delivery, displayed, displayedEvents, awaiting } =
+          answerRequest(parts, current, event.context.hints, record);
         // Its answer opened the session's view, so it waits for none.
         opening.delete(current.hookData.session_id);
         effects.push({
           kind: "present",
-          id: prepare(delivery),
+          ...prepare(delivery),
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
           frame,
+          displayed,
           displayedEvents,
           awaiting,
         });
@@ -384,7 +430,7 @@ export function mainRenderer(
       case "click": {
         const { click } = event;
         const live =
-          click.scope === "session"
+          click.scope === "session" && event.displayed === undefined
             ? parts.worldStates.contextOf(click.session)
             : null;
         const context =
@@ -399,7 +445,7 @@ export function mainRenderer(
               offered !== undefined &&
               originKey(offered) === originKey(origin)
             )
-              parts.renderCache.configure(origin, event.coldConfig);
+              configure(origin, event.coldConfig);
           }
           if (!parts.renderCache.holdsConfig(origin))
             throw new Error(
@@ -419,7 +465,7 @@ export function mainRenderer(
         return;
       }
       case "viewers":
-        feeds.view(event.viewers, time.tick);
+        feeds.view(event.viewers, time.tick, feedResumes);
         return;
       case "due": {
         const busy = new Set(event.pendingClicks);
@@ -594,6 +640,7 @@ export function mainRenderer(
     collect("subscriptions", () =>
       declare(
         event.kind === "config" ||
+          (event.kind === "context" && event.handoff !== undefined) ||
           (event.kind === "click" && event.coldConfig !== undefined),
       ),
     );
@@ -621,12 +668,37 @@ export function mainRenderer(
           const effects: Effect[] = [];
           const frames: PushedFrame[] = [];
           const { event } = input;
-          const { outcome, ...declaration } = ending(event, () =>
-            isCommand(event)
+          using feedsReport = wireVersion >= 36 ? feeds.reporting() : undefined;
+          const order = input.presentation?.order;
+          using idle =
+            order === undefined
+              ? undefined
+              : menuIdle.reporting((session) => {
+                  parts.renderCache.presentations.idleMoved(session, order);
+                });
+          const { outcome, ...declaration } = ending(event, () => {
+            for (const { resume, revision } of input.presentation?.sessions ??
+              [])
+              if (resume)
+                parts.renderCache.resumePresentation(
+                  resume,
+                  revision,
+                  parts.edits.view.revision(resume.session),
+                );
+            return isCommand(event)
               ? command(event)
-              : notify(event, record, effects, frames),
-          );
+              : notify(
+                  event,
+                  record,
+                  effects,
+                  frames,
+                  prepareFor(input.presentation),
+                  input.feedResumes,
+                );
+          });
+          const feedUpdates = feedsReport?.updates();
           return {
+            ...(feedUpdates?.length && { feedUpdates }),
             ...(outcome.kind === "answered"
               ? {
                   kind: "answered" as const,
@@ -638,6 +710,7 @@ export function mainRenderer(
             effects,
             record,
             frames,
+            ...(idle?.changes.length && { idle: idle.changes }),
             ...declaration,
           };
         }),
@@ -675,18 +748,33 @@ function closeIdleMenus(
 }
 
 // [LAW:single-enforcer] The main renderer is built from its supplied state.
-export function mainRendererOf(inputs: RendererBoot): RendererConstruction {
+export function mainRendererOf(
+  inputs: RendererBoot,
+  identifyCompile?: StateDeps["identifyCompile"],
+  wireVersion: number = RENDERER_WIRE_VERSION,
+): RendererConstruction {
   const turnLog = new TurnLog();
   return turnLog.during<RendererConstruction>(() => {
     try {
-      return { kind: "built", renderer: build(inputs, turnLog) };
+      return {
+        kind: "built",
+        renderer: build(inputs, turnLog, identifyCompile, wireVersion),
+      };
     } catch (thrown) {
       return { kind: "refused", failure: rendererFailureOf(thrown) };
     }
   });
 }
 
-function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
+function build(
+  inputs: RendererBoot,
+  turnLog: TurnLog,
+  identifyCompile: StateDeps["identifyCompile"],
+  wireVersion: number,
+): SessionRenderer {
+  // [LAW:one-source-of-truth] Replay uses the ownership contract of the
+  // recorded wire. Live construction always selects the current contract.
+  const capacity: CapacityOwner = wireVersion < 29 ? "renderer" : "host";
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
@@ -694,8 +782,18 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
   const time = new TurnTime();
   const now = () => time.at;
   const log = turnLog.add;
-  const store = new SessionState(inputs.stored.sessions);
-  const edits = new EditTransactions(store, log);
+  const store = new SessionState(
+    inputs.stored.sessions,
+    capacity === "host" ? "host" : undefined,
+  );
+  const edits: EditTransactions = new EditTransactions(
+    store,
+    log,
+    wireVersion >= 32,
+    inputs.stored.drafts,
+    (origin) =>
+      renderCache.holdsConfig(origin) ? renderCache.snapshotFor(origin) : null,
+  );
   // [LAW:one-source-of-truth] Every reader takes the session as its open
   // edit shows it.
   const sessionState = edits.view;
@@ -703,6 +801,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
     store,
     log,
     inputs.stored.history,
+    capacity,
   );
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
@@ -712,13 +811,18 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
   const actFailed = (session: SessionId, reason: string): void =>
     holdClickError(sessionState, session, reason, now());
   const acts = new ActsOnTheirWay(mint, actFailed);
-  const navigationHistory = new NavigationHistory();
+  const navigationHistory = new NavigationHistory(
+    wireVersion >= 31,
+    inputs.stored.navigation,
+  );
   const worldStates = new WorldStates();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock: time.clock,
+      sourceTime: wireVersion < 35 ? time.clock.now : undefined,
       locations: inputs.locations,
       region: inputs.region,
+      identifyCompile,
       sessionState: edits.view,
       editRevision: (origin, sid) => edits.revision(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
@@ -831,7 +935,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
-  return mainRenderer(
+  const core = mainRenderer(
     {
       ...parts,
       turnLog,
@@ -844,8 +948,76 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
       configWrites,
       sessionStats: () => store.stats(),
     },
-    { "session-state": store, "settings-history": settingsHistory },
+    {
+      "session-state": store,
+      "settings-history": settingsHistory,
+      navigation: navigationHistory,
+      draft: edits,
+    },
+    wireVersion,
   );
+  let revision = inputs.sessionRevision;
+  return {
+    answer: (input) => {
+      settingsHistory.beginInput();
+      navigationHistory.beginInput();
+      return core.answer(input);
+    },
+    observe: (commit) =>
+      turnLog.during(() =>
+        time.during(commit, () => {
+          if (commit.revision !== revision + 1)
+            throw new Error(
+              `session revision ${commit.revision} follows ${revision}`,
+            );
+          // Validate relative moves against the last accepted stacks before
+          // publishing any part of the transaction to a MobX derivation.
+          const staged = new Map<SessionId, SessionHistory>();
+          const histories: SessionHistory[] = [];
+          for (const write of commit.writes) {
+            if (write.kind !== "steps") continue;
+            const before =
+              staged.get(write.key) ?? settingsHistory.beforeCommit(write.key);
+            const next = write.edits.reduce(historyAfter, before);
+            staged.set(write.key, next);
+            histories.push(next);
+          }
+          const navigation = stageNavigation(commit.writes, (key) =>
+            navigationHistory.beforeCommit(key),
+          );
+          const applyDrafts = edits.prepare(
+            commit.writes.filter((w) => w.store === "draft"),
+          );
+          return feeds.observe(
+            () =>
+              runInAction(() => {
+                let at = 0;
+                for (const write of commit.writes) {
+                  if (write.store === "navigation" || write.store === "draft")
+                    continue;
+                  else if (write.store === "session-state")
+                    store.observe(write);
+                  else if (write.kind === "heard")
+                    settingsHistory.observeHearing(write.key);
+                  else settingsHistory.observe(write.key, histories[at++]!);
+                }
+                for (const [key, timeline] of navigation)
+                  navigationHistory.observe(key, timeline);
+                const refreshed = applyDrafts();
+                revision = commit.revision;
+                for (const sid of refreshed) {
+                  renderCache.refreshEditedView(sid);
+                  // A passive peer can hear an entire edit without ever
+                  // owning this session's view. Release its local revision
+                  // when the edit ends, just as a view retirement would.
+                  if (worldStates.contextOf(sid) === null) edits.retire(sid);
+                }
+              }),
+            wireVersion >= 36,
+          );
+        }),
+      ),
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The debug projection samples whatever DSL

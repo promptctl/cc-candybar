@@ -5,6 +5,7 @@ import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js"
 // silent renderer is ended, and whose ids cross.
 
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import { encodeSessionCommit, SessionDelivery } from "../../src/daemon/session-delivery";
 import { inProcessRenderer } from "../../src/in-process-renderer";
 import {
   BACKOFF_FIRST_MS,
@@ -47,7 +48,6 @@ import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
 import {
   oversizedRendererHistory,
-  oversizedSession,
 } from "../helpers/oversized-renderer-history";
 import type { LogLine } from "../../src/utils/logger";
 
@@ -89,10 +89,11 @@ const RENDERER_BOOT = {
   },
   region: SAMPLE_REGION,
   memoryLimitBytes: 1,
+  sessionRevision: 0,
   stored: EMPTY_STORED_STATE,
 } satisfies Extract<HostLine, { kind: "boot" }>["boot"];
 
-function rig(start: () => Promise<void> = async () => {}) {
+function rig(start: () => Promise<void> = async () => {}, boot = () => RENDERER_BOOT) {
   const clock: HeldClock = heldClock(new Date("2026-11-15T00:00:00Z"));
   const children: Child[] = [];
   const logs: string[] = [];
@@ -128,6 +129,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
   };
   const link = processRenderer({
+    observed: () => {},
     log: (level, msg) => {
       logs.push(msg);
       levels.push(level);
@@ -146,7 +148,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     cwd: "/state",
     heapCapMb: 512,
     name: MAIN_RENDERER,
-    boot: () => RENDERER_BOOT,
+    boot,
   });
   // The inputs the host sent the child, in order.
   const inputs = (child: Child) =>
@@ -206,6 +208,101 @@ const pin: EventInput = {
   at: 0 as Instant,
   tick: 0 as Tick,
 };
+
+const sessionCommit = (revision: number, value = "4") =>
+  encodeSessionCommit({
+    kind: "session-commit",
+    revision,
+    at: pin.at,
+    tick: pin.tick,
+    writes: [
+      {
+        kind: "patch",
+        store: "session-state",
+        key: SESSION,
+        changes: { padding: value },
+      },
+    ],
+  });
+
+test("a starting renderer receives its suffix and a healthy renderer confirms revisions on existing traffic", async () => {
+  const { link, children } = rig();
+  link.arm();
+  const child = children[0]!;
+  const first = sessionCommit(1);
+  expect(link.observe(first)).toBe(1);
+  expect(child.written.map((l) => l.kind)).toEqual(["boot"]);
+  child.say(startedLine(9001));
+  await settled();
+  expect(child.written.map((l) => l.kind)).toEqual([
+    "boot",
+    "session-commit",
+    "ping",
+  ]);
+  expect(child.written[1]).toEqual(first.value);
+  const ping = child.written[2];
+  if (ping?.kind !== "ping") throw new Error("missing startup ping");
+  for (let revision = 2; revision <= 256; revision++)
+    expect(link.observe(sessionCommit(revision))).toBe(1);
+  child.say({
+    kind: "ping",
+    n: ping.n,
+    sessionRevision: 1,
+    usage: { rss: 5, heapTotal: 3 },
+  });
+  expect(link.observe(sessionCommit(257))).toBe(1);
+  expect(child.written.filter((l) => l.kind === "session-commit")).toHaveLength(
+    257,
+  );
+  expect(child.written).toHaveLength(259);
+});
+
+test("a lagging renderer reboots from the host's current revision and receives just the next change", async () => {
+  let revision = 0;
+  const { link, children, clock, ends } = rig(undefined, () => ({
+    ...RENDERER_BOOT,
+    sessionRevision: revision,
+  }));
+  await readRenderer(link, children);
+  while (++revision <= 256)
+    expect(link.observe(sessionCommit(revision))).toBe(1);
+  expect(link.observe(sessionCommit(revision))).toBeNull();
+  const first = children[0]!;
+  await stopped(clock, first);
+  expect(ends[0]?.text).toContain("session delivery exceeded its budget");
+  clock.advance(BACKOFF_FIRST_MS);
+  const second = children[1]!;
+  expect(second.written[0]).toMatchObject({
+    kind: "boot",
+    boot: { sessionRevision: 257 },
+  });
+  expect(link.observe(sessionCommit(++revision))).toBe(2);
+  second.say(startedLine(9002));
+  await settled();
+  expect(second.written.filter((l) => l.kind === "session-commit")).toEqual([
+    sessionCommit(258).value,
+  ]);
+});
+
+test("delivery bounds use encoded bytes and accept a single oversize change on an empty pipe", () => {
+  const delivery = new SessionDelivery(10);
+  const large = sessionCommit(11, "🎨".repeat(270_000));
+  expect(large.bytes).toBe(Buffer.byteLength(large.line));
+  delivery.offer(large);
+  expect(() => delivery.offer(sessionCommit(12))).toThrow(
+    "exceeded its budget",
+  );
+  expect(() => delivery.confirm(12)).toThrow(
+    "invalid renderer session revision receipt",
+  );
+  delivery.confirm(11);
+  expect(() => delivery.confirm(10)).toThrow(
+    "invalid renderer session revision receipt",
+  );
+  expect(() => delivery.offer(sessionCommit(13))).toThrow("follows 11");
+  delivery.offer(sessionCommit(12));
+});
+
 const PINNED: Timed<RendererOutput> = {
   kind: "answered",
   record: [],
@@ -631,7 +728,7 @@ describe("a renderer process's start", () => {
   });
 });
 
-test("the in-process link logs construction diagnostics once before its first answer", async () => {
+test("an in-process peer takes its host checkpoint without proposing its own capacity edits", async () => {
   const logs: LogLine[] = [];
   const link = inProcessRenderer()({
     name: MAIN_RENDERER,
@@ -639,6 +736,7 @@ test("the in-process link logs construction diagnostics once before its first an
     entry: "/app/index.mjs",
     node: ["/bin/node"],
   }).start({
+    observed: () => {},
     log: (level, line) => void logs.push({ level, line }),
     clock: heldClock(new Date(0)),
     start: async () => {},
@@ -646,22 +744,11 @@ test("the in-process link logs construction diagnostics once before its first an
   });
   link.serve();
   link.serve();
-  expect(logs).toEqual([
-    {
-      level: "info",
-      line: `settings-history: trimmed an old step for session ${oversizedSession}`,
-    },
-  ]);
+  expect(logs).toEqual([]);
   const answered = await link.renderer.answer(pin);
+  expect(answered.stored).toEqual([]);
   expect(answered).not.toHaveProperty("diagnostics");
-  expect(answered.stored).toEqual([
-    {
-      kind: "put",
-      store: "settings-history",
-      key: oversizedSession,
-      value: null,
-    },
-  ]);
+  await link.close();
 });
 
 describe("a renderer process's end", () => {

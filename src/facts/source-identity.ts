@@ -72,6 +72,15 @@ export interface Run {
   readonly [RUN]: true;
 }
 
+// [LAW:one-source-of-truth] A keyed JSON variable keeps its identity as its
+// run changes. Several such declarations may share one read while carrying
+// distinct preceding documents.
+export interface RunSubscription {
+  readonly kind: "run";
+  readonly run: Run;
+  readonly documents?: readonly string[];
+}
+
 // [LAW:single-enforcer] The one digest of a source identity: lowercase sha256
 // hex of its canonical JSON (src/utils/plain.ts).
 export const runOf = (identity: SourceIdentity): Run =>
