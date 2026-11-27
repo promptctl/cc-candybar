@@ -186,7 +186,7 @@ export interface LaunchScope {
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
   // Hears each change in the launcher's warnings: why the lifeline is down
-  // (`fault`, below), and each pipe event as it happens. The daemon logs it
+  // (`fault`, below), each pipe event, and a refused job termination. The daemon logs it
   // and holds a pipe event while a bar can show it, so a warning comes on
   // pushed frames too and leaves when the daemon lets it go.
   readonly observeWarnings: (change: WarningChange) => void;
@@ -1210,7 +1210,16 @@ function launchJob(
           child.unref();
           state.unreaped.set(child, opts.category);
           ended.resolve();
-          throw error;
+          // [LAW:no-silent-failure] Settlement keeps the live child visible.
+          // Its owner's warning channel carries the OS refusal, even when
+          // this launcher's clock would rethrow an unhandled timer error.
+          state.scope.observeWarnings({
+            kind: "job-signal-refused",
+            error: new Error(
+              `SIGKILL refused for unreleased ${opts.category} job (pid ${pid}): ${error instanceof Error ? error.message : String(error)}`,
+              { cause: error },
+            ),
+          });
         }
       },
     );
@@ -1419,6 +1428,10 @@ function launcherWithState(
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
       observeWarnings: (change) => {
+        if (change.kind === "job-signal-refused") {
+          process.emitWarning(change.error);
+          return;
+        }
         const message =
           change.kind === "launch-pipes"
             ? change.text

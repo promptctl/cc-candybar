@@ -431,6 +431,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
+      if (change.kind === "job-signal-refused") {
+        clock.failed("unreleased job termination", change.error);
+        return;
+      }
       if (change.kind === "launch-pipes") {
         log("warn", change.text);
         launchPipes.occur(change.text);

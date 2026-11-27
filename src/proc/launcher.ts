@@ -250,11 +250,12 @@ export interface LifelineWarning {
 }
 
 // What the launcher reports as it happens: each change in whether what it
-// launches dies with it, and each pipe event, which its owner holds while a
-// bar can show it.
+// launches dies with it, each pipe event and a refused escalation of an
+// unreleased job. The owner chooses how the diagnostic is presented.
 export type WarningChange =
   | { readonly kind: "lifeline"; readonly fault: string | null }
-  | { readonly kind: "launch-pipes"; readonly text: string };
+  | { readonly kind: "launch-pipes"; readonly text: string }
+  | { readonly kind: "job-signal-refused"; readonly error: Error };
 
 // --- the job ---
 //

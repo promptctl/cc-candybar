@@ -97,6 +97,30 @@ describe("a daemon in this worker", () => {
     removeTmpDirs();
   });
 
+  test("a launcher's refused gate signal reaches the daemon log after shutdown", async () => {
+    let refuse!: (error: Error) => void;
+    daemon = startDaemon(env, {
+      launcher: (owner) => {
+        refuse = (error) =>
+          owner.observeWarnings?.({ kind: "job-signal-refused", error });
+        return fakeLauncher(systemTimekeeper, owner).launcher;
+      },
+    });
+    const { log } = daemon;
+    await daemon.stop();
+    daemon = null;
+    refuse(new Error("SIGKILL refused for unreleased fixture job: kill EPERM"));
+    await until(
+      () =>
+        logLines(log).some(
+          (line) =>
+            line.includes("unreleased job termination") &&
+            line.includes("kill EPERM"),
+        ),
+      "the closing daemon to log the job's signal refusal",
+    );
+  });
+
   test("the e2e helpers draw through it, click it, and read its events", async () => {
     const sid = "in-worker-draw";
     daemon = startDaemon(env);

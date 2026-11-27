@@ -299,6 +299,59 @@ describe("an owner's launcher over a scripted OS", () => {
     expect(await launcher.settled()).toEqual({ unreaped: [] });
   });
 
+  test("a refused escalation reports the unreaped gate until its child closes", async () => {
+    const clock = heldClock(new Date(1000));
+    const owner = new AbortController();
+    const { spawner } = fakeLauncher(clock, {
+      inherited: {},
+      signal: owner.signal,
+    });
+    spawner.program((bin) => bin === "/bin/sh", runsFor(1000, exits(0)));
+    const cause = Object.assign(new Error("operation not permitted"), {
+      code: "EPERM",
+    });
+    const signalGroup = jest.fn(() => {
+      throw cause;
+    });
+    const warn = jest
+      .spyOn(process, "emitWarning")
+      .mockImplementation(() => {});
+    try {
+      const launcher = createOneShotLauncher(
+        { inherited: {}, signal: owner.signal },
+        clock,
+        { ...spawner, signalGroup },
+      );
+      const job = launcher.launchJobSync(sh("never started"), {
+        stdout: "unused.out",
+        stderr: "unused.err",
+        status: "unused.status",
+      });
+      if (!job.ok) throw new Error(job.error);
+      owner.abort();
+      job.release();
+      const settlement = launcher.settled();
+      // The held clock uses the process reporter: a throw from this callback
+      // would escape advance and terminate an ordinary launcher process.
+      expect(() => clock.advance(250)).not.toThrow();
+      expect(signalGroup.mock.calls).toEqual([[job.pid, "SIGKILL"]]);
+      expect(await settlement).toEqual({ unreaped: ["user-shell"] });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("operation not permitted"),
+          cause,
+        }),
+      );
+      clock.advance(750);
+      expect(await launcher.settled()).toEqual({ unreaped: [] });
+      expect(spawner.spawned[0]!.stdin).toBe("");
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test.each([false, true])(
     "retires a terminated group while a pipe is still held (member outlives leader: %s)",
     async (memberSurvives) => {
