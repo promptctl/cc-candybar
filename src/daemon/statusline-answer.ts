@@ -431,7 +431,11 @@ export async function answerStatusline(
     // [LAW:one-source-of-truth] The mailbox that presented this frame is
     // the authority on its publisher, independent of later session moves.
     resp = RENDER_ANSWERS[req.encoding](
-      publish(presented.frame, { renderer: host.name, session }),
+      publish(presented.frame, {
+        renderer: host.name,
+        session,
+        displayed: presented.displayed,
+      }),
     );
   } catch (e) {
     const failure = failureOf(e);

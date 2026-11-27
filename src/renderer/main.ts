@@ -322,12 +322,8 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery, displayedEvents, awaiting } = answerRequest(
-          parts,
-          current,
-          event.context.hints,
-          record,
-        );
+        const { frame, delivery, displayed, displayedEvents, awaiting } =
+          answerRequest(parts, current, event.context.hints, record);
         // Its answer opened the session's view, so it waits for none.
         opening.delete(current.hookData.session_id);
         effects.push({
@@ -337,6 +333,7 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
+          displayed,
           displayedEvents,
           awaiting,
         });
@@ -391,7 +388,7 @@ export function mainRenderer(
       case "click": {
         const { click } = event;
         const live =
-          click.scope === "session"
+          click.scope === "session" && event.displayed === undefined
             ? parts.worldStates.contextOf(click.session)
             : null;
         const context =

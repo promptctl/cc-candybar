@@ -11,6 +11,10 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Asked } from "../utils/outcome.js";
+import {
+  displayedConfigFromHex,
+  type DisplayedConfig,
+} from "../config/displayed-config.js";
 import { isBarLink } from "./wire.js";
 import {
   rendererNameOf,
@@ -44,6 +48,7 @@ const MAC_SPELLING = /^[0-9a-f]{64}$/;
 export interface FrameSource {
   readonly renderer: RendererName;
   readonly session: SessionId;
+  readonly displayed?: DisplayedConfig;
 }
 
 export interface OpenedLink {
@@ -78,7 +83,7 @@ const LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 // signer's id. Pinned against the handler by scripts/check-protocol.mjs.
 export const LINK_MAC_MARK = "#";
 export const LINK_PROOF_SEPARATOR = "/";
-const SOURCE_VERSION = "v1";
+const SOURCE_VERSION = "v2";
 
 // [LAW:one-source-of-truth] Which daemon signed a link, spelled in the link
 // itself: the first field of its proof, `#<id>/…`. A bar drawn over ssh is
@@ -105,6 +110,24 @@ function base64url(bytes: Uint8Array): string {
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/, "");
+}
+
+// Both addresses fit in one 32-character field. A terminal may
+// repeat this proof on every linked run in a frame.
+function displayProof({ origin, files }: DisplayedConfig): string {
+  return base64url(Buffer.from(origin + files, "hex"));
+}
+
+function readDisplayProof(
+  proof: string | undefined,
+): DisplayedConfig | undefined {
+  if (proof === undefined || !/^[A-Za-z0-9_-]{32}$/.test(proof))
+    return undefined;
+  const hex = Buffer.from(
+    proof.replaceAll("-", "+").replaceAll("_", "/"),
+    "base64",
+  ).toString("hex");
+  return displayedConfigFromHex(hex);
 }
 
 // A link's text starts with its scheme, so no link is ever the domain text
@@ -162,9 +185,12 @@ function signLinkWith(
       ? signer
       : [
           signer,
-          SOURCE_VERSION,
+          source.displayed === undefined ? "v1" : SOURCE_VERSION,
           source.renderer,
           encodeURIComponent(JSON.stringify(source.session)),
+          ...(source.displayed === undefined
+            ? []
+            : [displayProof(source.displayed)]),
         ].join(LINK_PROOF_SEPARATOR);
   return `${issued}${LINK_PROOF_SEPARATOR}${linkMac(key, issued)}`;
 }
@@ -220,10 +246,14 @@ function openLinkWith(
     };
   const href = signed.slice(0, mark);
   if (source.length === 0) return { kind: "ok", value: { href } };
-  const [version, name, encoded] = source;
+  const [version, name, encoded, proof] = source;
+  const legacy = version === "v1" && source.length === 3;
+  const displayed =
+    version === SOURCE_VERSION && source.length === 4
+      ? readDisplayProof(proof)
+      : undefined;
   if (
-    source.length !== 3 ||
-    version !== SOURCE_VERSION ||
+    (!legacy && displayed === undefined) ||
     name === undefined ||
     encoded === undefined
   )
@@ -234,7 +264,14 @@ function openLinkWith(
     return session.ok
       ? {
           kind: "ok",
-          value: { href, source: { renderer, session: session.id } },
+          value: {
+            href,
+            source: {
+              renderer,
+              session: session.id,
+              ...(displayed && { displayed }),
+            },
+          },
         }
       : { kind: "failed", reason: `the link's session ${session.problem}` };
   } catch (error) {
@@ -284,7 +321,7 @@ export function linkSigner(key: Buffer): LinkSigner {
       const cacheKey =
         source === undefined
           ? `legacy:${link}`
-          : `frame:${source.renderer}\0${source.session}\0${link}`;
+          : `frame:${source.renderer}\0${source.session}\0${source.displayed?.origin ?? ""}\0${source.displayed?.files ?? ""}\0${link}`;
       let done = signed.get(cacheKey);
       if (done === undefined) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();

@@ -51,7 +51,7 @@ test.each(["restored", "unrestored"] as const)(
       fs.mkdtempSync(path.join(os.tmpdir(), "ccb-rollback-repo-")),
     );
     const userFile = path.join(
-      env.XDG_CONFIG_HOME!,
+      fs.realpathSync.native(env.XDG_CONFIG_HOME!),
       "cc-candybar",
       "config.json5",
     );

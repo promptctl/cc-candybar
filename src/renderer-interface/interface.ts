@@ -15,6 +15,7 @@
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
+import type { DisplayedConfig } from "../config/displayed-config.js";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { AdmittedClick } from "../click/wire";
 import {
@@ -290,6 +291,8 @@ export type Notification =
       readonly placementSeed: string;
       // The host's snapshot when this origin has yet to be delivered.
       readonly coldConfig?: ConfigSnapshot;
+      // The host pinned the displayed context when it admitted this control.
+      readonly displayed?: DisplayedConfig;
       // A scoped click's context, once the host has heard from its session.
       readonly context: SessionContext | null;
     }
@@ -366,6 +369,7 @@ export interface Present {
   readonly id: EffectId;
   readonly session: SessionId;
   readonly surface: "statusline";
+  readonly displayed?: DisplayedConfig;
   readonly request: RequestId;
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
@@ -548,6 +552,7 @@ interface RendererDeclaration extends RendererDiagnostics {
 export type FeedFrame<Body = WireFrame> =
   | {
       readonly kind: "drawn";
+      readonly displayed?: DisplayedConfig;
       readonly receipt: EffectId;
       readonly bar: Body;
       readonly handoff: Body | null;

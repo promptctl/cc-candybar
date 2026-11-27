@@ -25,6 +25,7 @@ import {
 } from "./discover.js";
 import { diskFiles, textFrom, type DiscoveryFiles } from "./discovery-files.js";
 import { ConfigText } from "./config-text.js";
+import { configDestinations } from "./config-destinations.js";
 import {
   readTextIfPresent,
   type withRegularTextFile,
@@ -510,6 +511,7 @@ export class ConfigDiscovery {
     if (move === "rebound") this.bound(origin, paths);
     const snapshot: ConfigSnapshot = {
       ...found.snapshot,
+      fileBinding: configDestinations(found.snapshot, shared.landingPath).id,
       watch: watchFault("config watch", { derived: spec, held: watch }, null),
     };
     const managedFolders = new Set(

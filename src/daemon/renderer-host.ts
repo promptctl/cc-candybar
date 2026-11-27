@@ -67,8 +67,10 @@ import {
   configEffectOutcome,
   type ApproveRepo,
   type ConfigLanding,
+  type ConfigWriteFiles,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
+import { configDestinations } from "./config-discovery/config-destinations.js";
 import {
   actLine,
   desktopActOf,
@@ -555,7 +557,7 @@ export function rendererHost(
       // and publishing that decision share this synchronous host turn.
       if (decision !== undefined)
         publish = collector.prepare([...output.stored, ...decision], hearing);
-      landed = landConfig(changes, answers);
+      landed = landConfig(changes, answers, event);
     } catch (thrown) {
       landed = {
         kind: "refused",
@@ -707,12 +709,43 @@ export function rendererHost(
   const landConfig = (
     changes: readonly ConfigChange[],
     answers: readonly ApproveRepo[],
+    event: Event,
   ): ConfigLanding => {
     try {
       if (world.closing())
         return { kind: "closing", reason: "the daemon is closing" };
       if (changes.length + answers.length === 0)
         return { kind: "ok", files: [], reports: [] };
+      let files: ConfigWriteFiles = world.configs;
+      if (event.kind === "click" && event.displayed !== undefined) {
+        const origin = event.context?.durable.origin;
+        const key = origin && originKey(origin);
+        if (
+          origin === undefined ||
+          changes.some((change) => originKey(change.target.origin) !== key) ||
+          answers.some((answer) => originKey(answer.origin) !== key)
+        )
+          return {
+            kind: "refused",
+            reason:
+              "The configuration effect names a different origin than the displayed control.",
+          };
+        const snapshot = world.configs.snapshotOf(origin);
+        const current = snapshot && configDestinations(snapshot);
+        if (current?.id !== event.displayed.files)
+          return {
+            kind: "refused",
+            reason:
+              "This control is stale because its displayed configuration files have changed. Redraw the bar and try again.",
+          };
+        // [LAW:no-ambient-temporal-coupling] Read and write through the
+        // verified destinations, including when a symlink named a layer.
+        files = {
+          readText: world.configs.readText,
+          repoDir: world.configs.repoDir,
+          path: (_origin, role) => current.paths.get(role) ?? null,
+        };
+      }
       return performChanges(
         changes,
         {
@@ -721,7 +754,7 @@ export function rendererHost(
           said: (line) =>
             void recordTaken("trust book record", () => log("info", line)),
         },
-        world.configs,
+        files,
         world.writeConfigFile,
       );
     } catch (thrown) {

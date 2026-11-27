@@ -45,6 +45,9 @@ import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "../scripts/lib/host";
+import { admitClick, encodeSegments, VERB_UNDO } from "../src/click/wire";
+import { displayDigestOf } from "../src/config/displayed-config";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 const S = sessionIdOf("s");
 const CLOCK = handClock({ now: () => 0, monotonic: () => 0 as Monotonic });
@@ -205,6 +208,48 @@ function themeChange(origin = ORIGIN): Extract<Effect, { kind: "change" }> {
     ),
   };
 }
+
+test("a renderer cannot send a held control's edit or conditional state to a different origin", async () => {
+  const before = fs.readFileSync(file, "utf8");
+  const elsewhere = { ...ORIGIN, projectDir: "/other" };
+  const edit: Effect = {
+    ...themeChange(elsewhere),
+    onApplied: [
+      {
+        kind: "patch",
+        store: "session-state",
+        key: S,
+        changes: { padding: "4" },
+      },
+    ],
+  };
+  const { host, sessions } = hostOver((event) =>
+    output(event.kind === "click" ? [edit] : [], [ORIGIN, elsewhere]),
+  );
+  await host.answer(() => ({ kind: "event", event: due }));
+  const turn = await host.answerClick(S, () => ({
+    kind: "event",
+    actsOn: "daemon",
+    event: {
+      kind: "click",
+      placementSeed: "test-click",
+      click: admitClick(VERB_UNDO, encodeSegments([S]), TEST_SIGNER).click,
+      context: { session: S, durable: { origin: ORIGIN }, live: null },
+      displayed: {
+        origin: displayDigestOf(ORIGIN),
+        files: displayDigestOf([]),
+      },
+    },
+  }));
+  expect(turn.settled).toEqual([
+    { kind: "refused", reason: expect.stringContaining("different origin") },
+  ]);
+  expect(fs.readFileSync(file, "utf8")).toBe(before);
+  expect(sessions.current(MAIN_RENDERER)).toMatchObject({
+    revision: 0,
+    state: { sessions: {} },
+  });
+});
 
 test("each origin a turn's landing moved gets its config turn before the landing's effect-done", async () => {
   const change = themeChange();

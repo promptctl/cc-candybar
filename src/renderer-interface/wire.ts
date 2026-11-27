@@ -38,7 +38,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 29;
+export const RENDERER_WIRE_VERSION = 30;
 export const SESSION_DELIVERY_LIMIT = {
   revisions: 256,
   bytes: 1024 * 1024,

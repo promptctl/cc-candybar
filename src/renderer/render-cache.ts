@@ -471,6 +471,7 @@ type SelectedState =
       readonly kind: "authored";
       readonly state: DslRenderState;
       readonly digest: string;
+      readonly fileBinding?: ConfigSnapshot["fileBinding"];
       readonly repo: RepoQuestion | null;
     }
   | { readonly kind: "bundled"; readonly state: DslRenderState };
@@ -1801,7 +1802,13 @@ export class RenderCache<
     if (loaded.state !== null)
       return {
         loaded,
-        selected: { kind: "authored", state: loaded.state, digest, repo },
+        selected: {
+          kind: "authored",
+          state: loaded.state,
+          digest,
+          repo,
+          fileBinding: snapshot.fileBinding,
+        },
       };
     if (retained !== null) return { loaded, selected: retained };
     // [LAW:carrying-cost] The same load identity keeps the bundled state and

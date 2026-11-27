@@ -505,8 +505,18 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
-  const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log), clock);
+  const publishFrame = publishingFrames(linkSigner, (source) => {
+    // [LAW:effects-at-boundaries] A renderer can echo an origin the host
+    // admitted for this session. A frame cannot introduce a new file target.
+    if (
+      !source.displayed ||
+      !sessionBook.displayedOrigin(source.session, source.displayed.origin)
+    )
+      throw new Error(
+        "the frame's displayed configuration origin is unavailable",
+      );
+  });
   // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.

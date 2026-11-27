@@ -10,7 +10,8 @@ import {
   type DaemonEvent,
   type EventHold,
 } from "../utils/event-hold.js";
-import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type { DisplayedConfig } from "../config/displayed-config.js";
 import {
   refusedHints,
   refusedArgsError,
@@ -184,6 +185,7 @@ export function renderFrame(
     return {
       frame: {
         kind: "drawn",
+        displayed: displayedConfig(setup),
         receipt,
         bar,
         handoff,
@@ -250,6 +252,19 @@ interface RenderSetup extends Disposable {
   readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
   readonly terminal?: TerminalSize;
+}
+
+function displayedConfig({
+  req,
+  entry,
+}: RenderSetup): DisplayedConfig | undefined {
+  const files =
+    entry.selected.kind === "authored"
+      ? entry.selected.fileBinding
+      : entry.revision.snapshot.fileBinding;
+  return req.displayOrigin !== undefined && files !== undefined
+    ? { origin: req.displayOrigin, files }
+    : undefined;
 }
 
 // What a render notes of the context it draws by.
@@ -1014,6 +1029,7 @@ interface DrawnBar {
 
 // A render request's answer: the bar drawn for its client.
 export interface RequestAnswer {
+  readonly displayed?: DisplayedConfig;
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
@@ -1066,6 +1082,7 @@ export function answerRequest(
   });
   return {
     frame,
+    displayed: displayedConfig(setup),
     displayedEvents: eventsShown,
     awaiting,
     delivery: {

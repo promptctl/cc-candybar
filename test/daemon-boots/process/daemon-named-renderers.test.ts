@@ -188,9 +188,61 @@ test("live renderer processes observe a signed click and one undo step across a 
   }
 });
 
+test("a held file control stays bound to its displayed origin across config and peer switches", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-pinned-origin", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "origins-"));
+    const first = path.join(dir, "first.json5"),
+      second = path.join(dir, "second.json5");
+    const body = JSON.stringify({
+      globals: { padding: 1 },
+      actions: {
+        wider: { persist: "padding", min: 0, max: 8, by: 1, layer: "user" },
+      },
+      segments: {
+        choice: {
+          template:
+            'padding={{ .padding.effective }} {{ action "wider" "WIDER" }}',
+        },
+      },
+      root: { h: ["choice"] },
+    });
+    for (const file of [first, second]) fs.writeFileSync(file, body);
+    const sid = sessionIdOf("held-origin");
+    const draw = async (file: string, named = false) => {
+      const frame = await frameRequest(daemon.sockPath, {
+        ...renderBody(sid, dir, {}, ["cc-candybar", "--config-only", file]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+      const link = linksOf(frame).find((l) => l.text === "WIDER");
+      if (!link)
+        throw new Error("the selected file drew no control: " + textOf(frame));
+      return link.url;
+    };
+    const oldLink = await draw(first);
+    expect(await draw(first)).toBe(oldLink);
+    const currentLink = await draw(second);
+    await draw(second, true);
+    await click(daemon.sockPath, oldLink);
+    const padding = (file: string) =>
+      JSON5.parse(fs.readFileSync(file, "utf8")).globals.padding;
+    expect([padding(first), padding(second)]).toEqual([2, 1]);
+    expect(currentLink).not.toBe(oldLink);
+    await click(daemon.sockPath, currentLink);
+    expect([padding(first), padding(second)]).toEqual([2, 2]);
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
 test("a successful file change remains undoable when its issuing worker dies at the rename", async () => {
   const isolated = prepareIsolatedDaemonEnv("ccb-config-issuer");
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-config-issuer-"));
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "ccb-config-issuer-")),
+  );
   const config = path.join(root, "bar.json5");
   const arm = path.join(root, "issuer-pid");
   const probe = path.join(root, "after-rename.cjs");

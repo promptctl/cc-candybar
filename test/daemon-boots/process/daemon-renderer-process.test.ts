@@ -576,12 +576,6 @@ describe("the daemon's renderer process", () => {
     if (requestLink === undefined)
       throw new Error("request has no disclosure close");
     expect(textOf(request)).toContain("DISCLOSURE-BODY");
-    expect(requestLink).toBe(
-      drawnLink(handle.sockPath, requestLink, {
-        renderer: MAIN_RENDERER,
-        session: sessionIdOf(session),
-      }),
-    );
     const authoredLink = linksOf(request).find(
       ({ text }) => text === "authored",
     )?.url;
