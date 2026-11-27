@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-985",
-      "ref": "refs/pull/985/merge",
-      "sha": "0ebb40397e80f7b73edaf460d8e9af7d99ed86a7",
-      "timestamp": "2026-11-27T14:13:28.792Z",
-      "commits": [
-        {
-          "sha": "0ebb40397e80f7b73edaf460d8e9af7d99ed86a7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T07:12:14-07:00",
-          "message": "Merge ea8ecaefb226c03dd20944801b63d2689001c095 into 548e226f061ed34d6a5b0709990e5f93952efa9f\n"
-        },
-        {
-          "sha": "ea8ecaefb226c03dd20944801b63d2689001c095",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T07:11:37-07:00",
-          "message": "fix(renderer): make regional and temporal inputs reproducible\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "548e226f061ed34d6a5b0709990e5f93952efa9f",
-      "timestamp": "2026-11-27T13:15:10.180Z",
+      "sha": "45e11fecc7f7b958692daf8c8320094d983823c3",
+      "timestamp": "2026-11-27T14:16:33.860Z",
       "commits": [
         {
-          "sha": "548e226f061ed34d6a5b0709990e5f93952efa9f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-27T13:13:32Z",
-          "message": "chore(release): set `package.json` to 1.245.0\n\n## [1.245.0](https://github.com/promptctl/cc-candybar/compare/v1.244.3...v1.245.0) (2026-11-27)\n\n### Features\n\n* **renderer:** ship one portable renderer for Node and WebKit ([#984](https://github.com/promptctl/cc-candybar/issues/984)) ([50d61ab](https://github.com/promptctl/cc-candybar/commit/50d61ab26aab8ee41974c2498d25ce000c6a6635))\n"
+          "sha": "45e11fecc7f7b958692daf8c8320094d983823c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T07:15:27-07:00",
+          "message": "fix(renderer): make regional and temporal inputs reproducible (#985)"
         }
       ]
     }
