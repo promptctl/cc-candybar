@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5c3741c7841a04b995a81d83663d549d4ce6d153",
-      "timestamp": "2026-11-27T04:36:26.893Z",
+      "sha": "64b9d9010d34954ec5ffbf748a1d755d845544fb",
+      "timestamp": "2026-11-27T04:40:22.210Z",
       "commits": [
         {
-          "sha": "5c3741c7841a04b995a81d83663d549d4ce6d153",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:35:19-07:00",
-          "message": "feat(tmux): drive pane visibility and session handoff from server events (#978)\n\n* refactor(tmux): share pane facts across interested host consumers\n\n* fix(tmux): preserve source verification across unrelated renders\n\n* Confirm pane ownership with foreground Claude process records\n\n* Retain unresolved source claims across a disconnected observer\n\n* fix: follow the enrolled tmux pane across session changes\n\n* feat(tmux): observe private server metadata without attaching or polling\n\n* test(tmux): verify packaged pane handoff across hide, clear and return\n\n* fix(tmux): distinguish observer hooks from window configuration edits\n\n* Recover unacknowledged tmux splits on a verified source report\n\n* fix(tmux): release superseded unobserved sources and verify hidden cadence\n\n* fix(tmux): recover foreground proof after transient failure or claim saturation\n\n* fix(tmux): subscribe only after checking unread observer work"
+          "sha": "64b9d9010d34954ec5ffbf748a1d755d845544fb",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T04:38:34Z",
+          "message": "chore(release): set `package.json` to 1.244.0\n\n## [1.244.0](https://github.com/promptctl/cc-candybar/compare/v1.243.1...v1.244.0) (2026-11-27)\n\n### Features\n\n* **tmux:** drive pane visibility and session handoff from server events ([#978](https://github.com/promptctl/cc-candybar/issues/978)) ([5c3741c](https://github.com/promptctl/cc-candybar/commit/5c3741c7841a04b995a81d83663d549d4ce6d153))\n"
         }
       ]
     }
