@@ -427,7 +427,7 @@ export function actingWorld(
   const acts = testActs(ctx.log, deps);
   return {
     authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
-    perform: (act) => acts.perform(act),
+    perform: (act, actsOn) => acts.perform(act, actsOn),
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
@@ -466,7 +466,7 @@ export async function performActs(
       outcomes.push(outcome);
       continue;
     }
-    const settled = acts.perform(read.value).then((outcome) => {
+    const settled = acts.perform(read.value, "daemon").then((outcome) => {
       (ctx.acts as ActsOnTheirWay).done(act.id, act.session, outcome);
       return outcome;
     });

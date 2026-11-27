@@ -292,8 +292,8 @@ describe("a frame that asks for its acts on the desktop", () => {
     ]);
   });
 
-  // A click that fails after asking one still asked it: the failure is held
-  // where any click's is, and the acts leave all the same.
+  // A click that fails after asking one still asked it: the acts leave all the
+  // same, and its failure rides beside them.
   test("a click that fails after asking its copy still hands the copy back", async () => {
     const h = host();
     const failing = effectsUrl([
@@ -310,6 +310,35 @@ describe("a frame that asks for its acts on the desktop", () => {
     });
     expect(h.events).toEqual([expect.not.stringContaining("outcome=ok")]);
     expect(h.copied).toEqual([]);
+  });
+
+  // [LAW:no-silent-failure] The link was taken and its verb then failed: that
+  // is not a link refused (a bad request) nor a forward that took nothing (a
+  // failed response), which the writer tells apart from it by the shape.
+  test("a click that asked no act and failed is the same verdict, with no acts and its failure", async () => {
+    const h = host();
+    const failing = effectsUrl([
+      { verb: VERB_COPY_DIAGNOSTIC, args: ["no-such-key"] },
+    ]);
+    const answered = await desktopFrame(h, TEST_SIGNER.signLink(failing));
+    expect((await landed(answered)).resp).toEqual({
+      ok: true,
+      output: "",
+      desktopActs: [],
+      desktopError: expect.stringMatching(/copy-diagnostic: unknown renderer/),
+    });
+    expect(h.copied).toEqual([]);
+  });
+
+  test("a failure its writer never took is said by the daemon, though no act went with it", async () => {
+    const h = host();
+    const failing = effectsUrl([
+      { verb: VERB_COPY_DIAGNOSTIC, args: ["no-such-key"] },
+    ]);
+    const answered = await desktopFrame(h, TEST_SIGNER.signLink(failing));
+    (await landed(answered)).settled(false);
+    expect(h.events.at(-1)).toContain("the click's failure for the machine");
+    expect(h.events.at(-1)).not.toContain("copy or open act(s)");
   });
 
   test("a verdict its writer never took says the acts it carried went with it", async () => {

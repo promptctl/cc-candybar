@@ -68,13 +68,7 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import type { WriteConfigFile } from "./file-rewrites.js";
-import {
-  actLine,
-  desktopActOf,
-  outlives,
-  type HostAct,
-  type HostOutcome,
-} from "./acts.js";
+import { outlives, type HostAct, type HostOutcome } from "./acts.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
@@ -84,7 +78,7 @@ import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
-import type { ActsOn } from "./foundations/protocol.js";
+import { ACTS_ON_DAEMON, type ActsOn } from "./foundations/protocol.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 
 // A turn as the host took it: how it ended, how long it waited in the
@@ -132,14 +126,9 @@ interface MadeEvent<E = Event> {
   readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
-  readonly actsOn?: ActsOn;
 }
 export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
-type MadeClick =
-  | (MadeEvent<Extract<Notification, { kind: "click" }>> & {
-      readonly actsOn: ActsOn;
-    })
-  | Failure;
+type MadeClick = Made<Extract<Notification, { kind: "click" }>>;
 
 // What the host's turns act in: the performer of acts, the trust book's
 // directory, what config discovery found at each origin it follows, whether
@@ -150,7 +139,7 @@ export interface HostWorld {
     request: RequestedRun,
     captures: readonly RunEvidence[],
   ) => Asked<RunAct>;
-  readonly perform: (act: HostAct) => Promise<EffectOutcome>;
+  readonly perform: (act: HostAct, actsOn: ActsOn) => Promise<HostOutcome>;
   readonly stateDir: string;
   readonly configs: RendererConfigs;
   readonly writeConfigFile?: WriteConfigFile;
@@ -171,9 +160,11 @@ export interface RendererHost {
   // slot comes up, and answers the input, or why there is none to send,
   // which is the turn's failure.
   answer(make: () => Made): Promise<HostTurn>;
-  // A click keeps its session busy until its mailbox slot lands.
+  // A click keeps its session busy until its mailbox slot lands. `actsOn` is
+  // where its acts go: asked of every click, never assumed.
   answerClick(
     session: SessionId | null,
+    actsOn: ActsOn,
     make: () => MadeClick,
   ): Promise<HostTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
@@ -425,8 +416,8 @@ export function rendererHost(
   const inSlot = async (
     input: EventInput,
     queuedMs: number,
-    captures: readonly RunEvidence[] = [],
-    actsOn: ActsOn = "daemon",
+    captures: readonly RunEvidence[],
+    actsOn: ActsOn,
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -617,14 +608,8 @@ export function rendererHost(
 
     // [LAW:single-enforcer] The connection owns the destination. Only the
     // acts of this writer's click can leave in its reply.
-    // [LAW:nothing-unseen] An act handed to the desktop is said on its act line
-    // as any act is.
-    const performed = async (act: HostAct): Promise<HostOutcome> => {
-      const desktop = actsOn === "desktop" ? await desktopActOf(act) : null;
-      if (desktop === null) return world.perform(act);
-      log("info", actLine(act, "desktop", "handed to the desktop"));
-      return Promise.resolve({ kind: "desktop", act: desktop });
-    };
+    const performed = (act: HostAct): Promise<HostOutcome> =>
+      world.perform(act, actsOn);
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
       const acted =
@@ -878,7 +863,12 @@ export function rendererHost(
         settled: Promise.resolve([{ kind: "failed", reason: made.message }]),
       };
     const input = stamped(made);
-    const { received, turn, settled } = await inSlot(input, 0);
+    const { received, turn, settled } = await inSlot(
+      input,
+      0,
+      [],
+      ACTS_ON_DAEMON,
+    );
     record(input.event, [["why", why]], turn);
     // A config failure belongs to the turn that requested its delivery.
     const threw: readonly EffectOutcome[] =
@@ -980,7 +970,7 @@ export function rendererHost(
     outcome: EffectOutcome,
   ): Promise<{ readonly settled: Promise<EffectOutcome> }> => {
     const input = stamped(doneOf(effect, outcome));
-    const { turn, settled } = await inSlot(input, 0);
+    const { turn, settled } = await inSlot(input, 0, [], ACTS_ON_DAEMON);
     record(input.event, [["effect", String(effect.id)]], turn);
     return { settled: settled.then(() => outcome) };
   };
@@ -1027,6 +1017,7 @@ export function rendererHost(
   // settling. `event` is null when its make failed, so no input was made.
   const throughSlot = (
     make: () => Made<BeforeDiscovery | Command>,
+    actsOn: ActsOn,
     at: Place,
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> => {
@@ -1099,8 +1090,8 @@ export function rendererHost(
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          made.event.kind === "click" ? made.runEvidence : undefined,
-          made.event.kind === "click" ? made.actsOn : undefined,
+          (made.event.kind === "click" ? made.runEvidence : undefined) ?? [],
+          actsOn,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         if (made.event.kind === "click" && restore !== undefined)
@@ -1124,27 +1115,29 @@ export function rendererHost(
   // slot.
   const taken = async (
     make: () => Made<BeforeDiscovery | Command>,
+    actsOn: ActsOn,
     at: Place = "last",
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
-    const { event, slotted } = await throughSlot(make, at, click);
+    const { event, slotted } = await throughSlot(make, actsOn, at, click);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled },
     };
   };
   const answer = async (make: () => Made): Promise<HostTurn> =>
-    (await taken(make)).turn;
+    (await taken(make, ACTS_ON_DAEMON)).turn;
   const answerClick = async (
     session: SessionId | null,
+    actsOn: ActsOn,
     make: () => MadeClick,
-  ): Promise<HostTurn> => (await taken(make, "last", session)).turn;
+  ): Promise<HostTurn> => (await taken(make, actsOn, "last", session)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
   const recorded =
     (at: Place) =>
     async (make: () => Made, about: TurnRecord): Promise<TurnOutcome> => {
-      const { event, turn } = await taken(make, at);
+      const { event, turn } = await taken(make, ACTS_ON_DAEMON, at);
       record(event, about, turn);
       return turn;
     };
@@ -1171,7 +1164,7 @@ export function rendererHost(
         message: "its asker stopped waiting",
         detail: `${commandLabel(event)} was not made: its asker stopped waiting`,
       };
-    });
+    }, ACTS_ON_DAEMON);
     if (!made) throw until?.reason;
     if (turn.kind === "threw") {
       const label = commandLabel(event);
@@ -1227,6 +1220,7 @@ export function rendererHost(
                   pendingClicks: [...pendingClicks.keys()],
                 },
               },
+        ACTS_ON_DAEMON,
         "scheduled",
       );
       unawaited("due acts", () => settled);

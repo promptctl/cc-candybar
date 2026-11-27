@@ -165,6 +165,14 @@ if case .accepted(let acts) = partial {
   expect(steps(for: acts, via: named), [.copy("hi"), .tell("cannot open the remote file")], "successful acts and a partial failure both reach the writer")
 } else { expect(false, true, "expected the partial result") }
 
+// A click that asked no act and then failed is the same verdict as one that
+// asked some: the link was taken, so it is neither a refusal nor a dead forward.
+let failedAlone = verdictOf(json(#"{"ok":true,"output":"","desktopActs":[],"desktopError":"copy-diagnostic: unknown renderer"}"#))
+expect(failedAlone, .accepted(acts: [.failed("copy-diagnostic: unknown renderer")]), "a click that asked nothing and failed is a taken link with its failure")
+if case .accepted(let acts) = failedAlone {
+  expect(steps(for: acts, via: named), [.tell("copy-diagnostic: unknown renderer")], "and its failure is told, not taken for the forward's")
+}
+
 expect(
   steps(for: [.copy("hi"), .open("/srv/x", file: false)], via: named),
   [.copy("hi"), .open("vscode://vscode-remote/ssh-remote+web.eu-1/srv/x/")],

@@ -6,7 +6,12 @@
 
 import { stat } from "node:fs/promises";
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
-import type { DesktopAct } from "./foundations/protocol.js";
+import type { ACTS_ON_DAEMON } from "./foundations/protocol.js";
+import {
+  ACTS_ON_DESKTOP,
+  type ActsOn,
+  type DesktopAct,
+} from "./foundations/protocol.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -40,7 +45,7 @@ export type HostOutcome = EffectOutcome | ForDesktop;
 
 // The act the desktop carries out, when the act says it does; every other act
 // is only ever performed here.
-export async function desktopActOf(act: HostAct): Promise<DesktopAct | null> {
+async function desktopActOf(act: HostAct): Promise<DesktopAct | null> {
   switch (act.kind) {
     case "copy":
       return { kind: "copy", text: act.text };
@@ -96,8 +101,11 @@ function nameOf(act: HostAct): string {
 }
 
 // [LAW:types-are-the-program] How an act ended: its outcome, and what its
-// line says of it — what it did, or why it did not.
-type Done = RunEnd;
+// line says of it — what it did, or why it did not, or that it was handed on.
+interface Done {
+  readonly outcome: HostOutcome;
+  readonly said: string;
+}
 const did = (said: string): Done => ({ outcome: { kind: "ok" }, said });
 const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
   outcome,
@@ -180,24 +188,41 @@ export class Acts {
     );
   }
 
-  // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
-  // throw is classified once, here: a refusal the user can act on, the
-  // daemon's close, or a failure.
-  async perform(act: HostAct): Promise<EffectOutcome> {
+  // [LAW:dataflow-not-control-flow] One act, by its kind's performer, or
+  // handed to the desktop when its click's writer runs there. A throw is
+  // classified once, here: a refusal the user can act on, the daemon's close,
+  // or a failure.
+  perform(act: HostAct, actsOn: typeof ACTS_ON_DAEMON): Promise<EffectOutcome>;
+  perform(act: HostAct, actsOn: ActsOn): Promise<HostOutcome>;
+  async perform(act: HostAct, actsOn: ActsOn): Promise<HostOutcome> {
     const { outcome, said } = this.deps.closing()
       ? not({ kind: "closing", reason: "the daemon is closing" })
-      : await this.performed(act);
+      : await this.performed(act, actsOn);
     this.deps.log(
-      outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
+      outcome.kind === "ok" ||
+        outcome.kind === "closing" ||
+        outcome.kind === "desktop"
+        ? "info"
+        : "warn",
       actLine(act, outcome.kind, said),
     );
-    return outcome.kind === "ok"
+    return outcome.kind === "ok" || outcome.kind === "desktop"
       ? outcome
       : { ...outcome, reason: `${nameOf(act)}: ${outcome.reason}` };
   }
 
-  private async performed(act: HostAct): Promise<Done> {
+  private async performed(act: HostAct, actsOn: ActsOn): Promise<Done> {
     try {
+      // [LAW:effects-at-boundaries] The desktop's acts are decided against the
+      // filesystem the click was drawn on, so a path gone since the draw fails
+      // here, as an act's own failure does.
+      const desktop =
+        actsOn === ACTS_ON_DESKTOP ? await desktopActOf(act) : null;
+      if (desktop !== null)
+        return {
+          outcome: { kind: "desktop", act: desktop },
+          said: "handed to the desktop",
+        };
       // [LAW:types-are-the-program] exception: the table is keyed by kind,
       // which the compiler cannot carry from the act to its performer.
       return await (
