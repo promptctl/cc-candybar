@@ -1071,7 +1071,7 @@ var require_buffer = __commonJS({
             return len3;
           case "utf8":
           case "utf-8":
-            return utf8ToBytes(string).length;
+            return utf8ToBytes2(string).length;
           case "ucs2":
           case "ucs-2":
           case "utf16le":
@@ -1083,7 +1083,7 @@ var require_buffer = __commonJS({
             return base64ToBytes(string).length;
           default:
             if (loweredCase) {
-              return mustMatch ? -1 : utf8ToBytes(string).length;
+              return mustMatch ? -1 : utf8ToBytes2(string).length;
             }
             encoding = ("" + encoding).toLowerCase();
             loweredCase = true;
@@ -1379,7 +1379,7 @@ var require_buffer = __commonJS({
       return i2;
     }
     function utf8Write(buf, string, offset, length) {
-      return blitBuffer(utf8ToBytes(string, buf.length - offset), buf, offset, length);
+      return blitBuffer(utf8ToBytes2(string, buf.length - offset), buf, offset, length);
     }
     function asciiWrite(buf, string, offset, length) {
       return blitBuffer(asciiToBytes(string), buf, offset, length);
@@ -2225,7 +2225,7 @@ var require_buffer = __commonJS({
       }
       return str;
     }
-    function utf8ToBytes(string, units) {
+    function utf8ToBytes2(string, units) {
       units = units || Infinity;
       let codePoint;
       const length = string.length;
@@ -2407,856 +2407,6 @@ var init_globals = __esm({
     symbols = Symbol;
     symbols.dispose ??= /* @__PURE__ */ Symbol.for("Symbol.dispose");
     symbols.asyncDispose ??= /* @__PURE__ */ Symbol.for("Symbol.asyncDispose");
-  }
-});
-
-// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/primordials.js
-var require_primordials = __commonJS({
-  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/primordials.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var primordials = {};
-    var {
-      defineProperty: ReflectDefineProperty,
-      getOwnPropertyDescriptor: ReflectGetOwnPropertyDescriptor,
-      ownKeys: ReflectOwnKeys
-    } = Reflect;
-    var { apply: apply2, bind, call } = Function.prototype;
-    var uncurryThis = bind.bind(call);
-    primordials.uncurryThis = uncurryThis;
-    var applyBind = bind.bind(apply2);
-    primordials.applyBind = applyBind;
-    var varargsMethods = [
-      // 'ArrayPrototypeConcat' is omitted, because it performs the spread
-      // on its own for arrays and array-likes with a truthy
-      // @@isConcatSpreadable symbol property.
-      "ArrayOf",
-      "ArrayPrototypePush",
-      "ArrayPrototypeUnshift",
-      // 'FunctionPrototypeCall' is omitted, since there's 'ReflectApply'
-      // and 'FunctionPrototypeApply'.
-      "MathHypot",
-      "MathMax",
-      "MathMin",
-      "StringPrototypeConcat",
-      "TypedArrayOf"
-    ];
-    function getNewKey(key) {
-      return typeof key === "symbol" ? `Symbol${key.description[7].toUpperCase()}${key.description.slice(8)}` : `${key[0].toUpperCase()}${key.slice(1)}`;
-    }
-    function copyAccessor(dest, prefix, key, { enumerable, get: get3, set: set2 }) {
-      ReflectDefineProperty(dest, `${prefix}Get${key}`, {
-        value: uncurryThis(get3),
-        enumerable
-      });
-      if (set2 !== void 0) {
-        ReflectDefineProperty(dest, `${prefix}Set${key}`, {
-          value: uncurryThis(set2),
-          enumerable
-        });
-      }
-    }
-    function copyPropsRenamed(src, dest, prefix) {
-      for (const key of ReflectOwnKeys(src)) {
-        const newKey = getNewKey(key);
-        const desc = ReflectGetOwnPropertyDescriptor(src, key);
-        if ("get" in desc) {
-          copyAccessor(dest, prefix, newKey, desc);
-        } else {
-          const name = `${prefix}${newKey}`;
-          ReflectDefineProperty(dest, name, desc);
-          if (varargsMethods.includes(name)) {
-            ReflectDefineProperty(dest, `${name}Apply`, {
-              // `src` is bound as the `this` so that the static `this` points
-              // to the object it was defined on,
-              // e.g.: `ArrayOfApply` gets a `this` of `Array`:
-              value: applyBind(desc.value, src)
-            });
-          }
-        }
-      }
-    }
-    function copyPropsRenamedBound(src, dest, prefix) {
-      for (const key of ReflectOwnKeys(src)) {
-        const newKey = getNewKey(key);
-        const desc = ReflectGetOwnPropertyDescriptor(src, key);
-        if ("get" in desc) {
-          copyAccessor(dest, prefix, newKey, desc);
-        } else {
-          const { value } = desc;
-          if (typeof value === "function") {
-            desc.value = value.bind(src);
-          }
-          const name = `${prefix}${newKey}`;
-          ReflectDefineProperty(dest, name, desc);
-          if (varargsMethods.includes(name)) {
-            ReflectDefineProperty(dest, `${name}Apply`, {
-              value: applyBind(value, src)
-            });
-          }
-        }
-      }
-    }
-    function copyPrototype(src, dest, prefix) {
-      for (const key of ReflectOwnKeys(src)) {
-        const newKey = getNewKey(key);
-        const desc = ReflectGetOwnPropertyDescriptor(src, key);
-        if ("get" in desc) {
-          copyAccessor(dest, prefix, newKey, desc);
-        } else {
-          const { value } = desc;
-          if (typeof value === "function") {
-            desc.value = uncurryThis(value);
-          }
-          const name = `${prefix}${newKey}`;
-          ReflectDefineProperty(dest, name, desc);
-          if (varargsMethods.includes(name)) {
-            ReflectDefineProperty(dest, `${name}Apply`, {
-              value: applyBind(value)
-            });
-          }
-        }
-      }
-    }
-    [
-      "Proxy",
-      "globalThis"
-    ].forEach((name) => {
-      primordials[name] = globalThis[name];
-    });
-    [
-      decodeURI,
-      decodeURIComponent,
-      encodeURI,
-      encodeURIComponent
-    ].forEach((fn) => {
-      primordials[fn.name] = fn;
-    });
-    [
-      "JSON",
-      "Math",
-      "Proxy",
-      "Reflect"
-    ].forEach((name) => {
-      copyPropsRenamed(globalThis[name], primordials, name);
-    });
-    [
-      "Array",
-      "ArrayBuffer",
-      "BigInt",
-      "BigInt64Array",
-      "BigUint64Array",
-      "Boolean",
-      "DataView",
-      "Date",
-      "Error",
-      "EvalError",
-      "Float32Array",
-      "Float64Array",
-      "Function",
-      "Int16Array",
-      "Int32Array",
-      "Int8Array",
-      "Map",
-      "Number",
-      "Object",
-      "RangeError",
-      "ReferenceError",
-      "RegExp",
-      "Set",
-      "String",
-      "Symbol",
-      "SyntaxError",
-      "TypeError",
-      "URIError",
-      "Uint16Array",
-      "Uint32Array",
-      "Uint8Array",
-      "Uint8ClampedArray",
-      "WeakMap",
-      "WeakSet"
-    ].forEach((name) => {
-      const original = globalThis[name];
-      primordials[name] = original;
-      copyPropsRenamed(original, primordials, name);
-      copyPrototype(original.prototype, primordials, `${name}Prototype`);
-    });
-    [
-      "Promise"
-    ].forEach((name) => {
-      const original = globalThis[name];
-      primordials[name] = original;
-      copyPropsRenamedBound(original, primordials, name);
-      copyPrototype(original.prototype, primordials, `${name}Prototype`);
-    });
-    [
-      { name: "TypedArray", original: Reflect.getPrototypeOf(Uint8Array) },
-      { name: "ArrayIterator", original: {
-        prototype: Reflect.getPrototypeOf(Array.prototype[Symbol.iterator]())
-      } },
-      { name: "StringIterator", original: {
-        prototype: Reflect.getPrototypeOf(String.prototype[Symbol.iterator]())
-      } }
-    ].forEach(({ name, original }) => {
-      primordials[name] = original;
-      copyPrototype(original, primordials, name);
-      copyPrototype(original.prototype, primordials, `${name}Prototype`);
-    });
-    var {
-      ArrayPrototypeForEach,
-      FunctionPrototypeCall,
-      Map: Map2,
-      ObjectFreeze,
-      ObjectSetPrototypeOf,
-      Set: Set2,
-      SymbolIterator,
-      WeakMap: WeakMap2,
-      WeakSet: WeakSet2
-    } = primordials;
-    var createSafeIterator = (factory, next2) => {
-      class SafeIterator {
-        constructor(iterable) {
-          this._iterator = factory(iterable);
-        }
-        next() {
-          return next2(this._iterator);
-        }
-        [SymbolIterator]() {
-          return this;
-        }
-      }
-      ObjectSetPrototypeOf(SafeIterator.prototype, null);
-      ObjectFreeze(SafeIterator.prototype);
-      ObjectFreeze(SafeIterator);
-      return SafeIterator;
-    };
-    primordials.SafeArrayIterator = createSafeIterator(
-      primordials.ArrayPrototypeSymbolIterator,
-      primordials.ArrayIteratorPrototypeNext
-    );
-    primordials.SafeStringIterator = createSafeIterator(
-      primordials.StringPrototypeSymbolIterator,
-      primordials.StringIteratorPrototypeNext
-    );
-    var copyProps = (src, dest) => {
-      ArrayPrototypeForEach(ReflectOwnKeys(src), (key) => {
-        if (!ReflectGetOwnPropertyDescriptor(dest, key)) {
-          ReflectDefineProperty(
-            dest,
-            key,
-            ReflectGetOwnPropertyDescriptor(src, key)
-          );
-        }
-      });
-    };
-    var makeSafe = (unsafe, safe) => {
-      if (SymbolIterator in unsafe.prototype) {
-        const dummy = new unsafe();
-        let next2;
-        ArrayPrototypeForEach(ReflectOwnKeys(unsafe.prototype), (key) => {
-          if (!ReflectGetOwnPropertyDescriptor(safe.prototype, key)) {
-            const desc = ReflectGetOwnPropertyDescriptor(unsafe.prototype, key);
-            if (typeof desc.value === "function" && desc.value.length === 0 && SymbolIterator in (FunctionPrototypeCall(desc.value, dummy) ?? {})) {
-              const createIterator = uncurryThis(desc.value);
-              next2 = next2 ?? uncurryThis(createIterator(dummy).next);
-              const SafeIterator = createSafeIterator(createIterator, next2);
-              desc.value = function() {
-                return new SafeIterator(this);
-              };
-            }
-            ReflectDefineProperty(safe.prototype, key, desc);
-          }
-        });
-      } else {
-        copyProps(unsafe.prototype, safe.prototype);
-      }
-      copyProps(unsafe, safe);
-      ObjectSetPrototypeOf(safe.prototype, null);
-      ObjectFreeze(safe.prototype);
-      ObjectFreeze(safe);
-      return safe;
-    };
-    primordials.makeSafe = makeSafe;
-    primordials.SafeMap = makeSafe(
-      Map2,
-      class SafeMap extends Map2 {
-        constructor(i2) {
-          super(i2);
-        }
-        // eslint-disable-line no-useless-constructor
-      }
-    );
-    primordials.SafeWeakMap = makeSafe(
-      WeakMap2,
-      class SafeWeakMap extends WeakMap2 {
-        constructor(i2) {
-          super(i2);
-        }
-        // eslint-disable-line no-useless-constructor
-      }
-    );
-    primordials.SafeSet = makeSafe(
-      Set2,
-      class SafeSet extends Set2 {
-        constructor(i2) {
-          super(i2);
-        }
-        // eslint-disable-line no-useless-constructor
-      }
-    );
-    primordials.SafeWeakSet = makeSafe(
-      WeakSet2,
-      class SafeWeakSet extends WeakSet2 {
-        constructor(i2) {
-          super(i2);
-        }
-        // eslint-disable-line no-useless-constructor
-      }
-    );
-    ObjectSetPrototypeOf(primordials, null);
-    ObjectFreeze(primordials);
-    module2.exports = primordials;
-  }
-});
-
-// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/errors.js
-var require_errors = __commonJS({
-  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/errors.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var ERR_INVALID_ARG_TYPE = class extends TypeError {
-      constructor(name, expected, actual) {
-        super(`${name} must be ${expected} got ${actual}`);
-        this.code = "ERR_INVALID_ARG_TYPE";
-      }
-    };
-    var ERR_INVALID_ARG_VALUE = class extends TypeError {
-      constructor(arg1, arg2, expected) {
-        super(`The property ${arg1} ${expected}. Received '${arg2}'`);
-        this.code = "ERR_INVALID_ARG_VALUE";
-      }
-    };
-    var ERR_PARSE_ARGS_INVALID_OPTION_VALUE = class extends Error {
-      constructor(message) {
-        super(message);
-        this.code = "ERR_PARSE_ARGS_INVALID_OPTION_VALUE";
-      }
-    };
-    var ERR_PARSE_ARGS_UNKNOWN_OPTION = class extends Error {
-      constructor(option, allowPositionals) {
-        const suggestDashDash = allowPositionals ? `. To specify a positional argument starting with a '-', place it at the end of the command after '--', as in '-- ${JSON.stringify(option)}` : "";
-        super(`Unknown option '${option}'${suggestDashDash}`);
-        this.code = "ERR_PARSE_ARGS_UNKNOWN_OPTION";
-      }
-    };
-    var ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL = class extends Error {
-      constructor(positional) {
-        super(`Unexpected argument '${positional}'. This command does not take positional arguments`);
-        this.code = "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL";
-      }
-    };
-    module2.exports = {
-      codes: {
-        ERR_INVALID_ARG_TYPE,
-        ERR_INVALID_ARG_VALUE,
-        ERR_PARSE_ARGS_INVALID_OPTION_VALUE,
-        ERR_PARSE_ARGS_UNKNOWN_OPTION,
-        ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/validators.js
-var require_validators = __commonJS({
-  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/validators.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var {
-      ArrayIsArray,
-      ArrayPrototypeIncludes,
-      ArrayPrototypeJoin
-    } = require_primordials();
-    var {
-      codes: {
-        ERR_INVALID_ARG_TYPE
-      }
-    } = require_errors();
-    function validateString(value, name) {
-      if (typeof value !== "string") {
-        throw new ERR_INVALID_ARG_TYPE(name, "String", value);
-      }
-    }
-    function validateUnion(value, name, union) {
-      if (!ArrayPrototypeIncludes(union, value)) {
-        throw new ERR_INVALID_ARG_TYPE(name, `('${ArrayPrototypeJoin(union, "|")}')`, value);
-      }
-    }
-    function validateBoolean(value, name) {
-      if (typeof value !== "boolean") {
-        throw new ERR_INVALID_ARG_TYPE(name, "Boolean", value);
-      }
-    }
-    function validateArray(value, name) {
-      if (!ArrayIsArray(value)) {
-        throw new ERR_INVALID_ARG_TYPE(name, "Array", value);
-      }
-    }
-    function validateStringArray(value, name) {
-      validateArray(value, name);
-      for (let i2 = 0; i2 < value.length; i2++) {
-        validateString(value[i2], `${name}[${i2}]`);
-      }
-    }
-    function validateBooleanArray(value, name) {
-      validateArray(value, name);
-      for (let i2 = 0; i2 < value.length; i2++) {
-        validateBoolean(value[i2], `${name}[${i2}]`);
-      }
-    }
-    function validateObject(value, name, options) {
-      const useDefaultOptions = options == null;
-      const allowArray = useDefaultOptions ? false : options.allowArray;
-      const allowFunction = useDefaultOptions ? false : options.allowFunction;
-      const nullable2 = useDefaultOptions ? false : options.nullable;
-      if (!nullable2 && value === null || !allowArray && ArrayIsArray(value) || typeof value !== "object" && (!allowFunction || typeof value !== "function")) {
-        throw new ERR_INVALID_ARG_TYPE(name, "Object", value);
-      }
-    }
-    module2.exports = {
-      validateArray,
-      validateObject,
-      validateString,
-      validateStringArray,
-      validateUnion,
-      validateBoolean,
-      validateBooleanArray
-    };
-  }
-});
-
-// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/util.js
-var require_util = __commonJS({
-  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/util.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var {
-      ObjectCreate,
-      ObjectFreeze
-    } = require_primordials();
-    var kEmptyObject = ObjectFreeze(ObjectCreate(null));
-    module2.exports = {
-      kEmptyObject
-    };
-  }
-});
-
-// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/utils.js
-var require_utils = __commonJS({
-  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/utils.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var {
-      ArrayPrototypeFind,
-      ObjectEntries,
-      ObjectPrototypeHasOwnProperty: ObjectHasOwn,
-      StringPrototypeCharAt,
-      StringPrototypeIncludes,
-      StringPrototypeStartsWith
-    } = require_primordials();
-    var {
-      validateObject
-    } = require_validators();
-    function objectGetOwn(obj, prop) {
-      if (ObjectHasOwn(obj, prop))
-        return obj[prop];
-    }
-    function optionsGetOwn(options, longOption, prop) {
-      if (ObjectHasOwn(options, longOption))
-        return objectGetOwn(options[longOption], prop);
-    }
-    function isOptionValue(value) {
-      if (value == null) return false;
-      return true;
-    }
-    function isOptionLikeValue(value) {
-      if (value == null) return false;
-      return value.length > 1 && StringPrototypeCharAt(value, 0) === "-";
-    }
-    function isLoneShortOption(arg) {
-      return arg.length === 2 && StringPrototypeCharAt(arg, 0) === "-" && StringPrototypeCharAt(arg, 1) !== "-";
-    }
-    function isLoneLongOption(arg) {
-      return arg.length > 2 && StringPrototypeStartsWith(arg, "--") && !StringPrototypeIncludes(arg, "=", 3);
-    }
-    function isLongOptionAndValue(arg) {
-      return arg.length > 2 && StringPrototypeStartsWith(arg, "--") && StringPrototypeIncludes(arg, "=", 3);
-    }
-    function isShortOptionGroup(arg, options) {
-      if (arg.length <= 2) return false;
-      if (StringPrototypeCharAt(arg, 0) !== "-") return false;
-      if (StringPrototypeCharAt(arg, 1) === "-") return false;
-      const firstShort = StringPrototypeCharAt(arg, 1);
-      const longOption = findLongOptionForShort(firstShort, options);
-      return optionsGetOwn(options, longOption, "type") !== "string";
-    }
-    function isShortOptionAndValue(arg, options) {
-      validateObject(options, "options");
-      if (arg.length <= 2) return false;
-      if (StringPrototypeCharAt(arg, 0) !== "-") return false;
-      if (StringPrototypeCharAt(arg, 1) === "-") return false;
-      const shortOption = StringPrototypeCharAt(arg, 1);
-      const longOption = findLongOptionForShort(shortOption, options);
-      return optionsGetOwn(options, longOption, "type") === "string";
-    }
-    function findLongOptionForShort(shortOption, options) {
-      validateObject(options, "options");
-      const longOptionEntry = ArrayPrototypeFind(
-        ObjectEntries(options),
-        ({ 1: optionConfig }) => objectGetOwn(optionConfig, "short") === shortOption
-      );
-      return longOptionEntry?.[0] ?? shortOption;
-    }
-    function useDefaultValueOption(longOption, optionConfig, values2) {
-      return objectGetOwn(optionConfig, "default") !== void 0 && values2[longOption] === void 0;
-    }
-    module2.exports = {
-      findLongOptionForShort,
-      isLoneLongOption,
-      isLoneShortOption,
-      isLongOptionAndValue,
-      isOptionValue,
-      isOptionLikeValue,
-      isShortOptionAndValue,
-      isShortOptionGroup,
-      useDefaultValueOption,
-      objectGetOwn,
-      optionsGetOwn
-    };
-  }
-});
-
-// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/index.js
-var require_parseargs = __commonJS({
-  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/index.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var {
-      ArrayPrototypeForEach,
-      ArrayPrototypeIncludes,
-      ArrayPrototypeMap,
-      ArrayPrototypePush,
-      ArrayPrototypePushApply,
-      ArrayPrototypeShift,
-      ArrayPrototypeSlice,
-      ArrayPrototypeUnshiftApply,
-      ObjectEntries,
-      ObjectPrototypeHasOwnProperty: ObjectHasOwn,
-      StringPrototypeCharAt,
-      StringPrototypeIndexOf,
-      StringPrototypeSlice,
-      StringPrototypeStartsWith
-    } = require_primordials();
-    var {
-      validateArray,
-      validateBoolean,
-      validateBooleanArray,
-      validateObject,
-      validateString,
-      validateStringArray,
-      validateUnion
-    } = require_validators();
-    var {
-      kEmptyObject
-    } = require_util();
-    var {
-      findLongOptionForShort,
-      isLoneLongOption,
-      isLoneShortOption,
-      isLongOptionAndValue,
-      isOptionValue,
-      isOptionLikeValue,
-      isShortOptionAndValue,
-      isShortOptionGroup,
-      useDefaultValueOption,
-      objectGetOwn,
-      optionsGetOwn
-    } = require_utils();
-    var {
-      codes: {
-        ERR_INVALID_ARG_VALUE,
-        ERR_PARSE_ARGS_INVALID_OPTION_VALUE,
-        ERR_PARSE_ARGS_UNKNOWN_OPTION,
-        ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL
-      }
-    } = require_errors();
-    function getMainArgs() {
-      const execArgv = process.execArgv;
-      if (ArrayPrototypeIncludes(execArgv, "-e") || ArrayPrototypeIncludes(execArgv, "--eval") || ArrayPrototypeIncludes(execArgv, "-p") || ArrayPrototypeIncludes(execArgv, "--print")) {
-        return ArrayPrototypeSlice(process.argv, 1);
-      }
-      return ArrayPrototypeSlice(process.argv, 2);
-    }
-    function checkOptionLikeValue(token) {
-      if (!token.inlineValue && isOptionLikeValue(token.value)) {
-        const example = StringPrototypeStartsWith(token.rawName, "--") ? `'${token.rawName}=-XYZ'` : `'--${token.name}=-XYZ' or '${token.rawName}-XYZ'`;
-        const errorMessage = `Option '${token.rawName}' argument is ambiguous.
-Did you forget to specify the option argument for '${token.rawName}'?
-To specify an option argument starting with a dash use ${example}.`;
-        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(errorMessage);
-      }
-    }
-    function checkOptionUsage(config, token) {
-      if (!ObjectHasOwn(config.options, token.name)) {
-        throw new ERR_PARSE_ARGS_UNKNOWN_OPTION(
-          token.rawName,
-          config.allowPositionals
-        );
-      }
-      const short = optionsGetOwn(config.options, token.name, "short");
-      const shortAndLong = `${short ? `-${short}, ` : ""}--${token.name}`;
-      const type3 = optionsGetOwn(config.options, token.name, "type");
-      if (type3 === "string" && typeof token.value !== "string") {
-        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(`Option '${shortAndLong} <value>' argument missing`);
-      }
-      if (type3 === "boolean" && token.value != null) {
-        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(`Option '${shortAndLong}' does not take an argument`);
-      }
-    }
-    function storeOption(longOption, optionValue, options, values2) {
-      if (longOption === "__proto__") {
-        return;
-      }
-      const newValue = optionValue ?? true;
-      if (optionsGetOwn(options, longOption, "multiple")) {
-        if (values2[longOption]) {
-          ArrayPrototypePush(values2[longOption], newValue);
-        } else {
-          values2[longOption] = [newValue];
-        }
-      } else {
-        values2[longOption] = newValue;
-      }
-    }
-    function storeDefaultOption(longOption, optionValue, values2) {
-      if (longOption === "__proto__") {
-        return;
-      }
-      values2[longOption] = optionValue;
-    }
-    function argsToTokens(args, options) {
-      const tokens = [];
-      let index = -1;
-      let groupCount = 0;
-      const remainingArgs = ArrayPrototypeSlice(args);
-      while (remainingArgs.length > 0) {
-        const arg = ArrayPrototypeShift(remainingArgs);
-        const nextArg = remainingArgs[0];
-        if (groupCount > 0)
-          groupCount--;
-        else
-          index++;
-        if (arg === "--") {
-          ArrayPrototypePush(tokens, { kind: "option-terminator", index });
-          ArrayPrototypePushApply(
-            tokens,
-            ArrayPrototypeMap(remainingArgs, (arg2) => {
-              return { kind: "positional", index: ++index, value: arg2 };
-            })
-          );
-          break;
-        }
-        if (isLoneShortOption(arg)) {
-          const shortOption = StringPrototypeCharAt(arg, 1);
-          const longOption = findLongOptionForShort(shortOption, options);
-          let value;
-          let inlineValue;
-          if (optionsGetOwn(options, longOption, "type") === "string" && isOptionValue(nextArg)) {
-            value = ArrayPrototypeShift(remainingArgs);
-            inlineValue = false;
-          }
-          ArrayPrototypePush(
-            tokens,
-            {
-              kind: "option",
-              name: longOption,
-              rawName: arg,
-              index,
-              value,
-              inlineValue
-            }
-          );
-          if (value != null) ++index;
-          continue;
-        }
-        if (isShortOptionGroup(arg, options)) {
-          const expanded = [];
-          for (let index2 = 1; index2 < arg.length; index2++) {
-            const shortOption = StringPrototypeCharAt(arg, index2);
-            const longOption = findLongOptionForShort(shortOption, options);
-            if (optionsGetOwn(options, longOption, "type") !== "string" || index2 === arg.length - 1) {
-              ArrayPrototypePush(expanded, `-${shortOption}`);
-            } else {
-              ArrayPrototypePush(expanded, `-${StringPrototypeSlice(arg, index2)}`);
-              break;
-            }
-          }
-          ArrayPrototypeUnshiftApply(remainingArgs, expanded);
-          groupCount = expanded.length;
-          continue;
-        }
-        if (isShortOptionAndValue(arg, options)) {
-          const shortOption = StringPrototypeCharAt(arg, 1);
-          const longOption = findLongOptionForShort(shortOption, options);
-          const value = StringPrototypeSlice(arg, 2);
-          ArrayPrototypePush(
-            tokens,
-            {
-              kind: "option",
-              name: longOption,
-              rawName: `-${shortOption}`,
-              index,
-              value,
-              inlineValue: true
-            }
-          );
-          continue;
-        }
-        if (isLoneLongOption(arg)) {
-          const longOption = StringPrototypeSlice(arg, 2);
-          let value;
-          let inlineValue;
-          if (optionsGetOwn(options, longOption, "type") === "string" && isOptionValue(nextArg)) {
-            value = ArrayPrototypeShift(remainingArgs);
-            inlineValue = false;
-          }
-          ArrayPrototypePush(
-            tokens,
-            {
-              kind: "option",
-              name: longOption,
-              rawName: arg,
-              index,
-              value,
-              inlineValue
-            }
-          );
-          if (value != null) ++index;
-          continue;
-        }
-        if (isLongOptionAndValue(arg)) {
-          const equalIndex = StringPrototypeIndexOf(arg, "=");
-          const longOption = StringPrototypeSlice(arg, 2, equalIndex);
-          const value = StringPrototypeSlice(arg, equalIndex + 1);
-          ArrayPrototypePush(
-            tokens,
-            {
-              kind: "option",
-              name: longOption,
-              rawName: `--${longOption}`,
-              index,
-              value,
-              inlineValue: true
-            }
-          );
-          continue;
-        }
-        ArrayPrototypePush(tokens, { kind: "positional", index, value: arg });
-      }
-      return tokens;
-    }
-    var parseArgs2 = (config = kEmptyObject) => {
-      const args = objectGetOwn(config, "args") ?? getMainArgs();
-      const strict = objectGetOwn(config, "strict") ?? true;
-      const allowPositionals = objectGetOwn(config, "allowPositionals") ?? !strict;
-      const returnTokens = objectGetOwn(config, "tokens") ?? false;
-      const options = objectGetOwn(config, "options") ?? { __proto__: null };
-      const parseConfig = { args, strict, options, allowPositionals };
-      validateArray(args, "args");
-      validateBoolean(strict, "strict");
-      validateBoolean(allowPositionals, "allowPositionals");
-      validateBoolean(returnTokens, "tokens");
-      validateObject(options, "options");
-      ArrayPrototypeForEach(
-        ObjectEntries(options),
-        ({ 0: longOption, 1: optionConfig }) => {
-          validateObject(optionConfig, `options.${longOption}`);
-          const optionType = objectGetOwn(optionConfig, "type");
-          validateUnion(optionType, `options.${longOption}.type`, ["string", "boolean"]);
-          if (ObjectHasOwn(optionConfig, "short")) {
-            const shortOption = optionConfig.short;
-            validateString(shortOption, `options.${longOption}.short`);
-            if (shortOption.length !== 1) {
-              throw new ERR_INVALID_ARG_VALUE(
-                `options.${longOption}.short`,
-                shortOption,
-                "must be a single character"
-              );
-            }
-          }
-          const multipleOption = objectGetOwn(optionConfig, "multiple");
-          if (ObjectHasOwn(optionConfig, "multiple")) {
-            validateBoolean(multipleOption, `options.${longOption}.multiple`);
-          }
-          const defaultValue = objectGetOwn(optionConfig, "default");
-          if (defaultValue !== void 0) {
-            let validator;
-            switch (optionType) {
-              case "string":
-                validator = multipleOption ? validateStringArray : validateString;
-                break;
-              case "boolean":
-                validator = multipleOption ? validateBooleanArray : validateBoolean;
-                break;
-            }
-            validator(defaultValue, `options.${longOption}.default`);
-          }
-        }
-      );
-      const tokens = argsToTokens(args, options);
-      const result = {
-        values: { __proto__: null },
-        positionals: []
-      };
-      if (returnTokens) {
-        result.tokens = tokens;
-      }
-      ArrayPrototypeForEach(tokens, (token) => {
-        if (token.kind === "option") {
-          if (strict) {
-            checkOptionUsage(parseConfig, token);
-            checkOptionLikeValue(token);
-          }
-          storeOption(token.name, token.value, options, result.values);
-        } else if (token.kind === "positional") {
-          if (!allowPositionals) {
-            throw new ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL(token.value);
-          }
-          ArrayPrototypePush(result.positionals, token.value);
-        }
-      });
-      ArrayPrototypeForEach(ObjectEntries(options), ({
-        0: longOption,
-        1: optionConfig
-      }) => {
-        const mustSetDefault = useDefaultValueOption(
-          longOption,
-          optionConfig,
-          result.values
-        );
-        if (mustSetDefault) {
-          storeDefaultOption(
-            longOption,
-            objectGetOwn(optionConfig, "default"),
-            result.values
-          );
-        }
-      });
-      return result;
-    };
-    module2.exports = {
-      parseArgs: parseArgs2
-    };
   }
 });
 
@@ -5048,28 +4198,6 @@ var require_dist = __commonJS({
       var es5 = lib;
       return es5;
     }));
-  }
-});
-
-// site/shims/url.ts
-var url_exports = {};
-__export(url_exports, {
-  URL: () => U,
-  URLSearchParams: () => S,
-  default: () => url_default,
-  fileURLToPath: () => fileURLToPath,
-  pathToFileURL: () => pathToFileURL
-});
-var fileURLToPath, pathToFileURL, U, S, url_default;
-var init_url = __esm({
-  "site/shims/url.ts"() {
-    "use strict";
-    init_globals();
-    fileURLToPath = (u) => decodeURIComponent(new URL(String(u)).pathname);
-    pathToFileURL = (p2) => new URL(`file://${encodeURI(p2)}`);
-    U = globalThis.URL;
-    S = globalThis.URLSearchParams;
-    url_default = { fileURLToPath, pathToFileURL, URL: U, URLSearchParams: S };
   }
 });
 
@@ -10779,6 +9907,856 @@ var require_hdrhistogram_umd = __commonJS({
   }
 });
 
+// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/primordials.js
+var require_primordials = __commonJS({
+  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/primordials.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var primordials = {};
+    var {
+      defineProperty: ReflectDefineProperty,
+      getOwnPropertyDescriptor: ReflectGetOwnPropertyDescriptor,
+      ownKeys: ReflectOwnKeys
+    } = Reflect;
+    var { apply: apply2, bind, call } = Function.prototype;
+    var uncurryThis = bind.bind(call);
+    primordials.uncurryThis = uncurryThis;
+    var applyBind = bind.bind(apply2);
+    primordials.applyBind = applyBind;
+    var varargsMethods = [
+      // 'ArrayPrototypeConcat' is omitted, because it performs the spread
+      // on its own for arrays and array-likes with a truthy
+      // @@isConcatSpreadable symbol property.
+      "ArrayOf",
+      "ArrayPrototypePush",
+      "ArrayPrototypeUnshift",
+      // 'FunctionPrototypeCall' is omitted, since there's 'ReflectApply'
+      // and 'FunctionPrototypeApply'.
+      "MathHypot",
+      "MathMax",
+      "MathMin",
+      "StringPrototypeConcat",
+      "TypedArrayOf"
+    ];
+    function getNewKey(key) {
+      return typeof key === "symbol" ? `Symbol${key.description[7].toUpperCase()}${key.description.slice(8)}` : `${key[0].toUpperCase()}${key.slice(1)}`;
+    }
+    function copyAccessor(dest, prefix, key, { enumerable, get: get3, set: set2 }) {
+      ReflectDefineProperty(dest, `${prefix}Get${key}`, {
+        value: uncurryThis(get3),
+        enumerable
+      });
+      if (set2 !== void 0) {
+        ReflectDefineProperty(dest, `${prefix}Set${key}`, {
+          value: uncurryThis(set2),
+          enumerable
+        });
+      }
+    }
+    function copyPropsRenamed(src, dest, prefix) {
+      for (const key of ReflectOwnKeys(src)) {
+        const newKey = getNewKey(key);
+        const desc = ReflectGetOwnPropertyDescriptor(src, key);
+        if ("get" in desc) {
+          copyAccessor(dest, prefix, newKey, desc);
+        } else {
+          const name = `${prefix}${newKey}`;
+          ReflectDefineProperty(dest, name, desc);
+          if (varargsMethods.includes(name)) {
+            ReflectDefineProperty(dest, `${name}Apply`, {
+              // `src` is bound as the `this` so that the static `this` points
+              // to the object it was defined on,
+              // e.g.: `ArrayOfApply` gets a `this` of `Array`:
+              value: applyBind(desc.value, src)
+            });
+          }
+        }
+      }
+    }
+    function copyPropsRenamedBound(src, dest, prefix) {
+      for (const key of ReflectOwnKeys(src)) {
+        const newKey = getNewKey(key);
+        const desc = ReflectGetOwnPropertyDescriptor(src, key);
+        if ("get" in desc) {
+          copyAccessor(dest, prefix, newKey, desc);
+        } else {
+          const { value } = desc;
+          if (typeof value === "function") {
+            desc.value = value.bind(src);
+          }
+          const name = `${prefix}${newKey}`;
+          ReflectDefineProperty(dest, name, desc);
+          if (varargsMethods.includes(name)) {
+            ReflectDefineProperty(dest, `${name}Apply`, {
+              value: applyBind(value, src)
+            });
+          }
+        }
+      }
+    }
+    function copyPrototype(src, dest, prefix) {
+      for (const key of ReflectOwnKeys(src)) {
+        const newKey = getNewKey(key);
+        const desc = ReflectGetOwnPropertyDescriptor(src, key);
+        if ("get" in desc) {
+          copyAccessor(dest, prefix, newKey, desc);
+        } else {
+          const { value } = desc;
+          if (typeof value === "function") {
+            desc.value = uncurryThis(value);
+          }
+          const name = `${prefix}${newKey}`;
+          ReflectDefineProperty(dest, name, desc);
+          if (varargsMethods.includes(name)) {
+            ReflectDefineProperty(dest, `${name}Apply`, {
+              value: applyBind(value)
+            });
+          }
+        }
+      }
+    }
+    [
+      "Proxy",
+      "globalThis"
+    ].forEach((name) => {
+      primordials[name] = globalThis[name];
+    });
+    [
+      decodeURI,
+      decodeURIComponent,
+      encodeURI,
+      encodeURIComponent
+    ].forEach((fn) => {
+      primordials[fn.name] = fn;
+    });
+    [
+      "JSON",
+      "Math",
+      "Proxy",
+      "Reflect"
+    ].forEach((name) => {
+      copyPropsRenamed(globalThis[name], primordials, name);
+    });
+    [
+      "Array",
+      "ArrayBuffer",
+      "BigInt",
+      "BigInt64Array",
+      "BigUint64Array",
+      "Boolean",
+      "DataView",
+      "Date",
+      "Error",
+      "EvalError",
+      "Float32Array",
+      "Float64Array",
+      "Function",
+      "Int16Array",
+      "Int32Array",
+      "Int8Array",
+      "Map",
+      "Number",
+      "Object",
+      "RangeError",
+      "ReferenceError",
+      "RegExp",
+      "Set",
+      "String",
+      "Symbol",
+      "SyntaxError",
+      "TypeError",
+      "URIError",
+      "Uint16Array",
+      "Uint32Array",
+      "Uint8Array",
+      "Uint8ClampedArray",
+      "WeakMap",
+      "WeakSet"
+    ].forEach((name) => {
+      const original = globalThis[name];
+      primordials[name] = original;
+      copyPropsRenamed(original, primordials, name);
+      copyPrototype(original.prototype, primordials, `${name}Prototype`);
+    });
+    [
+      "Promise"
+    ].forEach((name) => {
+      const original = globalThis[name];
+      primordials[name] = original;
+      copyPropsRenamedBound(original, primordials, name);
+      copyPrototype(original.prototype, primordials, `${name}Prototype`);
+    });
+    [
+      { name: "TypedArray", original: Reflect.getPrototypeOf(Uint8Array) },
+      { name: "ArrayIterator", original: {
+        prototype: Reflect.getPrototypeOf(Array.prototype[Symbol.iterator]())
+      } },
+      { name: "StringIterator", original: {
+        prototype: Reflect.getPrototypeOf(String.prototype[Symbol.iterator]())
+      } }
+    ].forEach(({ name, original }) => {
+      primordials[name] = original;
+      copyPrototype(original, primordials, name);
+      copyPrototype(original.prototype, primordials, `${name}Prototype`);
+    });
+    var {
+      ArrayPrototypeForEach,
+      FunctionPrototypeCall,
+      Map: Map2,
+      ObjectFreeze,
+      ObjectSetPrototypeOf,
+      Set: Set2,
+      SymbolIterator,
+      WeakMap: WeakMap2,
+      WeakSet: WeakSet2
+    } = primordials;
+    var createSafeIterator = (factory, next2) => {
+      class SafeIterator {
+        constructor(iterable) {
+          this._iterator = factory(iterable);
+        }
+        next() {
+          return next2(this._iterator);
+        }
+        [SymbolIterator]() {
+          return this;
+        }
+      }
+      ObjectSetPrototypeOf(SafeIterator.prototype, null);
+      ObjectFreeze(SafeIterator.prototype);
+      ObjectFreeze(SafeIterator);
+      return SafeIterator;
+    };
+    primordials.SafeArrayIterator = createSafeIterator(
+      primordials.ArrayPrototypeSymbolIterator,
+      primordials.ArrayIteratorPrototypeNext
+    );
+    primordials.SafeStringIterator = createSafeIterator(
+      primordials.StringPrototypeSymbolIterator,
+      primordials.StringIteratorPrototypeNext
+    );
+    var copyProps = (src, dest) => {
+      ArrayPrototypeForEach(ReflectOwnKeys(src), (key) => {
+        if (!ReflectGetOwnPropertyDescriptor(dest, key)) {
+          ReflectDefineProperty(
+            dest,
+            key,
+            ReflectGetOwnPropertyDescriptor(src, key)
+          );
+        }
+      });
+    };
+    var makeSafe = (unsafe, safe) => {
+      if (SymbolIterator in unsafe.prototype) {
+        const dummy = new unsafe();
+        let next2;
+        ArrayPrototypeForEach(ReflectOwnKeys(unsafe.prototype), (key) => {
+          if (!ReflectGetOwnPropertyDescriptor(safe.prototype, key)) {
+            const desc = ReflectGetOwnPropertyDescriptor(unsafe.prototype, key);
+            if (typeof desc.value === "function" && desc.value.length === 0 && SymbolIterator in (FunctionPrototypeCall(desc.value, dummy) ?? {})) {
+              const createIterator = uncurryThis(desc.value);
+              next2 = next2 ?? uncurryThis(createIterator(dummy).next);
+              const SafeIterator = createSafeIterator(createIterator, next2);
+              desc.value = function() {
+                return new SafeIterator(this);
+              };
+            }
+            ReflectDefineProperty(safe.prototype, key, desc);
+          }
+        });
+      } else {
+        copyProps(unsafe.prototype, safe.prototype);
+      }
+      copyProps(unsafe, safe);
+      ObjectSetPrototypeOf(safe.prototype, null);
+      ObjectFreeze(safe.prototype);
+      ObjectFreeze(safe);
+      return safe;
+    };
+    primordials.makeSafe = makeSafe;
+    primordials.SafeMap = makeSafe(
+      Map2,
+      class SafeMap extends Map2 {
+        constructor(i2) {
+          super(i2);
+        }
+        // eslint-disable-line no-useless-constructor
+      }
+    );
+    primordials.SafeWeakMap = makeSafe(
+      WeakMap2,
+      class SafeWeakMap extends WeakMap2 {
+        constructor(i2) {
+          super(i2);
+        }
+        // eslint-disable-line no-useless-constructor
+      }
+    );
+    primordials.SafeSet = makeSafe(
+      Set2,
+      class SafeSet extends Set2 {
+        constructor(i2) {
+          super(i2);
+        }
+        // eslint-disable-line no-useless-constructor
+      }
+    );
+    primordials.SafeWeakSet = makeSafe(
+      WeakSet2,
+      class SafeWeakSet extends WeakSet2 {
+        constructor(i2) {
+          super(i2);
+        }
+        // eslint-disable-line no-useless-constructor
+      }
+    );
+    ObjectSetPrototypeOf(primordials, null);
+    ObjectFreeze(primordials);
+    module2.exports = primordials;
+  }
+});
+
+// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/errors.js
+var require_errors = __commonJS({
+  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/errors.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var ERR_INVALID_ARG_TYPE = class extends TypeError {
+      constructor(name, expected, actual) {
+        super(`${name} must be ${expected} got ${actual}`);
+        this.code = "ERR_INVALID_ARG_TYPE";
+      }
+    };
+    var ERR_INVALID_ARG_VALUE = class extends TypeError {
+      constructor(arg1, arg2, expected) {
+        super(`The property ${arg1} ${expected}. Received '${arg2}'`);
+        this.code = "ERR_INVALID_ARG_VALUE";
+      }
+    };
+    var ERR_PARSE_ARGS_INVALID_OPTION_VALUE = class extends Error {
+      constructor(message) {
+        super(message);
+        this.code = "ERR_PARSE_ARGS_INVALID_OPTION_VALUE";
+      }
+    };
+    var ERR_PARSE_ARGS_UNKNOWN_OPTION = class extends Error {
+      constructor(option, allowPositionals) {
+        const suggestDashDash = allowPositionals ? `. To specify a positional argument starting with a '-', place it at the end of the command after '--', as in '-- ${JSON.stringify(option)}` : "";
+        super(`Unknown option '${option}'${suggestDashDash}`);
+        this.code = "ERR_PARSE_ARGS_UNKNOWN_OPTION";
+      }
+    };
+    var ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL = class extends Error {
+      constructor(positional) {
+        super(`Unexpected argument '${positional}'. This command does not take positional arguments`);
+        this.code = "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL";
+      }
+    };
+    module2.exports = {
+      codes: {
+        ERR_INVALID_ARG_TYPE,
+        ERR_INVALID_ARG_VALUE,
+        ERR_PARSE_ARGS_INVALID_OPTION_VALUE,
+        ERR_PARSE_ARGS_UNKNOWN_OPTION,
+        ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/validators.js
+var require_validators = __commonJS({
+  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/validators.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var {
+      ArrayIsArray,
+      ArrayPrototypeIncludes,
+      ArrayPrototypeJoin
+    } = require_primordials();
+    var {
+      codes: {
+        ERR_INVALID_ARG_TYPE
+      }
+    } = require_errors();
+    function validateString(value, name) {
+      if (typeof value !== "string") {
+        throw new ERR_INVALID_ARG_TYPE(name, "String", value);
+      }
+    }
+    function validateUnion(value, name, union) {
+      if (!ArrayPrototypeIncludes(union, value)) {
+        throw new ERR_INVALID_ARG_TYPE(name, `('${ArrayPrototypeJoin(union, "|")}')`, value);
+      }
+    }
+    function validateBoolean(value, name) {
+      if (typeof value !== "boolean") {
+        throw new ERR_INVALID_ARG_TYPE(name, "Boolean", value);
+      }
+    }
+    function validateArray(value, name) {
+      if (!ArrayIsArray(value)) {
+        throw new ERR_INVALID_ARG_TYPE(name, "Array", value);
+      }
+    }
+    function validateStringArray(value, name) {
+      validateArray(value, name);
+      for (let i2 = 0; i2 < value.length; i2++) {
+        validateString(value[i2], `${name}[${i2}]`);
+      }
+    }
+    function validateBooleanArray(value, name) {
+      validateArray(value, name);
+      for (let i2 = 0; i2 < value.length; i2++) {
+        validateBoolean(value[i2], `${name}[${i2}]`);
+      }
+    }
+    function validateObject(value, name, options) {
+      const useDefaultOptions = options == null;
+      const allowArray = useDefaultOptions ? false : options.allowArray;
+      const allowFunction = useDefaultOptions ? false : options.allowFunction;
+      const nullable2 = useDefaultOptions ? false : options.nullable;
+      if (!nullable2 && value === null || !allowArray && ArrayIsArray(value) || typeof value !== "object" && (!allowFunction || typeof value !== "function")) {
+        throw new ERR_INVALID_ARG_TYPE(name, "Object", value);
+      }
+    }
+    module2.exports = {
+      validateArray,
+      validateObject,
+      validateString,
+      validateStringArray,
+      validateUnion,
+      validateBoolean,
+      validateBooleanArray
+    };
+  }
+});
+
+// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/util.js
+var require_util = __commonJS({
+  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/internal/util.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var {
+      ObjectCreate,
+      ObjectFreeze
+    } = require_primordials();
+    var kEmptyObject = ObjectFreeze(ObjectCreate(null));
+    module2.exports = {
+      kEmptyObject
+    };
+  }
+});
+
+// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/utils.js
+var require_utils = __commonJS({
+  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/utils.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var {
+      ArrayPrototypeFind,
+      ObjectEntries,
+      ObjectPrototypeHasOwnProperty: ObjectHasOwn,
+      StringPrototypeCharAt,
+      StringPrototypeIncludes,
+      StringPrototypeStartsWith
+    } = require_primordials();
+    var {
+      validateObject
+    } = require_validators();
+    function objectGetOwn(obj, prop) {
+      if (ObjectHasOwn(obj, prop))
+        return obj[prop];
+    }
+    function optionsGetOwn(options, longOption, prop) {
+      if (ObjectHasOwn(options, longOption))
+        return objectGetOwn(options[longOption], prop);
+    }
+    function isOptionValue(value) {
+      if (value == null) return false;
+      return true;
+    }
+    function isOptionLikeValue(value) {
+      if (value == null) return false;
+      return value.length > 1 && StringPrototypeCharAt(value, 0) === "-";
+    }
+    function isLoneShortOption(arg) {
+      return arg.length === 2 && StringPrototypeCharAt(arg, 0) === "-" && StringPrototypeCharAt(arg, 1) !== "-";
+    }
+    function isLoneLongOption(arg) {
+      return arg.length > 2 && StringPrototypeStartsWith(arg, "--") && !StringPrototypeIncludes(arg, "=", 3);
+    }
+    function isLongOptionAndValue(arg) {
+      return arg.length > 2 && StringPrototypeStartsWith(arg, "--") && StringPrototypeIncludes(arg, "=", 3);
+    }
+    function isShortOptionGroup(arg, options) {
+      if (arg.length <= 2) return false;
+      if (StringPrototypeCharAt(arg, 0) !== "-") return false;
+      if (StringPrototypeCharAt(arg, 1) === "-") return false;
+      const firstShort = StringPrototypeCharAt(arg, 1);
+      const longOption = findLongOptionForShort(firstShort, options);
+      return optionsGetOwn(options, longOption, "type") !== "string";
+    }
+    function isShortOptionAndValue(arg, options) {
+      validateObject(options, "options");
+      if (arg.length <= 2) return false;
+      if (StringPrototypeCharAt(arg, 0) !== "-") return false;
+      if (StringPrototypeCharAt(arg, 1) === "-") return false;
+      const shortOption = StringPrototypeCharAt(arg, 1);
+      const longOption = findLongOptionForShort(shortOption, options);
+      return optionsGetOwn(options, longOption, "type") === "string";
+    }
+    function findLongOptionForShort(shortOption, options) {
+      validateObject(options, "options");
+      const longOptionEntry = ArrayPrototypeFind(
+        ObjectEntries(options),
+        ({ 1: optionConfig }) => objectGetOwn(optionConfig, "short") === shortOption
+      );
+      return longOptionEntry?.[0] ?? shortOption;
+    }
+    function useDefaultValueOption(longOption, optionConfig, values2) {
+      return objectGetOwn(optionConfig, "default") !== void 0 && values2[longOption] === void 0;
+    }
+    module2.exports = {
+      findLongOptionForShort,
+      isLoneLongOption,
+      isLoneShortOption,
+      isLongOptionAndValue,
+      isOptionValue,
+      isOptionLikeValue,
+      isShortOptionAndValue,
+      isShortOptionGroup,
+      useDefaultValueOption,
+      objectGetOwn,
+      optionsGetOwn
+    };
+  }
+});
+
+// node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/index.js
+var require_parseargs = __commonJS({
+  "node_modules/.pnpm/@pkgjs+parseargs@0.11.0/node_modules/@pkgjs/parseargs/index.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var {
+      ArrayPrototypeForEach,
+      ArrayPrototypeIncludes,
+      ArrayPrototypeMap,
+      ArrayPrototypePush,
+      ArrayPrototypePushApply,
+      ArrayPrototypeShift,
+      ArrayPrototypeSlice,
+      ArrayPrototypeUnshiftApply,
+      ObjectEntries,
+      ObjectPrototypeHasOwnProperty: ObjectHasOwn,
+      StringPrototypeCharAt,
+      StringPrototypeIndexOf,
+      StringPrototypeSlice,
+      StringPrototypeStartsWith
+    } = require_primordials();
+    var {
+      validateArray,
+      validateBoolean,
+      validateBooleanArray,
+      validateObject,
+      validateString,
+      validateStringArray,
+      validateUnion
+    } = require_validators();
+    var {
+      kEmptyObject
+    } = require_util();
+    var {
+      findLongOptionForShort,
+      isLoneLongOption,
+      isLoneShortOption,
+      isLongOptionAndValue,
+      isOptionValue,
+      isOptionLikeValue,
+      isShortOptionAndValue,
+      isShortOptionGroup,
+      useDefaultValueOption,
+      objectGetOwn,
+      optionsGetOwn
+    } = require_utils();
+    var {
+      codes: {
+        ERR_INVALID_ARG_VALUE,
+        ERR_PARSE_ARGS_INVALID_OPTION_VALUE,
+        ERR_PARSE_ARGS_UNKNOWN_OPTION,
+        ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL
+      }
+    } = require_errors();
+    function getMainArgs() {
+      const execArgv = process.execArgv;
+      if (ArrayPrototypeIncludes(execArgv, "-e") || ArrayPrototypeIncludes(execArgv, "--eval") || ArrayPrototypeIncludes(execArgv, "-p") || ArrayPrototypeIncludes(execArgv, "--print")) {
+        return ArrayPrototypeSlice(process.argv, 1);
+      }
+      return ArrayPrototypeSlice(process.argv, 2);
+    }
+    function checkOptionLikeValue(token) {
+      if (!token.inlineValue && isOptionLikeValue(token.value)) {
+        const example = StringPrototypeStartsWith(token.rawName, "--") ? `'${token.rawName}=-XYZ'` : `'--${token.name}=-XYZ' or '${token.rawName}-XYZ'`;
+        const errorMessage2 = `Option '${token.rawName}' argument is ambiguous.
+Did you forget to specify the option argument for '${token.rawName}'?
+To specify an option argument starting with a dash use ${example}.`;
+        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(errorMessage2);
+      }
+    }
+    function checkOptionUsage(config, token) {
+      if (!ObjectHasOwn(config.options, token.name)) {
+        throw new ERR_PARSE_ARGS_UNKNOWN_OPTION(
+          token.rawName,
+          config.allowPositionals
+        );
+      }
+      const short = optionsGetOwn(config.options, token.name, "short");
+      const shortAndLong = `${short ? `-${short}, ` : ""}--${token.name}`;
+      const type3 = optionsGetOwn(config.options, token.name, "type");
+      if (type3 === "string" && typeof token.value !== "string") {
+        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(`Option '${shortAndLong} <value>' argument missing`);
+      }
+      if (type3 === "boolean" && token.value != null) {
+        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(`Option '${shortAndLong}' does not take an argument`);
+      }
+    }
+    function storeOption(longOption, optionValue, options, values2) {
+      if (longOption === "__proto__") {
+        return;
+      }
+      const newValue = optionValue ?? true;
+      if (optionsGetOwn(options, longOption, "multiple")) {
+        if (values2[longOption]) {
+          ArrayPrototypePush(values2[longOption], newValue);
+        } else {
+          values2[longOption] = [newValue];
+        }
+      } else {
+        values2[longOption] = newValue;
+      }
+    }
+    function storeDefaultOption(longOption, optionValue, values2) {
+      if (longOption === "__proto__") {
+        return;
+      }
+      values2[longOption] = optionValue;
+    }
+    function argsToTokens(args, options) {
+      const tokens = [];
+      let index = -1;
+      let groupCount = 0;
+      const remainingArgs = ArrayPrototypeSlice(args);
+      while (remainingArgs.length > 0) {
+        const arg = ArrayPrototypeShift(remainingArgs);
+        const nextArg = remainingArgs[0];
+        if (groupCount > 0)
+          groupCount--;
+        else
+          index++;
+        if (arg === "--") {
+          ArrayPrototypePush(tokens, { kind: "option-terminator", index });
+          ArrayPrototypePushApply(
+            tokens,
+            ArrayPrototypeMap(remainingArgs, (arg2) => {
+              return { kind: "positional", index: ++index, value: arg2 };
+            })
+          );
+          break;
+        }
+        if (isLoneShortOption(arg)) {
+          const shortOption = StringPrototypeCharAt(arg, 1);
+          const longOption = findLongOptionForShort(shortOption, options);
+          let value;
+          let inlineValue;
+          if (optionsGetOwn(options, longOption, "type") === "string" && isOptionValue(nextArg)) {
+            value = ArrayPrototypeShift(remainingArgs);
+            inlineValue = false;
+          }
+          ArrayPrototypePush(
+            tokens,
+            {
+              kind: "option",
+              name: longOption,
+              rawName: arg,
+              index,
+              value,
+              inlineValue
+            }
+          );
+          if (value != null) ++index;
+          continue;
+        }
+        if (isShortOptionGroup(arg, options)) {
+          const expanded = [];
+          for (let index2 = 1; index2 < arg.length; index2++) {
+            const shortOption = StringPrototypeCharAt(arg, index2);
+            const longOption = findLongOptionForShort(shortOption, options);
+            if (optionsGetOwn(options, longOption, "type") !== "string" || index2 === arg.length - 1) {
+              ArrayPrototypePush(expanded, `-${shortOption}`);
+            } else {
+              ArrayPrototypePush(expanded, `-${StringPrototypeSlice(arg, index2)}`);
+              break;
+            }
+          }
+          ArrayPrototypeUnshiftApply(remainingArgs, expanded);
+          groupCount = expanded.length;
+          continue;
+        }
+        if (isShortOptionAndValue(arg, options)) {
+          const shortOption = StringPrototypeCharAt(arg, 1);
+          const longOption = findLongOptionForShort(shortOption, options);
+          const value = StringPrototypeSlice(arg, 2);
+          ArrayPrototypePush(
+            tokens,
+            {
+              kind: "option",
+              name: longOption,
+              rawName: `-${shortOption}`,
+              index,
+              value,
+              inlineValue: true
+            }
+          );
+          continue;
+        }
+        if (isLoneLongOption(arg)) {
+          const longOption = StringPrototypeSlice(arg, 2);
+          let value;
+          let inlineValue;
+          if (optionsGetOwn(options, longOption, "type") === "string" && isOptionValue(nextArg)) {
+            value = ArrayPrototypeShift(remainingArgs);
+            inlineValue = false;
+          }
+          ArrayPrototypePush(
+            tokens,
+            {
+              kind: "option",
+              name: longOption,
+              rawName: arg,
+              index,
+              value,
+              inlineValue
+            }
+          );
+          if (value != null) ++index;
+          continue;
+        }
+        if (isLongOptionAndValue(arg)) {
+          const equalIndex = StringPrototypeIndexOf(arg, "=");
+          const longOption = StringPrototypeSlice(arg, 2, equalIndex);
+          const value = StringPrototypeSlice(arg, equalIndex + 1);
+          ArrayPrototypePush(
+            tokens,
+            {
+              kind: "option",
+              name: longOption,
+              rawName: `--${longOption}`,
+              index,
+              value,
+              inlineValue: true
+            }
+          );
+          continue;
+        }
+        ArrayPrototypePush(tokens, { kind: "positional", index, value: arg });
+      }
+      return tokens;
+    }
+    var parseArgs2 = (config = kEmptyObject) => {
+      const args = objectGetOwn(config, "args") ?? getMainArgs();
+      const strict = objectGetOwn(config, "strict") ?? true;
+      const allowPositionals = objectGetOwn(config, "allowPositionals") ?? !strict;
+      const returnTokens = objectGetOwn(config, "tokens") ?? false;
+      const options = objectGetOwn(config, "options") ?? { __proto__: null };
+      const parseConfig = { args, strict, options, allowPositionals };
+      validateArray(args, "args");
+      validateBoolean(strict, "strict");
+      validateBoolean(allowPositionals, "allowPositionals");
+      validateBoolean(returnTokens, "tokens");
+      validateObject(options, "options");
+      ArrayPrototypeForEach(
+        ObjectEntries(options),
+        ({ 0: longOption, 1: optionConfig }) => {
+          validateObject(optionConfig, `options.${longOption}`);
+          const optionType = objectGetOwn(optionConfig, "type");
+          validateUnion(optionType, `options.${longOption}.type`, ["string", "boolean"]);
+          if (ObjectHasOwn(optionConfig, "short")) {
+            const shortOption = optionConfig.short;
+            validateString(shortOption, `options.${longOption}.short`);
+            if (shortOption.length !== 1) {
+              throw new ERR_INVALID_ARG_VALUE(
+                `options.${longOption}.short`,
+                shortOption,
+                "must be a single character"
+              );
+            }
+          }
+          const multipleOption = objectGetOwn(optionConfig, "multiple");
+          if (ObjectHasOwn(optionConfig, "multiple")) {
+            validateBoolean(multipleOption, `options.${longOption}.multiple`);
+          }
+          const defaultValue = objectGetOwn(optionConfig, "default");
+          if (defaultValue !== void 0) {
+            let validator;
+            switch (optionType) {
+              case "string":
+                validator = multipleOption ? validateStringArray : validateString;
+                break;
+              case "boolean":
+                validator = multipleOption ? validateBooleanArray : validateBoolean;
+                break;
+            }
+            validator(defaultValue, `options.${longOption}.default`);
+          }
+        }
+      );
+      const tokens = argsToTokens(args, options);
+      const result = {
+        values: { __proto__: null },
+        positionals: []
+      };
+      if (returnTokens) {
+        result.tokens = tokens;
+      }
+      ArrayPrototypeForEach(tokens, (token) => {
+        if (token.kind === "option") {
+          if (strict) {
+            checkOptionUsage(parseConfig, token);
+            checkOptionLikeValue(token);
+          }
+          storeOption(token.name, token.value, options, result.values);
+        } else if (token.kind === "positional") {
+          if (!allowPositionals) {
+            throw new ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL(token.value);
+          }
+          ArrayPrototypePush(result.positionals, token.value);
+        }
+      });
+      ArrayPrototypeForEach(ObjectEntries(options), ({
+        0: longOption,
+        1: optionConfig
+      }) => {
+        const mustSetDefault = useDefaultValueOption(
+          longOption,
+          optionConfig,
+          result.values
+        );
+        if (mustSetDefault) {
+          storeDefaultOption(
+            longOption,
+            objectGetOwn(optionConfig, "default"),
+            result.values
+          );
+        }
+      });
+      return result;
+    };
+    module2.exports = {
+      parseArgs: parseArgs2
+    };
+  }
+});
+
 // node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.es6.mjs
 var tslib_es6_exports = {};
 __export(tslib_es6_exports, {
@@ -15045,6 +15023,28 @@ var require_StatFs = __commonJS({
     };
     exports2.StatFs = StatFs;
     exports2.default = StatFs;
+  }
+});
+
+// site/shims/url.ts
+var url_exports = {};
+__export(url_exports, {
+  URL: () => U,
+  URLSearchParams: () => S,
+  default: () => url_default,
+  fileURLToPath: () => fileURLToPath,
+  pathToFileURL: () => pathToFileURL
+});
+var fileURLToPath, pathToFileURL, U, S, url_default;
+var init_url = __esm({
+  "site/shims/url.ts"() {
+    "use strict";
+    init_globals();
+    fileURLToPath = (u) => decodeURIComponent(new URL(String(u)).pathname);
+    pathToFileURL = (p2) => new URL(`file://${encodeURI(p2)}`);
+    U = globalThis.URL;
+    S = globalThis.URLSearchParams;
+    url_default = { fileURLToPath, pathToFileURL, URL: U, URLSearchParams: S };
   }
 });
 
@@ -28267,17 +28267,147 @@ init_globals();
 // src/daemon/foundations/verb-error.ts
 init_globals();
 
-// site/shims/util.ts
+// src/utils/describe-value.ts
 init_globals();
-var import_parseargs = __toESM(require_parseargs(), 1);
-var types = { isNativeError: (e) => e instanceof Error };
-var inspect = (v) => {
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
+function errorText(error, key, fallback) {
+  for (let source = error; source; source = Object.getPrototypeOf(source)) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor) continue;
+    if (typeof DOMException !== "undefined" && source === DOMException.prototype && descriptor.get)
+      return descriptor.get.call(error);
+    return typeof descriptor.value === "string" ? descriptor.value : fallback;
   }
-};
+  return fallback;
+}
+function isReportedError(value) {
+  return value instanceof Error || typeof DOMException !== "undefined" && value instanceof DOMException;
+}
+function errorMessage(error) {
+  return errorText(error, "message", "");
+}
+var UNINSPECTABLE = "[Uninspectable value]";
+function diagnosticMessage(value) {
+  try {
+    return isReportedError(value) ? errorMessage(value) : describeValue(value);
+  } catch {
+    return UNINSPECTABLE;
+  }
+}
+function describeValue(value, crossed) {
+  const path32 = /* @__PURE__ */ new Set();
+  let remaining = 100;
+  const limit = (text6) => text6.length > 4096 ? text6.slice(0, 4096) + "\u2026" : text6;
+  function describe3(item) {
+    if (--remaining < 0 || path32.size >= 10) return "\u2026";
+    try {
+      if (typeof item === "string")
+        return "'" + JSON.stringify(limit(item)).slice(1, -1).replace(/'/g, "\\'") + "'";
+      if (typeof item === "bigint") return item.toString() + "n";
+      if (typeof item === "function") return "[Function]";
+      if (item === null || typeof item !== "object") return String(item);
+      if (path32.has(item)) return "[Circular]";
+      path32.add(item);
+      try {
+        return limit(objectDetail(item));
+      } finally {
+        path32.delete(item);
+      }
+    } catch {
+      return UNINSPECTABLE;
+    }
+  }
+  const descriptorText = (field) => "value" in field ? describe3(field.value) : "[Accessor]";
+  function objectDetail(item) {
+    if (isReportedError(item)) {
+      const original = crossed?.(item);
+      if (original !== void 0) return original;
+      const lines2 = [
+        [errorText(item, "name", "Error"), errorMessage(item)].filter(Boolean).join(": ")
+      ];
+      const cause = Object.getOwnPropertyDescriptor(item, "cause");
+      if (cause) lines2.push("cause: " + descriptorText(cause));
+      const errors2 = item instanceof AggregateError ? Object.getOwnPropertyDescriptor(item, "errors")?.value : void 0;
+      if (Array.isArray(errors2)) {
+        for (let i2 = 0; i2 < errors2.length && remaining > 0; i2++) {
+          remaining--;
+          const field = Object.getOwnPropertyDescriptor(errors2, i2);
+          if (field) lines2.push(`errors[${i2}]: ${descriptorText(field)}`);
+        }
+      }
+      for (const key of Object.keys(item)) {
+        if (remaining <= 0) break;
+        if (["name", "message", "stack", "cause"].includes(key) || key === "errors" && item instanceof AggregateError)
+          continue;
+        remaining--;
+        lines2.push(
+          key + ": " + descriptorText(Object.getOwnPropertyDescriptor(item, key))
+        );
+      }
+      if (remaining <= 0) lines2.push("\u2026");
+      return lines2.join("\n");
+    }
+    if (item instanceof Date)
+      return Number.isNaN(Date.prototype.getTime.call(item)) ? "Invalid Date" : Date.prototype.toISOString.call(item);
+    if (item instanceof RegExp) {
+      const read3 = (key) => Object.getOwnPropertyDescriptor(RegExp.prototype, key)?.get?.call(item);
+      const flags = [
+        ["hasIndices", "d"],
+        ["global", "g"],
+        ["ignoreCase", "i"],
+        ["multiline", "m"],
+        ["dotAll", "s"],
+        ["unicode", "u"],
+        ["unicodeSets", "v"],
+        ["sticky", "y"]
+      ];
+      return "/" + read3("source") + "/" + flags.filter(([key]) => read3(key)).map(([, flag2]) => flag2).join("");
+    }
+    const fields2 = [];
+    if (item instanceof Map || item instanceof Set) {
+      const map = item instanceof Map;
+      if (map) {
+        for (const [key, value2] of Map.prototype.entries.call(item)) {
+          if (remaining <= 0) {
+            fields2.push("\u2026");
+            break;
+          }
+          fields2.push(describe3(key) + " => " + describe3(value2));
+        }
+      } else {
+        for (const entry of Set.prototype.values.call(item)) {
+          if (remaining <= 0) {
+            fields2.push("\u2026");
+            break;
+          }
+          fields2.push(describe3(entry));
+        }
+      }
+      return (map ? "Map" : "Set") + " { " + fields2.join(", ") + " }";
+    }
+    const array = Array.isArray(item);
+    let next2 = 0;
+    const holes = (end) => {
+      if (end > next2) fields2.push(`<${end - next2} empty>`);
+    };
+    for (const key of Reflect.ownKeys(item)) {
+      if (remaining-- <= 0) {
+        fields2.push("\u2026");
+        break;
+      }
+      const field = Object.getOwnPropertyDescriptor(item, key);
+      if (!field?.enumerable) continue;
+      if (array && typeof key === "string" && String(Number(key)) === key && Number.isInteger(Number(key)) && Number(key) >= 0 && Number(key) < item.length) {
+        holes(Number(key));
+        next2 = Number(key) + 1;
+        fields2.push(descriptorText(field));
+      } else fields2.push(String(key) + ": " + descriptorText(field));
+    }
+    if (array && remaining > 0) holes(item.length);
+    if (!fields2.length) return array ? "[]" : "{}";
+    return (array ? "[ " : "{ ") + fields2.join(", ") + (array ? " ]" : " }");
+  }
+  return describe3(value);
+}
 
 // src/daemon/foundations/verb-error.ts
 var BadVerbArgs = class extends Error {
@@ -28304,6 +28434,7 @@ var RendererDown = class extends Error {
     this.name = "RendererDown";
   }
 };
+var renderFailure = (failure2) => failure2.kind === "bad-request" ? { ...failure2, kind: "threw" } : failure2;
 var KINDS = [
   [BadVerbArgs, "bad-request"],
   [DaemonClosing, "closing"],
@@ -28319,70 +28450,26 @@ var CrossedFailure = class extends Error {
   failure;
 };
 function classified(thrown2, detailOf2) {
-  if (thrown2 instanceof CrossedFailure) return thrown2.failure;
-  const detail = detailOf2(thrown2);
-  return {
-    kind: KINDS.find(([as]) => thrown2 instanceof as)?.[1] ?? "threw",
-    message: thrown2 instanceof Error ? thrown2.message : detail,
-    detail
-  };
-}
-function failureOf(thrown2) {
-  return classified(thrown2, inspect);
+  try {
+    if (thrown2 instanceof CrossedFailure) return thrown2.failure;
+    const detail = detailOf2(thrown2);
+    return {
+      kind: KINDS.find(([as]) => thrown2 instanceof as)?.[1] ?? "threw",
+      message: isReportedError(thrown2) ? errorMessage(thrown2) : detail,
+      detail
+    };
+  } catch {
+    return { kind: "threw", message: UNINSPECTABLE, detail: UNINSPECTABLE };
+  }
 }
 function rendererFailureOf(thrown2) {
-  return classified(thrown2, (value) => rendererDetail(value, /* @__PURE__ */ new Set()));
-}
-function rendererDetail(value, path32) {
-  if (value instanceof CrossedFailure) return value.failure.detail;
-  if (!(value instanceof Error))
-    return inspect(rendererValue(value, path32, /* @__PURE__ */ new Map()), {
-      customInspect: false
-    });
-  const title2 = Error.prototype.toString.call(value);
-  if (path32.has(value)) return `[Circular: ${title2}]`;
-  path32.add(value);
-  const lines2 = [title2];
-  if (Object.hasOwn(value, "cause"))
-    lines2.push(`cause: ${rendererDetail(value.cause, path32)}`);
-  if (value instanceof AggregateError) {
-    const errors2 = value.errors;
-    for (const [index, error] of errors2.entries())
-      lines2.push(`errors[${index}]: ${rendererDetail(error, path32)}`);
-  }
-  for (const key of Object.keys(value)) {
-    if (key === "name" || key === "message" || key === "stack" || key === "cause")
-      continue;
-    if (key === "errors" && value instanceof AggregateError) continue;
-    const field = Object.getOwnPropertyDescriptor(value, key);
-    if (field !== void 0 && "value" in field)
-      lines2.push(`${key}: ${rendererDetail(field.value, path32)}`);
-  }
-  path32.delete(value);
-  return lines2.join("\n");
-}
-function rendererValue(value, errors2, seen) {
-  if (value instanceof Error) return rendererDetail(value, errors2);
-  if (typeof value !== "object" || value === null) return value;
-  const previous2 = seen.get(value);
-  if (previous2 !== void 0) return previous2;
-  let copy2;
-  if (Array.isArray(value)) {
-    copy2 = new Array(value.length);
-  } else {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== null && prototype !== Object.prototype) return value;
-    copy2 = prototype === null ? /* @__PURE__ */ Object.create(null) : {};
-  }
-  seen.set(value, copy2);
-  for (const key of Reflect.ownKeys(value)) {
-    const field = Object.getOwnPropertyDescriptor(value, key);
-    if (!field?.enumerable) continue;
-    if ("value" in field)
-      field.value = rendererValue(field.value, errors2, seen);
-    Object.defineProperty(copy2, key, field);
-  }
-  return copy2;
+  return classified(
+    thrown2,
+    (value) => describeValue(
+      value,
+      (error) => error instanceof CrossedFailure ? error.failure.detail : void 0
+    )
+  );
 }
 function badRequest(...problems) {
   const message = problems.join("; ");
@@ -28403,6 +28490,10 @@ init_globals();
 
 // src/renderer/draw-bar.ts
 init_globals();
+
+// src/utils/dispose-symbol.ts
+init_globals();
+var disposeSymbol = Symbol.dispose ?? /* @__PURE__ */ Symbol.for("Symbol.dispose");
 
 // src/utils/event-hold.ts
 init_globals();
@@ -28449,7 +28540,7 @@ function sameOccurrence(a, b) {
 
 // src/daemon/foundations/protocol.ts
 init_globals();
-var import_node_path = __toESM(require_path_browserify(), 1);
+var import_path_browserify = __toESM(require_path_browserify(), 1);
 
 // src/terminal-hint.ts
 init_globals();
@@ -28549,7 +28640,7 @@ function sanitizeTerminalEnv(v) {
   return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
 }
 function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path.default.isAbsolute(v) ? v : void 0;
+  return typeof v === "string" && import_path_browserify.default.isAbsolute(v) ? v : void 0;
 }
 function sanitizeTmux(v) {
   if (v === null) return null;
@@ -29431,54 +29522,369 @@ init_globals();
 // src/utils/plain.ts
 init_globals();
 
-// site/shims/crypto.ts
+// src/utils/sha256.ts
 init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
-function fnv(text6) {
-  let h = 2166136261;
-  for (let i2 = 0; i2 < text6.length; i2++) h = Math.imul(h ^ text6.charCodeAt(i2), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
+
+// node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/sha2.js
+init_globals();
+
+// node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_md.js
+init_globals();
+
+// node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/utils.js
+init_globals();
+function isBytes(a) {
+  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
+function abytes(value, length, title2 = "") {
+  const bytes = isBytes(value);
+  const len3 = value?.length;
+  const needsLen = length !== void 0;
+  if (!bytes || needsLen && len3 !== length) {
+    const prefix = title2 && `"${title2}" `;
+    const ofLen = needsLen ? ` of length ${length}` : "";
+    const got = bytes ? `length=${len3}` : `type=${typeof value}`;
+    const message = prefix + "expected Uint8Array" + ofLen + ", got " + got;
+    if (!bytes)
+      throw new TypeError(message);
+    throw new RangeError(message);
+  }
+  return value;
+}
+function aexists(instance, checkFinished = true) {
+  if (instance.destroyed)
+    throw new Error("Hash instance has been destroyed");
+  if (checkFinished && instance.finished)
+    throw new Error("Hash#digest() has already been called");
+}
+function aoutput(out, instance) {
+  abytes(out, void 0, "digestInto() output");
+  const min3 = instance.outputLen;
+  if (out.length < min3) {
+    throw new RangeError('"digestInto() output" expected to be of length >=' + min3);
+  }
+}
+function clean(...arrays) {
+  for (let i2 = 0; i2 < arrays.length; i2++) {
+    arrays[i2].fill(0);
+  }
+}
+function createView(arr) {
+  return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+}
+function rotr(word2, shift) {
+  return word2 << 32 - shift | word2 >>> shift;
+}
+var hasHexBuiltin = /* @__PURE__ */ (() => (
+  // @ts-ignore
+  typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function"
+))();
+var hexes = /* @__PURE__ */ Array.from({ length: 256 }, (_, i2) => i2.toString(16).padStart(2, "0"));
+function bytesToHex(bytes) {
+  abytes(bytes);
+  if (hasHexBuiltin)
+    return bytes.toHex();
+  let hex = "";
+  for (let i2 = 0; i2 < bytes.length; i2++) {
+    hex += hexes[bytes[i2]];
+  }
+  return hex;
+}
+function utf8ToBytes(str) {
+  if (typeof str !== "string")
+    throw new TypeError("string expected");
+  return new Uint8Array(new TextEncoder().encode(str));
+}
+function createHasher(hashCons, info = {}) {
+  const hashC = (msg, opts) => hashCons(opts).update(msg).digest();
+  const tmp = hashCons(void 0);
+  hashC.outputLen = tmp.outputLen;
+  hashC.blockLen = tmp.blockLen;
+  hashC.canXOF = tmp.canXOF;
+  hashC.create = (opts) => hashCons(opts);
+  Object.assign(hashC, info);
+  return Object.freeze(hashC);
+}
+var oidNist = (suffix) => ({
+  // Current NIST hashAlgs suffixes used here fit in one DER subidentifier octet.
+  // Larger suffix values would need base-128 OID encoding and a different length byte.
+  oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
+});
+
+// node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_md.js
+function Chi(a, b, c) {
+  return a & b ^ ~a & c;
+}
+function Maj(a, b, c) {
+  return a & b ^ a & c ^ b & c;
+}
+var HashMD = class {
+  blockLen;
+  outputLen;
+  canXOF = false;
+  padOffset;
+  isLE;
+  // For partial updates less than block size
+  buffer;
+  view;
+  finished = false;
+  length = 0;
+  pos = 0;
+  destroyed = false;
+  constructor(blockLen, outputLen, padOffset, isLE) {
+    this.blockLen = blockLen;
+    this.outputLen = outputLen;
+    this.padOffset = padOffset;
+    this.isLE = isLE;
+    this.buffer = new Uint8Array(blockLen);
+    this.view = createView(this.buffer);
+  }
+  update(data) {
+    aexists(this);
+    abytes(data);
+    const { view, buffer, blockLen } = this;
+    const len3 = data.length;
+    for (let pos = 0; pos < len3; ) {
+      const take = Math.min(blockLen - this.pos, len3 - pos);
+      if (take === blockLen) {
+        const dataView = createView(data);
+        for (; blockLen <= len3 - pos; pos += blockLen)
+          this.process(dataView, pos);
+        continue;
+      }
+      buffer.set(data.subarray(pos, pos + take), this.pos);
+      this.pos += take;
+      pos += take;
+      if (this.pos === blockLen) {
+        this.process(view, 0);
+        this.pos = 0;
+      }
     }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer2.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer2.Buffer.from(fnv(acc), "hex");
+    this.length += data.length;
+    this.roundClean();
+    return this;
+  }
+  digestInto(out) {
+    aexists(this);
+    aoutput(out, this);
+    this.finished = true;
+    const { buffer, view, blockLen, isLE } = this;
+    let { pos } = this;
+    buffer[pos++] = 128;
+    clean(this.buffer.subarray(pos));
+    if (this.padOffset > blockLen - pos) {
+      this.process(view, 0);
+      pos = 0;
     }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i2) => byte === b[i2]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => import_buffer2.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+    for (let i2 = pos; i2 < blockLen; i2++)
+      buffer[i2] = 0;
+    view.setBigUint64(blockLen - 8, BigInt(this.length * 8), isLE);
+    this.process(view, 0);
+    const oview = createView(out);
+    const len3 = this.outputLen;
+    if (len3 % 4)
+      throw new Error("_sha2: outputLen must be aligned to 32bit");
+    const outLen = len3 / 4;
+    const state = this.get();
+    if (outLen > state.length)
+      throw new Error("_sha2: outputLen bigger than state");
+    for (let i2 = 0; i2 < outLen; i2++)
+      oview.setUint32(4 * i2, state[i2], isLE);
+  }
+  digest() {
+    const { buffer, outputLen } = this;
+    this.digestInto(buffer);
+    const res = buffer.slice(0, outputLen);
+    this.destroy();
+    return res;
+  }
+  _cloneInto(to) {
+    to ||= new this.constructor();
+    to.set(...this.get());
+    const { blockLen, buffer, length, finished, destroyed, pos } = this;
+    to.destroyed = destroyed;
+    to.finished = finished;
+    to.length = length;
+    to.pos = pos;
+    if (length % blockLen)
+      to.buffer.set(buffer);
+    return to;
+  }
+  clone() {
+    return this._cloneInto();
+  }
+};
+var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
+  1779033703,
+  3144134277,
+  1013904242,
+  2773480762,
+  1359893119,
+  2600822924,
+  528734635,
+  1541459225
+]);
+
+// node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/sha2.js
+var SHA256_K = /* @__PURE__ */ Uint32Array.from([
+  1116352408,
+  1899447441,
+  3049323471,
+  3921009573,
+  961987163,
+  1508970993,
+  2453635748,
+  2870763221,
+  3624381080,
+  310598401,
+  607225278,
+  1426881987,
+  1925078388,
+  2162078206,
+  2614888103,
+  3248222580,
+  3835390401,
+  4022224774,
+  264347078,
+  604807628,
+  770255983,
+  1249150122,
+  1555081692,
+  1996064986,
+  2554220882,
+  2821834349,
+  2952996808,
+  3210313671,
+  3336571891,
+  3584528711,
+  113926993,
+  338241895,
+  666307205,
+  773529912,
+  1294757372,
+  1396182291,
+  1695183700,
+  1986661051,
+  2177026350,
+  2456956037,
+  2730485921,
+  2820302411,
+  3259730800,
+  3345764771,
+  3516065817,
+  3600352804,
+  4094571909,
+  275423344,
+  430227734,
+  506948616,
+  659060556,
+  883997877,
+  958139571,
+  1322822218,
+  1537002063,
+  1747873779,
+  1955562222,
+  2024104815,
+  2227730452,
+  2361852424,
+  2428436474,
+  2756734187,
+  3204031479,
+  3329325298
+]);
+var SHA256_W = /* @__PURE__ */ new Uint32Array(64);
+var SHA2_32B = class extends HashMD {
+  constructor(outputLen) {
+    super(64, outputLen, 8, false);
+  }
+  get() {
+    const { A, B, C, D, E, F, G, H } = this;
+    return [A, B, C, D, E, F, G, H];
+  }
+  // prettier-ignore
+  set(A, B, C, D, E, F, G, H) {
+    this.A = A | 0;
+    this.B = B | 0;
+    this.C = C | 0;
+    this.D = D | 0;
+    this.E = E | 0;
+    this.F = F | 0;
+    this.G = G | 0;
+    this.H = H | 0;
+  }
+  process(view, offset) {
+    for (let i2 = 0; i2 < 16; i2++, offset += 4)
+      SHA256_W[i2] = view.getUint32(offset, false);
+    for (let i2 = 16; i2 < 64; i2++) {
+      const W15 = SHA256_W[i2 - 15];
+      const W2 = SHA256_W[i2 - 2];
+      const s0 = rotr(W15, 7) ^ rotr(W15, 18) ^ W15 >>> 3;
+      const s1 = rotr(W2, 17) ^ rotr(W2, 19) ^ W2 >>> 10;
+      SHA256_W[i2] = s1 + SHA256_W[i2 - 7] + s0 + SHA256_W[i2 - 16] | 0;
+    }
+    let { A, B, C, D, E, F, G, H } = this;
+    for (let i2 = 0; i2 < 64; i2++) {
+      const sigma1 = rotr(E, 6) ^ rotr(E, 11) ^ rotr(E, 25);
+      const T1 = H + sigma1 + Chi(E, F, G) + SHA256_K[i2] + SHA256_W[i2] | 0;
+      const sigma0 = rotr(A, 2) ^ rotr(A, 13) ^ rotr(A, 22);
+      const T2 = sigma0 + Maj(A, B, C) | 0;
+      H = G;
+      G = F;
+      F = E;
+      E = D + T1 | 0;
+      D = C;
+      C = B;
+      B = A;
+      A = T1 + T2 | 0;
+    }
+    A = A + this.A | 0;
+    B = B + this.B | 0;
+    C = C + this.C | 0;
+    D = D + this.D | 0;
+    E = E + this.E | 0;
+    F = F + this.F | 0;
+    G = G + this.G | 0;
+    H = H + this.H | 0;
+    this.set(A, B, C, D, E, F, G, H);
+  }
+  roundClean() {
+    clean(SHA256_W);
+  }
+  destroy() {
+    this.destroyed = true;
+    this.set(0, 0, 0, 0, 0, 0, 0, 0);
+    clean(this.buffer);
+  }
+};
+var _SHA256 = class extends SHA2_32B {
+  // We cannot use array here since array allows indexing by variable
+  // which means optimizer/compiler cannot use registers.
+  A = SHA256_IV[0] | 0;
+  B = SHA256_IV[1] | 0;
+  C = SHA256_IV[2] | 0;
+  D = SHA256_IV[3] | 0;
+  E = SHA256_IV[4] | 0;
+  F = SHA256_IV[5] | 0;
+  G = SHA256_IV[6] | 0;
+  H = SHA256_IV[7] | 0;
+  constructor() {
+    super(32);
+  }
+};
+var sha256 = /* @__PURE__ */ createHasher(
+  () => new _SHA256(),
+  /* @__PURE__ */ oidNist(1)
+);
+
+// src/utils/sha256.ts
+var sha256Text = (value) => bytesToHex(sha256(utf8ToBytes(value)));
 
 // src/utils/plain.ts
 function ownValue(record3, key) {
   return Object.hasOwn(record3, key) ? record3[key] : void 0;
 }
 function digestOf(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+  return sha256Text(JSON.stringify(canonical(value)));
 }
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -38642,8 +39048,8 @@ function stripOscTerminators(url) {
   return url.replace(new RegExp(`[${TERMINATORS}]`, "g"), "");
 }
 function osc8Open(url) {
-  const clean = stripOscTerminators(url);
-  return `\x1B]8;id=${fnv1a(clean)};${clean}\x1B\\`;
+  const clean2 = stripOscTerminators(url);
+  return `\x1B]8;id=${fnv1a(clean2)};${clean2}\x1B\\`;
 }
 var OSC8_CLOSE = "\x1B]8;;\x1B\\";
 var OSC8 = pattern(new RegExp(`\\x1b\\]8;([^;${TERMINATORS}]*);([^${TERMINATORS}]*)(?:\\x1b\\\\|\\x07|\\x9c)`));
@@ -41644,7 +42050,6 @@ var FlexStrip = class {
 
 // src/click/wire.ts
 init_globals();
-init_url();
 
 // src/config/disclosure.ts
 init_globals();
@@ -42749,7 +43154,7 @@ function optionalEnum(ctx, path32, raw, field, allowed) {
   if (typeof v !== "string" || !allowed.includes(v)) {
     ctx.issues.push({
       path: `${path32}.${field}`,
-      message: `${path32}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue(v)}`,
+      message: `${path32}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue2(v)}`,
       line: findKeyLine(ctx.source, [...path32.split("."), field])
     });
     return void 0;
@@ -42764,7 +43169,7 @@ function describeType(v) {
   if (Array.isArray(v)) return "array";
   return typeof v;
 }
-function describeValue(v) {
+function describeValue2(v) {
   if (typeof v === "string") return JSON.stringify(v);
   if (v === void 0) return "undefined";
   return String(v);
@@ -42939,7 +43344,7 @@ function optionalEnvNamesSpec() {
       if (!Array.isArray(v) || !v.every((name) => typeof name === "string" && ENV_NAME.test(name))) {
         ctx.issues.push({
           path: `${path32}.${field}`,
-          message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
+          message: `${field} must be a list of environment variable names, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
         return void 0;
@@ -42978,7 +43383,7 @@ function optionalIntSpec(bounds) {
       if (typeof v !== "number" || !Number.isInteger(v) || v < min3 || v > max3) {
         ctx.issues.push({
           path: `${path32}.${field}`,
-          message: `${field} must be an integer between ${min3} and ${max3}, got ${describeValue(v)}`,
+          message: `${field} must be an integer between ${min3} and ${max3}, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
         return void 0;
@@ -43000,7 +43405,7 @@ function optionalNumberSpec(bounds = {}) {
         const shape = min3 !== void 0 ? `a finite number >= ${min3}` : "a finite number";
         ctx.issues.push({
           path: `${path32}.${field}`,
-          message: `${field} must be ${shape}, got ${describeValue(v)}`,
+          message: `${field} must be ${shape}, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
         return void 0;
@@ -44067,7 +44472,7 @@ function effectsUrl(effects, says = clickDoes(effects)) {
   return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
 }
 function parseEffects(rawValue) {
-  return new S(rawValue).getAll("e").map(splitVerb);
+  return new URLSearchParams(rawValue).getAll("e").map(splitVerb);
 }
 var BATCHED_VERBS = /* @__PURE__ */ new Map([
   [VERB_RESET_CONFIG, 2]
@@ -49451,12 +49856,19 @@ init_globals();
 
 // src/utils/user-path.ts
 init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
+var import_path_browserify2 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
   return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? (typeof home === "function" ? home() : home) + p2.slice(1) : p2;
 }
+function resolveFrom(base, value) {
+  if (!import_path_browserify2.default.isAbsolute(value) && !import_path_browserify2.default.isAbsolute(base))
+    throw new Error(
+      `relative path ${JSON.stringify(value)} needs an absolute base, got ${JSON.stringify(base)}`
+    );
+  return import_path_browserify2.default.resolve(base, value);
+}
 function resolveUserPath(base, p2, home) {
-  return import_node_path2.default.resolve(base, expandHome(p2, home));
+  return resolveFrom(base, expandHome(p2, home));
 }
 function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
@@ -50479,7 +50891,7 @@ var CACHE_SCHEMA = {
       parse: (ctx, path32, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
         ctx,
         path32,
-        `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue(value)}`
+        `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue2(value)}`
       )
     },
     watch_file: {
@@ -50487,7 +50899,7 @@ var CACHE_SCHEMA = {
       parse: (ctx, path32, value) => typeof value === "string" ? { watch_file: value } : reject(
         ctx,
         path32,
-        `cache.watch_file must be a path string, got ${describeValue(value)}`
+        `cache.watch_file must be a path string, got ${describeValue2(value)}`
       )
     },
     depends_on: {
@@ -50495,7 +50907,7 @@ var CACHE_SCHEMA = {
       parse: (ctx, path32, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
         ctx,
         path32,
-        `cache.depends_on must be an array of variable-name strings, got ${describeValue(value)}`
+        `cache.depends_on must be an array of variable-name strings, got ${describeValue2(value)}`
       )
     },
     key: {
@@ -50503,7 +50915,7 @@ var CACHE_SCHEMA = {
       parse: (ctx, path32, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
         ctx,
         path32,
-        `cache.key must be a non-empty template string, got ${describeValue(value)}`
+        `cache.key must be a non-empty template string, got ${describeValue2(value)}`
       )
     },
     never: {
@@ -50511,7 +50923,7 @@ var CACHE_SCHEMA = {
       parse: (ctx, path32, value) => value === true ? { never: true } : reject(
         ctx,
         path32,
-        `cache.never must be the literal boolean true, got ${describeValue(value)}`
+        `cache.never must be the literal boolean true, got ${describeValue2(value)}`
       )
     }
   }
@@ -50726,7 +51138,7 @@ var PARSE_SCHEMA = {
       parse: (ctx, path32, value) => value === true ? { text: true } : reject(
         ctx,
         path32,
-        `parse.text must be the literal boolean true, got ${describeValue(value)}`
+        `parse.text must be the literal boolean true, got ${describeValue2(value)}`
       )
     },
     regex: {
@@ -50734,7 +51146,7 @@ var PARSE_SCHEMA = {
       parse: (ctx, path32, value) => typeof value === "string" ? { regex: value } : reject(
         ctx,
         path32,
-        `parse.regex must be a pattern string, got ${describeValue(value)}`
+        `parse.regex must be a pattern string, got ${describeValue2(value)}`
       )
     },
     json: {
@@ -50742,7 +51154,7 @@ var PARSE_SCHEMA = {
       parse: (ctx, path32, value) => value === true ? { json: true } : reject(
         ctx,
         path32,
-        `parse.json must be the literal boolean true, got ${describeValue(value)}`
+        `parse.json must be the literal boolean true, got ${describeValue2(value)}`
       )
     }
   }
@@ -50778,7 +51190,7 @@ function jsonDefault(ctx, path32, value) {
   return isSourceDefault(value) ? value : reject(
     ctx,
     `${path32}.default`,
-    `${path32}.default must be a JSON value (a json-parsed source's document), got ${describeValue(value)}`
+    `${path32}.default must be a JSON value (a json-parsed source's document), got ${describeValue2(value)}`
   ) ?? void 0;
 }
 function isSourceDefault(value) {
@@ -50986,7 +51398,7 @@ function parseDomain(ctx, path32, raw) {
   return issue(
     ctx,
     path32,
-    `domain must be "bool", a list of words, or { min, max }, got ${describeValue(raw)}`
+    `domain must be "bool", a list of words, or { min, max }, got ${describeValue2(raw)}`
   );
 }
 function parseSettingDecl(ctx, path32, raw) {
@@ -51012,7 +51424,7 @@ function parseSettingDecl(ctx, path32, raw) {
     issue(
       ctx,
       `${path32}.label`,
-      `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue(label2)}`
+      `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue2(label2)}`
     );
   }
   const domain2 = parseDomain(ctx, `${path32}.domain`, raw.domain);
@@ -51022,7 +51434,7 @@ function parseSettingDecl(ctx, path32, raw) {
     return issue(
       ctx,
       `${path32}.default`,
-      `default must be ${describeSettingDomain(decl)}, got ${describeValue(raw.default)}`
+      `default must be ${describeSettingDomain(decl)}, got ${describeValue2(raw.default)}`
     );
   }
   return decl;
@@ -51102,7 +51514,7 @@ function placementIdSpec() {
       return issue(
         ctx,
         `${path32}.${field}`,
-        `a placement "id" ${layoutComponent.rule}, outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`
+        `a placement "id" ${layoutComponent.rule}, outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue2(v)}`
       );
     }
   };
@@ -51273,7 +51685,7 @@ function widthSpec() {
       if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
       ctx.issues.push({
         path: `${path32}.${field}`,
-        message: `width must be "auto", "fill", or a positive integer, got ${describeValue(v)}`,
+        message: `width must be "auto", "fill", or a positive integer, got ${describeValue2(v)}`,
         line: findKeyLine(ctx.source, [...path32.split("."), field])
       });
       return void 0;
@@ -51418,7 +51830,7 @@ init_globals();
 
 // src/config/dsl-loader.ts
 init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
+var import_path_browserify8 = __toESM(require_path_browserify(), 1);
 
 // src/config/loader/merge.ts
 init_globals();
@@ -51822,7 +52234,7 @@ function segmentNameSpec() {
       if (typeof v === "string" && v.length > 0) return v;
       ctx.issues.push({
         path: `${path32}.${field}`,
-        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue(v)}`,
+        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue2(v)}`,
         line: findKeyLine(ctx.source, ["root"])
       });
       return "";
@@ -51904,7 +52316,7 @@ function segArmSpec() {
       if (typeof v === "string" && v.length > 0) return v;
       ctx.issues.push({
         path: `${path32}.${field}`,
-        message: `a "seg" node must have a non-empty segment name, got ${describeValue(v)}`,
+        message: `a "seg" node must have a non-empty segment name, got ${describeValue2(v)}`,
         line: findKeyLine(ctx.source, [...path32.split("."), field])
       });
       return "";
@@ -52160,7 +52572,7 @@ function groupNameSpec() {
       if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
         ctx.issues.push({
           path: `${path32}.${field}`,
-          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue(v)}`,
+          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
         return void 0;
@@ -52179,7 +52591,7 @@ function groupKeySpec() {
       if (typeof v !== "string" || clickValue.parse(v) === null) {
         ctx.issues.push({
           path: `${path32}.${field}`,
-          message: `a group "key" ${clickValue.rule} (a SessionState key), got ${describeValue(v)}`,
+          message: `a group "key" ${clickValue.rule} (a SessionState key), got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
         return void 0;
@@ -54497,7 +54909,7 @@ var Engine = class {
       if (e instanceof TypeMismatchError) throw new TypeMismatchError(e.funcName, e.argIndex, e.expected, e.receivedSummary, pos, { source: ctx.source });
       if (e instanceof FailError) throw new FailError(e.message, pos, { source: ctx.source });
       if (e instanceof TemplateError) throw e;
-      throw new EvalError(`error calling ${name}: ${errorText(e)}`, pos, {
+      throw new EvalError(`error calling ${name}: ${errorText2(e)}`, pos, {
         source: ctx.source,
         cause: e
       });
@@ -54587,18 +54999,18 @@ function enforceArgTypes(funcName, spec, values2, pos, src, toString3 = defaultT
     const value = values2[i2];
     if (!matchesArgType(declared, value, toString3, isT)) {
       if ((declared === "int" || declared === "truncating-int") && (typeof value === "number" || typeof value === "bigint")) throw new NotIntegerError(funcName, i2 + 1, value, pos, { source: src });
-      throw new TypeMismatchError(funcName, i2 + 1, humanArgType(declared), describeValue2(value), pos, { source: src });
+      throw new TypeMismatchError(funcName, i2 + 1, humanArgType(declared), describeValue3(value), pos, { source: src });
     }
     if (declared === "liftable" && typeof value === "string") values2[i2] = fromString(value);
     if (declared === "truncating-int") values2[i2] = Math.trunc(Number(value));
     else if (declared === "int" || declared === "float") values2[i2] = Number(value);
     if (declared === "ordered") {
       if (firstOrdered === -1) firstOrdered = i2;
-      else if (!sameOrderedKind(values2[firstOrdered], value)) throw new TypeMismatchError(funcName, i2 + 1, `${humanArgType("ordered")} of the same kind as ${describeValue2(values2[firstOrdered])}`, describeValue2(value), pos, { source: src });
+      else if (!sameOrderedKind(values2[firstOrdered], value)) throw new TypeMismatchError(funcName, i2 + 1, `${humanArgType("ordered")} of the same kind as ${describeValue3(values2[firstOrdered])}`, describeValue3(value), pos, { source: src });
     }
     if (declared === "comparable") {
       if (firstComparable === -1) firstComparable = i2;
-      else if (!sameComparableKind(values2[firstComparable], value)) throw new TypeMismatchError(funcName, i2 + 1, `${humanArgType("comparable")} of the same kind as ${describeValue2(values2[firstComparable])}`, describeValue2(value), pos, { source: src });
+      else if (!sameComparableKind(values2[firstComparable], value)) throw new TypeMismatchError(funcName, i2 + 1, `${humanArgType("comparable")} of the same kind as ${describeValue3(values2[firstComparable])}`, describeValue3(value), pos, { source: src });
     }
   }
 }
@@ -54691,7 +55103,7 @@ function defaultToString(value) {
   if (typeof value === "string") return value;
   if (value === null || value === void 0) return "<nil>";
   if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") return String(value);
-  throw new TypeMismatchError("<engine.toString>", 1, "string (or a consumer-supplied toString that flattens T)", describeValue2(value), {
+  throw new TypeMismatchError("<engine.toString>", 1, "string (or a consumer-supplied toString that flattens T)", describeValue3(value), {
     line: 0,
     column: 0,
     offset: 0
@@ -54770,10 +55182,10 @@ function humanArgType(t2) {
       throw new Error(`invalid ArgType: ${String(t2)}`);
   }
 }
-function errorText(e) {
+function errorText2(e) {
   return e instanceof Error ? e.message : String(e);
 }
-function describeValue2(value) {
+function describeValue3(value) {
   if (value === null) return "null";
   if (value === void 0) return "undefined";
   if (Array.isArray(value)) return "array";
@@ -58735,7 +59147,7 @@ function refuseMintedKeys(ctx, out, accordions) {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
+var import_path_browserify3 = __toESM(require_path_browserify(), 1);
 
 // src/template-engine/colors.ts
 init_globals();
@@ -59005,7 +59417,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path3.default.join(import_node_path3.default.basename(import_node_path3.default.dirname(file)), import_node_path3.default.basename(file));
+  return import_path_browserify3.default.join(import_path_browserify3.default.basename(import_path_browserify3.default.dirname(file)), import_path_browserify3.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -59254,7 +59666,7 @@ function synthesizeEditChrome(config) {
 
 // src/config/loader/actions.ts
 init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
+var import_path_browserify4 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
   if (!isPlainObject(raw)) {
@@ -59313,7 +59725,7 @@ function validateGestures(ctx, path32, raw) {
       issue2(
         ctx,
         at,
-        `${at} must name a declared action, got ${describeValue(target)}`
+        `${at} must name a declared action, got ${describeValue2(target)}`
       );
       valid = false;
     } else out[name] = target;
@@ -59322,7 +59734,7 @@ function validateGestures(ctx, path32, raw) {
 }
 function actionHomeOf(filePath2) {
   if (filePath2 === "<default>") return { dir: null };
-  return import_node_path4.default.isAbsolute(filePath2) ? { dir: import_node_path4.default.dirname(filePath2) } : { text: filePath2 };
+  return import_path_browserify4.default.isAbsolute(filePath2) ? { dir: import_path_browserify4.default.dirname(filePath2) } : { text: filePath2 };
 }
 function required(json2, read3) {
   return {
@@ -59341,18 +59753,18 @@ function defaulted(spec, fallback) {
 }
 var text3 = required(
   { type: "string" },
-  (raw, name) => typeof raw === "string" ? { value: raw } : { error: `${name} must be a string, got ${describeValue(raw)}` }
+  (raw, name) => typeof raw === "string" ? { value: raw } : { error: `${name} must be a string, got ${describeValue2(raw)}` }
 );
 function choice(values2, requirement) {
   return required(
     { enum: values2 },
-    (raw, name) => values2.some((value) => value === raw) ? { value: raw } : { error: `${name} ${requirement}, got ${describeValue(raw)}` }
+    (raw, name) => values2.some((value) => value === raw) ? { value: raw } : { error: `${name} ${requirement}, got ${describeValue2(raw)}` }
   );
 }
 function wireField(shape, subject) {
   return required(shape.json, (raw, name) => {
     const value = shape.parse(raw);
-    return value === null ? { error: `${subject ?? name} ${shape.rule}, got ${describeValue(raw)}` } : { value };
+    return value === null ? { error: `${subject ?? name} ${shape.rule}, got ${describeValue2(raw)}` } : { value };
   });
 }
 function words2(minItems, shape, end) {
@@ -59361,7 +59773,7 @@ function words2(minItems, shape, end) {
     (raw, name) => {
       if (!Array.isArray(raw) || !raw.every((word2) => typeof word2 === "string"))
         return {
-          error: `${name} must be an array of strings, got ${describeValue(raw)}`
+          error: `${name} must be an array of strings, got ${describeValue2(raw)}`
         };
       if (raw.length < minItems)
         return {
@@ -59370,7 +59782,7 @@ function words2(minItems, shape, end) {
       const refused2 = raw.find((word2) => shape.parse(word2) === null);
       if (refused2 !== void 0)
         return {
-          error: `${name} members ${shape.rule} on the ${end} wire, got ${describeValue(refused2)}`
+          error: `${name} members ${shape.rule} on the ${end} wire, got ${describeValue2(refused2)}`
         };
       if (new Set(raw).size !== raw.length)
         return { error: `${name} array members must be unique` };
@@ -59394,7 +59806,7 @@ function domain(shape, end) {
 }
 var integer = required(
   { type: "integer" },
-  (v, name) => typeof v === "number" && Number.isInteger(v) ? { value: v } : { error: `${name} must be an integer, got ${describeValue(v)}` }
+  (v, name) => typeof v === "number" && Number.isInteger(v) ? { value: v } : { error: `${name} must be an integer, got ${describeValue2(v)}` }
 );
 var increment = required(
   { type: "integer", not: { const: 0 } },
@@ -59413,7 +59825,7 @@ var program = required(
     additionalItems: { type: "string" }
   },
   (v) => Array.isArray(v) && typeof v[0] === "string" && v[0] !== "" && v.every((x) => typeof x === "string") ? { value: [v[0], ...v.slice(1)] } : {
-    error: `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(v)}`
+    error: `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue2(v)}`
   }
 );
 var programInFile = {
@@ -59440,19 +59852,19 @@ var environment = required(
   (v) => isPlainObject(v) && Object.entries(v).every(
     ([k, val]) => ENV_NAME.test(k) && typeof val === "string"
   ) ? { value: v } : {
-    error: `env must map variable names to template strings, got ${describeValue(v)}`
+    error: `env must map variable names to template strings, got ${describeValue2(v)}`
   }
 );
 var refresh = required(
   { type: "array", items: { type: "string", minLength: 1 } },
   (v) => Array.isArray(v) && v.every((item) => typeof item === "string" && item !== "") ? { value: v } : {
-    error: `refreshes must list the names of the sources the program writes, got ${describeValue(v)}`
+    error: `refreshes must list the names of the sources the program writes, got ${describeValue2(v)}`
   }
 );
 var composition = required(
   { type: "array", minItems: 2, items: { type: "string", minLength: 1 } },
   (v) => Array.isArray(v) && v.length >= 2 && v.every((item) => typeof item === "string" && item !== "") ? { value: [v[0], ...v.slice(1)] } : {
-    error: `do must list at least two action names, got ${describeValue(v)}`
+    error: `do must list at least two action names, got ${describeValue2(v)}`
   }
 );
 var slash = required(
@@ -59651,7 +60063,7 @@ var registry = {
     select(raw) {
       const verb = raw.preset;
       return typeof verb === "string" && Object.hasOwn(presetVerbs, verb) ? presetVerbs[verb] : {
-        error: `preset must be ${Object.keys(presetVerbs).map((name) => JSON.stringify(name)).join(" or ")}, got ${describeValue(verb)}`
+        error: `preset must be ${Object.keys(presetVerbs).map((name) => JSON.stringify(name)).join(" or ")}, got ${describeValue2(verb)}`
       };
     }
   },
@@ -59822,7 +60234,7 @@ function validateHelpers(ctx, raw) {
     if (typeof body !== "string") {
       ctx.issues.push({
         path: `helpers.${name}`,
-        message: `helpers.${name} must be a string template body, got ${describeValue(body)}`,
+        message: `helpers.${name} must be a string template body, got ${describeValue2(body)}`,
         line: findKeyLine(ctx.source, ["helpers", name])
       });
       continue;
@@ -60207,7 +60619,7 @@ var FALLBACK_ERROR_STYLE = new Style({ color: "red", dim: true });
 
 // src/template-engine/funcs.ts
 init_globals();
-var import_path = __toESM(require_path_browserify(), 1);
+var import_path_browserify5 = __toESM(require_path_browserify(), 1);
 
 // src/utils/formatters.ts
 init_globals();
@@ -60368,12 +60780,12 @@ function ccCandybarFuncs() {
   return {
     // Path operations absent from sprig in this package.
     basename: {
-      fn: (s) => (0, import_path.basename)(s),
+      fn: (s) => import_path_browserify5.default.basename(s),
       argTypes: ["string"],
       arity: { kind: "exact" }
     },
     dirname: {
-      fn: (s) => (0, import_path.dirname)(s),
+      fn: (s) => import_path_browserify5.default.dirname(s),
       argTypes: ["string"],
       arity: { kind: "exact" }
     },
@@ -60743,7 +61155,7 @@ function bindClock(at, timeline) {
   drawing = bound;
   return {
     heard: () => bound.soonest,
-    [Symbol.dispose]: () => {
+    [disposeSymbol]: () => {
       drawing = null;
     }
   };
@@ -61029,7 +61441,7 @@ function templateInstants(basis) {
 
 // src/config/loader/plugins.ts
 init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
+var import_path_browserify6 = __toESM(require_path_browserify(), 1);
 var import_json53 = __toESM(require_dist(), 1);
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
@@ -61047,11 +61459,11 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 ]);
 var DEFINITION_FILE = "plugin.json5";
 function pluginDefinitionProblem(file) {
-  return import_node_path5.default.basename(file) === DEFINITION_FILE ? null : `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
+  return import_path_browserify6.default.basename(file) === DEFINITION_FILE ? null : `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
 }
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 function pluginDefinition(definition, scope) {
-  const name = import_node_path5.default.basename(import_node_path5.default.dirname(definition));
+  const name = import_path_browserify6.default.basename(import_path_browserify6.default.dirname(definition));
   return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
 function pluginDataVar(ns) {
@@ -61080,7 +61492,7 @@ function pluginList(raw) {
   return Array.isArray(raw) && raw.every((p2) => typeof p2 === "string" && p2 !== "") ? raw : void 0;
 }
 function listedPath(ref, from, home) {
-  return resolveUserPath(import_node_path5.default.dirname(from), ref, home);
+  return resolveUserPath(import_path_browserify6.default.dirname(from), ref, home);
 }
 function listedPlugins(refs, from, listed) {
   const unread2 = refs.filter((ref) => !Object.hasOwn(listed, ref));
@@ -61124,7 +61536,7 @@ function applyPlugins(files, ctx, base, validate) {
       }
       if (definition.name === void 0 || ns === void 0) {
         return drop(
-          `its folder "${import_node_path5.default.basename(import_node_path5.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
+          `its folder "${import_path_browserify6.default.basename(import_path_browserify6.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
           layer.config
         );
       }
@@ -61375,7 +61787,7 @@ function fragmentOf(file, { dir, storage }, id2, { source, json: json2 }, { chec
     if (!DEFINITION_KEYS.has(key)) {
       issues.push({
         path: key,
-        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path5.default.basename(import_node_path5.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
+        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_path_browserify6.default.basename(import_path_browserify6.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
       });
     }
   }
@@ -61704,7 +62116,7 @@ function requireOneSourcePerFile(file, plugin, config) {
   if (issues.length > 0) throw new ConfigError(file, issues);
 }
 function sourceFileOf(source) {
-  return import_node_path5.default.join(source.storage, sessionFileName("<session id>"));
+  return import_path_browserify6.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
   if (!isPlainObject(built) || !isPlainObject(authored)) {
@@ -61721,11 +62133,11 @@ function unbuilt(authored, built, at) {
 }
 function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
-    return resolveUserPath(import_node_path5.default.dirname(file), data, home);
+    return resolveUserPath(import_path_browserify6.default.dirname(file), data, home);
   }
   if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
-    if (import_node_path5.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path5.default.normalize(rel).split(import_node_path5.default.sep)[0] === "..") {
+    if (import_path_browserify6.default.isAbsolute(rel) || rel.startsWith("~") || import_path_browserify6.default.normalize(rel).split(import_path_browserify6.default.sep)[0] === "..") {
       issues.push({
         path: "data.checkout",
         message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`
@@ -61739,7 +62151,7 @@ function dataPathOf(data, file, checkout, home, issues) {
       });
       return void 0;
     }
-    return import_node_path5.default.resolve(checkout.root, rel);
+    return resolveFrom(checkout.root, rel);
   }
   if (isPlainObject(data) && "project" in data) {
     issues.push({
@@ -62740,7 +63152,7 @@ function refuseSettingKeyOwners(ctx, config) {
 
 // src/config/loader/chain-places.ts
 init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
+var import_path_browserify7 = __toESM(require_path_browserify(), 1);
 var CONFIG_EXTENSIONS = ["json5", "json"];
 var configQuery = (projectDir, target) => target.source === "argument-only" ? { kind: "file", path: target.path } : { kind: "chain", projectDir, path: target.path };
 function configLocations(locs, query, extensions = CONFIG_EXTENSIONS) {
@@ -62750,8 +63162,8 @@ function configLocations(locs, query, extensions = CONFIG_EXTENSIONS) {
     candidates: extensions.map((extension) => ({ file: base + "." + extension, extension })).filter(({ file }) => file !== query.path)
   });
   const project = query.kind === "chain" && query.projectDir !== void 0 ? [
-    at("local", import_node_path6.default.join(query.projectDir, PROJECT_BASES.local)),
-    at("project", import_node_path6.default.join(query.projectDir, PROJECT_BASES.project))
+    at("local", import_path_browserify7.default.join(query.projectDir, PROJECT_BASES.local)),
+    at("project", import_path_browserify7.default.join(query.projectDir, PROJECT_BASES.project))
   ] : [];
   return [...project, named2 ?? at("user", xdgConfigBase(locs))];
 }
@@ -62760,7 +63172,7 @@ var PROJECT_BASES = {
   local: ".cc-candybar.local"
 };
 function xdgConfigBase(locs) {
-  return import_node_path6.default.join(locs.configHome, "cc-candybar", "config");
+  return import_path_browserify7.default.join(locs.configHome, "cc-candybar", "config");
 }
 var admitsLayer = (project, role) => role === "user" || project.approved !== null;
 var scopeOf2 = (role) => role === "user" ? "plugins" : "repo";
@@ -62860,12 +63272,12 @@ function installedLayer(files, ctx, dflt, allowedPalettes) {
   );
 }
 function strayDrop({ path: file, scope }) {
-  const root = import_node_path7.default.dirname(file);
+  const root = import_path_browserify8.default.dirname(file);
   return {
     path: file,
     scope,
     name: void 0,
-    reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path7.default.join(root, "<name>", DEFINITION_FILE)}`
+    reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_path_browserify8.default.join(root, "<name>", DEFINITION_FILE)}`
   };
 }
 function loadSnapshot(snapshot, home, dflt, trace, allowedPalettes) {
@@ -65996,7 +66408,7 @@ function unwrapDocument(name, doc) {
 init_globals();
 var runOf2 = (identity3) => ({ digest: digestOf(identity3), identity: identity3 });
 function keyHashOf(value) {
-  return crypto_default.createHash("sha256").update(value).digest("hex");
+  return sha256Text(value);
 }
 
 // src/facts/world-state.ts
@@ -67111,6 +67523,16 @@ function decodeLayoutOp(token) {
   }
   return null;
 }
+function placementSuffixes(seed) {
+  let index = 0;
+  return () => {
+    if (typeof seed !== "string" || seed.length === 0)
+      throw new Error(
+        "layout insertion needs a placement seed from its recorded click"
+      );
+    return sha256Text(`placement/${seed}/${index++}`).slice(0, 6);
+  };
+}
 function mintPlacement(segment, anchor, trees, suffix) {
   const taken2 = new Set(
     trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
@@ -67157,7 +67579,7 @@ function bindRender(runtime, binding) {
   }
   runtime.bound = binding;
   return {
-    [Symbol.dispose]: () => {
+    [disposeSymbol]: () => {
       runtime.bound = void 0;
     }
   };
@@ -69739,7 +70161,7 @@ var ViewParts = class {
               error: e instanceof Error ? e.message : String(e)
             };
           } finally {
-            bound?.[Symbol.dispose]();
+            bound?.[disposeSymbol]();
             this.phase.ruling = false;
           }
         }
@@ -70193,7 +70615,7 @@ function compileInputOf(config, region = systemRegion()) {
   };
 }
 function compileKey(input) {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  return sha256Text(JSON.stringify(input));
 }
 function declareDslVariables(config, registry2, cwd2, scopes) {
   const scopeOf3 = variableScopes(config);
@@ -71243,10 +71665,7 @@ function runEach(steps2) {
 function throwAll(thrown2) {
   if (thrown2.length === 1) throw thrown2[0];
   if (thrown2.length > 1)
-    throw new AggregateError(
-      thrown2,
-      thrown2.map((each) => each instanceof Error ? each.message : inspect(each)).join("; ")
-    );
+    throw new AggregateError(thrown2, thrown2.map(diagnosticMessage).join("; "));
 }
 
 // src/renderer/render-cache.ts
@@ -71800,7 +72219,7 @@ var RenderCache = class {
     return {
       entry,
       state,
-      [Symbol.dispose]: () => {
+      [disposeSymbol]: () => {
         if (released) throw new Error("render-cache hold released twice");
         released = true;
         hold2.holders--;
@@ -71825,7 +72244,7 @@ var RenderCache = class {
       view = this.viewOf(held.entry, held.state, facts, "request");
       lease = this.leaseOf(view);
     } catch (err) {
-      held[Symbol.dispose]();
+      held[disposeSymbol]();
       throw err;
     }
     return this.holdViewOf(held, view, lease);
@@ -71878,12 +72297,12 @@ var RenderCache = class {
       entry: held.entry,
       state: held.state,
       view,
-      [Symbol.dispose]: () => {
+      [disposeSymbol]: () => {
         if (released) throw new Error("render-cache view hold released twice");
         released = true;
         lease.holders--;
         this.reclaimView(view, lease);
-        held[Symbol.dispose]();
+        held[disposeSymbol]();
       }
     };
   }
@@ -72393,7 +72812,6 @@ var roleOf = (client) => client?.kind === "frames" ? "frames" : "statusline";
 
 // src/renderer/render-payload.ts
 init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -72779,17 +73197,17 @@ init_globals();
 
 // src/claude-settings.ts
 init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
+var import_path_browserify9 = __toESM(require_path_browserify(), 1);
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 function detectClaudeConfigDir(env2, cwd2) {
   const first2 = (env2[CLAUDE_CONFIG_DIR_ENV] ?? "").split(",")[0].trim();
-  return first2 === "" ? void 0 : import_node_path8.default.resolve(cwd2, first2);
+  return first2 === "" ? void 0 : resolveFrom(cwd2, first2);
 }
 function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path8.default.join(home, ".claude");
+  return detected ?? import_path_browserify9.default.join(home, ".claude");
 }
 function claudeSettingsPath(configDir) {
-  return import_node_path8.default.join(configDir, "settings.json");
+  return import_path_browserify9.default.join(configDir, "settings.json");
 }
 var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -73009,15 +73427,13 @@ function composePayload(facts, inputs, draw2) {
   const cachePayload = over2(lanes.cache, (expiresAt) => ({
     expiresAt
   }));
-  const home = posixify(inputs.home);
-  const workspace = hookData2.workspace ? {
+  const { home } = inputs;
+  const workspace = hookData2.workspace && {
     ...hookData2.workspace,
-    current_dir: posixify(hookData2.workspace.current_dir) ?? "",
-    project_dir: posixify(hookData2.workspace.project_dir) ?? "",
-    added_dirs: (hookData2.workspace.added_dirs ?? []).map(
-      (dir) => posixify(dir) ?? dir
-    )
-  } : hookData2.workspace;
+    current_dir: hookData2.workspace.current_dir ?? "",
+    project_dir: hookData2.workspace.project_dir ?? "",
+    added_dirs: hookData2.workspace.added_dirs ?? []
+  };
   const payload = {
     ...hookData2,
     ...workspace !== void 0 && { workspace },
@@ -73026,7 +73442,7 @@ function composePayload(facts, inputs, draw2) {
     ...hookData2.location !== void 0 && {
       location: {
         ...hookData2.location,
-        main: posixify(hookData2.location.main) ?? ""
+        main: hookData2.location.main ?? ""
       }
     },
     ...tmuxPane !== null && {
@@ -73203,11 +73619,6 @@ function pickNonNull(src) {
     }
   }
   return any2 ? out : void 0;
-}
-function posixify(s) {
-  if (s === void 0 || s.length === 0) return s;
-  if (import_node_path9.default.sep !== "\\") return s;
-  return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
   const field = (oc) => oc.kind === "ok" ? oc.value : void 0;
@@ -73420,73 +73831,6 @@ function drawEvent(kind, facts, outcome) {
   };
 }
 
-// src/daemon/foundations/render-answers.ts
-init_globals();
-
-// src/render/hit-map.ts
-init_globals();
-var linksOf = (run2) => run2.link !== void 0 && isBarLink(run2.link) ? { [PLAIN_CLICK]: run2.link, ...run2.region?.gestures } : null;
-var sameRegion2 = (a, links, run2) => a.action === (run2.region?.name ?? null) && Object.keys(a.links).length === Object.keys(links).length && Object.entries(links).every(([gesture, link]) => a.links[gesture] === link);
-function hitMapOf(frame2) {
-  return frame2.rows.map(({ runs }) => {
-    const hits = [];
-    let column = 0;
-    for (const run2 of runs) {
-      const to = column + cellLen(run2.text);
-      const links = linksOf(run2);
-      const last2 = hits.at(-1);
-      if (links !== null) {
-        if (last2 !== void 0 && last2.to === column && sameRegion2(last2, links, run2))
-          hits[hits.length - 1] = { ...last2, to };
-        else
-          hits.push({
-            from: column,
-            to,
-            action: run2.region?.name ?? null,
-            links
-          });
-      }
-      column = to;
-    }
-    return hits;
-  });
-}
-
-// src/daemon/foundations/render-answers.ts
-function framed(value, encode, failure2) {
-  try {
-    return { sent: value, frame: encodeJsonFrame(encode(value)), unsent: null };
-  } catch (e) {
-    const sent = failure2(renderFailed(e));
-    return {
-      sent,
-      frame: encodeJsonFrame(encode(sent)),
-      unsent: e instanceof Error ? e : new Error(String(e))
-    };
-  }
-}
-var framedResponse = (resp) => framed(resp, JSON.stringify, (failed3) => failed3);
-var failedWith = (message) => ({
-  ok: false,
-  error: message,
-  code: "RENDER_FAILED",
-  daemonV: PROTOCOL_VERSION
-});
-var renderFailed = (err) => failedWith(failureOf(err).message);
-var renderFailure = (failure2) => failure2.kind === "bad-request" ? { ...failure2, kind: "threw" } : failure2;
-var RENDER_ANSWERS = {
-  ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
-  frame: (frame2) => ({ ok: true, frame: frame2 })
-};
-var FEED_ANSWERS = {
-  ...RENDER_ANSWERS,
-  "hit-mapped": (frame2) => ({
-    ok: true,
-    output: composeBar(frame2),
-    hits: hitMapOf(frame2)
-  })
-};
-
 // src/renderer/draw-bar.ts
 function renderFrame(parts, sessionId2, fps, readings, following, feeds, pointer, prepare) {
   const facts = [];
@@ -73575,7 +73919,7 @@ function contextFacts(req, facts) {
 }
 var hintsErrorOf = (req) => refusedHintsError(refusedHints(req, req.hints));
 function openSession(parts, session) {
-  holdSessionAt(parts, parts.worldStates.requestOf(session))[Symbol.dispose]();
+  holdSessionAt(parts, parts.worldStates.requestOf(session))[disposeSymbol]();
 }
 function retireSession(parts, session) {
   runInAction(() => {
@@ -73606,7 +73950,7 @@ function setUpFrame(parts, sessionId2, readings, facts) {
     contextFacts(req, facts);
     hintsError = hintsErrorOf(req);
   } catch (e) {
-    hold2[Symbol.dispose]();
+    hold2[disposeSymbol]();
     throw e;
   }
   return setUpDraw(parts, hold2, req, hintsError, readings, facts);
@@ -73625,10 +73969,10 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
       view,
       hintsError,
       terminal,
-      [Symbol.dispose]: () => hold2[Symbol.dispose]()
+      [disposeSymbol]: () => hold2[disposeSymbol]()
     };
   } catch (e) {
-    hold2[Symbol.dispose]();
+    hold2[disposeSymbol]();
     throw e;
   }
 }
@@ -74524,8 +74868,13 @@ var lanesOf = (viewers) => Object.entries(viewers.lanes).map(([lane, seen]) => `
 
 // src/renderer/click.ts
 init_globals();
-function clickTurn({ verbs }, { click: click2, context }, effects, record3) {
-  verbs.click(click2, { context, effects, record: record3 });
+function clickTurn({ verbs }, { click: click2, context, placementSeed }, effects, record3) {
+  verbs.click(click2, {
+    context,
+    effects,
+    record: record3,
+    placementSuffix: placementSuffixes(placementSeed)
+  });
 }
 
 // src/renderer/verbs/port.ts
@@ -76989,7 +77338,7 @@ function changeLanded(ctx, { session, consequence, outcome }, effects) {
     try {
       work();
     } catch (e) {
-      failed3.push(failureOf(e).message);
+      failed3.push(rendererFailureOf(e).message);
     }
   };
   if (outcome.kind === "ok") step4(() => consequence(effects));
@@ -77480,7 +77829,7 @@ var applyLayoutOp2 = (args, ctx) => {
     into,
     key,
     op,
-    () => randomBytes(3).toString("hex")
+    ctx.placementSuffix
   );
   ctx.log(
     "info",
@@ -77600,7 +77949,7 @@ function foldEffects(steps2, log, perform, recordErrors) {
     try {
       perform(step4);
     } catch (e) {
-      const failure2 = failureOf(e);
+      const failure2 = rendererFailureOf(e);
       if (failure2.kind !== "bad-request" && failure2.kind !== "threw") {
         if (errors2.length > 0) log("warn", `click: ${errors2.join("; ")}`);
         throw e;
@@ -78744,6 +79093,20 @@ function debugOf(cache2, what) {
 
 // src/utils/teardown.ts
 init_globals();
+
+// site/shims/util.ts
+init_globals();
+var import_parseargs = __toESM(require_parseargs(), 1);
+var types = { isNativeError: (e) => e instanceof Error };
+var inspect = (v) => {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+};
+
+// src/utils/teardown.ts
 async function runTeardown(steps2, log) {
   const failed3 = [];
   for (const [name, run2] of steps2) {
@@ -79024,7 +79387,50 @@ var systemTimers = {
 
 // src/utils/atomic-write.ts
 init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
+var import_node_path = __toESM(require_path_browserify(), 1);
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+function fnv(text6) {
+  let h = 2166136261;
+  for (let i2 = 0; i2 < text6.length; i2++) h = Math.imul(h ^ text6.charCodeAt(i2), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer2.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer2.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i2) => byte === b[i2]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => import_buffer2.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
+
+// src/utils/atomic-write.ts
 function publishByRename(file, bytes, mode) {
   const staged = stagedName(file);
   try {
@@ -79102,7 +79508,7 @@ function noted(e, staged, removal) {
 }
 function writeAtomic(at, text6, mode) {
   const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path10.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path.default.dirname(file), { recursive: true });
   publishByRename(file, text6, mode ?? filePermissions(file));
 }
 function filePermissions(file) {
@@ -79136,8 +79542,8 @@ function walkLinks(at) {
 function linkTarget(file) {
   try {
     if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path10.default.resolve(
-      fs_default.realpathSync(import_node_path10.default.dirname(file)),
+    return import_node_path.default.resolve(
+      fs_default.realpathSync(import_node_path.default.dirname(file)),
       fs_default.readlinkSync(file)
     );
   } catch (e) {
@@ -80190,6 +80596,12 @@ var systemOneShotLauncher = (owner2, clock) => createOneShotLauncher(owner2, clo
 
 // src/daemon/task-throws.ts
 init_globals();
+
+// src/daemon/foundations/host-failure.ts
+init_globals();
+var failureOf = (value) => classified(value, inspect);
+
+// src/daemon/task-throws.ts
 function thrownText(reported2, more = 0) {
   const failure2 = failureOf(reported2.thrown);
   const threw2 = `${reported2.task} threw${recurrence(more)}`;
@@ -80428,7 +80840,7 @@ function linkSignerOver(key) {
 }
 
 // src/click/read.ts
-function linksOf2({ rows }) {
+function linksOf({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
     for (const { link, text: text6 } of runs.filter((run2) => run2.text !== "")) {
@@ -80477,7 +80889,7 @@ init_globals();
 
 // src/daemon/session-book.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/render-origin.ts
 init_globals();
@@ -80506,7 +80918,7 @@ init_globals();
 
 // src/daemon/state-file.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path2 = __toESM(require_path_browserify(), 1);
 
 // src/utils/regular-text.ts
 init_globals();
@@ -80624,9 +81036,9 @@ function previousName(file, previous2, source) {
   if (!old?.isFile() && !old?.isSymbolicLink()) return null;
   const entry = (at) => {
     try {
-      return import_node_path11.default.join(
-        fs_default.realpathSync.native(import_node_path11.default.dirname(at)),
-        import_node_path11.default.basename(at)
+      return import_node_path2.default.join(
+        fs_default.realpathSync.native(import_node_path2.default.dirname(at)),
+        import_node_path2.default.basename(at)
       );
     } catch (cause) {
       if (cause.code === "ENOENT") return null;
@@ -80653,7 +81065,7 @@ function documentAt(file, text6, parse3) {
 
 // src/daemon/session-state-file.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/file-rewrites.ts
 init_globals();
@@ -80790,7 +81202,7 @@ function sessionFileOnDisk(kind, filePath2) {
 var LANDED = { ok: true };
 async function publishSession(filePath2, body) {
   const file = resolvedTarget(filePath2);
-  await fs_default.promises.mkdir(import_node_path12.default.dirname(file), { recursive: true });
+  await fs_default.promises.mkdir(import_node_path3.default.dirname(file), { recursive: true });
   await publishByRenameAsync(file, body, 384);
 }
 var SessionFile = class {
@@ -81088,7 +81500,7 @@ function durableOfRecord(value) {
   if (origin === null)
     return { kind: "failed", reason: "is not the origin of a render" };
   const { claudeConfigDir: claudeConfigDir2 } = value;
-  if (!(0, import_node_path13.isAbsolute)(origin.projectDir) || !(0, import_node_path13.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path13.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path13.isAbsolute)(claudeConfigDir2)))
+  if (!(0, import_node_path4.isAbsolute)(origin.projectDir) || !(0, import_node_path4.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path4.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path4.isAbsolute)(claudeConfigDir2)))
     return { kind: "failed", reason: "holds a path that is not absolute" };
   return {
     kind: "ok",
@@ -81166,7 +81578,7 @@ var SessionBook = class {
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/environment-output.ts
 init_globals();
@@ -81245,7 +81657,7 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program2.includes("/") ? import_node_path14.default.resolve(run2.cwd, program2) : program2,
+      bin: program2.includes("/") ? import_node_path5.default.resolve(run2.cwd, program2) : program2,
       args: [...args],
       // [LAW:single-enforcer] The program's own variables over its
       // session's environment, laid here for every click's run.
@@ -81309,49 +81721,49 @@ var Runs = class {
 // src/daemon/paths.ts
 init_globals();
 init_os();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path6 = __toESM(require_path_browserify(), 1);
 function xdgEnv(env2, name) {
   const v = env2[name];
   return v && v.length > 0 ? v : void 0;
 }
 function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path15.default.join(host.home, ".local", "state");
-  return import_node_path15.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path6.default.join(host.home, ".local", "state");
+  return import_node_path6.default.join(base, "cc-candybar");
 }
 function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path15.default.join(host.home, ".cache");
-  return import_node_path15.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path6.default.join(host.home, ".cache");
+  return import_node_path6.default.join(base, "cc-candybar");
 }
 function socketPath(host) {
   return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
-  return import_node_path15.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+  return import_node_path6.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 var HOST_ALIAS_FIRST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
 var HOST_ALIAS_REST = `${HOST_ALIAS_FIRST}.-`;
 function sessionStatePath(host) {
-  return import_node_path15.default.join(stateDir(host), "session-state.json");
+  return import_node_path6.default.join(stateDir(host), "session-state.json");
 }
 function settingsHistoryPath(host) {
-  return import_node_path15.default.join(stateDir(host), "settings-history.json");
+  return import_node_path6.default.join(stateDir(host), "settings-history.json");
 }
 function daemonRegistryDir(host) {
   const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os_default.userInfo().uid;
-  return import_node_path15.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+  return import_node_path6.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 var SPAWN_BACKOFF_FILE = "spawn.backoff";
 function spawnBackoffPath(host) {
-  return import_node_path15.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+  return import_node_path6.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 function watchProbeDir(host) {
-  return import_node_path15.default.join(stateDir(host), "watch-probe");
+  return import_node_path6.default.join(stateDir(host), "watch-probe");
 }
 function logPath(host) {
-  return import_node_path15.default.join(stateDir(host), "daemon.log");
+  return import_node_path6.default.join(stateDir(host), "daemon.log");
 }
 function daemonPaths(host) {
   return {
@@ -81361,10 +81773,10 @@ function daemonPaths(host) {
     log: logPath(host),
     sessionState: sessionStatePath(host),
     settingsHistory: settingsHistoryPath(host),
-    sessionBook: import_node_path15.default.join(stateDir(host), "session-book.json"),
+    sessionBook: import_node_path6.default.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host),
-    pricingCache: import_node_path15.default.join(cacheDir(host), "usage", "pricing.json")
+    pricingCache: import_node_path6.default.join(cacheDir(host), "usage", "pricing.json")
   };
 }
 function profilePaths(paths2, name) {
@@ -81373,23 +81785,89 @@ function profilePaths(paths2, name) {
       sessionState: paths2.sessionState,
       settingsHistory: paths2.settingsHistory
     };
-  const state = import_node_path15.default.join(paths2.state, "renderers", name, "state");
+  const state = import_node_path6.default.join(paths2.state, "renderers", name, "state");
   return {
-    sessionState: import_node_path15.default.join(state, import_node_path15.default.basename(paths2.sessionState)),
-    settingsHistory: import_node_path15.default.join(state, import_node_path15.default.basename(paths2.settingsHistory))
+    sessionState: import_node_path6.default.join(state, import_node_path6.default.basename(paths2.sessionState)),
+    settingsHistory: import_node_path6.default.join(state, import_node_path6.default.basename(paths2.settingsHistory))
   };
 }
 function locations(host) {
   const { env: env2 } = host;
   const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path15.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path6.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
   return {
     home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path15.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path15.default.join(host.home, ".local", "share"),
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path6.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path6.default.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
+
+// src/daemon/foundations/render-answers.ts
+init_globals();
+
+// src/render/hit-map.ts
+init_globals();
+var linksOf2 = (run2) => run2.link !== void 0 && isBarLink(run2.link) ? { [PLAIN_CLICK]: run2.link, ...run2.region?.gestures } : null;
+var sameRegion2 = (a, links, run2) => a.action === (run2.region?.name ?? null) && Object.keys(a.links).length === Object.keys(links).length && Object.entries(links).every(([gesture, link]) => a.links[gesture] === link);
+function hitMapOf(frame2) {
+  return frame2.rows.map(({ runs }) => {
+    const hits = [];
+    let column = 0;
+    for (const run2 of runs) {
+      const to = column + cellLen(run2.text);
+      const links = linksOf2(run2);
+      const last2 = hits.at(-1);
+      if (links !== null) {
+        if (last2 !== void 0 && last2.to === column && sameRegion2(last2, links, run2))
+          hits[hits.length - 1] = { ...last2, to };
+        else
+          hits.push({
+            from: column,
+            to,
+            action: run2.region?.name ?? null,
+            links
+          });
+      }
+      column = to;
+    }
+    return hits;
+  });
+}
+
+// src/daemon/foundations/render-answers.ts
+function framed(value, encode, failure2) {
+  try {
+    return { sent: value, frame: encodeJsonFrame(encode(value)), unsent: null };
+  } catch (e) {
+    const sent = failure2(renderFailed(e));
+    return {
+      sent,
+      frame: encodeJsonFrame(encode(sent)),
+      unsent: e instanceof Error ? e : new Error(String(e))
+    };
+  }
+}
+var framedResponse = (resp) => framed(resp, JSON.stringify, (failed3) => failed3);
+var failedWith = (message) => ({
+  ok: false,
+  error: message,
+  code: "RENDER_FAILED",
+  daemonV: PROTOCOL_VERSION
+});
+var renderFailed = (err) => failedWith(failureOf(err).message);
+var RENDER_ANSWERS = {
+  ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
+  frame: (frame2) => ({ ok: true, frame: frame2 })
+};
+var FEED_ANSWERS = {
+  ...RENDER_ANSWERS,
+  "hit-mapped": (frame2) => ({
+    ok: true,
+    output: composeBar(frame2),
+    hits: hitMapOf(frame2)
+  })
+};
 
 // src/daemon/reply.ts
 init_globals();
@@ -81618,7 +82096,7 @@ function followWatch(held, spec, acquire) {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path7 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/file-events-warnings.ts
 init_globals();
@@ -81818,7 +82296,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path16.default.join(inst.folder, PROBE_FILE),
+        import_node_path7.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -83093,7 +83571,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path8 = __toESM(require_path_browserify(), 1);
 
 // src/client-hints.ts
 init_globals();
@@ -83384,19 +83862,19 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path17.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path8.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
   }
   const projectDir = req.hookData?.workspace?.project_dir;
-  if (typeof projectDir === "string" && !(0, import_node_path17.isAbsolute)(projectDir)) {
+  if (typeof projectDir === "string" && !(0, import_node_path8.isAbsolute)(projectDir)) {
     wireProblems.push(
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
     );
   }
   const currentDir = req.hookData?.workspace?.current_dir;
-  if (typeof currentDir === "string" && !(0, import_node_path17.isAbsolute)(currentDir)) {
+  if (typeof currentDir === "string" && !(0, import_node_path8.isAbsolute)(currentDir)) {
     wireProblems.push(
       `field 'workspace.current_dir' is not an absolute path: ${JSON.stringify(currentDir)}`
     );
@@ -83431,7 +83909,7 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
     env2 = presented;
   }
   const keyed = env2.kind === "reported" && env2.key !== void 0 ? env2.env : void 0;
-  const clientHome = keyed ? keyed.HOME ? (0, import_node_path17.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
+  const clientHome = keyed ? keyed.HOME ? (0, import_node_path8.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
   const rawHints = keyed ? {
     ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
     ...req.termCols !== void 0 && { termCols: req.termCols },
@@ -83475,7 +83953,7 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
       ...hints.tmux && {
         sourceConfigDir: hints.claudeConfigDir ?? claudeConfigDir(
           env2.kind === "reported" ? detectClaudeConfigDir(env2.env, req.cwd) : void 0,
-          env2.kind === "reported" && env2.env.HOME ? (0, import_node_path17.resolve)(req.cwd, env2.env.HOME) : lookup2?.accountHome() ?? home
+          env2.kind === "reported" && env2.env.HOME ? (0, import_node_path8.resolve)(req.cwd, env2.env.HOME) : lookup2?.accountHome() ?? home
         )
       },
       // Existing workers show a diagnostic for an explicitly refused hint.
@@ -83908,7 +84386,7 @@ function isDebugWhat(v) {
 
 // src/daemon/foundations/recording-command.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path9 = __toESM(require_path_browserify(), 1);
 function recordingCommandOf(value) {
   if (!isPlainObject(value) || typeof value.renderer !== "string")
     throw new BadVerbArgs("recording needs a renderer name");
@@ -83919,7 +84397,7 @@ function recordingCommandOf(value) {
     throw new BadVerbArgs(String(error));
   }
   if (value.action === "stop") return { action: "stop", renderer: name };
-  if (value.action === "start" && typeof value.file === "string" && (0, import_node_path18.isAbsolute)(value.file) && !value.file.includes("\0"))
+  if (value.action === "start" && typeof value.file === "string" && (0, import_node_path9.isAbsolute)(value.file) && !value.file.includes("\0"))
     return { action: "start", renderer: name, file: value.file };
   throw new BadVerbArgs(
     "recording needs stop, or start with an absolute output file"
@@ -84587,6 +85065,7 @@ async function handleClick(parts, {
       event: {
         kind: "click",
         click: admitted,
+        placementSeed: randomUUID(),
         context: admitted.scope === "global" ? null : parts.sessionBook.contextOf(
           admitted.session,
           parts.frameFeeds.latest(admitted.session)
@@ -84716,7 +85195,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -84811,8 +85290,8 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: [{ path: import_node_path19.default.join(commonDir, "refs", "heads"), recursive: true }],
-    polled: [import_node_path19.default.join(gitDir, "HEAD"), import_node_path19.default.join(gitDir, "index")]
+    dirs: [{ path: import_node_path10.default.join(commonDir, "refs", "heads"), recursive: true }],
+    polled: [import_node_path10.default.join(gitDir, "HEAD"), import_node_path10.default.join(gitDir, "index")]
   });
 }
 function branchOf(outcome) {
@@ -85251,11 +85730,11 @@ var GitDataProvider = class {
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/cache/pricing.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 
 // src/utils/wire-shape.ts
 init_globals();
@@ -85464,7 +85943,7 @@ function cachedTable(body) {
 var DAY_MS2 = 24 * 60 * 60 * 1e3;
 var EVERY = { okMs: DAY_MS2, failedMs: 6e4 };
 var BACKOFF_CEILING_MS = 60 * 6e4;
-var errorText2 = (e) => e instanceof Error ? e.message : String(e);
+var errorText3 = (e) => e instanceof Error ? e.message : String(e);
 var Pricing = class {
   constructor(opts) {
     this.opts = opts;
@@ -85566,7 +86045,7 @@ var Pricing = class {
     } catch (e) {
       return {
         standing: this.fellBack(prior, cached),
-        outcome: failed(`pricing load threw: ${errorText2(e)}`, "read")
+        outcome: failed(`pricing load threw: ${errorText3(e)}`, "read")
       };
     }
   }
@@ -85604,7 +86083,7 @@ var Pricing = class {
     const file = this.opts.cache;
     try {
       if (signal.aborted) return;
-      await fs_default.promises.mkdir(import_node_path20.default.dirname(file), { recursive: true });
+      await fs_default.promises.mkdir(import_node_path11.default.dirname(file), { recursive: true });
       if (signal.aborted) return;
       const written2 = {
         data: Object.fromEntries(table.models),
@@ -85623,14 +86102,14 @@ var Pricing = class {
   warn(state, file, why) {
     this.opts.logger(
       "warn",
-      `pricing cache ${state} path=${valueOf(file)} reason=${valueOf(errorText2(why))}`
+      `pricing cache ${state} path=${valueOf(file)} reason=${valueOf(errorText3(why))}`
     );
   }
 };
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -85704,19 +86183,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path21.join)(homeDir, ".config", "claude"), (0, import_node_path21.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path12.join)(homeDir, ".config", "claude"), (0, import_node_path12.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path21.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path12.join)(claudePath, "projects");
     const entries2 = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries2 ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path21.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path12.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -85733,7 +86212,7 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   const unowned = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path21.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path12.join)(projectPath, sessionId2, "subagents");
   let files;
   try {
     files = await unlessGone(readdir2(subagentsDir));
@@ -85747,7 +86226,7 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
     (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
   );
   for (const fileName2 of agentFileNames) {
-    const filePath2 = (0, import_node_path21.join)(subagentsDir, fileName2);
+    const filePath2 = (0, import_node_path12.join)(subagentsDir, fileName2);
     if (verified?.has(filePath2)) {
       paths2.push(filePath2);
       continue;
@@ -86519,7 +86998,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path22.join)(dir, "projects") + import_node_path22.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path13.join)(dir, "projects") + import_node_path13.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -86541,7 +87020,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const found2 = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path22.dirname)(transcriptPath),
+      (0, import_node_path13.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     if (found2.kind === "failed") return found2;
@@ -86609,7 +87088,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path22.join)(dir, file);
+          const filePath2 = (0, import_node_path13.join)(dir, file);
           const st = await unlessGone(stat2(filePath2, { bigint: true }));
           if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
@@ -86703,24 +87182,24 @@ var SessionUsageStore = class {
 
 // src/daemon/cache/git-service.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 function checkoutAt(start, files) {
-  let dir = import_node_path23.default.resolve(start);
+  let dir = import_node_path14.default.resolve(start);
   for (; ; ) {
     const found2 = gitEntryAt(dir, files);
     if (found2.kind === "ok") return ok({ root: dir, entry: found2.value });
     if (found2.kind === "failed") return found2;
-    const parent = import_node_path23.default.dirname(dir);
+    const parent = import_node_path14.default.dirname(dir);
     if (parent === dir) return ABSENT2;
     dir = parent;
   }
 }
 function gitEntryAt(dir, files = checkoutFiles) {
-  return files.stat(import_node_path23.default.join(dir, ".git"));
+  return files.stat(import_node_path14.default.join(dir, ".git"));
 }
 function gitRootOf(start, files = checkoutFiles) {
   const found2 = checkoutAt(start, files);
@@ -86732,7 +87211,7 @@ function checkoutOf(cwd2, files = checkoutFiles) {
     case "ok":
       return ok({ root: root.value, git: true });
     case "absent":
-      return ok({ root: import_node_path23.default.resolve(cwd2), git: false });
+      return ok({ root: import_node_path14.default.resolve(cwd2), git: false });
     case "failed":
       return root;
   }
@@ -86756,29 +87235,29 @@ var checkoutFiles = {
   text: (file) => probe(file, () => readRegularTextSync(file))
 };
 function gitDirNamed(root, files = checkoutFiles) {
-  const text6 = files.text(import_node_path23.default.join(root, ".git"));
+  const text6 = files.text(import_node_path14.default.join(root, ".git"));
   if (text6.kind !== "ok") return text6;
   const named2 = text6.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named2 === void 0 ? failed(`${import_node_path23.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path23.default.resolve(root, named2));
+  return named2 === void 0 ? failed(`${import_node_path14.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path14.default.resolve(root, named2));
 }
 function sharedExcludeOf(root) {
-  const dotGit = import_node_path23.default.join(root, ".git");
+  const dotGit = import_node_path14.default.join(root, ".git");
   const entry = gitEntryAt(root);
   if (entry.kind !== "ok") return entry;
   if (entry.value.isDirectory())
-    return ok(import_node_path23.default.join(dotGit, "info", "exclude"));
+    return ok(import_node_path14.default.join(dotGit, "info", "exclude"));
   const gitDir = gitDirNamed(root);
   if (gitDir.kind !== "ok") return gitDir;
   const common = commonDirOf(gitDir.value);
   if (common.kind === "failed") return common;
   const shared = common.kind === "ok" ? common.value : gitDir.value;
-  return ok(import_node_path23.default.join(shared, "info", "exclude"));
+  return ok(import_node_path14.default.join(shared, "info", "exclude"));
 }
 function commonDirOf(gitDir, files = checkoutFiles) {
-  const text6 = files.text(import_node_path23.default.join(gitDir, "commondir"));
+  const text6 = files.text(import_node_path14.default.join(gitDir, "commondir"));
   if (text6.kind !== "ok") return text6;
   const common = text6.value.trim();
-  return common === "" ? failed(`${import_node_path23.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path23.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path14.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path14.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -86800,11 +87279,11 @@ function worktreeLink(dir, files = checkoutFiles) {
   const link = worktreeLinkAt(found2.value, files);
   return link.kind === "linked" ? {
     kind: "linked",
-    main: import_node_path23.default.join(link.main, import_node_path23.default.relative(found2.value.root, dir))
+    main: import_node_path14.default.join(link.main, import_node_path14.default.relative(found2.value.root, dir))
   } : link;
 }
 function worktreeLinkAt({ root, entry }, files) {
-  const dotGit = import_node_path23.default.join(root, ".git");
+  const dotGit = import_node_path14.default.join(root, ".git");
   if (entry.isDirectory()) return UNLINKED;
   const direct = files.lstat(dotGit);
   if (direct.kind !== "ok") return unverified(dotGit, direct);
@@ -86816,22 +87295,22 @@ function worktreeLinkAt({ root, entry }, files) {
   const common = commonDirOf(gitDir.value, files);
   if (common.kind === "absent") return UNLINKED;
   if (common.kind === "failed")
-    return unverified(import_node_path23.default.join(gitDir.value, "commondir"), common);
+    return unverified(import_node_path14.default.join(gitDir.value, "commondir"), common);
   const realCommon = files.realpath(common.value);
   if (realCommon.kind !== "ok") return unverified(common.value, realCommon);
-  if (import_node_path23.default.dirname(gitDir.value) !== import_node_path23.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path14.default.dirname(gitDir.value) !== import_node_path14.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path23.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path14.default.join(gitDir.value, "gitdir");
   const back2 = files.text(backFile);
   if (back2.kind !== "ok") return unverified(backFile, back2);
-  const pointer = import_node_path23.default.resolve(gitDir.value, back2.value.trim());
-  if (import_node_path23.default.basename(pointer) !== ".git") {
+  const pointer = import_node_path14.default.resolve(gitDir.value, back2.value.trim());
+  if (import_node_path14.default.basename(pointer) !== ".git") {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const parent = import_node_path23.default.dirname(pointer);
+  const parent = import_node_path14.default.dirname(pointer);
   const pointerDir = files.realpath(parent);
   if (pointerDir.kind !== "ok") return unverified(parent, pointerDir);
   if (pointerDir.value !== root) {
@@ -86839,23 +87318,23 @@ function worktreeLinkAt({ root, entry }, files) {
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path23.default.basename(realCommon.value) === ".git" ? import_node_path23.default.dirname(realCommon.value) : realCommon.value;
+  const main = import_node_path14.default.basename(realCommon.value) === ".git" ? import_node_path14.default.dirname(realCommon.value) : realCommon.value;
   return { kind: "linked", main };
 }
 function checkoutLocation(dir, files = checkoutFiles) {
   const real = files.realpath(dir);
   if (real.kind === "failed") return real;
-  const at = real.kind === "ok" ? real.value : import_node_path23.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path14.default.resolve(dir);
   const found2 = checkoutAt(at, files);
   if (found2.kind !== "ok") return found2;
   const { root } = found2.value;
-  const sub2 = import_node_path23.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path23.default.sep).join("/")}`;
+  const sub2 = import_node_path14.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path14.default.sep).join("/")}`;
   const link = worktreeLinkAt(found2.value, files);
   if (link.kind === "unreadable") return failed(link.reason, "read");
   return link.kind === "linked" ? ok({
     main: link.main,
-    worktree: import_node_path23.default.basename(root),
+    worktree: import_node_path14.default.basename(root),
     subpath,
     noRepo: false
   }) : ok({ main: root, worktree: "", subpath, noRepo: false });
@@ -87031,17 +87510,17 @@ var GitService = class {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path24.default.join(workingDir, ".git"));
+    return orElse(gitDirNamed(workingDir), import_node_path15.default.join(workingDir, ".git"));
   }
   getOngoingOperation(workingDir) {
     try {
       const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "CHERRY_PICK_HEAD")))
+      if (fs_default.existsSync(import_node_path15.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path15.default.join(gitDir, "CHERRY_PICK_HEAD")))
         return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path24.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path24.default.join(gitDir, "rebase-apply")))
+      if (fs_default.existsSync(import_node_path15.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path15.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path15.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path15.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
       return ABSENT2;
     } catch (e) {
@@ -87168,7 +87647,7 @@ var GitService = class {
   // unrepresentable. Sync, because reading one small file is not worth a
   // microtask: its former `Promise.all` partner is the only spawn left.
   getStashCount(workingDir) {
-    const reflog = import_node_path24.default.join(
+    const reflog = import_node_path15.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
@@ -87235,7 +87714,7 @@ var GitService = class {
   // yields no stamp and therefore no memo, so an unreadable config re-reads rather
   // than freezing an answer.
   async getRemotesAsync(workingDir) {
-    const configPath = import_node_path24.default.join(
+    const configPath = import_node_path15.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
@@ -87284,7 +87763,7 @@ var GitService = class {
   // remotes read stays failed at the call site instead of borrowing this rule.
   repoNameFrom(remotes, workingDir) {
     const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path24.default.basename(workingDir);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path15.default.basename(workingDir);
   }
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote; a
@@ -88108,7 +88587,7 @@ var RefreshFaults = class {
 
 // src/daemon/cache/managed-storage.ts
 init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/var-system/parse.ts
 init_globals();
@@ -88136,7 +88615,7 @@ var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS3;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS3;
 var MAX_ENTRIES3 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path25.default.join(f.folder, fileName(f.sessionId));
+var fileOf = (f) => import_node_path16.default.join(f.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 function madeOnce(folder) {
   try {
@@ -88463,7 +88942,7 @@ var ManagedStorage = class {
     const { folder } = watching.key;
     if (this.folders.get(folder) !== watching) return;
     const inFolder = (f) => f.folder === folder;
-    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path25.default.join(folder, import_node_path25.default.basename(folder)))) {
+    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path16.default.join(folder, import_node_path16.default.basename(folder)))) {
       const paths2 = new Set(invalidation.paths);
       this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
       return;
@@ -88556,7 +89035,7 @@ var ManagedStorage = class {
       for (const entry of entries2) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
-        const file = import_node_path25.default.join(key.folder, entry.name);
+        const file = import_node_path16.default.join(key.folder, entry.name);
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held = this.sessions.isHeld(
@@ -88738,7 +89217,7 @@ function createPayloadProviders(opts) {
 
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/polled-entry.ts
 init_globals();
@@ -88773,7 +89252,7 @@ function folded(window2, next2) {
   return window2;
 }
 var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path26.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path17.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -88782,7 +89261,7 @@ var heldBy2 = (state, handle) => state.kind === "listening" && state.handle === 
 var UNSEEN = /* @__PURE__ */ Symbol("unseen");
 var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var isBelow = (at, root) => at.startsWith(root + import_node_path26.default.sep);
+var isBelow = (at, root) => at.startsWith(root + import_node_path17.default.sep);
 function dirsBelow(at, held, trusted, unlisted) {
   const heldIn = (dir) => [...held].filter((p2) => p2 === dir || isBelow(p2, dir));
   let entries2;
@@ -88795,7 +89274,7 @@ function dirsBelow(at, held, trusted, unlisted) {
     return [...held].filter((p2) => isBelow(p2, at));
   }
   return entries2.filter((e) => e.isDirectory()).flatMap((e) => {
-    const below2 = import_node_path26.default.join(at, e.name);
+    const below2 = import_node_path17.default.join(at, e.name);
     return trusted && held.has(below2) ? heldIn(below2) : [below2, ...dirsBelow(below2, held, false, unlisted)];
   });
 }
@@ -89118,7 +89597,7 @@ var WatcherRegistry = class {
     const { state } = dir;
     if (!heldBy2(state, handle)) return;
     this.tell(dir, namedOf(dir.path, changed));
-    if (changed === import_node_path26.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
+    if (changed === import_node_path17.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
       this.judged(dir, "moved");
     for (const slot of [...dir.listeners].map((l) => l.slot))
       this.reconciled(slot, "heard", dir.path);
@@ -89519,7 +89998,7 @@ var RuntimeStats = class {
 
 // src/daemon/limits.ts
 init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // site/shims/unavailable.ts
 init_globals();
@@ -89699,7 +90178,7 @@ function gapOf(reading, before) {
 }
 function artifactFile(dir, kind, identity3) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path27.default.join(dir, `${prefix}${identity3}${suffix}`);
+  return import_node_path18.default.join(dir, `${prefix}${identity3}${suffix}`);
 }
 function breachArtifactOf(base) {
   for (const kind of Object.keys(BREACH_ARTIFACTS)) {
@@ -89951,12 +90430,12 @@ function breachArtifacts(dir) {
     if (e.code === "ENOENT") return [];
     throw e;
   }
-  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path27.default.join(dir, f));
+  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path18.default.join(dir, f));
 }
 function postMortemsOf(files) {
   const byIdentity = /* @__PURE__ */ new Map();
   for (const file of files) {
-    const base = import_node_path27.default.basename(file);
+    const base = import_node_path18.default.basename(file);
     const kind = breachArtifactOf(base);
     if (kind === null) continue;
     const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -90176,7 +90655,7 @@ function failedStamp(prior, reason, daemon2, windowIssue) {
 
 // src/daemon/foundations/judge-run.ts
 init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 var MIN_SHELL_TTL_MS = 500;
 function judgeRun(run2) {
   const parser = parserOf(run2.identity.parse);
@@ -90201,7 +90680,7 @@ function refusalOf2({ identity: { read: read3, refresh: refresh2 } }) {
   return (read3.kind === "file" ? absolute("file.path", read3.path) : null) ?? (refresh2.kind === "watch_file" ? absolute("cache.watch_file", refresh2.path) : null) ?? (read3.kind === "shell" && refresh2.kind === "ttl" && refresh2.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh2.durationMs}ms` : null);
 }
 function absolute(where, path32) {
-  return (0, import_node_path28.isAbsolute)(path32) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path32)}`;
+  return (0, import_node_path19.isAbsolute)(path32) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path32)}`;
 }
 function capturing(pattern2) {
   let regex;
@@ -91252,7 +91731,7 @@ init_globals();
 
 // src/daemon/tmux-source-edge.ts
 init_globals();
-var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/process-fingerprint.ts
 init_globals();
@@ -91397,7 +91876,7 @@ function createTmuxSourceEdges(launcher, watchers) {
           if (claim.parentPid !== void 0 && !rooted(claim.parentPid, member.pid, table))
             continue;
           candidates.set(
-            import_node_path29.default.join(claim.configDir, "sessions", `${member.pid}.json`),
+            import_node_path20.default.join(claim.configDir, "sessions", `${member.pid}.json`),
             member
           );
           if (candidates.size > MAX_TTY_PROCESSES)
@@ -91442,7 +91921,7 @@ function createTmuxSourceEdges(launcher, watchers) {
         };
       const [pid2, owner2] = outer[0];
       const matching = claims.some(
-        (c) => c.sid === owner2.sid && (c.parentPid === void 0 || c.parentPid === pid2) && owner2.files.has(import_node_path29.default.join(c.configDir, "sessions", `${pid2}.json`))
+        (c) => c.sid === owner2.sid && (c.parentPid === void 0 || c.parentPid === pid2) && owner2.files.has(import_node_path20.default.join(c.configDir, "sessions", `${pid2}.json`))
       );
       return matching ? { kind: "confirmed", sid: owner2.sid, outside } : {
         ...unknown(
@@ -91454,7 +91933,7 @@ function createTmuxSourceEdges(launcher, watchers) {
     watch(file, changed) {
       const spec = watchTargetsOf({
         named: [file],
-        whole: [import_node_path29.default.dirname(file)]
+        whole: [import_node_path20.default.dirname(file)]
       });
       let previous2;
       const handle = watchers.acquire(spec.key, spec.targets, () => {
@@ -92143,7 +92622,7 @@ var SOURCE_PANE_CLOSED = 66;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 22;
+var RENDERER_WIRE_VERSION = 23;
 function lineSplitter(heard) {
   let rest2 = "";
   return {
@@ -93163,7 +93642,7 @@ init_globals();
 
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
-var import_node_path30 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -93179,17 +93658,17 @@ function presence(path32) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path30.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path21.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path30.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path21.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 function storedDirectory(written2) {
-  const dir = import_node_path30.default.sep === "\\" ? written2.replaceAll("/", import_node_path30.default.sep) : written2;
-  if (!import_node_path30.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path30.default.sep).includes("..")) {
+  const dir = import_node_path21.default.sep === "\\" ? written2.replaceAll("/", import_node_path21.default.sep) : written2;
+  if (!import_node_path21.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path21.default.sep).includes("..")) {
     return null;
   }
-  return import_node_path30.default.format(import_node_path30.default.parse(import_node_path30.default.normalize(dir)));
+  return import_node_path21.default.format(import_node_path21.default.parse(import_node_path21.default.normalize(dir)));
 }
 function parseRepoConfigBook(doc) {
   if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
@@ -93224,7 +93703,7 @@ function parseRepoConfigBook(doc) {
   return ok(Object.fromEntries(book));
 }
 var repoConfigs = (dir, readText) => stateFile(
-  [repoConfigsPath(dir), import_node_path30.default.join(dir, REPO_CONFIGS_FILE)],
+  [repoConfigsPath(dir), import_node_path21.default.join(dir, REPO_CONFIGS_FILE)],
   {},
   parseRepoConfigBook,
   readText
@@ -93266,11 +93745,11 @@ function answeredBook(stateDir2, answers, readText) {
 }
 
 // src/daemon/effect-interpreter.ts
-var import_node_path32 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 
 // src/utils/directory-entry.ts
 init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/utils/once-per-path.ts
 init_globals();
@@ -93290,10 +93769,10 @@ function directoryEntries(realpath2 = canonicalDirectory) {
   const directory = oncePerPath((at) => {
     const actual = realpath2(at);
     if (typeof actual === "string") return actual;
-    const parent = import_node_path31.default.dirname(at);
-    return at === parent ? at : import_node_path31.default.join(directory(parent), import_node_path31.default.basename(at));
+    const parent = import_node_path22.default.dirname(at);
+    return at === parent ? at : import_node_path22.default.join(directory(parent), import_node_path22.default.basename(at));
   });
-  return (file) => import_node_path31.default.join(directory(import_node_path31.default.dirname(file)), import_node_path31.default.basename(file));
+  return (file) => import_node_path22.default.join(directory(import_node_path22.default.dirname(file)), import_node_path22.default.basename(file));
 }
 
 // src/daemon/effect-interpreter.ts
@@ -93435,7 +93914,7 @@ function performChanges(changes, book, files, write) {
   return { kind: "ok", files: landed.files, reports };
 }
 function excludeRewrite(file, rewrites, readText, entryOf4) {
-  const checkout = gitRootOf(import_node_path32.default.dirname(file));
+  const checkout = gitRootOf(import_node_path23.default.dirname(file));
   if (checkout.kind !== "ok") return checkout;
   const root = checkout.value;
   const at = sharedExcludeOf(root);
@@ -93444,7 +93923,7 @@ function excludeRewrite(file, rewrites, readText, entryOf4) {
   const prior = rewrites.get(entryOf4(exclude));
   const was = prior === void 0 ? readText(exclude) : prior.was;
   const text6 = prior === void 0 ? was ?? "" : prior.will ?? "";
-  const entry = `/${import_node_path32.default.relative(root, file).split(import_node_path32.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
+  const entry = `/${import_node_path23.default.relative(root, file).split(import_node_path23.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
   if (text6.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT2;
   const lead = text6 === "" || text6.endsWith("\n") ? "" : "\n";
   return ok({
@@ -94925,27 +95404,27 @@ init_globals();
 
 // src/daemon/config-discovery/discover.ts
 init_globals();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
+var import_node_path27 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/config-search.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
+var import_node_path26 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
+var import_node_path24 = __toESM(require_path_browserify(), 1);
 function installedPluginDirs(locs) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path33.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path24.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return installed.filter((r, i2) => installed.lastIndexOf(r) === i2);
 }
 function userPluginRoot(locs) {
-  return import_node_path33.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path24.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path33.default.join(".cc-candybar", "plugins");
-var repoPluginDir = (project) => import_node_path33.default.join(project, REPO_PLUGIN_DIR);
+var REPO_PLUGIN_DIR = import_node_path24.default.join(".cc-candybar", "plugins");
+var repoPluginDir = (project) => import_node_path24.default.join(project, REPO_PLUGIN_DIR);
 function listedRepoRoot(approved, entries2) {
   if (entries2 === null) return null;
   if ("error" in entries2)
@@ -94969,7 +95448,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path33.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path24.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -94977,7 +95456,7 @@ function isDirectoryLink(root, e) {
 
 // src/daemon/config-discovery/discovery-files.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 function textFrom(read3) {
   return (file) => {
     try {
@@ -95006,7 +95485,7 @@ var diskFiles = {
   checkout: checkoutOf
 };
 function readNamedText(files, directory, name) {
-  const entry = import_node_path34.default.join(directory, import_node_path34.default.basename(name));
+  const entry = import_node_path25.default.join(directory, import_node_path25.default.basename(name));
   const resolved = files.realpath(entry);
   const physical = typeof resolved === "string" ? resolved : entry;
   const read3 = files.text(physical);
@@ -95040,7 +95519,7 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
         unchecked.push(observed2);
         continue;
       }
-      const dir = files.realpath(import_node_path35.default.dirname(candidate.file));
+      const dir = files.realpath(import_node_path26.default.dirname(candidate.file));
       if (typeof dir !== "string") {
         unchecked.push({ path: candidate.file, error: dir.error });
         continue;
@@ -95175,7 +95654,7 @@ function readDefinition(file, scope, files = diskFiles) {
       path: file,
       definition: { kind: "unreadable", error: badPath }
     };
-  const dir = files.realpath(import_node_path36.default.dirname(file));
+  const dir = files.realpath(import_node_path27.default.dirname(file));
   if (typeof dir !== "string")
     return {
       scope,
@@ -95186,7 +95665,7 @@ function readDefinition(file, scope, files = diskFiles) {
   return {
     scope,
     path: file,
-    definition: read3.kind === "text" ? { ...read3, dir, storage: import_node_path36.default.join(dir, STORAGE_FOLDER) } : read3
+    definition: read3.kind === "text" ? { ...read3, dir, storage: import_node_path27.default.join(dir, STORAGE_FOLDER) } : read3
   };
 }
 function sessionPlugins(roots, checkout, files = discoveryFiles()) {
@@ -95206,10 +95685,10 @@ function sessionPlugins(roots, checkout, files = discoveryFiles()) {
     for (const name of listed.folders) {
       const key = `${scope}\0${name}`;
       byNs.delete(key);
-      byNs.set(key, { scope, path: import_node_path36.default.join(root, name, DEFINITION_FILE) });
+      byNs.set(key, { scope, path: import_node_path27.default.join(root, name, DEFINITION_FILE) });
     }
     for (const name of listed.files)
-      strays.push({ path: import_node_path36.default.join(root, name), scope });
+      strays.push({ path: import_node_path27.default.join(root, name), scope });
   }
   if (checkout.kind === "failed")
     notices.push(
@@ -96698,7 +97177,7 @@ function createDaemon(inputs) {
 
 // src/daemon/log.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path28 = __toESM(require_path_browserify(), 1);
 var MAX_BYTES3 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
@@ -96850,7 +97329,7 @@ var DaemonLog = class {
       return { held: this.sink, size: st.size };
     }
     this.closeSink();
-    await fs_default.promises.mkdir(import_node_path37.default.dirname(this.filePath), { recursive: true });
+    await fs_default.promises.mkdir(import_node_path28.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
       (resolve2, reject2) => fs_default.open(
         this.filePath,
@@ -96967,7 +97446,7 @@ var DaemonLog = class {
     if (first2.length === 0 && this.waiting.length === 0) return;
     const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
     try {
-      fs_default.mkdirSync(import_node_path37.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path28.default.dirname(this.filePath), { recursive: true });
       fs_default.appendFileSync(this.filePath, lines2);
       if (stillOut !== null && out !== null && idOf3(fs_default.fstatSync(stillOut.fd)) === idOf3(fs_default.statSync(this.filePath))) {
         out.state = {
@@ -97092,7 +97571,7 @@ init_globals();
 
 // src/daemon/history-file.ts
 init_globals();
-var import_node_path38 = __toESM(require_path_browserify(), 1);
+var import_node_path29 = __toESM(require_path_browserify(), 1);
 var HISTORY_FILE = {
   parse: (value) => {
     const parsed2 = parseSessionHistory(value);
@@ -97104,7 +97583,7 @@ function fileHistoryStorage(file, logger) {
     ...sessionFileOnDisk(HISTORY_FILE, file),
     save: (state) => {
       try {
-        fs_default.mkdirSync(import_node_path38.default.dirname(file), { recursive: true });
+        fs_default.mkdirSync(import_node_path29.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 384);
       } catch (e) {
         const message = `settings-history write failed \u2014 what this daemon holds undoes until it restarts, and the file keeps what it last saved: ${e.message}`;
@@ -97127,7 +97606,7 @@ function fileStorage(paths2, log, clock) {
 
 // src/daemon/tmux-server-observer.ts
 init_globals();
-var import_node_path39 = __toESM(require_path_browserify(), 1);
+var import_node_path30 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/tmux-observer-hooks.ts
 init_globals();
@@ -97448,7 +97927,7 @@ function productionTmuxServerObserver(launcher, node, bundle, tmp) {
       const token = randomBytes(16).toString("hex");
       let directory;
       try {
-        directory = mkdtempSync((0, import_node_path39.join)(tmp, "ccb-o-"));
+        directory = mkdtempSync((0, import_node_path30.join)(tmp, "ccb-o-"));
       } catch (err) {
         events2.lost(
           "could not create the tmux observer lifeline: " + messageOf2(err)
@@ -97456,7 +97935,7 @@ function productionTmuxServerObserver(launcher, node, bundle, tmp) {
         return () => {
         };
       }
-      const endpoint = (0, import_node_path39.join)(directory, "s");
+      const endpoint = (0, import_node_path30.join)(directory, "s");
       let removed = false;
       let retired2 = false;
       let peer;
@@ -97808,9 +98287,9 @@ function productionBarPaneEdge(launcher) {
 
 // src/daemon/link-key.ts
 init_globals();
-var import_node_path40 = __toESM(require_path_browserify(), 1);
+var import_node_path31 = __toESM(require_path_browserify(), 1);
 function linkKeyFile(dir) {
-  return import_node_path40.default.join(dir, "link.key");
+  return import_node_path31.default.join(dir, "link.key");
 }
 function linkKeyFromFile(file, log = quietLogger) {
   let key;
@@ -97840,7 +98319,7 @@ function readOrCreate(file, log) {
   return key;
 }
 function create(file, log) {
-  fs_default.mkdirSync(import_node_path40.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path31.default.dirname(file), { recursive: true });
   const { leftover } = publishByLink(file, randomBytes(LINK_KEY_BYTES), 384);
   if (leftover !== null) log("warn", `link key: ${leftover}`);
 }
@@ -98479,7 +98958,7 @@ async function render2(size) {
   const drawn = await frame(size);
   return {
     ansi: composeBar(drawn),
-    links: linksOf2(drawn).map((l) => ({
+    links: linksOf(drawn).map((l) => ({
       ...l,
       does: describeLink(l, sessionId)
     })),

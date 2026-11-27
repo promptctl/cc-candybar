@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-984",
-      "ref": "refs/pull/984/merge",
-      "sha": "09c09029822b43479913414235d22af6d9acb237",
-      "timestamp": "2026-11-27T13:08:13.715Z",
-      "commits": [
-        {
-          "sha": "09c09029822b43479913414235d22af6d9acb237",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T13:07:16Z",
-          "message": "Merge 022935624e9cc4095f6e5af6ffd68cda62ebd3a2 into f7be96a940c3997ccbb5d75d6d08f3746681fcf6\n"
-        },
-        {
-          "sha": "022935624e9cc4095f6e5af6ffd68cda62ebd3a2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T06:07:03-07:00",
-          "message": "fix(renderer): enforce the import boundary and isolate malformed turns\n"
-        },
-        {
-          "sha": "442c3d66ce540e1ede0a7e017ee167898957ad61",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T06:01:15-07:00",
-          "message": "fix(renderer): bind installed generations and preserve diagnostic and replay failures\n"
-        },
-        {
-          "sha": "32ea2a796eb292327b09e7be990bbc2357db768d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:42:08-07:00",
-          "message": "fix(build): keep the patch lock compatible with CI pnpm\n"
-        },
-        {
-          "sha": "5de575167fc82dca16576147a39e75c0d1eb9180",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:37:30-07:00",
-          "message": "feat(renderer): ship one portable renderer for Node and WebKit\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f7be96a940c3997ccbb5d75d6d08f3746681fcf6",
-      "timestamp": "2026-11-27T12:20:58.073Z",
+      "sha": "50d61ab26aab8ee41974c2498d25ce000c6a6635",
+      "timestamp": "2026-11-27T13:11:13.346Z",
       "commits": [
         {
-          "sha": "f7be96a940c3997ccbb5d75d6d08f3746681fcf6",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-27T12:19:35Z",
-          "message": "chore(release): set `package.json` to 1.244.3\n\n## [1.244.3](https://github.com/promptctl/cc-candybar/compare/v1.244.2...v1.244.3) (2026-11-27)\n\n### Bug Fixes\n\n* **renderer:** report the state actually lost on restart ([#983](https://github.com/promptctl/cc-candybar/issues/983)) ([381022e](https://github.com/promptctl/cc-candybar/commit/381022e93253b0c5cb6870ad8f26b4c1c80dde27))\n"
+          "sha": "50d61ab26aab8ee41974c2498d25ce000c6a6635",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T06:10:00-07:00",
+          "message": "feat(renderer): ship one portable renderer for Node and WebKit (#984)\n\n* feat(renderer): ship one portable renderer for Node and WebKit\n\n* fix(build): keep the patch lock compatible with CI pnpm\n\n* fix(renderer): bind installed generations and preserve diagnostic and replay failures\n\n* fix(renderer): enforce the import boundary and isolate malformed turns"
         }
       ]
     }
