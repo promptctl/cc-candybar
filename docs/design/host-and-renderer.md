@@ -215,7 +215,7 @@ The effects are in `src/renderer-interface/interface.ts` (a frame to present, a 
 
 | Condition | What the user sees | Who reports it |
 |---|---|---|
-| A renderer crashed or its bundle changed | The supervisor restarts it from a complete start after its backoff. Its unsaved state (open menus, armed confirms) does not survive, as today, and every bar carries a `⚠` naming how it ended and saying so, held as the daemon holds a launched program's pipe event: for the hold, and past it until an answer has carried it | The supervisor, through the daemon's world state |
+| A renderer crashed or its bundle changed | The supervisor restarts it after backoff with the profile the host accepted. Committed menu choices and armed confirmations survive. Unsaved edits and menu Back history are lost. Every bar carries a `⚠` describing the restart, held until both the hold has elapsed and an answer has carried it. [Renderer state inventory](inventory/renderer-state.md) | The supervisor, through the daemon's world state |
 | A renderer stopped answering | It is ended and restarted as one that crashed, the `⚠` saying it stopped answering | The supervisor's ping |
 | An input while no renderer is live | A failure naming the renderer and how it ended, which the client prints; a click's reply says the same | The supervisor |
 | A renderer's process passes the memory limit | Its post-mortem, and it is ended and restarted as one that crashed, the `⚠` saying it passed its memory limit | The memory backstop, through the supervisor |

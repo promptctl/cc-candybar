@@ -627,7 +627,7 @@ describe("a renderer process's start", () => {
     await waiting;
     await stopped(clock, children[0]!);
     expect(ends.map((e) => e.text)).toEqual([
-      `renderer main[1] stopped answering for ${HUNG_AFTER_MS / 1000} s; it restarts, and unsaved state (open menus, armed confirms) is lost`,
+      `renderer main[1] stopped answering for ${HUNG_AFTER_MS / 1000} s; it restarts with committed settings. Unsaved edits and menu Back history are lost.`,
     ]);
   });
 });
@@ -675,7 +675,9 @@ describe("a renderer process's end", () => {
     children[0]!.exit({ ...CRASHED, signal: "SIGKILL" });
     await settled();
     expect(ends).toHaveLength(1);
-    expect(logs).toContain("renderer main[1] killed by SIGKILL after 2 s; next start in 1 s");
+    expect(logs).toContain(
+      "renderer main[1] killed by SIGKILL after 2 s; next start in 1 s",
+    );
     expect(ends[0]!.text).toMatch(/^renderer main\[1\] killed by SIGKILL;/);
     await expect(link.renderer.answer(pin)).rejects.toThrow(
       new RendererDown("renderer main is down: killed by SIGKILL"),

@@ -967,8 +967,8 @@ function daemonEventsAt(
 
 // [LAW:no-silent-failure] The daemon's own events that warn: a launched
 // program's pipe that outlived its launch, one warning per what it met; a
-// renderer process that ended, taking the session state that lives only in
-// memory with it (open menus, armed confirms), so the bar the next one draws
+// renderer process that ended, taking its unsaved edits and Back history
+// with it, so the bar the next one draws
 // says so; and an act that failed where no session's bar could hold it.
 interface DaemonEventWarning {
   readonly kind: Exclude<DaemonEvent, ThrewEvent>["kind"];

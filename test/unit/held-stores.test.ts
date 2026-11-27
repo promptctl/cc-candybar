@@ -2,6 +2,10 @@
 // failure, which the host says on every bar, and the write is still held.
 
 import { HeldStores, type ProfileStorage } from "../../src/daemon/held-stores";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../src/config/door";
+import { EDIT_MODE_KEY } from "../../src/config/reserved-names";
+import { EDIT_MODE_ARRANGE } from "../../src/config/loader/edit-mode";
+import { SessionState } from "../../src/renderer/session-state";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { heldClock } from "../helpers/held-clock";
@@ -24,6 +28,20 @@ function held(storage: Partial<ProfileStorage>): HeldStores {
   stores.load();
   return stores;
 }
+
+test("a replacement restores a committed menu and confirmation while edit mode ends", () => {
+  const stores = held({});
+  const first = new SessionState(stores.current().sessions);
+  first.set(S1, SETTINGS_ANCHOR, SETTINGS_OPEN);
+  first.set(S1, "clear.armed", "armed");
+  first.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  stores.take(first.drain());
+
+  const replacement = new SessionState(stores.current().sessions);
+  expect(replacement.get(S1, SETTINGS_ANCHOR)).toBe(SETTINGS_OPEN);
+  expect(replacement.get(S1, "clear.armed")).toBe("armed");
+  expect(replacement.get(S1, EDIT_MODE_KEY)).toBeNull();
+});
 
 test("a history its file refuses throws, and the step is still held", () => {
   const stores = held({
