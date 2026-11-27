@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-981",
+      "ref": "refs/pull/981/merge",
+      "sha": "1b4cc24b1d4a04fc850d3a613c87ccf4b53f0bd5",
+      "timestamp": "2026-11-27T04:56:38.910Z",
+      "commits": [
+        {
+          "sha": "1b4cc24b1d4a04fc850d3a613c87ccf4b53f0bd5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:54:56-07:00",
+          "message": "Merge 5d4d32aa4c55f6940cb176f9c49e512e71711472 into 14fb9650a28042cccfc6e4185e9083f57e2c7db5\n"
+        },
+        {
+          "sha": "5d4d32aa4c55f6940cb176f9c49e512e71711472",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:54:21-07:00",
+          "message": "fix(lint): resolve native loader bindings and URL-based ownership\n"
+        },
+        {
+          "sha": "d34f8c2cd7debaa6e8f4894917a01e784a80d393",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:40:08-07:00",
+          "message": "Enforce module ownership on resolved import edges\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "24c369f8021d561d17a1baaf73de873118ca0457",
