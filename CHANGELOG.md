@@ -1,3 +1,9 @@
+## [1.244.2](https://github.com/promptctl/cc-candybar/compare/v1.244.1...v1.244.2) (2026-11-27)
+
+### Bug Fixes
+
+* **lint:** check every owned source in its runtime environment ([#982](https://github.com/promptctl/cc-candybar/issues/982)) ([ea31b27](https://github.com/promptctl/cc-candybar/commit/ea31b273cb3166b992666554cfa1b34472166803))
+
 ## [1.244.1](https://github.com/promptctl/cc-candybar/compare/v1.244.0...v1.244.1) (2026-11-27)
 
 ### Bug Fixes
