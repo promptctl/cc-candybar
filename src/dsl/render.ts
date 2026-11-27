@@ -520,9 +520,10 @@ export function registerCompiled(
   cwd: string,
   compile: CompileProvider,
   scopes: ReadonlySet<VarScope> = EVERY_SCOPE,
+  identify: (input: CompileInput) => string = compileKey,
 ): Registration {
   const input = compileInputOf(config, registry.region);
-  const key = compileKey(input);
+  const key = identify(input);
   return {
     compiled: compile(key, input),
     compileKey: key,

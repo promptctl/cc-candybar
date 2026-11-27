@@ -1,3 +1,6 @@
+import { VERB_SET_STATE } from "../click/wire.js";
+import type { SessionId } from "./foundations/session-id.js";
+import type { DrawnEffect } from "../render/drawn-link.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import { HOVER_KEY, NO_HOVER } from "../config/click-mode.js";
 import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
@@ -11,10 +14,9 @@ import { entryOf, parseDocument } from "../config/json5-edit.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import { synthesizeSettingsMenu } from "../config/settings-menu.js";
 import { sessionKeyKind } from "../config/session-key.js";
-import {
-  makeStateKeyspace,
-  type Gate,
-} from "./foundations/state-validators.js";
+import { makeStateKeyspace } from "./foundations/state-validators.js";
+import type { SessionHistory } from "../renderer-interface/history-storage.js";
+import type { ChangedPicks } from "../renderer-interface/stored-state.js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WireFrame } from "../render/frame.js";
 import type {
@@ -131,7 +133,10 @@ function configProblem({ chain, plugins }: ConfigSnapshot): string | null {
 
 // [LAW:single-enforcer] Every input kind has one export disposition. The
 // check reads the checked renderer input, never the host's environment book.
-export function recordingInputProblem({ event }: EventInput): string | null {
+export function recordingInputProblem(
+  { event }: EventInput,
+  controls?: RecordingControls,
+): string | null {
   switch (event.kind) {
     case "start":
       for (const { context, worldState } of event.sessions) {
@@ -159,81 +164,164 @@ export function recordingInputProblem({ event }: EventInput): string | null {
       const problem = event.coldConfig && configProblem(event.coldConfig);
       if (problem) return problem;
       const live = event.context?.live;
-      return live == null ? null : contextProblem(live);
+      const problemAtClick = live == null ? null : contextProblem(live);
+      if (problemAtClick !== null || event.click.scope !== "session")
+        return problemAtClick;
+      const session = event.click.session;
+      for (const step of event.click.steps) {
+        if (step.kind !== "state-writes") continue;
+        for (const write of step.writes) {
+          if (write.verb !== VERB_SET_STATE) continue;
+          const pairs = pickPairs(write.args);
+          if (
+            pairs === null ||
+            pairs.some(
+              ([key, value]) =>
+                !knownPick(key, value) &&
+                !controls?.offers(session, key, value),
+            )
+          )
+            return UNKNOWN_PROFILE;
+        }
+      }
+      return null;
     }
     case "stats":
     case "debug":
     case "close-journal":
-    case "close-views":
     case "due":
     case "viewers":
+      return null;
+    case "close-views":
+      controls?.clear();
+      return null;
     case "retire":
+      controls?.forget(event.session);
       return null;
   }
 }
 
-function frameHasActionEnvironment({ rows }: WireFrame): boolean {
-  return rows.some(({ runs }) =>
-    runs.some(
-      ({ link }) =>
-        typeof link === "object" &&
-        link.kind === "action" &&
-        link.effects.some(
-          (effect) =>
-            "kind" in effect && Object.keys(effect.evaluated.env).length > 0,
-        ),
-    ),
-  );
+function pickPairs(args: readonly string[]): Array<[string, string]> | null {
+  if (args.length === 0 || args.length % 2 !== 0) return null;
+  const pairs: Array<[string, string]> = [];
+  for (let i = 0; i < args.length; i += 2) pairs.push([args[i]!, args[i + 1]!]);
+  return pairs;
 }
 
-// [LAW:one-source-of-truth] Both surfaces carry the same typed action links.
-// The run's environment stays in the link at draw time. On click it is kept
-// as host-only run evidence and is absent from the renderer's run request.
-export function recordingOutputProblem(output: RendererOutput): string | null {
-  return output.effects.some(
-    (effect) =>
-      effect.kind === "present" && frameHasActionEnvironment(effect.frame),
-  ) ||
-    output.frames.some(
-      ({ frame }) =>
-        frame.kind === "drawn" &&
-        (frameHasActionEnvironment(frame.bar) ||
-          (frame.handoff !== null && frameHasActionEnvironment(frame.handoff))),
-    )
-    ? ACTION_ENVIRONMENT
-    : null;
+function* frameEffects({ rows }: WireFrame): Generator<DrawnEffect> {
+  for (const { runs } of rows)
+    for (const { link } of runs) {
+      if (typeof link !== "object" || link.kind !== "action") continue;
+      yield* link.effects;
+      if (link.region === undefined) continue;
+      for (const effects of Object.values(link.region.gestures)) yield* effects;
+      yield* link.region.hover ?? [];
+    }
+}
+
+type RecordedSurface = "statusline" | "bar";
+interface RecordedFrame {
+  session: SessionId;
+  surface: RecordedSurface;
+  frame: WireFrame;
+}
+
+function* drawnFrames(output: RendererOutput): Generator<RecordedFrame> {
+  for (const effect of output.effects)
+    if (effect.kind === "present") yield effect;
+  for (const { session, frame } of output.frames) {
+    if (frame.kind !== "drawn") continue;
+    yield { session, surface: "bar", frame: frame.bar };
+    if (frame.handoff !== null)
+      yield { session, surface: "statusline", frame: frame.handoff };
+  }
+}
+
+// [LAW:no-ambient-temporal-coupling] A recording can identify an authored
+// choice it has already exported in this session's controls. Keep the latest
+// frame per surface. Boot and other sessions supply no such evidence.
+export class RecordingControls {
+  private readonly sessions = new Map<
+    SessionId,
+    Map<RecordedSurface, ReadonlySet<string>>
+  >();
+
+  offers(session: SessionId, key: string, value: string | null): boolean {
+    const surfaces = this.sessions.get(session);
+    if (surfaces === undefined || value === null) return false;
+    const pair = JSON.stringify([key, value]);
+    for (const pairs of surfaces.values()) if (pairs.has(pair)) return true;
+    return false;
+  }
+
+  remember(
+    { session, surface }: RecordedFrame,
+    pairs: ReadonlySet<string>,
+  ): void {
+    const surfaces =
+      this.sessions.get(session) ??
+      new Map<RecordedSurface, ReadonlySet<string>>();
+    if (pairs.size > 0) surfaces.set(surface, pairs);
+    else surfaces.delete(surface);
+    if (surfaces.size > 0) this.sessions.set(session, surfaces);
+    else this.sessions.delete(session);
+  }
+
+  forget(session: SessionId): void {
+    this.sessions.delete(session);
+  }
+  clear(): void {
+    this.sessions.clear();
+  }
+}
+
+// [LAW:effects-at-boundaries] The input and output are captured together.
+// A new frame cannot vouch for a write in its own turn. Only a previously
+// admitted control can establish the origin of an authored pair.
+export function recordingOutputProblem(
+  output: RendererOutput,
+  controls?: RecordingControls,
+): string | null {
+  const frames = new Map<RecordedFrame, Set<string>>();
+  for (const drawn of drawnFrames(output)) {
+    const pairs = new Set<string>();
+    for (const effect of frameEffects(drawn.frame)) {
+      if ("kind" in effect) {
+        if (Object.keys(effect.evaluated.env).length > 0)
+          return ACTION_ENVIRONMENT;
+      } else if (
+        controls &&
+        effect.verb === VERB_SET_STATE &&
+        effect.args[0] === drawn.session
+      ) {
+        for (const [key, value] of pickPairs(effect.args.slice(1)) ?? []) {
+          if (sessionKeyKind(key).kind === "plain")
+            pairs.add(JSON.stringify([key, value]));
+        }
+      }
+    }
+    if (controls) frames.set(drawn, pairs);
+  }
+  for (const write of output.stored) {
+    const problem =
+      write.kind === "patch"
+        ? picksProblem(
+            write.changes,
+            (key, value) => controls?.offers(write.key, key, value) === true,
+          )
+        : write.kind === "put" && write.value !== null
+          ? historyProblem(write.value)
+          : null;
+    if (problem !== null) return problem;
+  }
+  for (const [drawn, pairs] of frames) controls?.remember(drawn, pairs);
+  return null;
 }
 
 // [LAW:one-source-of-truth] The bundled actions are a public vocabulary of
 // concrete key/value pairs. A session's own config can add private names to
 // that vocabulary, so it cannot establish what is safe to export at boot.
-function knownPick(
-  gate: Gate,
-  unrestricted: ReadonlySet<string>,
-  key: string,
-  value: string,
-): boolean {
-  const { kind } = sessionKeyKind(key);
-  if (kind === "plain" || kind === "record" || kind === "edit") return false;
-  if (key === HOVER_KEY) return value === NO_HOVER;
-  // An integer action accepts arbitrary strings of digits. Admit only the
-  // fixed public markers of its owner. A newly introduced integer action
-  // otherwise remains private until its recording domain is known.
-  if (unrestricted.has(key)) {
-    if (kind === "viewer") return value === DIAGNOSTICS_CLOSED;
-    return (
-      menuOfKey(key)?.page === true &&
-      (value === FIRST_PAGE || value === PAGE_HOLDING_CURRENT)
-    );
-  }
-  const result = gate.validate(key, value);
-  return result.ok && result.value === value;
-}
-
-// [LAW:effects-at-boundaries] Refuse unproven historical values at export,
-// when all their original text is still private. Replay needs the whole boot
-// profile, including untouched sessions and both sides of history changes.
-export function recordingBootProblem({ stored }: RendererBoot): string | null {
+function bundledPickDomain() {
   const bundled = synthesizeSettingsMenu(DEFAULT_DSL_CONFIG);
   const gate = makeStateKeyspace().gateFor(bundled);
   const unrestricted = new Set(
@@ -241,32 +329,75 @@ export function recordingBootProblem({ stored }: RendererBoot): string | null {
       "set" in action && "int" in action ? [action.set] : [],
     ),
   );
-  for (const picks of Object.values(stored.sessions)) {
-    if (
-      !Object.entries(picks).every(([key, value]) =>
-        knownPick(gate, unrestricted, key, value),
-      )
-    )
-      return UNKNOWN_PROFILE;
-  }
-  for (const { past, future } of Object.values(stored.history)) {
-    for (const steps of [past, future]) {
-      for (const step of steps) {
-        for (const change of step) {
-          for (const value of [change.before, change.after]) {
-            if (value === null) continue;
-            if (change.kind === "session") {
-              if (!knownPick(gate, unrestricted, change.key, value))
-                return UNKNOWN_PROFILE;
-            } else {
-              const problem = configTextProblem(value);
-              if (problem !== null)
-                return `${problem} or use a fresh renderer profile`;
-            }
+  const keys = new Set(gate.listKeys());
+  return (key: string, value: string | null): boolean => {
+    const { kind } = sessionKeyKind(key);
+    if (kind === "plain" || kind === "record" || kind === "edit") return false;
+    if (key === HOVER_KEY) return value === null || value === NO_HOVER;
+    if (value === null) return keys.has(key);
+    // An integer action accepts arbitrary strings of digits. Admit only the
+    // fixed public markers of its owner. A newly introduced integer action
+    // otherwise remains private until its recording domain is known.
+    if (unrestricted.has(key)) {
+      if (kind === "viewer") return value === DIAGNOSTICS_CLOSED;
+      return (
+        menuOfKey(key)?.page === true &&
+        (value === FIRST_PAGE || value === PAGE_HOLDING_CURRENT)
+      );
+    }
+    const result = gate.validate(key, value);
+    return result.ok && result.value === value;
+  };
+}
+
+// The recording vocabulary belongs to the immutable bundled config. Compute it
+// on the first exported pick so daemons without recordings pay no setup cost.
+let publicPick: ReturnType<typeof bundledPickDomain> | undefined;
+
+function knownPick(key: string, value: string | null): boolean {
+  return (publicPick ??= bundledPickDomain())(key, value);
+}
+
+function picksProblem(
+  picks: ChangedPicks,
+  offered?: (key: string, value: string | null) => boolean,
+): string | null {
+  return Object.entries(picks).every(
+    ([key, value]) => knownPick(key, value) || offered?.(key, value),
+  )
+    ? null
+    : UNKNOWN_PROFILE;
+}
+
+function historyProblem({ past, future }: SessionHistory): string | null {
+  for (const steps of [past, future]) {
+    for (const step of steps) {
+      for (const change of step) {
+        for (const value of [change.before, change.after]) {
+          if (change.kind === "session") {
+            if (!knownPick(change.key, value)) return UNKNOWN_PROFILE;
+          } else if (value !== null) {
+            const problem = configTextProblem(value);
+            if (problem !== null)
+              return `${problem} or use a fresh renderer profile`;
           }
         }
       }
     }
+  }
+  return null;
+}
+
+// [LAW:single-enforcer] Starting a capture and appending a turn inspect the
+// same state, including names of erased picks and both sides of an undo.
+export function recordingBootProblem({ stored }: RendererBoot): string | null {
+  for (const picks of Object.values(stored.sessions)) {
+    const problem = picksProblem(picks);
+    if (problem !== null) return problem;
+  }
+  for (const history of Object.values(stored.history)) {
+    const problem = historyProblem(history);
+    if (problem !== null) return problem;
   }
   return null;
 }

@@ -1,9 +1,7 @@
-// What of a renderer's stores outlives it: what its file keeps across a
-// restart, and what a renderer hands the host, are one rule. So a file never
-// holds what only one renderer reads, and a load that drops a key is reading
-// what an older build wrote.
+// What a live renderer shares with its host, and what the profile keeps.
 
 import { SESSION_STATE_FILE } from "../../src/daemon/session-state-file";
+import { storedPicksAfter } from "../../src/renderer-interface/stored-state";
 import { SessionState } from "../../src/renderer/session-state";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
@@ -67,16 +65,88 @@ test("a session holding only what this build reads nothing of takes no slot", ()
   });
 });
 
-// [LAW:single-enforcer] The renderer hands the host what a load would keep,
-// so an edit opened and closed leaves no key for the next load to drop.
-test("a session's picks reach the host without edit mode's own, and one holding only those is gone", () => {
+test("live changes include private edit picks and the durable projection omits them", () => {
   const state = new SessionState();
   state.set(S1, "theme", "nord");
   state.set(S1, EDIT_MODE_KEY, "closed");
   state.set(S2, EDIT_CONFIGURE_KEY, "default:clock");
+  const writes = state.drain();
+  expect(writes).toEqual([
+    {
+      kind: "patch",
+      store: "session-state",
+      key: S1,
+      changes: { theme: "nord", [EDIT_MODE_KEY]: "closed" },
+    },
+    {
+      kind: "patch",
+      store: "session-state",
+      key: S2,
+      changes: { [EDIT_CONFIGURE_KEY]: "default:clock" },
+    },
+  ]);
+  expect(
+    writes.map((write) => {
+      if (write.kind !== "patch") throw new Error("expected live picks");
+      return storedPicksAfter(undefined, write);
+    }),
+  ).toEqual([{ theme: "nord" }, null]);
+});
+
+test.each([1, 128])(
+  "a changed pick among %d other picks has the same payload",
+  (count) => {
+    const others = Object.fromEntries(
+      Array.from({ length: count }, (_, i) => [String(i), "old"]),
+    );
+    const state = new SessionState({
+      [S1]: { ...others, changed: "old" },
+      [S2]: { other: "untouched" },
+    });
+    state.set(S1, "changed", "new");
+    state.heard(S2);
+    expect(state.drain()).toEqual([
+      {
+        kind: "patch",
+        store: "session-state",
+        key: S1,
+        changes: { changed: "new" },
+      },
+      { kind: "heard", store: "session-state", key: S2 },
+    ]);
+    state.clear(S1, "changed");
+    expect(state.drain()).toEqual([
+      {
+        kind: "patch",
+        store: "session-state",
+        key: S1,
+        changes: { changed: null },
+      },
+    ]);
+  },
+);
+
+test("eviction and recreation in one turn erase the old keys on a warm host", () => {
+  const old = { first: "one", second: "two" };
+  const state = new SessionState({ [S1]: old }, 1);
+  state.set(S2, "other", "value");
+  state.set(S1, "first", "back");
+  const writes = state.drain();
+  expect(writes).toEqual([
+    {
+      kind: "patch",
+      store: "session-state",
+      key: S1,
+      changes: { first: "back", second: null },
+    },
+    { kind: "drop", store: "session-state", key: S2 },
+  ]);
+  const [revived] = writes;
+  if (revived?.kind !== "patch") throw new Error("expected revived picks");
+  expect(storedPicksAfter(old, revived)).toEqual({ first: "back" });
+  state.clear(S1, "first");
   expect(state.drain()).toEqual([
-    { kind: "put", store: "session-state", key: S1, value: { theme: "nord" } },
-    { kind: "put", store: "session-state", key: S2, value: null },
+    { kind: "drop", store: "session-state", key: S1 },
   ]);
 });
 

@@ -26,7 +26,12 @@ export const ORDER_PERIOD_MS = 5 * 60 * 1000;
 // newest end without changing what it holds.
 export type HeldChange<V> =
   | { readonly kind: "put"; readonly key: SessionId; readonly value: V | null }
-  | { readonly kind: "heard"; readonly key: SessionId };
+  | { readonly kind: "heard"; readonly key: SessionId }
+  | {
+      readonly kind: "update";
+      readonly key: SessionId;
+      readonly apply: (prior: V | undefined) => V | null;
+    };
 
 // [LAW:no-ambient-temporal-coupling] Saved to only while open. Before the
 // load a save would land over a file nobody has read; after the close, over
@@ -121,13 +126,22 @@ export class HeldFile<V> {
       return [];
     }
     let content = false;
-    for (const change of changes)
-      if (change.kind === "heard" || this.holds(change.key, change.value)) {
+    for (const change of changes) {
+      if (change.kind === "heard") {
         if (toNewest(this.held, change.key)) this.behind = true;
-      } else if (putNewest(this.held, change.key, change.value)) {
+        continue;
+      }
+      const value =
+        change.kind === "update"
+          ? change.apply(this.held.get(change.key))
+          : change.value;
+      if (this.holds(change.key, value)) {
+        if (toNewest(this.held, change.key)) this.behind = true;
+      } else if (putNewest(this.held, change.key, value)) {
         content = true;
         this.behind = true;
       }
+    }
     const evicted = this.evict();
     if (content || evicted.length > 0) this.save();
     else if (this.behind) this.orderDue();

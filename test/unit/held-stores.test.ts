@@ -57,7 +57,7 @@ test("a history its file refuses throws, and the step is still held", () => {
   expect(() =>
     stores.take([
       { kind: "put", store: "settings-history", key: S1, value: STEP },
-      { kind: "put", store: "session-state", key: S1, value: { pick: "a" } },
+      { kind: "patch", store: "session-state", key: S1, changes: { pick: "a" } },
     ]),
   ).toThrow("ENOSPC: no space left on device");
   expect(stores.current().history[S1]).toEqual(STEP);
@@ -101,7 +101,7 @@ test("each store hears only its own writes, in the order the turn made them", ()
   stores.take([
     { kind: "heard", store: "session-state", key: S1 },
     { kind: "put", store: "settings-history", key: S2, value: STEP },
-    { kind: "put", store: "session-state", key: S2, value: { pick: "c" } },
+    { kind: "patch", store: "session-state", key: S2, changes: { pick: "c" } },
   ]);
   expect([...session.saves.at(-1)!]).toEqual([
     [S1, { pick: "a" }],

@@ -125,18 +125,45 @@ export const EMPTY_STORED_STATE: StoredState = {
   history: {},
 };
 
-// [LAW:types-are-the-program] One entry of one store as a turn left it: a
-// session's picks or history written, which null drops, or the session heard
-// by a render, which moves it without changing what it holds. Either moves
-// the entry to the end of its store's recency order, as the renderer's own
-// store moved it.
-export type StoreWrite =
+// [LAW:types-are-the-program] A null pick erases that key. Dropping the
+// session also erases keys the receiver held before this turn.
+export type ChangedPicks = Readonly<Record<string, string | null>>;
+
+export type PickWrite =
   | {
-      readonly kind: "put";
+      readonly kind: "patch";
       readonly store: "session-state";
       readonly key: SessionId;
-      readonly value: SessionPicks | null;
+      readonly changes: ChangedPicks;
     }
+  | {
+      readonly kind: "drop";
+      readonly store: "session-state";
+      readonly key: SessionId;
+    };
+
+// [LAW:single-enforcer] Convert the live changes to a durable pick record
+// at the file or historical-recording boundary. Each new record stands alone
+// while an earlier snapshot may still be waiting for its write.
+export function storedPicksAfter(
+  prior: SessionPicks | undefined,
+  write: PickWrite,
+): SessionPicks | null {
+  if (write.kind === "drop") return null;
+  const picks: Record<string, string> = Object.assign(
+    Object.create(null),
+    prior,
+  );
+  for (const [key, value] of Object.entries(write.changes)) {
+    if (value === null || retiredBecause(key, value) !== undefined)
+      delete picks[key];
+    else picks[key] = value;
+  }
+  return Object.keys(picks).length ? picks : null;
+}
+
+export type StoreWrite =
+  | PickWrite
   | {
       readonly kind: "put";
       readonly store: "settings-history";

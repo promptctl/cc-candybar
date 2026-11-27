@@ -394,9 +394,9 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   answered(await acknowledge(changed.id));
   const remembered = answered(await sendClick(click("remember")));
   expect(remembered.stored).toContainEqual({
-    kind: "put", store: "session-state",
+    kind: "patch", store: "session-state",
     key: session,
-    value: { remembered: "remembered by click" },
+    changes: { remembered: "remembered by click" },
   });
   const watching = answered(await turn({
     kind: "viewers",

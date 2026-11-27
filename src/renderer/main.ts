@@ -60,6 +60,7 @@ import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
   RenderCache,
+  type StateDeps,
   renderCacheBudget,
 } from "./render-cache.js";
 import {
@@ -675,18 +676,28 @@ function closeIdleMenus(
 }
 
 // [LAW:single-enforcer] The main renderer is built from its supplied state.
-export function mainRendererOf(inputs: RendererBoot): RendererConstruction {
+export function mainRendererOf(
+  inputs: RendererBoot,
+  identifyCompile?: StateDeps["identifyCompile"],
+): RendererConstruction {
   const turnLog = new TurnLog();
   return turnLog.during<RendererConstruction>(() => {
     try {
-      return { kind: "built", renderer: build(inputs, turnLog) };
+      return {
+        kind: "built",
+        renderer: build(inputs, turnLog, identifyCompile),
+      };
     } catch (thrown) {
       return { kind: "refused", failure: rendererFailureOf(thrown) };
     }
   });
 }
 
-function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
+function build(
+  inputs: RendererBoot,
+  turnLog: TurnLog,
+  identifyCompile: StateDeps["identifyCompile"],
+): Renderer {
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
@@ -719,6 +730,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
       clock: time.clock,
       locations: inputs.locations,
       region: inputs.region,
+      identifyCompile,
       sessionState: edits.view,
       editRevision: (origin, sid) => edits.revision(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),

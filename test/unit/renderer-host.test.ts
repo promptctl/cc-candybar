@@ -107,10 +107,10 @@ const offeredEffect: Effect = {
   text: "an unrelated effect",
 };
 const offeredWrite: StoreWrite = {
-  kind: "put",
+  kind: "patch",
   store: "session-state",
   key: commandSession,
-  value: { menu: "closed" },
+  changes: { menu: "closed" },
 };
 
 test("a command takes its own reply, writes and subscriptions", async () => {
@@ -698,10 +698,10 @@ test("failed replacement starts leave the accepted declaration until a complete 
   const recorded: string[] = [];
   const performed: string[] = [];
   const write: StoreWrite = {
-    kind: "put",
+    kind: "patch",
     store: "session-state",
     key: sessionIdOf("kept"),
-    value: { "open-menu": "before failing" },
+    changes: { "open-menu": "before failing" },
   };
   const read: string[] = [];
   const discoveries: string[] = [];

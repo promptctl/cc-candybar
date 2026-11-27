@@ -15,8 +15,17 @@ import {
   rendererBootFrom,
   RENDERER_WIRE_VERSION,
 } from "../renderer-interface/wire.js";
+import { sha256Text } from "../utils/sha256.js";
+import type { CompileInput } from "../dsl/render.js";
 import { regionFor } from "../utils/region.js";
 import { ownValue } from "../utils/plain.js";
+import {
+  storedPicksAfter,
+  withoutRetiredKeys,
+  type SessionPicks,
+  type StoredState,
+} from "../renderer-interface/stored-state.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 import { mainRendererOf } from "./main.js";
 
 // [LAW:parse-dont-validate] Admit known event arms with their required
@@ -200,6 +209,7 @@ function verify<T>(
   label: string,
   field: string,
   note = "",
+  compareAs?: (output: T) => unknown,
 ): T {
   let value: unknown;
   try {
@@ -207,16 +217,53 @@ function verify<T>(
   } catch {
     throw new Error(`${label} could not be encoded as JSON`);
   }
-  const changed = firstDifference(expected, value, field);
+  const changed = firstDifference(
+    expected,
+    compareAs ? compareAs(value as T) : value,
+    field,
+  );
   if (changed !== undefined)
     throw new Error(`${label} differs at ${changed}${note}`);
   // This detached copy was encoded from the typed production result.
   return value as T;
 }
 
+// [LAW:one-source-of-truth] Historical captures described each durable pick
+// map in full. Reconstruct it from the boot and the actual changes alone;
+// a wrong key, value, deletion or order must still show up in verification.
+function historicalOutputs(
+  stored: StoredState,
+): (output: RendererOutput) => unknown {
+  const picks = new Map<SessionId, SessionPicks>();
+  for (const [id, values] of Object.entries(stored.sessions)) {
+    const kept = withoutRetiredKeys(values);
+    if (kept.kind === "ok") picks.set(id as SessionId, kept.value.value);
+  }
+  return (output) => ({
+    ...output,
+    stored: output.stored.map((write) => {
+      if (write.store !== "session-state" || write.kind === "heard")
+        return write;
+      const value = storedPicksAfter(picks.get(write.key), write);
+      if (value === null) picks.delete(write.key);
+      else picks.set(write.key, value);
+      return { kind: "put", store: write.store, key: write.key, value };
+    }),
+  });
+}
+
+// Wires 22 and 23 included the locale and zone in their compile identity.
+// Hash the actual compiler input in that spelling so cache and diagnostic
+// comparisons still catch a different config. Drawing uses the restored facts.
+function legacyCompileKey(input: CompileInput): string {
+  const { locale, timeZone } = input.region;
+  return sha256Text(JSON.stringify({ ...input, region: { locale, timeZone } }));
+}
+
 function constructionOf(entry: Record<string, unknown>): {
   readonly result: RecordedConstruction;
   readonly renderer: Renderer | null;
+  readonly compareAs?: (output: RendererOutput) => unknown;
 } {
   if (entry.version !== RECORDING_VERSION)
     throw new Error(
@@ -225,7 +272,11 @@ function constructionOf(entry: Record<string, unknown>): {
   // Older recordings only carry a locale name. Recover its presentation at
   // the offline boundary. Whole-output verification still detects any drift.
   const legacyRegion = entry.wireVersion === 22 || entry.wireVersion === 23;
-  if (!legacyRegion && entry.wireVersion !== RENDERER_WIRE_VERSION)
+  if (
+    !legacyRegion &&
+    entry.wireVersion !== 24 &&
+    entry.wireVersion !== RENDERER_WIRE_VERSION
+  )
     throw new Error(
       `recording line 1 needs renderer wire version ${RENDERER_WIRE_VERSION}`,
     );
@@ -245,10 +296,20 @@ function constructionOf(entry: Record<string, unknown>): {
   } catch {
     throw new Error("recording line 1 has an invalid renderer boot input");
   }
-  const built = mainRendererOf(boot);
+  const built = mainRendererOf(
+    boot,
+    legacyRegion ? legacyCompileKey : undefined,
+  );
   if (built.kind === "refused") return { result: built, renderer: null };
   const { renderer, ...result } = built;
-  return { result, renderer };
+  return {
+    result,
+    renderer,
+    compareAs:
+      entry.wireVersion === RENDERER_WIRE_VERSION
+        ? undefined
+        : historicalOutputs(boot.stored),
+  };
 }
 
 // [LAW:effects-at-boundaries] The caller supplies the lines and can inspect a
@@ -261,6 +322,7 @@ export async function replayRecording(
 ): Promise<{ turns: number }> {
   let renderer: Renderer | null = null;
   let historical = false;
+  let compareAs: ((output: RendererOutput) => unknown) | undefined;
   let ended = false;
   let line = 0;
   let turns = 0;
@@ -277,6 +339,7 @@ export async function replayRecording(
       historical = entry.wireVersion === 22;
       verify(entry.result, boot.result, "recording boot", "result");
       renderer = boot.renderer;
+      compareAs = boot.compareAs;
     } else if (entry.kind === "turn") {
       requireFields(entry, "turn", line);
       if (renderer === null)
@@ -309,6 +372,7 @@ export async function replayRecording(
           )
           ? " (this historical insertion had no recorded placement seed)"
           : "",
+        compareAs,
       );
       onTurn?.(input, output);
     } else if (entry.kind === "end") {

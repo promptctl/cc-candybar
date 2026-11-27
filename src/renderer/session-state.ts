@@ -11,7 +11,6 @@ import type {
 } from "../renderer-interface/stored-state";
 import { putNewest, toNewest } from "../utils/recency";
 import { StoredMoves } from "./stored-moves";
-import { withoutRetiredKeys } from "../renderer-interface/stored-state";
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
 // landed, each key it touched that `records` admits — its value before the
@@ -84,6 +83,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     deep: false,
   });
   private readonly moved = new StoredMoves();
+  private readonly edits = new Map<SessionId, Map<string, string | null>>();
   // [LAW:single-enforcer] The store's revision: counts every change any
   // writer makes, so it never repeats while the store lives.
   private head = 0;
@@ -173,6 +173,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
         const address = pickAddress(sessionId, key);
         if (this.picks.get(address) === value) continue;
         this.picks.set(address, value);
+        this.edited(sessionId, key, value);
         keys.add(key);
         moved = true;
       }
@@ -188,6 +189,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     if (keys === undefined || !keys.has(key)) return;
     runInAction(() => {
       this.picks.delete(pickAddress(sessionId, key));
+      this.edited(sessionId, key, null);
       keys.delete(key);
       if (keys.size === 0) this.dropped(sessionId, keys);
       else this.changed(sessionId, keys);
@@ -201,37 +203,33 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     if (toNewest(this.sessions, sessionId)) this.moved.heard(sessionId);
   }
 
-  // What the host has not yet been told: each session that moved, as it now
-  // stands (null for one dropped) or only its place, in the order they last
-  // moved.
+  // [LAW:dataflow-not-control-flow] Coalesce writes to a key before crossing
+  // the wire. Recency is the order of each session's last move, even when
+  // several sessions were edited and one was heard again.
   drain(): StoreWrite[] {
-    return this.moved.drain(
-      (key, moved): StoreWrite =>
-        moved === "heard"
-          ? { kind: "heard", store: "session-state", key }
-          : {
-              kind: "put",
-              store: "session-state",
-              key,
-              value: this.valuesOf(key),
-            },
-    );
+    const writes = this.moved.drain((key, move): StoreWrite => {
+      if (move === "heard")
+        return { kind: "heard", store: "session-state", key };
+      if (!this.sessions.has(key))
+        return { kind: "drop", store: "session-state", key };
+      return {
+        kind: "patch",
+        store: "session-state",
+        key,
+        changes: Object.fromEntries(this.edits.get(key)!),
+      };
+    });
+    this.edits.clear();
+    return writes;
   }
 
-  // [LAW:single-enforcer] What the host keeps of a session is what a load of
-  // its file keeps, so the file never holds a pick only this renderer reads
-  // (edit mode's own), and a load that drops one is reading an older build's.
-  private valuesOf(sessionId: SessionId): Record<string, string> | null {
-    const keys = this.sessions.get(sessionId);
-    if (keys === undefined) return null;
-    const values = Object.fromEntries(
-      Array.from(keys, (key) => [
-        key,
-        this.picks.get(pickAddress(sessionId, key))!,
-      ]),
-    );
-    const outlives = withoutRetiredKeys(values);
-    return outlives.kind === "ok" ? outlives.value.value : null;
+  private edited(session: SessionId, key: string, value: string | null): void {
+    let edits = this.edits.get(session);
+    if (edits === undefined) {
+      edits = new Map();
+      this.edits.set(session, edits);
+    }
+    edits.set(key, value);
   }
 
   // Move-to-end: re-inserting at the tail makes this the most recently
@@ -244,7 +242,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   private dropped(sessionId: SessionId, keys: ReadonlySet<string>): void {
     this.head++;
-    for (const key of keys) this.picks.delete(pickAddress(sessionId, key));
+    for (const key of keys) {
+      this.picks.delete(pickAddress(sessionId, key));
+      // A session evicted then recreated in this turn still erases its old keys.
+      this.edited(sessionId, key, null);
+    }
     this.revisions.delete(sessionId);
     this.sessions.delete(sessionId);
     this.told(sessionId);

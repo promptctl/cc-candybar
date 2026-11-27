@@ -1,3 +1,4 @@
+import wire24 from "../fixtures/renderer-wire-24.json";
 import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type { EventInput, RendererBoot } from "../../src/renderer-interface/interface";
 import { RECORDING_VERSION, type RecordingEntry } from "../../src/renderer-interface/recording";
@@ -91,7 +92,13 @@ test("historical wire 22 recordings replay until an insertion needs its missing 
   if (live.kind !== "built") throw new Error("renderer refused construction");
   const actual = await live.renderer.answer({ ...input, event: { ...input.event, placementSeed: "new" } } as EventInput);
   expect(actual.kind).toBe("threw");
-  await expect(replayRecording(linesOf(historical, { ...stats, input, output: actual }, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
+  const stored = [{ kind: "put", store: "session-state", key: "session", value: {
+    "candybar.clickError": JSON.stringify({
+      text: "apply-layout-op: session session has not rendered yet — no config to act on",
+      at: 1, revision: 1, answered: false,
+    }),
+  } }];
+  await expect(replayRecording(linesOf(historical, { ...stats, input, output: { ...actual, stored } }, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
   for (const placementSeed of [undefined, "", 42])
     await expect(replayRecording(linesOf(boot, { ...stats, input: { ...input, event: { ...input.event, placementSeed } } }, { ...end, turns: 1 }))).rejects.toThrow("invalid click placement seed");
   await expect(replayRecording(linesOf(historical, {...stats, input}, { ...end, turns: 1 })))
@@ -104,4 +111,36 @@ test.each([22, 23])("wire %d requires reconstructible number data", async wireVe
   } }, end);
   await expect(replayRecording(recording("en-US"))).resolves.toEqual({ turns: 0 });
   await expect(replayRecording(recording("zz-ZZ"))).rejects.toThrow("invalid renderer boot input");
+});
+
+// Captured from the published 1.245.1 renderer. One click changes a pick
+// beside an untouched pick. A second writes a file, receives its completion,
+// records a durable undo step, and the next request draws the applied config.
+test("wire 24 verifies a complete pick record, a file change and the following draw", async () => {
+  const lines = linesOf(...wire24);
+  await expect(replayRecording(lines)).resolves.toEqual({ turns: 8 });
+  const alter = (turn: number, from: string, to: string) => {
+    expect(lines[turn]).toContain(from);
+    return lines.with(turn, lines[turn]!.replace(from, to));
+  };
+  await expect(replayRecording(alter(2, '"endcaps":"round"', '"endcaps":"wrong"')))
+    .rejects.toThrow("recording turn 2 differs at output.stored[0].value");
+  await expect(replayRecording(alter(5, '"role":"user"', '"role":"project"')))
+    .rejects.toThrow("recording turn 5 differs at output.stored[0].value");
+  await expect(replayRecording(alter(7, '"text":"space"', '"text":"wrong"')))
+    .rejects.toThrow("recording turn 7 differs at output.effects");
+});
+
+// The same inputs through the released pre-integer-table renderer produced
+// these two compile digests. Every other recorded output field was identical.
+test.each([22, 23])("wire %d reproduces the cache identity of both captured configs", async wireVersion => {
+  const [first, ...rest] = wire24;
+  if (first?.kind !== "boot" || first.input?.region === undefined) throw new Error("expected wire 24 boot");
+  const {locale, timeZone} = first.input.region;
+  const lines = linesOf({
+    ...first, wireVersion, input: {...first.input, region: {locale, timeZone}},
+  }, ...rest).map(line => line.replaceAll("9dc55f2ce0a7", "86b51f35df7a").replaceAll("31e5b55ad197", "06621d1d8302"));
+  await expect(replayRecording(lines)).resolves.toEqual({turns: 8});
+  const altered = lines.with(2, lines[2]!.replace("86b51f35df7a", "000000000000"));
+  await expect(replayRecording(altered)).rejects.toThrow("recording turn 2 differs at output.diagnostics");
 });

@@ -10,6 +10,7 @@ import type {
   StoredState,
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
+import { storedPicksAfter } from "../renderer-interface/stored-state.js";
 import type { Timekeeper } from "../time.js";
 import { HeldFile, type HeldChange } from "./held-file.js";
 import type { StoreReport } from "./foundations/stored-file.js";
@@ -69,7 +70,15 @@ export class HeldStores {
     for (const write of writes)
       switch (write.store) {
         case "session-state":
-          sessions.push(write);
+          sessions.push(
+            write.kind === "heard"
+              ? write
+              : {
+                  kind: "update",
+                  key: write.key,
+                  apply: (prior) => storedPicksAfter(prior, write),
+                },
+          );
           break;
         case "settings-history":
           history.push(write);

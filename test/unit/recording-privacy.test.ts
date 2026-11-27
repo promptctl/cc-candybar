@@ -8,6 +8,7 @@ import {
   HOVER_KEY,
   NO_HOVER,
 } from "../../src/config/click-mode";
+import { EDIT_MODE_KEY } from "../../src/config/reserved-names";
 import { DISCLOSURE_OPEN } from "../../src/config/disclosure";
 import { SETTINGS_ANCHOR } from "../../src/config/door";
 import {
@@ -31,6 +32,7 @@ import {
 } from "../../src/daemon/session-state-file";
 import type { RunReading } from "../../src/daemon/readings";
 import {
+  RecordingControls,
   recordingBootProblem,
   recordingInputProblem,
   recordingOutputProblem,
@@ -438,6 +440,78 @@ test("the output check sees the evaluated run environment in ordinary and pane f
     expect(problem).toMatch(/run action supplies environment/);
     expect(problem).not.toContain(ACTION_SECRET);
   }
+});
+
+test("only an earlier captured control in the same session identifies an authored pick", async () => {
+  const controls = new RecordingControls();
+  const { output } = await draw(JSON.stringify({
+    actions: { save: { set: "choice", to: "displayed" } },
+    segments: { item: { template: '{{ action "save" "choose" }}' } },
+    root: { h: ["item"] },
+  }));
+  const patch = { kind: "patch", store: "session-state", key: SESSION, changes: { choice: "displayed" } } as const;
+  const click = (value: string) => input({
+    kind: "click", placementSeed: "seed", context: null,
+    click: admitClick(VERB_SET_STATE, encodeSegments([SESSION, "choice", value]), TEST_SIGNER).click,
+  });
+  expect(recordingInputProblem(click("displayed"), controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem({ ...output, stored: [patch] }, controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem(output, controls)).toBeNull();
+  expect(recordingInputProblem(click("displayed"), controls)).toBeNull();
+  expect(recordingInputProblem(click(SECRET), controls)).toMatch(/unknown origin/);
+  expect(recordingOutputProblem({ ...output, stored: [patch] }, controls)).toBeNull();
+  expect(recordingOutputProblem({ ...output, stored: [{ ...patch, key: sessionIdOf("other") }] }, controls))
+    .toMatch(/unknown origin/);
+  recordingInputProblem(input({kind: "retire", session: SESSION}), controls);
+  expect(recordingInputProblem(click("displayed"), controls)).toMatch(/unknown origin/);
+});
+
+test("turn recordings inspect live pick values, erased key names and undo history", async () => {
+  const { output } = await draw("{}");
+  const patchProblem = (changes: Record<string, string | null>) =>
+    recordingOutputProblem({
+      ...output,
+      stored: [
+        { kind: "patch", store: "session-state", key: SESSION, changes },
+      ],
+    });
+  expect(patchProblem({ padding: "2", [HOVER_KEY]: null })).toBeNull();
+  const privateChanges: Array<Record<string, string | null>> = [
+    { [EDIT_MODE_KEY]: SECRET },
+    { [SECRET]: null },
+    { padding: SECRET },
+  ];
+  for (const changes of privateChanges) {
+    const problem = patchProblem(changes);
+    expect(problem).toMatch(/unknown origin/);
+    expect(problem).not.toContain(SECRET);
+  }
+  expect(
+    recordingOutputProblem({
+      ...output,
+      stored: [
+        {
+          kind: "put",
+          store: "settings-history",
+          key: SESSION,
+          value: {
+            past: [],
+            future: [
+              [
+                {
+                  kind: "layer",
+                  role: "user",
+                  digest: "same-layer",
+                  before: ACTION_CONFIG,
+                  after: null,
+                },
+              ],
+            ],
+          },
+        },
+      ],
+    }),
+  ).toMatch(/run action supplies environment/);
 });
 
 test("recording can start from a profile saved with the former layout and toggles menus open", () => {

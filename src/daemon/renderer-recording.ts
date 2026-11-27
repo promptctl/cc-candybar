@@ -18,6 +18,7 @@ import type { RecordingFile } from "./recording-file.js";
 import type { RecordingCommand } from "./foundations/recording-command.js";
 import type { Timekeeper } from "../time.js";
 import {
+  RecordingControls,
   recordingBootProblem,
   recordingInputProblem,
   recordingOutputProblem,
@@ -48,6 +49,7 @@ export class RendererRecording {
   private pending: Promise<void> = Promise.resolve();
   private waitingBytes = 0;
   private turns = 0;
+  private readonly controls = new RecordingControls();
 
   constructor(
     readonly renderer: RendererName,
@@ -94,7 +96,7 @@ export class RendererRecording {
     answer: (event: EventInput) => Promise<Timed<RendererOutput>>,
   ): Promise<Timed<RendererOutput>> {
     const captured = this.admit(
-      () => recordingInputProblem(input),
+      () => recordingInputProblem(input, this.controls),
       () => this.snapshot(input),
     );
     let timed: Timed<RendererOutput>;
@@ -107,7 +109,7 @@ export class RendererRecording {
     if (captured === undefined || !this.active) return timed;
     const { turnMs: _transportTiming, ...output } = timed;
     this.admit(
-      () => recordingOutputProblem(output),
+      () => recordingOutputProblem(output, this.controls),
       () => {
         this.turns++;
         return this.append({ kind: "turn", input: captured, output });

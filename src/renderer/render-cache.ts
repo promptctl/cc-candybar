@@ -165,7 +165,7 @@ const MAX_UNPINNED_FAILURES = 256;
 export interface RenderDeps<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
-> extends Pick<StateDeps, "region"> {
+> extends Pick<StateDeps, "region" | "identifyCompile"> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;
   // Where the user's home is, which a `~` in a plugin's data path names
@@ -207,6 +207,7 @@ export interface StateDeps {
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
   readonly compile?: CompileProvider;
+  readonly identifyCompile?: (input: CompileInput) => string;
 }
 
 // [LAW:no-ambient-temporal-coupling] The cache's outward lifecycle signal. A
@@ -766,6 +767,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       cwd,
       deps.compile ?? compileAlone,
       DIRECTORY_SCOPE,
+      deps.identifyCompile,
     );
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
     // declaration failures that didn't abort the load) flow through the
