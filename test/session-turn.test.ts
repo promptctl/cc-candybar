@@ -1,3 +1,4 @@
+import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // A session's view draws from one turn (candybar-gather-renderer-76bb.6pj.83l):
 // the world state, the payload composed from it and the globals the draw's
 // options are built from are derived together, so no reader joins one turn's
@@ -355,6 +356,7 @@ describe("a request's wait", () => {
     const runs = fakeLauncher(systemTimekeeper);
     runs.spawner.program(shell("echo hi"), runsFor(30, exits(0, "hi\n")));
     const sourceRuns = new SourceRuns({
+      watchers: manualWatcherRegistry(systemTimekeeper),
       launcher: runs.launcher,
       clock: systemTimekeeper,
     });

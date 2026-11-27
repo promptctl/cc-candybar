@@ -1,3 +1,4 @@
+import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // A source's identity is a digest of what its run needs, two declarations
 // with one digest share one run, and a key that moves is a new identity whose
 // run lands over the old value (candybar-gather-renderer-76bb.6pj.5dx; spec
@@ -43,7 +44,11 @@ interface Held {
 function rig() {
   const clock = heldClock(new Date(0));
   const { launcher, spawner, started } = fakeLauncher(clock);
-  const runs = new SourceRuns({ launcher, clock });
+  const runs = new SourceRuns({
+    watchers: manualWatcherRegistry(clock),
+    launcher,
+    clock,
+  });
   const opened: Held[] = [];
   // A session's registry, its programs run in `environment`.
   const registry = (environment: Environment = {}): Held => {

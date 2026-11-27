@@ -73,9 +73,9 @@ import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
 import { heardRequest } from "./helpers/click";
 import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
-import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
+import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "../scripts/lib/until";
-import { fakeWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import {
@@ -166,6 +166,7 @@ function programWrites(storage: string, sid: string, doc: unknown): void {
 }
 
 interface Rig {
+  readonly directories: ReturnType<typeof manualDirectoryWatches>;
   readonly cache: RenderCache<SessionSource>;
   // The host's half: what discovery hands the cache at each origin.
   readonly configs: ConfigHost;
@@ -197,6 +198,7 @@ interface Rig {
 
 // The daemon's own composition of a render cache (src/daemon/daemon.ts).
 function rig(): Rig {
+  const directories = manualDirectoryWatches();
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -210,6 +212,7 @@ function rig(): Rig {
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({
+    watchDirectory: directories.open,
     clock: systemTimekeeper,
     counters,
     logger: log,
@@ -230,6 +233,7 @@ function rig(): Rig {
       logger: log,
       ledger: new RefreshLedger(log),
       sourceRuns: new SourceRuns({
+        watchers,
         launcher: world.launcher,
         clock: systemTimekeeper,
       }),
@@ -286,6 +290,7 @@ function rig(): Rig {
     watchers.closeAll();
   });
   return {
+    directories,
     cache,
     configs,
     providers,
@@ -367,19 +372,15 @@ async function answered(
   );
 }
 
-// fs.watch goes live after it returns, with no ready signal: the program
-// writes again (the same bytes, so the final state is one) until the bar shows
-// what it wrote.
-function writeUntilShown(
-  write: () => void,
-  shown: () => boolean,
-  what: string,
+// The program writes once. Deliver its directory event at that point and
+// observe the consumer's asynchronous read completing.
+function writeAndShow(
+  rig: Rig, folder: string, sid: string, document: unknown,
+  shown: () => boolean, what: string,
 ): Promise<void> {
-  return until(() => {
-    if (shown()) return true;
-    write();
-    return false;
-  }, `${what} showing`);
+  programWrites(folder, sid, document);
+  rig.directories.change(fs.realpathSync(folder), `${sid}.json`);
+  return until(shown, what);
 }
 
 describe("a source's declaration", () => {
@@ -702,8 +703,8 @@ describe("a session reads its source", () => {
     expect(before.errors).toEqual([]);
     expect(before.text).toContain("mine");
     expect(before.text).not.toContain("home=");
-    await writeUntilShown(
-      () => programWrites(storageOf(), "s1", { home: "/h/one" }),
+    await writeAndShow(
+      r, storageOf(), "s1", { home: "/h/one" },
       () => draw(view).text.includes("home=/h/one"),
       "the program's write",
     );
@@ -726,8 +727,8 @@ describe("a session reads its source", () => {
     const b = viewOf(r, file, "s-b");
     await answered(a);
     await answered(b);
-    await writeUntilShown(
-      () => programWrites(storageOf(), "s-a", { home: "/a" }),
+    await writeAndShow(
+      r, storageOf(), "s-a", { home: "/a" },
       () => draw(a).text.includes("home=/a"),
       "session a's write",
     );
@@ -752,14 +753,14 @@ describe("a session reads its source", () => {
       Number(/runs=(\d+)/.exec(draw(view).text)?.[1] ?? 0);
     // Before the write the key has nothing to read, so the shell has not run.
     expect(runs()).toBe(0);
-    await writeUntilShown(
-      () => programWrites(storageOf(), "s1", { home: "/one" }),
+    await writeAndShow(
+      r, storageOf(), "s1", { home: "/one" },
       () => runs() > 0,
       "the shell's run under the first value",
     );
     const first = runs();
-    await writeUntilShown(
-      () => programWrites(storageOf(), "s1", { home: "/two" }),
+    await writeAndShow(
+      r, storageOf(), "s1", { home: "/two" },
       () => runs() > first,
       "the shell's run under the second value",
     );
@@ -1074,8 +1075,8 @@ describe("a session's world state", () => {
       () => view.source.facts().sources[STATUS]?.kind === "absent",
       "the source's first answer in the document",
     );
-    await writeUntilShown(
-      () => programWrites(storageOf(), "s1", { home: "/h/one" }),
+    await writeAndShow(
+      r, storageOf(), "s1", { home: "/h/one" },
       () => view.source.facts().sources[STATUS]?.kind === "ok",
       "the program's write in the document",
     );
@@ -1201,17 +1202,16 @@ describe("a storage folder's watch", () => {
     const file = config(["plugins.p.gated"]);
     const storage = storageOf();
     fs.mkdirSync(storage, { recursive: true });
-    fakeWatches(new Set([storage]));
-    cleanups.push(() => jest.restoreAllMocks());
     const r = rig();
+    r.directories.refused.add(storage);
     const view = viewOf(r, file);
     await answered(view);
     expect(r.providers.managedStorage.stats().faults.refused).toBe(1);
-    jest.restoreAllMocks();
+    r.directories.refused.clear();
     fs.appendFileSync(file, "\n// a comment keeps the state\n");
     r.configs.again();
-    await writeUntilShown(
-      () => programWrites(storage, "s1", { home: "/recovered" }),
+    await writeAndShow(
+      r, storage, "s1", { home: "/recovered" },
       () => draw(view).text.includes("home=/recovered"),
       "the write after the reload",
     );
@@ -1220,9 +1220,8 @@ describe("a storage folder's watch", () => {
   test("a config observation retries only the managed folders it observed", () => {
     const roots = [path.join(dir, "left", "p"), path.join(dir, "right", "p")];
     const folders = roots.map((root) => path.join(root, "session"));
-    fakeWatches(new Set(folders));
-    cleanups.push(() => jest.restoreAllMocks());
     const r = rig();
+    for (const folder of folders) r.directories.refused.add(folder);
     const origins = roots.map((root, i) => {
       const definition = plugin("", root);
       const file = write(
@@ -1239,14 +1238,14 @@ describe("a storage folder's watch", () => {
     expect(r.cache.managedFolders()).toEqual(folders);
     expect(r.providers.managedStorage.stats().faults.refused).toBe(2);
 
-    jest.restoreAllMocks();
-    const opened = fakeWatches();
+    r.directories.refused.clear();
+    const beforeRetry = r.directories.opened.length;
     fs.appendFileSync(
       path.join(dir, "selected-0.json5"),
       "\n// physical edit\n",
     );
     r.configs.again();
-    expect(opened.map((watch) => watch.path)).toEqual([folders[0]]);
+    expect(r.directories.opened.slice(beforeRetry).map((watch) => watch.path)).toEqual([folders[0]]);
   });
 
   test("a reload keeps it open", async () => {
@@ -1283,22 +1282,17 @@ describe("a storage folder's watch", () => {
     const state = entry.state;
     const storage = storageOf();
     const lost = r.providers.managedStorage.stats().lost;
-    await untilHeard(
-      () => {
-        if (fs.existsSync(storage))
-          fs.rmSync(storage, { recursive: true, maxRetries: 3 });
-      },
-      () => r.providers.managedStorage.stats().lost > lost,
-      "the loss of the removed folder",
-    );
+    fs.rmSync(storage, { recursive: true });
+    r.directories.change(storage, path.basename(storage));
+    await until(() => r.providers.managedStorage.stats().lost > lost, "the loss of the removed folder");
     expect(fs.existsSync(storage)).toBe(false);
     r.fileEvents.notify({ kind: "period" });
     expect(fs.statSync(storage).isDirectory()).toBe(true);
     expect(entry.state).toBe(state);
     const view = viewOf(r, file);
     await answered(view);
-    await writeUntilShown(
-      () => programWrites(storage, "s1", { home: "/after" }),
+    await writeAndShow(
+      r, storage, "s1", { home: "/after" },
       () => draw(view).text.includes("home=/after"),
       "the write after the removal",
     );
@@ -1312,8 +1306,8 @@ describe("a storage folder's watch", () => {
     const view = viewOf(r, file);
     await answered(view);
     const storage = storageOf();
-    await writeUntilShown(
-      () => programWrites(storage, "s1", { home: "/first" }),
+    await writeAndShow(
+      r, storage, "s1", { home: "/first" },
       () => draw(view).text.includes("home=/first"),
       "the first write",
     );
@@ -1325,8 +1319,8 @@ describe("a storage folder's watch", () => {
     fs.utimesSync(storage, new Date(), new Date());
     // Whatever the folder's watch and its plugin folder's made of them has
     // run once the next write lands.
-    await writeUntilShown(
-      () => programWrites(storage, "s1", { home: "/second" }),
+    await writeAndShow(
+      r, storage, "s1", { home: "/second" },
       () => draw(view).text.includes("home=/second"),
       "the write after the touches",
     );
@@ -1387,8 +1381,8 @@ describe("an installed plugin's storage", () => {
     const file = placing();
     const view0 = viewOf(r, file);
     await answered(view0);
-    await writeUntilShown(
-      () => programWrites(path.join(dev, "session"), "s1", { home: "/linked" }),
+    await writeAndShow(
+      r, path.join(dev, "session"), "s1", { home: "/linked" },
       () => draw(view0).text.includes("home=/linked"),
       "the linked folder's write",
     );
@@ -1411,8 +1405,8 @@ describe("an installed plugin's storage", () => {
     );
     const view = viewOf(r, file);
     await answered(view);
-    await writeUntilShown(
-      () => programWrites(installed, "s1", { home: "/installed" }),
+    await writeAndShow(
+      r, installed, "s1", { home: "/installed" },
       () => draw(view).text.includes("home=/installed"),
       "the installed folder's write",
     );

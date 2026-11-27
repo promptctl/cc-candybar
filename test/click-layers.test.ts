@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] A click writes the layer its action names, by role,
 // in the chain of the snapshot its renderer holds for the session's origin:
 // a save names the project's file or the local one, and undo writes back to
@@ -73,6 +74,7 @@ function session(): {
   readonly cache: DiscoveringCache;
 } {
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     logger: () => {},
   });

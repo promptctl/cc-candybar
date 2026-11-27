@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { refuseFile } from "./helpers/refuse-file";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
 // changed: cache identity (projectDir+cwd, args ignored), last-known-good
@@ -19,7 +20,6 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import fs from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -107,9 +107,11 @@ function makeCache(
   configs: ConfigHost;
   cleanups: Array<() => void>;
   reloads: ReloadSignal;
+  directories: ReturnType<typeof manualDirectoryWatches>;
   watchers: WatcherRegistry;
   counters: WatcherCounters;
 } {
+  const directories = manualDirectoryWatches();
   const cleanups: Array<() => void> = [];
   const counters: WatcherCounters = {
     watchersOpened: 0,
@@ -120,6 +122,7 @@ function makeCache(
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    watchDirectory: directories.open,
     clock: systemTimekeeper,
     counters,
     logger: () => {},
@@ -154,6 +157,7 @@ function makeCache(
   return {
     cache,
     originAt: configs.at,
+    directories,
     configs,
     cleanups,
     reloads,
@@ -704,16 +708,9 @@ describe("RenderCache", () => {
     const plugins = join(dir, ".cc-candybar", "plugins");
     mkdirSync(plugins, { recursive: true });
     const at = realpathSync(plugins);
-    const watch = fs.watch.bind(fs);
-    let refuse = true;
-    const spy = jest.spyOn(fs, "watch").mockImplementation(((
-      ...args: Parameters<typeof fs.watch>
-    ) => {
-      if (refuse && args[0] === at)
-        throw new Error("EMFILE: too many open files");
-      return watch(...args);
-    }) as typeof fs.watch);
-    const { cache, originAt, configs, cleanups, watchers } = makeCache();
+    const { cache, originAt, configs, cleanups, watchers, directories } =
+      makeCache();
+    directories.refused.add(at);
     try {
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       const refused = `cannot watch ${at} — EMFILE: too many open files`;
@@ -721,7 +718,7 @@ describe("RenderCache", () => {
       watchers.judge();
       configs.again();
       expect(entry.revision.snapshot.watch).toContain(refused);
-      refuse = false;
+      directories.refused.delete(at);
       configs.again();
       expect(entry.revision.snapshot.watch).toContain(refused);
       watchers.judge();
@@ -729,7 +726,6 @@ describe("RenderCache", () => {
       expect(entry.revision.snapshot.watch).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
-      spy.mockRestore();
       cleanup();
     }
   });
@@ -1458,7 +1454,7 @@ describe("RenderCache", () => {
   // into a plugin root, with no config edit — the root is watched for every
   // child, so the install reloads the entry and the segment is there.
   test("a plugin folder installed into a repo's plugin root reloads the entry", async () => {
-    const { cache, originAt, cleanups, reloads } = makeCache();
+    const { cache, originAt, cleanups, reloads, directories } = makeCache();
     const { dir, cleanup } = mkConfigDir();
     try {
       const root = join(dir, ".cc-candybar", "plugins");
@@ -1475,6 +1471,7 @@ describe("RenderCache", () => {
         );
         rmSync(join(root, "deploy"), { recursive: true, force: true });
         renameSync(staging, join(root, "deploy"));
+        directories.change(realpathSync(root), "deploy");
       });
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.segments["repo.deploy.status"]).toBeDefined();
@@ -1492,6 +1489,7 @@ describe("RenderCache close", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       logger: () => {},
     });
@@ -1548,6 +1546,7 @@ describe("RenderCache close", () => {
 describe("RenderCache frames and pins", () => {
   function pinCache(source = SOURCES_NOTHING) {
     const watchers = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       logger: () => {},
     });
@@ -1665,6 +1664,7 @@ describe("RenderCache frames and pins", () => {
     "a failed pinned %s successor keeps its owner and reopens on corrective config under pressure",
     (which) => {
       const watchers = new WatcherRegistry({
+        watchDirectory: manualDirectoryWatches().open,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -1774,6 +1774,7 @@ describe("RenderCache frames and pins", () => {
   // forgets it.
   test("a retired session's open failure is forgotten", () => {
     const watchers = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       logger: () => {},
     });

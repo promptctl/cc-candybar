@@ -1,3 +1,4 @@
+import { heldClock } from "./helpers/held-clock";
 import { refuseFile } from "./helpers/refuse-file";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
@@ -16,6 +17,7 @@ import {
 } from "../src/utils/folder-identity";
 import {
   DEBOUNCE_MS,
+  systemWatchDirectory,
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
@@ -24,7 +26,7 @@ import { Holds } from "../src/utils/holds";
 import { ABSENT, ok } from "../src/utils/outcome";
 import type { Current } from "../src/utils/reading";
 import { until } from "../scripts/lib/until";
-import { fakeWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { untilHeard } from "./helpers/reload-signal";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import { SourceFiles } from "../src/daemon/source-files";
@@ -37,6 +39,7 @@ const A = sessionIdOf("session-a");
 const B = sessionIdOf("session-b");
 
 interface Rig {
+  readonly watches: ReturnType<typeof manualDirectoryWatches>;
   readonly root: string;
   readonly folder: string;
   readonly storage: ManagedStorage;
@@ -53,8 +56,14 @@ interface Rig {
 const rigs: Rig[] = [];
 
 function rig(
-  opts: { identityOf?: IdentityRead; files?: SourceFiles } = {},
+  opts: {
+    clock?: typeof systemTimekeeper;
+    nativeWatch?: boolean;
+    identityOf?: IdentityRead;
+    files?: SourceFiles;
+  } = {},
 ): Rig {
+  const watches = manualDirectoryWatches();
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "managed-storage-")),
   );
@@ -72,13 +81,14 @@ function rig(
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+    watchDirectory: opts.nativeWatch ? systemWatchDirectory : watches.open,
+    clock: opts.clock ?? systemTimekeeper,
     counters,
     logger,
   });
   const fileEvents = handDelivery();
   const storage = new ManagedStorage({
-    clock: systemTimekeeper,
+    clock: opts.clock ?? systemTimekeeper,
     watchers,
     logger,
     fileEvents,
@@ -87,6 +97,7 @@ function rig(
   });
   const wanted = new Set([folder]);
   const made: Rig = {
+    watches,
     root,
     folder,
     storage,
@@ -213,7 +224,6 @@ describe("ManagedStorage reads", () => {
   });
 
   test("a file waits for its folder to be followed before any bytes are read", async () => {
-    const watches = fakeWatches();
     const reads: string[] = [];
     const r = rig({
       files: new SourceFiles((file, signal) => {
@@ -226,7 +236,7 @@ describe("ManagedStorage reads", () => {
     const lane = r.storage.declare(new Holds(), r.folder, A);
     expect(await answered(lane)).toEqual(ABSENT);
     expect(reads).toEqual([]);
-    expect(watches).toHaveLength(0);
+    expect(r.watches.opened).toHaveLength(0);
     r.follow();
     await until(
       () => lane.current().kind === "ok",
@@ -237,7 +247,7 @@ describe("ManagedStorage reads", () => {
   });
 
   test("a program's write reaches its session's lane through the folder's watch", async () => {
-    const r = rig();
+    const r = rig({ nativeWatch: true });
     r.follow();
     r.write(A, '"a1"');
     const a = r.storage.declare(new Holds(), r.folder, A);
@@ -255,7 +265,6 @@ describe("ManagedStorage reads", () => {
   });
 
   test("a write to session A's file re-reads A only", async () => {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"a1"');
@@ -268,8 +277,8 @@ describe("ManagedStorage reads", () => {
     r.write(A, '"a2"');
     r.write(B, '"b2"');
     // The window names A's file, and the temp file beside it.
-    watches[0]!.listener("rename", ".session-a.tmp");
-    watches[0]!.listener("rename", "session-a.json");
+    r.watches.opened[0]!.changed(".session-a.tmp");
+    r.watches.opened[0]!.changed("session-a.json");
     await until(() => {
       const now = a.current();
       return now.kind === "ok" && now.value === "a2";
@@ -281,7 +290,6 @@ describe("ManagedStorage reads", () => {
   });
 
   test("an unnamed event re-reads every held key in the folder, and only those", async () => {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"a1"');
@@ -297,7 +305,7 @@ describe("ManagedStorage reads", () => {
     loose.declare(() => {});
     r.write(A, '"a2"');
     r.write(B, '"b2"');
-    watches[0]!.listener("rename", null);
+    r.watches.opened[0]!.changed(null);
     await until(() => {
       const [nowA, nowB] = [a.current(), b.current()];
       return (
@@ -311,7 +319,6 @@ describe("ManagedStorage reads", () => {
   });
 
   test("hold, release, write, hold again: the kept value draws until the re-read lands the write", async () => {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"before"');
@@ -320,7 +327,7 @@ describe("ManagedStorage reads", () => {
     holds.declare(() => {});
     r.write(A, '"while away"');
     // The event finds the key unheld: nothing reads.
-    watches[0]!.listener("rename", "session-a.json");
+    r.watches.opened[0]!.changed("session-a.json");
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(refreshes(r, "change")).toHaveLength(0);
     const lane = r.storage.declare(holds, r.folder, A);
@@ -333,7 +340,6 @@ describe("ManagedStorage reads", () => {
   });
 
   test("a supersede holds back watch triggers until it resumes; two need both resumes", async () => {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"before"');
@@ -347,7 +353,7 @@ describe("ManagedStorage reads", () => {
       why: "superseded",
     });
     r.write(A, '"after"');
-    watches[0]!.listener("rename", "session-a.json");
+    r.watches.opened[0]!.changed("session-a.json");
     await new Promise((resolve) => setTimeout(resolve, 100));
     one();
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -406,7 +412,7 @@ describe("ManagedStorage watches", () => {
   // An attribute change reaches a watch as the same "change" event on every
   // platform, xattr included, so these two stand for all of them.
   test("chmod and utimes on the folder leave its sources reading and open no watch", async () => {
-    const r = rig();
+    const r = rig({ nativeWatch: true });
     r.follow();
     r.write(A, '"a"');
     const lane = r.storage.declare(new Holds(), r.folder, A);
@@ -439,7 +445,6 @@ describe("ManagedStorage watches", () => {
   test("a folder removed under its watch is lost, and the next config observation is a new generation", async () => {
     const r = rig();
     r.follow();
-    await new Promise((resolve) => setTimeout(resolve, 100));
     fs.rmSync(r.folder, { recursive: true });
     r.recheck();
     expect(r.generation()).toBe(1);
@@ -456,11 +461,10 @@ describe("ManagedStorage watches", () => {
   // Not at once: a plugin folder being removed would have its storage folder
   // made in it again before its own removal, which then fails as not empty.
   test("a folder removed under its watch is made again by its owner at the next period, as a new generation, with no load's hold", async () => {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     fs.rmSync(r.folder, { recursive: true });
-    watches[0]!.listener("rename", path.basename(r.folder));
+    r.watches.opened[0]!.changed(path.basename(r.folder));
     await until(() => r.storage.stats().lost === 1, "the loss");
     expect(r.generation()).toBe(0);
     expect(fs.existsSync(r.folder)).toBe(false);
@@ -470,14 +474,13 @@ describe("ManagedStorage watches", () => {
   });
 
   test("a held file whose folder is removed reads what the path holds now, not its last value", async () => {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"a"');
     const lane = r.storage.declare(new Holds(), r.folder, A);
     expect(await answered(lane)).toEqual(ok("a"));
     fs.rmSync(r.folder, { recursive: true });
-    watches[0]!.listener("rename", path.basename(r.folder));
+    r.watches.opened[0]!.changed(path.basename(r.folder));
     await until(() => r.storage.stats().lost === 1, "the loss");
     await until(() => lane.current().kind !== "ok", "the re-read");
     expect(await answered(lane)).toEqual(ABSENT);
@@ -543,7 +546,7 @@ describe("ManagedStorage watches", () => {
         return fs.promises.readFile(file, { encoding: "utf8", signal });
       }),
     });
-    fakeWatches(new Set([r.folder]));
+    r.watches.refused.add(r.folder);
     r.follow();
     r.write(A, '"must not read"');
     const lane = r.storage.declare(new Holds(), r.folder, A);
@@ -572,7 +575,6 @@ describe("ManagedStorage watches", () => {
   // carry the old device and inode. Only its birth time tells them apart.
   describe("a folder recreated with the same device and inode", () => {
     async function recreated() {
-      const watches = fakeWatches();
       let birth = 1n;
       const identityOf: IdentityRead = (folder) => {
         const real = statIdentity(folder);
@@ -580,33 +582,36 @@ describe("ManagedStorage watches", () => {
         const same: FolderIdentity = { dev: 7n, ino: 42n, birthtimeNs: birth };
         return same;
       };
-      const r = rig({ identityOf });
+      const clock = heldClock(new Date(0));
+      const r = rig({ identityOf, clock });
       r.follow();
       const recreate = () => {
         fs.rmSync(r.folder, { recursive: true });
         fs.mkdirSync(r.folder);
         birth = 2n;
       };
-      return { r, watches, recreate };
+      return { r, recreate, clock };
     }
 
     test("its own event first, then the config load: a new generation", async () => {
-      const { r, watches, recreate } = await recreated();
+      const { r, recreate, clock } = await recreated();
       recreate();
-      watches[0]!.listener("rename", path.basename(r.folder));
-      // The fake watch's window closes on the registry's debounce.
-      await until(() => r.storage.stats().lost === 1, "the loss");
+      r.watches.opened[0]!.changed(path.basename(r.folder));
+      clock.advance(DEBOUNCE_MS);
+      expect(r.storage.stats().lost).toBe(1);
       r.recheck();
       expect(r.generation()).toBe(1);
     });
 
     test("the config load first, then its own event: the load counts the loss and opens a new generation, and the stale event marks nothing", async () => {
-      const { r, watches, recreate } = await recreated();
+      const { r, recreate, clock } = await recreated();
       recreate();
       r.recheck();
       expect(r.generation()).toBe(1);
-      watches[0]!.listener("rename", path.basename(r.folder));
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      const pending = clock.pending();
+      r.watches.opened[0]!.changed(path.basename(r.folder));
+      expect(clock.pending()).toBe(pending);
+      clock.advance(DEBOUNCE_MS);
       r.recheck();
       expect(r.generation()).toBe(1);
       expect(r.storage.stats().lost).toBe(1);
@@ -615,7 +620,7 @@ describe("ManagedStorage watches", () => {
 
   test("a refused watch is a standing fault on every source in the folder while the OS refuses it; the next config observation clears it in the same generation", async () => {
     const r0 = rig();
-    fakeWatches(new Set([r0.folder]));
+    r0.watches.refused.add(r0.folder);
     r0.follow();
     r0.write(A, '"a"');
     const lane = r0.storage.declare(new Holds(), r0.folder, A);
@@ -633,7 +638,7 @@ describe("ManagedStorage watches", () => {
     });
     r0.recheck();
     expect(faultLines(r0)).toEqual([started("refused")]);
-    jest.restoreAllMocks();
+    r0.watches.refused.clear();
     r0.follow();
     expect(faultLines(r0)).toEqual([started("refused")]);
     r0.recheck();
@@ -644,13 +649,12 @@ describe("ManagedStorage watches", () => {
   });
 
   test("an error after open on a folder still there is the fault, and the held keys read it; the next config observation reopens the watch", async () => {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"a"');
     const lane = r.storage.declare(new Holds(), r.folder, A);
     await answered(lane);
-    watches[0]!.emitter.emit("error", new Error("EIO: i/o error"));
+    r.watches.opened[0]!.emitter.emit("error", new Error("EIO: i/o error"));
     await until(() => lane.current().kind === "failed", "the fault");
     expect(lane.current()).toEqual({
       kind: "failed",
@@ -666,7 +670,7 @@ describe("ManagedStorage watches", () => {
     });
     r.recheck();
     expect(r.generation()).toBe(0);
-    expect(watches).toHaveLength(2);
+    expect(r.watches.opened).toHaveLength(2);
     expect(faultLines(r)).toEqual([started("error"), cleared("error")]);
     await until(() => lane.current().kind === "ok", "the re-read");
   });
@@ -779,7 +783,6 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     r.lines.filter((l) => l.includes("plugin storage refresh"));
 
   async function stalledRig() {
-    const watches = fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"a"');
@@ -787,7 +790,7 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     expect(await answered(lane)).toEqual(ok("a"));
     r.fileEvents.set(stalled, { kind: "moved" });
     await until(() => lane.current().kind === "failed", "the stall");
-    return { r, lane, watch: watches[0]! };
+    return { r, lane, watch: r.watches.opened[0]! };
   }
 
   test("while delivery is stalled every held lane reads the stall, naming its folder and the span's start", async () => {
@@ -871,7 +874,6 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
   // The event naming the folder and the follower's event that reloads its
   // config ride one stream, which can drop both at once without a stall.
   test("a folder replaced while its own event was dropped is lost on the next period, and the next config observation is a new generation", async () => {
-    fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"a"');
@@ -896,7 +898,6 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
   });
 
   test("a folder removed under its watch is lost once, however many periods pass", async () => {
-    fakeWatches();
     const r = rig();
     r.follow();
     fs.rmSync(r.folder, { recursive: true });
@@ -962,11 +963,10 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     "a refused watch's fault clears at %s once the OS opens it, with no load's hold",
     async (_trigger, trigger) => {
       const r = rig();
-      fakeWatches(new Set([r.folder]));
+      r.watches.refused.add(r.folder);
       r.follow();
       expect(r.storage.stats().faults).toMatchObject({ refused: 1 });
-      jest.restoreAllMocks();
-      fakeWatches();
+      r.watches.refused.clear();
       trigger(r);
       expect(r.generation()).toBe(0);
       expect(faultLines(r)).toEqual([started("refused"), cleared("refused")]);
@@ -974,7 +974,6 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
   );
 
   test("a period with delivery unchanged re-reads nothing", async () => {
-    fakeWatches();
     const r = rig();
     r.follow();
     r.write(A, '"a"');

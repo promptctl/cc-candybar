@@ -1,3 +1,5 @@
+import { systemWatchDirectory } from "../src/daemon/cache/watchers";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] The host's config discovery
 // (src/daemon/config-discovery/config-discovery.ts): it follows exactly the
 // origins the renderer names, each discovered once as it is first named and
@@ -100,6 +102,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock,
     counters,
     logger: () => {},
@@ -835,6 +838,7 @@ function physicalDiscovery(
   dataHome: string,
   reads: string[],
   {
+    watchDirectory = manualDirectoryWatches().open,
     opens,
     dataDirs = [],
     state = path.join(root, "state"),
@@ -844,6 +848,7 @@ function physicalDiscovery(
     log = () => {},
     moved = () => {},
   }: {
+    watchDirectory?: ConstructorParameters<typeof WatcherRegistry>[0]["watchDirectory"];
     opens?: string[];
     dataDirs?: readonly string[];
     state?: string;
@@ -855,6 +860,7 @@ function physicalDiscovery(
   } = {},
 ) {
   const watchers = new WatcherRegistry({
+    watchDirectory,
     clock,
     logger: () => {},
   });
@@ -1349,6 +1355,7 @@ test("a plugin installed, renamed and removed in the shared root reaches each or
   const logged: string[] = [];
   const delivered: string[] = [];
   const service = physicalDiscovery(data, [], {
+    watchDirectory: systemWatchDirectory,
     state,
     clock: systemTimekeeper,
     opens: observed,
@@ -1479,7 +1486,7 @@ test("a deleted layer heard through its descriptor revision retires on the first
     target: requestedConfigTarget(file, undefined, "config-only"),
   };
   const clock = heldClock(new Date());
-  const watchers = new WatcherRegistry({ clock, logger: () => {} });
+  const watchers = new WatcherRegistry({ clock, watchDirectory: manualDirectoryWatches().open, logger: () => {} });
   const reads: string[] = [];
   const moved: RenderOrigin[] = [];
   const observe = countingText(reads);

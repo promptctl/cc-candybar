@@ -1,3 +1,7 @@
+import {
+  WatcherRegistry,
+  systemWatchDirectory,
+} from "../../../src/daemon/cache/watchers";
 // The host's hold of a registry's runs, through a real collector: the
 // registry's subscriptions go to the collector as a renderer's output hands
 // them back, the collector declares and judges them over the case's source
@@ -151,7 +155,14 @@ export function heldRuns(
   environment: SessionEnvironment,
   cleanups: Array<() => void>,
 ): HeldRuns {
-  const sourceRuns = new SourceRuns({ launcher, clock: systemTimekeeper });
+  const sourceRuns = new SourceRuns({
+    watchers: new WatcherRegistry({
+      clock: systemTimekeeper,
+      watchDirectory: systemWatchDirectory,
+    }),
+    launcher,
+    clock: systemTimekeeper,
+  });
   const holders = observable.map<SessionId, CollectedRuns>(undefined, {
     deep: false,
   });

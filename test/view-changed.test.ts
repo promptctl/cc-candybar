@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // brandon-unfiled-3248.8ro6 §4e: a session's view says when what it draws
 // from moved, and a feed showing the session wakes on nothing else of its
 // data. It says so as it opens, and when a source it reads publishes a value
@@ -62,6 +63,7 @@ function setUp() {
     );
   writeConfig("{{ .status }}");
   const watchers = new WatcherRegistry({
+    watchDirectory: manualDirectoryWatches().open,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

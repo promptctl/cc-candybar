@@ -14,7 +14,7 @@ import {
   type RefreshTrigger,
   type Refreshes,
 } from "../../utils/refresh-ledger";
-import { WatcherRegistry } from "./watchers";
+import type { WatcherRegistry } from "./watchers";
 import {
   specOf,
   type HeldWatch,
@@ -309,7 +309,6 @@ export class GitDataProvider {
   private readonly maxRepos: number;
   private readonly forgeLookups: Limiter;
   private readonly watchers: WatcherRegistry;
-  private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
   private readonly clock: Pick<
     Timekeeper,
@@ -329,7 +328,7 @@ export class GitDataProvider {
     // How many forge lookups may be out at once, across every repo.
     maxPrLookups?: number;
     inner: GitService;
-    watchers?: WatcherRegistry;
+    watchers: WatcherRegistry;
     // [LAW:single-enforcer] One injection point. Daemon passes its log;
     // non-daemon consumers leave the default (debug-routed, quiet
     // unless CC_CANDYBAR_DEBUG is set).
@@ -355,18 +354,7 @@ export class GitDataProvider {
       refresh: ["first", "period"],
       lines: ["first", "period"],
     });
-    if (opts.watchers) {
-      this.watchers = opts.watchers;
-      this.ownsWatchers = false;
-    } else {
-      // Auto-constructed registry shares the same logger, so cache and watcher
-      // events land together; with the default logger both stay quiet.
-      this.watchers = new WatcherRegistry({
-        clock: this.clock,
-        logger: this.logger,
-      });
-      this.ownsWatchers = true;
-    }
+    this.watchers = opts.watchers;
   }
 
   getWatcherRegistry(): WatcherRegistry {
@@ -829,6 +817,5 @@ export class GitDataProvider {
     for (const state of this.repos.values()) this.drop(state);
     this.repos.clear();
     this.resolutions.clear();
-    if (this.ownsWatchers) this.watchers.closeAll();
   }
 }

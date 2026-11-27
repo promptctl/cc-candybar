@@ -1,3 +1,7 @@
+import {
+  manualWatcherRegistry,
+  manualDirectoryWatches,
+} from "../scripts/lib/draw-fixtures/directory-watches";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { processLauncher } from "./helpers/host";
 import { reaction } from "mobx";
@@ -9,9 +13,12 @@ import { handDelivery } from "./helpers/hand-delivery";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { EventEmitter } from "events";
 import { heldGrandchild } from "./helpers/held-grandchild";
-import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import {
+  DEBOUNCE_MS,
+  POLL_MS,
+  WatcherRegistry,
+} from "../src/daemon/cache/watchers";
 import type { Delivery } from "../src/daemon/foundations/stats-snapshot";
 import {
   VariableStore,
@@ -188,6 +195,8 @@ function runsOver(deps: Partial<SourceRunsDeps> = {}): SourceRuns {
     launcher: processLauncher,
     clock: systemTimekeeper,
     ...deps,
+    watchers:
+      deps.watchers ?? manualWatcherRegistry(deps.clock ?? systemTimekeeper),
   });
   liveRuns.add(runs);
   return runs;
@@ -214,11 +223,25 @@ function registryOver(
 // Helper: fresh pair so tests are fully isolated.
 // `env` is the environment its sources read and run in: stated by the test
 // that means one, otherwise the test process's own.
-function make(defaultEmptyValue?: string, env?: Environment) {
-  const store = new VariableStore(systemTimekeeper);
+function make(
+  defaultEmptyValue?: string,
+  env?: Environment,
+  clock = systemTimekeeper,
+  events = manualDirectoryWatches(),
+) {
+  const store = new VariableStore(clock);
   return {
     store,
-    registry: registryOver(store, defaultEmptyValue, undefined, undefined, env),
+    events,
+    clock,
+    registry: registryOver(
+      store,
+      defaultEmptyValue,
+      undefined,
+      undefined,
+      env,
+      runsOver({ clock, watchers: manualWatcherRegistry(clock, events) }),
+    ),
   };
 }
 
@@ -1375,7 +1398,8 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       const dataFile = path.join(dir, "data");
       fs.mkdirSync(watchedDir);
       fs.writeFileSync(dataFile, "v1");
-      const { store, registry } = make();
+      const clock = heldClock(new Date(0));
+      const { store, registry, events } = make(undefined, undefined, clock);
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
         env: SHELL_ENV,
@@ -1384,15 +1408,13 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       });
       await ran(registry);
       fs.writeFileSync(dataFile, "v2");
-      // fs.watch attaches with no ready signal: repeat the idempotent change.
-      let write = 0;
-      await repeatUntil(
-        registry,
+      fs.writeFileSync(path.join(watchedDir, "main"), "changed");
+      events.change(fs.realpathSync(watchedDir), "main");
+      clock.advance(DEBOUNCE_MS);
+      await until(
         () => store.read("val") === "v2",
-        () => fs.writeFileSync(path.join(watchedDir, "main"), String(write++)),
-        "the store reading v2",
+        "the changed value published",
       );
-      expect(store.read("val")).toBe("v2");
     } finally {
       cleanup();
     }
@@ -1402,26 +1424,24 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const f = path.join(dir, "state", "deep", "data");
-      const { store, registry } = make();
+      const clock = heldClock(new Date(0));
+      const { store, registry } = make(undefined, undefined, clock);
       registry.declareFile("val", f, {
         parse: text("(none)"),
         cache: { kind: "watch_file", path: f },
       });
       await ran(registry);
       expect(store.read("val")).toBe("(none)");
-      // Each directory that appears re-arms the watch one level deeper; the
-      // watch attaches with no ready signal, so the idempotent write repeats.
       fs.mkdirSync(path.dirname(f), { recursive: true });
-      // Let the mkdir's own event land first, so only a write can deliver v1.
-      await elapse(500);
+      clock.advance(POLL_MS + DEBOUNCE_MS);
+      await ran(registry);
       expect(store.read("val")).toBe("(none)");
-      await repeatUntil(
-        registry,
+      fs.writeFileSync(f, "v1");
+      clock.advance(POLL_MS + DEBOUNCE_MS);
+      await until(
         () => store.read("val") === "v1",
-        () => fs.writeFileSync(f, "v1"),
-        "the store reading v1",
+        "the changed value published",
       );
-      expect(store.read("val")).toBe("v1");
     } finally {
       cleanup();
     }
@@ -2277,6 +2297,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         dirWatchesClosed: 0,
       };
       const watchers = new WatcherRegistry({
+        watchDirectory: manualDirectoryWatches().open,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -2449,20 +2470,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     // it as it is.
     it("a folder whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
       const { dir, cleanup } = makeTmpDir();
-      const opened: Array<{
-        dir: string;
-        handle: EventEmitter;
-        listener: (event: string, changed: string | null) => void;
-      }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((
-        d: string,
-        _opts: unknown,
-        listener: (event: string, changed: string | null) => void,
-      ) => {
-        const handle = Object.assign(new EventEmitter(), { close: () => {} });
-        opened.push({ dir: d, handle, listener });
-        return handle;
-      }) as unknown as typeof fs.watch);
+      const events = manualDirectoryWatches();
       try {
         const real = fs.realpathSync(dir);
         const one = path.join(real, "one");
@@ -2470,6 +2478,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const state = path.join(one, "state");
         fs.writeFileSync(state, "v1");
         const watchers = new WatcherRegistry({
+          watchDirectory: events.open,
           clock: systemTimekeeper,
           logger: () => {},
         });
@@ -2488,12 +2497,12 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
-        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
+        const opensOf = events.opensOf;
         expect(opensOf(one)).toHaveLength(1);
         expect(registry.cachePolicyFaults().has("val")).toBe(false);
 
         fs.writeFileSync(state, "v2");
-        opensOf(one)[0]!.handle.emit(
+        opensOf(one)[0]!.emitter.emit(
           "error",
           new Error("EMFILE: too many open files"),
         );
@@ -2511,7 +2520,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
           "the fault cleared",
         );
       } finally {
-        watch.mockRestore();
         cleanup();
       }
     });
@@ -2522,41 +2530,31 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     // folder, and hears a child through it.
     it("a watched folder removed and made again is watched again", async () => {
       const { dir, cleanup } = makeTmpDir();
-      const opened: Array<{
-        dir: string;
-        closed: boolean;
-        listener: (event: string, changed: string | null) => void;
-      }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((
-        d: string,
-        _opts: unknown,
-        listener: (event: string, changed: string | null) => void,
-      ) => {
-        const record = { dir: d, closed: false, listener };
-        opened.push(record);
-        return Object.assign(new EventEmitter(), {
-          close: () => void (record.closed = true),
-        });
-      }) as unknown as typeof fs.watch);
+      const events = manualDirectoryWatches();
       try {
         const one = path.join(fs.realpathSync(dir), "one");
         fs.mkdirSync(one);
         const state = path.join(one, "state");
         fs.writeFileSync(state, "v1");
-        const { store, registry } = make();
+        const { store, registry } = make(
+          undefined,
+          undefined,
+          systemTimekeeper,
+          events,
+        );
         registry.declareFile("val", state, {
           parse: TEXT,
           cache: { kind: "watch_file", path: one },
         });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
-        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
+        const opensOf = events.opensOf;
         expect(opensOf(one)).toHaveLength(1);
 
         // `rm -rf one && mkdir one`: the handle reports its own directory's name.
         fs.rmSync(one, { recursive: true });
         fs.mkdirSync(one);
-        opensOf(one)[0]!.listener("rename", "one");
+        opensOf(one)[0]!.changed("one");
         await until(
           () => opensOf(one).length === 2,
           "the directory watched again",
@@ -2565,11 +2563,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         expect(opensOf(one)[0]!.closed).toBe(true);
 
         fs.writeFileSync(state, "v2");
-        opensOf(one)[1]!.listener("rename", "state");
+        opensOf(one)[1]!.changed("state");
         await until(() => store.read("val") === "v2", "the store reading v2");
         expect(store.read("val")).toBe("v2");
       } finally {
-        watch.mockRestore();
         cleanup();
       }
     });

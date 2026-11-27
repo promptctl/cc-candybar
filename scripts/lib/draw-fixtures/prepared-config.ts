@@ -1,3 +1,7 @@
+import {
+  WatcherRegistry,
+  systemWatchDirectory,
+} from "../../../src/daemon/cache/watchers";
 // A config fixture uses the same loader, compiler, collector and DSL renderer as the statusline.
 import type { ConfigSnapshot } from "../../../src/config/config-snapshot";
 import { locations } from "../../../src/daemon/paths";
@@ -109,6 +113,10 @@ export function prepareSnapshot(
   deriveActionGates(createGates(), config);
   const store = new VariableStore(world.clock);
   const sourceRuns = new SourceRuns({
+    watchers: new WatcherRegistry({
+      clock: world.clock,
+      watchDirectory: systemWatchDirectory,
+    }),
     launcher: world.launcher,
     clock: world.clock,
   });
@@ -165,7 +173,11 @@ export async function renderEffective(
   effective: EffectiveGlobals,
   width: number,
   at: Instant,
-): Promise<{ rendered: Frame; failures: readonly string[]; pending: readonly string[] }> {
+): Promise<{
+  rendered: Frame;
+  failures: readonly string[];
+  pending: readonly string[];
+}> {
   const { config, compiled, store, registry, runs, layers } = prepared;
   const payload = samplePayload(config, effective, layers.at(-1) ?? null, at);
   const opts = renderOptionsOf(effective, width);

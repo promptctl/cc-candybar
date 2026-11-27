@@ -1,3 +1,4 @@
+import { systemWatchDirectory } from "./cache/watchers";
 // The real adapters a daemon is built with: the one module that names them.
 // [LAW:single-enforcer] A process, a test's worker and the page in site/ each
 // build their daemon over these or over fakes of them, and `createDaemon` names
@@ -34,6 +35,7 @@ export function productionAdapters(
 ): DaemonAdapters {
   let accountHome: string | undefined;
   return {
+    watchDirectory: systemWatchDirectory,
     openRecording: openRecordingFile,
     accountHome: () => (accountHome ??= userInfo().homedir),
     daemonLog,

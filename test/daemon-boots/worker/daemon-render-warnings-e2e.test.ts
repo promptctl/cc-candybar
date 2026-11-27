@@ -31,7 +31,7 @@ import {
 import { heldClock } from "../../helpers/held-clock";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../../scripts/lib/daemon/log";
-import { fakeWatches } from "../../helpers/fake-watches";
+import { manualDirectoryWatches } from "../../../scripts/lib/draw-fixtures/directory-watches";
 import { untilHeard } from "../../helpers/reload-signal";
 
 jest.setTimeout(30_000);
@@ -60,6 +60,7 @@ const fieldOf =
     new RegExp(` ${name}=(\\S+)`).exec(line)?.[1];
 
 describe("a daemon render's event names every warning, and the indicator offers each", () => {
+  const directories = manualDirectoryWatches();
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
   let projectDir: string;
@@ -73,7 +74,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
     );
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
-    daemon = startDaemon(prepared.env);
+    daemon = startDaemon(prepared.env, { watchDirectory: directories.open });
   });
 
   afterAll(async () => {
@@ -252,8 +253,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
     const broken = path.join(dir, "broken.json5");
     writeFileSync(broken, "{ nope");
     const refusal = `config watch: cannot watch ${plugins} — EMFILE`;
-    const refused = new Set([plugins]);
-    fakeWatches(refused);
+    directories.refused.add(plugins);
     try {
       const sid = "refused";
       const bar = await render(daemon, sid, dir);
@@ -291,7 +291,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
 
       // The OS listens again. No period runs here; a new slot on the folder
       // retries it as the period would.
-      refused.delete(plugins);
+      directories.refused.delete(plugins);
       const heard = path.join(dir, "heard.json5");
       writeFileSync(heard, "{ segments: {} }");
       await render(daemon, "refused-heard", dir, {}, [

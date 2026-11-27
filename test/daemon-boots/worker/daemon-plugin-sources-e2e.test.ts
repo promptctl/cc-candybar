@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "../../../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:nothing-unseen] A plugin's session source and its `run` action,
 // measured on a daemon: the bar a request draws before and after the
 // plugin's program writes the session's file, a clicked program's write in the
@@ -23,7 +24,6 @@ import {
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
 import { until } from "../../../scripts/lib/until";
-import { untilHeard } from "../../helpers/reload-signal";
 import {
   startDaemon,
   statsOf,
@@ -57,6 +57,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   let config: string;
   let storage: string;
   let daemon: InWorkerDaemon;
+  const directories = manualDirectoryWatches();
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-sources-e2e");
@@ -93,7 +94,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.gated", "plugins.p.go"] } }`,
     );
     storage = path.join(fs.realpathSync(folder), "session");
-    daemon = startDaemon({ ...prepared.env, XDG_DATA_HOME: dataHome });
+    daemon = startDaemon({ ...prepared.env, XDG_DATA_HOME: dataHome }, { watchDirectory: directories.open });
   });
 
   afterAll(async () => {
@@ -159,21 +160,11 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     const event = (await renderLines(env, SESSION)).at(-1);
     expect(event).toContain(" sources=1 sourcesPending=- ");
 
-    // The program's write: the whole file, renamed into place, again until a
-    // render shows it (the folder's watch goes live after it opens).
-    let bar = "";
-    await untilHeard(
-      () => {
-        const tmp = path.join(storage, `.${SESSION}.tmp`);
-        fs.writeFileSync(tmp, JSON.stringify({ home: "/h/before" }));
-        fs.renameSync(tmp, path.join(storage, `${SESSION}.json`));
-      },
-      async () => {
-        bar = await render();
-        return bar.includes("home=/h/before");
-      },
-      () => `the bar showing the program's write; last:\n${bar}`,
-    );
+    const tmp = path.join(storage, `.${SESSION}.tmp`);
+    fs.writeFileSync(tmp, JSON.stringify({ home: "/h/before" }));
+    fs.renameSync(tmp, path.join(storage, `${SESSION}.json`));
+    directories.change(storage, `${SESSION}.json`);
+    await renderUntil((bar) => bar.includes("home=/h/before"), "the program's write");
   });
 
   test("a click runs the drawn program through the storage owner's supersede; then its write", async () => {

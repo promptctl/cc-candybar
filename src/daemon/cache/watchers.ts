@@ -71,6 +71,28 @@ type Gathering =
   | Exclude<Invalidation, { kind: "changed" }>
   | { readonly kind: "changed"; readonly paths: Set<string> };
 
+interface DirectoryHandle {
+  close(): void;
+  on(event: "error", listener: (error: Error) => void): void;
+}
+
+export type WatchDirectory = (
+  directory: string,
+  recursive: boolean,
+  changed: (name: string | null) => void,
+) => DirectoryHandle;
+
+// [LAW:effects-at-boundaries] The registry owns subscriptions and decides
+// what an event invalidates. Only this adapter opens a native stream.
+export const systemWatchDirectory: WatchDirectory = (
+  directory,
+  recursive,
+  changed,
+) =>
+  fs.watch(directory, { persistent: false, recursive }, (_event, name) =>
+    changed(name),
+  );
+
 // [LAW:types-are-the-program] A directory watch listens or is deaf, never
 // both. A listening one holds its handle and the folder it bound, read before
 // the open, so a folder replaced while it opens reads as moved at the next
@@ -78,7 +100,7 @@ type Gathering =
 type DirState =
   | {
       readonly kind: "listening";
-      readonly handle: fs.FSWatcher;
+      readonly handle: DirectoryHandle;
       readonly bound: string;
     }
   | { readonly kind: "deaf"; readonly deafness: Deafness };
@@ -185,7 +207,7 @@ const failedOf = (d: Deafness): Gathering => ({
 // already on its way from the closed one reports a directory that is gone.
 const heldBy = (
   state: DirState,
-  handle: fs.FSWatcher,
+  handle: DirectoryHandle,
 ): state is Extract<DirState, { kind: "listening" }> =>
   state.kind === "listening" && state.handle === handle;
 
@@ -245,6 +267,7 @@ export class WatcherRegistry {
   private readonly clock: Pick<Timekeeper, "after" | "every" | "detach">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
+  private readonly watchDirectory: WatchDirectory;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The clock the debounce window and the
@@ -259,8 +282,10 @@ export class WatcherRegistry {
     // Whether the runtime's recursive watch is Node's own walk, which stops
     // at the first entry it cannot watch and says nothing: Linux's.
     nodeWalksTrees?: boolean;
+    watchDirectory: WatchDirectory;
   }) {
     this.clock = opts.clock;
+    this.watchDirectory = opts.watchDirectory;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
@@ -618,18 +643,16 @@ export class WatcherRegistry {
       // [LAW:dataflow-not-control-flow] So every open opens the directory
       // first, recursive or not, and its error is the refusal's reason.
       fs.opendirSync(at).closeSync();
-      const handle = fs.watch(
-        at,
-        { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), handle, changed),
+      const handle = this.watchDirectory(at, where.recursive, (changed) =>
+        this.heard(dirOf(), handle, changed),
       );
       // [LAW:no-silent-failure] An error after open reaches every slot on
       // the directory and the stats, not only the log: the handle behind it
       // delivers nothing more.
       handle.on("error", (e) => {
+        const dir = dirOf();
         this.logger("warn", `watcher error ${at}: ${e.message}`);
         if (this.counters) this.counters.watchErrors++;
-        const dir = dirOf();
         if (!heldBy(dir.state, handle)) return;
         this.closeHandle(at, handle, "error");
         const deafness: Deafness = {
@@ -666,7 +689,7 @@ export class WatcherRegistry {
   // event naming the directory is judged against the folder there.
   private heard(
     dir: DirWatch,
-    handle: fs.FSWatcher,
+    handle: DirectoryHandle,
     changed: string | null,
   ): void {
     const { state } = dir;
@@ -760,7 +783,11 @@ export class WatcherRegistry {
     };
   }
 
-  private closeHandle(at: string, handle: fs.FSWatcher, cause: string): void {
+  private closeHandle(
+    at: string,
+    handle: DirectoryHandle,
+    cause: string,
+  ): void {
     try {
       handle.close();
     } catch {}

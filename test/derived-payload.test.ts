@@ -1,3 +1,4 @@
+import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // brandon-unfiled-3248.8ro6, step 4e (the data half): a view's payload is
 // derived and a draw writes no input. So a cache policy over the payload — a
 // selection slot's `.effective`, a key over the drawn depth — re-runs its
@@ -56,6 +57,7 @@ function viewOver(
   });
   const answer = observable.box(payload, { deep: false });
   const sourceRuns = new SourceRuns({
+    watchers: manualWatcherRegistry(systemTimekeeper),
     launcher: processLauncher,
     clock: systemTimekeeper,
   });
