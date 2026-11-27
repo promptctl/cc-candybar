@@ -79621,6 +79621,7 @@ function unguard(state, group) {
   state.liveGroups.delete(group);
   state.lifeline?.pipe.write(`- ${group}
 `);
+  if (state.scope.signal.aborted && state.liveGroups.size === 0) endLifeline(state);
 }
 function endLifeline(state) {
   const line = state.lifeline;
@@ -79787,7 +79788,13 @@ async function launchPiped(state, opts, pipes) {
       return;
     }
     const group = child.pid;
+    let guarded = group;
     if (group !== void 0) guard(state, group);
+    const releaseGroup = () => {
+      if (guarded === void 0) return;
+      unguard(state, guarded);
+      guarded = void 0;
+    };
     const exited = new Promise((end) => child.once("exit", end));
     const input = child.stdin;
     child.stdin = null;
@@ -79833,7 +79840,7 @@ async function launchPiped(state, opts, pipes) {
       groupEndTimer?.();
       concludeTurn?.();
       unlisten();
-      if (group !== void 0) unguard(state, group);
+      releaseGroup();
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
       child.off("close", conclude);
       child.off("error", onError);
@@ -79875,11 +79882,17 @@ async function launchPiped(state, opts, pipes) {
       if (!settled3)
         concludeTurn ??= clock.defer(tasks.conclude, concludeWithGroup);
     };
+    const groupEnded = () => {
+      releaseGroup();
+      killTimer?.();
+      if (state.scope.signal.aborted) concludeWithGroup();
+      else concludeNextTurn();
+    };
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
-        if (settled3) return;
+        if (settled3 || guarded === void 0) return;
         if (spawner.groupGone(group)) {
-          concludeNextTurn();
+          groupEnded();
           return;
         }
         groupEndTimer = clock.after(
@@ -79888,25 +79901,18 @@ async function launchPiped(state, opts, pipes) {
           () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS))
         );
       };
-      afterExit(tasks.groupEnd, () => {
-        if (!settled3 && terminated === null)
-          groupEndTimer = clock.defer(
-            tasks.groupEnd,
-            () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)
-          );
-      });
+      afterExit(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS));
     }
     const terminate = (cause) => {
       if (terminated !== null) return;
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== void 0 && spawner.groupGone(group)) {
+      if (ended && (guarded === void 0 || spawner.groupGone(guarded))) {
         terminated = cause === "timeout" ? null : cause;
-        concludeNextTurn();
+        groupEnded();
         return;
       }
       terminated = cause;
       timer?.();
-      groupEndTimer?.();
       unlisten();
       const pid2 = child.pid;
       if (pid2 !== void 0) {
@@ -80217,7 +80223,7 @@ function launcherWithState(owner, clock, spawner) {
     () => {
       state.inFlight.forEach((end) => end());
       state.drains.forEach((pipe) => pipe.destroy());
-      endLifeline(state);
+      if (state.liveGroups.size === 0) endLifeline(state);
     },
     { once: true }
   );

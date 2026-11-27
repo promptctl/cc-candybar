@@ -4,15 +4,22 @@
     {
       "version": "pr-977",
       "ref": "refs/pull/977/merge",
-      "sha": "3c86fb66caea8d04707de798454b4ef18aeafeba",
-      "timestamp": "2026-11-27T03:43:42.355Z",
+      "sha": "852ead58689da6e70f87ca757e05af02a7be3c97",
+      "timestamp": "2026-11-27T03:53:25.700Z",
       "commits": [
         {
-          "sha": "3c86fb66caea8d04707de798454b4ef18aeafeba",
+          "sha": "852ead58689da6e70f87ca757e05af02a7be3c97",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T03:42:26Z",
-          "message": "Merge 30d274bf0e35ce3d6dbad126ad88f1e3d194a5ff into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
+          "timestamp": "2026-11-27T03:52:27Z",
+          "message": "Merge 2f2a736a03780557ff5ef6ec95910e7efcc8bea1 into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
+        },
+        {
+          "sha": "2f2a736a03780557ff5ef6ec95910e7efcc8bea1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:50:37-07:00",
+          "message": "fix(launcher): retire an observed process group before draining its pipes\n"
         },
         {
           "sha": "30d274bf0e35ce3d6dbad126ad88f1e3d194a5ff",
