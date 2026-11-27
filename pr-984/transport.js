@@ -10497,10 +10497,10 @@ var require_parseargs = __commonJS({
     function checkOptionLikeValue(token) {
       if (!token.inlineValue && isOptionLikeValue(token.value)) {
         const example = StringPrototypeStartsWith(token.rawName, "--") ? `'${token.rawName}=-XYZ'` : `'--${token.name}=-XYZ' or '${token.rawName}-XYZ'`;
-        const errorMessage = `Option '${token.rawName}' argument is ambiguous.
+        const errorMessage2 = `Option '${token.rawName}' argument is ambiguous.
 Did you forget to specify the option argument for '${token.rawName}'?
 To specify an option argument starting with a dash use ${example}.`;
-        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(errorMessage);
+        throw new ERR_PARSE_ARGS_INVALID_OPTION_VALUE(errorMessage2);
       }
     }
     function checkOptionUsage(config, token) {
@@ -28269,43 +28269,142 @@ init_globals();
 
 // src/utils/describe-value.ts
 init_globals();
-function describeValue(value, describeError = (error) => Error.prototype.toString.call(error)) {
-  const ancestors = /* @__PURE__ */ new Set();
+function errorText(error, key, fallback) {
+  for (let source = error; source; source = Object.getPrototypeOf(source)) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor) continue;
+    if (typeof DOMException !== "undefined" && source === DOMException.prototype && descriptor.get)
+      return descriptor.get.call(error);
+    return typeof descriptor.value === "string" ? descriptor.value : fallback;
+  }
+  return fallback;
+}
+function isReportedError(value) {
+  return value instanceof Error || typeof DOMException !== "undefined" && value instanceof DOMException;
+}
+function errorMessage(error) {
+  return errorText(error, "message", "");
+}
+var UNINSPECTABLE = "[Uninspectable value]";
+function diagnosticMessage(value) {
+  try {
+    return isReportedError(value) ? errorMessage(value) : describeValue(value);
+  } catch {
+    return UNINSPECTABLE;
+  }
+}
+function describeValue(value, crossed) {
+  const path32 = /* @__PURE__ */ new Set();
+  let remaining = 100;
+  const limit = (text6) => text6.length > 4096 ? text6.slice(0, 4096) + "\u2026" : text6;
   function describe3(item) {
-    if (typeof item === "string")
-      return "'" + JSON.stringify(item).slice(1, -1).replace(/'/g, "\\'") + "'";
-    if (typeof item === "bigint") return item.toString() + "n";
-    if (typeof item === "function") return "[Function]";
-    if (item === null || typeof item !== "object") return String(item);
-    if (item instanceof Error) return describeError(item);
-    if (ancestors.has(item)) return "[Circular]";
-    ancestors.add(item);
+    if (--remaining < 0 || path32.size >= 10) return "\u2026";
     try {
-      if (item instanceof Date)
-        return Number.isNaN(Date.prototype.getTime.call(item)) ? "Invalid Date" : Date.prototype.toISOString.call(item);
-      if (item instanceof Map)
-        return "Map { " + Array.from(
-          Map.prototype.entries.call(item),
-          ([k, v]) => describe3(k) + " => " + describe3(v)
-        ).join(", ") + " }";
-      if (item instanceof Set)
-        return "Set { " + Array.from(Set.prototype.values.call(item), describe3).join(", ") + " }";
-      if (item instanceof RegExp) return RegExp.prototype.toString.call(item);
-      const array = Array.isArray(item);
-      const fields2 = [];
-      for (const key of Reflect.ownKeys(item)) {
-        const field = Object.getOwnPropertyDescriptor(item, key);
-        if (!field?.enumerable) continue;
-        const content = "value" in field ? describe3(field.value) : "[Accessor]";
-        fields2.push(
-          array && typeof key === "string" && /^\d+$/.test(key) ? content : String(key) + ": " + content
+      if (typeof item === "string")
+        return "'" + JSON.stringify(limit(item)).slice(1, -1).replace(/'/g, "\\'") + "'";
+      if (typeof item === "bigint") return item.toString() + "n";
+      if (typeof item === "function") return "[Function]";
+      if (item === null || typeof item !== "object") return String(item);
+      if (path32.has(item)) return "[Circular]";
+      path32.add(item);
+      try {
+        return limit(objectDetail(item));
+      } finally {
+        path32.delete(item);
+      }
+    } catch {
+      return UNINSPECTABLE;
+    }
+  }
+  const descriptorText = (field) => "value" in field ? describe3(field.value) : "[Accessor]";
+  function objectDetail(item) {
+    if (isReportedError(item)) {
+      const original = crossed?.(item);
+      if (original !== void 0) return original;
+      const lines2 = [
+        [errorText(item, "name", "Error"), errorMessage(item)].filter(Boolean).join(": ")
+      ];
+      const cause = Object.getOwnPropertyDescriptor(item, "cause");
+      if (cause) lines2.push("cause: " + descriptorText(cause));
+      const errors2 = item instanceof AggregateError ? Object.getOwnPropertyDescriptor(item, "errors")?.value : void 0;
+      if (Array.isArray(errors2)) {
+        for (let i2 = 0; i2 < errors2.length && remaining > 0; i2++) {
+          const field = Object.getOwnPropertyDescriptor(errors2, i2);
+          if (field) lines2.push(`errors[${i2}]: ${descriptorText(field)}`);
+          else remaining--;
+        }
+      }
+      for (const key of Object.keys(item)) {
+        if (remaining <= 0) break;
+        if (["name", "message", "stack", "cause"].includes(key) || key === "errors" && item instanceof AggregateError)
+          continue;
+        remaining--;
+        lines2.push(
+          key + ": " + descriptorText(Object.getOwnPropertyDescriptor(item, key))
         );
       }
-      if (fields2.length === 0) return array ? "[]" : "{}";
-      return (array ? "[ " : "{ ") + fields2.join(", ") + (array ? " ]" : " }");
-    } finally {
-      ancestors.delete(item);
+      if (remaining <= 0) lines2.push("\u2026");
+      return lines2.join("\n");
     }
+    if (item instanceof Date)
+      return Number.isNaN(Date.prototype.getTime.call(item)) ? "Invalid Date" : Date.prototype.toISOString.call(item);
+    if (item instanceof RegExp) {
+      const read3 = (key) => Object.getOwnPropertyDescriptor(RegExp.prototype, key)?.get?.call(item);
+      const flags = [
+        ["hasIndices", "d"],
+        ["global", "g"],
+        ["ignoreCase", "i"],
+        ["multiline", "m"],
+        ["dotAll", "s"],
+        ["unicode", "u"],
+        ["unicodeSets", "v"],
+        ["sticky", "y"]
+      ];
+      return "/" + read3("source") + "/" + flags.filter(([key]) => read3(key)).map(([, flag2]) => flag2).join("");
+    }
+    const fields2 = [];
+    if (item instanceof Map || item instanceof Set) {
+      const map = item instanceof Map;
+      if (map) {
+        for (const [key, value2] of Map.prototype.entries.call(item)) {
+          if (remaining <= 0) {
+            fields2.push("\u2026");
+            break;
+          }
+          fields2.push(describe3(key) + " => " + describe3(value2));
+        }
+      } else {
+        for (const entry of Set.prototype.values.call(item)) {
+          if (remaining <= 0) {
+            fields2.push("\u2026");
+            break;
+          }
+          fields2.push(describe3(entry));
+        }
+      }
+      return (map ? "Map" : "Set") + " { " + fields2.join(", ") + " }";
+    }
+    const array = Array.isArray(item);
+    let next2 = 0;
+    const holes = (end) => {
+      if (end > next2) fields2.push(`<${end - next2} empty>`);
+    };
+    for (const key of Reflect.ownKeys(item)) {
+      if (remaining-- <= 0) {
+        fields2.push("\u2026");
+        break;
+      }
+      const field = Object.getOwnPropertyDescriptor(item, key);
+      if (!field?.enumerable) continue;
+      if (array && typeof key === "string" && String(Number(key)) === key && Number.isInteger(Number(key)) && Number(key) >= 0 && Number(key) < item.length) {
+        holes(Number(key));
+        next2 = Number(key) + 1;
+        fields2.push(descriptorText(field));
+      } else fields2.push(String(key) + ": " + descriptorText(field));
+    }
+    if (array && remaining > 0) holes(item.length);
+    if (!fields2.length) return array ? "[]" : "{}";
+    return (array ? "[ " : "{ ") + fields2.join(", ") + (array ? " ]" : " }");
   }
   return describe3(value);
 }
@@ -28351,56 +28450,26 @@ var CrossedFailure = class extends Error {
   failure;
 };
 function classified(thrown2, detailOf2) {
-  if (thrown2 instanceof CrossedFailure) return thrown2.failure;
-  const detail = detailOf2(thrown2);
-  return {
-    kind: KINDS.find(([as]) => thrown2 instanceof as)?.[1] ?? "threw",
-    message: thrown2 instanceof Error ? errorText(thrown2, "message", "") : detail,
-    detail
-  };
+  try {
+    if (thrown2 instanceof CrossedFailure) return thrown2.failure;
+    const detail = detailOf2(thrown2);
+    return {
+      kind: KINDS.find(([as]) => thrown2 instanceof as)?.[1] ?? "threw",
+      message: isReportedError(thrown2) ? errorMessage(thrown2) : detail,
+      detail
+    };
+  } catch {
+    return { kind: "threw", message: UNINSPECTABLE, detail: UNINSPECTABLE };
+  }
 }
 function rendererFailureOf(thrown2) {
-  return classified(thrown2, (value) => rendererDetail(value, /* @__PURE__ */ new Set()));
-}
-function errorText(error, key, fallback) {
-  for (let source = error; source !== null; source = Object.getPrototypeOf(source)) {
-    const field = Object.getOwnPropertyDescriptor(source, key);
-    if (field) return typeof field.value === "string" ? field.value : fallback;
-  }
-  return fallback;
-}
-function rendererDetail(value, path32) {
-  if (value instanceof CrossedFailure) return value.failure.detail;
-  if (!(value instanceof Error))
-    return describeValue(value, (error) => rendererDetail(error, path32));
-  const title2 = [
-    errorText(value, "name", "Error"),
-    errorText(value, "message", "")
-  ].filter(Boolean).join(": ");
-  if (path32.has(value)) return `[Circular: ${title2}]`;
-  path32.add(value);
-  const lines2 = [title2];
-  const cause = Object.getOwnPropertyDescriptor(value, "cause");
-  if (cause && "value" in cause)
-    lines2.push(`cause: ${rendererDetail(cause.value, path32)}`);
-  const errors2 = value instanceof AggregateError ? Object.getOwnPropertyDescriptor(value, "errors")?.value : void 0;
-  if (Array.isArray(errors2)) {
-    for (let i2 = 0; i2 < errors2.length; i2++) {
-      const field = Object.getOwnPropertyDescriptor(errors2, i2);
-      if (field && "value" in field)
-        lines2.push(`errors[${i2}]: ${rendererDetail(field.value, path32)}`);
-    }
-  }
-  for (const key of Object.keys(value)) {
-    if (key === "name" || key === "message" || key === "stack" || key === "cause")
-      continue;
-    if (key === "errors" && value instanceof AggregateError) continue;
-    const field = Object.getOwnPropertyDescriptor(value, key);
-    if (field !== void 0 && "value" in field)
-      lines2.push(`${key}: ${rendererDetail(field.value, path32)}`);
-  }
-  path32.delete(value);
-  return lines2.join("\n");
+  return classified(
+    thrown2,
+    (value) => describeValue(
+      value,
+      (error) => error instanceof CrossedFailure ? error.failure.detail : void 0
+    )
+  );
 }
 function badRequest(...problems) {
   const message = problems.join("; ");
@@ -71596,12 +71665,7 @@ function runEach(steps2) {
 function throwAll(thrown2) {
   if (thrown2.length === 1) throw thrown2[0];
   if (thrown2.length > 1)
-    throw new AggregateError(
-      thrown2,
-      thrown2.map(
-        (each) => each instanceof Error ? each.message : describeValue(each)
-      ).join("; ")
-    );
+    throw new AggregateError(thrown2, thrown2.map(diagnosticMessage).join("; "));
 }
 
 // src/renderer/render-cache.ts

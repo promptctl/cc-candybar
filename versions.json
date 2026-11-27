@@ -4,15 +4,22 @@
     {
       "version": "pr-984",
       "ref": "refs/pull/984/merge",
-      "sha": "fded9141db90a0071322263bae16bbbe6a501855",
-      "timestamp": "2026-11-27T12:43:37.261Z",
+      "sha": "d7e2887a35d04ad186fe79ec53863f5bc740601b",
+      "timestamp": "2026-11-27T13:02:32.216Z",
       "commits": [
         {
-          "sha": "fded9141db90a0071322263bae16bbbe6a501855",
+          "sha": "d7e2887a35d04ad186fe79ec53863f5bc740601b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T12:42:21Z",
-          "message": "Merge 32ea2a796eb292327b09e7be990bbc2357db768d into f7be96a940c3997ccbb5d75d6d08f3746681fcf6\n"
+          "timestamp": "2026-11-27T13:01:27Z",
+          "message": "Merge 442c3d66ce540e1ede0a7e017ee167898957ad61 into f7be96a940c3997ccbb5d75d6d08f3746681fcf6\n"
+        },
+        {
+          "sha": "442c3d66ce540e1ede0a7e017ee167898957ad61",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T06:01:15-07:00",
+          "message": "fix(renderer): bind installed generations and preserve diagnostic and replay failures\n"
         },
         {
           "sha": "32ea2a796eb292327b09e7be990bbc2357db768d",
