@@ -62,12 +62,13 @@ function projectWith(config: string, probes: readonly string[]) {
 function diagnosticsOf(
   project: ts.ParsedCommandLine,
   probes: readonly string[],
+  code = PROBE,
 ): Record<string, string[]> {
   const host = ts.createCompilerHost(project.options);
   const read = host.getSourceFile.bind(host);
   host.getSourceFile = (name, language, ...rest) =>
     probes.includes(name)
-      ? ts.createSourceFile(name, PROBE, language)
+      ? ts.createSourceFile(name, code, language)
       : read(name, language, ...rest);
   const program = ts.createProgram(project.fileNames, project.options, host);
   return Object.fromEntries(
@@ -91,6 +92,29 @@ describe("the type environments", () => {
       expect.stringMatching(/^Cannot find name 'expect'\./),
       expect.stringMatching(/^Cannot find name 'describe'\./),
       expect.stringContaining("Element implicitly has an 'any' type"),
+    ];
+    expect(found).toEqual(
+      Object.fromEntries(Object.keys(found).map((probe) => [probe, refused])),
+    );
+  }, 60_000);
+
+  test("WebKit owns DOM types and cannot read Node or Jest globals", () => {
+    const probes = probesUnder(["resources/bar-window/"]);
+    const project = projectWith(
+      path.join(REPO, "tsconfig.browser.json"),
+      probes,
+    );
+    expect(
+      probes.filter((probe) => !project.fileNames.includes(probe)),
+    ).toEqual([]);
+    const found = diagnosticsOf(
+      project,
+      probes,
+      "document.body; process.pid; expect(1);",
+    );
+    const refused = [
+      expect.stringMatching(/^Cannot find name 'process'\./),
+      expect.stringMatching(/^Cannot find name 'expect'\./),
     ];
     expect(found).toEqual(
       Object.fromEntries(Object.keys(found).map((probe) => [probe, refused])),
