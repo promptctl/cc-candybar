@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-988",
-      "ref": "refs/pull/988/merge",
-      "sha": "663b34ad4ba342926749b40b095a1c2358e8b588",
-      "timestamp": "2026-11-27T23:34:41.536Z",
-      "commits": [
-        {
-          "sha": "663b34ad4ba342926749b40b095a1c2358e8b588",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T23:33:23Z",
-          "message": "Merge a8b1cf83f4ee1ff6be5389091189f30918bd66c1 into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
-        },
-        {
-          "sha": "a8b1cf83f4ee1ff6be5389091189f30918bd66c1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T16:33:08-07:00",
-          "message": "test(recording): the two-session recording case has the time a real daemon takes on CI\n\nIt ran 21 to 33 s on CI against the suite's 30 s; the host-bundle case, the\nsame kind, already has 60 s.\n"
-        },
-        {
-          "sha": "e683305c6c000cf673d66d629181cf71943c3d3f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T16:27:27-07:00",
-          "message": "fix(stored-state): HeldFile names what it owes apart from what the bar says is behind\n\nA refused write is owed again only by the next change or the close, and the\ne2e gives the book its own disk.\n"
-        },
-        {
-          "sha": "7e90d19be758e59806fc2408a29bea5dbeb485b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T16:18:34-07:00",
-          "message": "fix(stored-state): a file's standing is kept by its cause, and told once per change\n\nA failed write's message names a staged file unique to the attempt, so a\nstanding compared by text restated the bar on every refusal. The holder\nkeeps the standing by the error's code and tells the daemon the error whole.\nThe history storage shares the one Landings the other storages tell through,\nthe write-failure rows have their own map, a standing's set and clear are\nlogged, and close and take keep their error boundaries.\n"
-        },
-        {
-          "sha": "b4504405ed828e5e50c997a1a091445c8178c0cc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T15:58:02-07:00",
-          "message": "fix(stored-state): a per-session file whose write fails stands behind on every bar\n\nA write behind has no caller to throw into, so its failure reached only the\ndaemon log. Each per-session storage now tells its holder what every write came\nto, and the daemon keeps one standing warning per file until a write lands.\nThe settings history writes at once but is told the same way, so its failure is\none row in the same words instead of a second act failure that left the bar\nwhen its hold ended.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "dfd45a29e6c86fc420ccaa588ea8bd9796bf270c",
-      "timestamp": "2026-11-27T22:49:02.508Z",
+      "sha": "59949da179994f9735daa010c71c696f055a4fa5",
+      "timestamp": "2026-11-27T23:37:48.613Z",
       "commits": [
         {
-          "sha": "dfd45a29e6c86fc420ccaa588ea8bd9796bf270c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-27T22:47:18Z",
-          "message": "chore(release): set `package.json` to 1.245.2\n\n## [1.245.2](https://github.com/promptctl/cc-candybar/compare/v1.245.1...v1.245.2) (2026-11-27)\n\n### Bug Fixes\n\n* **ssh-links:** a forwarded click's own failure is told as itself; desktop acts go through the one performer ([#987](https://github.com/promptctl/cc-candybar/issues/987)) ([90d265c](https://github.com/promptctl/cc-candybar/commit/90d265cab09e4d71ab46d30287a5944220706931))\n"
+          "sha": "59949da179994f9735daa010c71c696f055a4fa5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T16:36:29-07:00",
+          "message": "fix(stored-state): a per-session file whose write fails stands behind on every bar (#988)"
         }
       ]
     },

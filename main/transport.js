@@ -30028,6 +30028,18 @@ init_globals();
 var unreadText = (reason, where) => `could not be read: ${reason} \u2014 ${where}`;
 var readOrEmpty = (result, empty2) => result.kind === "ok" ? result.value : empty2;
 var kept = (value, dropped2 = []) => ({ kind: "ok", value: { value, dropped: dropped2 } });
+var LANDED = { ok: true };
+var Landings = class {
+  listeners = [];
+  listen(listener) {
+    this.listeners.push(listener);
+  }
+  tell(landed) {
+    for (const listener of this.listeners) listener(landed);
+    return landed;
+  }
+};
+var behindText = (store, file, error) => `${store} (${file}) is behind what this daemon holds: the file keeps what it last saved, and a restart loses the difference \u2014 ${error.message}`;
 function reportText({ store, file, found: found2 }) {
   switch (found2.kind) {
     case "absent":
@@ -92495,6 +92507,8 @@ var ephemeralSessionFile = () => ({
   },
   save: () => {
   },
+  landed: () => {
+  },
   flush: async () => {
   }
 });
@@ -92539,7 +92553,6 @@ function sessionFileOnDisk(kind, filePath2) {
     setAside
   };
 }
-var LANDED = { ok: true };
 async function publishSession(filePath2, body) {
   const file = resolvedTarget(filePath2);
   await fs_default.promises.mkdir(import_node_path3.default.dirname(file), { recursive: true });
@@ -92575,11 +92588,15 @@ var SessionFile = class {
   written = Promise.resolve();
   // The write queued behind the one in flight and not yet begun.
   waiting = null;
+  landings = new Landings();
   observe() {
     return this.disk.observe();
   }
   setAside(file) {
     return this.disk.setAside(file);
+  }
+  landed(listener) {
+    this.landings.listen(listener);
   }
   save(snapshot) {
     this.pending = new Map(snapshot);
@@ -92649,11 +92666,11 @@ var SessionFile = class {
     } catch (e) {
       const error = asError(e);
       this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
-      return { ok: false, error };
+      return this.landings.tell({ ok: false, error });
     }
     if (this.pending === snapshot) this.pending = null;
     this.saved(body, snapshot, started2, heldMs);
-    return LANDED;
+    return this.landings.tell(LANDED);
   }
   // For shutdown and for callers that read the file back: what is pending
   // lands now, behind any write already on its way. [LAW:no-silent-failure]
@@ -92676,14 +92693,26 @@ var SessionFile = class {
 var sessionStateFile = (filePath2, clock, debounceMs, logger) => new SessionFile(SESSION_STATE_FILE, filePath2, clock, debounceMs, logger);
 
 // src/daemon/held-file.ts
+var causeOf = (error) => error.code ?? error.message;
 var ORDER_PERIOD_MS = 5 * 60 * 1e3;
 var HeldFile = class {
-  constructor(store, storage, clock, bound = Infinity, same2 = Object.is) {
+  constructor(store, storage, clock, told, bound = Infinity, same2 = Object.is) {
     this.store = store;
     this.storage = storage;
     this.clock = clock;
     this.bound = bound;
     this.same = same2;
+    let cause = null;
+    storage.landed((landed) => {
+      const now3 = landed.ok ? null : causeOf(landed.error);
+      if (now3 === cause) return;
+      cause = now3;
+      told({
+        store,
+        file: storage.file,
+        behind: landed.ok ? null : landed.error
+      });
+    });
   }
   store;
   storage;
@@ -92697,10 +92726,11 @@ var HeldFile = class {
   // bound each run one way, whenever they come.
   early = [];
   // [LAW:one-source-of-truth] Whether the storage is yet to be handed the map
-  // as it stands: set by every change, cleared only once a save returns, so
-  // one that throws (history's) is still owed to the next change and to the
-  // close. Whether a write handed over lands is the storage's.
-  behind = false;
+  // as it stands: set by every change, cleared once a save is made. Whether a
+  // write handed over lands is the storage's, and it tells us. A write it
+  // refuses is not owed again until the next change or the close, since a
+  // timer retrying a disk that keeps refusing is load for nothing.
+  owed = false;
   clearOrderTimer = null;
   // [LAW:single-enforcer] Read once. A file that did not read is set aside by
   // the rule every state file keeps, before anything is written. What was
@@ -92754,14 +92784,14 @@ var HeldFile = class {
     let content = false;
     for (const change of changes)
       if (change.kind === "heard" || this.holds(change.key, change.value)) {
-        if (toNewest(this.held, change.key)) this.behind = true;
+        if (toNewest(this.held, change.key)) this.owed = true;
       } else if (putNewest(this.held, change.key, change.value)) {
         content = true;
-        this.behind = true;
+        this.owed = true;
       }
     const evicted2 = this.evict();
     if (content || evicted2.length > 0) this.save();
-    else if (this.behind) this.orderDue();
+    else if (this.owed) this.orderDue();
     return evicted2;
   }
   get(key) {
@@ -92776,10 +92806,10 @@ var HeldFile = class {
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
   // is still owed is handed over now, what is pending lands, and what is
   // taken after it stays in memory.
-  // A save that throws (history's is synchronous) rejects the close.
+  // A save that throws rejects the close.
   async close() {
     try {
-      if (this.behind) this.save();
+      if (this.owed) this.save();
     } finally {
       this.phase = "closed";
     }
@@ -92794,7 +92824,7 @@ var HeldFile = class {
     this.clearOrderTimer = null;
     if (this.phase !== "open") return;
     this.storage.save(this.held);
-    this.behind = false;
+    this.owed = false;
   }
   // [LAW:no-ambient-temporal-coupling] Only an open file is owed an order
   // write: a closed or refused one saves nothing, so it arms no timer.
@@ -92857,11 +92887,12 @@ var SessionBook = class {
   book;
   // The environment of each session heard since the daemon started.
   environments = /* @__PURE__ */ new Map();
-  constructor(storage, clock) {
+  constructor(storage, clock, told) {
     this.book = new HeldFile(
       "Session book",
       storage,
       clock,
+      told,
       MAX_SESSIONS4,
       sameDurable
     );
@@ -106102,10 +106133,15 @@ var stampedOf = (clock) => (made) => ({
 // src/daemon/held-stores.ts
 init_globals();
 var HeldStores = class {
-  constructor(storage, clock) {
+  constructor(storage, clock, told) {
     this.storage = storage;
-    this.sessions = new HeldFile("Session picks", storage.session, clock);
-    this.history = new HeldFile("Settings history", storage.history, clock);
+    this.sessions = new HeldFile("Session picks", storage.session, clock, told);
+    this.history = new HeldFile(
+      "Settings history",
+      storage.history,
+      clock,
+      told
+    );
   }
   storage;
   // [LAW:one-source-of-truth] Each store's order is its renderer's, which
@@ -106134,11 +106170,12 @@ var HeldStores = class {
     };
   }
   // A turn's stored writes, in the order it made them, each store's saved
-  // once. [LAW:no-silent-failure] A save that throws (the history's, written
-  // at once) throws once every store has taken its share, so the host's
-  // taking says it on every bar; a write behind says its failure where it
-  // lands. The renderer holds the refused write too, and the store's next
-  // write saves the copy held here whole.
+  // once. [LAW:no-silent-failure] A write a file refuses is told by its
+  // storage where it lands (the history's at once, the others behind), and
+  // the file stands behind on every bar until a write lands. A store whose
+  // taking throws anyway throws once every store has taken its share. The
+  // renderer holds the refused write too, and the store's next write saves
+  // the copy held here whole.
   take(writes2) {
     const sessions = [];
     const history = [];
@@ -107668,6 +107705,7 @@ function createDaemon(inputs) {
     restateOnceBuilt
   );
   const unsaved = /* @__PURE__ */ new Map();
+  const behind = /* @__PURE__ */ new Map();
   const storeReported = (reports) => {
     for (const report2 of reports) {
       const { file, found: found2 } = report2;
@@ -107679,6 +107717,21 @@ function createDaemon(inputs) {
         restateOnceBuilt();
       } else storeLoads.occur({ file, text: text6 });
     }
+  };
+  const storeStanding = ({
+    store,
+    file,
+    behind: error
+  }) => {
+    if (error === null) {
+      behind.delete(file);
+      log("info", `${store} (${file}) is current again: a write landed`);
+    } else {
+      const message = behindText(store, file, error);
+      behind.set(file, { kind: "store-unsaved", file, message });
+      log("warn", message);
+    }
+    restateOnceBuilt();
   };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
@@ -107702,7 +107755,7 @@ function createDaemon(inputs) {
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        unsaved: [...unsaved.values()],
+        unsaved: [...unsaved.values(), ...behind.values()],
         held: [
           ...launchPipes.held(),
           ...heldBy3("renderer-ended", rendererEnded),
@@ -107781,7 +107834,11 @@ function createDaemon(inputs) {
   });
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
-  const sessionBook = new SessionBook(inputs.sessionBook(log), clock);
+  const sessionBook = new SessionBook(
+    inputs.sessionBook(log),
+    clock,
+    storeStanding
+  );
   const primaryPrepared = prepareRenderer(
     inputs.rendererName,
     bundle.path,
@@ -108083,7 +108140,11 @@ function createDaemon(inputs) {
     reconcileTmux();
   };
   function prepareRenderer(name, reported2, entry) {
-    const stores = new HeldStores(inputs.profile(name, log), clock);
+    const stores = new HeldStores(
+      inputs.profile(name, log),
+      clock,
+      storeStanding
+    );
     const boot = () => ({
       stored: stores.current(),
       locations: locs,
@@ -108922,20 +108983,33 @@ var HISTORY_FILE = {
     return parsed2.kind === "failed" ? parsed2 : withoutRetiredChanges(parsed2.value);
   }
 };
-function fileHistoryStorage(file, logger) {
+function fileHistoryStorage(file, logger, publish = writeAtomic) {
+  const landings = new Landings();
+  let pending2 = null;
+  const write = () => {
+    if (pending2 === null) return LANDED;
+    let landed = LANDED;
+    try {
+      fs_default.mkdirSync(import_node_path29.default.dirname(file), { recursive: true });
+      publish(file, JSON.stringify(Object.fromEntries(pending2)), 384);
+      pending2 = null;
+    } catch (e) {
+      const error = asError(e);
+      logger("warn", `settings-history save failed: ${error.message}`);
+      landed = { ok: false, error };
+    }
+    return landings.tell(landed);
+  };
   return {
     ...sessionFileOnDisk(HISTORY_FILE, file),
     save: (state) => {
-      try {
-        fs_default.mkdirSync(import_node_path29.default.dirname(file), { recursive: true });
-        writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 384);
-      } catch (e) {
-        const message = `settings-history write failed \u2014 what this daemon holds undoes until it restarts, and the file keeps what it last saved: ${e.message}`;
-        logger("error", message);
-        throw new Error(message);
-      }
+      pending2 = new Map(state);
+      write();
     },
+    landed: (listener) => landings.listen(listener),
     flush: async () => {
+      const landed = write();
+      if (!landed.ok) throw landed.error;
     }
   };
 }
