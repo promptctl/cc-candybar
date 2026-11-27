@@ -401,7 +401,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                 }
               },
               "parse": {
@@ -602,6 +602,11 @@
     },
     "segments": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
+      },
       "properties": {
         "directory": {
           "$ref": "#/definitions/SegmentDelta"
@@ -688,7 +693,10 @@
           "id": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+            "pattern": "^[^/\\r\\n:]+(?![\\s\\S])",
+            "not": {
+              "pattern": "^(?:groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)"
+            }
           },
           "before": {
             "type": "string"
@@ -724,15 +732,20 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "to": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -746,7 +759,9 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "from": {
                 "anyOf": [
@@ -758,7 +773,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -768,7 +784,8 @@
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -782,7 +799,9 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "min": {
                 "type": "integer"
@@ -791,12 +810,16 @@
                 "type": "integer"
               },
               "by": {
-                "type": "integer"
+                "type": "integer",
+                "not": {
+                  "const": 0
+                }
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -806,21 +829,59 @@
               "max",
               "by"
             ],
+            "additionalProperties": false,
+            "description": "The loader requires min to be less than max."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+              },
+              "cycle": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+                },
+                "minItems": 2,
+                "uniqueItems": true
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "set",
+              "cycle"
+            ],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "int": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -833,39 +894,22 @@
           {
             "type": "object",
             "properties": {
-              "set": {
-                "type": "string"
+              "persist": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
-              "cycle": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "minItems": 2,
-                "uniqueItems": true
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
-              }
-            },
-            "required": [
-              "set",
-              "cycle"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "persist": {
-                "type": "string"
-              },
-              "to": {
-                "type": "string"
               },
               "layer": {
                 "enum": [
@@ -873,12 +917,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -891,7 +929,9 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "from": {
                 "anyOf": [
@@ -903,12 +943,20 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
                   }
                 ]
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -916,12 +964,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -934,7 +976,9 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "min": {
                 "type": "integer"
@@ -943,7 +987,17 @@
                 "type": "integer"
               },
               "by": {
-                "type": "integer"
+                "type": "integer",
+                "not": {
+                  "const": 0
+                }
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -951,12 +1005,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -965,22 +1013,33 @@
               "max",
               "by"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "description": "The loader requires min to be less than max."
           },
           {
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "cycle": {
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                 },
                 "minItems": 2,
                 "uniqueItems": true
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -988,12 +1047,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1006,10 +1059,21 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "removeSegment": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -1017,12 +1081,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1035,13 +1093,19 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "insertSegment": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
               },
               "anchor": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
               },
               "relation": {
                 "enum": [
@@ -1049,18 +1113,19 @@
                   "after"
                 ]
               },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
               "layer": {
                 "enum": [
                   "user",
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1075,7 +1140,9 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
               },
               "insertSegmentFrom": {
                 "anyOf": [
@@ -1087,7 +1154,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -1095,7 +1163,9 @@
                 ]
               },
               "anchor": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n:]+(?![\\s\\S])"
               },
               "relation": {
                 "enum": [
@@ -1103,18 +1173,19 @@
                   "after"
                 ]
               },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
               "layer": {
                 "enum": [
                   "user",
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1134,7 +1205,8 @@
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1152,7 +1224,8 @@
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1165,7 +1238,16 @@
             "type": "object",
             "properties": {
               "reset": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -1173,12 +1255,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1190,12 +1266,15 @@
             "type": "object",
             "properties": {
               "undo": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1208,12 +1287,15 @@
             "type": "object",
             "properties": {
               "redo": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1226,12 +1308,15 @@
             "type": "object",
             "properties": {
               "back": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1244,12 +1329,15 @@
             "type": "object",
             "properties": {
               "rewind": {
-                "const": true
+                "enum": [
+                  true
+                ]
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1262,7 +1350,16 @@
             "type": "object",
             "properties": {
               "save": {
-                "const": true
+                "enum": [
+                  true
+                ]
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -1271,12 +1368,6 @@
                   "local",
                   "ask"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1288,7 +1379,16 @@
             "type": "object",
             "properties": {
               "preset": {
-                "const": "save"
+                "enum": [
+                  "save"
+                ]
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -1296,12 +1396,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1313,10 +1407,19 @@
             "type": "object",
             "properties": {
               "preset": {
-                "const": "delete"
+                "enum": [
+                  "delete"
+                ]
               },
               "name": {
                 "type": "string"
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -1324,12 +1427,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1342,7 +1439,16 @@
             "type": "object",
             "properties": {
               "themeDefault": {
-                "const": "save"
+                "enum": [
+                  "save"
+                ]
+              },
+              "on": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "layer": {
                 "enum": [
@@ -1350,12 +1456,6 @@
                   "project",
                   "local"
                 ]
-              },
-              "on": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -1373,7 +1473,8 @@
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1387,15 +1488,21 @@
             "properties": {
               "run": {
                 "type": "array",
-                "items": {
+                "minItems": 1,
+                "items": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                ],
+                "additionalItems": {
                   "type": "string"
-                },
-                "minItems": 1
+                }
               },
               "env": {
                 "type": "object",
                 "propertyNames": {
-                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                 },
                 "additionalProperties": {
                   "type": "string"
@@ -1411,7 +1518,8 @@
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1425,16 +1533,17 @@
             "properties": {
               "do": {
                 "type": "array",
+                "minItems": 2,
                 "items": {
                   "type": "string",
                   "minLength": 1
-                },
-                "minItems": 2
+                }
               },
               "on": {
                 "type": "object",
                 "additionalProperties": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -1448,6 +1557,11 @@
     },
     "styles": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+      },
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -1519,6 +1633,11 @@
     },
     "presets": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
+      },
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -2182,7 +2301,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                     }
                   },
                   "parse": {
@@ -2384,7 +2503,7 @@
         "settings": {
           "type": "object",
           "propertyNames": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])",
             "not": {
               "enum": [
                 "theme",
@@ -2414,7 +2533,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[^/\\n\\r]+$"
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -2439,7 +2559,7 @@
                       },
                       "atLeast": {
                         "type": "string",
-                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                       }
                     }
                   }
@@ -2781,7 +2901,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                     }
                   },
                   "parse": {
@@ -2983,7 +3103,7 @@
         "settings": {
           "type": "object",
           "propertyNames": {
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])",
             "not": {
               "enum": [
                 "theme",
@@ -3013,7 +3133,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[^/\\n\\r]+$"
+                      "minLength": 1,
+                      "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -3038,7 +3159,7 @@
                       },
                       "atLeast": {
                         "type": "string",
-                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
                       }
                     }
                   }
@@ -3137,12 +3258,15 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^[^/\\r\\n:]+(?![\\s\\S])",
+              "not": {
+                "pattern": "^(?:groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)"
+              }
             },
             "settings": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
               },
               "additionalProperties": {
                 "anyOf": [
@@ -3173,7 +3297,7 @@
             },
             "name": {
               "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
             },
             "label": {
               "type": "string",
@@ -3190,7 +3314,8 @@
             },
             "key": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "pattern": "^[^/\\r\\n]+(?![\\s\\S])"
             },
             "bg": {
               "type": "string"
@@ -3237,12 +3362,15 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^[^/\\r\\n:]+(?![\\s\\S])",
+              "not": {
+                "pattern": "^(?:groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)"
+              }
             },
             "settings": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
               },
               "additionalProperties": {
                 "anyOf": [
@@ -3331,7 +3459,7 @@
             "rows": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
               },
               "additionalProperties": {
                 "$ref": "#/definitions/LayoutNode"

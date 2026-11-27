@@ -446,3 +446,102 @@ describe("authored picker values and their click destinations", () => {
     },
   );
 });
+
+describe("action records in the published schema and file loader", () => {
+  const file = "/config/project/candybar.json5";
+  const sourceOf = (action: object) =>
+    JSON.stringify({ actions: { shortcut: action } });
+  const fromFile = (action: object) =>
+    parseDslConfig(file, sourceOf(action)).actions?.shortcut;
+  const complete = [
+    { set: "page", int: true },
+    { set: "mode", cycle: ["one", "two"] },
+    { set: "mode", from: ["one", "two"] },
+    { persist: "globals.endcaps", to: "round", layer: "project" },
+    { persist: "globals.scrollSpeed", min: 1, max: 5, by: 1 },
+    { persist: "presets.default.root", removeSegment: "dir" },
+    {
+      persist: "presets.default.root",
+      insertSegment: "dir",
+      anchor: "git",
+      relation: "before",
+    },
+    {
+      persist: "presets.default.root",
+      insertSegmentFrom: ["dir"],
+      anchor: "git",
+      relation: "after",
+    },
+    { copy: "copy" },
+    { open: "https://example.invalid" },
+    { reset: "mode" },
+    { undo: true },
+    { redo: true },
+    { back: true },
+    { rewind: true },
+    { save: true, layer: "ask" },
+    { preset: "save" },
+    { preset: "delete", name: "mine" },
+    { themeDefault: "save" },
+    { slash: "/clear" },
+    { run: ["echo", ""] },
+    { do: ["a", "b"] },
+    { copy: "copy", on: { right: "other" } },
+  ];
+  test.each(complete)("admits the authored record %j", (action) => {
+    expect(schemaAccepts(sourceOf(action))).toBe(true);
+    expect(fromFile(action)).toBeDefined();
+  });
+  test.each([
+    { run: ["echo"], env: null },
+    { run: ["echo"], refreshes: null },
+    { run: ["echo"], refreshes: 5 },
+    { run: ["echo"], cwd: "/override" },
+    { run: [""] },
+    { run: ["echo"], env: { "9bad": "value" } },
+    { set: "k", min: 1, max: 2 },
+    { set: "k", min: 1, max: 2, by: 0 },
+    { set: "k", cycle: ["a", "a"] },
+    { set: "k", to: "one", layer: "user" },
+    { reset: "k", layer: "ask" },
+    { persist: "presets.default.root", insertSegment: "a", relation: "after" },
+    { preset: "save", name: "forbidden" },
+    { preset: "delete" },
+    { save: true, layer: null },
+  ])("refuses the invalid field without a usable action %j", (action) => {
+    expect(schemaAccepts(sourceOf(action))).toBe(false);
+    expect(() => fromFile(action)).toThrow(ConfigError);
+  });
+  test("only missing run fields receive defaults, and the declaring file owns cwd", () => {
+    expect(fromFile({ run: ["echo"] })).toEqual({
+      run: ["echo"],
+      env: {},
+      refreshes: [],
+      cwd: "/config/project",
+    });
+  });
+  test("a misspelled writer field offers layer and on, and an invalid sibling is diagnosed too", () => {
+    expect(() => fromFile({ reset: 42, layre: "local" })).toThrow(
+      /Unknown key "layre" on a reset action\. Expected only: (?=[^\n]*\blayer\b)(?=[^\n]*\bon\b)/,
+    );
+    expect(() => fromFile({ reset: 42, layre: "local" })).toThrow(/reset key/);
+  });
+  test("a missing source reports its invalid destination and gesture in the same load", () => {
+    const bad = () => fromFile({ persist: 42, on: { left: "other" } });
+    expect(bad).toThrow(/persist key/);
+    expect(bad).toThrow(/plain click/);
+    expect(bad).toThrow(/exactly one value source/);
+  });
+  test("an ambiguous persist lists the actual source discriminators and omits companion fields", () => {
+    const bad = {
+      persist: "presets.default.root",
+      removeSegment: "old",
+      insertSegment: "new",
+      anchor: "old",
+      relation: "after",
+    };
+    expect(() => fromFile(bad)).toThrow(
+      "value source: to, from, min, cycle, removeSegment, insertSegment, insertSegmentFrom — found: removeSegment, insertSegment",
+    );
+  });
+});
