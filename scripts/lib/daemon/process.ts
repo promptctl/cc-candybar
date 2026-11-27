@@ -54,18 +54,20 @@ const TSX_LOADER = pathToFileURL(
 // if it has not answered within ~60 ms, so a daemon the scheduler is slow to
 // run dies before its shutdown runs.
 const sourceDaemon =
-  (argv: DaemonArgs): DaemonEntry =>
+  (
+    argv: DaemonArgs,
+    script = path.join(REPO, "src", "index.ts"),
+  ): DaemonEntry =>
   (env) => ({
     bin: process.execPath,
-    args: [
-      "--import",
-      TSX_LOADER,
-      ...argv(path.join(REPO, "src", "index.ts"), env),
-    ],
+    args: ["--import", TSX_LOADER, ...argv(script, env)],
   });
 
 // [LAW:one-source-of-truth] After the loader come the arguments the client's
 // own spawn ships, heap cap included.
+export const daemonAt = (script: string): DaemonEntry =>
+  sourceDaemon(daemonArgs, script);
+
 export const SOURCE_ENTRY: DaemonEntry = sourceDaemon(daemonArgs);
 
 // The daemon's source run by hand, with no spawner in front of it. The client

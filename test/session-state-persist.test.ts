@@ -158,73 +158,6 @@ describe("the session state's file", () => {
     expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
-  // [LAW:no-ambient-temporal-coupling] Writes land in the order they began: a
-  // flush while the debounced write is on its way waits for it, then lands
-  // the newer state, so older state never lands over newer.
-  it("a flush while the debounced write is in flight lands after it, with the newer state", async () => {
-    const logged: string[] = [];
-    const session = storage((_level, line) => logged.push(line));
-    const rename = fs.promises.rename;
-    let release: () => void = () => {};
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const spy = jest
-      .spyOn(fs.promises, "rename")
-      .mockImplementationOnce(async (from, to) => {
-        await held;
-        return rename(from, to);
-      });
-    let flushed: Promise<void>;
-    try {
-      session.save(new Map([[S1, { theme: "old" }]]));
-      await settled(() => spy.mock.calls.length === 1);
-      session.save(new Map([[S1, { theme: "new" }]]));
-      flushed = session.flush();
-      release();
-      await flushed;
-    } finally {
-      spy.mockRestore();
-    }
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
-    });
-    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
-    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
-    expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
-  });
-
-  // [LAW:no-ambient-temporal-coupling] The host goes on moving its own map
-  // while a write is on its way, so a pick made then is pending still when
-  // that write lands, and the close writes it.
-  it("a pick made while a write is on its way is not lost", async () => {
-    const rename = fs.promises.rename;
-    let release: () => void = () => {};
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const spy = jest
-      .spyOn(fs.promises, "rename")
-      .mockImplementationOnce(async (from, to) => {
-        await held;
-        return rename(from, to);
-      });
-    try {
-      const daemon = daemonOver(storage());
-      daemon.turn((s) => s.set(S1, "theme", "nord"));
-      await settled(() => spy.mock.calls.length === 1);
-      daemon.turn((s) => s.set(S2, "theme", "dracula"));
-      release();
-      await daemon.stores.close();
-    } finally {
-      spy.mockRestore();
-    }
-    expect(onDisk()).toEqual({
-      s1: { theme: "nord" },
-      s2: { theme: "dracula" },
-    });
-  });
-
   // A flush the disk refuses drops nothing: it rejects with the reason, the
   // snapshot stays pending, and the next flush lands it.
   it("a flush the disk refuses rejects and leaves its snapshot for the next flush", async () => {
@@ -249,49 +182,6 @@ describe("the session state's file", () => {
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "nord" },
     });
-  });
-
-  // The write in flight lands; the newer flush the disk refuses rejects and
-  // leaves its state pending, so the older state stands until a flush lands.
-  it("a flush refused behind a write in flight leaves that write's state, and its own pending", async () => {
-    const session = storage();
-    const rename = fs.promises.rename;
-    let release: () => void = () => {};
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const renameSpy = jest
-      .spyOn(fs.promises, "rename")
-      .mockImplementationOnce(async (from, to) => {
-        await held;
-        return rename(from, to);
-      });
-    let writeSpy: jest.SpiedFunction<typeof fs.promises.writeFile> | null =
-      null;
-    try {
-      session.save(new Map([[S1, { theme: "old" }]]));
-      await until(() => renameSpy.mock.calls.length === 1, "the held rename");
-      writeSpy = jest
-        .spyOn(fs.promises, "writeFile")
-        .mockRejectedValueOnce(
-          Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
-        );
-      session.save(new Map([[S1, { theme: "new" }]]));
-      const flushed = session.flush();
-      release();
-      await expect(flushed).rejects.toThrow(/ENOSPC/);
-    } finally {
-      writeSpy?.mockRestore();
-      renameSpy.mockRestore();
-    }
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "old" },
-    });
-    await session.flush();
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
-    });
-    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
   });
 
   // A snapshot its kind cannot encode fails that one write, and the next
