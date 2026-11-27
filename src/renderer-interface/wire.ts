@@ -453,8 +453,7 @@ export function rendererOverLines(deps: {
             return true;
           }
           if (
-            heard.output.feedUpdates !== undefined &&
-            !validFeedUpdates(heard.output.feedUpdates)
+            !validFeedUpdates(heard.output.feedUpdates, heard.output.frames)
           ) {
             reject(
               new Error(`renderer output ${heard.n} has invalid feed updates`),

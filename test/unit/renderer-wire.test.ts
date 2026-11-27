@@ -180,6 +180,14 @@ test("both presentation paths carry the displayed event in their turn's answer",
         awaiting: { kind: "settled", seq: 1 },
       },
     ],
+    feedUpdates: [
+      {
+        sequence: 1,
+        session,
+        schedule: { kind: "frame", next: 1 as Tick, change: null },
+        changed: ["pane"],
+      },
+    ],
     frames: [
       {
         session,
@@ -211,6 +219,28 @@ test("both presentation paths carry the displayed event in their turn's answer",
   });
   expect(answer).toEqual({ ...output, turnMs: 0 });
   expect(heard).toMatchObject([{ kind: "output", output }]);
+  for (const invalid of [
+    { ...output, feedUpdates: undefined },
+    { ...output, frames: [] },
+    { ...output, frames: [...output.frames, ...output.frames] },
+  ]) {
+    const broken = linesOver(undefined, {
+      renderer: timed(
+        { answer: async () => invalid },
+        () => 0,
+        unexpectedTimingProblem,
+      ),
+      heard: [],
+    });
+    await expect(
+      broken.renderer.answer({
+        kind: "event",
+        event: { kind: "due" },
+        at: 7 as Instant,
+        tick: 0 as Tick,
+      }),
+    ).rejects.toThrow("invalid feed updates");
+  }
 });
 
 function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {

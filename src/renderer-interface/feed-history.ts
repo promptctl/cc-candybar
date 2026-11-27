@@ -128,31 +128,53 @@ function isSchedule(value: unknown): boolean {
   }
 }
 
-export function validFeedUpdates(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (update) =>
-        isPlainObject(update) &&
-        Number.isSafeInteger(update.sequence) &&
-        Number(update.sequence) > 0 &&
-        typeof update.session === "string" &&
-        update.session.length > 0 &&
-        isSchedule(update.schedule) &&
-        (update.viewers === undefined || update.viewers === true) &&
-        (update.changed === undefined ||
-          (Array.isArray(update.changed) &&
-            update.changed.every(
-              (lane) => typeof lane === "string" && Object.hasOwn(LANES, lane),
-            ) &&
-            new Set(update.changed).size === update.changed.length)) &&
-        Object.keys(update).length ===
-          3 +
-            Number(update.viewers !== undefined) +
-            Number(update.changed !== undefined),
-    ) &&
-    new Set(value.map((update) => update.session)).size === value.length
-  );
+// [LAW:parse-dont-validate] A draw and its comparison refer to exactly
+// the same attempt. Check the pairing before the host can publish a frame,
+// including an answer which omitted the history field altogether.
+export function validFeedUpdates(value: unknown, frames: unknown): boolean {
+  if (!Array.isArray(frames)) return false;
+  if (value === undefined) return frames.length === 0;
+  if (!Array.isArray(value)) return false;
+  const attempts = new Set<string>();
+  for (const frame of frames) {
+    if (
+      !isPlainObject(frame) ||
+      typeof frame.session !== "string" ||
+      attempts.has(frame.session)
+    )
+      return false;
+    attempts.add(frame.session);
+  }
+  const seen = new Set<string>();
+  for (const update of value) {
+    if (
+      !isPlainObject(update) ||
+      typeof update.session !== "string" ||
+      !update.session.length ||
+      seen.has(update.session) ||
+      !Number.isSafeInteger(update.sequence) ||
+      Number(update.sequence) <= 0 ||
+      !isSchedule(update.schedule) ||
+      (update.viewers !== undefined && update.viewers !== true) ||
+      Object.keys(update).length !==
+        3 +
+          Number(update.viewers !== undefined) +
+          Number(update.changed !== undefined)
+    )
+      return false;
+    seen.add(update.session);
+    if (update.changed === undefined) continue;
+    if (
+      !attempts.delete(update.session) ||
+      !Array.isArray(update.changed) ||
+      !update.changed.every(
+        (lane) => typeof lane === "string" && Object.hasOwn(LANES, lane),
+      ) ||
+      new Set(update.changed).size !== update.changed.length
+    )
+      return false;
+  }
+  return attempts.size === 0;
 }
 
 export function validFeedAdvances(value: unknown): boolean {

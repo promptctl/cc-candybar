@@ -116,10 +116,6 @@ export class HostFeedHistory {
               `feed for ${session} reported a schedule without viewers`,
             );
           const frame = frames.get(session);
-          if ((changed !== undefined) !== (frame !== undefined))
-            throw new Error(
-              `feed for ${session} did not pair its draw with a comparison`,
-            );
           let rates = history?.rates ?? {};
           if (update.viewers || changed?.length) {
             const kept: Partial<Record<Lane, readonly Tick[]>> = {};
