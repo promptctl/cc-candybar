@@ -1,3 +1,9 @@
+## [1.245.2](https://github.com/promptctl/cc-candybar/compare/v1.245.1...v1.245.2) (2026-11-27)
+
+### Bug Fixes
+
+* **ssh-links:** a forwarded click's own failure is told as itself; desktop acts go through the one performer ([#987](https://github.com/promptctl/cc-candybar/issues/987)) ([90d265c](https://github.com/promptctl/cc-candybar/commit/90d265cab09e4d71ab46d30287a5944220706931))
+
 ## [1.245.1](https://github.com/promptctl/cc-candybar/compare/v1.245.0...v1.245.1) (2026-11-27)
 
 ### Bug Fixes
