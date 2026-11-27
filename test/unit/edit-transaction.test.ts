@@ -1,3 +1,4 @@
+import { autorun, computed } from "mobx";
 import type { ConfigSnapshot, Layer } from "../../src/config/config-snapshot";
 import type { RenderOrigin } from "../../src/config-hint";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
@@ -88,4 +89,37 @@ test("an open edit reads as arranging with no write of its mode, and a write of 
   edits.view.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
   expect(edits.view.get(sid, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
   expect(committed.get(sid, EDIT_MODE_KEY)).toBeNull();
+});
+
+test("one draft pick invalidates only its own reader, including a clear and a return to inheritance", () => {
+  const committed = new SessionState();
+  const edits = new EditTransactions(committed, () => {});
+  committed.set(sid, "pick.17", "original");
+  edits.open(sid, origin, snapshot("approved"), new Map());
+  const evaluations = Array<number>(128).fill(0);
+  const values = new Map<number, string | null>();
+  const stops = evaluations.map((_, i) => {
+    const read = computed(() => {
+      evaluations[i]!++;
+      return edits.view.get(sid, `pick.${i}`);
+    });
+    return autorun(() => values.set(i, read.get()));
+  });
+  try {
+    evaluations.fill(0);
+    edits.view.clear(sid, "pick.17");
+    expect(values.get(17)).toBeNull();
+    expect(evaluations.reduce((a, b) => a + b)).toBe(1);
+    const cleared = edits.view.revision(sid);
+    edits.view.clear(sid, "pick.17");
+    expect(edits.view.revision(sid)).toBe(cleared);
+    committed.set(sid, "pick.17", "later");
+    expect(values.get(17)).toBeNull();
+    edits.view.set(sid, "pick.17", "later");
+    committed.set(sid, "pick.17", "inherited");
+    expect(values.get(17)).toBe("inherited");
+    expect(evaluations.reduce((a, b) => a + b)).toBe(3);
+  } finally {
+    for (const stop of stops) stop();
+  }
 });

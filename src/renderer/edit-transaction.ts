@@ -154,8 +154,11 @@ const ENDED: Unheld = { get: () => null, put: () => {} };
 class EditDraft implements DraftWrites {
   // Every write this session made inside the edit, as the edit reads it,
   // from the writes of the click that opened it on.
-  private readonly writes: Map<string, string | null>;
-  private files = new Map<string, string | null>();
+  private readonly writes = observable.map<string, string | null>(undefined, {
+    deep: false,
+  });
+  private pickRevision = 0;
+  private readonly files = new Map<string, string | null>();
   private readonly history: SettingsHistory;
   readonly navigation = new NavigationHistory();
   private latest: ConfigSnapshot;
@@ -173,7 +176,9 @@ class EditDraft implements DraftWrites {
     log: DaemonLogger,
     first: SessionWrites,
   ) {
-    this.writes = new Map(first);
+    runInAction(() => {
+      for (const [key, value] of first) this.writes.set(key, value);
+    });
     this.latest = base;
     this.#revision = revisionOf(base);
     // [LAW:one-type-per-behavior] The same undo step and journal serve a
@@ -234,14 +239,22 @@ class EditDraft implements DraftWrites {
     return this.committed.get(this.session, key);
   }
 
-  put(key: string, value: string | null): void {
-    if (this.committed.get(this.session, key) === value)
-      this.writes.delete(key);
-    else this.writes.set(key, value);
+  put(key: string, value: string | null): boolean {
+    // [LAW:types-are-the-program] An absent override reads through to the
+    // committed pick. An override holding null keeps even a later pick hidden.
+    const held =
+      this.committed.get(this.session, key) === value ? undefined : value;
+    if (this.writes.get(key) === held) return false;
+    if (held === undefined) this.writes.delete(key);
+    else this.writes.set(key, held);
+    this.pickRevision++;
+    return true;
   }
 
   begin(prove: ConfigFiles["prove"]): EditTurn {
-    const working = new Map(this.files);
+    // [LAW:carrying-cost] A click stages just the layers it touches. Only
+    // Save needs to enumerate all overrides that will reach the file writer.
+    const working = new Map<string, string | null | undefined>();
     const layerAt = (file: string): Layer => {
       const layer = layerAtPath(this.base.chain, file);
       if (layer === undefined)
@@ -249,14 +262,19 @@ class EditDraft implements DraftWrites {
       return layer;
     };
     const files: ConfigFiles = {
-      read: (file) =>
-        working.has(file)
-          ? contentOfText(working.get(file)!)
-          : layerAt(file).content,
+      read: (file) => {
+        const held = working.has(file)
+          ? working.get(file)
+          : this.files.get(file);
+        return held === undefined ? layerAt(file).content : contentOfText(held);
+      },
       land: (file, _before, after) => {
-        if (after === requireLayerText(file, layerAt(file).content))
-          working.delete(file);
-        else working.set(file, after);
+        const held =
+          after === requireLayerText(file, layerAt(file).content)
+            ? undefined
+            : after;
+        if (this.files.get(file) === held) working.delete(file);
+        else working.set(file, held);
       },
       roleOf: (file) => layerAt(file).role,
       pathOf: (role) => layerForRole(this.base.chain, role)?.path ?? null,
@@ -268,12 +286,14 @@ class EditDraft implements DraftWrites {
       journal,
       navigation: this.navigation,
       commit: () => {
-        const before = new Map(this.writes);
+        const before = this.pickRevision;
         const clicked = journal.commit().get(this.session) ?? new Map();
-        const stateMoved = !sameEntries(before, this.writes);
-        if (sameEntries(working, this.files))
-          return { moved: stateMoved, clicked };
-        this.files = working;
+        if (working.size === 0)
+          return { moved: before !== this.pickRevision, clicked };
+        for (const [file, held] of working) {
+          if (held === undefined) this.files.delete(file);
+          else this.files.set(file, held);
+        }
         this.refreshSnapshot();
         return { moved: true, clicked };
       },
@@ -282,7 +302,11 @@ class EditDraft implements DraftWrites {
         // host. Disjoint edits can coexist; a conflicting address or moved
         // layer leaves the transaction open with the preview as it was.
         const rewritten = new Map<string, string | null>();
-        for (const [path, after] of working) {
+        for (const path of new Set([...this.files.keys(), ...working.keys()])) {
+          const after = working.has(path)
+            ? working.get(path)
+            : this.files.get(path);
+          if (after === undefined) continue;
           const source = layerAt(path);
           const target = layerForRole(latest.chain, source.role);
           if (target?.path !== path)
@@ -336,22 +360,15 @@ class EditDraft implements DraftWrites {
   }
 }
 
-function sameEntries(left: SessionWrites, right: SessionWrites): boolean {
-  return (
-    left.size === right.size &&
-    [...left].every(([key, value]) => right.get(key) === value)
-  );
-}
-
-interface Entry {
-  readonly draft: EditDraft | null;
-  readonly revision: number;
-}
-
 // [LAW:one-source-of-truth] The transaction is the only owner of edit mode.
 // Each session's view overlays exactly its own draft; no draft is persisted.
 export class EditTransactions {
-  private readonly entries = observable.map<SessionId, Entry>(undefined, {
+  // [LAW:one-source-of-truth] Key readers observe the open draft's identity
+  // and the one override they read. Revision readers track every change.
+  private readonly drafts = observable.map<SessionId, EditDraft>(undefined, {
+    deep: false,
+  });
+  private readonly revisions = observable.map<SessionId, number>(undefined, {
     deep: false,
   });
 
@@ -376,12 +393,12 @@ export class EditTransactions {
       setBatch: routed.setBatch,
       clear: routed.clear,
       revision: (sid) =>
-        committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0),
+        committed.revision(sid) + (this.revisions.get(sid) ?? 0),
     };
   }
 
   draft(sid: SessionId): EditDraft | null {
-    return this.entries.get(sid)?.draft ?? null;
+    return this.drafts.get(sid) ?? null;
   }
 
   // The session's open edit as the router writes into it: each write a
@@ -393,8 +410,7 @@ export class EditTransactions {
       : {
           read: (key) => draft.read(key),
           put: (key, value) => {
-            draft.put(key, value);
-            this.changed(sid);
+            if (draft.put(key, value)) this.changed(sid);
           },
         };
   }
@@ -409,8 +425,8 @@ export class EditTransactions {
   configured(origin: RenderOrigin, snapshot: ConfigSnapshot): SessionId[] {
     const key = originKey(origin);
     const refreshed: SessionId[] = [];
-    for (const [sid, { draft }] of this.entries) {
-      if (draft === null || originKey(draft.origin) !== key) continue;
+    for (const [sid, draft] of this.drafts) {
+      if (originKey(draft.origin) !== key) continue;
       draft.updated(snapshot);
       refreshed.push(sid);
     }
@@ -447,7 +463,9 @@ export class EditTransactions {
   }
 
   changed(sid: SessionId): void {
-    this.update(sid, this.draft(sid));
+    runInAction(() =>
+      this.revisions.set(sid, (this.revisions.get(sid) ?? 0) + 1),
+    );
   }
 
   moved(sid: SessionId, origin: RenderOrigin): boolean {
@@ -463,11 +481,17 @@ export class EditTransactions {
   }
 
   retire(sid: SessionId): void {
-    runInAction(() => this.entries.delete(sid));
+    runInAction(() => {
+      this.drafts.delete(sid);
+      this.revisions.delete(sid);
+    });
   }
 
   private update(sid: SessionId, draft: EditDraft | null): void {
-    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
-    runInAction(() => this.entries.set(sid, { draft, revision }));
+    runInAction(() => {
+      if (draft === null) this.drafts.delete(sid);
+      else this.drafts.set(sid, draft);
+      this.changed(sid);
+    });
   }
 }
