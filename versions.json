@@ -4,15 +4,22 @@
     {
       "version": "pr-987",
       "ref": "refs/pull/987/merge",
-      "sha": "270cb512fc619464332e8760c3bbdcb31d2e1839",
-      "timestamp": "2026-11-27T22:15:13.918Z",
+      "sha": "03984a8188e939e693184f8a946a5989b5cc3d02",
+      "timestamp": "2026-11-27T22:29:41.596Z",
       "commits": [
         {
-          "sha": "270cb512fc619464332e8760c3bbdcb31d2e1839",
+          "sha": "03984a8188e939e693184f8a946a5989b5cc3d02",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T15:14:04-07:00",
-          "message": "Merge 7d2c35229b36a951587f255e66d3f02859148d38 into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+          "timestamp": "2026-11-27T22:28:23Z",
+          "message": "Merge d7af4caf452e5556d00110e1ad1908caddb3b516 into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+        },
+        {
+          "sha": "d7af4caf452e5556d00110e1ad1908caddb3b516",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T15:28:02-07:00",
+          "message": "fix(ssh-links): tell a daemon-spoken click failure as the daemon's, not a dead forward\n\nThe URL handler worded every failed verdict as a forward that took nothing, so a\nclick the daemon answered it could not take (no renderer, an oversized verdict)\nblamed the ssh connection. A failure the daemon said is now told with its reason;\nonly a frame that never reached the daemon blames the forward.\n\nAlso: the performer's table can no longer end an act as handed to the desktop,\nthe desktop act line cites its law again, a failure beside a malformed acts list\nor a non-string failure is kept by the URL handler, and the stale verdict\ncomments say what the code does.\n"
         },
         {
           "sha": "7d2c35229b36a951587f255e66d3f02859148d38",

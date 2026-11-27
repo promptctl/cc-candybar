@@ -105509,7 +105509,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const problem = inspectionPayloadProblem(reply);
     if (problem !== null) throw new Error(`${label2} returned ${problem}`);
   };
-  const inSlot = async (input, queuedMs, captures, actsOn) => {
+  const inSlot = async (input, queuedMs, actsOn, captures = []) => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
     const session = sessionOfEvent(input.event);
@@ -105833,12 +105833,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         settled: Promise.resolve([{ kind: "failed", reason: made.message }])
       };
     const input = stamped(made);
-    const { received, turn, settled: settled3 } = await inSlot(
-      input,
-      0,
-      [],
-      ACTS_ON_DAEMON
-    );
+    const { received, turn, settled: settled3 } = await inSlot(input, 0, ACTS_ON_DAEMON);
     record3(input.event, [["why", why]], turn);
     const threw2 = turn.kind === "threw" ? [
       {
@@ -105896,7 +105891,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const settleInSlot = async (effect, outcome) => {
     const input = stamped(doneOf(effect, outcome));
-    const { turn, settled: settled3 } = await inSlot(input, 0, [], ACTS_ON_DAEMON);
+    const { turn, settled: settled3 } = await inSlot(input, 0, ACTS_ON_DAEMON);
     record3(input.event, [["effect", String(effect.id)]], turn);
     return { settled: settled3.then(() => outcome) };
   };
@@ -105978,8 +105973,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          (made.event.kind === "click" ? made.runEvidence : void 0) ?? [],
-          actsOn
+          actsOn,
+          made.event.kind === "click" ? made.runEvidence : void 0
         );
         if (starting && slotted.turn.kind === "answered") restore = void 0;
         if (made.event.kind === "click" && restore !== void 0)
