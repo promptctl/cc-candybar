@@ -103926,6 +103926,10 @@ var Acts = class {
       )
     );
   }
+  // [LAW:dataflow-not-control-flow] One act, by its kind's performer, or
+  // handed to the desktop when its click's writer runs there. A throw is
+  // classified once, here: a refusal the user can act on, the daemon's close,
+  // or a failure.
   async perform(act, actsOn) {
     const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act, actsOn);
     this.deps.log(
@@ -105658,10 +105662,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           );
       } else acts.push(effect);
     }
-    const performed = (act) => world.perform(act, actsOn);
     let before = Promise.resolve();
     for (const act of acts) {
-      const acted = configOutcome.kind === "ok" ? before.then(() => performed(act)).catch(
+      const acted = configOutcome.kind === "ok" ? before.then(() => world.perform(act, actsOn)).catch(
         (error) => ({
           kind: "failed",
           reason: failureOf(error).detail

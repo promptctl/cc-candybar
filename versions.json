@@ -4,15 +4,22 @@
     {
       "version": "pr-987",
       "ref": "refs/pull/987/merge",
-      "sha": "03984a8188e939e693184f8a946a5989b5cc3d02",
-      "timestamp": "2026-11-27T22:29:41.596Z",
+      "sha": "743f62834e5ed6a14df31d91076495e87a68ce71",
+      "timestamp": "2026-11-27T22:41:06.942Z",
       "commits": [
         {
-          "sha": "03984a8188e939e693184f8a946a5989b5cc3d02",
+          "sha": "743f62834e5ed6a14df31d91076495e87a68ce71",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T22:28:23Z",
-          "message": "Merge d7af4caf452e5556d00110e1ad1908caddb3b516 into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+          "timestamp": "2026-11-27T22:40:02Z",
+          "message": "Merge 28f163ef2f486c742d1663edcdc42a7cdadc04b4 into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+        },
+        {
+          "sha": "28f163ef2f486c742d1663edcdc42a7cdadc04b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T15:39:48-07:00",
+          "message": "fix(ssh-links): word a click's own failure as the click's, and test how a verdict is told\n\nA failure after the acts a click asked is told as the click's failure, not as an\nact left undone. A failure with no acts key is a malformed verdict, not an older\ndaemon. The verdict-to-forward mapping moves beside the verdict parser so the\ncheck asserts it. The performer loses its test-only overload, and the comments\nthat claimed a failed response means the click never ran say what is true.\n"
         },
         {
           "sha": "d7af4caf452e5556d00110e1ad1908caddb3b516",
