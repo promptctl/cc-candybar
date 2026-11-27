@@ -55,9 +55,10 @@ test("a replacement restores a committed menu and confirmation without restoring
 // not thrown into the turn that made it, and what the turn changed is held.
 test("a history its file refuses is told, and the step is still held", () => {
   const told: StoreStanding[] = [];
+  const error = new Error("ENOSPC");
   const history = heldStorage<SessionHistory>(undefined, {
     file: "/state/history.json",
-    save: () => history.land({ ok: false, error: new Error("ENOSPC") }),
+    save: () => history.land({ ok: false, error }),
   });
   const stores = held({ history: history.storage }, (standing) =>
     told.push(standing),
@@ -70,9 +71,29 @@ test("a history its file refuses is told, and the step is still held", () => {
     {
       store: "Settings history",
       file: "/state/history.json",
-      behind: "ENOSPC",
+      behind: error,
     },
   ]);
+  expect(stores.current().history[S1]).toEqual(STEP);
+  expect(stores.current().sessions[S1]).toEqual({ pick: "a" });
+});
+
+// [LAW:single-enforcer] Each store its own error boundary: one whose taking
+// throws costs the other none of its share, and the turn still says it threw.
+test("a store whose taking throws leaves the other store its share", () => {
+  const stores = held({
+    session: heldStorage<Record<string, string>>(undefined, {
+      save: () => {
+        throw new Error("a save that throws");
+      },
+    }).storage,
+  });
+  expect(() =>
+    stores.take([
+      { kind: "put", store: "settings-history", key: S1, value: STEP },
+      { kind: "put", store: "session-state", key: S1, value: { pick: "a" } },
+    ]),
+  ).toThrow("a save that throws");
   expect(stores.current().history[S1]).toEqual(STEP);
   expect(stores.current().sessions[S1]).toEqual({ pick: "a" });
 });

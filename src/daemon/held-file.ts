@@ -19,6 +19,11 @@ import type {
   StoreStanding,
 } from "./foundations/stored-file.js";
 
+// What a failed write came to, as the same thing every time its cause is: a
+// system error's code, or the message of an error that has none.
+const causeOf = (error: Error): string =>
+  (error as NodeJS.ErrnoException).code ?? error.message;
+
 // [LAW:carrying-cost] How long a change of order alone waits for its write.
 // Order is what the bound reads after a restart, and a write on every
 // hearing would make the bar's load grow with its tick; once a period, at
@@ -70,13 +75,21 @@ export class HeldFile<V> {
     // a hearing: it moves only the session's place.
     private readonly same: (held: V, put: V) => boolean = Object.is,
   ) {
-    storage.landed((landed) =>
+    // [LAW:one-source-of-truth] The file's standing is held here, once: it is
+    // told when it changes, and a failure is the same standing while its
+    // cause is. The message is not the cause: a failed write's names a staged
+    // file unique to the attempt, so the code is.
+    let cause: string | null = null;
+    storage.landed((landed) => {
+      const now = landed.ok ? null : causeOf(landed.error);
+      if (now === cause) return;
+      cause = now;
       told({
         store,
         file: storage.file,
-        behind: landed.ok ? null : landed.error.message,
-      }),
-    );
+        behind: landed.ok ? null : landed.error,
+      });
+    });
   }
 
   // [LAW:single-enforcer] Read once. A file that did not read is set aside by
@@ -163,10 +176,13 @@ export class HeldFile<V> {
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
   // is still owed is handed over now, what is pending lands, and what is
   // taken after it stays in memory.
-  // A write the file refuses rejects the close.
+  // A save that throws rejects the close.
   async close(): Promise<void> {
-    if (this.behind) this.save();
-    this.phase = "closed";
+    try {
+      if (this.behind) this.save();
+    } finally {
+      this.phase = "closed";
+    }
     await this.storage.flush();
   }
 

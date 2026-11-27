@@ -529,38 +529,45 @@ describe("the session state's file", () => {
     expect(said).toContain(`it is kept as ${join(dir, "dotfiles", aside!)}`);
   });
 
-  it("a file the daemon may not read is kept beside itself, and the store saves on", async () => {
-    writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
-    using _denied = refuseFile(file, "openSync");
-    const { turn, said, stores } = daemonOver(storage());
-    turn((s) => s.set(S2, "theme", "dracula"));
-    await stores.close();
-    const [aside] = fs.readdirSync(dir).filter((f) => f.includes(".unread-"));
-    expect(JSON.parse(readFileSync(join(dir, aside!), "utf8"))).toEqual({
-      s1: { theme: "nord" },
-    });
-    expect(onDisk()).toEqual({ s2: { theme: "dracula" } });
-    expect(said).toMatch(/EACCES/);
-  });
+  it(
+    "a file the daemon may not read is kept beside itself, and the store saves on",
+    async () => {
+      writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
+      using _denied = refuseFile(file, "openSync");
+      const { turn, said, stores } = daemonOver(storage());
+      turn((s) => s.set(S2, "theme", "dracula"));
+      await stores.close();
+      const [aside] = fs.readdirSync(dir).filter((f) => f.includes(".unread-"));
+      expect(JSON.parse(readFileSync(join(dir, aside!), "utf8"))).toEqual({
+        s1: { theme: "nord" },
+      });
+      expect(onDisk()).toEqual({ s2: { theme: "dracula" } });
+      expect(said).toMatch(/EACCES/);
+    },
+  );
 
   // [LAW:no-silent-failure] A file that can be neither read nor set aside is
   // never saved to, and the bar says so for as long as the daemon runs.
-  it("a file that can be neither read nor set aside is left as it was", async () => {
-    writeFileSync(file, "{ not json");
-    using _denied = refuseFile(file, "renameSync");
-    const { turn, said, stores } = daemonOver(storage());
-    turn((s) => s.set(S2, "theme", "dracula"));
-    await stores.close();
-    expect(readFileSync(file, "utf8")).toBe("{ not json");
-    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
-    expect(said).toMatch(/setting it aside failed \(EACCES/);
-  });
+  it(
+    "a file that can be neither read nor set aside is left as it was",
+    async () => {
+      writeFileSync(file, "{ not json");
+      using _denied = refuseFile(file, "renameSync");
+      const { turn, said, stores } = daemonOver(storage());
+      turn((s) => s.set(S2, "theme", "dracula"));
+      await stores.close();
+      expect(readFileSync(file, "utf8")).toBe("{ not json");
+      expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
+      expect(said).toMatch(/setting it aside failed \(EACCES/);
+    },
+  );
 
   // [LAW:no-silent-failure] A write behind has no caller to throw into, so
   // each write's outcome is told to whoever holds the file.
   it("tells each write's outcome, a failure with its error, then a landing", async () => {
     const refused = { value: true };
-    const told: Array<string | null> = [];
+    const failure = new Error("ENOSPC: no space left on device");
+    const told: Array<Error | null> = [];
     const refusing = new SessionFile(
       SESSION_STATE_FILE,
       file,
@@ -568,15 +575,13 @@ describe("the session state's file", () => {
       0,
       () => {},
       async () => {
-        if (refused.value) throw new Error("ENOSPC: no space left on device");
+        if (refused.value) throw failure;
       },
     );
-    refusing.landed((landed) =>
-      told.push(landed.ok ? null : landed.error.message),
-    );
+    refusing.landed((landed) => told.push(landed.ok ? null : landed.error));
     refusing.save(new Map([[S1, { theme: "nord" }]]));
     await expect(refusing.flush()).rejects.toThrow("ENOSPC");
-    expect(told).toEqual(["ENOSPC: no space left on device"]);
+    expect(told).toEqual([failure]);
     refused.value = false;
     await refusing.flush();
     expect(told.at(-1)).toBeNull();

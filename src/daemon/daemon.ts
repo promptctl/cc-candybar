@@ -364,8 +364,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   );
   // A file nothing is saved to stands for as long as this daemon runs.
   const unsaved = new Map<string, StoreUnsavedWarning>();
-  // [LAW:single-enforcer] Every store's report reaches the log and the bar
-  // here, whichever store made it and whenever.
+  // [LAW:single-enforcer] A file whose last write failed stands until a write
+  // lands. Its own map beside `unsaved`, so a landing clears only a standing
+  // it set.
+  const behind = new Map<string, StoreUnsavedWarning>();
+  // [LAW:single-enforcer] Every store's report on what it read reaches the log
+  // and the bar here, whichever store made it and whenever.
   const storeReported = (reports: readonly StoreReport[]): void => {
     for (const report of reports) {
       const { file, found } = report;
@@ -381,14 +385,23 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
   };
   // [LAW:no-silent-failure] A write a file refuses has no caller to throw
-  // into, so its storage tells it here, and the file stands behind on every
-  // bar until a write lands. A write that lands over a file that was not
-  // behind changes nothing and restates nothing: it is every write's outcome.
-  const storeStanding = ({ store, file, behind }: StoreStanding): void => {
-    const message = behind === null ? null : behindText(store, file, behind);
-    if ((unsaved.get(file)?.message ?? null) === message) return;
-    if (message === null) unsaved.delete(file);
-    else unsaved.set(file, { kind: "store-unsaved", file, message });
+  // into, so its holder tells it here whenever the file's standing changes,
+  // and the file stands behind on every bar until a write lands.
+  // [LAW:nothing-unseen] Both changes are logged: the bar alone would not say
+  // when a file went behind or caught up.
+  const storeStanding = ({
+    store,
+    file,
+    behind: error,
+  }: StoreStanding): void => {
+    if (error === null) {
+      behind.delete(file);
+      log("info", `${store} (${file}) is current again: a write landed`);
+    } else {
+      const message = behindText(store, file, error);
+      behind.set(file, { kind: "store-unsaved", file, message });
+      log("warn", message);
+    }
     restateOnceBuilt();
   };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
@@ -421,7 +434,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        unsaved: [...unsaved.values()],
+        unsaved: [...unsaved.values(), ...behind.values()],
         held: [
           ...launchPipes.held(),
           ...heldBy("renderer-ended", rendererEnded),

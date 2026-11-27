@@ -1,4 +1,4 @@
-// [LAW:verifiable-goals] A per-session file whose write fails is never silent:
+// [LAW:no-silent-failure] A per-session file whose write fails is never silent:
 // every bar says the file is behind what the daemon holds, in the same words
 // whichever store it is and however its write was made, until a write lands.
 // Each case makes a real storage's write fail and reads the viewer of a bar.
@@ -17,6 +17,7 @@ import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { until } from "../../../scripts/lib/until";
 import { fileHistoryStorage } from "../../../src/daemon/history-file";
+import { writeAtomic } from "../../../src/utils/atomic-write";
 import { SESSION_BOOK_FILE } from "../../../src/daemon/session-book";
 import {
   SESSION_STATE_FILE,
@@ -45,7 +46,6 @@ const CONFIG = {
 let isolated: IsolatedDaemonEnv;
 let daemon: InWorkerDaemon | undefined;
 let project: string;
-let lockedDir: string;
 beforeEach(() => {
   isolated = prepareIsolatedDaemonEnv("cc-candybar-store-behind");
   project = fs.realpathSync(
@@ -58,10 +58,6 @@ beforeEach(() => {
   );
   fs.mkdirSync(path.dirname(config), { recursive: true });
   fs.writeFileSync(config, JSON.stringify(CONFIG));
-  // A directory the history file reads as absent from, and cannot be written
-  // into.
-  lockedDir = path.join(project, "locked");
-  fs.mkdirSync(lockedDir, { mode: 0o500 });
 });
 afterEach(async () => {
   await daemon?.stop();
@@ -71,11 +67,29 @@ afterEach(async () => {
 });
 
 // What a refused disk says; each write of a test's own fails or lands as the
-// case sets, at the step that writes the bytes.
+// case sets, at the step that writes the bytes. As a real refusal does, each
+// attempt's message names a staged file of its own.
 const DISK_FULL = "ENOSPC: no space left on device";
-const refusing = (refused: { value: boolean }) => async (): Promise<void> => {
-  if (refused.value) throw new Error(DISK_FULL);
+interface Disk {
+  value: boolean;
+  attempts: number;
+}
+const refusal = (disk: Disk): Error => {
+  disk.attempts += 1;
+  return Object.assign(
+    new Error(DISK_FULL + ", open 'file." + disk.attempts + ".tmp'"),
+    { code: "ENOSPC" },
+  );
 };
+const refusing = (disk: Disk) => async (): Promise<void> => {
+  if (disk.value) throw refusal(disk);
+};
+const publishRefusing =
+  (disk: Disk): typeof writeAtomic =>
+  (file, text, mode) => {
+    if (disk.value) throw refusal(disk);
+    writeAtomic(file, text, mode);
+  };
 
 // The messages a bar's viewer shows, each whole and without its wrapping.
 const said = async (sid: string): Promise<string[]> => {
@@ -97,8 +111,9 @@ describe("a per-session file whose write fails", () => {
   test("stands behind on every bar, in the same words for the picks, the book and the history, until a write lands", async () => {
     const picksFile = sessionStatePath(hostOf(isolated.env));
     const bookFile = path.join(path.dirname(picksFile), "session-book.json");
-    const historyFile = path.join(lockedDir, "settings-history.json");
-    const refused = { value: true };
+    const historyFile = path.join(project, "settings-history.json");
+    const refused = { value: true, attempts: 0 };
+    const historyRefused = { value: true, attempts: 0 };
     daemon = startDaemon(isolated.env, {
       profile: (log) => ({
         session: new SessionFile(
@@ -109,7 +124,11 @@ describe("a per-session file whose write fails", () => {
           log,
           refusing(refused),
         ),
-        history: fileHistoryStorage(historyFile, log),
+        history: fileHistoryStorage(
+          historyFile,
+          log,
+          publishRefusing(historyRefused),
+        ),
       }),
       sessionBook: (log) =>
         new SessionFile(
@@ -145,8 +164,9 @@ describe("a per-session file whose write fails", () => {
     const history = rowOf("Settingshistory", historyFile);
     expect(picks).toContain(bare(DISK_FULL));
     expect(book).toContain(bare(DISK_FULL));
-    // The real storage's own refusal, said once, as the row and nothing beside.
-    expect(history).toContain("EACCES");
+    // The history's write is refused at once, not behind, and is said once, as
+    // the row and nothing beside.
+    expect(history).toContain(bare(DISK_FULL));
     expect(
       (await said("behind-b")).filter((m) => m.includes("couldnotbetaken")),
     ).toEqual([]);
@@ -165,8 +185,18 @@ describe("a per-session file whose write fails", () => {
       normalized(picks, "Sessionpicks", picksFile),
     );
 
-    // It stands while the writes keep failing, and a write that lands clears
-    // its own file's row alone.
+    // It stands, as it was said, while the writes keep failing: a refusal of
+    // the same cause names another staged file, and says nothing new.
+    const standing = [...rows].sort();
+    const failed = refused.attempts;
+    await clickOn("behind-a", "[pad+]");
+    await until(
+      async () => refused.attempts > failed,
+      () => "another write of the picks was refused",
+    );
+    expect([...(await behindOn("behind-b"))].sort()).toEqual(standing);
+
+    // A write that lands clears its own file's row alone.
     refused.value = false;
     await clickOn("behind-a", "[pad+]");
     await until(
@@ -177,5 +207,16 @@ describe("a per-session file whose write fails", () => {
       () => `the picks row cleared once its write landed, saw ${rows.length}`,
     );
     expect(rows.some((r) => r.includes(bare(historyFile)))).toBe(true);
+
+    // The history's row clears when its own write lands.
+    historyRefused.value = false;
+    await clickOn("behind-a", "[keep]");
+    await until(
+      async () => {
+        rows = await behindOn("behind-b");
+        return rows.every((r) => !r.includes(bare(historyFile)));
+      },
+      () => `the history row cleared once its write landed, saw ${rows.length}`,
+    );
   });
 });

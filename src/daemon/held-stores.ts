@@ -5,7 +5,7 @@
 
 import type { SessionFileStorage, SessionPicks } from "./session-state-file.js";
 import type { SessionHistory } from "../renderer-interface/history-storage.js";
-import { throwAll } from "../utils/run-each.js";
+import { runEach, throwAll } from "../utils/run-each.js";
 import type {
   StoredState,
   StoreWrite,
@@ -66,9 +66,10 @@ export class HeldStores {
   // A turn's stored writes, in the order it made them, each store's saved
   // once. [LAW:no-silent-failure] A write a file refuses is told by its
   // storage where it lands (the history's at once, the others behind), and
-  // the file stands behind on every bar until a write lands. The renderer
-  // holds the refused write too, and the store's next write saves the copy
-  // held here whole.
+  // the file stands behind on every bar until a write lands. A store whose
+  // taking throws anyway throws once every store has taken its share. The
+  // renderer holds the refused write too, and the store's next write saves
+  // the copy held here whole.
   take(writes: readonly StoreWrite[]): void {
     const sessions: Array<HeldChange<SessionPicks>> = [];
     const history: Array<HeldChange<SessionHistory>> = [];
@@ -83,8 +84,11 @@ export class HeldStores {
         default:
           write satisfies never;
       }
-    this.sessions.take(sessions);
-    this.history.take(history);
+    // [LAW:single-enforcer] Each store its own error boundary (`runEach`).
+    runEach([
+      () => this.sessions.take(sessions),
+      () => this.history.take(history),
+    ]);
   }
 
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending

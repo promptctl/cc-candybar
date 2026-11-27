@@ -6,7 +6,7 @@ import path from "node:path";
 import type { DaemonLogger } from "../utils/logger";
 import { asError, writeAtomic } from "../utils/atomic-write.js";
 import type { SessionId } from "./foundations/session-id";
-import { LANDED, type Landed } from "./foundations/stored-file";
+import { LANDED, Landings, type Landed } from "./foundations/stored-file";
 import {
   sessionFileOnDisk,
   type SessionFileKind,
@@ -40,8 +40,11 @@ const HISTORY_FILE: Pick<SessionFileKind<SessionHistory>, "parse"> = {
 export function fileHistoryStorage(
   file: string,
   logger: DaemonLogger,
+  // The step that writes the bytes, as `SessionFile`'s is, so a case can make
+  // a write fail without a disk that does.
+  publish: typeof writeAtomic = writeAtomic,
 ): SessionFileStorage<SessionHistory> {
-  const listeners: Array<(landed: Landed) => void> = [];
+  const landings = new Landings();
   let pending: ReadonlyMap<SessionId, SessionHistory> | null = null;
   const write = (): Landed => {
     if (pending === null) return LANDED;
@@ -50,15 +53,14 @@ export function fileHistoryStorage(
       fs.mkdirSync(path.dirname(file), { recursive: true });
       // [LAW:effects-at-boundaries] The file's record of the histories, in
       // the order the owner holds them, written before this returns.
-      writeAtomic(file, JSON.stringify(Object.fromEntries(pending)), 0o600);
+      publish(file, JSON.stringify(Object.fromEntries(pending)), 0o600);
       pending = null;
     } catch (e) {
       const error = asError(e);
-      logger("error", `settings-history write failed: ${error.message}`);
+      logger("warn", `settings-history save failed: ${error.message}`);
       landed = { ok: false, error };
     }
-    for (const listener of listeners) listener(landed);
-    return landed;
+    return landings.tell(landed);
   };
   return {
     ...sessionFileOnDisk(HISTORY_FILE, file),
@@ -66,9 +68,7 @@ export function fileHistoryStorage(
       pending = new Map(state);
       write();
     },
-    landed: (listener) => {
-      listeners.push(listener);
-    },
+    landed: (listener) => landings.listen(listener),
     flush: async () => {
       const landed = write();
       if (!landed.ok) throw landed.error;

@@ -319,9 +319,12 @@ describe("the order a restart reads", () => {
 });
 
 // [LAW:no-silent-failure] What its storage tells of a write is the owner's to
-// hear: the file is behind with the error's reason, or it is not.
+// hear: the file is behind with the error, or it is not.
 describe("a write its storage tells", () => {
-  test("is the file's standing, behind with the error, then not behind", () => {
+  const refused = (code: string, staged: string) =>
+    Object.assign(new Error(`${code}: open '${FILE}.${staged}.tmp'`), { code });
+
+  function standings() {
     const told: StoreStanding[] = [];
     const { held, land } = holder(
       undefined,
@@ -331,11 +334,35 @@ describe("a write its storage tells", () => {
       (standing) => told.push(standing),
     );
     held.load();
-    land({ ok: false, error: new Error("ENOSPC") });
+    return { told, land };
+  }
+
+  test("is the file's standing: behind with the error whole, then not behind", () => {
+    const { told, land } = standings();
+    const error = refused("ENOSPC", "1");
+    land({ ok: false, error });
     land({ ok: true });
     expect(told).toEqual([
-      { store: "The store", file: FILE, behind: "ENOSPC" },
+      { store: "The store", file: FILE, behind: error },
       { store: "The store", file: FILE, behind: null },
     ]);
+  });
+
+  test("is told once while its cause stands, though each attempt's message differs, and again when the cause changes", () => {
+    const { told, land } = standings();
+    land({ ok: false, error: refused("EACCES", "1") });
+    land({ ok: false, error: refused("EACCES", "2") });
+    land({ ok: false, error: refused("ENOSPC", "3") });
+    expect(told.map((t) => (t.behind as NodeJS.ErrnoException).code)).toEqual([
+      "EACCES",
+      "ENOSPC",
+    ]);
+  });
+
+  test("tells nothing of a landing over a file that was not behind", () => {
+    const { told, land } = standings();
+    land({ ok: true });
+    land({ ok: true });
+    expect(told).toEqual([]);
   });
 });

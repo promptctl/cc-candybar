@@ -19,6 +19,7 @@ import { stateFile, type StateObservation } from "./state-file";
 import { setAside, type FileRetirement } from "./file-rewrites";
 import {
   LANDED,
+  Landings,
   type Dropped,
   type Kept,
   type Landed,
@@ -168,7 +169,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   private written: Promise<void> = Promise.resolve();
   // The write queued behind the one in flight and not yet begun.
   private waiting: Promise<Landed> | null = null;
-  private readonly listeners: Array<(landed: Landed) => void> = [];
+  private readonly landings = new Landings();
 
   constructor(
     private readonly kind: SessionFileKind<V>,
@@ -195,7 +196,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   }
 
   landed(listener: (landed: Landed) => void): void {
-    this.listeners.push(listener);
+    this.landings.listen(listener);
   }
 
   save(snapshot: ReadonlyMap<SessionId, V>): void {
@@ -278,21 +279,13 @@ export class SessionFile<V> implements SessionFileStorage<V> {
       // flush, so a disk that keeps refusing is not retried on a timer.
       const error = asError(e);
       this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
-      return this.told({ ok: false, error });
+      return this.landings.tell({ ok: false, error });
     }
     // [LAW:no-ambient-temporal-coupling] An identity, not a value: a newer
     // save made while this one was on its way stays pending.
     if (this.pending === snapshot) this.pending = null;
     this.saved(body, snapshot, started, heldMs);
-    return this.told(LANDED);
-  }
-
-  // [LAW:no-silent-failure] Every write that wrote, or failed to, is heard by
-  // whoever holds the file, since the debounced write has no caller to throw
-  // into.
-  private told(landed: Landed): Landed {
-    for (const listener of this.listeners) listener(landed);
-    return landed;
+    return this.landings.tell(LANDED);
   }
 
   // For shutdown and for callers that read the file back: what is pending
