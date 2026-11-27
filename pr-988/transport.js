@@ -30029,7 +30029,17 @@ var unreadText = (reason, where) => `could not be read: ${reason} \u2014 ${where
 var readOrEmpty = (result, empty2) => result.kind === "ok" ? result.value : empty2;
 var kept = (value, dropped2 = []) => ({ kind: "ok", value: { value, dropped: dropped2 } });
 var LANDED = { ok: true };
-var behindText = (store, file, reason) => `${store} (${file}) is behind what this daemon holds: the file keeps what it last saved, and a restart loses the difference \u2014 ${reason}`;
+var Landings = class {
+  listeners = [];
+  listen(listener) {
+    this.listeners.push(listener);
+  }
+  tell(landed) {
+    for (const listener of this.listeners) listener(landed);
+    return landed;
+  }
+};
+var behindText = (store, file, error) => `${store} (${file}) is behind what this daemon holds: the file keeps what it last saved, and a restart loses the difference \u2014 ${error.message}`;
 function reportText({ store, file, found: found2 }) {
   switch (found2.kind) {
     case "absent":
@@ -92578,7 +92588,7 @@ var SessionFile = class {
   written = Promise.resolve();
   // The write queued behind the one in flight and not yet begun.
   waiting = null;
-  listeners = [];
+  landings = new Landings();
   observe() {
     return this.disk.observe();
   }
@@ -92586,7 +92596,7 @@ var SessionFile = class {
     return this.disk.setAside(file);
   }
   landed(listener) {
-    this.listeners.push(listener);
+    this.landings.listen(listener);
   }
   save(snapshot) {
     this.pending = new Map(snapshot);
@@ -92656,18 +92666,11 @@ var SessionFile = class {
     } catch (e) {
       const error = asError(e);
       this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
-      return this.told({ ok: false, error });
+      return this.landings.tell({ ok: false, error });
     }
     if (this.pending === snapshot) this.pending = null;
     this.saved(body, snapshot, started2, heldMs);
-    return this.told(LANDED);
-  }
-  // [LAW:no-silent-failure] Every write that wrote, or failed to, is heard by
-  // whoever holds the file, since the debounced write has no caller to throw
-  // into.
-  told(landed) {
-    for (const listener of this.listeners) listener(landed);
-    return landed;
+    return this.landings.tell(LANDED);
   }
   // For shutdown and for callers that read the file back: what is pending
   // lands now, behind any write already on its way. [LAW:no-silent-failure]
@@ -92690,6 +92693,7 @@ var SessionFile = class {
 var sessionStateFile = (filePath2, clock, debounceMs, logger) => new SessionFile(SESSION_STATE_FILE, filePath2, clock, debounceMs, logger);
 
 // src/daemon/held-file.ts
+var causeOf = (error) => error.code ?? error.message;
 var ORDER_PERIOD_MS = 5 * 60 * 1e3;
 var HeldFile = class {
   constructor(store, storage, clock, told, bound = Infinity, same2 = Object.is) {
@@ -92698,13 +92702,17 @@ var HeldFile = class {
     this.clock = clock;
     this.bound = bound;
     this.same = same2;
-    storage.landed(
-      (landed) => told({
+    let cause = null;
+    storage.landed((landed) => {
+      const now3 = landed.ok ? null : causeOf(landed.error);
+      if (now3 === cause) return;
+      cause = now3;
+      told({
         store,
         file: storage.file,
-        behind: landed.ok ? null : landed.error.message
-      })
-    );
+        behind: landed.ok ? null : landed.error
+      });
+    });
   }
   store;
   storage;
@@ -92796,10 +92804,13 @@ var HeldFile = class {
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what the storage
   // is still owed is handed over now, what is pending lands, and what is
   // taken after it stays in memory.
-  // A write the file refuses rejects the close.
+  // A save that throws rejects the close.
   async close() {
-    if (this.behind) this.save();
-    this.phase = "closed";
+    try {
+      if (this.behind) this.save();
+    } finally {
+      this.phase = "closed";
+    }
     await this.storage.flush();
   }
   holds(key, value) {
@@ -106159,9 +106170,10 @@ var HeldStores = class {
   // A turn's stored writes, in the order it made them, each store's saved
   // once. [LAW:no-silent-failure] A write a file refuses is told by its
   // storage where it lands (the history's at once, the others behind), and
-  // the file stands behind on every bar until a write lands. The renderer
-  // holds the refused write too, and the store's next write saves the copy
-  // held here whole.
+  // the file stands behind on every bar until a write lands. A store whose
+  // taking throws anyway throws once every store has taken its share. The
+  // renderer holds the refused write too, and the store's next write saves
+  // the copy held here whole.
   take(writes2) {
     const sessions = [];
     const history = [];
@@ -106176,8 +106188,10 @@ var HeldStores = class {
         default:
           write;
       }
-    this.sessions.take(sessions);
-    this.history.take(history);
+    runEach([
+      () => this.sessions.take(sessions),
+      () => this.history.take(history)
+    ]);
   }
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
   // lands, and what is written after it (a render that was awaiting, a run
@@ -107689,6 +107703,7 @@ function createDaemon(inputs) {
     restateOnceBuilt
   );
   const unsaved = /* @__PURE__ */ new Map();
+  const behind = /* @__PURE__ */ new Map();
   const storeReported = (reports) => {
     for (const report2 of reports) {
       const { file, found: found2 } = report2;
@@ -107701,11 +107716,19 @@ function createDaemon(inputs) {
       } else storeLoads.occur({ file, text: text6 });
     }
   };
-  const storeStanding = ({ store, file, behind }) => {
-    const message = behind === null ? null : behindText(store, file, behind);
-    if ((unsaved.get(file)?.message ?? null) === message) return;
-    if (message === null) unsaved.delete(file);
-    else unsaved.set(file, { kind: "store-unsaved", file, message });
+  const storeStanding = ({
+    store,
+    file,
+    behind: error
+  }) => {
+    if (error === null) {
+      behind.delete(file);
+      log("info", `${store} (${file}) is current again: a write landed`);
+    } else {
+      const message = behindText(store, file, error);
+      behind.set(file, { kind: "store-unsaved", file, message });
+      log("warn", message);
+    }
     restateOnceBuilt();
   };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
@@ -107730,7 +107753,7 @@ function createDaemon(inputs) {
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        unsaved: [...unsaved.values()],
+        unsaved: [...unsaved.values(), ...behind.values()],
         held: [
           ...launchPipes.held(),
           ...heldBy3("renderer-ended", rendererEnded),
@@ -108958,23 +108981,22 @@ var HISTORY_FILE = {
     return parsed2.kind === "failed" ? parsed2 : withoutRetiredChanges(parsed2.value);
   }
 };
-function fileHistoryStorage(file, logger) {
-  const listeners2 = [];
+function fileHistoryStorage(file, logger, publish = writeAtomic) {
+  const landings = new Landings();
   let pending2 = null;
   const write = () => {
     if (pending2 === null) return LANDED;
     let landed = LANDED;
     try {
       fs_default.mkdirSync(import_node_path29.default.dirname(file), { recursive: true });
-      writeAtomic(file, JSON.stringify(Object.fromEntries(pending2)), 384);
+      publish(file, JSON.stringify(Object.fromEntries(pending2)), 384);
       pending2 = null;
     } catch (e) {
       const error = asError(e);
-      logger("error", `settings-history write failed: ${error.message}`);
+      logger("warn", `settings-history save failed: ${error.message}`);
       landed = { ok: false, error };
     }
-    for (const listener of listeners2) listener(landed);
-    return landed;
+    return landings.tell(landed);
   };
   return {
     ...sessionFileOnDisk(HISTORY_FILE, file),
@@ -108982,9 +109004,7 @@ function fileHistoryStorage(file, logger) {
       pending2 = new Map(state);
       write();
     },
-    landed: (listener) => {
-      listeners2.push(listener);
-    },
+    landed: (listener) => landings.listen(listener),
     flush: async () => {
       const landed = write();
       if (!landed.ok) throw landed.error;

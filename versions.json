@@ -4,15 +4,22 @@
     {
       "version": "pr-988",
       "ref": "refs/pull/988/merge",
-      "sha": "026a5c1b7517fda0434082af03a5686c00d49e14",
-      "timestamp": "2026-11-27T22:59:33.515Z",
+      "sha": "2fd1ad157dc3853cabcb17a8a738371daba8b28b",
+      "timestamp": "2026-11-27T23:19:54.007Z",
       "commits": [
         {
-          "sha": "026a5c1b7517fda0434082af03a5686c00d49e14",
+          "sha": "2fd1ad157dc3853cabcb17a8a738371daba8b28b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T15:58:22-07:00",
-          "message": "Merge 981a59cda6ec187cf4d2c54eec94b97c2d2a268f into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+          "timestamp": "2026-11-27T23:18:49Z",
+          "message": "Merge 26cfd3805b0c22cb7042e0abedba51dbd0f49a41 into dfd45a29e6c86fc420ccaa588ea8bd9796bf270c\n"
+        },
+        {
+          "sha": "26cfd3805b0c22cb7042e0abedba51dbd0f49a41",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T16:18:34-07:00",
+          "message": "fix(stored-state): a file's standing is kept by its cause, and told once per change\n\nA failed write's message names a staged file unique to the attempt, so a\nstanding compared by text restated the bar on every refusal. The holder\nkeeps the standing by the error's code and tells the daemon the error whole.\nThe history storage shares the one Landings the other storages tell through,\nthe write-failure rows have their own map, a standing's set and clear are\nlogged, and close and take keep their error boundaries.\n"
         },
         {
           "sha": "981a59cda6ec187cf4d2c54eec94b97c2d2a268f",
