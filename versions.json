@@ -4,15 +4,22 @@
     {
       "version": "pr-983",
       "ref": "refs/pull/983/merge",
-      "sha": "1c6433462946dff123165198d4c72233ca468c94",
-      "timestamp": "2026-11-27T12:12:03.505Z",
+      "sha": "aeda1c1e6ecda97fc60bbd1ff8987ae5875435ad",
+      "timestamp": "2026-11-27T12:14:15.101Z",
       "commits": [
         {
-          "sha": "1c6433462946dff123165198d4c72233ca468c94",
+          "sha": "aeda1c1e6ecda97fc60bbd1ff8987ae5875435ad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:10:56-07:00",
-          "message": "Merge 65ad7d872eb1e6aef028a6724d3c96da59f74b01 into baa0154ae296580d06ae87e7722574a1a4028def\n"
+          "timestamp": "2026-11-27T12:13:19Z",
+          "message": "Merge b522c91172afdb8489f311b1a269741f0368d0c3 into baa0154ae296580d06ae87e7722574a1a4028def\n"
+        },
+        {
+          "sha": "b522c91172afdb8489f311b1a269741f0368d0c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T05:13:06-07:00",
+          "message": "fix(renderer): distinguish restart behavior from confirmed loss\n"
         },
         {
           "sha": "65ad7d872eb1e6aef028a6724d3c96da59f74b01",
