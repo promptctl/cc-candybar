@@ -640,7 +640,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // A physical follower can reconnect before a new renderer declaration.
   // Retain the server until its last physical or rendering consumer leaves.
   const physical = new Map<TmuxHint, number>();
-  let enabledPanes: readonly SessionId[] = [];
+  let enabledPanes = new Set<SessionId>();
+  const confirmedLocations = new Map<SessionId, TmuxHint>();
   let interestedSources = new Map<string, TmuxHint>();
   const declaredSurfaces = new DeclaredSurfaces({
     paneOf: (session) => frameFeeds.latest(session)?.hints.tmux ?? undefined,
@@ -667,8 +668,17 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const authority = new TmuxSourceAuthority({
     ...inputs.tmuxSourceEdges(launcher, watcherRegistry),
-    confirmed: (source, session, serverPid) =>
-      declaredSurfaces.confirmed(source, session, serverPid),
+    confirmed: (source, session, serverPid) => {
+      const key = paneKey(source);
+      for (const [sid, previous] of confirmedLocations) {
+        if (sid !== session && paneKey(previous) === key)
+          confirmedLocations.delete(sid);
+      }
+      const moved = session && confirmedLocations.get(session);
+      if (session) confirmedLocations.set(session, source);
+      declaredSurfaces.confirmed(source, session, serverPid);
+      if (moved && paneKey(moved) !== key) authority.release(moved);
+    },
     log,
   });
   // Who watches each session's frames (candybar-animation-wbxz.jmm.usl),
@@ -715,17 +725,21 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
 
   function reportSource(req: CheckedRenderRequest): void {
     const pane = req.hints.tmux;
+    const configDir = req.sourceConfigDir;
     if (
       pane &&
-      req.sourceConfigDir !== undefined &&
+      configDir !== undefined &&
       interestedSources.has(paneKey(pane))
-    )
-      authority.report(
-        pane,
-        req.hookData.session_id,
-        req.hints.parentPid,
-        req.sourceConfigDir,
+    ) {
+      clock.detach(`confirm source ${pane.pane}`, () =>
+        authority.report(
+          pane,
+          req.hookData.session_id,
+          req.hints.parentPid,
+          configDir,
+        ),
       );
+    }
   }
 
   function reconcileTmux(retry?: string, changed?: CheckedRenderRequest): void {
@@ -737,6 +751,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       if (pane) sources.set(paneKey(pane), pane);
     }
     const previous = interestedSources;
+    // A newer packet (including a shell that reports no pane) cannot withdraw
+    // a confirmed or pending source while its session still asks for a pane.
+    for (const [key, pane] of previous) {
+      if (
+        !sources.has(key) &&
+        [...authority.candidates(pane)].some((sid) => enabledPanes.has(sid))
+      )
+        sources.set(key, pane);
+    }
     interestedSources = sources;
     for (const [key, pane] of previous)
       if (!sources.has(key)) authority.release(pane);
@@ -752,7 +775,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         if (req.hints.tmux && !previous.has(paneKey(req.hints.tmux)))
           reportSource(req);
       }
-    } else if (changed) reportSource(changed);
+    }
+    if (
+      changed &&
+      changed.hints.tmux &&
+      previous.has(paneKey(changed.hints.tmux))
+    )
+      reportSource(changed);
   }
   const binaryWatch = makeBinaryWatch({
     clock,
@@ -836,8 +865,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
     managedStorage.follow(folders);
     collector.subscribed({ sources });
-    enabledPanes = (Object.keys(lanes) as SessionId[]).filter(
-      (sid) => lanes[sid]?.pane,
+    enabledPanes = new Set(
+      (Object.keys(lanes) as SessionId[]).filter((sid) => lanes[sid]?.pane),
     );
     declaredSurfaces.declare(lanes);
     frameFeeds.switched(lanes);
@@ -1165,7 +1194,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ),
     subscribe: (sessionId, subscriber) =>
       admit(
-        () => frameFeeds.subscribe(sessionId, subscriber),
+        () => {
+          const leave = frameFeeds.subscribe(sessionId, subscriber);
+          if (subscriber.lane === "pane")
+            declaredSurfaces.legacySubscribed(sessionId);
+          return leave;
+        },
         () => {
           log(
             "info",
@@ -1181,7 +1215,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       admit(
         () => declaredSurfaces.enroll(hello, stream),
         () => {
-          stream.refused(new DaemonClosing("pane subscription").message);
+          stream.disconnect();
           return () => {};
         },
       ),
