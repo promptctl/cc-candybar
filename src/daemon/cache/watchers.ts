@@ -282,10 +282,10 @@ export class WatcherRegistry {
     // Whether the runtime's recursive watch is Node's own walk, which stops
     // at the first entry it cannot watch and says nothing: Linux's.
     nodeWalksTrees?: boolean;
-    watchDirectory?: WatchDirectory;
+    watchDirectory: WatchDirectory;
   }) {
     this.clock = opts.clock;
-    this.watchDirectory = opts.watchDirectory ?? systemWatchDirectory;
+    this.watchDirectory = opts.watchDirectory;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
@@ -651,9 +651,9 @@ export class WatcherRegistry {
       // delivers nothing more.
       handle.on("error", (e) => {
         const dir = dirOf();
-        if (!heldBy(dir.state, handle)) return;
         this.logger("warn", `watcher error ${at}: ${e.message}`);
         if (this.counters) this.counters.watchErrors++;
+        if (!heldBy(dir.state, handle)) return;
         this.closeHandle(at, handle, "error");
         const deafness: Deafness = {
           kind: "failed",

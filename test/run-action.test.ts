@@ -1,4 +1,4 @@
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:behavior-not-structure] The `run` action through what a user and an
 // operator see: the load errors a declaration earns, the link a draw makes,
 // what a click does with a link (runs the program, or refuses it into the
@@ -235,6 +235,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     logger: log,
     ledger: new RefreshLedger(log),
     sourceRuns: new SourceRuns({
+      watchers,
       launcher: processLauncher,
       clock: systemTimekeeper,
     }),

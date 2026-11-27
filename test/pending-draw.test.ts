@@ -1,3 +1,4 @@
+import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] brandon-unfiled-3248.8ro6 step 3, part 2: a value
 // whose source has not answered yet is its own state, never drawn as an answer.
 // Every place a template is evaluated takes it as an outcome of its own: a
@@ -82,7 +83,11 @@ function renderer(cfg: ValidatedConfig) {
   const registry = new SourceRegistry(store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
-  const sourceRuns = new SourceRuns({ launcher, clock });
+  const sourceRuns = new SourceRuns({
+    watchers: manualWatcherRegistry(clock),
+    launcher,
+    clock,
+  });
   const runs = collectedRuns(sourceRuns, registry, TEST_ENVIRONMENT);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {

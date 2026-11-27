@@ -1,3 +1,4 @@
+import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // The host's collector (src/daemon/collector.ts): one record per session the
 // host had a request from, holding the owners' entries at the keys the
 // session's newest request names and at each plugin source its renderer
@@ -477,11 +478,13 @@ describe("the renderer's subscriptions", () => {
 
   test("a run the host refuses is logged once as it joins the set, and stands as its fault; requests judge nothing again", () => {
     const { owners } = handLanded();
+    const clock = heldClock(new Date(0));
     const { collector, handedIn, logged } = collectorOver({
       ...owners,
       sourceRuns: new SourceRuns({
+        watchers: manualWatcherRegistry(clock),
         launcher: unscriptedLauncher,
-        clock: heldClock(new Date(0)),
+        clock,
       }),
     });
     const run = runOf({
@@ -726,6 +729,7 @@ describe("over the real repository owner", () => {
   test("a held repo's PR is looked up with no draw, and the next request finds the repo's value stored", async () => {
     const inner = new OneRepo(unscriptedLauncher);
     const git = new GitDataProvider({
+      watchers: manualWatcherRegistry(systemTimekeeper),
       clock: systemTimekeeper,
       inner,
       logger: () => {},

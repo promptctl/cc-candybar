@@ -1,4 +1,4 @@
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { HOST } from "../scripts/lib/host";
 import { fixtureLauncher, locs, processLauncher } from "./helpers/host";
@@ -120,7 +120,11 @@ function makeCache(
     { budgetBytes: () => opts.budgetBytes ?? 1024 * 1024 * 1024 },
   );
   cleanups.push(() => cache.close());
-  const sourceRuns = new SourceRuns({ launcher, clock: systemTimekeeper });
+  const sourceRuns = new SourceRuns({
+    watchers,
+    launcher,
+    clock: systemTimekeeper,
+  });
   holding = { sourceRuns, held: new Map() };
   const held = holding.held;
   cleanups.push(() => {

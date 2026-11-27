@@ -1,4 +1,4 @@
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:behavior-not-structure] The providers' one close, as steps of a
 // teardown: what a teardown that meets a throwing owner still ends, and what
 // it says.

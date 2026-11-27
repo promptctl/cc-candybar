@@ -1,3 +1,7 @@
+import {
+  manualWatcherRegistry,
+  manualDirectoryWatches,
+} from "../scripts/lib/draw-fixtures/directory-watches";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import {
   clockOver,
@@ -173,8 +177,10 @@ function makeCache(
   const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
+  const clock = clockOver(systemTimers, opts.report ?? rethrowing);
   const svc = new GitDataProvider({
-    clock: clockOver(systemTimers, opts.report ?? rethrowing),
+    clock,
+    watchers: manualWatcherRegistry(clock),
     periodMs: opts.periodMs,
     maxRepos: opts.maxRepos,
     maxPrLookups: opts.maxPrLookups,
@@ -1282,6 +1288,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
     const watchers = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       counters,
       logger,

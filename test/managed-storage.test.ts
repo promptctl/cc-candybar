@@ -1,3 +1,4 @@
+import { heldClock } from "./helpers/held-clock";
 import { refuseFile } from "./helpers/refuse-file";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
@@ -16,6 +17,7 @@ import {
 } from "../src/utils/folder-identity";
 import {
   DEBOUNCE_MS,
+  systemWatchDirectory,
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
@@ -24,7 +26,7 @@ import { Holds } from "../src/utils/holds";
 import { ABSENT, ok } from "../src/utils/outcome";
 import type { Current } from "../src/utils/reading";
 import { until } from "../scripts/lib/until";
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { untilHeard } from "./helpers/reload-signal";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import { SourceFiles } from "../src/daemon/source-files";
@@ -54,7 +56,12 @@ interface Rig {
 const rigs: Rig[] = [];
 
 function rig(
-  opts: { nativeWatch?: boolean; identityOf?: IdentityRead; files?: SourceFiles } = {},
+  opts: {
+    clock?: typeof systemTimekeeper;
+    nativeWatch?: boolean;
+    identityOf?: IdentityRead;
+    files?: SourceFiles;
+  } = {},
 ): Rig {
   const watches = manualDirectoryWatches();
   const root = fs.realpathSync(
@@ -74,14 +81,14 @@ function rig(
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const watchers = new WatcherRegistry({
-    watchDirectory: opts.nativeWatch ? undefined : watches.open,
-    clock: systemTimekeeper,
+    watchDirectory: opts.nativeWatch ? systemWatchDirectory : watches.open,
+    clock: opts.clock ?? systemTimekeeper,
     counters,
     logger,
   });
   const fileEvents = handDelivery();
   const storage = new ManagedStorage({
-    clock: systemTimekeeper,
+    clock: opts.clock ?? systemTimekeeper,
     watchers,
     logger,
     fileEvents,
@@ -436,9 +443,8 @@ describe("ManagedStorage watches", () => {
   });
 
   test("a folder removed under its watch is lost, and the next config observation is a new generation", async () => {
-    const r = rig({ nativeWatch: true });
+    const r = rig();
     r.follow();
-    await new Promise((resolve) => setTimeout(resolve, 100));
     fs.rmSync(r.folder, { recursive: true });
     r.recheck();
     expect(r.generation()).toBe(1);
@@ -576,33 +582,36 @@ describe("ManagedStorage watches", () => {
         const same: FolderIdentity = { dev: 7n, ino: 42n, birthtimeNs: birth };
         return same;
       };
-      const r = rig({ identityOf });
+      const clock = heldClock(new Date(0));
+      const r = rig({ identityOf, clock });
       r.follow();
       const recreate = () => {
         fs.rmSync(r.folder, { recursive: true });
         fs.mkdirSync(r.folder);
         birth = 2n;
       };
-      return { r, recreate };
+      return { r, recreate, clock };
     }
 
     test("its own event first, then the config load: a new generation", async () => {
-      const { r, recreate } = await recreated();
+      const { r, recreate, clock } = await recreated();
       recreate();
       r.watches.opened[0]!.changed(path.basename(r.folder));
-      // The fake watch's window closes on the registry's debounce.
-      await until(() => r.storage.stats().lost === 1, "the loss");
+      clock.advance(DEBOUNCE_MS);
+      expect(r.storage.stats().lost).toBe(1);
       r.recheck();
       expect(r.generation()).toBe(1);
     });
 
     test("the config load first, then its own event: the load counts the loss and opens a new generation, and the stale event marks nothing", async () => {
-      const { r, recreate } = await recreated();
+      const { r, recreate, clock } = await recreated();
       recreate();
       r.recheck();
       expect(r.generation()).toBe(1);
+      const pending = clock.pending();
       r.watches.opened[0]!.changed(path.basename(r.folder));
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(clock.pending()).toBe(pending);
+      clock.advance(DEBOUNCE_MS);
       r.recheck();
       expect(r.generation()).toBe(1);
       expect(r.storage.stats().lost).toBe(1);

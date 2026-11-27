@@ -1,4 +1,4 @@
-import { manualDirectoryWatches } from "./fake-watches";
+import { manualDirectoryWatches } from "../../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:one-source-of-truth] The tests' one composition root for a daemon in a
 // jest worker. It is the shell a process puts over the daemon, and no more: the
 // request handling is the daemon's and a connection is `handleConnection`, so

@@ -1,4 +1,7 @@
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import {
+  manualWatcherRegistry,
+  manualDirectoryWatches,
+} from "../scripts/lib/draw-fixtures/directory-watches";
 import { refuseFile } from "./helpers/refuse-file";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
@@ -6,10 +9,10 @@ import { processLauncher } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { EventEmitter } from "node:events";
 import {
   DEBOUNCE_MS,
   POLL_MS,
+  systemWatchDirectory,
   WatcherRegistry,
 } from "../src/daemon/cache/watchers";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
@@ -57,12 +60,18 @@ describe("WatcherRegistry", () => {
     let dir: string;
     let clock: HeldClock;
     let reg: WatcherRegistry;
+    let directoryEvents: ReturnType<typeof manualDirectoryWatches>;
     beforeEach(() => {
       dir = fs.realpathSync(
         fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-polled-")),
       );
       clock = heldClock(new Date(0));
-      reg = new WatcherRegistry({ clock, logger: () => {} });
+      directoryEvents = manualDirectoryWatches();
+      reg = new WatcherRegistry({
+        watchDirectory: directoryEvents.open,
+        clock,
+        logger: () => {},
+      });
     });
     afterEach(() => {
       reg.closeAll();
@@ -185,31 +194,26 @@ describe("WatcherRegistry", () => {
     test("fires on a write, a rename over it, its removal and its creation, each by its path, and opens no OS watch", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "one");
-      const watch = jest.spyOn(fs, "watch");
-      try {
-        const seen = polling(f);
-        const changes = [
-          () => fs.writeFileSync(f, "two!"),
-          () => {
-            fs.writeFileSync(`${f}.tmp`, "three");
-            fs.renameSync(`${f}.tmp`, f);
-          },
-          () => fs.rmSync(f),
-          () => fs.writeFileSync(f, "four"),
-        ];
-        for (const change of changes) {
-          change();
-          swept();
-        }
-        expect(seen).toEqual(
-          changes.map(() => ({ kind: "changed", paths: [f] })),
-        );
-        expect(watch).not.toHaveBeenCalled();
-        expect(reg.polledPaths()).toBe(1);
-        expect(reg.dirWatches()).toBe(0);
-      } finally {
-        watch.mockRestore();
+      const seen = polling(f);
+      const changes = [
+        () => fs.writeFileSync(f, "two!"),
+        () => {
+          fs.writeFileSync(`${f}.tmp`, "three");
+          fs.renameSync(`${f}.tmp`, f);
+        },
+        () => fs.rmSync(f),
+        () => fs.writeFileSync(f, "four"),
+      ];
+      for (const change of changes) {
+        change();
+        swept();
       }
+      expect(seen).toEqual(
+        changes.map(() => ({ kind: "changed", paths: [f] })),
+      );
+      expect(directoryEvents.opened).toHaveLength(0);
+      expect(reg.polledPaths()).toBe(1);
+      expect(reg.dirWatches()).toBe(0);
     });
 
     test("does not fire for a sibling, or for a directory it names gaining a child", () => {
@@ -304,7 +308,10 @@ describe("WatcherRegistry", () => {
 
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
+      clock: systemTimekeeper,
+    });
     const h1 = reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     const h2 = reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     expect(reg.size()).toBe(1);
@@ -326,7 +333,11 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
+      clock: systemTimekeeper,
+      counters,
+    });
     const first = reg.follow(
       null,
       { key: "a", targets: { dirs: [], polled: [] }, unbound: false },
@@ -385,7 +396,11 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
+      clock: systemTimekeeper,
+      counters,
+    });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
       reg.acquire(`k${i}`, { dirs: [], polled: [] }, () => fired.push(`k${i}`)),
@@ -410,7 +425,10 @@ describe("WatcherRegistry", () => {
 
   test("hands its consumer the paths that fired in the window", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      watchDirectory: systemWatchDirectory,
+      clock: systemTimekeeper,
+    });
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir }], polled: [] }, (inv) =>
       seen.push(inv),
@@ -437,7 +455,10 @@ describe("WatcherRegistry", () => {
 
   test("a tree target hears a write below its first level, named by its path", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      watchDirectory: systemWatchDirectory,
+      clock: systemTimekeeper,
+    });
     const seen: Invalidation[] = [];
     reg.acquire(
       dir,
@@ -472,6 +493,7 @@ describe("WatcherRegistry", () => {
       dirWatchesClosed: 0,
     };
     const reg = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       counters,
       logger: () => {},
@@ -512,39 +534,37 @@ describe("WatcherRegistry", () => {
   // fs.watch refuses a folder it cannot read, except Linux's recursive watch
   // on Node 20 and 22, which swallows the error and never fires. The registry
   // refuses it on every platform and Node, as a tree or not.
-  test(
-    "a folder the daemon cannot open is refused, watched as a tree or not",
-    () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
-      using _denied = refuseFile(dir, "opendirSync", "readdirSync");
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
-        logger: () => {},
-      });
-      try {
-        const refusal = {
-          kind: "refused",
-          path: dir,
-          reason: expect.stringContaining("EACCES"),
-        };
-        expect(
-          reg.acquire("dir", { dirs: [{ path: dir }], polled: [] }, () => {})
-            .deaf,
-        ).toEqual([refusal]);
-        expect(
-          reg.acquire(
-            "tree",
-            { dirs: [{ path: dir, recursive: true }], polled: [] },
-            () => {},
-          ).deaf,
-        ).toEqual([refusal]);
-        expect(reg.dirWatches()).toBe(0);
-      } finally {
-        reg.closeAll();
-        rmrf(dir);
-      }
-    },
-  );
+  test("a folder the daemon cannot open is refused, watched as a tree or not", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
+    using _denied = refuseFile(dir, "opendirSync", "readdirSync");
+    const reg = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
+    try {
+      const refusal = {
+        kind: "refused",
+        path: dir,
+        reason: expect.stringContaining("EACCES"),
+      };
+      expect(
+        reg.acquire("dir", { dirs: [{ path: dir }], polled: [] }, () => {})
+          .deaf,
+      ).toEqual([refusal]);
+      expect(
+        reg.acquire(
+          "tree",
+          { dirs: [{ path: dir, recursive: true }], polled: [] },
+          () => {},
+        ).deaf,
+      ).toEqual([refusal]);
+      expect(reg.dirWatches()).toBe(0);
+    } finally {
+      reg.closeAll();
+      rmrf(dir);
+    }
+  });
 
   // Where the recursive watch is Node's own walk (Linux), a tree is a plain
   // watch on each directory under its root. Forced on here, so it runs on
@@ -683,62 +703,76 @@ describe("WatcherRegistry", () => {
     });
 
     test("where the recursive watch is native, a tree is one watch", () => {
+      const events = manualDirectoryWatches();
       const native = new WatcherRegistry({
-        clock: systemTimekeeper,
+        watchDirectory: events.open,
+        clock,
         logger: () => {},
         nodeWalksTrees: false,
       });
       try {
         fs.mkdirSync(path.join(root, "a", "b"), { recursive: true });
+        const tree: Invalidation[] = [];
+        const flat: Invalidation[] = [];
         native.acquire(
           "tree",
-          { dirs: [{ path: root, recursive: true as const }], polled: [] },
-          () => {},
+          { dirs: [{ path: root, recursive: true }], polled: [] },
+          (inv) => tree.push(inv),
         );
         expect(native.dirWatches()).toBe(1);
+        native.acquire("flat", { dirs: [{ path: root }], polled: [] }, (inv) =>
+          flat.push(inv),
+        );
+        expect(events.opensOf(root).map((handle) => handle.recursive)).toEqual([
+          true,
+          false,
+        ]);
+        events.change(root, path.join("a", "b"));
+        clock.advance(DEBOUNCE_MS);
+        expect(changedPaths(tree)).toEqual([path.join(root, "a", "b")]);
+        expect(flat).toEqual([]);
       } finally {
         native.closeAll();
       }
     });
   });
 
-  test(
-    "a deaf directory refused again for another reason tells its slot the new fault",
-    async () => {
-      const parent = fs.mkdtempSync(path.join(os.tmpdir(), "watch-redeaf-"));
-      const dir = path.join(parent, "later");
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
-        logger: () => {},
-      });
-      const heard: Invalidation[] = [];
-      try {
-        const handle = reg.acquire(
-          "k",
-          { dirs: [{ path: dir }], polled: [] },
-          (h) => heard.push(h),
-        );
-        expect(handle.deaf[0]?.reason).toContain("ENOENT");
-        fs.mkdirSync(dir);
-        using _denied = refuseFile(dir, "opendirSync", "readdirSync");
-        reg.judge();
-        await until(() => heard.length === 1, "the new refusal's window");
-        expect(handle.deaf[0]?.reason).toContain("EACCES");
-        expect(heard).toEqual([
-          { kind: "failed", reason: expect.stringContaining("EACCES") },
-        ]);
-      } finally {
-        reg.closeAll();
-        rmrf(parent);
-      }
-    },
-  );
+  test("a deaf directory refused again for another reason tells its slot the new fault", async () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "watch-redeaf-"));
+    const dir = path.join(parent, "later");
+    const reg = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
+    const heard: Invalidation[] = [];
+    try {
+      const handle = reg.acquire(
+        "k",
+        { dirs: [{ path: dir }], polled: [] },
+        (h) => heard.push(h),
+      );
+      expect(handle.deaf[0]?.reason).toContain("ENOENT");
+      fs.mkdirSync(dir);
+      using _denied = refuseFile(dir, "opendirSync", "readdirSync");
+      reg.judge();
+      await until(() => heard.length === 1, "the new refusal's window");
+      expect(handle.deaf[0]?.reason).toContain("EACCES");
+      expect(heard).toEqual([
+        { kind: "failed", reason: expect.stringContaining("EACCES") },
+      ]);
+    } finally {
+      reg.closeAll();
+      rmrf(parent);
+    }
+  });
 
   test("an error after open reaches the consumer and the stats", async () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -749,7 +783,7 @@ describe("WatcherRegistry", () => {
       );
       fake
         .opensOf("/w")[0]!
-        .handle.emit("error", new Error("EMFILE: too many open files"));
+        .emitter.emit("error", new Error("EMFILE: too many open files"));
       await until(() => seen.length > 0, "the error's invalidation");
       expect(seen).toEqual([
         { kind: "failed", reason: "/w: EMFILE: too many open files" },
@@ -767,42 +801,13 @@ describe("WatcherRegistry", () => {
     }
   });
 
-  // A stand-in for the OS's side of a watch the test drives: every directory
-  // opens, and every handle fs.watch opens is recorded with the directory, the
-  // listener the registry gave it, and whether it was closed. No real
-  // directory can be made to report or fail on demand.
+  // The fixtures using /w and /v declare both directories readable.
   function standIn() {
-    type Opened = {
-      dir: string;
-      closed: boolean;
-      listener: (event: string, changed: string | null) => void;
-      handle: EventEmitter;
-    };
-    const opened: Opened[] = [];
-    const watch = jest.spyOn(fs, "watch").mockImplementation(((
-      dir: string,
-      _opts: unknown,
-      listener: Opened["listener"],
-    ) => {
-      const record = { dir, closed: false, listener } as Opened;
-      record.handle = Object.assign(new EventEmitter(), {
-        close: () => void (record.closed = true),
-      });
-      opened.push(record);
-      return record.handle;
-    }) as unknown as typeof fs.watch);
+    const watches = manualDirectoryWatches();
     const opendir = jest.spyOn(fs, "opendirSync").mockImplementation((() => ({
       closeSync: () => {},
     })) as unknown as typeof fs.opendirSync);
-    const opensOf = (dir: string) => opened.filter((o) => o.dir === dir);
-    return {
-      opened,
-      opensOf,
-      restore: () => {
-        watch.mockRestore();
-        opendir.mockRestore();
-      },
-    };
+    return { ...watches, restore: () => opendir.mockRestore() };
   }
 
   const zeroCounters = () => ({
@@ -825,6 +830,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -832,15 +838,15 @@ describe("WatcherRegistry", () => {
       reg.acquire("k", { dirs: [{ path: conf }], polled: [] }, (inv) =>
         seen.push(inv),
       );
-      const { listener } = fake.opensOf(conf)[0]!;
+      const { changed } = fake.opensOf(conf)[0]!;
       fs.renameSync(conf, path.join(root, "old"));
       fs.mkdirSync(conf);
-      listener("rename", "conf");
+      changed("conf");
       await until(() => seen.length === 1, "the replacement's invalidation");
       expect(seen).toEqual([{ kind: "unknown" }]);
       expect(fake.opensOf(conf)).toHaveLength(2);
       expect(fake.opensOf(conf)[0]!.closed).toBe(true);
-      fake.opensOf(conf)[1]!.listener("rename", "config.json5");
+      fake.opensOf(conf)[1]!.changed("config.json5");
       await until(() => seen.length === 2, "the watched name's invalidation");
       expect(seen[1]).toEqual({
         kind: "changed",
@@ -857,6 +863,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -869,7 +876,7 @@ describe("WatcherRegistry", () => {
         second.push(inv),
       );
       expect(fake.opened).toHaveLength(1);
-      fake.opensOf("/w")[0]!.listener("rename", "a");
+      fake.opensOf("/w")[0]!.changed("a");
       await until(
         () => first.length === 1 && second.length === 1,
         "both holders' windows",
@@ -888,6 +895,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -931,6 +939,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -964,6 +973,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -986,7 +996,7 @@ describe("WatcherRegistry", () => {
       // Bound to the folder there now: judged again, nothing reopens.
       reg.judge();
       expect(fake.opensOf(conf)).toHaveLength(2);
-      fake.opensOf(conf)[1]!.listener("rename", "config.json5");
+      fake.opensOf(conf)[1]!.changed("config.json5");
       await until(() => seen.length === 2, "the watched name's window");
       expect(seen[1]).toEqual({
         kind: "changed",
@@ -1014,6 +1024,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -1031,7 +1042,7 @@ describe("WatcherRegistry", () => {
       );
       fake
         .opensOf("/w")[0]!
-        .handle.emit("error", new Error("EMFILE: too many open files"));
+        .emitter.emit("error", new Error("EMFILE: too many open files"));
       await until(
         () => seen.length === 1 && other.length === 1,
         "both slots' failed windows",
@@ -1074,17 +1085,20 @@ describe("WatcherRegistry", () => {
 
   // A reopen replaces the handle; an error or event still on its way from
   // the closed one speaks for no directory.
-  test("an error or event from a handle a reopen replaced changes nothing", async () => {
+  test("a retired handle reports its error without invalidating or closing the replacement", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-stale-"));
     const dir = path.join(root, "d");
     fs.mkdirSync(dir);
     const fake = standIn();
     try {
+      const clock = heldClock(new Date(0));
+      const log = jest.fn();
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
+        watchDirectory: fake.open,
+        clock,
         counters,
-        logger: () => {},
+        logger: log,
       });
       const seen: Invalidation[] = [];
       const a = reg.acquire("a", { dirs: [{ path: dir }], polled: [] }, (inv) =>
@@ -1093,16 +1107,25 @@ describe("WatcherRegistry", () => {
       fs.rmSync(dir, { recursive: true });
       fs.mkdirSync(dir);
       reg.acquire("b", { dirs: [{ path: dir }], polled: [] }, () => {});
-      await until(() => seen.length === 1, "the reopen's window");
+      clock.advance(DEBOUNCE_MS);
       const [stale, current] = fake.opensOf(dir);
-      stale!.handle.emit("error", new Error("EBADF: bad file descriptor"));
-      stale!.listener("rename", "x");
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      stale!.emitter.emit("error", new Error("EBADF: bad file descriptor"));
+      stale!.changed("x");
+      expect(clock.pending()).toBe(0);
+      clock.advance(DEBOUNCE_MS);
+      expect(counters.watchErrors).toBe(1);
+      expect(log).toHaveBeenCalledWith(
+        "warn",
+        `watcher error ${dir}: EBADF: bad file descriptor`,
+      );
       expect(seen).toEqual([{ kind: "unknown" }]);
       expect(a.deaf).toEqual([]);
       expect(current!.closed).toBe(false);
       expect(reg.dirWatches()).toBe(1);
       expect(counters.dirWatchesClosed).toBe(1);
+      current!.changed("y");
+      clock.advance(DEBOUNCE_MS);
+      expect(changedPaths(seen)).toEqual([path.join(dir, "y")]);
       reg.closeAll();
     } finally {
       fake.restore();
@@ -1116,6 +1139,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        watchDirectory: fake.open,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -1126,7 +1150,7 @@ describe("WatcherRegistry", () => {
       );
       fake
         .opensOf("/w")[0]!
-        .handle.emit("error", new Error("EMFILE: too many open files"));
+        .emitter.emit("error", new Error("EMFILE: too many open files"));
       expect(first.deaf).toHaveLength(1);
       const second = reg.acquire(
         "k",
@@ -1144,7 +1168,10 @@ describe("WatcherRegistry", () => {
 
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
+      clock: systemTimekeeper,
+    });
     reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();
@@ -1200,6 +1227,10 @@ async function hearsRefOnlyMove(
   // test can ask whether the value is the ref's after a move.
   const inner = new GitService(processLauncher);
   const svc = new GitDataProvider({
+    watchers: new WatcherRegistry({
+      clock: systemTimekeeper,
+      watchDirectory: systemWatchDirectory,
+    }),
     clock: systemTimekeeper,
     inner,
     periodMs: 600_000,
@@ -1410,7 +1441,11 @@ describe("GitDataProvider + watchers integration", () => {
   test("a HEAD change re-reads the repo with no read asking", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
+    const svc = new GitDataProvider({
+      watchers: manualWatcherRegistry(systemTimekeeper),
+      clock: systemTimekeeper,
+      inner,
+    });
     const holds = new Holds();
     try {
       await laneOutcome(svc.declare(holds, repo));
@@ -1444,6 +1479,7 @@ describe("GitDataProvider + watchers integration", () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
     const svc = new GitDataProvider({
+      watchers: manualWatcherRegistry(systemTimekeeper),
       clock: systemTimekeeper,
       inner,
       periodMs: 150,
@@ -1467,7 +1503,11 @@ describe("GitDataProvider + watchers integration", () => {
   test("close releases all watchers", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
+    const svc = new GitDataProvider({
+      watchers: manualWatcherRegistry(systemTimekeeper),
+      clock: systemTimekeeper,
+      inner,
+    });
     await laneOutcome(svc.declare(new Holds(), repo));
     expect(svc.getStats().watchers).toBe(1);
     svc.close();

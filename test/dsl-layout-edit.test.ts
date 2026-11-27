@@ -1,4 +1,4 @@
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST } from "../scripts/lib/host";

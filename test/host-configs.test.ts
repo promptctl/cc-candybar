@@ -1,4 +1,4 @@
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] An origin's config as the host routes it
 // (src/daemon/renderer-host.ts): an origin a turn newly names gets its
 // `config` turn in that turn's slot, before anything queued behind it; each

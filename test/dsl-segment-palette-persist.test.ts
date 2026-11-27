@@ -1,4 +1,4 @@
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.6 —
 // per-segment palette override as a menu-able domain — mirroring
 // dsl-persist-actions.test.ts's model for the Globals-scoped `persist`

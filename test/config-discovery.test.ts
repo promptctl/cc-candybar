@@ -1,5 +1,5 @@
 import { systemWatchDirectory } from "../src/daemon/cache/watchers";
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] The host's config discovery
 // (src/daemon/config-discovery/config-discovery.ts): it follows exactly the
 // origins the renderer names, each discovered once as it is first named and

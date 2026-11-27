@@ -1,3 +1,4 @@
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:behavior-not-structure] A plugin, end to end, as the two programs that
 // meet it see it: the load and render diagnostics
 // and the loaded config's live variable store (what the daemon renders from).
@@ -934,6 +935,7 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "main/src"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const watchers = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,
@@ -960,6 +962,7 @@ describe("an installed plugin", () => {
     );
     // The runs each view's sources name, held as the host holds a session's.
     const sourceRuns = new SourceRuns({
+      watchers,
       launcher: processLauncher,
       clock: systemTimekeeper,
     });
@@ -1581,6 +1584,7 @@ describe("an installed plugin", () => {
   test("a failed first load still watches the repo's plugin root", async () => {
     const reloads = new ReloadSignal();
     const watchers = new WatcherRegistry({
+      watchDirectory: manualDirectoryWatches().open,
       clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,

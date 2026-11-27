@@ -31,7 +31,7 @@ import {
 import { heldClock } from "../../helpers/held-clock";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../../scripts/lib/daemon/log";
-import { manualDirectoryWatches } from "../../helpers/fake-watches";
+import { manualDirectoryWatches } from "../../../scripts/lib/draw-fixtures/directory-watches";
 import { untilHeard } from "../../helpers/reload-signal";
 
 jest.setTimeout(30_000);

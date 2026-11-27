@@ -1,3 +1,4 @@
+import { manualWatcherRegistry } from "./directory-watches";
 import {
   createOneShotLauncher,
   LIFELINE_PROGRAM,
@@ -73,4 +74,8 @@ export const unscriptedLauncher: FakeLauncher["launcher"] =
 // A source-runs owner over the unscripted launcher, for owners whose runs a
 // case never starts: one per caller, so no test's holds reach another's.
 export const unscriptedRuns = (): SourceRuns =>
-  new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper });
+  new SourceRuns({
+    watchers: manualWatcherRegistry(systemTimekeeper),
+    launcher: unscriptedLauncher,
+    clock: systemTimekeeper,
+  });

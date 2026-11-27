@@ -75,7 +75,7 @@ import { heardRequest } from "./helpers/click";
 import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "../scripts/lib/until";
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import {
@@ -233,6 +233,7 @@ function rig(): Rig {
       logger: log,
       ledger: new RefreshLedger(log),
       sourceRuns: new SourceRuns({
+        watchers,
         launcher: world.launcher,
         clock: systemTimekeeper,
       }),

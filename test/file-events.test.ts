@@ -11,14 +11,18 @@ import {
 } from "../src/daemon/cache/file-events";
 import { fileEventsWarnings } from "../src/daemon/foundations/file-events-warnings";
 import { type Delivery } from "../src/daemon/foundations/stats-snapshot";
-import { DEBOUNCE_MS, WatcherRegistry } from "../src/daemon/cache/watchers";
+import {
+  DEBOUNCE_MS,
+  systemWatchDirectory,
+  WatcherRegistry,
+} from "../src/daemon/cache/watchers";
 import { statIdentity, type IdentityRead } from "../src/utils/folder-identity";
 import { aboutKind } from "../src/config/about";
 import {
   WARNING_SEVERITY,
   collectDiagnostics,
 } from "../src/render/diagnostics";
-import { manualDirectoryWatches } from "./helpers/fake-watches";
+import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { until } from "../scripts/lib/until";
 
 // [LAW:behavior-not-structure] The daemon's one owner of file-event delivery
@@ -70,7 +74,7 @@ function rig(opts: { nativeWatch?: boolean; identityOf?: IdentityRead } = {}): R
   const events = new FileEventDelivery({
     clock: systemTimekeeper,
     watchers: new WatcherRegistry({
-      watchDirectory: opts.nativeWatch ? undefined : watches.open,
+      watchDirectory: opts.nativeWatch ? systemWatchDirectory : watches.open,
       clock: systemTimekeeper,
       logger,
     }),
