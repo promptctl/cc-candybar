@@ -30,7 +30,7 @@ A reload whose resolved inputs are the ones the served state was built from keep
 
 ## Dispose releases every MobX subscription
 
-Disposing a store has to release its computeds' subscriptions. A keepAlive computed never unsubscribes on its own. If it read session state, it stays among the observers of the daemon-wide session-state atom for the daemon's lifetime, and it keeps the whole disposed store alive. The stats report that atom's observer count beside the session count. An observer count that climbs while the cache size holds steady is this leak. A test checks that the count drops back after a dispose.
+Disposing a store has to release its computeds' subscriptions. A keepAlive computed never unsubscribes on its own. A session-state read subscribes to its specific pick or session revision. The store counts distinct readers independently of how many picks each reads. A live subscription can keep the whole disposed store alive. The stats report the distinct reader count beside the session count. An observer count that climbs while the cache size holds steady is this leak. A test checks that the count drops back after a dispose.
 
 ## There is always a bar
 

@@ -197,9 +197,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
       // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
-      // Unrelated key: the atom invalidated the `caps` computed too
-      // (coarse-grained reactivity), but it re-derived to the same fallback
-      // "" — MobX's value comparer suppresses propagation to this observer.
+      // The caps variable reads a different pick.
       expect(capsObs).toEqual([""]);
 
       // Sanity: a mutation to the OTHER state key fires the caps

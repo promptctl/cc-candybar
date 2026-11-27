@@ -161,9 +161,8 @@ export interface TimeOptions {
   readonly varDefault?: string;
 }
 
-// [LAW:one-source-of-truth] state vars read through to SessionState; the
-// reactive contract is owned by SessionState's internal atom. The computed
-// reads the bound view's session and dispatches through SessionStateReader.get.
+// [LAW:one-source-of-truth] The bound session and its observable pick are
+// the inputs to a state variable. SessionStateReader.get owns that lookup.
 //
 // `read` is the variable's view of what the session holds at `key` (null:
 // nothing): a plain `state` variable's stored value over its default, a
@@ -959,12 +958,6 @@ export class SourceRegistry {
     });
   }
 
-  // state: read-through to SessionState. The computed reads two deps — the
-  // bound view's session (`session()`) and SessionState itself (MobX-tracked
-  // via its internal atom). A click verb that mutates SessionState
-  // invalidates this computed.
-  // Persistence rides on SessionState's disk backing — no extra wiring.
-  //
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
   // determine the result, never whether code runs.
   declareState(name: string, opts: StateOptions): void {

@@ -1,20 +1,4 @@
-// [LAW:one-type-per-behavior] One generic store for all per-session state.
-// Adding a new per-session value is just picking a string key — no new class,
-// no DI wiring, no cache invalidation.
-//
-// [LAW:single-enforcer] Reads are MobX-tracked through a single internal atom.
-// Every get() reports observed; every set/clear/prune reports changed. A DSL
-// computed that reads SessionState via this object will re-evaluate whenever
-// any (sessionId, key) pair mutates — coarse-grained on purpose, since
-// session-state mutations are rare (clicks) and computeds are cheap. The
-// alternative — per-key atoms — would be lower-cardinality reactivity at the
-// cost of a much wider API surface; we don't need it.
-//
-// Outside a reactive context (the common case: ad-hoc gets from the segments
-// renderer), atom.reportObserved is a no-op. Tests that construct SessionState
-// without any observer see no change in behavior.
-
-import { createAtom, type IAtom, runInAction } from "mobx";
+import { createAtom, observable, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { RendererStats } from "../renderer-interface/renderer-stats";
 import type {
@@ -73,13 +57,10 @@ export function recordingView(
   };
 }
 
-// One session's state, and the store's revision when it last changed.
-// [LAW:one-source-of-truth] The revision lives on the entry it describes, so a
-// session the store drops takes its revision with it.
-interface Session {
-  readonly values: Map<string, string>;
-  revision: number;
-}
+// [LAW:types-are-the-program] A checked session ID cannot contain a slash.
+// The first slash separates it from an arbitrary, possibly empty, pick key.
+const pickAddress = (sessionId: SessionId, key: string): string =>
+  `${sessionId}/${key}`;
 
 // Generous headroom over realistic concurrent-session counts; matches the
 // render cache's LRU bound. Only a session no click has written to for longest
@@ -92,46 +73,51 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // hold more than maxSessions, so the bound is structural, not dependent on
   // an external prune caller, and drops the session idle longest. A read
   // moves nothing, so the host's copy, told of every move, keeps the order.
-  private readonly sessions: Map<SessionId, Session>;
+  private readonly sessions = new Map<SessionId, Set<string>>();
+  // [LAW:one-source-of-truth] Each pick has one observable address, even
+  // before it exists. The recency index holds only its session's key names
+  // for eviction and persistence. An unrelated insertion cannot wake it.
+  private readonly picks = observable.map<string, string>(undefined, {
+    deep: false,
+  });
+  private readonly revisions = observable.map<SessionId, number>(undefined, {
+    deep: false,
+  });
   private readonly moved = new StoredMoves();
   // [LAW:single-enforcer] The store's revision: counts every change any
   // writer makes, so it never repeats while the store lives.
   private head = 0;
-  // [LAW:single-enforcer] One atom; every read reports observed against it,
-  // every mutation reports changed. Coarse-grained reactivity is correct for
-  // session-state's load — mutations are rare and computeds are cheap.
-  private readonly atom: IAtom = createAtom("SessionState");
+  // [LAW:nothing-unseen] One subscription per distinct reader for the
+  // disposal diagnostic, even when that reader observes several pick keys.
+  // Only the pick and revision observables invalidate reads.
+  private readonly readers = createAtom("SessionState readers");
 
   // `loaded` is what the profile holds, oldest first, as the host handed it in.
   constructor(
     loaded: StoredState["sessions"] = {},
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
-    this.sessions = new Map(
-      (
-        Object.entries(loaded) as Array<
-          [SessionId, Readonly<Record<string, string>>]
-        >
-      ).map(([id, kv]): [SessionId, Session] => [
-        id,
-        { values: new Map(Object.entries(kv)), revision: ++this.head },
-      ]),
-    );
-    // A profile over the bound loses its oldest at once, and the host hears
-    // it with the first turn's writes.
-    this.evictOldest();
+    runInAction(() => {
+      for (const [id, values] of Object.entries(loaded) as Array<
+        [SessionId, Readonly<Record<string, string>>]
+      >) {
+        this.sessions.set(id, new Set(Object.keys(values)));
+        for (const [key, value] of Object.entries(values))
+          this.picks.set(pickAddress(id, key), value);
+        this.revisions.set(id, ++this.head);
+      }
+      this.evictOldest();
+    });
   }
 
   get(sessionId: SessionId, key: string): string | null {
-    // [LAW:single-enforcer] reportObserved is the reactive-dep registration —
-    // outside a tracking context (the common direct-read case) it is a no-op.
-    this.atom.reportObserved();
-    return this.sessions.get(sessionId)?.values.get(key) ?? null;
+    this.readers.reportObserved();
+    return this.picks.get(pickAddress(sessionId, key)) ?? null;
   }
 
   revision(sessionId: SessionId): number {
-    this.atom.reportObserved();
-    return this.sessions.get(sessionId)?.revision ?? 0;
+    this.readers.reportObserved();
+    return this.revisions.get(sessionId) ?? 0;
   }
 
   // How many derivations are subscribed to this store right now — every
@@ -145,7 +131,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // one node per observer per path — to answer this direct count, on the
   // daemon's request thread.
   observers(): number {
-    return this.atom.observers_?.size ?? 0;
+    return this.readers.observers_?.size ?? 0;
   }
 
   // The store's revision: how many changes any writer has made to it.
@@ -173,38 +159,38 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // [LAW:no-silent-failure] Atomic commit of N pairs: every write lands
-  // BEFORE the single reportChanged() that marks the transaction complete, so
+  // in one MobX action, so
   // no observer sees half of it. A batch that writes only values already held
   // changes nothing, and moves no session in the recency order.
   setBatch(
     sessionId: SessionId,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
-    const held = this.sessions.get(sessionId);
-    if (!pairs.some(({ key, value }) => held?.values.get(key) !== value))
-      return;
     runInAction(() => {
-      const session = held ?? {
-        values: new Map<string, string>(),
-        revision: 0,
-      };
-      for (const { key, value } of pairs) session.values.set(key, value);
-      this.changed(sessionId, session);
-      this.evictOldest();
-      this.atom.reportChanged();
+      const keys = this.sessions.get(sessionId) ?? new Set<string>();
+      let moved = false;
+      for (const { key, value } of pairs) {
+        const address = pickAddress(sessionId, key);
+        if (this.picks.get(address) === value) continue;
+        this.picks.set(address, value);
+        keys.add(key);
+        moved = true;
+      }
+      if (moved) {
+        this.changed(sessionId, keys);
+        this.evictOldest();
+      }
     });
   }
 
   clear(sessionId: SessionId, key: string): void {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined || !session.values.has(key)) return;
+    const keys = this.sessions.get(sessionId);
+    if (keys === undefined || !keys.has(key)) return;
     runInAction(() => {
-      session.values.delete(key);
-      // An emptied session is a non-state — drop it so it neither occupies a
-      // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
-      if (session.values.size === 0) this.dropped(sessionId);
-      else this.changed(sessionId, session);
-      this.atom.reportChanged();
+      this.picks.delete(pickAddress(sessionId, key));
+      keys.delete(key);
+      if (keys.size === 0) this.dropped(sessionId, keys);
+      else this.changed(sessionId, keys);
     });
   }
 
@@ -236,23 +222,31 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // its file keeps, so the file never holds a pick only this renderer reads
   // (edit mode's own), and a load that drops one is reading an older build's.
   private valuesOf(sessionId: SessionId): Record<string, string> | null {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined) return null;
-    const outlives = withoutRetiredKeys(Object.fromEntries(session.values));
+    const keys = this.sessions.get(sessionId);
+    if (keys === undefined) return null;
+    const values = Object.fromEntries(
+      Array.from(keys, (key) => [
+        key,
+        this.picks.get(pickAddress(sessionId, key))!,
+      ]),
+    );
+    const outlives = withoutRetiredKeys(values);
     return outlives.kind === "ok" ? outlives.value.value : null;
   }
 
   // Move-to-end: re-inserting at the tail makes this the most recently
   // written, here and in what the host is told.
-  private changed(sessionId: SessionId, session: Session): void {
-    session.revision = ++this.head;
-    putNewest(this.sessions, sessionId, session);
+  private changed(sessionId: SessionId, keys: Set<string>): void {
+    this.revisions.set(sessionId, ++this.head);
+    putNewest(this.sessions, sessionId, keys);
     this.told(sessionId);
   }
 
-  private dropped(sessionId: SessionId): void {
+  private dropped(sessionId: SessionId, keys: ReadonlySet<string>): void {
     this.head++;
-    putNewest(this.sessions, sessionId, null);
+    for (const key of keys) this.picks.delete(pickAddress(sessionId, key));
+    this.revisions.delete(sessionId);
+    this.sessions.delete(sessionId);
     this.told(sessionId);
   }
 
@@ -266,8 +260,8 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     // Delete the oldest keys in insertion order. Cost is proportional to the
     // number of evictions, not the total loaded set — deleting an already-
     // yielded key mid-iteration is well-defined for a Map.
-    for (const id of this.sessions.keys()) {
-      this.dropped(id);
+    for (const [id, keys] of this.sessions) {
+      this.dropped(id, keys);
       if (--overflow === 0) break;
     }
   }
