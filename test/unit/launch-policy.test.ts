@@ -1,4 +1,8 @@
-import { createOneShotLauncher, MAX_CAPTURED_BYTES } from "../../src/proc/launch";
+import {
+  createOneShotLauncher,
+  MAX_CAPTURED_BYTES,
+} from "../../src/proc/launch";
+import { EventEmitter } from "node:events";
 import type { Spawner } from "../../src/proc/spawner";
 import { type LaunchResult } from "../../src/proc/launcher";
 import {
@@ -9,7 +13,10 @@ import {
   runsFor,
   shell,
 } from "../../src/proc/spawner-fake";
-import { fakeLauncher, turns } from "../../scripts/lib/draw-fixtures/fake-launcher";
+import {
+  fakeLauncher,
+  turns,
+} from "../../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] What a launch promises its caller, proved on the
@@ -232,6 +239,66 @@ describe("a launch over a scripted OS", () => {
 });
 
 describe("an owner's launcher over a scripted OS", () => {
+  test.each([false, true])(
+    "retires a terminated group while a pipe is still held (member outlives leader: %s)",
+    async (memberSurvives) => {
+      const r = rig();
+      const command = "held descriptor";
+      r.spawner.program(shell(command), hangs());
+      let group: number | undefined;
+      let member = memberSurvives;
+      const signals: NodeJS.Signals[] = [];
+      const spawner: Spawner = {
+        ...r.spawner,
+        spawn(bin, args, options) {
+          const child = r.spawner.spawn(bin, args, options);
+          if (!shell(command)(bin, args)) return child;
+          group = child.pid;
+          // A process outside the group holds a pipe. Leader exit is
+          // delivered, but a child close is unavailable to the launcher.
+          const events = new EventEmitter();
+          child.once("exit", (code, signal) =>
+            events.emit("exit", code, signal),
+          );
+          return Object.assign(Object.create(child) as typeof child, {
+            on: events.on.bind(events),
+            once: events.once.bind(events),
+            off: events.off.bind(events),
+          });
+        },
+        groupGone: (pid) =>
+          (pid !== group || !member) && r.spawner.groupGone(pid),
+        signalGroup(pid, signal) {
+          if (pid === group) signals.push(signal);
+          r.spawner.signalGroup(pid, signal);
+        },
+      };
+      const launcher = createOneShotLauncher(
+        { inherited: {} },
+        r.clock,
+        spawner,
+      );
+      const stop = new AbortController();
+      let result: LaunchResult | undefined;
+      void launcher
+        .launch(sh(command, { signal: stop.signal }))
+        .then((value) => {
+          result = value;
+        });
+      stop.abort();
+      await r.advance(0);
+      if (memberSurvives) expect(result).toBeUndefined();
+      member = false;
+      await r.advance(100);
+      expect(result).toMatchObject({ ok: false, reason: "aborted" });
+      // Once absence is observed even a later positive group lookup
+      // cannot renew the launch's authority over that numeric id.
+      member = true;
+      await r.advance(1_000);
+      expect(signals).toEqual(["SIGTERM"]);
+    },
+  );
+
   test("closing the owner ends what is in flight and refuses what comes after", async () => {
     const clock = heldClock(new Date(1_000_000));
     const closing = new AbortController();
@@ -246,6 +313,9 @@ describe("an owner's launcher over a scripted OS", () => {
     clock.advance(1000);
     await turns();
     expect(await inFlight).toMatchObject({ ok: false, reason: "aborted" });
+    const group = started()[0]!.pid;
+    const lifeline = spawner.spawned.find(({ bin }) => bin === "awk");
+    expect(lifeline?.stdin.trimEnd().split("\n").at(-1)).toBe(`- ${group}`);
     expect(await launcher.launch(sh("sleep 60"))).toMatchObject({
       ok: false,
       reason: "aborted",

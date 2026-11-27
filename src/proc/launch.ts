@@ -424,6 +424,7 @@ function guard(state: LaunchState, group: number): void {
 function unguard(state: LaunchState, group: number): void {
   state.liveGroups.delete(group);
   state.lifeline?.pipe.write(`- ${group}\n`);
+  if (state.scope.signal.aborted && state.liveGroups.size === 0) endLifeline(state);
 }
 
 // A closed owner's lifeline goes with it: the EOF a dying launcher gives it, on
@@ -704,7 +705,15 @@ async function launchPiped(
     // A child whose spawn failed asynchronously (ENOENT) has no pid, and no
     // group to guard: its `error` event settles it.
     const group = child.pid;
+    let guarded = group;
     if (group !== undefined) guard(state, group);
+    // The group and the pipe can end independently. Once absence is observed,
+    // neither the lifeline nor a later deadline may signal this number again.
+    const releaseGroup = () => {
+      if (guarded === undefined) return;
+      unguard(state, guarded);
+      guarded = undefined;
+    };
     const exited = new Promise((end) => child.once("exit", end));
     // Node destroys a child's stdin when the child itself exits, dropping input
     // a descendant still reads (`(cat > f) <&0 &`). The launch owns the pipe
@@ -763,7 +772,7 @@ async function launchPiped(
       groupEndTimer?.();
       concludeTurn?.();
       unlisten();
-      if (group !== undefined) unguard(state, group);
+      releaseGroup();
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
       // The launch's scope goes once its child has exited: what still reads
       // the child's pipes then is a drain, which holds nothing of the launch.
@@ -819,28 +828,28 @@ async function launchPiped(
       if (!settled)
         concludeTurn ??= clock.defer(tasks.conclude, concludeWithGroup);
     };
-    // While a member of the group lives the launch waits for it, guarded, so
-    // SIGKILL still reaches it. The OS has no event for a group's end, so it is
-    // polled, with exponential backoff.
+    const groupEnded = () => {
+      releaseGroup();
+      killTimer?.();
+      // A closed owner releases its pipe readers. A live owner gets the
+      // next I/O turn for the group's final output, or close if it comes first.
+      if (state.scope.signal.aborted) concludeWithGroup();
+      else concludeNextTurn();
+    };
+    // The OS supplies a leader-exit event but no group-exit event. Inspect
+    // the group at leader exit, then only while a remaining member is alive.
     if (group !== undefined) {
       const awaitGroupEnd = (delayMs: number) => {
-        if (settled) return;
+        if (settled || guarded === undefined) return;
         if (spawner.groupGone(group)) {
-          concludeNextTurn();
+          groupEnded();
           return;
         }
         groupEndTimer = clock.after(tasks.groupEnd, delayMs, () =>
           awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
-      afterExit(tasks.groupEnd, () => {
-        // Termination already owns a SIGKILL deadline and the child's close.
-        // Its late exit must not start an independent group-poll loop.
-        if (!settled && terminated === null)
-          groupEndTimer = clock.defer(tasks.groupEnd, () =>
-            awaitGroupEnd(GROUP_END_POLL_MIN_MS),
-          );
-      });
+      afterExit(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS));
     }
 
     // [LAW:types-are-the-program] Do NOT settle here. We signal and let
@@ -861,14 +870,13 @@ async function launchPiped(
       // may no longer be the launch's. It did not time out; an abort and an
       // overflow, which happened, still stand.
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== undefined && spawner.groupGone(group)) {
+      if (ended && (guarded === undefined || spawner.groupGone(guarded))) {
         terminated = cause === "timeout" ? null : cause;
-        concludeNextTurn();
+        groupEnded();
         return;
       }
       terminated = cause;
       timer?.();
-      groupEndTimer?.();
       unlisten();
       const pid = child.pid;
       if (pid !== undefined) {
@@ -1370,7 +1378,10 @@ function launcherWithState(
       state.inFlight.forEach((end) => end());
       // Nothing reads a closed launcher's drains, so their fds go with it.
       state.drains.forEach((pipe) => pipe.destroy());
-      endLifeline(state);
+      // On an orderly close the launcher still owns termination. Keep the
+      // lifeline informed until its last group retires. Process death closes
+      // the pipe independently and still activates the emergency fallback.
+      if (state.liveGroups.size === 0) endLifeline(state);
     },
     { once: true },
   );
