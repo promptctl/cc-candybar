@@ -1002,30 +1002,34 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           });
           frameFeeds.took(name, routed, settled);
         },
-        prepare: (writes) =>
-          stores.prepare(writes, (revision) => {
-            const commit = encodeSessionCommit({
-              kind: "session-commit",
-              revision,
-              writes,
-              ...readingsAt(clock),
-            });
-            const recipients: string[] = [];
-            for (const [peer, target] of renderers) {
-              const generation = target.link.observe(commit);
-              if (generation !== null)
-                recipients.push(`${peer}[${generation}]`);
-            }
-            log(
-              "info",
-              eventLine("session commit", [
-                ["revision", String(revision)],
-                ["writer", name],
-                ["bytes", String(commit.bytes)],
-                ["recipients", recipients.join(",") || "-"],
-              ]),
-            );
-          }),
+        prepare: (writes, heard) =>
+          stores.prepare(
+            writes,
+            (revision, accepted) => {
+              const commit = encodeSessionCommit({
+                kind: "session-commit",
+                revision,
+                writes: accepted,
+                ...readingsAt(clock),
+              });
+              const recipients: string[] = [];
+              for (const [peer, target] of renderers) {
+                const generation = target.link.observe(commit);
+                if (generation !== null)
+                  recipients.push(`${peer}[${generation}]`);
+              }
+              log(
+                "info",
+                eventLine("session commit", [
+                  ["revision", String(revision)],
+                  ["writer", name],
+                  ["bytes", String(commit.bytes)],
+                  ["recipients", recipients.join(",") || "-"],
+                ]),
+              );
+            },
+            heard,
+          ),
         holding: (session) => collector.holding(session),
         recorded: () => {},
       },

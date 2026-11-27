@@ -48,7 +48,6 @@ import { failureOf } from "../../src/daemon/foundations/host-failure";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
 import {
   oversizedRendererHistory,
-  oversizedSession,
 } from "../helpers/oversized-renderer-history";
 import type { LogLine } from "../../src/utils/logger";
 
@@ -729,7 +728,7 @@ describe("a renderer process's start", () => {
   });
 });
 
-test("the in-process link logs construction diagnostics once before its first answer", async () => {
+test("an in-process peer takes its host checkpoint without proposing its own capacity edits", async () => {
   const logs: LogLine[] = [];
   const link = inProcessRenderer()({
     name: MAIN_RENDERER,
@@ -745,22 +744,11 @@ test("the in-process link logs construction diagnostics once before its first an
   });
   link.serve();
   link.serve();
-  expect(logs).toEqual([
-    {
-      level: "info",
-      line: `settings-history: trimmed an old step for session ${oversizedSession}`,
-    },
-  ]);
+  expect(logs).toEqual([]);
   const answered = await link.renderer.answer(pin);
+  expect(answered.stored).toEqual([]);
   expect(answered).not.toHaveProperty("diagnostics");
-  expect(answered.stored).toEqual([
-    {
-      kind: "steps",
-      store: "settings-history",
-      key: oversizedSession,
-      edits: [{ kind: "clear" }],
-    },
-  ]);
+  await link.close();
 });
 
 describe("a renderer process's end", () => {

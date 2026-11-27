@@ -1,3 +1,4 @@
+import { oversizedRendererHistory, oversizedSession } from "../helpers/oversized-renderer-history";
 import wire24 from "../fixtures/renderer-wire-24.json";
 import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type { EventInput, RendererBoot } from "../../src/renderer-interface/interface";
@@ -203,4 +204,28 @@ test("wire 25 compares sparse picks alongside the full recorded undo history", a
   await expect(replayRecording(lines)).resolves.toEqual({turns: 8});
   const altered = lines.with(5, lines[5]!.replace('"role":"user"', '"role":"project"'));
   await expect(replayRecording(altered)).rejects.toThrow("recording turn 5 differs at output.stored[0].value");
+});
+
+test("wire 28 reproduces its renderer-owned startup trim before the first input", async () => {
+  const result = {
+    kind: "built",
+    diagnostics: [
+      {
+        level: "info",
+        line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+      },
+    ],
+  };
+  const checkpoint = {
+    ...boot,
+    wireVersion: 28,
+    input: { ...settings, stored: oversizedRendererHistory() },
+    result,
+  };
+  await expect(replayRecording(linesOf(checkpoint, end))).resolves.toEqual({
+    turns: 0,
+  });
+  await expect(
+    replayRecording(linesOf({ ...checkpoint, result: { kind: "built" } }, end)),
+  ).rejects.toThrow("recording boot differs at result.diagnostics");
 });

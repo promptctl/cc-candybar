@@ -496,3 +496,39 @@ describe("the renderer over lines", () => {
     expect(heard).toEqual(['{"a":1}', '{"b":2}', '{"c"']);
   });
 });
+
+test("peer proposals cannot evict a session or manufacture a hearing", async () => {
+  const key = sessionIdOf("session");
+  for (const write of [
+    { kind: "drop", store: "session-state", key },
+    { kind: "heard", store: "settings-history", key },
+    {
+      kind: "steps",
+      store: "settings-history",
+      key,
+      edits: [{ kind: "trim", count: 1 }],
+    },
+    {
+      kind: "steps",
+      store: "settings-history",
+      key,
+      edits: [{ kind: "clear" }],
+    },
+  ] as const) {
+    const transport = linesOver(undefined, {
+      renderer: timed(
+        {
+          answer: async (input) => ({
+            ...(await talkingRenderer().answer(input)),
+            stored: [write],
+          }),
+        },
+        () => 0,
+        unexpectedTimingProblem,
+      ),
+    });
+    await expect(
+      transport.renderer.answer(command("close-journal")),
+    ).rejects.toThrow("invalid session writes");
+  }
+});

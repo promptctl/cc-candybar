@@ -63,7 +63,6 @@ import { heldClock } from "../helpers/held-clock";
 import { unexpectedTimingProblem } from "../helpers/renderers";
 import {
   oversizedRendererHistory,
-  oversizedSession,
 } from "../helpers/oversized-renderer-history";
 
 const SAID = "said-by-the-snapshot";
@@ -295,14 +294,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     kind: "boot", version: RECORDING_VERSION, wireVersion: RENDERER_WIRE_VERSION,
     input: boot, result: live.construction,
   }];
-  const bootDiagnostic = {
-    level: "info",
-    line: `settings-history: trimmed an old step for session ${oversizedSession}`,
-  };
-  expect(live.construction).toEqual({
-    kind: "built",
-    diagnostics: [bootDiagnostic],
-  });
+  expect(live.construction).toEqual({ kind: "built" });
   const config = JSON.stringify({
     globals: { experimentalPane: true },
     actions: {
@@ -342,12 +334,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   ]);
   expect(started.subscriptions.configs).toEqual([origin]);
   expect(started.subscriptions.lanes[session]?.pane).toBe(true);
-  expect(started.stored).toContainEqual({
-    kind: "steps", store: "settings-history",
-    key: oversizedSession,
-    edits: [{ kind: "clear" }],
-  });
-  expect(started.diagnostics).not.toContainEqual(bootDiagnostic);
+  expect(started.stored).toEqual([]);
   const first = presentOf(answered(await turn(
     { kind: "request", id: 1 as RequestId, context },
     10,

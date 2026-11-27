@@ -1,5 +1,7 @@
 // [LAW:one-source-of-truth] One host session image supplies every renderer
 // generation. Its persistence boundary sees only the durable projection.
+import type { DaemonLogger } from "../utils/logger.js";
+import type { SessionId } from "./foundations/session-id.js";
 import type { StoreReport } from "./foundations/stored-file.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import {
@@ -32,7 +34,8 @@ export interface SessionStores {
   current(name: RendererName): SessionCheckpoint;
   prepare(
     writes: readonly StoreWrite[],
-    published?: (revision: number) => void,
+    published?: (revision: number, writes: readonly StoreWrite[]) => void,
+    heard?: SessionId,
   ): () => void;
   close(): Promise<void>;
 }
@@ -40,10 +43,14 @@ export interface SessionStores {
 export class HostSessions implements SessionStores {
   private image?: HostSessionImage;
   private revision = 0;
-  private early: StoreWrite[][] = [];
+  private early: Array<{ writes: readonly StoreWrite[]; heard?: SessionId }> =
+    [];
   private closed = false;
   private readonly names = new Set<RendererName>();
-  constructor(private readonly disk?: SessionPersistence) {}
+  constructor(
+    private readonly disk?: SessionPersistence,
+    private readonly log?: DaemonLogger,
+  ) {}
 
   load(): readonly StoreReport[] {
     if (this.image) throw new Error("shared session state was loaded twice");
@@ -54,9 +61,15 @@ export class HostSessions implements SessionStores {
     };
     this.image = new HostSessionImage(seed.state);
     this.revision = seed.revision;
+    const expired = this.image.bound();
+    if (expired.writes.length) {
+      this.persist(expired.durable);
+      this.reportLimits(expired.writes);
+    }
     const early = this.early;
     this.early = [];
-    for (const writes of early) this.take(writes);
+    for (const { writes, heard } of early)
+      this.prepare(writes, undefined, heard)();
     return seed.reports;
   }
   current(name: RendererName): SessionCheckpoint {
@@ -72,37 +85,57 @@ export class HostSessions implements SessionStores {
     revision: this.revision,
     state: this.image!.snapshot("durable"),
   });
+  private reportLimits(writes: readonly StoreWrite[]): void {
+    if (!this.log) return;
+    for (const write of writes) {
+      const change = write.kind === "steps" ? write.edits[0] : undefined;
+      const detail =
+        change?.kind === "trim"
+          ? `trimmed old steps count=${change.count}`
+          : "evicted session";
+      this.log("info", `${write.store}: ${detail} session=${write.key}`);
+    }
+  }
+  private persist(durable: readonly DurableWrite[]): void {
+    this.revision++;
+    if (!this.closed)
+      this.disk?.append(this.revision, durable, this.checkpoint);
+  }
   take(
     writes: readonly StoreWrite[],
-    published?: (revision: number) => void,
+    published?: (revision: number, writes: readonly StoreWrite[]) => void,
   ): void {
     this.prepare(writes, published)();
   }
   prepare(
     writes: readonly StoreWrite[],
-    published?: (revision: number) => void,
+    published?: (revision: number, writes: readonly StoreWrite[]) => void,
+    heard?: SessionId,
   ): () => void {
-    if (!writes.length) return () => {};
     if (!this.image)
       return () => {
-        this.early.push([...writes]);
+        this.early.push({ writes: [...writes], heard });
       };
-    const apply = this.image.prepare(writes);
+    const hearing = heard === undefined ? undefined : this.image.hearing(heard);
+    const proposals = hearing?.length ? [...hearing, ...writes] : writes;
+    if (!proposals.length) return () => {};
+    const apply = this.image.prepare(proposals);
     const expected = this.revision;
     return () => {
       if (this.revision !== expected)
         throw new Error(
           `session decision prepared at revision ${expected} cannot land at ${this.revision}`,
         );
-      const durable = apply();
-      this.revision++;
-      if (!this.closed) {
-        try {
-          this.disk?.append(this.revision, durable, this.checkpoint);
-        } finally {
-          // A refused disk write still changed the live session. Its peers
-          // observe that decision while its caller learns persistence failed.
-          published?.(this.revision);
+      const accepted = apply();
+      try {
+        this.persist(accepted.durable);
+      } finally {
+        // A refused disk write still changed the live session. Its peers
+        // observe that decision while its caller learns persistence failed.
+        if (!this.closed) {
+          published?.(this.revision, accepted.writes);
+          if (accepted.writes.length > proposals.length)
+            this.reportLimits(accepted.writes.slice(proposals.length));
         }
       }
     };

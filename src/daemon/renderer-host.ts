@@ -265,7 +265,10 @@ export function rendererHost(
     ) => void;
     // [LAW:single-enforcer] Where every output's stored writes go: the host's
     // copy of the renderer's stores, before any later input.
-    readonly prepare: (writes: readonly StoreWrite[]) => () => void;
+    readonly prepare: (
+      writes: readonly StoreWrite[],
+      heard?: SessionId,
+    ) => () => void;
     // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Every turn
     // holds the session its event names until it settles, so no sweep retires
     // a session under a turn on it.
@@ -542,6 +545,8 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const decision = configSessionDecision(output.effects);
+    const hearing =
+      event.kind === "context" ? event.context.hookData.session_id : undefined;
     let publish: (() => void) | undefined;
     let landed: ConfigLanding;
     try {
@@ -549,7 +554,7 @@ export function rendererHost(
       // decision while the file can still be refused. The guarded write
       // and publishing that decision share this synchronous host turn.
       if (decision !== undefined)
-        publish = collector.prepare([...output.stored, ...decision]);
+        publish = collector.prepare([...output.stored, ...decision], hearing);
       landed = landConfig(changes, answers);
     } catch (thrown) {
       landed = {
@@ -576,7 +581,7 @@ export function rendererHost(
     // Wake the next turn even if storage or a later collector fails.
     const owed: Array<Promise<HostOutcome | readonly HostOutcome[]>> = [];
     try {
-      (accepted ?? collector.prepare(output.stored))();
+      (accepted ?? collector.prepare(output.stored, hearing))();
     } catch (thrown) {
       const failure = failureOf(thrown);
       notTaken("stored writes", failure);

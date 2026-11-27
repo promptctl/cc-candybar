@@ -375,3 +375,85 @@ test("a refused append is held live and the next successful write makes both cli
   });
   await afterCrash.close();
 });
+
+test("over-capacity profile imports are bounded before the first peer boots and recovered in that revision", async () => {
+  const ids = Array.from({ length: 33 }, (_, i) =>
+    sessionIdOf("migrated-" + i),
+  );
+  const old = Object.fromEntries(
+    ids.map((id) => [id, { past: [[theme]], future: [] }]),
+  );
+  put(paths().settingsHistory, old);
+  const original = fs.readFileSync(paths().settingsHistory);
+  const host = build();
+  host.load();
+  const checkpoint = host.current(peer);
+  expect(checkpoint.revision).toBe(1);
+  expect(Object.keys(checkpoint.state.history)).toEqual(ids.slice(1));
+  const folder = path.join(dir, "shared-session", "archive");
+  expect(
+    fs
+      .readdirSync(folder)
+      .some((name) =>
+        fs.readFileSync(path.join(folder, name)).equals(original),
+      ),
+  ).toBe(true);
+  const afterCrash = build();
+  afterCrash.load();
+  expect(afterCrash.current(main)).toEqual(checkpoint);
+  await afterCrash.close();
+  expect(
+    Object.keys(JSON.parse(fs.readFileSync(paths().settingsHistory, "utf8"))),
+  ).toEqual(ids.slice(1));
+});
+
+test("a request protects the same session on both stores only when the host recency changes", async () => {
+  const ids = Array.from({ length: 32 }, (_, index) =>
+    sessionIdOf("active-" + index),
+  );
+  const recent = ids[0]!;
+  const oldest = ids[1]!;
+  const extra = sessionIdOf("incoming");
+  put(
+    paths().settingsHistory,
+    Object.fromEntries(ids.map((id) => [id, { past: [[theme]], future: [] }])),
+  );
+  put(
+    paths().sessionState,
+    Object.fromEntries(ids.map((id) => [id, { theme: "nord" }])),
+  );
+  const host = build();
+  host.load();
+  const publish = jest.fn();
+  host.prepare([], publish, recent)();
+  const heard = [
+    { kind: "heard", store: "session-state", key: recent },
+    { kind: "heard", store: "settings-history", key: recent },
+  ];
+  expect(publish.mock.calls).toEqual([[1, heard]]);
+  host.current(peer);
+  host.prepare([], publish, recent)();
+  expect(publish).toHaveBeenCalledTimes(1);
+  const history = {
+    kind: "steps",
+    store: "settings-history",
+    key: extra,
+    edits: [{ kind: "append", step: [layout] }],
+  } as const;
+  host.prepare([history], publish)();
+  expect(publish.mock.calls[1]).toEqual([
+    2,
+    [
+      history,
+      {
+        kind: "steps",
+        store: "settings-history",
+        key: oldest,
+        edits: [{ kind: "clear" }],
+      },
+    ],
+  ]);
+  expect(host.current(main).state.history[recent]?.past).toEqual([[theme]]);
+  expect(host.current(peer).state.history[oldest]).toBeUndefined();
+  await host.close();
+});

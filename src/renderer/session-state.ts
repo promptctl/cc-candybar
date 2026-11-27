@@ -10,6 +10,7 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state";
 import { RecencyMap } from "../utils/recency";
+import { MAX_PICK_SESSIONS } from "../renderer-interface/session-capacity.js";
 import { StoredMoves } from "./stored-moves";
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
@@ -61,17 +62,9 @@ export function recordingView(
 const pickAddress = (sessionId: SessionId, key: string): string =>
   `${sessionId}/${key}`;
 
-// Generous headroom over realistic concurrent-session counts; matches the
-// render cache's LRU bound. Only a session no click has written to for longest
-// is ever evicted — eviction *is* "drop dead sessions".
-const DEFAULT_MAX_SESSIONS = 256;
-
 export class SessionState implements SessionStateReader, SessionStateRW {
-  // [LAW:types-are-the-program] Insertion order is recency order, the order
-  // each session was last written or heard by a request: the store cannot
-  // hold more than maxSessions, so the bound is structural, not dependent on
-  // an external prune caller, and drops the session idle longest. A read
-  // moves nothing, so the host's copy, told of every move, keeps the order.
+  // Recency is a local eviction policy only for standalone stores and
+  // historical recordings. A live peer takes removals from its host.
   private readonly sessions = new RecencyMap<SessionId, Set<string>>();
   // [LAW:one-source-of-truth] Each pick has one observable address, even
   // before it exists. The recency index holds only its session's key names
@@ -95,7 +88,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // `loaded` is what the profile holds, oldest first, as the host handed it in.
   constructor(
     loaded: StoredState["sessions"] = {},
-    private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
+    private readonly maxSessions: number | "host" = MAX_PICK_SESSIONS,
   ) {
     runInAction(() => {
       for (const [id, values] of Object.entries(loaded) as Array<
@@ -229,11 +222,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     });
   }
 
-  // A request from the session: it moves to the newest end, so the bound
-  // drops the session idle longest. What it holds is unchanged, so no reader
-  // is told, and the host hears only its place.
+  // A historical or standalone request promotes its session without
+  // invalidating pick readers. The live host admits its own requests.
   heard(sessionId: SessionId): void {
-    if (this.sessions.touch(sessionId)) this.moved.heard(sessionId);
+    if (this.maxSessions !== "host" && this.sessions.touch(sessionId))
+      this.moved.heard(sessionId);
   }
 
   // [LAW:dataflow-not-control-flow] Coalesce writes to a key before crossing
@@ -243,7 +236,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     const writes = this.moved.drain((key, move): StoreWrite => {
       if (move === "heard")
         return { kind: "heard", store: "session-state", key };
-      if (!this.sessions.has(key))
+      if (this.maxSessions !== "host" && !this.sessions.has(key))
         return { kind: "drop", store: "session-state", key };
       return {
         kind: "patch",
@@ -283,6 +276,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   private evictOldest(): void {
     while (
+      this.maxSessions !== "host" &&
       this.sessions.size > this.maxSessions &&
       this.sessions.oldest !== undefined
     ) {

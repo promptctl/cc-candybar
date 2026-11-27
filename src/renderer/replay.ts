@@ -253,7 +253,10 @@ function historicalOutputs(
   return (output) => ({
     ...output,
     effects: output.effects.map((effect) => {
-      if (effect.kind !== "change" && effect.kind !== "approve-repo")
+      if (
+        wireVersion >= 28 ||
+        (effect.kind !== "change" && effect.kind !== "approve-repo")
+      )
         return effect;
       const { onApplied: _hostDecision, ...historical } = effect;
       return historical;
@@ -333,6 +336,7 @@ function constructionOf(entry: Record<string, unknown>): {
   const built = mainRendererOf(
     boot,
     legacyRegion ? legacyCompileKey : undefined,
+    wireVersion < 29 ? "renderer" : "host",
   );
   if (built.kind === "refused")
     return {
@@ -379,7 +383,7 @@ export async function replayRecording(
       const boot = constructionOf(entry);
       historical = entry.wireVersion === 22;
       sessionRevision =
-        entry.wireVersion === RENDERER_WIRE_VERSION || entry.wireVersion === 27
+        typeof entry.wireVersion === "number" && entry.wireVersion >= 27
           ? boot.sessionRevision
           : undefined;
       verify(entry.result, boot.result, "recording boot", "result");

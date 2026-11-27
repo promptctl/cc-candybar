@@ -59,7 +59,10 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { digestOf } from "../utils/plain.js";
-import { RecencyMap } from "../utils/recency.js";
+import {
+  HistoryIndex,
+  type CapacityOwner,
+} from "../renderer-interface/session-capacity.js";
 import { StoredMoves } from "./stored-moves.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
@@ -76,14 +79,6 @@ export const EMPTY_HISTORY_DEPTH: HistoryDepth = {
   redo: 0,
   sinceEdit: 0,
 };
-
-// [LAW:carrying-cost] A file change holds two whole-file snapshots, so what a
-// history costs is its bytes, held in memory and rewritten on every step. It
-// is bounded three ways: steps per session, sessions, and total snapshot text.
-// Over either shared bound, the session that changed least recently goes
-// first; a lone session over the byte bound loses its oldest steps.
-const MAX_SESSIONS = 32;
-const MAX_BYTES = 8 * 1024 * 1024;
 
 // Where a click's config writes go: changes its turn returns
 // (src/renderer/config-writes.ts).
@@ -143,9 +138,7 @@ export class SettingsHistory {
   private readonly held = observable.map<SessionId, SessionHistory>(undefined, {
     deep: false,
   });
-  private readonly costs = new RecencyMap<SessionId, number>();
-  private readonly stepCosts = new WeakMap<Step, number>();
-  private totalCost = 0;
+  private readonly index?: HistoryIndex;
 
   private readonly moved = new StoredMoves();
   private readonly edits = new Map<SessionId, HistoryEdit[]>();
@@ -154,14 +147,15 @@ export class SettingsHistory {
   // stacks touched by that turn so a relative move is applied exactly once.
   private readonly proposedFrom = new Map<SessionId, SessionHistory>();
 
-  // `loaded` is what the profile holds, oldest first, as the host handed it
-  // in: held to the same bounds as every step that lands.
+  // Private drafts and historical recordings enforce their own bounds.
+  // A live peer applies the evictions attached to its host revision.
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
     loaded: StoredState["history"] = {},
-    private readonly destination: "host" | "private" = "host",
+    private readonly owner: CapacityOwner | "private" = "renderer",
   ) {
+    if (owner !== "host") this.index = new HistoryIndex(true);
     runInAction(() => {
       for (const [id, history] of Object.entries(loaded))
         this.keep(id as SessionId, history);
@@ -170,8 +164,8 @@ export class SettingsHistory {
   }
 
   heard(sessionId: SessionId): void {
-    if (!this.costs.touch(sessionId)) return;
-    if (this.destination === "host") this.moved.heard(sessionId);
+    if (!this.index?.touch(sessionId)) return;
+    if (this.owner !== "private") this.moved.heard(sessionId);
   }
 
   drain(): StoreWrite[] {
@@ -191,9 +185,10 @@ export class SettingsHistory {
   }
 
   private record(session: SessionId, edits: readonly HistoryEdit[]): void {
-    if (this.destination === "private") return;
+    if (this.owner === "private") return;
     this.moved.put(session);
-    if (!this.held.has(session)) this.edits.set(session, [{ kind: "clear" }]);
+    if (this.index && !this.held.has(session))
+      this.edits.set(session, [{ kind: "clear" }]);
     else {
       const pending = this.edits.get(session);
       if (pending === undefined) this.edits.set(session, [...edits]);
@@ -219,7 +214,7 @@ export class SettingsHistory {
   }
 
   private proposing(session: SessionId): void {
-    if (this.destination === "host" && !this.proposedFrom.has(session))
+    if (this.owner !== "private" && !this.proposedFrom.has(session))
       this.proposedFrom.set(session, this.history(session));
   }
 
@@ -234,7 +229,7 @@ export class SettingsHistory {
   }
 
   observeHearing(session: SessionId): void {
-    this.costs.touch(session);
+    this.index?.touch(session);
   }
 
   begin(files: ConfigFiles): Journal {
@@ -400,65 +395,30 @@ export class SettingsHistory {
     return step;
   }
 
-  // [LAW:single-enforcer] Account immutable steps once. Only the affected
-  // session changes its contribution to the shared budget. Keep the original
-  // weight in string code units so an upgrade preserves eviction decisions.
   private keep(sessionId: SessionId, history: SessionHistory): void {
-    let cost = 0;
-    for (const stack of [history.past, history.future]) {
-      for (const step of stack) {
-        let weight = this.stepCosts.get(step);
-        if (weight === undefined) {
-          weight = step.reduce(
-            (sum, change) =>
-              sum + (change.before?.length ?? 0) + (change.after?.length ?? 0),
-            0,
-          );
-          this.stepCosts.set(step, weight);
-        }
-        cost += weight;
-      }
-    }
-    this.totalCost += cost - (this.costs.get(sessionId) ?? 0);
-    this.costs.set(sessionId, cost);
+    this.index?.set(sessionId, history);
     this.held.set(sessionId, history);
   }
 
   private drop(sessionId: SessionId): void {
-    this.totalCost -= this.costs.get(sessionId) ?? 0;
-    this.costs.delete(sessionId);
+    this.index?.delete(sessionId);
     this.held.delete(sessionId);
   }
 
   private bound(): void {
-    while (this.costs.size > MAX_SESSIONS || this.totalCost > MAX_BYTES) {
-      const oldest = this.costs.oldest!;
-      this.proposing(oldest);
-      if (this.costs.size > 1) {
-        this.drop(oldest);
-        this.record(oldest, []);
-        continue;
-      }
-      const history = this.held.get(oldest)!;
-      let remaining = this.totalCost;
-      let count = 0;
-      for (const stack of [history.past, history.future]) {
-        for (const step of stack) {
-          if (remaining <= MAX_BYTES) break;
-          remaining -= this.stepCosts.get(step)!;
-          count++;
-        }
-      }
-      const edit = { kind: "trim", count } as const;
-      const trimmed = historyAfter(history, edit);
-      if (holdsNothing(trimmed)) this.drop(oldest);
-      else this.keep(oldest, trimmed);
-      this.record(oldest, [edit]);
-      for (let i = 0; i < count; i++)
-        this.logger(
-          "info",
-          `settings-history: trimmed an old step for session ${oldest}`,
-        );
+    for (let limit; (limit = this.index?.excess()) !== undefined; ) {
+      const { key, edit } = limit;
+      this.proposing(key);
+      const next = historyAfter(this.history(key), edit);
+      if (holdsNothing(next)) this.drop(key);
+      else this.keep(key, next);
+      this.record(key, [edit]);
+      if (edit.kind === "trim")
+        for (let i = 0; i < edit.count; i++)
+          this.logger(
+            "info",
+            `settings-history: trimmed an old step for session ${key}`,
+          );
     }
   }
 }

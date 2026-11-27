@@ -59,7 +59,6 @@ import { type IsolatedDaemonHandle } from "../../../scripts/lib/daemon/isolated"
 import { until } from "../../../scripts/lib/until";
 import {
   oversizedRendererHistory,
-  oversizedSession,
 } from "../../helpers/oversized-renderer-history";
 import type { Instant, Tick } from "../../../src/utils/instant";
 import { fieldsOf } from "../../../src/utils/logfmt";
@@ -194,7 +193,7 @@ require("node:module").syncBuiltinESMExports();`,
     });
   });
 
-  test("a built child reports history trimmed at boot on readiness alone", () => {
+  test("a built peer accepts its checkpoint without issuing a capacity edit", () => {
     const child = bootChild(
       {
         ...COMPATIBLE_BOOT,
@@ -217,31 +216,13 @@ require("node:module").syncBuiltinESMExports();`,
       .split("\n")
       .map((line) => JSON.parse(line));
     expect(lines).toEqual([
+      expect.objectContaining({ kind: "started" }),
       expect.objectContaining({
-        kind: "started",
-        diagnostics: [
-          {
-            level: "info",
-            line: `settings-history: trimmed an old step for session ${oversizedSession}`,
-          },
-        ],
-      }),
-      expect.objectContaining({
-        kind: "output",
-        n: 1,
-        output: expect.objectContaining({
-          kind: "answered",
-          stored: [
-            {
-              kind: "steps",
-              store: "settings-history",
-              key: oversizedSession,
-              edits: [{ kind: "clear" }],
-            },
-          ],
-        }),
+        kind: "output", n: 1,
+        output: expect.objectContaining({kind: "answered", stored: []}),
       }),
     ]);
+    expect(lines[0]).not.toHaveProperty("diagnostics");
     expect(lines[1]?.output).not.toHaveProperty("diagnostics");
   });
 });

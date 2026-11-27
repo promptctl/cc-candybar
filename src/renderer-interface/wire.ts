@@ -38,7 +38,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 28;
+export const RENDERER_WIRE_VERSION = 29;
 export const SESSION_DELIVERY_LIMIT = {
   revisions: 256,
   bytes: 1024 * 1024,
@@ -67,6 +67,20 @@ export function sessionCommitOf(raw: unknown): SessionCommit {
 }
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
+// A peer proposes only the keys or targets its gesture changed. Recency and
+// capacity edits in a host commit may affect sessions the peer never saw.
+function isRendererWrite(raw: unknown) {
+  return (
+    isStoreWrite(raw, isHistoryEdit) &&
+    (raw.kind === "patch" ||
+      (raw.kind === "steps" &&
+        raw.edits.length > 0 &&
+        raw.edits.every(
+          (edit) => edit.kind !== "clear" && edit.kind !== "trim",
+        )))
+  );
+}
+
 function validConfigDecisions(effects: readonly unknown[]): boolean {
   let found = false;
   for (const effect of effects) {
@@ -77,8 +91,7 @@ function validConfigDecisions(effects: readonly unknown[]): boolean {
       !Array.isArray(effect.onApplied) ||
       effect.onApplied.length === 0 ||
       !effect.onApplied.every(
-        (write) =>
-          isStoreWrite(write, isHistoryEdit) && write.key === effect.session,
+        (write) => isRendererWrite(write) && write.key === effect.session,
       )
     )
       return false;
@@ -428,9 +441,9 @@ export function rendererOverLines(deps: {
           }
           if (
             !Array.isArray(heard.output.stored) ||
-            !heard.output.stored.every((w) => isStoreWrite(w, isHistoryEdit)) ||
-            (Array.isArray(heard.output.effects) &&
-              !validConfigDecisions(heard.output.effects))
+            !heard.output.stored.every(isRendererWrite) ||
+            !Array.isArray(heard.output.effects) ||
+            !validConfigDecisions(heard.output.effects)
           ) {
             reject(
               new Error(

@@ -14,6 +14,7 @@
 // read, which origins' config the renderer holds, and when it next wants a
 // turn, as they stand once the turn's act has landed.
 
+import type { CapacityOwner } from "../renderer-interface/session-capacity.js";
 import {
   answerRequest,
   deliver,
@@ -266,8 +267,8 @@ export function mainRenderer(
         const origin = context.requested;
         contextFacts(context, record);
         noteFacts(record, { encoding: context.encoding });
-        // [LAW:one-source-of-truth] Recency is the session's last request or
-        // write, so the bound drops the one idle longest.
+        // Historical wires proposed recency from the renderer. Live stores
+        // defer to the host that received the request.
         for (const store of Object.values(stores)) store.heard(session);
         // [LAW:one-source-of-truth] A view cannot observe a new context
         // while it is still bound to the previous origin's config.
@@ -684,13 +685,14 @@ function closeIdleMenus(
 export function mainRendererOf(
   inputs: RendererBoot,
   identifyCompile?: StateDeps["identifyCompile"],
+  capacity: CapacityOwner = "host",
 ): RendererConstruction {
   const turnLog = new TurnLog();
   return turnLog.during<RendererConstruction>(() => {
     try {
       return {
         kind: "built",
-        renderer: build(inputs, turnLog, identifyCompile),
+        renderer: build(inputs, turnLog, identifyCompile, capacity),
       };
     } catch (thrown) {
       return { kind: "refused", failure: rendererFailureOf(thrown) };
@@ -702,6 +704,7 @@ function build(
   inputs: RendererBoot,
   turnLog: TurnLog,
   identifyCompile: StateDeps["identifyCompile"],
+  capacity: CapacityOwner,
 ): SessionRenderer {
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
@@ -710,7 +713,10 @@ function build(
   const time = new TurnTime();
   const now = () => time.at;
   const log = turnLog.add;
-  const store = new SessionState(inputs.stored.sessions);
+  const store = new SessionState(
+    inputs.stored.sessions,
+    capacity === "host" ? "host" : undefined,
+  );
   const edits = new EditTransactions(store, log);
   // [LAW:one-source-of-truth] Every reader takes the session as its open
   // edit shows it.
@@ -719,6 +725,7 @@ function build(
     store,
     log,
     inputs.stored.history,
+    capacity,
   );
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;

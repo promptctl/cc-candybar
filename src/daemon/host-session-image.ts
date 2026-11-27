@@ -3,6 +3,10 @@
 // named picks, histories and recency links.
 import { isPlainObject } from "../config/loader/validate-core.js";
 import type { SessionId } from "./foundations/session-id.js";
+import {
+  HistoryIndex,
+  MAX_PICK_SESSIONS,
+} from "../renderer-interface/session-capacity.js";
 import { RecencyMap } from "../utils/recency.js";
 import {
   durableHistory,
@@ -114,12 +118,13 @@ function publicEdits(
 
 export class HostSessionImage {
   private readonly picks = new RecencyMap<SessionId, Map<string, string>>();
-  private readonly histories = new RecencyMap<SessionId, SessionHistory>();
-  constructor(seed: StoredState) {
+  private readonly histories: HistoryIndex;
+  constructor(seed: StoredState, purpose: "live" | "recovery" = "live") {
+    this.histories = new HistoryIndex(purpose === "live");
     for (const [id, picks] of Object.entries(seed.sessions))
       this.picks.set(id as SessionId, new Map(Object.entries(picks)));
     for (const [id, history] of Object.entries(seed.history))
-      this.histories.set(id as SessionId, history);
+      this.setHistory(id as SessionId, history);
   }
 
   snapshot(scope: "live" | "durable"): StoredState {
@@ -161,12 +166,57 @@ export class HostSessionImage {
     }
   }
 
-  private history(id: SessionId, next: SessionHistory): void {
-    if (holdsNothing(next)) this.histories.delete(id);
-    else this.histories.set(id, next);
+  private setHistory(key: SessionId, next: SessionHistory): void {
+    if (holdsNothing(next)) this.histories.delete(key);
+    else this.histories.set(key, next);
   }
 
-  prepare(writes: readonly StoreWrite[]): () => DurableWrite[] {
+  // The host heard the request. A peer boot replaying old contexts is never a
+  // new request, and a worker can lag a more recent hearing on another peer.
+  hearing(key: SessionId): StoreWrite[] {
+    const writes: StoreWrite[] = [];
+    if (this.picks.wouldTouch(key))
+      writes.push({ kind: "heard", store: "session-state", key });
+    if (this.histories.wouldTouch(key))
+      writes.push({ kind: "heard", store: "settings-history", key });
+    return writes;
+  }
+
+  // Evictions are decided after every authored write has taken its place in
+  // recency order. Persist and publish the same removals as the original turn.
+  bound(): { writes: StoreWrite[]; durable: DurableWrite[] } {
+    const writes: StoreWrite[] = [],
+      durable: DurableWrite[] = [];
+    while (this.picks.size > MAX_PICK_SESSIONS) {
+      const drop = {
+        store: "session-state",
+        kind: "drop",
+        key: this.picks.oldest!,
+      } as const;
+      this.picks.delete(drop.key);
+      writes.push(drop);
+      durable.push(drop);
+    }
+    for (let limit; (limit = this.histories.excess()) !== undefined; ) {
+      const { key, edit } = limit;
+      const prior = this.histories.get(key)!;
+      const next = historyAfter(prior, edit);
+      this.setHistory(key, next);
+      const steps = {
+        store: "settings-history",
+        kind: "steps",
+        key,
+        edits: [edit],
+      } as const;
+      writes.push(steps);
+      durable.push({ ...steps, edits: publicEdits(prior, edit, next) });
+    }
+    return { writes, durable };
+  }
+
+  prepare(
+    writes: readonly StoreWrite[],
+  ): () => { writes: readonly StoreWrite[]; durable: readonly DurableWrite[] } {
     // Resolve every ordered history reference before mutating either store.
     // One bad peer message cannot land half a transaction.
     const staged = new Map<SessionId, SessionHistory>();
@@ -184,7 +234,15 @@ export class HostSessionImage {
       staged.set(write.key, prior);
       histories.push({ next: prior, edits });
     }
-    return () => this.apply(writes, histories);
+    return () => {
+      const durable = this.apply(writes, histories);
+      const expired = this.bound();
+      if (!expired.writes.length) return { writes, durable };
+      return {
+        writes: [...writes, ...expired.writes],
+        durable: [...durable, ...expired.durable],
+      };
+    };
   }
 
   private apply(
@@ -201,7 +259,7 @@ export class HostSessionImage {
       } as const;
       if (write.kind === "steps") {
         const { next, edits } = histories[at++]!;
-        this.history(write.key, next);
+        this.setHistory(write.key, next);
         durable.push(edits.length ? { ...write, edits } : heard);
       } else if (write.kind === "patch") {
         const prior = this.picks.get(write.key);
@@ -236,7 +294,7 @@ export class HostSessionImage {
           (h, e) => (e.kind === "cut" ? cut(h, e) : historyAfter(h, e)),
           this.histories.get(write.key) ?? EMPTY_HISTORY,
         );
-        this.history(write.key, next);
+        this.setHistory(write.key, next);
       }
     }
   }

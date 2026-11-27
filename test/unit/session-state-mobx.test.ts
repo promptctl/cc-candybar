@@ -145,3 +145,29 @@ describe("SessionState MobX integration", () => {
     expect(state.get(S1, "missing")).toBeNull();
   });
 });
+
+test("a peer clearing its last visible key preserves a key a different writer just added", () => {
+  const issuer = new SessionState({ [S1]: { theme: "nord" } }, "host");
+  issuer.clear(S1, "theme");
+  const proposal = issuer.drain();
+  expect(proposal).toEqual([
+    {
+      store: "session-state",
+      kind: "patch",
+      key: S1,
+      changes: { theme: null },
+    },
+  ]);
+  const other = new SessionState(
+    { [S1]: { theme: "nord", padding: "2" } },
+    "host",
+  );
+  for (const write of proposal) {
+    if (write.store !== "session-state")
+      throw new Error("expected a pick change");
+    other.observe(write);
+  }
+  expect(other.get(S1, "theme")).toBeNull();
+  expect(other.get(S1, "padding")).toBe("2");
+  expect(other.drain()).toEqual([]);
+});

@@ -22,7 +22,7 @@ test("a journal prefix equals the durable projection after every cap, private ed
   const image = new HostSessionImage(EMPTY_STORED_STATE);
   const disk = new HostSessionImage(EMPTY_STORED_STATE);
   const take = (write: StoreWrite) => {
-    const changes = image.prepare([write])();
+    const changes = image.prepare([write])().durable;
     const json = JSON.stringify(changes);
     expect(json).not.toContain("private-secret");
     expect(json).not.toContain(EDIT_MODE_KEY);
@@ -87,4 +87,84 @@ test("an invalid relative edit refuses its whole transaction", () => {
     ]),
   ).toThrow(/empty stack/);
   expect(image.snapshot("live")).toEqual(EMPTY_STORED_STATE);
+});
+
+test("one host revision evicts the least recently heard pick and history across writers", () => {
+  const ids = Array.from({ length: 256 }, (_, i) => sessionIdOf("held-" + i));
+  const [heard, oldest] = ids;
+  const extra = sessionIdOf("newcomer");
+  const initial = {
+    sessions: Object.fromEntries(ids.map((id) => [id, { theme: "nord" }])),
+    history: Object.fromEntries(
+      ids
+        .slice(0, 32)
+        .map((id) => [id, { past: [[change("theme", "nord")]], future: [] }]),
+    ),
+  };
+  const host = new HostSessionImage(initial);
+  const peer = new HostSessionImage(initial, "recovery");
+  const disk = new HostSessionImage(initial, "recovery");
+  const input: StoreWrite[] = [
+    { store: "session-state", kind: "heard", key: heard! },
+    { store: "settings-history", kind: "heard", key: heard! },
+    {
+      store: "session-state",
+      kind: "patch",
+      key: extra,
+      changes: { padding: "2" },
+    },
+    {
+      store: "settings-history",
+      kind: "steps",
+      key: extra,
+      edits: [{ kind: "append", step: [change("padding", "2")] }],
+    },
+  ];
+  const { writes, durable } = host.prepare(input)();
+  expect(writes).toEqual([
+    ...input,
+    { store: "session-state", kind: "drop", key: oldest },
+    {
+      store: "settings-history",
+      kind: "steps",
+      key: oldest,
+      edits: [{ kind: "clear" }],
+    },
+  ]);
+  peer.recover(writes);
+  disk.recover(durable);
+  expect(peer.snapshot("live")).toEqual(host.snapshot("live"));
+  expect(disk.snapshot("live")).toEqual(host.snapshot("durable"));
+  expect(Object.keys(host.snapshot("live").sessions)).toHaveLength(256);
+  expect(Object.keys(host.snapshot("live").history)).toHaveLength(32);
+});
+
+test("a private step can trim the oldest public step without reaching disk", () => {
+  const initial = {
+    sessions: {},
+    history: { [a]: { past: [[change("theme", "nord")]], future: [] } },
+  };
+  const host = new HostSessionImage(initial);
+  const disk = new HostSessionImage(initial, "recovery");
+  const privateStep = [change(EDIT_MODE_KEY, "x".repeat(8 * 1024 * 1024))];
+  const input: StoreWrite = {
+    store: "settings-history",
+    kind: "steps",
+    key: a,
+    edits: [{ kind: "append", step: privateStep }],
+  };
+  const { writes, durable } = host.prepare([input])();
+  expect(writes.slice(1)).toEqual([
+    {
+      store: "settings-history",
+      kind: "steps",
+      key: a,
+      edits: [{ kind: "trim", count: 1 }],
+    },
+  ]);
+  expect(host.snapshot("live").history[a]?.past).toEqual([privateStep]);
+  expect(JSON.stringify(durable).length).toBeLessThan(300);
+  disk.recover(durable);
+  expect(disk.snapshot("live")).toEqual(EMPTY_STORED_STATE);
+  expect(host.snapshot("durable")).toEqual(EMPTY_STORED_STATE);
 });

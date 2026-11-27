@@ -231,6 +231,31 @@ test("a successful file change remains undoable when its issuing worker dies at 
       require("node:module").syncBuiltinESMExports();
     `,
     );
+    const prior = Array.from({ length: 32 }, (_, i) =>
+      sessionIdOf("prior-" + i),
+    );
+    fs.writeFileSync(
+      path.join(isolated.stateDir, "session-state.json"),
+      JSON.stringify(
+        Object.fromEntries(prior.map((id) => [id, { padding: "3" }])),
+      ),
+    );
+    fs.writeFileSync(
+      path.join(isolated.stateDir, "settings-history.json"),
+      JSON.stringify(
+        Object.fromEntries(
+          prior.map((id) => [
+            id,
+            {
+              past: [
+                [{ kind: "session", key: "padding", before: null, after: "3" }],
+              ],
+              future: [],
+            },
+          ]),
+        ),
+      ),
+    );
     daemon = await spawnDaemonWithEnv(
       {
         ...isolated.env,
@@ -242,9 +267,9 @@ test("a successful file change remains undoable when its issuing worker dies at 
     );
     const sid = sessionIdOf("saved-file");
     const peer = rendererNameOf("worktree");
-    const draw = (named: boolean) =>
+    const draw = (named: boolean, session = sid) =>
       frameRequest(isolated.sockPath, {
-        ...renderBody(sid, root, {}, ["cc-candybar", "--config", config]),
+        ...renderBody(session, root, {}, ["cc-candybar", "--config", config]),
         ...(named && {
           env: { ...TEST_ENV, CC_CANDYBAR_NAME: peer },
           client: { kind: "node", bundle: worktreeBuilt, source: null },
@@ -264,11 +289,13 @@ test("a successful file change remains undoable when its issuing worker dies at 
     expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
       2,
     );
-    const undo = drawnLink(
-      isolated.sockPath,
-      effectsUrl([{ verb: VERB_UNDO, args: [sid] }]),
-      { renderer: peer, session: sid },
-    );
+    const undoOnPeer = (session: typeof sid) =>
+      drawnLink(
+        isolated.sockPath,
+        effectsUrl([{ verb: VERB_UNDO, args: [session] }]),
+        { renderer: peer, session },
+      );
+    const undo = undoOnPeer(sid);
     await click(isolated.sockPath, undo);
     expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
       1,
@@ -277,6 +304,19 @@ test("a successful file change remains undoable when its issuing worker dies at 
       ok: false,
       error: expect.stringContaining("nothing to undo"),
     });
+    // The surviving worker took the host's eviction with the file decision.
+    // The adjacent session retained the same pick and its usable Undo.
+    const [evicted, retained] = prior;
+    expect(textOf(await draw(true, evicted!))).toContain("padding=3");
+    expect(
+      await sendClick(isolated.sockPath, undoOnPeer(evicted!)),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("nothing to undo"),
+    });
+    expect(textOf(await draw(true, retained!))).toContain("padding=3");
+    await click(isolated.sockPath, undoOnPeer(retained!));
+    expect(textOf(await draw(true, retained!))).toContain("padding=1");
   } finally {
     try {
       await daemon?.stop();

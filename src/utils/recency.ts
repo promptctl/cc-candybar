@@ -64,6 +64,11 @@ export class RecencyMap<K, V> implements ReadonlyMap<K, V> {
     }
   }
 
+  wouldTouch(key: K): boolean {
+    const entry = this.byKey.get(key);
+    return entry !== undefined && entry !== this.last;
+  }
+
   touch(key: K): boolean {
     const entry = this.byKey.get(key);
     if (entry === undefined || entry === this.last) return false;

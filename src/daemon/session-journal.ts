@@ -151,7 +151,7 @@ export class SessionJournal implements SessionPersistence {
 
   private recover(header: Checkpoint): SessionCheckpoint {
     let revision = header.revision;
-    const image = new HostSessionImage(header.state);
+    const image = new HostSessionImage(header.state, "recovery");
     const bytes = readBytesIfPresent(this.journalFile);
     if (!bytes) return header;
     let start = 0;
@@ -212,9 +212,15 @@ export class SessionJournal implements SessionPersistence {
     this.refused = imported.refused;
     const changed =
       JSON.stringify(header.basis) !== JSON.stringify(imported.basis);
+    // A newly registered peer can add an empty downgrade profile. Only an
+    // imported change to state or recency advances the session revision.
+    const stateChanged =
+      changed &&
+      bytes !== null &&
+      JSON.stringify(recovered.state) !== JSON.stringify(imported.state);
     this.header = {
       version: 1,
-      revision: recovered.revision + (bytes !== null && changed ? 1 : 0),
+      revision: recovered.revision + (stateChanged ? 1 : 0),
       state: imported.state,
       basis: imported.basis,
       exporting: null,
@@ -360,5 +366,5 @@ export function fileSessionStores(
   paths: DaemonPaths,
   clock: Timekeeper,
 ): (log: DaemonLogger) => HostSessions {
-  return (log) => new HostSessions(new SessionJournal(paths, clock, log));
+  return (log) => new HostSessions(new SessionJournal(paths, clock, log), log);
 }
