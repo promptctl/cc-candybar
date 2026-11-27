@@ -7,6 +7,7 @@
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate, then
 // registerDslConfig + drawDsl.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -52,7 +53,7 @@ function runtime(source: string) {
     new Set([THEME_FLOOR]),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const segmentErrors: Array<readonly [string, string]> = [];

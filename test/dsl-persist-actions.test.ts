@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.2 —
 // persistent config writes — driven through the real spine, mirroring
@@ -412,7 +413,7 @@ function buildPersistRuntime(
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
   });
@@ -614,7 +615,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       cwd: process.cwd(),
     });
@@ -1005,6 +1006,7 @@ function makeCache(): {
   const reloads = new ReloadSignal();
   const cache = new DiscoveringCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),

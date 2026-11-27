@@ -193,7 +193,7 @@ export interface RenderDeps<
 
 // What building one config's state needs.
 export interface StateDeps {
-  readonly region?: RegionalSettings;
+  readonly region: RegionalSettings;
   // The clock its variables' ages run on, and its sources' held work: the
   // renderer's turn time, or the clock of a command that draws once.
   readonly clock: TurnClock;
@@ -748,10 +748,10 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // default ("") matches the historical behavior when omitted.
   const registry = new SourceRegistry(
     store,
+    deps.region,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
-    deps.region,
   );
 
   let registration: Registration;

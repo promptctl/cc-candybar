@@ -6,6 +6,7 @@
 // a string becomes drawn characters, and this pins that every segment's text
 // takes that path on the production render.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -39,7 +40,7 @@ const CONFIG = parseAndValidate(
 
 function render(s: string): Frame {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });
     return drawPayload(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS).frame;

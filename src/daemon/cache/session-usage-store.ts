@@ -55,7 +55,7 @@ import {
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
-import { dayKey } from "../foundations/today-facts";
+import { ZonedCalendar } from "../../utils/calendar.js";
 import {
   dayTotals,
   DayLedgersDraft,
@@ -218,15 +218,6 @@ const EMPTY_USAGE: TranscriptUsage = {
   tokenBreakdown: null,
 };
 
-// Files modified before this can hold no entry that lands in "today", so the
-// seed never parses them. A full day of slack absorbs timezone/rollover skew.
-function seedCutoffMs(now: number): number {
-  const d = new Date(now);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - 1);
-  return d.getTime();
-}
-
 function emptyBreakdown(): TokenBreakdown {
   return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
 }
@@ -285,6 +276,7 @@ async function foldFile(
   entries: readonly ParsedEntry[],
   prices: () => Promise<PriceTable>,
   keep: string,
+  calendar: ZonedCalendar,
 ): Promise<FileFold> {
   let table: PriceTable | undefined;
   let count = state.entries;
@@ -308,7 +300,7 @@ async function foldFile(
     breakdown.output += u.output_tokens || 0;
     breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
     breakdown.cacheRead += u.cache_read_input_tokens || 0;
-    const key = dayKey(new Date(entry.timestamp));
+    const key = calendar.dayKey(new Date(entry.timestamp));
     if (key < keep) continue;
     // [LAW:one-source-of-truth] Day cost uses the PRICED value, same as session
     // cost — the old path mutated entry.costUSD to the priced cost before
@@ -487,6 +479,7 @@ export class SessionUsageStore {
   // speed) share it, so it records and logs once.
   private readonly refreshFlight = new SingleFlight();
   private readonly staleAgeMs: number;
+  private readonly calendar: ZonedCalendar;
   // The machine the store reads: where transcripts live.
   private readonly host: Host;
   private readonly prices: Prices;
@@ -505,6 +498,7 @@ export class SessionUsageStore {
   >;
 
   constructor(opts: {
+    timeZone: string;
     host: Host;
     // What an entry without a cost is priced by.
     prices: Prices;
@@ -520,6 +514,7 @@ export class SessionUsageStore {
     logger?: DaemonLogger;
     ledger?: RefreshLedger;
   }) {
+    this.calendar = new ZonedCalendar(opts.timeZone);
     this.host = opts.host;
     this.prices = opts.prices;
     this.clock = opts.clock;
@@ -953,7 +948,9 @@ export class SessionUsageStore {
     // and windows, and asks only if a usage entry needs a calculated cost.
     let table: Promise<PriceTable> | undefined;
     const prices = () => (table ??= this.prices.table());
-    const keep = dayKey(new Date(seedCutoffMs(this.clock.now())));
+    const keep = this.calendar.dayKey(
+      new Date(this.calendar.previousMidnight(this.clock.now())),
+    );
     const newFiles = new Map<string, Folded<FileFold>>();
     let mainStamp = "";
     // [LAW:no-ambient-temporal-coupling] What each file is when it reads
@@ -970,7 +967,8 @@ export class SessionUsageStore {
         filePath,
         prior?.files.get(filePath),
         EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, prices, keep),
+        (state, entries) =>
+          foldFile(state, entries, prices, keep, this.calendar),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {
@@ -1017,7 +1015,7 @@ export class SessionUsageStore {
     claudePaths: readonly string[],
   ): Promise<Outcome<Scanned>> {
     try {
-      const cutoff = seedCutoffMs(this.clock.now());
+      const cutoff = this.calendar.previousMidnight(this.clock.now());
       const projectPaths = await findProjectPaths(claudePaths);
       const candidates: Array<{
         sessionId: SessionId;
@@ -1093,7 +1091,7 @@ export class SessionUsageStore {
   // wall clock a frame's instant and the scan's cutoff read too.
   sweepStale(): number {
     const now = this.clock.now();
-    const today = dayKey(new Date(now));
+    const today = this.calendar.dayKey(new Date(now));
     let dropped = 0;
     let held = 0;
     // Slots dropped holding no record: a session seen only before its

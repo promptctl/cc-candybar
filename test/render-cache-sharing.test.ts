@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { HOST } from "../scripts/lib/host";
@@ -85,6 +86,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   const gates = bareGates();
   const cache = new RenderCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       locations: locs(),
@@ -168,7 +170,7 @@ class ProbeStore extends VariableStore {}
 // of the compile after the registry is disposed.
 const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): ProbeStore => {
   const store = new ProbeStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(
     config,
@@ -432,7 +434,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
       parseAndValidate(
         "<test>",
         `{ segments: { clock: { template: '{{ now | date "15:04" }}' } }, root: { h: ["clock"] } }`,
-      ),
+      ), SAMPLE_REGION,
     ),
   );
   expect(() => compiled.segments["clock"]!.template.evaluate({})).toThrow(
@@ -451,7 +453,7 @@ class CompileHolder {
 
 test("a compile keeps nothing of a render once it returns", () => {
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
-  const holder = new CompileHolder(compileDslConfig(compileInputOf(config)));
+  const holder = new CompileHolder(compileDslConfig(compileInputOf(config, SAMPLE_REGION)));
   const drawnStore = drawAlone(config, holder.compiled);
   // The control is the one store strongly reachable from this holder. A
   // second path names precisely how the compile keeps the render's store.
@@ -490,7 +492,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
       undefined,
       DEFAULT_DSL_CONFIG,
     );
-    const compiled = compileDslConfig(compileInputOf(config));
+    const compiled = compileDslConfig(compileInputOf(config, SAMPLE_REGION));
     drawAlone(config, compiled);
     return compiled;
   };

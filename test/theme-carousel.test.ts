@@ -14,6 +14,7 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
@@ -109,7 +110,7 @@ function rig(
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp",
   });
@@ -830,7 +831,7 @@ describe("the preset control's list carries the layout beneath it", () => {
       DEFAULT_DSL_CONFIG,
     );
     const registry = new SourceRegistry(
-      new VariableStore(systemTimekeeper),
+      new VariableStore(systemTimekeeper), SAMPLE_REGION,
       "",
     );
     const compiled = registerDslConfig(config, registry, {

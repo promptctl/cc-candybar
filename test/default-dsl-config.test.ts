@@ -8,6 +8,7 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import {
@@ -215,7 +216,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const store = new VariableStore(systemTimekeeper);
     // The default now carries `kind: "state"` vars (the style picker); a
     // SessionState is required to declare them, exactly as the daemon supplies.
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       const compiled = registerDslConfig(parsed, registry, {
         cwd: process.cwd(),
@@ -293,7 +294,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         () => false,
       );
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       const compiled = registerDslConfig(config, registry, {
         cwd: process.cwd(),
       });
@@ -514,7 +515,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
@@ -659,7 +660,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const render = (padding: number): string => {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       try {
         const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
@@ -729,7 +730,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): Frame {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
@@ -791,7 +792,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): Frame {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
@@ -825,7 +826,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       try {
         const compiled = registerDslConfig(toolbarOnly, registry, {
           cwd: process.cwd(),
@@ -929,7 +930,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // on the payload object directly; no env-var mutation needed.
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
           cwd: process.cwd(),
@@ -1389,7 +1390,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
           cwd: process.cwd(),
@@ -1473,7 +1474,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = narrowToSegment(parsed, "block", { errorAt });
         const store = new VariableStore(systemTimekeeper);
-        const registry = new SourceRegistry(store, "", new SessionState());
+        const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
             cwd: process.cwd(),
@@ -1555,7 +1556,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // it those two vars silently fail to declare into loadWarnings — harmless
       // for the session segment here, but the fixture should exercise the
       // genuinely-complete default config, not a partially-registered one.
-      const registry = new SourceRegistry(store, "", new SessionState());
+      const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
           cwd: process.cwd(),
@@ -1690,7 +1691,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // the `state` vars the templates read (edit.mode gating the chrome, the
     // ↺ banner) and the globals resolved above answer from one session, not
     // from a fresh SessionState that disagrees with it about edit mode.
-    const registry = new SourceRegistry(store, "", {
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", {
       get: (_sessionId, key) => sessionPick(key, name),
       revision: () => 0,
     });

@@ -4,6 +4,7 @@
 // the parts that read it; and a view kept across changes draws exactly what a
 // view made fresh for each draws.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { reaction } from "mobx";
 import { partsOf } from "../src/dsl/parts";
 import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
@@ -44,7 +45,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 // A view of `config`: its store and registry, and the compile it draws with.
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp",
   });

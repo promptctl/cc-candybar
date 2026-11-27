@@ -3,6 +3,7 @@
 // spine (registerDslConfig + drawDsl), and the real set-state gate derived
 // from the config, so "the gate admits it" is measured, not assumed.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -54,7 +55,7 @@ function runtime(src: string) {
   const cfg = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp/proj" });
   recordRender(sessionState, S1);
   return {

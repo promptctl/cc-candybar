@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../../scripts/lib/draw-fixtures/directory-watches";
 // A session's view, opened through the daemon's own composition (the render
 // cache serving views from the session source) over owners that answer one
@@ -173,6 +174,7 @@ export function sessionRig(
   });
   const cache = new DiscoveringCache<SessionSource>(
     {
+      region: SAMPLE_REGION,
       editRevision,
       clock: systemTimekeeper,
       stateDir: stateDir({ env: {}, home: dir, tmp: dir }),

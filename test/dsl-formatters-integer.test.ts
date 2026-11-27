@@ -20,6 +20,7 @@
 // SENSITIVITY itself (the retention rationale, what Option A would break) is
 // pinned separately below.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -35,7 +36,8 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { formatInteger } from "../src/utils/formatters";
+import { formatInteger } from "../src/utils/integer-presentation";
+import { regionFor } from "../src/utils/region";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 
@@ -60,7 +62,7 @@ function render(n: number): string {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const out = drawPayload(
     config,
@@ -82,7 +84,7 @@ describe("bdi.5 — formatInteger retained primitive (production path)", () => {
   test.each<number>([0, 999, 1000, 1_000_000, -1234, -1_000_000])(
     "{{ formatInteger %p }} === formatInteger(%p)",
     (n) => {
-      expect(render(n)).toContain(`[${formatInteger(n)}]`);
+      expect(render(n)).toContain(`[${new Intl.NumberFormat(SAMPLE_REGION.locale).format(n)}]`);
     },
   );
 });
@@ -95,11 +97,7 @@ describe("bdi.5 — formatInteger retained primitive (production path)", () => {
 // "50,000" while a de_DE daemon reads "50.000").
 describe("bdi.5 — formatInteger is locale-aware (why it is retained)", () => {
   test("grouping separator tracks locale, not a hardcoded comma", () => {
-    expect((50000).toLocaleString("en-US")).toBe("50,000");
-    expect((50000).toLocaleString("de-DE")).toBe("50.000");
-    // The production primitive uses the host-default locale (no explicit arg),
-    // so its separator is whatever the daemon's inherited LANG/LC_* resolves —
-    // a single source of truth a fixed regex cannot honor.
-    expect(formatInteger(50000)).toBe((50000).toLocaleString());
+    expect(formatInteger(50000, SAMPLE_REGION.integers)).toBe("50,000");
+    expect(formatInteger(50000, regionFor("de-DE", "UTC").integers)).toBe("50.000");
   });
 });

@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type { EventInput, RendererBoot } from "../../src/renderer-interface/interface";
 import { RECORDING_VERSION, type RecordingEntry } from "../../src/renderer-interface/recording";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
@@ -9,7 +10,7 @@ import type { Instant, Tick } from "../../src/utils/instant";
 const settings: RendererBoot = {
   stored: EMPTY_STORED_STATE,
   locations: { home: "/offline", configHome: "/offline/config", dataHome: "/offline/data", dataDirs: [] },
-  region: { locale: "en-US", timeZone: "UTC" },
+  region: SAMPLE_REGION,
   memoryLimitBytes: 1024 * 1024 * 1024,
 };
 const boot = {
@@ -77,7 +78,7 @@ test.each([
 });
 
 test("historical wire 22 recordings replay until an insertion needs its missing seed", async () => {
-  const historical = { ...boot, wireVersion: 22 };
+  const historical = { ...boot, wireVersion: 22, input: { ...settings, region: { locale: "en-US", timeZone: "UTC" } } };
   const stats = await recordedStats();
   await expect(replayRecording(linesOf(historical, stats, { ...end, turns: 1 }))).resolves.toEqual({ turns: 1 });
   const input = { ...stats.input, event: { kind: "click", context: null, click: {
@@ -95,4 +96,12 @@ test("historical wire 22 recordings replay until an insertion needs its missing 
     await expect(replayRecording(linesOf(boot, { ...stats, input: { ...input, event: { ...input.event, placementSeed } } }, { ...end, turns: 1 }))).rejects.toThrow("invalid click placement seed");
   await expect(replayRecording(linesOf(historical, {...stats, input}, { ...end, turns: 1 })))
     .rejects.toThrow("this historical insertion had no recorded placement seed");
+});
+
+test.each([22, 23])("wire %d requires reconstructible number data", async wireVersion => {
+  const recording = (locale: string) => linesOf({ ...boot, wireVersion, input: {
+    ...settings, region: { locale, timeZone: "UTC" },
+  } }, end);
+  await expect(replayRecording(recording("en-US"))).resolves.toEqual({ turns: 0 });
+  await expect(replayRecording(recording("zz-ZZ"))).rejects.toThrow("invalid renderer boot input");
 });

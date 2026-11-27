@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
@@ -559,7 +560,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
   });
@@ -894,7 +895,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
       compiled = registerDslConfig(config, registry, {
@@ -947,7 +948,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set(S1, EDIT_LIVE_KEY, "open");
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     try {
       const compiled = registerDslConfig(config, registry, {
         cwd: process.cwd(),
@@ -1014,6 +1015,7 @@ function makeCache(reloads?: ReloadSignal): {
   const sessionState = new SessionState();
   const cache = new DiscoveringCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
@@ -1219,6 +1221,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const sessionState = new SessionState();
     const cache = new DiscoveringCache(
       {
+        region: SAMPLE_REGION,
         editRevision: () => null,
         clock: systemTimekeeper,
         stateDir: stateDir(durable.host),

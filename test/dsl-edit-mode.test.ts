@@ -26,6 +26,7 @@
 //      SAME padding/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -190,7 +191,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
       .find((layer) => layer.role === "user")?.content;
   let loaded = src;
   let authored = config;
-  let registry = new SourceRegistry(store, "", base.edits.view);
+  let registry = new SourceRegistry(store, SAMPLE_REGION, "", base.edits.view);
   let compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
   });
@@ -202,7 +203,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
       authored = parseAndValidate("<test>", text, ALLOWED);
       registry.dispose();
       store = new VariableStore(systemTimekeeper);
-      registry = new SourceRegistry(store, "", base.edits.view);
+      registry = new SourceRegistry(store, SAMPLE_REGION, "", base.edits.view);
       compiled = registerDslConfig(authored, registry, {
         cwd: process.cwd(),
       });
@@ -976,7 +977,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       cwd: process.cwd(),
     });

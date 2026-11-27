@@ -1,0 +1,158 @@
+diff --git a/dist/core/cells.js b/dist/core/cells.js
+index 0683b53cf564c3b0a7dc20eccec784d356fcca1e..d0edc9ef9ff5ca7520db81a0527abf1471a4e19f 100644
+--- a/dist/core/cells.js
++++ b/dist/core/cells.js
+@@ -1,6 +1,7 @@
+ /**
+  * Terminal cell width calculation: Rich's `cell_len`, ported.
+  */
++import { graphemeSegments } from "unicode-segmenter/grapheme";
+ import { codePointWidth, widensToEmoji } from "./cell-widths.js";
+ import { Memo } from "./memo.js";
+ import { pattern } from "./pattern.js";
+@@ -9,10 +10,6 @@ const ZWJ = 0x200d;
+ const VS16 = 0xfe0f;
+ const JOINERS = pattern(/[\u200d\ufe0f]/);
+ const PRINTABLE_ASCII = pattern(/^[ -~]*$/);
+-// Segmented afresh on every call: a cursor's step costs a few microseconds
+-// even in 10k code units, and a cache of segmentations would hold native
+-// memory for every string it kept.
+-const SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+ // Rich's `cell_len` over a run of text: each code point the cells Rich's table
+ // gives it, but that a ZWJ takes the code point after it into the glyph before
+ // so neither adds a cell, and VS16 widens the last code point measured to two
+@@ -53,7 +50,7 @@ function measure(text) {
+     if (!JOINERS.test(text))
+         return richCells(text);
+     let cells = 0;
+-    for (const { segment } of SEGMENTER.segment(text))
++    for (const { segment } of graphemeSegments(text))
+         cells += richCells(segment);
+     return cells;
+ }
+@@ -262,20 +259,21 @@ export function graphemes(text) {
+  * stops early pays only for the clusters it reads.
+  */
+ export function* clustersFrom(text, start) {
+-    const segments = SEGMENTER.segment(text);
+-    for (let at = start, s = segments.containing(at); s; s = segments.containing(at)) {
+-        const end = s.index + s.segment.length;
+-        yield text.slice(at, end);
+-        at = asCodePoint(end);
++    for (const { index, segment } of graphemeSegments(text)) {
++        const end = index + segment.length;
++        if (end > start) yield index < start ? text.slice(start, end) : segment;
+     }
+ }
+ /** `clustersFrom` backwards: the clusters of `text` before code unit `end`, nearest first. */
+ export function* clustersBefore(text, end) {
+-    const segments = SEGMENTER.segment(text);
+-    for (let at = end; at > 0;) {
+-        const { index } = segments.containing(at - 1);
+-        yield text.slice(index, at);
+-        at = asCodePoint(index);
++    const starts = [];
++    for (const { index } of graphemeSegments(text)) {
++        if (index >= end) break;
++        starts.push(index);
++    }
++    for (let i = starts.length - 1; i >= 0; i--) {
++        yield text.slice(starts[i], end);
++        end = starts[i];
+     }
+ }
+ /**
+@@ -350,8 +348,11 @@ export function prevGrapheme(s, cu) {
+  */
+ export function graphemeBoundary(s, cu) {
+     const at = Math.min(cu, s.length);
+-    const cluster = SEGMENTER.segment(s).containing(at);
+-    return asCodePoint(cluster === undefined || cluster.index === at ? at : cluster.index + cluster.segment.length);
++    for (const { index, segment } of graphemeSegments(s)) {
++        if (index === at) return asCodePoint(at);
++        if (index + segment.length > at) return asCodePoint(index + segment.length);
++    }
++    return asCodePoint(at);
+ }
+ /**
+  * `n` as a `TabSize`, or a `RangeError` naming it. Rich divides by the tab
+diff --git a/dist/core/color.d.ts b/dist/core/color.d.ts
+index c84b281e765406242356924d57f3defa1bb33252..97597708a88a9e51ef672ac3078b164e106c47bb 100644
+--- a/dist/core/color.d.ts
++++ b/dist/core/color.d.ts
+@@ -186,6 +186,8 @@ export interface DestinationOptions extends DetectColorOptions {
+  * colour preferences, leave them alone. A FORCE_COLOR that forces colour on
+  * declares the destination takes escapes, so it keeps links on a pipe too.
+  */
++export declare function explicitDestination(spec: Exclude<ColorSystemName, "auto"> | ColorDepth | null, reducedMotion?: boolean): Destination;
++export declare function explicitColorSystem(spec: Exclude<ColorSystemName, "auto">): ColorDepth | null;
+ export declare function resolveDestination(spec: ColorSystemName | ColorDepth | null, options?: DestinationOptions): Destination;
+ /**
+  * Resolve a colour system name into a `ColorDepth` (or `null` for no color).
+diff --git a/dist/core/color.js b/dist/core/color.js
+index 6d92b6f5bda374540702af2ff2e662b942704d1f..cbeb7f25f34e79aeeb8126a5d2e7ddab68ae72b3 100644
+--- a/dist/core/color.js
++++ b/dist/core/color.js
+@@ -376,13 +376,7 @@ function terminalColorSystem(options) {
+  */
+ export function resolveDestination(spec, options = {}) {
+     const reducedMotion = options.reducedMotion ?? false;
+-    if (spec !== "auto") {
+-        return {
+-            colorSystem: typeof spec === "string" ? resolveColorSystem(spec) : spec,
+-            hyperlinks: true,
+-            reducedMotion,
+-        };
+-    }
++    if (spec !== "auto") return explicitDestination(spec, reducedMotion);
+     return {
+         colorSystem: detectColorSystem(options),
+         hyperlinks: (forcedColorSystem(envOf(options)) ?? null) !== null ||
+@@ -390,6 +384,13 @@ export function resolveDestination(spec, options = {}) {
+         reducedMotion,
+     };
+ }
++export function explicitDestination(spec, reducedMotion = false) {
++    return {
++        colorSystem: typeof spec === "string" ? explicitColorSystem(spec) : spec,
++        hyperlinks: true,
++        reducedMotion,
++    };
++}
+ /**
+  * Resolve a colour system name into a `ColorDepth` (or `null` for no color).
+  *
+@@ -402,6 +403,9 @@ export function resolveDestination(spec, options = {}) {
+ export function resolveColorSystem(spec, options) {
+     if (spec === "auto")
+         return detectColorSystem(options);
++    return explicitColorSystem(spec);
++}
++export function explicitColorSystem(spec) {
+     if (Object.hasOwn(COLOR_SYSTEM_DEPTHS, spec))
+         return COLOR_SYSTEM_DEPTHS[spec];
+     throw new ColorParseError(`Unknown color system name: ${JSON.stringify(spec)} (expected "auto", "truecolor", "256", "ansi", or "none")`);
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 228e9f3d3b32198702b0a27497a9850edccce11a..b37f71e3d8d3285ef3fb8156d21e841762631a58 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,6 +1,6 @@
+ export { cellLen, setCellSize, splitText, chopCells, cellFit, graphemes, asCellCol, asCodePoint, } from "./core/cells.js";
+ export type { CellCol, CodeUnit, CodePoint } from "./core/cells.js";
+-export { ColorRgba, ColorTable, ColorDepth, ColorSpec, ColorParseError, TerminalTheme, type TerminalColors, parseRgbHex, parseRgbaHex, parseHexColor, blendRgb, resolveColorSystem, detectColorSystem, resolveDestination, STANDARD_TABLE, EIGHT_BIT_TABLE, WINDOWS_TABLE, ANSI_COLOR_NAMES, } from "./core/color.js";
++export { ColorRgba, ColorTable, ColorDepth, ColorSpec, ColorParseError, TerminalTheme, type TerminalColors, parseRgbHex, parseRgbaHex, parseHexColor, blendRgb, explicitColorSystem, explicitDestination, resolveColorSystem, detectColorSystem, resolveDestination, STANDARD_TABLE, EIGHT_BIT_TABLE, WINDOWS_TABLE, ANSI_COLOR_NAMES, } from "./core/color.js";
+ export type { ColorSystemName, DetectColorOptions, Destination, DestinationOptions } from "./core/color.js";
+ export { Oklch, IDENTITY, INVERT_LIGHTNESS, isIdentityKey, } from "./core/oklch.js";
+ export type { ThemeKey, OklchWeights } from "./core/oklch.js";
+diff --git a/dist/index.js b/dist/index.js
+index dea17e07bb1b5ff8abd4e8f26c2f6be69b20096b..6cba32db27970bcc9050ebe11ecf1912a3cb43e2 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,6 +1,6 @@
+ // Core primitives
+ export { cellLen, setCellSize, splitText, chopCells, cellFit, graphemes, asCellCol, asCodePoint, } from "./core/cells.js";
+-export { ColorRgba, ColorTable, ColorDepth, ColorSpec, ColorParseError, TerminalTheme, parseRgbHex, parseRgbaHex, parseHexColor, blendRgb, resolveColorSystem, detectColorSystem, resolveDestination, STANDARD_TABLE, EIGHT_BIT_TABLE, WINDOWS_TABLE, ANSI_COLOR_NAMES, } from "./core/color.js";
++export { ColorRgba, ColorTable, ColorDepth, ColorSpec, ColorParseError, TerminalTheme, parseRgbHex, parseRgbaHex, parseHexColor, blendRgb, explicitColorSystem, explicitDestination, resolveColorSystem, detectColorSystem, resolveDestination, STANDARD_TABLE, EIGHT_BIT_TABLE, WINDOWS_TABLE, ANSI_COLOR_NAMES, } from "./core/color.js";
+ // Perceptually-uniform color space (manipulation, transposition).
+ export { Oklch, IDENTITY, INVERT_LIGHTNESS, isIdentityKey, } from "./core/oklch.js";
+ // Themes — semantic palettes (distinct from ColorTable quantization LUTs)

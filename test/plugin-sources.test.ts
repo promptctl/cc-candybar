@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import {
@@ -224,6 +225,7 @@ function rig(): Rig {
   const providers = withTranscriptLanes({
     environment: TEST_ENVIRONMENT,
     ...createPayloadProviders({
+      timeZone: SAMPLE_REGION.timeZone,
       prices: settledPrices,
       clock: systemTimekeeper,
       launcher: world.launcher,
@@ -255,6 +257,7 @@ function rig(): Rig {
   );
   const cache = new RenderCache<SessionSource>(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       locations: locations(host),
@@ -409,6 +412,7 @@ describe("a source's declaration", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -499,6 +503,7 @@ describe("a source's declaration", () => {
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -531,6 +536,7 @@ describe("a source's declaration", () => {
          root: { h: ["mine"] } }`,
     );
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -648,6 +654,7 @@ describe("a source's declaration", () => {
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const loaded = loadDiscovered(dir, dir, p, {
+      region: SAMPLE_REGION,
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -771,7 +778,7 @@ describe("a session reads its source", () => {
 describe("a source's document", () => {
   function sourceDoc(payload: () => unknown) {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store);
+    const registry = new SourceRegistry(store, SAMPLE_REGION);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
       session: () => TEST_SESSION,

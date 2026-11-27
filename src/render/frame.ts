@@ -6,7 +6,7 @@ import {
   ColorDepth,
   Segment,
   Style,
-  resolveDestination,
+  explicitDestination,
   segmentsToString,
   type Attributes,
   type ColorSpec,
@@ -222,7 +222,7 @@ export function encodeAnsi(
   lines: ReadonlyArray<readonly Run[]>,
   depth: ColorCompatibility,
 ): string {
-  const destination = resolveDestination(depth);
+  const destination = explicitDestination(depth);
   return lines
     .map((runs) => segmentsToString(runs.map(segmentOf), destination))
     .join("\n");

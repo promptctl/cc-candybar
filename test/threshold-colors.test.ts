@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 // The bundled default's threshold colours, pinned as a CONTRACT over palette
@@ -218,7 +219,7 @@ function renderOne(
     : narrowed.segments;
   const one = { ...narrowed, segments };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(one, registry, { cwd: process.cwd() });
     return drawPayload(

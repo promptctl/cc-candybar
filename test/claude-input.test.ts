@@ -5,6 +5,7 @@
 // including a read to which no keystroke may follow. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import { OWNER_CONTEXT } from "../src/proc/launcher";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
@@ -223,7 +224,7 @@ function runtime(tmux: TmuxHint | null) {
   const sessionState = new SessionState();
   hearRender(sessionState, heardRequest(S1, "/tmp/proj", { tmux }));
   const store = new VariableStore(clock);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
   });
@@ -434,7 +435,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const sessionState = new SessionState();
   hearRender(sessionState, heardRequest(S1, "/tmp/proj", { tmux }));
   const store = new VariableStore(clock);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
   });

@@ -6,6 +6,7 @@
 // Every sample is checked against what the fixture holds, so a read that
 // returned early, empty or stale is a failure and not a fast sample.
 
+import { SAMPLE_REGION } from "../../lib/draw-fixtures/sample-region.js";
 import path from "node:path";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
@@ -125,6 +126,7 @@ const coldFold = ([
       const { world } = plan;
       const ms = await repeat(plan.samples, async () => {
         const store = new SessionUsageStore({
+          timeZone: SAMPLE_REGION.timeZone,
           host: world.host,
           prices: PRICES,
           clock: world.clock,
@@ -161,6 +163,7 @@ const warmFold = (
       writeTranscript(transcript, SESSION, root, WARM_TURNS);
       const { world } = plan;
       const store = new SessionUsageStore({
+        timeZone: SAMPLE_REGION.timeZone,
         host: world.host,
         prices: PRICES,
         clock: world.clock,

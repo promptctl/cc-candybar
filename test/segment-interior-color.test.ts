@@ -7,6 +7,7 @@
 // segment could pass while the SHIPPED gitaculous regresses.
 
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import type { Frame, Run } from "../src/render/frame";
@@ -63,7 +64,7 @@ function render(): Frame {
   );
 
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     return drawPayload(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {

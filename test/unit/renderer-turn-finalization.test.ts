@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import { observable, runInAction } from "mobx";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { RenderOrigin } from "../../src/config-hint";
@@ -60,6 +61,7 @@ function rig(
     }
   })(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock,
       locations: {

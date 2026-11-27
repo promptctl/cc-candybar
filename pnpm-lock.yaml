@@ -4,21 +4,41 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-2j75yExGPz9IgykzmsNMayhO4GuMNjBwQ6DyyVgUtUI=
+
 patchedDependencies:
+  '@formatjs/intl-datetimeformat@8.2.2':
+    hash: da09719132e2c4f27dccf000104afa3b8bb280b123c4ab2defe854f471f65cca
+    path: patches/@formatjs__intl-datetimeformat@8.2.2.patch
+  '@promptctl/go-template-js@0.10.0':
+    hash: 0814142f5da27d9feb22249b179ed105ca2166535bed9581944510d27aa6e3ff
+    path: patches/@promptctl__go-template-js@0.10.0.patch
+  '@promptctl/rich-js@0.27.0':
+    hash: 3fa09f9d90fb685860a59ff589a32f87b9be640710e67f5066a8137af17fbfff
+    path: patches/@promptctl__rich-js@0.27.0.patch
   hdr-histogram-js@3.0.1:
-    hash: fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490
+    hash: 8421c871f8720a94cbde7f91c4998e87f5d1fa5f499a1be5fc40a5913d649ca5
     path: patches/hdr-histogram-js@3.0.1.patch
+  path-browserify@1.0.1:
+    hash: 557de3c49368a6655a7fb8a795342fe698717f3fa672f5c18476ee67c02d82f3
+    path: patches/path-browserify@1.0.1.patch
 
 importers:
 
   .:
     devDependencies:
+      '@eslint-community/eslint-utils':
+        specifier: 4.9.1
+        version: 4.9.1(eslint@9.39.4)
       '@eslint/js':
         specifier: ^9.33.0
         version: 9.39.4
       '@eslint/plugin-kit':
         specifier: 0.4.1
         version: 0.4.1
+      '@formatjs/intl-datetimeformat':
+        specifier: 8.2.2
+        version: 8.2.2(patch_hash=da09719132e2c4f27dccf000104afa3b8bb280b123c4ab2defe854f471f65cca)
       '@noble/hashes':
         specifier: 2.2.0
         version: 2.2.0
@@ -27,10 +47,10 @@ importers:
         version: 0.11.0
       '@promptctl/go-template-js':
         specifier: ^0.10.0
-        version: 0.10.0
+        version: 0.10.0(patch_hash=0814142f5da27d9feb22249b179ed105ca2166535bed9581944510d27aa6e3ff)
       '@promptctl/rich-js':
         specifier: ^0.27.0
-        version: 0.27.0(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)
+        version: 0.27.0(patch_hash=3fa09f9d90fb685860a59ff589a32f87b9be640710e67f5066a8137af17fbfff)(@promptctl/go-template-js@0.10.0(patch_hash=0814142f5da27d9feb22249b179ed105ca2166535bed9581944510d27aa6e3ff))(mobx@7.0.6)
       '@semantic-release/changelog':
         specifier: ^6.0.3
         version: 6.0.3(semantic-release@25.0.3(typescript@5.9.3))
@@ -84,7 +104,7 @@ importers:
         version: 14.0.0
       hdr-histogram-js:
         specifier: 3.0.1
-        version: 3.0.1(patch_hash=fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490)
+        version: 3.0.1(patch_hash=8421c871f8720a94cbde7f91c4998e87f5d1fa5f499a1be5fc40a5913d649ca5)
       jest:
         specifier: ^30.0.5
         version: 30.3.0(@types/node@20.19.39)
@@ -102,7 +122,7 @@ importers:
         version: 7.0.6
       path-browserify:
         specifier: 1.0.1
-        version: 1.0.1
+        version: 1.0.1(patch_hash=557de3c49368a6655a7fb8a795342fe698717f3fa672f5c18476ee67c02d82f3)
       prettier:
         specifier: ^3.6.2
         version: 3.8.3
@@ -699,6 +719,15 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@formatjs/fast-memoize@3.1.8':
+    resolution: {integrity: sha512-Y9YFFfeBDkAWmLWD3LVNHbHlyELsP2lYRNoY6+QhtPh1/ujCiX5QYBzAqe0cWdkCxKVezHLt0qjWz1veEUV7UA==}
+
+  '@formatjs/intl-datetimeformat@8.2.2':
+    resolution: {integrity: sha512-J1NBeAs3GJRfZRXyLDxK43OMBk+5UDUa7bgwoUNLvr1lUfXACfl+K6DvdQ/mpPaPHimfPOBzGGIX6oDfRlVZNQ==}
+
+  '@formatjs/intl-localematcher@0.10.3':
+    resolution: {integrity: sha512-qHGNMjYbewa1uteT7VFPot2+q9glcBMVRQhmQNXgNYia35Arzln7vJ4Zyj6ktm6POzRc3SW/CTAhhSnMQSFvJg==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -3470,6 +3499,9 @@ packages:
     resolution: {integrity: sha512-yLSH4py7oFH3oG/9K+XWrz1pSi3dfUrWEnInbxMfArOfc1+33BlGPQtLsOYwvdMy11AwUBetYuaRxSPqgkq+8g==}
     engines: {node: '>=4'}
 
+  unicode-segmenter@0.17.3:
+    resolution: {integrity: sha512-hKZwqBjJDmqNrq1+LjDxck1qLzJFcLLJM2Xq92ORRHOuau6GSHeELmn+uyk6zNH1CK9mogrUJGP9WJCJUQXMAw==}
+
   unicorn-magic@0.1.0:
     resolution: {integrity: sha512-lRfVq8fE8gz6QMBuDM6a+LO3IAzTi05H6gCVaUpir2E1Rwpo4ZUog45KpNXKC/Mn3Yb9UDuHumeFTo9iV/D9FQ==}
     engines: {node: '>=18'}
@@ -4066,6 +4098,16 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
+  '@formatjs/fast-memoize@3.1.8': {}
+
+  '@formatjs/intl-datetimeformat@8.2.2(patch_hash=da09719132e2c4f27dccf000104afa3b8bb280b123c4ab2defe854f471f65cca)':
+    dependencies:
+      '@formatjs/intl-localematcher': 0.10.3
+
+  '@formatjs/intl-localematcher@0.10.3':
+    dependencies:
+      '@formatjs/fast-memoize': 3.1.8
+
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -4519,13 +4561,15 @@ snapshots:
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
 
-  '@promptctl/go-template-js@0.10.0':
+  '@promptctl/go-template-js@0.10.0(patch_hash=0814142f5da27d9feb22249b179ed105ca2166535bed9581944510d27aa6e3ff)':
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@0.27.0(@promptctl/go-template-js@0.10.0)(mobx@7.0.6)':
+  '@promptctl/rich-js@0.27.0(patch_hash=3fa09f9d90fb685860a59ff589a32f87b9be640710e67f5066a8137af17fbfff)(@promptctl/go-template-js@0.10.0(patch_hash=0814142f5da27d9feb22249b179ed105ca2166535bed9581944510d27aa6e3ff))(mobx@7.0.6)':
+    dependencies:
+      unicode-segmenter: 0.17.3
     optionalDependencies:
-      '@promptctl/go-template-js': 0.10.0
+      '@promptctl/go-template-js': 0.10.0(patch_hash=0814142f5da27d9feb22249b179ed105ca2166535bed9581944510d27aa6e3ff)
       mobx: 7.0.6
 
   '@quansync/fs@1.0.0':
@@ -5681,7 +5725,7 @@ snapshots:
 
   has-flag@4.0.0: {}
 
-  hdr-histogram-js@3.0.1(patch_hash=fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490):
+  hdr-histogram-js@3.0.1(patch_hash=8421c871f8720a94cbde7f91c4998e87f5d1fa5f499a1be5fc40a5913d649ca5):
     dependencies:
       '@assemblyscript/loader': 0.19.23
       base64-js: 1.5.1
@@ -6501,7 +6545,7 @@ snapshots:
 
   parse5@6.0.1: {}
 
-  path-browserify@1.0.1: {}
+  path-browserify@1.0.1(patch_hash=557de3c49368a6655a7fb8a795342fe698717f3fa672f5c18476ee67c02d82f3): {}
 
   path-exists@3.0.0: {}
 
@@ -7026,6 +7070,8 @@ snapshots:
   undici@7.25.0: {}
 
   unicode-emoji-modifier-base@1.0.0: {}
+
+  unicode-segmenter@0.17.3: {}
 
   unicorn-magic@0.1.0: {}
 

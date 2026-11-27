@@ -8,6 +8,7 @@
 // registerDslConfig + drawDsl, the style resolved as src/renderer/draw-bar.ts
 // resolves it and the theme and effect from the config's own globals.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -48,7 +49,7 @@ const src = (slot: string, rule: string): string => `{
 function runtime(source: string) {
   const config = parseAndValidate("<rule-throws>", source, ALLOWED);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const render = (pct: number): string => {

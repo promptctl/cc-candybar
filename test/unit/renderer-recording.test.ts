@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import {
@@ -22,7 +23,7 @@ const boot: RendererBoot = {
     dataHome: "/data",
     dataDirs: [],
   },
-  region: { locale: "en-US", timeZone: "UTC" },
+  region: SAMPLE_REGION,
   memoryLimitBytes: 1024,
 };
 const input: EventInput = {

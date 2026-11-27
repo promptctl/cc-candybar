@@ -4,6 +4,7 @@
 // forge outcome produces, and that an open PR draws one link region.
 
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -63,7 +64,7 @@ function renderGitPr(git: Record<string, unknown>): Frame {
     },
   };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
     const payload = {

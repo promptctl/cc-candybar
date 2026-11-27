@@ -1,3 +1,4 @@
+import { SAMPLE_CALENDAR } from "./sample-region.js";
 import { daemonFactsOf } from "./daemon-facts";
 // Sample inputs for the production payload projection. The menu counters exercise
 // reset, Save, Undo, Redo, and Back in the template suites.
@@ -101,5 +102,5 @@ export function samplePayload(
       back: 1,
     },
   );
-  return { ...payload, ...instantFacts(document.builtins, at) };
+  return { ...payload, ...instantFacts(document.builtins, at, SAMPLE_CALENDAR) };
 }

@@ -1,6 +1,7 @@
 // The checkout's location: what `checkoutLocation` reads off a real
 // checkout, and what `directory` draws from it. `gitaculous` reads the same
 // payload fields only to decide whether it has a branch to show at all.
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { execFileSync } from "node:child_process";
@@ -77,7 +78,7 @@ function drawAll(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     const { segments } = drawPayload(

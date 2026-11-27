@@ -1,0 +1,197 @@
+diff --git a/add-all-tz.d.ts b/add-all-tz.d.ts
+index 336ce12bb9106afdf843063ee67c0c1970f70d37..5d102cc8cf80629b053f1fa26a07099114f69629 100755
+--- a/add-all-tz.d.ts
++++ b/add-all-tz.d.ts
+@@ -1 +1 @@
+-export {}
++export declare function loadTimeZones(): void;
+diff --git a/add-all-tz.js b/add-all-tz.js
+index 6546799100a47a9a84efc24cc81579f76c7a9540..5940fa5e74c6faee8cda2e1d8fe2b6cff4c42d79 100755
+--- a/add-all-tz.js
++++ b/add-all-tz.js
+@@ -1,7 +1,8 @@
++import { DateTimeFormat } from "./index.js";
+ // @generated
+ // prettier-ignore
+-if ('DateTimeFormat' in Intl && Intl.DateTimeFormat.__addTZData) {
+-  Intl.DateTimeFormat.__addTZData({
++export function loadTimeZones() {
++  DateTimeFormat.__addTZData({
+   "abbrvs": "LMT|GMT|+0230|EAT|+0245|PMT|WET|WEST|CET|CEST|+0030|WAT|-01|CAT|EET|EEST|+00|+01|SAST|CAST|MMT|WAST|+0130|NST|NWT|NPT|BST|BDT|AHST|HST|HDT|AST|AWT|APT|AHDT|YST|AKST|AKDT|-03|-02|CMT|-04|AMT|EST|MST|CST|MDT|CDT|ADT|-0330|-0530|CWT|CPT|BMT|-05|PST|PDT|MWT|MPT|-00|EDT|-0430|SJMT|SMT|YDT|YWT|YPT|YDDT|PWT|PPT|EWT|EPT|NDT|ADDT|KMT|QMT|-0345|HMT|FFMT|-0230|-0130|PPMT|SDMT|NDDT|+08|+11|+07|+05|PMMT|+10|AEST|AEDT|+06|NZMT|NZST|NZDT|+03|CEMT|+12|+13|+14|+04|+0730|+0820|+09|+0530|+0630|IST|IDT|PLMT|HKT|HKST|HKWT|JST|IMT|+0720|WIB|+0930|WIT|JMT|IDDT|+0430|PKT|PKST|+0545|WITA|KST|KDT|TBMT|TMT|+0330|JDT|RMT|FMT|ACST|ACDT|+0845|+0945|+1030|+1130|AWST|AWDT|MSK|MSD|DMT|BDST|WEMT|MDST|LST|+02|WMT|-1130|-11|-10|+1215|+1245|+1345|EMT|-07|-06|-09|GST|GDT|ChST|HWT|HPT|-12|-1040|-0930|SST|-1120|+1112|+1230|-0830|-08|-1030|+1220|GMT+14|GMT+13|GMT+12|GMT+11|GMT+10|GMT+9|GMT+8|GMT+7|GMT+6|GMT+5|GMT+4|GMT+3|GMT+2|GMT+1|GMT-1|GMT-2|GMT-3|GMT-4|GMT-5|GMT-6|GMT-7|GMT-8|GMT-9|GMT-10|GMT-11|GMT-12",
+   "future": {
+     "Africa/Abidjan": {
+diff --git a/index.d.ts b/index.d.ts
+index fa13968d0457f3281e00a78677792a90250772e3..68de9e6cf2245da6cd66250a8c6e8f603a3b0f33 100755
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -292,3 +292,9 @@ interface DateTimeFormatConstructor {
+ }
+ export declare const DateTimeFormat: DateTimeFormatConstructor;
+ export type { DateTimeFormatConstructor };
++export declare function zoneOffsetMilliseconds(formatter: InstanceType<DateTimeFormatConstructor>, epoch: number): number;
++
++export declare function gregorianFields(formatter: InstanceType<DateTimeFormatConstructor>, epoch: number): {
++  year: number; month: number; day: number; weekday: number; hour: number;
++  minute: number; second: number; ms: number; offsetMinutes: number;
++};
+diff --git a/index.js b/index.js
+index 327bb1351728423b2dabf29ee940d7d1d3127bcf..6cb920c6dc71917b1bb1e01318c58bf571be4491 100755
+--- a/index.js
++++ b/index.js
+@@ -967,8 +967,8 @@ function createDataProperty(target, name, value) {
+ function invariant(condition, message, Err = ErrorConstructor) {
+ 	if (!condition) throw new Err(message);
+ }
+-memoize((...args) => new Intl.NumberFormat(...args), { strategy: strategies.variadic });
+-memoize((...args) => new Intl.ListFormat(...args), { strategy: strategies.variadic });
++/* @__PURE__ */ memoize((...args) => new Intl.NumberFormat(...args), { strategy: strategies.variadic });
++/* @__PURE__ */ memoize((...args) => new Intl.ListFormat(...args), { strategy: strategies.variadic });
+ const getOwnPropertyDescriptor$1 = Object.getOwnPropertyDescriptor;
+ const formatterMemoizeOptions = {
+ 	__proto__: null,
+@@ -3500,24 +3500,26 @@ function UnpackTimeZoneData(data) {
+ 	const packedZones = data.zones;
+ 	const zones = {};
+ 	for (let index = 0; index < packedZones.length; index++) {
+-		const parts = packedZones[index].split("|"), zone = parts[0];
+-		const rows = [];
+-		for (let index = 1; index < parts.length; index++) {
+-			const row = parts[index].split(",");
+-			rows.push([
+-				row[0] === "" ? -1e400 : parseInt(row[0], 36),
+-				abbrvs[+row[1]],
+-				offsets[+row[2]],
+-				row[3] === "1"
+-			]);
+-		}
+-		zones[zone] = rows;
+-		if (data.future?.[zone]) zones[zone].future = data.future[zone];
++        const packed = packedZones[index];
++        const zone = packed.slice(0, packed.indexOf("|"));
++        // Keep the compact source until a calendar requests this zone.
++        Object.defineProperty(zones, zone, { configurable: true, enumerable: true, get() {
++            const parts = packed.split("|");
++            const rows = [];
++            for (let index = 1; index < parts.length; index++) {
++                const row = parts[index].split(",");
++                rows.push([row[0] === "" ? -Infinity : parseInt(row[0], 36),
++                    abbrvs[+row[1]], offsets[+row[2]], row[3] === "1"]);
++            }
++            if (data.future?.[zone]) rows.future = data.future[zone];
++            Object.defineProperty(zones, zone, { configurable: true, enumerable: true, writable: true, value: rows });
++            return rows;
++        } });
+ 	}
+ 	return zones;
+ }
+ // packages/intl-datetimeformat/core.ts
+-const now = Date.now;
++const now = () => { throw new RangeError("An explicit instant is required"); };
+ const createObject = Object.create;
+ const objectDefineProperty = Object.defineProperty;
+ const getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+@@ -3525,17 +3527,6 @@ const reflectApply = Reflect.apply;
+ const timeZoneUpperCase = String.prototype.toUpperCase;
+ const timeZoneCharCodeAt = String.prototype.charCodeAt;
+ const objectKeys = Object.keys;
+-const hostTimeZoneProvider = (() => {
+-	try {
+-		const Constructor = globalThis.Intl?.DateTimeFormat;
+-		if (typeof Constructor !== "function" || getOwnPropertyDescriptor(Constructor, "polyfilled")?.value) return;
+-		const resolvedOptions = Constructor.prototype?.resolvedOptions;
+-		if (typeof resolvedOptions === "function") return {
+-			Constructor,
+-			resolvedOptions
+-		};
+-	} catch {}
+-})();
+ const UPPERCASED_LINKS = Object.keys(links_default).reduce((all, l) => {
+ 	all[l.toUpperCase()] = links_default[l];
+ 	return all;
+@@ -3834,45 +3825,24 @@ DateTimeFormat.relevantExtensionKeys = [...RELEVANT_EXTENSION_KEYS];
+ DateTimeFormat.__defaultTimeZone = void 0;
+ DateTimeFormat.getDefaultTimeZone = getDefaultTimeZone;
+ function getDefaultTimeZone() {
+-	const override = getOwnPropertyDescriptor(DateTimeFormat, "__defaultTimeZone");
+-	if (override && HasOwnProperty(override, "value") && typeof override.value === "string" && (override.value === DEFAULT_TIMEZONE || HasOwnProperty(DateTimeFormat.tzData, override.value) || IsValidTimeZoneName(override.value, {
+-		zoneNamesFromData: objectKeys(DateTimeFormat.tzData),
+-		uppercaseLinks: UPPERCASED_LINKS
+-	}))) return override.value;
+-	if (hostTimeZoneProvider) {
+-		const { Constructor, resolvedOptions } = hostTimeZoneProvider;
+-		try {
+-			const resolved = reflectApply(resolvedOptions, new Constructor(), []);
+-			const field = getOwnPropertyDescriptor(resolved, "timeZone");
+-			const hostName = field && getOwnPropertyDescriptor(field, "value")?.value;
+-			if (typeof hostName === "string") {
+-				for (let index = 0; index < hostName.length; index++) if (reflectApply(timeZoneCharCodeAt, hostName, [index]) > 127) return DEFAULT_TIMEZONE;
+-				const upper = reflectApply(timeZoneUpperCase, hostName, []);
+-				const identifier = HasOwnProperty(UPPERCASED_IDENTIFIERS, upper) ? UPPERCASED_IDENTIFIERS[upper] : void 0;
+-				const name = identifier ?? hostName;
+-				const primary = HasOwnProperty(PRIMARY_TIME_ZONES, name) ? PRIMARY_TIME_ZONES[name] ?? name : name;
+-				if (primary === DEFAULT_TIMEZONE || HasOwnProperty(DateTimeFormat.tzData, primary)) return primary;
+-				const zoneNames = objectKeys(DateTimeFormat.tzData);
+-				const candidates = primary === name ? [name] : [primary, name];
+-				for (let index = 0; index < candidates.length; index++) {
+-					const timeZone = candidates[index];
+-					if (!IsValidTimeZoneName(timeZone, {
+-						zoneNamesFromData: zoneNames,
+-						uppercaseLinks: UPPERCASED_LINKS
+-					})) continue;
+-					const dataZone = CanonicalizeTimeZoneName(timeZone, {
+-						zoneNames,
+-						uppercaseLinks: UPPERCASED_LINKS
+-					});
+-					if (dataZone !== void 0) {
+-						if (dataZone === DEFAULT_TIMEZONE || dataZone[0] === "+" || dataZone[0] === "-") return dataZone;
+-						if (HasOwnProperty(DateTimeFormat.tzData, dataZone)) return identifier ? timeZone : dataZone;
+-					}
+-				}
+-			}
+-		} catch {}
+-	}
+-	return DEFAULT_TIMEZONE;
++  throw new RangeError("An explicit time zone is required");
++}
++
++// Read the same transition as the formatter, without rendering and parsing
++// a localized offset for each usage entry.
++export function zoneOffsetMilliseconds(formatter, epoch) {
++  const { dataTimeZone } = getInternalSlots(formatter);
++  return getApplicableZoneData(epoch, dataTimeZone, DateTimeFormat.tzData)[0] / 1e6;
++}
++// Expose the same Gregorian arithmetic as the named formatter. A shifted
++// civil time can exceed native Date's range while its UTC instant is valid.
++export function gregorianFields(formatter, epoch) {
++  const offset = zoneOffsetMilliseconds(formatter, epoch);
++  const local = epoch + offset;
++  return { year: YearFromTime(local), month: MonthFromTime(local) + 1,
++    day: DateFromTime(local), weekday: WeekDay(local), hour: HourFromTime(local),
++    minute: MinFromTime(local), second: SecFromTime(local), ms: msFromTime(local),
++    offsetMinutes: Math.trunc(offset / 60000) };
+ }
+ const intervalCandidates = /* @__PURE__ */ new WeakMap();
+ const getIntervalCandidates = intervalCandidates.get.bind(intervalCandidates);
+diff --git a/locale-data/en.d.ts b/locale-data/en.d.ts
+index cb0ff5c3b541f646105198ee23ac0fc3d805023e..72c21689bb07c52e597dea2cac452c6718eea01f 100755
+--- a/locale-data/en.d.ts
++++ b/locale-data/en.d.ts
+@@ -1 +1 @@
+-export {};
++export declare function loadEnglish(): void;
+diff --git a/locale-data/en.js b/locale-data/en.js
+index c163a4a7972973259f039018ac8300310981208d..3017cf685abecaaacfa366bd60fe24eb8939204b 100755
+--- a/locale-data/en.js
++++ b/locale-data/en.js
+@@ -1,8 +1,4 @@
++import { DateTimeFormat } from "../index.js";
+ /* @generated */
+-(function (data) {
+-    if (Intl.DateTimeFormat && typeof Intl.DateTimeFormat["__addLocaleData"] === "function") {
+-        Intl.DateTimeFormat["__addLocaleData"](data);
+-    }
+-    else {
+-        (globalThis["__FORMATJS_DATETIMEFORMAT_DATA__"] = globalThis["__FORMATJS_DATETIMEFORMAT_DATA__"] || []).push(data);
+-    }
++export const loadEnglish = () => (function (data) {
++    DateTimeFormat.__addLocaleData(data);

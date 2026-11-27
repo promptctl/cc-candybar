@@ -23,7 +23,16 @@ strictPeerDependencies: true
 minimumReleaseAgeExclude:
   - "@promptctl/*"
 
-# [LAW:one-source-of-truth] Pin the histogram codec in the shared package so
-# source and bundled renderers emit identical diagnostics and one HDR format.
+# Pin the renderer adapters and data to the same implementation in every engine.
 patchedDependencies:
+  '@formatjs/intl-datetimeformat@8.2.2': patches/@formatjs__intl-datetimeformat@8.2.2.patch
+  '@promptctl/go-template-js@0.10.0': patches/@promptctl__go-template-js@0.10.0.patch
+  '@promptctl/rich-js@0.27.0': patches/@promptctl__rich-js@0.27.0.patch
   hdr-histogram-js@3.0.1: patches/hdr-histogram-js@3.0.1.patch
+  path-browserify@1.0.1: patches/path-browserify@1.0.1.patch
+
+# The patched Rich cell-width code owns the versioned grapheme rules.
+packageExtensions:
+  '@promptctl/rich-js@0.27.0':
+    dependencies:
+      unicode-segmenter: 0.17.3

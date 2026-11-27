@@ -9,6 +9,7 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -57,7 +58,7 @@ function rig(template: string) {
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const drawn = drawPayload(
     config,

@@ -19,6 +19,7 @@
 // DEFAULT_DSL_CONFIG, so the `{{ template "name" }}` calls resolve the same
 // helper bodies the shipped statusline uses — not a test-local copy.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -69,7 +70,7 @@ function render(call: string, payload: Record<string, number>): string {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const out = drawPayload(
     config,

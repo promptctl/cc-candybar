@@ -14,6 +14,7 @@
 // [LAW:behavior-not-structure] Everything below asserts observable behavior:
 // what lands in the payload, and whether the bundled segment renders.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
@@ -219,7 +220,7 @@ describe("the bundled host segment", () => {
 
   function render(host: Record<string, unknown>): Frame {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       const compiled = registerDslConfig(CONFIG, registry, {
         cwd: "/tmp",

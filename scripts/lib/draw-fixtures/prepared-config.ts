@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "./sample-region.js";
 import {
   WatcherRegistry,
   systemWatchDirectory,
@@ -121,7 +122,7 @@ export function prepareSnapshot(
     clock: world.clock,
   });
   const registry = new SourceRegistry(
-    store,
+    store, SAMPLE_REGION,
     config.globals.default_empty_value ?? "",
     new SessionState(),
     null,

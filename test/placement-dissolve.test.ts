@@ -6,6 +6,7 @@
 // until the dissolve is over, then closes up in one step. A write to the
 // session's state, the width or the palette ends every dissolve in flight.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
@@ -74,7 +75,7 @@ interface Frame {
 // drawn until it reloads.
 function renderer(cfg: ValidatedConfig, session = new SessionState()) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", session);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

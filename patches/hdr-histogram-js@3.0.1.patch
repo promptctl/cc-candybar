@@ -1,5 +1,130 @@
+diff --git a/dist/Histogram.js b/dist/Histogram.js
+index e952df76d37b2712902ae47d5f44593aa520ceb6..5b7e8a8e6cc0c39b7353fa65369b0e04cef70325 100644
+--- a/dist/Histogram.js
++++ b/dist/Histogram.js
+@@ -1,7 +1,7 @@
+ "use strict";
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.toSummary = exports.NO_TAG = void 0;
+-const formatters_1 = require("./formatters");
++const formatters_1 = require("./significantDigits");
+ exports.NO_TAG = "NO TAG";
+ const toSummary = (histogram) => {
+     const { totalCount, maxValue, numberOfSignificantValueDigits } = histogram;
+diff --git a/dist/JsHistogram.distribution.js b/dist/JsHistogram.distribution.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..733e900e6bde99e25bba20c18554186845646343
+--- /dev/null
++++ b/dist/JsHistogram.distribution.js
+@@ -0,0 +1,106 @@
++"use strict";
++const { JsHistogram } = require("./JsHistogram");
++const formatters_1 = require("./formatters");
++    /**
++     * Produce textual representation of the value distribution of histogram data by percentile. The distribution is
++     * output with exponentially increasing resolution, with each exponentially decreasing half-distance containing
++     * <i>dumpTicksPerHalf</i> percentile reporting tick points.
++     *
++     * @param printStream    Stream into which the distribution will be output
++     * <p>
++     * @param percentileTicksPerHalfDistance  The number of reporting points per exponentially decreasing half-distance
++     * <p>
++     * @param outputValueUnitScalingRatio    The scaling factor by which to divide histogram recorded values units in
++     *                                     output
++     * @param useCsvFormat  Output in CSV format if true. Otherwise use plain text form.
++     */
++Object.defineProperty(JsHistogram.prototype, "outputPercentileDistribution", {
++    writable: true, configurable: true, value: function(percentileTicksPerHalfDistance = 5, outputValueUnitScalingRatio = 1, useCsvFormat = false) {
++        let result = "";
++        if (useCsvFormat) {
++            result += '"Value","Percentile","TotalCount","1/(1-Percentile)"\n';
++        }
++        else {
++            result += "       Value     Percentile TotalCount 1/(1-Percentile)\n\n";
++        }
++        const iterator = this.percentileIterator;
++        iterator.reset(percentileTicksPerHalfDistance);
++        let lineFormatter;
++        let lastLineFormatter;
++        if (useCsvFormat) {
++            const valueFormatter = (0, formatters_1.floatFormatter)(0, this.numberOfSignificantValueDigits);
++            const percentileFormatter = (0, formatters_1.floatFormatter)(0, 12);
++            const lastFormatter = (0, formatters_1.floatFormatter)(0, 2);
++            lineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
++                "," +
++                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
++                "," +
++                iterationValue.totalCountToThisValue +
++                "," +
++                lastFormatter(1 / (1 - iterationValue.percentileLevelIteratedTo / 100)) +
++                "\n";
++            lastLineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
++                "," +
++                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
++                "," +
++                iterationValue.totalCountToThisValue +
++                ",Infinity\n";
++        }
++        else {
++            const valueFormatter = (0, formatters_1.floatFormatter)(12, this.numberOfSignificantValueDigits);
++            const percentileFormatter = (0, formatters_1.floatFormatter)(2, 12);
++            const totalCountFormatter = (0, formatters_1.integerFormatter)(10);
++            const lastFormatter = (0, formatters_1.floatFormatter)(14, 2);
++            lineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
++                " " +
++                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
++                " " +
++                totalCountFormatter(iterationValue.totalCountToThisValue) +
++                " " +
++                lastFormatter(1 / (1 - iterationValue.percentileLevelIteratedTo / 100)) +
++                "\n";
++            lastLineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
++                " " +
++                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
++                " " +
++                totalCountFormatter(iterationValue.totalCountToThisValue) +
++                "\n";
++        }
++        while (iterator.hasNext()) {
++            const iterationValue = iterator.next();
++            if (iterationValue.percentileLevelIteratedTo < 100) {
++                result += lineFormatter(iterationValue);
++            }
++            else {
++                result += lastLineFormatter(iterationValue);
++            }
++        }
++        if (!useCsvFormat) {
++            // Calculate and output mean and std. deviation.
++            // Note: mean/std. deviation numbers are very often completely irrelevant when
++            // data is extremely non-normal in distribution (e.g. in cases of strong multi-modal
++            // response time distribution associated with GC pauses). However, reporting these numbers
++            // can be very useful for contrasting with the detailed percentile distribution
++            // reported by outputPercentileDistribution(). It is not at all surprising to find
++            // percentile distributions where results fall many tens or even hundreds of standard
++            // deviations away from the mean - such results simply indicate that the data sampled
++            // exhibits a very non-normal distribution, highlighting situations for which the std.
++            // deviation metric is a useless indicator.
++            //
++            const formatter = (0, formatters_1.floatFormatter)(12, this.numberOfSignificantValueDigits);
++            const _mean = this.mean;
++            const mean = formatter(_mean / outputValueUnitScalingRatio);
++            const std_deviation = formatter(this.getStdDeviation(_mean) / outputValueUnitScalingRatio);
++            const max = formatter(this.maxValue / outputValueUnitScalingRatio);
++            const intFormatter = (0, formatters_1.integerFormatter)(12);
++            const totalCount = intFormatter(this.totalCount);
++            const bucketCount = intFormatter(this.bucketCount);
++            const subBucketCount = intFormatter(this.subBucketCount);
++            result += `#[Mean    = ${mean}, StdDeviation   = ${std_deviation}]
++#[Max     = ${max}, Total count    = ${totalCount}]
++#[Buckets = ${bucketCount}, SubBuckets     = ${subBucketCount}]
++`;
++        }
++        return result;
++    }
++});
 diff --git a/dist/JsHistogram.encoding.js b/dist/JsHistogram.encoding.js
-index 3c7f56b2d50bcebd1294d75f568b3163b2a8f527..75cf0b02e4c721c3b651ded382586b00dceb4e1b 100644
+index 3c7f56b2d50bcebd1294d75f568b3163b2a8f527..0a72c6153368e2edcc14ab6796d7b6489cdd2672 100644
 --- a/dist/JsHistogram.encoding.js
 +++ b/dist/JsHistogram.encoding.js
 @@ -117,24 +117,10 @@ function getWordSizeInBytesFromCookie(cookie) {
@@ -31,3 +156,178 @@ index 3c7f56b2d50bcebd1294d75f568b3163b2a8f527..75cf0b02e4c721c3b651ded382586b00
  function decompress(data) {
      const buffer = new ByteBuffer_1.default(data);
      const initialTargetPosition = buffer.position;
+diff --git a/dist/JsHistogram.js b/dist/JsHistogram.js
+index a8d37248fddf46a0105356408756ec5cf3893c6c..4bbd2dbabce9a3f95e6b3c93cd23ca7215a170f9 100644
+--- a/dist/JsHistogram.js
++++ b/dist/JsHistogram.js
+@@ -10,7 +10,6 @@ exports.default = exports.JsHistogram = void 0;
+  */
+ const RecordedValuesIterator_1 = require("./RecordedValuesIterator");
+ const PercentileIterator_1 = require("./PercentileIterator");
+-const formatters_1 = require("./formatters");
+ const ulp_1 = require("./ulp");
+ const Histogram_1 = require("./Histogram");
+ const { pow, floor, ceil, log2, max, min } = Math;
+@@ -412,107 +411,6 @@ class JsHistogram {
+         const std_deviation = Math.sqrt(geometric_deviation_total / this.totalCount);
+         return std_deviation;
+     }
+-    /**
+-     * Produce textual representation of the value distribution of histogram data by percentile. The distribution is
+-     * output with exponentially increasing resolution, with each exponentially decreasing half-distance containing
+-     * <i>dumpTicksPerHalf</i> percentile reporting tick points.
+-     *
+-     * @param printStream    Stream into which the distribution will be output
+-     * <p>
+-     * @param percentileTicksPerHalfDistance  The number of reporting points per exponentially decreasing half-distance
+-     * <p>
+-     * @param outputValueUnitScalingRatio    The scaling factor by which to divide histogram recorded values units in
+-     *                                     output
+-     * @param useCsvFormat  Output in CSV format if true. Otherwise use plain text form.
+-     */
+-    outputPercentileDistribution(percentileTicksPerHalfDistance = 5, outputValueUnitScalingRatio = 1, useCsvFormat = false) {
+-        let result = "";
+-        if (useCsvFormat) {
+-            result += '"Value","Percentile","TotalCount","1/(1-Percentile)"\n';
+-        }
+-        else {
+-            result += "       Value     Percentile TotalCount 1/(1-Percentile)\n\n";
+-        }
+-        const iterator = this.percentileIterator;
+-        iterator.reset(percentileTicksPerHalfDistance);
+-        let lineFormatter;
+-        let lastLineFormatter;
+-        if (useCsvFormat) {
+-            const valueFormatter = (0, formatters_1.floatFormatter)(0, this.numberOfSignificantValueDigits);
+-            const percentileFormatter = (0, formatters_1.floatFormatter)(0, 12);
+-            const lastFormatter = (0, formatters_1.floatFormatter)(0, 2);
+-            lineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
+-                "," +
+-                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
+-                "," +
+-                iterationValue.totalCountToThisValue +
+-                "," +
+-                lastFormatter(1 / (1 - iterationValue.percentileLevelIteratedTo / 100)) +
+-                "\n";
+-            lastLineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
+-                "," +
+-                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
+-                "," +
+-                iterationValue.totalCountToThisValue +
+-                ",Infinity\n";
+-        }
+-        else {
+-            const valueFormatter = (0, formatters_1.floatFormatter)(12, this.numberOfSignificantValueDigits);
+-            const percentileFormatter = (0, formatters_1.floatFormatter)(2, 12);
+-            const totalCountFormatter = (0, formatters_1.integerFormatter)(10);
+-            const lastFormatter = (0, formatters_1.floatFormatter)(14, 2);
+-            lineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
+-                " " +
+-                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
+-                " " +
+-                totalCountFormatter(iterationValue.totalCountToThisValue) +
+-                " " +
+-                lastFormatter(1 / (1 - iterationValue.percentileLevelIteratedTo / 100)) +
+-                "\n";
+-            lastLineFormatter = (iterationValue) => valueFormatter(iterationValue.valueIteratedTo / outputValueUnitScalingRatio) +
+-                " " +
+-                percentileFormatter(iterationValue.percentileLevelIteratedTo / 100) +
+-                " " +
+-                totalCountFormatter(iterationValue.totalCountToThisValue) +
+-                "\n";
+-        }
+-        while (iterator.hasNext()) {
+-            const iterationValue = iterator.next();
+-            if (iterationValue.percentileLevelIteratedTo < 100) {
+-                result += lineFormatter(iterationValue);
+-            }
+-            else {
+-                result += lastLineFormatter(iterationValue);
+-            }
+-        }
+-        if (!useCsvFormat) {
+-            // Calculate and output mean and std. deviation.
+-            // Note: mean/std. deviation numbers are very often completely irrelevant when
+-            // data is extremely non-normal in distribution (e.g. in cases of strong multi-modal
+-            // response time distribution associated with GC pauses). However, reporting these numbers
+-            // can be very useful for contrasting with the detailed percentile distribution
+-            // reported by outputPercentileDistribution(). It is not at all surprising to find
+-            // percentile distributions where results fall many tens or even hundreds of standard
+-            // deviations away from the mean - such results simply indicate that the data sampled
+-            // exhibits a very non-normal distribution, highlighting situations for which the std.
+-            // deviation metric is a useless indicator.
+-            //
+-            const formatter = (0, formatters_1.floatFormatter)(12, this.numberOfSignificantValueDigits);
+-            const _mean = this.mean;
+-            const mean = formatter(_mean / outputValueUnitScalingRatio);
+-            const std_deviation = formatter(this.getStdDeviation(_mean) / outputValueUnitScalingRatio);
+-            const max = formatter(this.maxValue / outputValueUnitScalingRatio);
+-            const intFormatter = (0, formatters_1.integerFormatter)(12);
+-            const totalCount = intFormatter(this.totalCount);
+-            const bucketCount = intFormatter(this.bucketCount);
+-            const subBucketCount = intFormatter(this.subBucketCount);
+-            result += `#[Mean    = ${mean}, StdDeviation   = ${std_deviation}]
+-#[Max     = ${max}, Total count    = ${totalCount}]
+-#[Buckets = ${bucketCount}, SubBuckets     = ${subBucketCount}]
+-`;
+-        }
+-        return result;
+-    }
+     get summary() {
+         return (0, Histogram_1.toSummary)(this);
+     }
+diff --git a/dist/formatters.js b/dist/formatters.js
+index 8fdd4d915df2e5acd2420d2be38ec85e51bfe8f0..4d33b4412a7f6bccf1c82421e15bb23cad9fe93e 100644
+--- a/dist/formatters.js
++++ b/dist/formatters.js
+@@ -14,18 +14,7 @@ const integerFormatter = (size) => {
+     return (integer) => padding("" + integer);
+ };
+ exports.integerFormatter = integerFormatter;
+-const { floor, log10, pow } = Math;
+-const numberOfDigits = (n) => floor(log10(n) + 1);
+-const keepSignificantDigits = (digits) => (value) => {
+-    const valueDigits = numberOfDigits(value);
+-    if (valueDigits > digits) {
+-        const extraDigits = valueDigits - digits;
+-        const magnitude = pow(10, extraDigits);
+-        return value - (value % magnitude);
+-    }
+-    return value;
+-};
+-exports.keepSignificantDigits = keepSignificantDigits;
++exports.keepSignificantDigits = require("./significantDigits").keepSignificantDigits;
+ const floatFormatter = (size, fractionDigits) => {
+     const numberFormatter = new Intl.NumberFormat("en-US", {
+         maximumFractionDigits: fractionDigits,
+diff --git a/dist/index.js b/dist/index.js
+index 68d473ad9d57b600b506bb10f64f5187bb4d5ac3..007edf4ea282c90299c43f5056f0f36a2ad928ac 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -26,6 +26,7 @@ const Int32Histogram_1 = require("./Int32Histogram");
+ exports.Int32Histogram = Int32Histogram_1.default;
+ const Int8Histogram_1 = require("./Int8Histogram");
+ exports.Int8Histogram = Int8Histogram_1.default;
++require("./JsHistogram.distribution");
+ const JsHistogram_1 = require("./JsHistogram");
+ exports.JsHistogram = JsHistogram_1.default;
+ const PackedHistogram_1 = require("./PackedHistogram");
+diff --git a/dist/significantDigits.js b/dist/significantDigits.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..33c6b7fb5066b7ab67bf91ec1f2ad92f9305cddf
+--- /dev/null
++++ b/dist/significantDigits.js
+@@ -0,0 +1,13 @@
++"use strict";
++const { floor, log10, pow } = Math;
++const numberOfDigits = (n) => floor(log10(n) + 1);
++const keepSignificantDigits = (digits) => (value) => {
++    const valueDigits = numberOfDigits(value);
++    if (valueDigits > digits) {
++        const extraDigits = valueDigits - digits;
++        const magnitude = pow(10, extraDigits);
++        return value - (value % magnitude);
++    }
++    return value;
++};
++exports.keepSignificantDigits = keepSignificantDigits;

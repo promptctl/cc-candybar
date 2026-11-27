@@ -3,17 +3,32 @@
 // however long the daemon runs, read as one distribution. A render's time, a
 // launch's and a feed frame's lateness are spelled the same wherever they show.
 
-import {
-  build as buildHistogram,
-  encodeIntoCompressedBase64,
-  type Histogram,
-} from "hdr-histogram-js";
+import { constructorFromBucketSize } from "hdr-histogram-js/dist/JsHistogramFactory.js";
+import "hdr-histogram-js/dist/JsHistogram.encoding.js";
+import type { JsHistogram } from "hdr-histogram-js/dist/JsHistogram.js";
 import type { Durations } from "./stats-snapshot.js";
 
-export type { Histogram };
+// [LAW:types-are-the-program] The duration port exposes the measurements and
+// codec installed here. Human-readable HDR reports belong to its full entry.
+export type Histogram = Pick<
+  JsHistogram,
+  | "recordValue"
+  | "totalCount"
+  | "getValueAtPercentile"
+  | "maxValue"
+  | "mean"
+  | "stdDeviation"
+  | "encodeIntoCompressedBase64"
+>;
 
-export const durationHistogram = (): Histogram =>
-  buildHistogram({ bitBucketSize: "packed" });
+// [LAW:one-way-deps] A bounded JS histogram needs only its packed storage
+// and existing codec. The general factory also initializes a WASM runtime.
+const PackedHistogram = constructorFromBucketSize("packed");
+export function durationHistogram(): Histogram {
+  const histogram = new PackedHistogram(1, 2, 3);
+  histogram.autoResize = true;
+  return histogram;
+}
 
 export const recordMs = (h: Histogram, ms: number): void => {
   h.recordValue(Math.round(ms * 1000));
@@ -27,7 +42,7 @@ const msOf = (us: number): number => Math.round(us / 10) / 100;
 
 // The whole histogram, compressed, as HdrHistogram's tools read and merge it.
 export const encodedOf = (h: Histogram): string =>
-  encodeIntoCompressedBase64(h);
+  h.encodeIntoCompressedBase64();
 
 // A percentile is the highest value its bucket stands for, which can lie above
 // the largest value recorded; no recorded value lies above the largest, so that

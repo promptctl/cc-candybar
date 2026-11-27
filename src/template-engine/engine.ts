@@ -38,7 +38,7 @@
 //    — see DEFAULT_DSL_CONFIG.helpers.)
 
 import { disposeSymbol } from "../utils/dispose-symbol.js";
-import { systemRegion, type RegionalSettings } from "../utils/region.js";
+import { type RegionalSettings } from "../utils/region.js";
 import {
   createEngine,
   type Engine,
@@ -225,11 +225,11 @@ const DEPTH_BINDINGS = { readableOn: readableOnFunc } as const;
 // depth nobody stated. It carries no terminal: the detached daemon cannot see
 // the client's.
 export function createCcCandybarEngine(opts: {
-  readonly region?: RegionalSettings;
+  readonly region: RegionalSettings;
   readonly drawnAt: () => ColorDepth;
   readonly extraFuncs?: FuncMap;
 }): Engine<RichText> {
-  const { drawnAt, extraFuncs, region = systemRegion() } = opts;
+  const { drawnAt, extraFuncs, region } = opts;
   const depth = (): DrawnAt => ({ depth: drawnAt() });
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
@@ -277,7 +277,7 @@ export function createCcCandybarEngine(opts: {
       // formatterFuncs' Math.round shadows sprigMath's precision-aware round,
       // registered last so the domain meaning wins (revisited by the bdi
       // cleanup ticket).
-      ...formatterFuncs(region.locale),
+      ...formatterFuncs(region.integers),
       // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
       // engine supplies the `action` + `picker` funcs; resolver-less compile-only
       // paths do not). Last so a feature can override on collision.

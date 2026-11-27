@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 import { refuseFile } from "./helpers/refuse-file";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
@@ -132,6 +133,7 @@ function makeCache(
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       locations: locations(host),
@@ -1495,6 +1497,7 @@ describe("RenderCache close", () => {
     });
     const cache = new RenderCache(
       {
+        region: SAMPLE_REGION,
         editRevision: () => null,
         clock: systemTimekeeper,
         locations: locations(host),
@@ -1553,6 +1556,7 @@ describe("RenderCache frames and pins", () => {
     const logs: string[] = [];
     const cache = new RenderCache(
       {
+        region: SAMPLE_REGION,
         editRevision: () => null,
         clock: systemTimekeeper,
         locations: locations(host),
@@ -1676,6 +1680,7 @@ describe("RenderCache frames and pins", () => {
       let opens = 0;
       const cache = new RenderCache(
         {
+          region: SAMPLE_REGION,
           clock: systemTimekeeper,
           locations: locations(host),
           gates: bareGates(),
@@ -1783,6 +1788,7 @@ describe("RenderCache frames and pins", () => {
     let canOpen = false;
     const cache = new RenderCache(
       {
+        region: SAMPLE_REGION,
         editRevision: () => null,
         clock: systemTimekeeper,
         locations: locations(host),

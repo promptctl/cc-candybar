@@ -7,6 +7,7 @@
 // test/claude-input.test.ts's; the lane itself is
 // test/render-payload-outcomes.test.ts's.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -64,7 +65,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
   const sessionState = new SessionState();
   hearRender(sessionState, heardRequest(S1, "/tmp/proj", { tmux: HINT }));
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
   });

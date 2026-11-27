@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { fixtureFakeLauncher } from "./helpers/scripted-launcher";
 import { manualWatcherRegistry } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] brandon-unfiled-3248.8ro6 step 3, part 2: a value
@@ -71,7 +72,7 @@ interface Drawn {
 }
 
 function renderer(cfg: ValidatedConfig) {
-  const compiled = compileDslConfig(compileInputOf(cfg));
+  const compiled = compileDslConfig(compileInputOf(cfg, SAMPLE_REGION));
   const clock = heldClock(new Date(AT * 1000));
   const { launcher, spawner } = fixtureFakeLauncher(clock, {});
   // The two commands the configs here run: one never answers, one answers empty
@@ -80,7 +81,7 @@ function renderer(cfg: ValidatedConfig) {
   spawner.program(shell("sleep 0.2; printf ''"), runsFor(200, exits(0)));
   const store = new VariableStore(clock);
   const session = new SessionState();
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
   const sourceRuns = new SourceRuns({

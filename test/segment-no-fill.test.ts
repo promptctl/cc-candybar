@@ -8,6 +8,7 @@
 //   - with no `fg:` the cell carries no text colour either: the terminal's own
 //     text on its own ground, the one pair known to read there.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
@@ -41,7 +42,7 @@ function render() {
     new Set(listResolvablePaletteNames()),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const drawn = drawPayload(
     config,

@@ -3,6 +3,7 @@
 // click. Driven through the real loader and draw, so what a click does is read
 // from the link the frame drew.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -71,7 +72,7 @@ function draw(held: Held, surface = "left"): readonly Run[] {
   const cfg = parseAndValidate("<user>", CONFIG, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp/proj" });
   recordRender(sessionState, S1);
   if (held.mode !== undefined) sessionState.set(S1, CLICK_MODE_KEY, held.mode);

@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import type { Frame } from "../src/render/frame";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
@@ -312,7 +313,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // repaint every compile-only render (`cc-candybar check`, tests).
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       const compiled = registerDslConfig(config, registry, {
         cwd: process.cwd(),
@@ -340,7 +341,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   test("a session with no picks evaluates a RULE too, rather than falling to the floor", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       const compiled = registerDslConfig(config, registry, {
         cwd: process.cwd(),
@@ -405,7 +406,7 @@ describe("globals.palette as an expression — loader", () => {
       ALLOWED,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       expect(() =>
         registerDslConfig(config, registry, { cwd: process.cwd() }),
@@ -531,7 +532,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       return body(config, registry, store);
     } finally {

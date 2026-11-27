@@ -6,8 +6,10 @@
 // fails. That a session under the set's roots is not counted twice is the
 // store's read (test/daemon-session-usage-store.test.ts).
 
+import { SAMPLE_CALENDAR } from "../scripts/lib/draw-fixtures/sample-region.js";
 import type { DaySums } from "../src/daemon/cache/session-usage-store";
-import { dayKey, projectToday } from "../src/daemon/foundations/today-facts";
+import { ZonedCalendar } from "../src/utils/calendar";
+import { projectToday } from "../src/daemon/foundations/today-facts";
 import { type DayUsage, type TodayFacts } from "../src/facts/world-state";
 import { todayOf } from "../src/renderer/render-payload";
 import { todayReading } from "../src/daemon/readings";
@@ -22,9 +24,9 @@ import {
 import { settledLane } from "../src/utils/reading";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-const NOON = instantOf(new Date(2031, 0, 2, 12, 0, 0));
-const NEXT_DAY = instantOf(new Date(2031, 0, 3, 12, 0, 0));
-const key = (at: typeof NOON) => dayKey(dateOf(at));
+const NOON = instantOf(new Date("2031-01-02T12:00:00Z"));
+const NEXT_DAY = instantOf(new Date("2031-01-03T12:00:00Z"));
+const key = (at: typeof NOON) => SAMPLE_CALENDAR.dayKey(dateOf(at));
 
 const day = (cost: number, input: number) => ({
   cost,
@@ -39,9 +41,36 @@ const SET: DaySums = {
   sums: { [key(NOON)]: day(4, 40), [key(NEXT_DAY)]: day(1, 10) },
 };
 
+test("the recorded calendar selects the host bucket at midnight and spans both lengths of DST day", () => {
+  const calendar = new ZonedCalendar("America/New_York");
+  const instant = (iso: string) => instantOf(new Date(iso));
+  const facts = { sums: {
+    "2024-03-09": day(9, 90), "2024-03-10": day(10, 100),
+  }, own: {} };
+  expect(todayOf(ok(facts), instant("2024-03-10T04:59:59Z"), calendar)).toEqual({ cost: 9, tokens: 90 });
+  expect(todayOf(ok(facts), instant("2024-03-10T05:00:00Z"), calendar)).toEqual({ cost: 10, tokens: 100 });
+  expect(calendar.previousMidnight(Date.parse("2024-03-11T04:00:00Z"))).toBe(Date.parse("2024-03-10T05:00:00Z"));
+  expect(calendar.previousMidnight(Date.parse("2024-11-04T05:00:00Z"))).toBe(Date.parse("2024-11-03T04:00:00Z"));
+});
+
+test.each([
+  ["Pacific/Kiritimati", "+275760-09-13T00:00:00.000Z", "275760-09-13", 840],
+  ["America/New_York", "-271821-04-20T00:00:00.000Z", "-271821-04-19", -296],
+  ["Europe/Kiev", "2026-11-30T22:30:00Z", "2026-12-01", 120],
+  ["Europe/Kyiv", "2026-11-30T22:30:00Z", "2026-12-01", 120],
+  ["US/Eastern", "2110-07-15T03:59:59Z", "2110-07-14", -240],
+  ["America/New_York", "2110-07-15T03:59:59Z", "2110-07-14", -240],
+  ["Africa/Casablanca", "2026-11-30T23:30:00Z", "2026-11-30", 0],
+] as const)("uses the shipped transition rules for %s at %s", (zone, iso, dayKey, offsetMinutes) => {
+  const calendar = new ZonedCalendar(zone);
+  const date = new Date(iso);
+  expect(calendar.dayKey(date)).toBe(dayKey);
+  expect(calendar.partsAt(date).offsetMinutes).toBe(offsetMinutes);
+});
+
 describe("projectToday", () => {
   test("sums the day of the draw's instant out of the set", () => {
-    const today = projectToday({ sums: SET.sums, own: {} }, NOON);
+    const today = projectToday({ sums: SET.sums, own: {} }, NOON, SAMPLE_CALENDAR);
     expect(today).toMatchObject({
       kind: "ok",
       value: { cost: 4, tokens: 40, date: key(NOON) },
@@ -50,19 +79,19 @@ describe("projectToday", () => {
 
   test("the day turning over moves it with no owner moving", () => {
     const facts: TodayFacts = { sums: SET.sums, own: {} };
-    expect(projectToday(facts, NOON)).toMatchObject({ value: { cost: 4 } });
-    expect(projectToday(facts, NEXT_DAY)).toMatchObject({ value: { cost: 1 } });
+    expect(projectToday(facts, NOON, SAMPLE_CALENDAR)).toMatchObject({ value: { cost: 4 } });
+    expect(projectToday(facts, NEXT_DAY, SAMPLE_CALENDAR)).toMatchObject({ value: { cost: 1 } });
   });
 
   test("a day nothing was recorded on is absent", () => {
     const later = instantOf(new Date(2031, 0, 9, 12, 0, 0));
-    expect(projectToday({ sums: SET.sums, own: {} }, later)).toEqual(ABSENT);
+    expect(projectToday({ sums: SET.sums, own: {} }, later, SAMPLE_CALENDAR)).toEqual(ABSENT);
   });
 
   test("the session's own day adds to the set's", () => {
     const today = projectToday(
       { sums: SET.sums, own: { [key(NOON)]: day(0.5, 5) } },
-      NOON,
+      NOON, SAMPLE_CALENDAR,
     );
     expect(today).toMatchObject({ value: { cost: 4.5, tokens: 45 } });
   });
@@ -70,7 +99,7 @@ describe("projectToday", () => {
   test("the session's own day counts when the set holds none", () => {
     const today = projectToday(
       { sums: {}, own: { [key(NOON)]: day(2, 20) } },
-      NOON,
+      NOON, SAMPLE_CALENDAR,
     );
     expect(today).toMatchObject({ value: { cost: 2, tokens: 20 } });
   });
@@ -125,17 +154,17 @@ describe("todayOf", () => {
   const facts: TodayFacts = { sums: SET.sums, own: {} };
 
   test("an ok fact is the day's cost and tokens", () => {
-    expect(todayOf(ok(facts), NOON)).toEqual({ cost: 4, tokens: 40 });
+    expect(todayOf(ok(facts), NOON, SAMPLE_CALENDAR)).toEqual({ cost: 4, tokens: 40 });
   });
 
   test("a fact not answered yet is not answered yet, in the reason it gave", () => {
-    expect(todayOf(pendingOf("superseded"), NOON)).toEqual(
+    expect(todayOf(pendingOf("superseded"), NOON, SAMPLE_CALENDAR)).toEqual(
       pendingOf("superseded"),
     );
   });
 
   test("a failed or absent fact draws nothing", () => {
-    expect(todayOf(failed("scan broke", "read"), NOON)).toBeUndefined();
-    expect(todayOf(ABSENT, NOON)).toBeUndefined();
+    expect(todayOf(failed("scan broke", "read"), NOON, SAMPLE_CALENDAR)).toBeUndefined();
+    expect(todayOf(ABSENT, NOON, SAMPLE_CALENDAR)).toBeUndefined();
   });
 });

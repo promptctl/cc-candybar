@@ -3,6 +3,7 @@
 // snapshot, and read back from its answers. Every layer names a file that does
 // not exist, so a renderer that read one would fail at that call.
 
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -39,7 +40,7 @@ export const bootOf = (stored = EMPTY_STORED_STATE): RendererBoot => ({
     dataHome: "/nowhere/data",
     dataDirs: [],
   },
-  region: { locale: "en-US", timeZone: "UTC" },
+  region: SAMPLE_REGION,
   memoryLimitBytes: 1024 * 1024 * 1024,
 });
 

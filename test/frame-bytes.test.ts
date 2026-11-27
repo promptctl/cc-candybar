@@ -10,6 +10,7 @@
 // reach is asserted too: a config that stops drawing a blank row, a wrapped
 // row, a ColorBlend, a moving effect or a fade fails here, not silently.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { ColorDepth, Style, type ColorSpec } from "@promptctl/rich-js";
@@ -75,7 +76,7 @@ function rig(
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
   });

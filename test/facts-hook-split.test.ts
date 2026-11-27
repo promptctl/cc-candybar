@@ -5,6 +5,7 @@
 // what those fields answer. Read over the real usage, context and metrics
 // owners, the three whose answers the hook used to be laid into.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { daemonFactsOf } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { heldClock } from "./helpers/held-clock";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -122,6 +123,7 @@ afterEach(() => {
 // refresh stores cannot reach the other's document.
 function inputsOf(hookData: CheckedHookData) {
   const usageStore = new SessionUsageStore({
+    timeZone: SAMPLE_REGION.timeZone,
     prices: settledPrices,
     clock: systemTimekeeper,
     host: hostOf({}, { home: dir }),

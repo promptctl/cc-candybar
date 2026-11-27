@@ -6,6 +6,7 @@
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
 // key is a no-op (an inherited define emits nothing).
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
@@ -41,7 +42,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   return { config, compiled, store, registry };
 }

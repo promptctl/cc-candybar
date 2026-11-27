@@ -12,6 +12,7 @@
 //   2. Two adjacent segments are always joined by a filled arrow, whatever
 //      their grounds: no thin divider is drawn in its place.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -54,7 +55,7 @@ function draw(src: string, hookData: Record<string, unknown>) {
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(
-    store,
+    store, SAMPLE_REGION,
     config.globals.default_empty_value,
     sessionState,
   );

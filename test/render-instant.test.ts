@@ -3,6 +3,7 @@
 // a segment template's `now`, a template variable's `now`, a `time` variable —
 // reads that instant and nothing else.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -41,10 +42,9 @@ const CONFIG = parseAndValidate(
   }`,
 );
 
-// Built from local fields: `date` and a `time` variable format in local time,
-// so the clock text is the same wherever the suite runs.
-const A = new Date(2026, 5, 4, 12, 34, 56);
-const B = new Date(2026, 5, 4, 12, 34, 57);
+// The fixture renders these instants in its explicit UTC region.
+const A = new Date("2026-06-04T12:34:56Z");
+const B = new Date("2026-06-04T12:34:57Z");
 const epochOf = (d: Date): string => String(Math.floor(d.getTime() / 1000));
 
 function renderer(): {
@@ -52,7 +52,7 @@ function renderer(): {
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });
   return {
     render: (at) =>
@@ -128,7 +128,7 @@ describe("a stored instant is read against the frame's instant", () => {
 
   test("one payload, two frames: each draws its own age and ETA", () => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
+    const registry = new SourceRegistry(store, SAMPLE_REGION,
       "",
       new SessionState(),
     );
@@ -157,7 +157,7 @@ describe("a stored instant is read against the frame's instant", () => {
 
   test("no commit date reads as no age, and an unused window as no ETA", () => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
+    const registry = new SourceRegistry(store, SAMPLE_REGION,
       "",
       new SessionState(),
     );

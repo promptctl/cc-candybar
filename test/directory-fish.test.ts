@@ -9,6 +9,7 @@
 // two functions the daemon and check call — not a synthetic in-process
 // transform.
 
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -81,7 +82,7 @@ function renderDirRaw(paths: DirPaths): Frame {
     root: dirOnlyRoot,
   };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, {
       cwd: paths.current_dir,
@@ -232,7 +233,7 @@ describe("configurability seam: user template override restores full path", () =
       }),
     };
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
     try {
       const compiled = registerDslConfig(overridden, registry, {
         cwd: "/Users/bmf/code/cc-candybar",

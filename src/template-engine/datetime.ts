@@ -1,107 +1,201 @@
+import { ZonedCalendar } from "../utils/calendar.js";
 import {
-  sprigDatetime,
+  sprigDatetimeIn,
   type FuncMap,
   type TemplateFunc,
 } from "@promptctl/go-template-js";
 
 export const DATE_CLOCK_FUNCTIONS = ["now", "ago"] as const;
 
-const SPRIG = sprigDatetime(() => {
-  throw new Error(
-    "a sprig date function other than now and ago read the clock",
-  );
-});
-
-const DAY_MS = 86_400_000;
-const DATE_LIMIT_MS = 8.64e15;
+// ECMAScript date-only values are UTC. A timestamp with no offset is a
+// wall time in the region the host recorded. Legacy dates use that same zone.
 const ISO =
-  /^(?:\d{4}|(?!-000000)[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
-const NAMED_ZONE = /(?:^|[^a-z])(?:ut|utc|gmt|[ecmp][sd]t|z)(?![a-z])/i;
+  /^((?!-000000)[+-]\d{6}|\d{4})(?:-(\d{2})(?:-(\d{2}))?)?(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:?\d{2})?)?$/i;
+const ZONES: Readonly<Record<string, number>> = {
+  Z: 0,
+  UT: 0,
+  UTC: 0,
+  GMT: 0,
+  EST: -300,
+  EDT: -240,
+  CST: -360,
+  CDT: -300,
+  MST: -420,
+  MDT: -360,
+  PST: -480,
+  PDT: -420,
+};
+const MONTHS = [
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "may",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "oct",
+  "nov",
+  "dec",
+];
 
-function legacyDate(value: string): { tokens: string; end: number } {
-  // Look for zones outside parenthesized comments. Retain the original text
-  // for native parsing, truncating an open comment only before adding a zone.
-  if (!value.includes("(")) return { tokens: value, end: value.length };
-  let depth = 0;
-  let start = 0;
-  let tokens = "";
-  for (let i = 0; i < value.length; i++) {
-    const character = value.charAt(i);
-    if (character === "(") {
-      if (depth === 0) {
-        start = i;
-        tokens += " ";
-      }
-      depth++;
-    } else if (character === ")" && depth > 0) depth--;
-    else if (depth === 0) tokens += character;
+function zoneMinutes(zone: string): number {
+  const named = ZONES[zone.toUpperCase()];
+  if (typeof named === "number") return named;
+  const offset = /^(?:GMT)?([+-])(\d{1,2})(?::?(\d{2}))?$/i.exec(zone);
+  if (!offset) return NaN;
+  const hours = Number(offset[2]),
+    minutes = Number(offset[3] ?? 0);
+  return hours <= 23 && minutes <= 59
+    ? (offset[1] === "-" ? -1 : 1) * (hours * 60 + minutes)
+    : NaN;
+}
+
+function calendarStamp(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  millis = 0,
+): number {
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour > 24 ||
+    minute > 59 ||
+    second > 59 ||
+    (hour === 24 && minute + second + millis !== 0)
+  )
+    return NaN;
+  // setUTCFullYear preserves years 0..99, which Date.UTC remaps to 1900..1999.
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date.setUTCHours(hour, minute, second, millis);
+}
+
+function legacyFields(
+  source: string,
+): readonly [number, number, number] | undefined {
+  const words = source
+    .trim()
+    .replace(/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+/i, "")
+    .split(/[\s,./-]+/);
+  const named = words.findIndex((word) => /^[a-z]{3,}$/i.test(word));
+  const digits = words.filter((_, index) => index !== named);
+  if (!digits.length || !digits.every((word) => /^\d{1,6}$/.test(word)))
+    return undefined;
+  const [first = 1, second = 1, third = 2001] = digits.map(Number);
+  const yearOf = (n: number) => (n < 50 ? n + 2000 : n < 100 ? n + 1900 : n);
+  const yearFirst = first === 0 || first > 31;
+  if (named >= 0) {
+    const month = MONTHS.indexOf(words[named]!.slice(0, 3).toLowerCase()) + 1;
+    if (digits.length > 2 || !month) return undefined;
+    return yearFirst
+      ? [yearOf(first), month, second]
+      : [digits.length === 1 ? 2001 : yearOf(second), month, first];
   }
-  return { tokens, end: depth === 0 ? value.length : start };
+  if (digits.length > 3) return undefined;
+  return yearFirst
+    ? [yearOf(first), second, digits.length === 3 ? third : 1]
+    : [yearOf(third), first, second];
 }
 
-function hasLegacyZone(value: string): boolean {
-  // V8 reads a named zone after a number, or a numeric offset after a time.
-  const firstNumber = value.search(/\d/);
-  if (firstNumber < 0) return false;
-  const timed = value.slice(firstNumber);
-  if (NAMED_ZONE.test(timed)) return true;
-  const colon = timed.search(/\d:/);
-  return colon !== -1 && /[+-]\d/.test(timed.slice(colon + 2));
+function withoutDateComments(source: string): string | undefined {
+  let depth = 0;
+  let text = "";
+  for (const char of source) {
+    if (char === "(") {
+      if (
+        depth === 0 &&
+        text &&
+        !/\s$/.test(text) &&
+        !/(?:GMT[+-]\d{1,2}(?::?\d{2})?|\b(?:UTC|GMT|[ECMP][SD]T)|\dZ)$/i.test(
+          text,
+        )
+      )
+        return undefined;
+      depth++;
+    } else if (depth) {
+      if (char === ")") depth--;
+    } else {
+      text += char;
+    }
+  }
+  return text.trim();
 }
 
-// [LAW:effects-at-boundaries] Read offsets only at supplied instants in the
-// supplied zone. Native Date never interprets an unzoned timestamp itself.
-function wallTimeIn(timeZone: string): (wall: number) => number {
-  let offsets: Intl.DateTimeFormat | undefined;
-  const offsetAt = (instant: number): number => {
-    offsets ??= new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      timeZoneName: "longOffset",
-    });
-    const name = offsets
-      .formatToParts(instant)
-      .find(({ type }) => type === "timeZoneName")?.value;
-    if (name === "GMT") return 0;
-    const offset = /^GMT([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(name ?? "");
-    if (!offset) throw new Error(`could not determine offset for ${timeZone}`);
-    const [, sign, hours, minutes, seconds = "0"] = offset;
-    const magnitude =
-      Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
-    return (sign === "-" ? -magnitude : magnitude) * 1000;
-  };
-  return (wall) => {
-    const before = offsetAt(Math.max(-DATE_LIMIT_MS, wall - DAY_MS));
-    const after = offsetAt(Math.min(DATE_LIMIT_MS, wall + DAY_MS));
-    if (before === after) return wall - before;
-    // [LAW:single-enforcer] Date's local-time disambiguation chooses the
-    // earlier instant for a repeated time and advances across a skipped time.
-    const earlier = wall - Math.max(before, after);
-    return Math.abs(earlier) <= DATE_LIMIT_MS &&
-      earlier + offsetAt(earlier) === wall
-      ? earlier
-      : wall - Math.min(before, after);
-  };
-}
-
-function dateInput(
-  value: unknown,
-  wallTime: (wall: number) => number,
-): unknown {
-  if (typeof value !== "string") return value;
-  const iso = ISO.exec(value);
-  const { tokens, end } =
-    iso === null ? legacyDate(value) : { tokens: value, end: value.length };
-  const absolute =
-    iso === null
-      ? hasLegacyZone(tokens)
-      : iso[1] === undefined || iso[2] !== undefined;
-  // Parse the unzoned calendar as UTC only to recover its wall fields. The
-  // recorded zone then determines which instant those fields describe.
-  let instant = Date.parse(
-    absolute ? value : value.slice(0, end) + (iso === null ? " GMT" : "Z"),
+function legacyInstant(source: string, calendar: ZonedCalendar): number {
+  const uncommented = withoutDateComments(source);
+  if (!uncommented) return NaN;
+  // A rejected negative-zero ISO year leaves just the month and day in
+  // the legacy grammar, whose omitted year is 2001.
+  let text = uncommented.replace(/^-000000-(?=\d{2}-\d{2}(?:\s|$))/, "");
+  // A trailing signed number is a zone after a clock or GMT. In a
+  // date alone it is a day or year, as in 15-Jan-24.
+  const zone = (
+    text.includes(":") || /GMT\s*[+-]/i.test(text)
+      ? /(?:\s*(?:GMT\s*)?([+-]\d{1,2}(?::?\d{2})?)|\s*(UTC|GMT|UT|[ECMP][SD]T|Z))$/i
+      : /(?:\s+(UTC|GMT|UT|[ECMP][SD]T)|(?<=\d)\s*(Z))$/i
+  ).exec(text);
+  if (zone) text = text.slice(0, zone.index).trimEnd();
+  const clock =
+    /[,\s]+(\d{1,2}):(\d{0,2})(?::(\d{1,2})(?:\.(\d+))?)?(?:\s*([AP]M))?$/i.exec(
+      text,
+    );
+  const fields = legacyFields(clock ? text.slice(0, clock.index) : text);
+  if (!fields) return NaN;
+  let hour = Number(clock?.[1] ?? 0);
+  if (clock?.[5]) {
+    if (hour < 1 || hour > 12) return NaN;
+    hour = (hour % 12) + (clock[5].toUpperCase() === "PM" ? 12 : 0);
+  }
+  const wall = calendarStamp(
+    ...fields,
+    hour,
+    Number(clock?.[2] ?? 0),
+    Number(clock?.[3] ?? 0),
+    Number((clock?.[4] ?? "").padEnd(3, "0").slice(0, 3)),
   );
-  if (!absolute && Number.isFinite(instant)) instant = wallTime(instant);
-  const date = new Date(instant);
+  if (!Number.isFinite(wall)) return NaN;
+  return zone
+    ? wall - zoneMinutes((zone[1] ?? zone[2])!) * 60_000
+    : calendar.instantOfWallTime(wall);
+}
+
+// [LAW:single-enforcer] Interpret template text once, before Sprig sees a
+// Date. Native engines disagree on legacy date strings even with a zone.
+function dateInput(value: string, calendar: ZonedCalendar): Date {
+  const iso = ISO.exec(value);
+  let instant: number;
+  if (iso) {
+    const [, year, month, day, hour, minute, second, fraction, zone] = iso;
+    if (hour === "24" && /[1-9]/.test(fraction ?? ""))
+      throw new Error(
+        `sprig: cannot parse date value ${JSON.stringify(value)}`,
+      );
+    const wall = calendarStamp(
+      Number(year),
+      Number(month ?? 1),
+      Number(day ?? 1),
+      Number(hour ?? 0),
+      Number(minute ?? 0),
+      Number(second ?? 0),
+      Number((fraction ?? "").padEnd(3, "0").slice(0, 3)),
+    );
+    instant = zone
+      ? wall - zoneMinutes(zone) * 60_000
+      : hour === undefined || !Number.isFinite(wall)
+        ? wall
+        : calendar.instantOfWallTime(wall);
+  } else {
+    instant = legacyInstant(value, calendar);
+  }
+  const date = new Date(+instant);
   if (Number.isNaN(date.getTime()))
     throw new Error(`sprig: cannot parse date value ${JSON.stringify(value)}`);
   return date;
@@ -131,65 +225,57 @@ function apply(spec: FuncMap, name: string, ...args: unknown[]): unknown {
 }
 
 export function dateFunctions(timeZone: string, clock: () => Date): FuncMap {
-  const wallTime = wallTimeIn(timeZone);
-  const input = (value: unknown) => dateInput(value, wallTime);
-  let longName: Intl.DateTimeFormat | undefined;
+  const calendar = new ZonedCalendar(timeZone);
+  let previous: { zone: string; calendar: ZonedCalendar } | undefined;
+  const forZone = (zone: string) => {
+    if (zone === timeZone) return calendar;
+    if (previous?.zone === zone) return previous.calendar;
+    try {
+      previous = { zone, calendar: new ZonedCalendar(zone) };
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      // Sprig formats an unknown destination zone in UTC.
+      previous = { zone, calendar: new ZonedCalendar("UTC") };
+    }
+    return previous.calendar;
+  };
+  const sprig = sprigDatetimeIn(
+    clock,
+    () => timeZone,
+    (date, zone) => forZone(zone).partsAt(date),
+    (text) => dateInput(text, calendar),
+  );
   const describe = (date: Date): string => {
-    longName ??= new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      timeZoneName: "long",
-    });
-    const zone = longName
-      .formatToParts(date)
-      .find(({ type }) => type === "timeZoneName")?.value;
+    const zone = calendar.nameAt(date, "long");
     const local = apply(
-      SPRIG,
+      sprig,
       "dateInZone",
       "Mon Jan 02 2006 15:04:05 GMT-0700",
       date,
       timeZone,
     );
-    return `${String(local)} (${zone ?? timeZone})`;
+    return `${String(local)} (${zone})`;
   };
   const display = (value: unknown): Date => {
     if (!(value instanceof Date))
       throw new Error("Sprig date function did not return a Date");
     return new DisplayDate(value.getTime(), describe);
   };
-  const timed = sprigDatetime(clock);
   const bind = (name: string, fn: TemplateFunc["fn"]): TemplateFunc => {
-    const spec = SPRIG[name];
+    const spec = sprig[name];
     if (spec === undefined)
       throw new Error(`Sprig date function unavailable: ${name}`);
     return { ...spec, fn };
   };
-  const [now, ago] = DATE_CLOCK_FUNCTIONS;
+  const [now] = DATE_CLOCK_FUNCTIONS;
   return {
-    ...SPRIG,
-    date: bind("date", (layout: string, value: unknown) =>
-      apply(SPRIG, "dateInZone", layout, input(value), timeZone),
-    ),
-    dateInZone: bind(
-      "dateInZone",
-      (layout: string, value: unknown, zone: string) =>
-        apply(SPRIG, "dateInZone", layout, input(value), zone),
-    ),
-    htmlDate: bind("htmlDate", (value: unknown) =>
-      apply(SPRIG, "htmlDateInZone", input(value), timeZone),
-    ),
-    htmlDateInZone: bind("htmlDateInZone", (value: unknown, zone: string) =>
-      apply(SPRIG, "htmlDateInZone", input(value), zone),
-    ),
+    ...sprig,
     dateModify: bind("dateModify", (duration: string, value: unknown) =>
-      display(apply(SPRIG, "dateModify", duration, input(value))),
+      display(apply(sprig, "dateModify", duration, value)),
     ),
     toDate: bind("toDate", (layout: string, value: string) =>
-      display(apply(SPRIG, "toDate", layout, value)),
-    ),
-    unixEpoch: bind("unixEpoch", (value: unknown) =>
-      apply(SPRIG, "unixEpoch", input(value)),
+      display(apply(sprig, "toDate", layout, value)),
     ),
     [now]: bind(now, () => display(clock())),
-    [ago]: bind(ago, (value: unknown) => apply(timed, ago, input(value))),
   };
 }

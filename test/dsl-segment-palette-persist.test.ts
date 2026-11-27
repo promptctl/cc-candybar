@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { manualDirectoryWatches } from "../scripts/lib/draw-fixtures/directory-watches";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.6 —
 // per-segment palette override as a menu-able domain — mirroring
@@ -471,6 +472,7 @@ function makeCache(): {
   const reloads = new ReloadSignal();
   const cache = new DiscoveringCache(
     {
+      region: SAMPLE_REGION,
       editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),

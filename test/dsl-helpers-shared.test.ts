@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../scripts/lib/draw-fixtures/sample-region.js";
 import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import v8 from "node:v8";
 import vm from "node:vm";
@@ -37,7 +38,7 @@ function registerStdlib() {
   });
   expect({ warnings, dropped }).toEqual({ warnings: [], dropped: [] });
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, SAMPLE_REGION, "", new SessionState());
   return {
     registry,
     compiled: registerDslConfig(config, registry, {

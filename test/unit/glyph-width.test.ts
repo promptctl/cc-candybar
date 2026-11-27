@@ -1,3 +1,4 @@
+import { asCellCol, chopCells, setCellSize } from "@promptctl/rich-js";
 // [LAW:behavior-not-structure] The bar's width budgets (fill, wrap, a picker's
 // pages) are rich-js's cell measure, so a glyph measured narrower than the
 // terminal draws it leaves its row a column short. The text-default symbols
@@ -96,4 +97,12 @@ describe("variation selectors in src/", () => {
   test("no glyph is two cells only through VS16", () => {
     expect(selected.map(label)).toEqual([]);
   });
+});
+
+test("narrow terminal cells use the same grapheme boundaries on every peer", () => {
+  // Some Apple fonts use this private-use glyph as a combining character.
+  expect(setCellSize("A\uF870", asCellCol(1))).toBe("A");
+  expect(chopCells("A\uF870", asCellCol(1))).toEqual(["A", "\uF870"]);
+  // The Khmer conjunct is one grapheme even on engines with older ICU data.
+  expect(chopCells("ក្ក", asCellCol(1))).toEqual(["ក្ក"]);
 });

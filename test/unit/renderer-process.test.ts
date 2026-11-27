@@ -1,3 +1,4 @@
+import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
 // The supervisor of a renderer in its own process, over a channel the test
 // plays the renderer's side of and a clock it moves by hand: what it spawns,
 // what waits for a start, how an end is said and backed off from, when a
@@ -86,7 +87,7 @@ const RENDERER_BOOT = {
     dataHome: "/data",
     dataDirs: [],
   },
-  region: { locale: "en-US", timeZone: "UTC" },
+  region: SAMPLE_REGION,
   memoryLimitBytes: 1,
   stored: EMPTY_STORED_STATE,
 } satisfies Extract<HostLine, { kind: "boot" }>["boot"];

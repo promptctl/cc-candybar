@@ -15,7 +15,7 @@
 
 import {
   ColorDepth,
-  resolveColorSystem,
+  explicitColorSystem,
   IDENTITY,
   JOINERS,
   EFFECT_CATALOGUE,
@@ -608,7 +608,7 @@ export function isStyleEraEndcaps(value: string): value is Endcaps {
 // Same species as ENDCAPS_SHAPES: a closed render-vocabulary enum hosted in this leaf
 // policy module so the config loader (validation + JSON-schema emit) and the
 // render layer both derive from one literal without a config↔render cycle
-// [LAW:one-way-deps]. Every member is a name rich-js's `resolveColorSystem`
+// [LAW:one-way-deps]. Every member is a name rich-js's `explicitColorSystem`
 // accepts; it takes a bare `string` and throws on a name it does not know, so
 // test/option-domain.test.ts runs each member through it rather than the
 // compiler holding the two vocabularies together.
@@ -636,12 +636,12 @@ export function isColorCompatibility(
 // [LAW:one-source-of-truth] The depth a setting draws at, which is what a
 // contrast floor has to be measured on (rich-js `ensureContrast`'s `drawnAt`):
 // at 256 the terminal rounds text and background independently, so text chosen
-// in truecolor is re-measured on the drawn pair. rich-js's `resolveColorSystem`
+// in truecolor is re-measured on the drawn pair. rich-js's `explicitColorSystem`
 // is the mapping its SGR writer draws by, so the floor is measured at exactly
 // the depth the bytes are written at; `none` draws no colour (null there), so
 // no floor is measurable and DEFAULT says so.
 export function drawnDepth(compatibility: ColorCompatibility): ColorDepth {
-  return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
+  return explicitColorSystem(compatibility) ?? ColorDepth.DEFAULT;
 }
 
 // --- Bar variation identifiers ---
