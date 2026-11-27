@@ -1,4 +1,5 @@
-import { MAX_CAPTURED_BYTES } from "../../src/proc/launch";
+import { createOneShotLauncher, MAX_CAPTURED_BYTES } from "../../src/proc/launch";
+import type { Spawner } from "../../src/proc/spawner";
 import { type LaunchResult } from "../../src/proc/launcher";
 import {
   exits,
@@ -49,6 +50,61 @@ async function settled(
 }
 
 describe("a launch over a scripted OS", () => {
+  test.each(["EPIPE", "ECONNRESET"])(
+    "blocking stdin %s leaves every observed child verdict intact",
+    (errno) => {
+      const r = rig();
+      const error = Object.assign(new Error(`write ${errno}`), { code: errno });
+      const raw = {
+        pid: 42,
+        output: [null, "out", "err"],
+        stdout: "out",
+        stderr: "err",
+        error,
+      };
+      const run = (status: number | null, signal: NodeJS.Signals | null) => {
+        const spawner: Spawner = {
+          ...r.spawner,
+          spawnSync: () => ({ ...raw, status, signal }),
+        };
+        const launcher = createOneShotLauncher(
+          { inherited: {} },
+          r.clock,
+          spawner,
+        );
+        return launcher.launchSync({
+          ...sh("closed reader"),
+          stdinInput: "unread",
+        });
+      };
+      const output = { stdout: "out", stderr: "err" };
+      expect(run(0, null)).toEqual({ ...output, ok: true, exitCode: 0 });
+      expect(run(3, null)).toEqual({
+        ...output,
+        ok: false,
+        reason: "non-zero",
+        exitCode: 3,
+        signal: null,
+      });
+      expect(run(null, "SIGKILL")).toEqual({
+        ...output,
+        ok: false,
+        reason: "signal",
+        exitCode: null,
+        signal: "SIGKILL",
+      });
+      // With no child outcome to prefer, the pipe error is the evidence.
+      expect(run(null, null)).toEqual({
+        ...output,
+        ok: false,
+        reason: "spawn-error",
+        exitCode: null,
+        signal: null,
+        error: error.message,
+      });
+    },
+  );
+
   test("a program that exits 0 gives its output", async () => {
     const r = rig();
     r.spawner.program(shell("echo hi"), exits(0, "hi\n", "warn"));

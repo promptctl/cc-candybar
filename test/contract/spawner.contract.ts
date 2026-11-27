@@ -121,14 +121,24 @@ export function spawnerContract(name: string, make: () => Subject): void {
     });
 
     test("a program that ignores a signal outlives it, and the next one ends it", async () => {
-      const w = begin({ ...hung(), ignores: ["SIGTERM"] });
-      await subject!.settle(60);
+      // [LAW:no-ambient-temporal-coupling] The program publishes readiness
+      // after installing the ignore; only it can echo a challenge sent later.
+      const w = begin({
+        ...hung(),
+        ignores: ["SIGTERM"],
+        stdout: "ready\n",
+        stdin: "echo",
+      });
+      await until("SIGTERM ignore installed", () => w.stdout === "ready\n");
       subject!.spawner.signalGroup(w.child.pid!, "SIGTERM");
-      await subject!.settle(200);
-      expect(w.exit).toBeNull();
+      w.child.stdin!.write("after TERM\n");
+      await until("the live child answered after TERM", () =>
+        w.stdout.includes("after TERM\n"),
+      );
       subject!.spawner.signalGroup(w.child.pid!, "SIGKILL");
-      await until("exit", () => w.exit !== null);
+      await until("SIGKILL closed the child", () => w.events.includes("close"));
       expect(w.exit).toEqual({ code: null, signal: "SIGKILL" });
+      expect(w.child.signalCode).toBe("SIGKILL");
     });
 
     test("a group is not gone while its program runs, and is once it has ended", async () => {

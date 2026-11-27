@@ -151,6 +151,10 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
           new Writable({
             write(chunk: Buffer, _enc, done) {
               stdinText.push(chunk);
+              if (behaviour?.stdin === "echo")
+                timers.push(
+                  clock.after(`fake echo ${bin}`, 0, () => out?.write(chunk)),
+                );
               // Decoded whole, so a character split across chunks is not.
               record.stdin = Buffer.concat(stdinText).toString();
               done();
@@ -255,9 +259,6 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
     );
     if (behaviour.stdin !== undefined && inn !== null) {
       inn.once("finish", () => {
-        if (behaviour.stdin === "echo") {
-          out?.write(Buffer.concat(stdinText));
-        }
         timers.push(ending(0));
       });
     }

@@ -9,8 +9,15 @@ import { setDebug } from "../../src/utils/logger";
 setDebug(Boolean(process.env.CC_CANDYBAR_DEBUG));
 
 const [bytes, code] = process.argv.slice(2).map(Number) as [number, number];
-void exitWith({
+const deliver = () => exitWith({
   stdout: "x".repeat(bytes - 1) + "\n",
   stderr: "advisory\n",
   code,
 });
+
+if (process.argv.includes("--wait-for-reader")) {
+  process.stdout.write("ready\n");
+  process.stdin.once("data", () => void deliver());
+} else {
+  void deliver();
+}

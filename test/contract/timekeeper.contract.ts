@@ -5,6 +5,9 @@ import { sleep, timeoutSignal, type Timekeeper } from "../../src/time";
 // on both.
 export interface Subject {
   readonly clock: Timekeeper;
+  // Drive the held clock far enough to deliver an expected callback. Real
+  // time advances on its own. Both subjects await the callback itself.
+  readonly advance?: (ms: number) => void;
   readonly settle: (ms: number) => Promise<void>;
 }
 
@@ -59,25 +62,43 @@ export function timekeeperContract(
     });
 
     test("a repeating timer runs again and again until cleared", async () => {
-      const { clock, settle } = make();
+      const { clock, advance } = make();
+      const third = Promise.withResolvers<void>();
       let runs = 0;
-      const clear = clock.every("test task", 20, () => runs++);
-      await settle(110);
-      expect(runs).toBeGreaterThanOrEqual(2);
-      clear();
-      const seen = runs;
-      await settle(110);
-      expect(runs).toBe(seen);
+      const period = 5;
+      const clear = clock.every("contract repeating task", period, () => {
+        if (++runs === 3) third.resolve();
+      });
+      try {
+        advance?.(3 * period);
+        await third.promise;
+        clear();
+        const seen = runs;
+        // [LAW:behavior-not-structure] An independently delivered timer
+        // crosses the next due period after cancellation on this same clock.
+        const crossed = sleep(clock, "contract cancellation witness", 2 * period);
+        advance?.(2 * period);
+        await crossed;
+        expect(runs).toBe(seen);
+      } finally {
+        clear();
+      }
     });
 
     test("a repeating timer can clear itself from inside its run", async () => {
-      const { clock, settle } = make();
+      const { clock, advance } = make();
+      const cleared = Promise.withResolvers<void>();
       let runs = 0;
-      const clear = clock.every("test task", 20, () => {
+      const clear = clock.every("self-clearing task", 5, () => {
         runs++;
         clear();
+        cleared.resolve();
       });
-      await settle(150);
+      advance?.(5);
+      await cleared.promise;
+      const crossed = sleep(clock, "self-clear witness", 10);
+      advance?.(10);
+      await crossed;
       expect(runs).toBe(1);
     });
 

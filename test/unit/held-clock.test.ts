@@ -12,6 +12,7 @@ timekeeperContract("the held clock", () => {
   const clock = heldClock(new Date(1_000_000));
   return {
     clock,
+    advance: clock.advance,
     settle: async (ms) => {
       clock.advance(ms);
       await turns();

@@ -38,6 +38,7 @@
 // timeout, its caller's `signal`, its own exit, or the lifeline (below) when
 // the process that launched it ends.
 
+import { peerClosedPipe } from "./pipe";
 import { existsSync, readFileSync } from "node:fs";
 import type { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
@@ -908,18 +909,7 @@ async function launchPiped(
         });
         return;
       }
-      if (code === 0) {
-        settle({ ok: true, ...output(), exitCode: code });
-        return;
-      }
-      const reason: "signal" | "non-zero" = signal ? "signal" : "non-zero";
-      settle({
-        ok: false,
-        reason,
-        ...output(),
-        exitCode: code,
-        signal,
-      });
+      settle(childVerdict(code, signal, output()));
     };
 
     child.on("close", conclude);
@@ -936,6 +926,23 @@ async function launchPiped(
 
     pipes.opened(input, group ?? null);
   });
+}
+
+// [LAW:single-enforcer] Both captured launches report the same exit. A peer
+// leaving its input unread can change how the pipe ends, never how it exited.
+function childVerdict(
+  exitCode: number | null,
+  signal: NodeJS.Signals | null,
+  output: { stdout: string; stderr: string },
+): LaunchResult {
+  if (exitCode === 0) return { ok: true, ...output, exitCode };
+  return {
+    ok: false,
+    reason: signal ? "signal" : "non-zero",
+    ...output,
+    exitCode,
+    signal,
+  };
 }
 
 // Sync variant. For callers that genuinely cannot be async — the spawn
@@ -968,7 +975,11 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
     // mid-close) are input the child left unread; its exit stays the verdict,
     // as in `launch`.
     const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
-    if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
+    if (
+      result.error &&
+      (!peerClosedPipe(result.error) ||
+        (result.status === null && result.signal === null))
+    ) {
       const reason: "timeout" | "spawn-error" =
         code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
@@ -985,21 +996,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
       };
     }
 
-    if (result.status === 0) {
-      return { ok: true, stdout, stderr, exitCode: result.status };
-    }
-
-    // A real timeout returned above on ETIMEDOUT, so a signal here came from
-    // somewhere else (OOM killer, ctrl-C through the tty group, etc.).
-    const reason: "signal" | "non-zero" = result.signal ? "signal" : "non-zero";
-    return {
-      ok: false,
-      reason,
-      stdout,
-      stderr,
-      exitCode: result.status,
-      signal: result.signal ?? null,
-    };
+    return childVerdict(result.status, result.signal, { stdout, stderr });
   } catch (err) {
     stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {

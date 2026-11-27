@@ -1,16 +1,15 @@
 // [LAW:verifiable-goals] brandon-context-ceiling-xta.7xt: a `slash` action
 // types its declared command into the clicked session's Claude Code pane.
-// Driven through the real loader, the real spine (registerDslConfig +
-// drawDsl), the real verb table AND the production tmux edge, with a stub
-// `tmux` on PATH that records its argv and serves a captured screen — so the
-// assertions are the exact commands tmux would run. The screens are the ones
+// Driven through the loader, draw, click and production tmux edge over a
+// held clock and a scripted spawner. It records every command and its input,
+// including a read to which no keystroke may follow. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
 import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
-import { fixtureLauncher, processLauncher } from "./helpers/host";
+import { fakeLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
+import { instantAt } from "../src/utils/instant";
+import { heldClock } from "./helpers/held-clock";
+import { exits } from "../src/proc/spawner-fake";
 import { linkUrls } from "./helpers/frame";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -33,20 +32,10 @@ import { promptState } from "../src/claude-input/prompt-screen";
 import { parseSlashLine } from "../src/claude-input/slash-line";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
-import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/foundations/click-error";
-import { systemTimekeeper } from "../scripts/lib/system-clock";
-import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { TABS } from "../src/config/menu-places";
 
-// The host's typing, over the real tmux edge on the test's fake tmux: one
-// edge per rig, since an edge remembers what it typed moments ago.
-const typing = () => ({
-  claudeInput: productionClaudeInputEdge(
-    fixtureLauncher({ inherited: process.env }),
-  ),
-});
 const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -176,52 +165,42 @@ describe("parseSlashLine: a line is one slash command, and only text", () => {
   });
 });
 
-// ─── The click, end to end through a stub tmux ────────────────────────────────
-
-let dir: string;
-let savedPath: string | undefined;
-// A socket inside the test's own directory: were the stub ever bypassed, a
-// real tmux would find no server there instead of typing into a live pane.
-let HINT: TmuxHint;
-
+// [LAW:effects-at-boundaries] Only the OS is scripted. The production launcher
+// still owns rate limits, and the production edge builds and reads tmux argv.
+const HINT: TmuxHint = {
+  socket: "/fixture/tmux.sock",
+  pane: "%7",
+  truecolor: null,
+};
+let clock: ReturnType<typeof heldClock>;
+let programs: ReturnType<typeof fakeLauncher>;
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slash-"));
-  HINT = { socket: path.join(dir, "tmux.sock"), pane: "%7", truecolor: null };
-  // One line per argument, a line of `@@` after each invocation; a `display`
-  // prints the pane mode and the served screen, as the real pair does, and a
-  // `load-buffer` keeps what arrived on stdin.
-  fs.writeFileSync(
-    path.join(dir, "tmux"),
-    [
-      "#!/bin/sh",
-      `for a in "$@"; do printf '%s\\n' "$a"; done >> "${dir}/argv"`,
-      `echo @@ >> "${dir}/argv"`,
-      `if [ "$3" = display ]; then cat "${dir}/mode" "${dir}/screen"; fi`,
-      `if [ "$3" = load-buffer ]; then cat > "${dir}/stdin"; fi`,
-    ].join("\n"),
-    { mode: 0o755 },
+  clock = heldClock(new Date(1_000_000));
+  programs = fakeLauncher(clock);
+  programs.spawner.program(
+    (bin, args) => bin === "tmux" && args[2] === "load-buffer",
+    exits(),
   );
-  savedPath = process.env.PATH;
-  process.env.PATH = `${dir}:${savedPath ?? ""}`;
-});
-afterEach(() => {
-  process.env.PATH = savedPath;
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 function serve(screen: readonly string[], inMode = false): void {
-  fs.writeFileSync(path.join(dir, "mode"), inMode ? "1\n" : "0\n");
-  fs.writeFileSync(path.join(dir, "screen"), screen.join("\n"));
+  programs.spawner.program(
+    (bin, args) => bin === "tmux" && args[2] === "display",
+    exits(0, [inMode ? "1" : "0", ...screen].join("\n")),
+  );
 }
-
-const invocations = (): string[][] =>
-  fs.existsSync(path.join(dir, "argv"))
-    ? fs
-        .readFileSync(path.join(dir, "argv"), "utf8")
-        .split("@@\n")
-        .filter((s) => s !== "")
-        .map((s) => s.trimEnd().split("\n"))
-    : [];
+const typing = () => ({
+  claudeInput: productionClaudeInputEdge({
+    launch: (opts) => {
+      const result = programs.launcher.launch(opts);
+      clock.advance(0);
+      return result;
+    },
+  }),
+});
+const invocations = () => programs.started().map((spawn) => spawn.args);
+const pasted = () =>
+  programs.started().find((spawn) => spawn.args[2] === "load-buffer")?.stdin;
 
 function runtime(tmux: TmuxHint | null) {
   const config = parseAndValidate(
@@ -241,7 +220,7 @@ function runtime(tmux: TmuxHint | null) {
   );
   const sessionState = new SessionState();
   hearRender(sessionState, heardRequest(S1, "/tmp/proj", { tmux }));
-  const store = new VariableStore(systemTimekeeper);
+  const store = new VariableStore(clock);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
@@ -252,7 +231,7 @@ function runtime(tmux: TmuxHint | null) {
     store,
     registry,
     { session_id: "s1" },
-    instantOf(new Date()),
+    instantAt(clock),
     OPTS,
   ).frame;
   const logged: string[] = [];
@@ -324,7 +303,7 @@ describe("a slash click", () => {
         "Enter",
       ],
     ]);
-    expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe(
+    expect(pasted()).toBe(
       "/model opus",
     );
     expect(rt.logged).toContainEqual(
@@ -338,7 +317,7 @@ describe("a slash click", () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
     await clickActing(rt.urls[2]!, rt.ctx, rt.host);
-    expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe(
+    expect(pasted()).toBe(
       "/compact keep the api;",
     );
     expect(invocations()[1]).not.toContain("/compact keep the api;");
@@ -408,7 +387,10 @@ describe("a slash click", () => {
     expect(await clickActing(rt.urls[0]!, rt.ctx, rt.host)).toEqual([
       { kind: "refused", reason: expect.stringMatching(reason) },
     ]);
-    expect(invocations().map((argv) => argv[2])).toEqual(["display"]);
+    expect(invocations()).toEqual([[
+      "-S", HINT.socket, "display", "-p", "-t", HINT.pane, "#{pane_in_mode}",
+      ";", "capture-pane", "-p", "-t", HINT.pane,
+    ]]);
   });
 
   test("a line no action declares is refused before tmux is asked", async () => {
@@ -449,7 +431,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   );
   const sessionState = new SessionState();
   hearRender(sessionState, heardRequest(S1, "/tmp/proj", { tmux }));
-  const store = new VariableStore(systemTimekeeper);
+  const store = new VariableStore(clock);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
@@ -469,7 +451,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
         store,
         registry,
         payload,
-        instantOf(new Date()),
+        instantAt(clock),
         OPTS,
       ).frame,
     ).map((u) => ({ url: u, effects: effectsOf(u) }));
@@ -496,7 +478,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
         "display",
         "load-buffer",
       ]);
-      expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe(line);
+      expect(pasted()).toBe(line);
     },
   );
 
@@ -538,7 +520,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       },
     ]);
     await clickActing(confirm!.url, rt.ctx, rt.host);
-    expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
+    expect(pasted()).toBe("/clear");
     expect(rt.sessionState.get(S1, "commands.clear.armed")).toBe("disarmed");
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
   });
