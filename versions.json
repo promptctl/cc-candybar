@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-977",
+      "ref": "refs/pull/977/merge",
+      "sha": "70eb890e0941db0a8dd7df86a60325355d6bbe29",
+      "timestamp": "2026-11-27T03:19:11.846Z",
+      "commits": [
+        {
+          "sha": "70eb890e0941db0a8dd7df86a60325355d6bbe29",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:18:20-07:00",
+          "message": "Merge 96973ea9708782aed4cbed456471318c888ca7b8 into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
+        },
+        {
+          "sha": "96973ea9708782aed4cbed456471318c888ca7b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:16:37-07:00",
+          "message": "test: report leaked periods in the Jest file that armed them\n"
+        },
+        {
+          "sha": "7f2f6319dd9b160de7d70c8bab20293737209340",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:16:37-07:00",
+          "message": "fix(launcher): retire deferred group checks when a launch settles\n"
+        },
+        {
+          "sha": "2db97c981abedb99089141fc73e6136d409eb21e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:16:37-07:00",
+          "message": "test(persistence): drive pending session writes through flush and shutdown\n"
+        },
+        {
+          "sha": "8ea8f58fc637110eccc040e82977f839555e2f9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:15:40-07:00",
+          "message": "test(plugins): establish the input for each native action check\n"
+        },
+        {
+          "sha": "d1555578865db6d66a6c156a0b7882f6a57a71fa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:11:18-07:00",
+          "message": "fix: preserve pipe exit verdicts and verify lifecycle contracts by delivery\n"
+        },
+        {
+          "sha": "d19b9ef44b703a7de1b3c43806edd34ede303633",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:10:08-07:00",
+          "message": "test(daemon): verify host lifecycle from owned events\n"
+        },
+        {
+          "sha": "b2f6d4576f27cf834cda42d996ddfe845158f4ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:12:18-07:00",
+          "message": "test: retire failure quarantine and retain file-scoped fixture cleanup\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7370e44ab6e6cb940a0df316b3d0b49f4b4899b6",
