@@ -4,15 +4,29 @@
     {
       "version": "pr-978",
       "ref": "refs/pull/978/merge",
-      "sha": "ab1fd534df1ae270f12de51539252ede7be9fdb8",
-      "timestamp": "2026-11-27T04:22:26.310Z",
+      "sha": "4c81fd147f6087e2a001bca2118974471f9f3e27",
+      "timestamp": "2026-11-27T04:33:08.668Z",
       "commits": [
         {
-          "sha": "ab1fd534df1ae270f12de51539252ede7be9fdb8",
+          "sha": "4c81fd147f6087e2a001bca2118974471f9f3e27",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:21:24-07:00",
-          "message": "Merge 943fb6dc4e8fca0f43359653fef0ab92266331fe into 957eac95789f30efd7fc089c422843cf36d06300\n"
+          "timestamp": "2026-11-27T04:32:13Z",
+          "message": "Merge 70c7d4050083929f47bb89fe1ca4ef87d8112c91 into 957eac95789f30efd7fc089c422843cf36d06300\n"
+        },
+        {
+          "sha": "70c7d4050083929f47bb89fe1ca4ef87d8112c91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:31:36-07:00",
+          "message": "fix(tmux): subscribe only after checking unread observer work\n"
+        },
+        {
+          "sha": "4e85aa6c6cf21755ee9bb89425a6a21015d6b14d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:23:45-07:00",
+          "message": "fix(tmux): recover foreground proof after transient failure or claim saturation\n"
         },
         {
           "sha": "943fb6dc4e8fca0f43359653fef0ab92266331fe",

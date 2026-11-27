@@ -91733,16 +91733,13 @@ var TmuxSourceAuthority = class {
     }
     const claim = { sid, parentPid, configDir };
     const id2 = claimKey(claim);
-    if (held.claims.has(id2)) return held.running ?? Promise.resolve();
+    if (held.claims.has(id2)) {
+      if (held.running) return held.running;
+      return held.reason !== null && !held.watches.size ? this.changed(held) : Promise.resolve();
+    }
     if (held.claims.size >= MAX_PENDING_CLAIMS) {
-      const reason = "too many pending source claims";
-      if (held.reason !== reason)
-        this.deps.log(
-          "warn",
-          `source pane ${source.pane} on ${source.socket}: ${reason}`
-        );
-      held.reason = reason;
-      return held.running ?? Promise.resolve();
+      const oldest = held.claims.keys().next();
+      if (!oldest.done) held.claims.delete(oldest.value);
     }
     held.claims.set(id2, claim);
     return this.changed(held);
@@ -91807,18 +91804,23 @@ var TmuxSourceAuthority = class {
       while (held.physical && held.claims.size) {
         const version = held.version;
         let proof;
+        let watched = false;
         try {
           proof = await this.deps.inspect(
             held.physical,
             [...held.claims.values()],
             (files) => {
-              if (held.version === version) this.watch(held, files);
+              if (held.version === version) {
+                this.watch(held, files);
+                watched = true;
+              }
             }
           );
         } catch (error) {
           proof = { kind: "unknown", reason: failureOf(error).message };
         }
         if (version !== held.version) continue;
+        if (!watched) this.watch(held, []);
         for (const outside of proof.outside ?? [])
           held.claims.delete(claimKey(outside));
         if (proof.kind === "unknown") {
@@ -97388,6 +97390,7 @@ var ObserverServer = class {
     this.live = this.action + "_live";
     this.dirty = this.action + "_dirty";
     this.scopesDirty = this.action + "_hooks";
+    this.waiting = this.action + "_waiting";
     this.expected = this.action + "_body";
     this.hook = 'run-shell -C "#{' + this.action + '}"';
   }
@@ -97399,6 +97402,7 @@ var ObserverServer = class {
   action;
   dirty;
   scopesDirty;
+  waiting;
   live;
   expected;
   hook;
@@ -97487,13 +97491,11 @@ var ObserverServer = class {
     ))
       throw new Error(keys2.reason);
     const edit = "#{||:#{==:#{hook},after-set-hook},#{==:#{hook},after-set-option}}";
-    const relevant = `#{m/r:^(${[...events].join("|")})([[]|$),#{hook_argument_0}}`;
-    const newScope = "#{m/r:^(session-created|window-linked|after-split-window|pane-moved)$,#{hook}}";
-    const scopes = `#{||:${newScope},#{&&:${edit},${relevant}}}`;
-    const wake = `if-shell -F '#{!:#{${this.dirty}}}' { set-option -s ${this.dirty} 1 ; wait-for -S ${this.prefix} }`;
-    const topology = `set-option -s ${this.scopesDirty} 1 ; ${wake}`;
-    const changed = `if-shell -F '${scopes}' { ${topology} } { if-shell -F '#{||:#{!:${edit}},#{==:#{hook_argument_0},mouse}}' { ${wake} } }`;
-    const action2 = `if-shell -F '${this.current}' { ${changed} }`;
+    const observerEdit = `#{||:#{m:@${serverObserverHookPrefix}*,#{hook_argument_0}},#{m:*${serverObserverHookPrefix}*,#{hook_argument_1}}}`;
+    const wake = `if-shell -F '#{${this.waiting}}' { set-option -su ${this.waiting} ; wait-for -S ${this.prefix} }`;
+    const changed = `set-option -s ${this.scopesDirty} 1 ; set-option -s ${this.dirty} 1 ; ${wake}`;
+    const external = `#{!:#{&&:${edit},${observerEdit}}}`;
+    const action2 = `if-shell -F '#{&&:${this.current},${external}}' { ${changed} }`;
     await this.program([
       command("set-option", "-so", this.live, "1"),
       command("set-option", "-so", this.dirty, "1"),
@@ -97553,11 +97555,7 @@ var ObserverServer = class {
         command("display-message", "-p", "B #{pid}"),
         command("list-panes", "-a", "-F", paneFacts),
         command("list-clients", "-F", "C #{session_id} #{client_control_mode}"),
-        command("display-message", "-p", "E #{pid}"),
-        // A scope edit during renewal occurred while the preceding wake was
-        // already outstanding. Give that obligation exactly one new wake at
-        // the beginning of this generation, before accepting another signal.
-        `if-shell -F '#{${this.scopesDirty}}' { set-option -s ${this.dirty} 1 ; wait-for -S ${this.prefix} }`
+        command("display-message", "-p", "E #{pid}")
       ],
       this.current
     );
@@ -97580,7 +97578,18 @@ var ObserverServer = class {
   async wait(signal) {
     const r = await this.launcher.launch({
       bin: "tmux",
-      args: ["-N", "-S", this.socket, "wait-for", this.prefix],
+      // A single non-yielding tmux command queue checks for unread work and
+      // subscribes. If work already exists it returns immediately. A wake
+      // after the check belongs to this waiter even if it has yet to block.
+      args: [
+        "-N",
+        "-S",
+        this.socket,
+        "if-shell",
+        "-F",
+        `#{&&:${this.current},#{!:#{||:#{${this.dirty}},#{${this.scopesDirty}}}}}`,
+        `set-option -s ${this.waiting} 1 ; wait-for ${this.prefix}`
+      ],
       signal,
       category: "frames.visibility"
     });
@@ -97619,7 +97628,8 @@ var ObserverServer = class {
       this.expected,
       this.action,
       this.dirty,
-      this.scopesDirty
+      this.scopesDirty,
+      this.waiting
     ])
       lines2.push(command("set-option", "-su", option));
     for (const flag2 of ["-L", "-S", "-S", "-U"])
