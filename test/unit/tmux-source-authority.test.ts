@@ -181,3 +181,40 @@ test("a retry checks its own claim even when another invocation already establis
   a.release(source);
   expect(await a.verifies(source, claim)).toBe(false);
 });
+
+test("a repeated report can recover a failed foreground lookup before any record was watched", async () => {
+  const { deps, confirmed } = fixture();
+  const inspect = jest
+    .fn(deps.inspect)
+    .mockResolvedValueOnce({ kind: "unknown", reason: "tty lookup failed" });
+  const authority = new TmuxSourceAuthority({
+    ...deps,
+    inspect,
+    confirmed,
+    log: jest.fn(),
+  });
+  authority.observed(source.socket, view(1));
+  await authority.report(source, A, undefined, "/c");
+  expect(authority.session(source)).toBeNull();
+  await authority.report(source, A, undefined, "/c");
+  expect(authority.session(source)).toBe(A);
+  await authority.report(source, A, undefined, "/c");
+  expect(inspect).toHaveBeenCalledTimes(2);
+  authority.close();
+});
+
+test("a full history of unproven legacy reports still admits a genuine new owner", async () => {
+  const { authority, inspected } = fixture();
+  for (let index = 0; index < 300; index++)
+    await authority.report(
+      source,
+      sessionIdOf("unresolved-" + index),
+      undefined,
+      "/c",
+    );
+  authority.observed(source.socket, view(1));
+  await authority.report(source, A, undefined, "/c");
+  expect(authority.session(source)).toBe(A);
+  expect(inspected.at(-1)!.length).toBeLessThan(300);
+  authority.close();
+});

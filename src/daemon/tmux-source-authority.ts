@@ -141,18 +141,19 @@ export class TmuxSourceAuthority {
     }
     const claim = { sid, parentPid, configDir };
     const id = claimKey(claim);
-    if (held.claims.has(id)) return held.running ?? Promise.resolve();
-    // Keep candidates through a delayed atomic replacement. An intervening
-    // request from a tool shell must not displace a pending genuine /clear.
+    if (held.claims.has(id)) {
+      if (held.running) return held.running;
+      // A failure before reading the tty can leave no watched record to
+      // wake this proof. A new report can recover it without an idle timer.
+      return held.reason !== null && !held.watches.size
+        ? this.changed(held)
+        : Promise.resolve();
+    }
+    // Retain interleaved reports across atomic record replacement, but
+    // always admit a new candidate. Eviction cannot confer or erase ownership.
     if (held.claims.size >= MAX_PENDING_CLAIMS) {
-      const reason = "too many pending source claims";
-      if (held.reason !== reason)
-        this.deps.log(
-          "warn",
-          `source pane ${source.pane} on ${source.socket}: ${reason}`,
-        );
-      held.reason = reason;
-      return held.running ?? Promise.resolve();
+      const oldest = held.claims.keys().next();
+      if (!oldest.done) held.claims.delete(oldest.value);
     }
     held.claims.set(id, claim);
     return this.changed(held);
@@ -241,12 +242,16 @@ export class TmuxSourceAuthority {
       while (held.physical && held.claims.size) {
         const version = held.version;
         let proof: SourceProof;
+        let watched = false;
         try {
           proof = await this.deps.inspect(
             held.physical,
             [...held.claims.values()],
             (files) => {
-              if (held.version === version) this.watch(held, files);
+              if (held.version === version) {
+                this.watch(held, files);
+                watched = true;
+              }
             },
           );
         } catch (error) {
@@ -255,6 +260,7 @@ export class TmuxSourceAuthority {
         // [LAW:no-ambient-temporal-coupling] A replaced server, foreground
         // pane, record or candidate set invalidates every outstanding read.
         if (version !== held.version) continue;
+        if (!watched) this.watch(held, []);
         for (const outside of proof.outside ?? [])
           held.claims.delete(claimKey(outside));
         if (proof.kind === "unknown") {
