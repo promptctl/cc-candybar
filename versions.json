@@ -2,116 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-978",
-      "ref": "refs/pull/978/merge",
-      "sha": "4c81fd147f6087e2a001bca2118974471f9f3e27",
-      "timestamp": "2026-11-27T04:33:08.668Z",
-      "commits": [
-        {
-          "sha": "4c81fd147f6087e2a001bca2118974471f9f3e27",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T04:32:13Z",
-          "message": "Merge 70c7d4050083929f47bb89fe1ca4ef87d8112c91 into 957eac95789f30efd7fc089c422843cf36d06300\n"
-        },
-        {
-          "sha": "70c7d4050083929f47bb89fe1ca4ef87d8112c91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:31:36-07:00",
-          "message": "fix(tmux): subscribe only after checking unread observer work\n"
-        },
-        {
-          "sha": "4e85aa6c6cf21755ee9bb89425a6a21015d6b14d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:23:45-07:00",
-          "message": "fix(tmux): recover foreground proof after transient failure or claim saturation\n"
-        },
-        {
-          "sha": "943fb6dc4e8fca0f43359653fef0ab92266331fe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:20:48-07:00",
-          "message": "fix(tmux): release superseded unobserved sources and verify hidden cadence\n"
-        },
-        {
-          "sha": "0ab55095793e38050ad7defe5509ea3dc81b6ac5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:19:05-07:00",
-          "message": "Recover unacknowledged tmux splits on a verified source report\n"
-        },
-        {
-          "sha": "5e6ee920fd1a10421830d05e3aa5bb0c0f727200",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:15:27-07:00",
-          "message": "fix(tmux): distinguish observer hooks from window configuration edits\n"
-        },
-        {
-          "sha": "a22a2758f251f37bd0778c9551c2f2838dabc6a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:15:56-07:00",
-          "message": "test(tmux): verify packaged pane handoff across hide, clear and return\n"
-        },
-        {
-          "sha": "9dff01cc4a2f3e078018e29601e07973a4879957",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:10:18-07:00",
-          "message": "feat(tmux): observe private server metadata without attaching or polling\n"
-        },
-        {
-          "sha": "d1809a2c5eafa202a745b6ae0c154eceba3d203f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:09:59-07:00",
-          "message": "fix: follow the enrolled tmux pane across session changes\n"
-        },
-        {
-          "sha": "24e7a702e358d37bab7093a21fa97131fe298c60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:08:29-07:00",
-          "message": "Retain unresolved source claims across a disconnected observer\n"
-        },
-        {
-          "sha": "48aa261e743d44575642bfda87e255d70244e823",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:06:21-07:00",
-          "message": "Confirm pane ownership with foreground Claude process records\n"
-        },
-        {
-          "sha": "1885d837df67f3e88b7a0ba3393b30ac85827438",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:08:10-07:00",
-          "message": "fix(tmux): preserve source verification across unrelated renders\n"
-        },
-        {
-          "sha": "bb8c699596aadab38cee3d0382fb04c6e1bb9663",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:59:31-07:00",
-          "message": "refactor(tmux): share pane facts across interested host consumers\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "957eac95789f30efd7fc089c422843cf36d06300",
-      "timestamp": "2026-11-27T04:02:13.415Z",
+      "sha": "5c3741c7841a04b995a81d83663d549d4ce6d153",
+      "timestamp": "2026-11-27T04:36:26.893Z",
       "commits": [
         {
-          "sha": "957eac95789f30efd7fc089c422843cf36d06300",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-27T04:00:35Z",
-          "message": "chore(release): set `package.json` to 1.243.1\n\n## [1.243.1](https://github.com/promptctl/cc-candybar/compare/v1.243.0...v1.243.1) (2026-11-27)\n\n### Bug Fixes\n\n* **lifecycle:** retire settled launcher work and verify daemon shutdown ([#977](https://github.com/promptctl/cc-candybar/issues/977)) ([648ab81](https://github.com/promptctl/cc-candybar/commit/648ab81867f4dd06cace3a3aa26f10ed956a7050))\n"
+          "sha": "5c3741c7841a04b995a81d83663d549d4ce6d153",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:35:19-07:00",
+          "message": "feat(tmux): drive pane visibility and session handoff from server events (#978)\n\n* refactor(tmux): share pane facts across interested host consumers\n\n* fix(tmux): preserve source verification across unrelated renders\n\n* Confirm pane ownership with foreground Claude process records\n\n* Retain unresolved source claims across a disconnected observer\n\n* fix: follow the enrolled tmux pane across session changes\n\n* feat(tmux): observe private server metadata without attaching or polling\n\n* test(tmux): verify packaged pane handoff across hide, clear and return\n\n* fix(tmux): distinguish observer hooks from window configuration edits\n\n* Recover unacknowledged tmux splits on a verified source report\n\n* fix(tmux): release superseded unobserved sources and verify hidden cadence\n\n* fix(tmux): recover foreground proof after transient failure or claim saturation\n\n* fix(tmux): subscribe only after checking unread observer work"
         }
       ]
     }
