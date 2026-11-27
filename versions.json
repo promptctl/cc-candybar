@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-980",
-      "ref": "refs/pull/980/merge",
-      "sha": "494b07f9db61baeb22af2e9cadde1cf8f93bf1f8",
-      "timestamp": "2026-11-27T04:52:51.579Z",
-      "commits": [
-        {
-          "sha": "494b07f9db61baeb22af2e9cadde1cf8f93bf1f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T04:51:42Z",
-          "message": "Merge 021036c0f9399ab2ea3d5c9d8afeb448ef30f633 into 14fb9650a28042cccfc6e4185e9083f57e2c7db5\n"
-        },
-        {
-          "sha": "021036c0f9399ab2ea3d5c9d8afeb448ef30f633",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:43:44-07:00",
-          "message": "fix(config): preserve action field presence and every structural diagnostic\n"
-        },
-        {
-          "sha": "e5eca1269f9ad32ada26240e531e4975bf96e39e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:34:51-07:00",
-          "message": "refactor(config): derive action parsing, schema and diagnostics from authored records\n"
-        },
-        {
-          "sha": "d6df6b72199c04024f388fcfb091ea3d5c895289",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:29:59-07:00",
-          "message": "refactor(config): share authored wire values and identifier rules with click admission\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "14fb9650a28042cccfc6e4185e9083f57e2c7db5",
-      "timestamp": "2026-11-27T04:52:30.443Z",
+      "sha": "24c369f8021d561d17a1baaf73de873118ca0457",
+      "timestamp": "2026-11-27T04:56:34.092Z",
       "commits": [
         {
-          "sha": "14fb9650a28042cccfc6e4185e9083f57e2c7db5",
+          "sha": "24c369f8021d561d17a1baaf73de873118ca0457",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:51:09-07:00",
-          "message": "refactor(proc): require explicit launcher lifetimes and child execution contexts (#979)\n\n* refactor(proc): require launcher ownership and explicit child context\n\n* fix(bench): measure the signed settings controls drawn by the fixture\n\n* fix(proc): reap unreleased jobs and detach the gate on transfer\n\n* fix(proc): report refused job escalation without throwing from its timer"
+          "timestamp": "2026-11-26T21:55:14-07:00",
+          "message": "refactor(config): derive action validation and editor schema from common records (#980)\n\n* refactor(config): share authored wire values and identifier rules with click admission\n\n* refactor(config): derive action parsing, schema and diagnostics from authored records\n\n* fix(config): preserve action field presence and every structural diagnostic"
         }
       ]
     }

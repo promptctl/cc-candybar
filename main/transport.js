@@ -331,10 +331,10 @@ var require_events = __commonJS({
         return this;
       }
       if (arguments.length === 0) {
-        var keys2 = Object.keys(events2);
+        var keys3 = Object.keys(events2);
         var key;
-        for (i2 = 0; i2 < keys2.length; ++i2) {
-          key = keys2[i2];
+        for (i2 = 0; i2 < keys3.length; ++i2) {
+          key = keys3[i2];
           if (key === "removeListener") continue;
           this.removeAllListeners(key);
         }
@@ -3992,8 +3992,8 @@ var require_dist = __commonJS({
       var token;
       var key;
       var root;
-      var parse3 = function parse4(text5, reviver) {
-        source = String(text5);
+      var parse3 = function parse4(text6, reviver) {
+        source = String(text6);
         parseState = "start";
         stack = [];
         pos = 0;
@@ -4963,9 +4963,9 @@ var require_dist = __commonJS({
           stack2.push(value2);
           var stepback = indent2;
           indent2 = indent2 + gap;
-          var keys2 = propertyList || Object.keys(value2);
+          var keys3 = propertyList || Object.keys(value2);
           var partial = [];
-          for (var i3 = 0, list4 = keys2; i3 < list4.length; i3 += 1) {
+          for (var i3 = 0, list4 = keys3; i3 < list4.length; i3 += 1) {
             var key2 = list4[i3];
             var propertyString = serializeProperty(key2, value2);
             if (propertyString !== void 0) {
@@ -11836,19 +11836,19 @@ var require_inspectBrand = __commonJS({
     };
     exports2.prefixOf = prefixOf;
     var ownKeys3 = (value) => {
-      const keys2 = Object.keys(value);
+      const keys3 = Object.keys(value);
       const symbols2 = Object.getOwnPropertySymbols(value);
       for (let i2 = 0; i2 < symbols2.length; i2++)
         if (exports2.isEnumerable.call(value, symbols2[i2]))
-          keys2.push(symbols2[i2]);
-      return keys2;
+          keys3.push(symbols2[i2]);
+      return keys3;
     };
     exports2.ownKeys = ownKeys3;
     var nonIndexKeys = (value) => {
-      const keys2 = (0, exports2.ownKeys)(value);
+      const keys3 = (0, exports2.ownKeys)(value);
       const out = [];
-      for (let i2 = 0; i2 < keys2.length; i2++) {
-        const key = keys2[i2];
+      for (let i2 = 0; i2 < keys3.length; i2++) {
+        const key = keys3[i2];
         if (typeof key !== "string" || !INDEX_REG.test(key) || +key > 4294967294)
           out.push(key);
       }
@@ -11920,7 +11920,7 @@ var require_inspectBrand = __commonJS({
       return base;
     };
     exports2.functionBase = functionBase;
-    var boxedBase = (value, keys2, constructor, tag, indentation) => {
+    var boxedBase = (value, keys3, constructor, tag, indentation) => {
       const brand = exports2.objectToString.call(value);
       const valueOf3 = BOXED[brand];
       if (valueOf3 === void 0)
@@ -11933,7 +11933,7 @@ var require_inspectBrand = __commonJS({
       }
       const type3 = brand.slice(8, -1);
       if (type3 === "String")
-        keys2.splice(0, primitive.length);
+        keys3.splice(0, primitive.length);
       let base = "[" + type3;
       if (type3 !== constructor)
         base += constructor === null ? " (null prototype)" : " (" + constructor + ")";
@@ -11997,10 +11997,10 @@ var require_inspect = __commonJS({
       return "[" + key + "]: " + str;
     };
     var formatSparseArray = (ctx, value, recurseTimes, maxLength, output, i2) => {
-      const keys2 = Object.keys(value);
+      const keys3 = Object.keys(value);
       let index = i2;
-      for (; i2 < keys2.length && output.length < maxLength; i2++) {
-        const key = keys2[i2];
+      for (; i2 < keys3.length && output.length < maxLength; i2++) {
+        const key = keys3[i2];
         const tmp = +key;
         if (tmp > 4294967294)
           break;
@@ -12100,7 +12100,7 @@ var require_inspect = __commonJS({
       } catch {
       }
       const tag = typeof rawTag !== "string" || rawTag !== "" && inspectBrand_1.isEnumerable.call(value, Symbol.toStringTag) ? "" : rawTag;
-      let keys2;
+      let keys3;
       let base = "";
       let braces = ["{", "}"];
       let formatter = noEntries;
@@ -12111,10 +12111,10 @@ var require_inspect = __commonJS({
         let typed;
         if (Array.isArray(value)) {
           fallback = "Array";
-          keys2 = (0, inspectBrand_1.nonIndexKeys)(value);
+          keys3 = (0, inspectBrand_1.nonIndexKeys)(value);
           const prefix = constructor !== "Array" || tag !== "" ? (0, inspectBrand_1.prefixOf)(constructor, tag, "Array", "(" + value.length + ")") : "";
           braces = [prefix + "[", "]"];
-          if (value.length === 0 && keys2.length === 0)
+          if (value.length === 0 && keys3.length === 0)
             return braces[0] + "]";
           kind = 2;
           formatter = formatArray;
@@ -12122,37 +12122,37 @@ var require_inspect = __commonJS({
           const isSet = (0, inspectBrand_1.hasBrand)(inspectBrand_1.setSize, value);
           const size = isSet ? inspectBrand_1.setSize.call(value) : inspectBrand_1.mapSize.call(value);
           fallback = isSet ? "Set" : "Map";
-          keys2 = (0, inspectBrand_1.ownKeys)(value);
+          keys3 = (0, inspectBrand_1.ownKeys)(value);
           const prefix = (0, inspectBrand_1.prefixOf)(constructor, tag, fallback, "(" + size + ")");
-          if (size === 0 && keys2.length === 0)
+          if (size === 0 && keys3.length === 0)
             return prefix + "{}";
           braces = [prefix + "{", "}"];
           formatter = isSet ? formatSet : formatMap;
         } else if ((typed = inspectBrand_1.typedArrayTag.call(value)) !== void 0) {
           fallback = typed;
-          keys2 = (0, inspectBrand_1.nonIndexKeys)(value);
+          keys3 = (0, inspectBrand_1.nonIndexKeys)(value);
           const length = inspectBrand_1.typedArrayLength.call(value);
           const prefix = (0, inspectBrand_1.prefixOf)(constructor, tag, constructor === null ? typed : "", "(" + length + ")");
           braces = [prefix + "[", "]"];
-          if (length === 0 && keys2.length === 0)
+          if (length === 0 && keys3.length === 0)
             return braces[0] + "]";
           kind = 2;
           formatter = formatTypedArray;
         }
       }
-      if (keys2 === void 0) {
-        keys2 = (0, inspectBrand_1.ownKeys)(value);
+      if (keys3 === void 0) {
+        keys3 = (0, inspectBrand_1.ownKeys)(value);
         if (typeof value === "function") {
           fallback = "Function";
           base = (0, inspectBrand_1.functionBase)(value, constructor, tag, (name) => formatValue(ctx, name, 0));
-          if (keys2.length === 0)
+          if (keys3.length === 0)
             return base;
         } else if (constructor === "Object") {
           if (inspectBrand_1.objectToString.call(value) === "[object Arguments]" && inspectBrand_1.hasOwn.call(value, "callee"))
             braces[0] = "[Arguments] {";
           else if (tag !== "")
             braces[0] = (0, inspectBrand_1.prefixOf)(constructor, tag, "Object") + "{";
-          if (keys2.length === 0)
+          if (keys3.length === 0)
             return braces[0] + "}";
         } else if ((0, inspectBrand_1.hasBrand)(inspectBrand_1.regExpSource, value)) {
           fallback = "RegExp";
@@ -12160,7 +12160,7 @@ var require_inspect = __commonJS({
           base = RegExp.prototype.toString.call(constructor === null ? new RegExp(value) : value);
           if (prefix !== "RegExp ")
             base = prefix + base;
-          if (keys2.length === 0 || recurseTimes > ctx.depth)
+          if (keys3.length === 0 || recurseTimes > ctx.depth)
             return base;
         } else if ((0, inspectBrand_1.hasBrand)(Date.prototype.getTime, value)) {
           fallback = "Date";
@@ -12169,13 +12169,13 @@ var require_inspect = __commonJS({
           base = time !== time ? Date.prototype.toString.call(value) : Date.prototype.toISOString.call(value);
           if (prefix !== "Date ")
             base = prefix + base;
-          if (keys2.length === 0)
+          if (keys3.length === 0)
             return base;
         } else if (inspectBrand_1.objectToString.call(value) === "[object Error]" || (0, inspectBrand_1.isInstance)(value, Error)) {
           fallback = "Error";
           const stack = value.stack;
           base = typeof stack === "string" && stack !== "" ? stack.replace(/\n/g, "\n" + " ".repeat(ctx.indentationLvl)) : "[" + Error.prototype.toString.call(value) + "]";
-          if (keys2.length === 0)
+          if (keys3.length === 0)
             return base;
         } else if ((0, inspectBrand_1.hasBrand)(inspectBrand_1.arrayBufferByteLength, value) || inspectBrand_1.sharedArrayBufferByteLength !== void 0 && (0, inspectBrand_1.hasBrand)(inspectBrand_1.sharedArrayBufferByteLength, value)) {
           fallback = (0, inspectBrand_1.hasBrand)(inspectBrand_1.arrayBufferByteLength, value) ? "ArrayBuffer" : "SharedArrayBuffer";
@@ -12187,14 +12187,14 @@ var require_inspect = __commonJS({
           braces[0] = (0, inspectBrand_1.prefixOf)(constructor, tag, "DataView") + "{";
           extraKeys = ["byteLength", "byteOffset", "buffer"];
         } else {
-          const boxed = (0, inspectBrand_1.boxedBase)(value, keys2, constructor, tag, ctx.indentationLvl);
+          const boxed = (0, inspectBrand_1.boxedBase)(value, keys3, constructor, tag, ctx.indentationLvl);
           if (boxed !== void 0) {
             base = boxed;
-            if (keys2.length === 0)
+            if (keys3.length === 0)
               return base;
           } else {
             const style = (0, inspectBrand_1.prefixOf)(constructor, tag, constructor === null ? "Object" : "");
-            if (keys2.length === 0)
+            if (keys3.length === 0)
               return style + "{}";
             braces[0] = style + "{";
           }
@@ -12211,8 +12211,8 @@ var require_inspect = __commonJS({
       if (extraKeys !== void 0)
         for (let i2 = 0; i2 < extraKeys.length; i2++)
           output.push(formatExtra(ctx, value, recurseTimes, extraKeys[i2]));
-      for (let i2 = 0; i2 < keys2.length; i2++)
-        output.push(formatProperty(ctx, value, recurseTimes, keys2[i2], kind));
+      for (let i2 = 0; i2 < keys3.length; i2++)
+        output.push(formatProperty(ctx, value, recurseTimes, keys3[i2], kind));
       const index = ctx.circular === void 0 ? void 0 : ctx.circular.get(value);
       if (index !== void 0)
         base = base === "" ? "<ref *" + index + ">" : "<ref *" + index + "> " + base;
@@ -12606,8 +12606,8 @@ var require_lib = __commonJS({
               i2 = j;
               break;
             }
-            let slash2 = pattern2.charCodeAt(j) === 47;
-            while (slash2) {
+            let slash3 = pattern2.charCodeAt(j) === 47;
+            while (slash3) {
               let k = j + 1;
               if (pattern2.charCodeAt(k) !== 42 || pattern2.charCodeAt(k + 1) !== 42)
                 break;
@@ -12616,13 +12616,13 @@ var require_lib = __commonJS({
                 k++;
               if (k === length) {
                 j = k;
-                slash2 = false;
+                slash3 = false;
               } else if (pattern2.charCodeAt(k) === 47)
                 j = k;
               else
                 break;
             }
-            if (slash2) {
+            if (slash3) {
               out += nodot ? "(?:" + guard2 + GLOBSTAR_NODOT + "/)?" : "(?:.*/)?";
               j++;
               start = true;
@@ -15765,15 +15765,15 @@ var require_glob = __commonJS({
         this.stats.set(path32, value);
       }
       add(path32, pattern2) {
-        let keys2 = this.seenKeys.get(path32);
-        if (!keys2) {
-          keys2 = /* @__PURE__ */ new Set();
-          this.seenKeys.set(path32, keys2);
+        let keys3 = this.seenKeys.get(path32);
+        if (!keys3) {
+          keys3 = /* @__PURE__ */ new Set();
+          this.seenKeys.set(path32, keys3);
         }
-        const originalSize = keys2.size;
+        const originalSize = keys3.size;
         for (const index of pattern2.indexes)
-          keys2.add(pattern2.cacheKey(index));
-        return keys2.size !== originalSize + pattern2.indexes.size;
+          keys3.add(pattern2.cacheKey(index));
+        return keys3.size !== originalSize + pattern2.indexes.size;
       }
       seen(path32, pattern2, index) {
         return !!this.seenKeys.get(path32)?.has(pattern2.cacheKey(index));
@@ -20390,9 +20390,9 @@ var require_duplex = __commonJS({
     ObjectSetPrototypeOf(Duplex.prototype, Readable.prototype);
     ObjectSetPrototypeOf(Duplex, Readable);
     {
-      const keys2 = ObjectKeys(Writable.prototype);
-      for (let i2 = 0; i2 < keys2.length; i2++) {
-        const method = keys2[i2];
+      const keys3 = ObjectKeys(Writable.prototype);
+      for (let i2 = 0; i2 < keys3.length; i2++) {
+        const method = keys3[i2];
         if (!Duplex.prototype[method]) Duplex.prototype[method] = Writable.prototype[method];
       }
     }
@@ -23021,8 +23021,8 @@ var require_Writer = __commonJS({
         const remaining = byteLength - this.x;
         if (remaining < capacity) {
           const total = byteLength - this.x0;
-          const required = capacity - remaining;
-          const totalRequired = total + required;
+          const required2 = capacity - remaining;
+          const totalRequired = total + required2;
           this.grow(totalRequired <= this.allocSize ? this.allocSize : totalRequired * 2);
         }
       }
@@ -23567,11 +23567,11 @@ var require_CborEncoderFast = __commonJS({
           writer.u8u64(155, length);
       }
       writeObj(obj) {
-        const keys2 = Object.keys(obj);
-        const length = keys2.length;
+        const keys3 = Object.keys(obj);
+        const length = keys3.length;
         this.writeObjHdr(length);
         for (let i2 = 0; i2 < length; i2++) {
-          const key = keys2[i2];
+          const key = keys3[i2];
           this.writeStr(key);
           this.writeAny(obj[key]);
         }
@@ -25468,13 +25468,13 @@ var require_JsonEncoder = __commonJS({
       }
       writeObj(obj) {
         const writer = this.writer;
-        const keys2 = Object.keys(obj);
-        const length = keys2.length;
+        const keys3 = Object.keys(obj);
+        const length = keys3.length;
         if (!length)
           return writer.u16(31613);
         writer.u8(123);
         for (let i2 = 0; i2 < length; i2++) {
-          const key = keys2[i2];
+          const key = keys3[i2];
           const value = obj[key];
           this.writeStr(key);
           writer.u8(58);
@@ -28415,26 +28415,26 @@ function eventHoldAt(event, holdS, at, render3) {
 }
 var TEXT_LIMIT = 2048;
 var OMITTED = "\u2026\n";
-function heldEventText(text5) {
-  if (text5.length <= TEXT_LIMIT) return text5;
+function heldEventText(text6) {
+  if (text6.length <= TEXT_LIMIT) return text6;
   const split2 = Math.floor((TEXT_LIMIT - OMITTED.length - 1) / 2);
   const tail = TEXT_LIMIT - OMITTED.length - 1 - split2;
-  return `${text5.slice(0, split2)}
-${OMITTED}${text5.slice(-tail)}`.toWellFormed();
+  return `${text6.slice(0, split2)}
+${OMITTED}${text6.slice(-tail)}`.toWellFormed();
 }
-function appendText(previous2, text5) {
-  if (previous2 === null) return heldEventText(text5);
-  const room = TEXT_LIMIT - text5.length;
+function appendText(previous2, text6) {
+  if (previous2 === null) return heldEventText(text6);
+  const room = TEXT_LIMIT - text6.length;
   if (previous2.length + 1 <= room) return `${previous2}
-${text5}`;
-  if (room < OMITTED.length) return heldEventText(text5);
+${text6}`;
+  if (room < OMITTED.length) return heldEventText(text6);
   const tail = room - OMITTED.length - 1;
   return tail > 0 ? `${OMITTED}${previous2.slice(-tail)}
-${text5}`.toWellFormed() : `${OMITTED}${text5}`;
+${text6}`.toWellFormed() : `${OMITTED}${text6}`;
 }
-function joinedEvent(last2, text5, at) {
+function joinedEvent(last2, text6, at) {
   return {
-    text: appendText(last2 === null || last2.answered ? null : last2.text, text5),
+    text: appendText(last2 === null || last2.answered ? null : last2.text, text6),
     at,
     revision: (last2?.revision ?? 0) + 1,
     answered: false
@@ -28624,7 +28624,7 @@ var aboutKind = (kind) => ({
   rule: "kind"
 });
 var aboutSubject = (kind, subject) => ({ kind, rule: "subject", subject });
-var aboutText = (kind, text5) => ({ kind, rule: "text", text: text5 });
+var aboutText = (kind, text6) => ({ kind, rule: "text", text: text6 });
 
 // src/config/json5-edit.ts
 init_globals();
@@ -28645,8 +28645,8 @@ var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
 var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
 var LINE_END = /\r\n|[\n\r\u2028\u2029]/g;
 var Scanner = class {
-  constructor(text5) {
-    this.text = text5;
+  constructor(text6) {
+    this.text = text6;
   }
   text;
   pos = 0;
@@ -28800,23 +28800,23 @@ var Scanner = class {
   }
 };
 var HOLDS_NO_VALUE = "the file holds no value (a config that sets nothing is {})";
-function holdsNoValue(text5) {
-  const s = new Scanner(text5);
+function holdsNoValue(text6) {
+  const s = new Scanner(text6);
   try {
     s.skipTrivia();
   } catch (e) {
     if (e instanceof Json5EditError) return false;
     throw e;
   }
-  return s.pos === text5.length;
+  return s.pos === text6.length;
 }
 var EMPTY_DOCUMENT = "{}\n";
-function parseDocument(text5) {
-  if (holdsNoValue(text5)) throw new Json5EditError(HOLDS_NO_VALUE, 0);
-  const s = new Scanner(text5);
+function parseDocument(text6) {
+  if (holdsNoValue(text6)) throw new Json5EditError(HOLDS_NO_VALUE, 0);
+  const s = new Scanner(text6);
   const root = s.value();
   s.skipTrivia();
-  if (s.pos !== text5.length) s.fail("trailing content after the document");
+  if (s.pos !== text6.length) s.fail("trailing content after the document");
   return root;
 }
 function entryOf(node, key) {
@@ -28829,15 +28829,15 @@ function nodeAt(root, path32) {
   }
   return node;
 }
-function textOf(text5, node) {
-  return text5.slice(node.span.start, node.span.end);
+function textOf(text6, node) {
+  return text6.slice(node.span.start, node.span.end);
 }
-function movableTextOf(text5, node) {
-  const indent2 = indentOfLine(text5, node.span.start);
+function movableTextOf(text6, node) {
+  const indent2 = indentOfLine(text6, node.span.start);
   const literals = literalSpans(node);
   const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
   let lineStart = node.span.start;
-  return textOf(text5, node).split("\n").map((line, i2) => {
+  return textOf(text6, node).split("\n").map((line, i2) => {
     const at = lineStart;
     lineStart += line.length + 1;
     const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
@@ -28863,12 +28863,12 @@ function keyText(key) {
 var JSON5_DIALECT = {
   key: keyText,
   trailingComma: ",",
-  parse: (text5) => import_json5.default.parse(text5)
+  parse: (text6) => import_json5.default.parse(text6)
 };
 var JSON_DIALECT = {
   key: (key) => JSON.stringify(key),
   trailingComma: "",
-  parse: (text5) => JSON.parse(text5)
+  parse: (text6) => JSON.parse(text6)
 };
 function json5Text(value) {
   if (Array.isArray(value)) {
@@ -28892,8 +28892,8 @@ ${items.join("\n")}
   }
   return JSON.stringify(value);
 }
-function eolOf(text5) {
-  return /\r\n|[\r\n]/.exec(text5)?.[0] ?? "\n";
+function eolOf(text6) {
+  return /\r\n|[\r\n]/.exec(text6)?.[0] ?? "\n";
 }
 function reindent(valueText, indent2, eol) {
   return valueText.split("\n").join(`${eol}${indent2}`);
@@ -28905,89 +28905,89 @@ function entryText(path32, valueText, dialect) {
 }`;
   return `${dialect.key(head)}: ${inner}`;
 }
-function splice(text5, start, end, insert) {
-  return text5.slice(0, start) + insert + text5.slice(end);
+function splice(text6, start, end, insert) {
+  return text6.slice(0, start) + insert + text6.slice(end);
 }
-function lineStartOf(text5, offset) {
+function lineStartOf(text6, offset) {
   let start = offset;
-  while (start > 0 && !/[\r\n\u2028\u2029]/.test(text5[start - 1])) start--;
+  while (start > 0 && !/[\r\n\u2028\u2029]/.test(text6[start - 1])) start--;
   return start;
 }
 function isBlank(s) {
   return /^[ \t]*$/.test(s);
 }
-function indentOfLine(text5, offset) {
-  const ls = lineStartOf(text5, offset);
-  return /^[ \t]*/.exec(text5.slice(ls))[0];
+function indentOfLine(text6, offset) {
+  const ls = lineStartOf(text6, offset);
+  return /^[ \t]*/.exec(text6.slice(ls))[0];
 }
-function startsLine(text5, offset) {
-  return isBlank(text5.slice(lineStartOf(text5, offset), offset));
+function startsLine(text6, offset) {
+  return isBlank(text6.slice(lineStartOf(text6, offset), offset));
 }
 var LINE_TRAILER = /(?:\/\/[^\r\n\u2028\u2029]*)?(\r\n|[\r\n\u2028\u2029]|$)/y;
-function trailerAfter(text5, end) {
+function trailerAfter(text6, end) {
   let i2 = end;
-  while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
-  const commaEnd = text5[i2] === "," ? i2 + 1 : -1;
+  while (i2 < text6.length && (text6[i2] === " " || text6[i2] === "	")) i2++;
+  const commaEnd = text6[i2] === "," ? i2 + 1 : -1;
   if (commaEnd !== -1) i2 = commaEnd;
-  while (i2 < text5.length && (text5[i2] === " " || text5[i2] === "	")) i2++;
+  while (i2 < text6.length && (text6[i2] === " " || text6[i2] === "	")) i2++;
   LINE_TRAILER.lastIndex = i2;
-  const m = LINE_TRAILER.exec(text5);
+  const m = LINE_TRAILER.exec(text6);
   if (m === null) return { commaEnd, line: null };
   const next2 = i2 + m[0].length;
   return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
 }
-function removeMember(text5, span) {
-  const { commaEnd, line } = trailerAfter(text5, span.end);
-  if (startsLine(text5, span.start) && line !== null) {
-    return splice(text5, lineStartOf(text5, span.start), line.next, "");
+function removeMember(text6, span) {
+  const { commaEnd, line } = trailerAfter(text6, span.end);
+  if (startsLine(text6, span.start) && line !== null) {
+    return splice(text6, lineStartOf(text6, span.start), line.next, "");
   }
   if (commaEnd !== -1) {
     let end = commaEnd;
-    while (end < text5.length && text5[end] === " ") end++;
-    return splice(text5, span.start, end, "");
+    while (end < text6.length && text6[end] === " ") end++;
+    return splice(text6, span.start, end, "");
   }
   let start = span.start;
-  while (start > 0 && (text5[start - 1] === " " || text5[start - 1] === "	")) {
+  while (start > 0 && (text6[start - 1] === " " || text6[start - 1] === "	")) {
     start--;
   }
-  if (text5[start - 1] === ",") return splice(text5, start - 1, span.end, "");
-  return splice(text5, span.start, span.end, "");
+  if (text6[start - 1] === ",") return splice(text6, start - 1, span.end, "");
+  return splice(text6, span.start, span.end, "");
 }
-function insertLineAfter(text5, span, trailer, memberText, indent2) {
+function insertLineAfter(text6, span, trailer, memberText, indent2) {
   const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text5 : splice(text5, span.end, span.end, ",");
+  const withComma = hasComma ? text6 : splice(text6, span.end, span.end, ",");
   const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text5);
+  const eol = eolOf(text6);
   const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
   return splice(withComma, at, at, line);
 }
-function commentsEnd(text5, from) {
-  const s = new Scanner(text5);
+function commentsEnd(text6, from) {
+  const s = new Scanner(text6);
   s.pos = from;
   return s.skipTrivia();
 }
-function appendMember(text5, container, memberText, dialect) {
+function appendMember(text6, container, memberText, dialect) {
   const members = container.kind === "object" ? container.entries : container.elements;
   const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text5, container.span.start);
+  const baseIndent = indentOfLine(text6, container.span.start);
   if (last2 === void 0) {
     const inner = baseIndent + "  ";
-    const eol = eolOf(text5);
+    const eol = eolOf(text6);
     return splice(
-      text5,
-      commentsEnd(text5, container.span.start + 1),
+      text6,
+      commentsEnd(text6, container.span.start + 1),
       container.span.end - 1,
       `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
     );
   }
-  const { commaEnd, line } = trailerAfter(text5, last2.span.end);
-  if (startsLine(text5, last2.span.start) && line !== null) {
-    const indent2 = text5.slice(
-      lineStartOf(text5, last2.span.start),
+  const { commaEnd, line } = trailerAfter(text6, last2.span.end);
+  if (startsLine(text6, last2.span.start) && line !== null) {
+    const indent2 = text6.slice(
+      lineStartOf(text6, last2.span.start),
       last2.span.start
     );
     return insertLineAfter(
-      text5,
+      text6,
       last2.span,
       { commaEnd, line },
       memberText,
@@ -28997,18 +28997,18 @@ function appendMember(text5, container, memberText, dialect) {
   const at = commaEnd === -1 ? last2.span.end : commaEnd;
   const sep2 = commaEnd === -1 ? ", " : " ";
   const tail = commaEnd === -1 ? "" : ",";
-  return splice(text5, at, at, `${sep2}${memberText}${tail}`);
+  return splice(text6, at, at, `${sep2}${memberText}${tail}`);
 }
-function setValue(text5, path32, valueText, dialect) {
+function setValue(text6, path32, valueText, dialect) {
   if (path32.length === 0) {
     throw new Json5EditError("setValue needs a non-empty path", 0);
   }
-  return setBelow(text5, parseDocument(text5), path32, valueText, dialect);
+  return setBelow(text6, parseDocument(text6), path32, valueText, dialect);
 }
-function insertValue(text5, path32, valueText, dialect, precedes) {
+function insertValue(text6, path32, valueText, dialect, precedes) {
   const parentPath = path32.slice(0, -1);
   const leaf2 = path32[path32.length - 1];
-  const parent = nodeAt(parseDocument(text5), parentPath);
+  const parent = nodeAt(parseDocument(text6), parentPath);
   if (leaf2 === void 0 || parent?.kind !== "object")
     throw new Json5EditError(
       `cannot insert ${path32.join(".")}: its parent is not an object`,
@@ -29021,20 +29021,20 @@ function insertValue(text5, path32, valueText, dialect, precedes) {
     );
   const member = entryText([leaf2], valueText, dialect);
   const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
-  if (next2 === void 0) return appendMember(text5, parent, member, dialect);
-  if (!startsLine(text5, next2.span.start))
-    return splice(text5, next2.span.start, next2.span.start, `${member}, `);
-  const indent2 = indentOfLine(text5, next2.span.start);
-  const eol = eolOf(text5);
-  const at = lineStartOf(text5, next2.span.start);
+  if (next2 === void 0) return appendMember(text6, parent, member, dialect);
+  if (!startsLine(text6, next2.span.start))
+    return splice(text6, next2.span.start, next2.span.start, `${member}, `);
+  const indent2 = indentOfLine(text6, next2.span.start);
+  const eol = eolOf(text6);
+  const at = lineStartOf(text6, next2.span.start);
   return splice(
-    text5,
+    text6,
     at,
     at,
     `${indent2}${reindent(member, indent2, eol)},${eol}`
   );
 }
-function setBelow(text5, start, path32, valueText, dialect) {
+function setBelow(text6, start, path32, valueText, dialect) {
   let node = start;
   for (let i2 = 0; i2 < path32.length; i2++) {
     if (node.kind !== "object") {
@@ -29046,34 +29046,34 @@ function setBelow(text5, start, path32, valueText, dialect) {
     const entry = entryOf(node, path32[i2]);
     if (entry === void 0) {
       return appendMember(
-        text5,
+        text6,
         node,
         entryText(path32.slice(i2), valueText, dialect),
         dialect
       );
     }
     if (i2 === path32.length - 1) {
-      const indent2 = indentOfLine(text5, entry.keySpan.start);
+      const indent2 = indentOfLine(text6, entry.keySpan.start);
       return splice(
-        text5,
+        text6,
         entry.value.span.start,
         entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text5))
+        reindent(valueText, indent2, eolOf(text6))
       );
     }
     node = entry.value;
   }
   throw new Json5EditError("unreachable: path exhausted", 0);
 }
-function deleteValue(text5, path32, keep = 0) {
+function deleteValue(text6, path32, keep = 0) {
   if (path32.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
   const parentPath = path32.slice(0, -1);
-  const parent = nodeAt(parseDocument(text5), parentPath);
+  const parent = nodeAt(parseDocument(text6), parentPath);
   const entry = parent === void 0 ? void 0 : entryOf(parent, path32[path32.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text5;
-  const pruned = removeMember(text5, entry.span);
+  if (entry === void 0 || parent?.kind !== "object") return text6;
+  const pruned = removeMember(text6, entry.span);
   return parentPath.length > keep && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep) : pruned;
 }
 var CHILD_KEYS = ["h", "v", "children"];
@@ -29121,28 +29121,28 @@ function hasSegmentRef(root, id2) {
   }
   return false;
 }
-function refAt(text5, rootPath, id2) {
-  const root = nodeAt(parseDocument(text5), rootPath);
+function refAt(text6, rootPath, id2) {
+  const root = nodeAt(parseDocument(text6), rootPath);
   if (root === void 0) return null;
   for (const { node, bareAt } of nodesIn(root, rootPath)) {
     if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text5, ref: node };
+    if (bareAt === null) return { text: text6, ref: node };
     const wrapped = setValue(
-      text5,
+      text6,
       bareAt,
-      `{ h: [${textOf(text5, node)}] }`,
+      `{ h: [${textOf(text6, node)}] }`,
       JSON5_DIALECT
     );
     return refAt(wrapped, rootPath, id2);
   }
   return null;
 }
-function removeSegmentRef(text5, rootPath, target) {
-  const hit = refAt(text5, rootPath, target);
+function removeSegmentRef(text6, rootPath, target) {
+  const hit = refAt(text6, rootPath, target);
   return hit === null ? null : removeMember(hit.text, hit.ref.span);
 }
-function insertSegmentRef(text5, rootPath, placement, anchor, relation) {
-  const hit = refAt(text5, rootPath, anchor);
+function insertSegmentRef(text6, rootPath, placement, anchor, relation) {
+  const hit = refAt(text6, rootPath, anchor);
   if (hit === null) return null;
   const { text: src, ref } = hit;
   const newText = `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
@@ -29160,8 +29160,8 @@ function insertSegmentRef(text5, rootPath, placement, anchor, relation) {
   const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
   return splice(src, ref.span.start, ref.span.end, pair);
 }
-function setPlacementSetting(text5, rootPath, id2, setting, valueText) {
-  const hit = refAt(text5, rootPath, id2);
+function setPlacementSetting(text6, rootPath, id2, setting, valueText) {
+  const hit = refAt(text6, rootPath, id2);
   if (hit === null) return null;
   const { text: src, ref } = hit;
   const settings = `{ ${keyText(setting)}: ${valueText} }`;
@@ -29434,9 +29434,9 @@ init_globals();
 // site/shims/crypto.ts
 init_globals();
 var import_buffer2 = __toESM(require_buffer(), 1);
-function fnv(text5) {
+function fnv(text6) {
   let h = 2166136261;
-  for (let i2 = 0; i2 < text5.length; i2++) h = Math.imul(h ^ text5.charCodeAt(i2), 16777619) >>> 0;
+  for (let i2 = 0; i2 < text6.length; i2++) h = Math.imul(h ^ text6.charCodeAt(i2), 16777619) >>> 0;
   return h.toString(16).padStart(8, "0").repeat(8);
 }
 function createHash(_alg) {
@@ -30247,11 +30247,11 @@ var VS16 = 65039;
 var JOINERS = pattern(/[\u200d\ufe0f]/);
 var PRINTABLE_ASCII = pattern(/^[ -~]*$/);
 var SEGMENTER = new Intl.Segmenter(void 0, { granularity: "grapheme" });
-function richCells(text5) {
+function richCells(text6) {
   let cells = 0;
   let widenable = false;
   let joined = false;
-  for (const ch of text5) {
+  for (const ch of text6) {
     const codePoint = ch.codePointAt(0);
     if (joined) {
       joined = false;
@@ -30268,20 +30268,20 @@ function richCells(text5) {
   }
   return cells;
 }
-function measure(text5) {
-  if (PRINTABLE_ASCII.test(text5))
-    return text5.length;
-  if (!JOINERS.test(text5))
-    return richCells(text5);
+function measure(text6) {
+  if (PRINTABLE_ASCII.test(text6))
+    return text6.length;
+  if (!JOINERS.test(text6))
+    return richCells(text6);
   let cells = 0;
-  for (const { segment } of SEGMENTER.segment(text5))
+  for (const { segment } of SEGMENTER.segment(text6))
     cells += richCells(segment);
   return cells;
 }
-function cellLen(text5) {
-  if (text5.length === 0)
+function cellLen(text6) {
+  if (text6.length === 0)
     return 0;
-  return text5.length <= 64 ? cellLenMemo.get(text5, measure) : measure(text5);
+  return text6.length <= 64 ? cellLenMemo.get(text6, measure) : measure(text6);
 }
 function asCellCol(n) {
   return n;
@@ -30292,29 +30292,29 @@ function asCodePoint(n) {
 function cellCount(n) {
   return n > 0 ? Math.floor(n) : 0;
 }
-function splitText(text5, position) {
+function splitText(text6, position) {
   if (position <= 0)
-    return ["", text5];
-  if (position >= cellLen(text5))
-    return [text5, ""];
-  const left = cellFit(text5, position);
-  return [left + " ".repeat(position - cellLen(left)), text5.slice(left.length)];
+    return ["", text6];
+  if (position >= cellLen(text6))
+    return [text6, ""];
+  const left = cellFit(text6, position);
+  return [left + " ".repeat(position - cellLen(left)), text6.slice(left.length)];
 }
-function cutCells(text5, positions) {
+function cutCells(text6, positions) {
   const pieces = [];
   let start = 0;
   let lead = 0;
   let at = 0;
   let col = 0;
   let next2 = 0;
-  for (const glyph of clustersFrom(text5, asCodePoint(0))) {
+  for (const glyph of clustersFrom(text6, asCodePoint(0))) {
     if (next2 === positions.length)
       break;
     const end = col + cellLen(glyph);
     let from = col;
     for (; next2 < positions.length && positions[next2] < end; next2++) {
       const cut = positions[next2];
-      pieces.push(" ".repeat(lead) + text5.slice(start, at) + " ".repeat(cut - from));
+      pieces.push(" ".repeat(lead) + text6.slice(start, at) + " ".repeat(cut - from));
       lead = 0;
       start = cut === col ? at : at + glyph.length;
       from = cut;
@@ -30324,20 +30324,20 @@ function cutCells(text5, positions) {
     at += glyph.length;
     col = end;
   }
-  pieces.push(" ".repeat(lead) + text5.slice(start));
+  pieces.push(" ".repeat(lead) + text6.slice(start));
   return pieces;
 }
-function chopCells(text5, maxWidth) {
-  if (maxWidth <= 0 || text5.length === 0)
-    return [text5];
-  return Array.from(cellRows(text5, () => maxWidth), ({ start, end }) => text5.slice(start, end));
+function chopCells(text6, maxWidth) {
+  if (maxWidth <= 0 || text6.length === 0)
+    return [text6];
+  return Array.from(cellRows(text6, () => maxWidth), ({ start, end }) => text6.slice(start, end));
 }
-function* cellRows(text5, capOf) {
+function* cellRows(text6, capOf) {
   let row = 0;
   let start = 0;
   let at = 0;
   let cells = 0;
-  for (const glyph of clustersFrom(text5, asCodePoint(0))) {
+  for (const glyph of clustersFrom(text6, asCodePoint(0))) {
     const width = cellLen(glyph);
     if (at > start && cells + width > capOf(row)) {
       yield { start: asCodePoint(start), end: asCodePoint(at) };
@@ -30351,32 +30351,32 @@ function* cellRows(text5, capOf) {
   if (at > start)
     yield { start: asCodePoint(start), end: asCodePoint(at) };
 }
-function graphemes(text5) {
-  if (PRINTABLE_ASCII.test(text5))
-    return text5.split("");
-  return Array.from(clustersFrom(text5, asCodePoint(0)));
+function graphemes(text6) {
+  if (PRINTABLE_ASCII.test(text6))
+    return text6.split("");
+  return Array.from(clustersFrom(text6, asCodePoint(0)));
 }
-function* clustersFrom(text5, start) {
-  const segments = SEGMENTER.segment(text5);
+function* clustersFrom(text6, start) {
+  const segments = SEGMENTER.segment(text6);
   for (let at = start, s = segments.containing(at); s; s = segments.containing(at)) {
     const end = s.index + s.segment.length;
-    yield text5.slice(at, end);
+    yield text6.slice(at, end);
     at = asCodePoint(end);
   }
 }
-function* clustersBefore(text5, end) {
-  const segments = SEGMENTER.segment(text5);
+function* clustersBefore(text6, end) {
+  const segments = SEGMENTER.segment(text6);
   for (let at = end; at > 0; ) {
     const { index } = segments.containing(at - 1);
-    yield text5.slice(index, at);
+    yield text6.slice(index, at);
     at = asCodePoint(index);
   }
 }
-function cellFit(text5, cap) {
-  return text5.slice(0, fitLength(clustersFrom(text5, asCodePoint(0)), cap));
+function cellFit(text6, cap) {
+  return text6.slice(0, fitLength(clustersFrom(text6, asCodePoint(0)), cap));
 }
-function cellFitEnd(text5, cap) {
-  return text5.slice(text5.length - fitLength(clustersBefore(text5, asCodePoint(text5.length)), cap));
+function cellFitEnd(text6, cap) {
+  return text6.slice(text6.length - fitLength(clustersBefore(text6, asCodePoint(text6.length)), cap));
 }
 function fitLength(clusters, cap) {
   let w = 0;
@@ -30396,8 +30396,8 @@ function parseTabSize(n) {
   }
   return n;
 }
-function expandTabs(text5, tabSize) {
-  const [head, ...rest2] = text5.split("	");
+function expandTabs(text6, tabSize) {
+  const [head, ...rest2] = text6.split("	");
   const tabAt = [];
   const grownBy = [];
   const columnAfter = (piece, column2) => {
@@ -37127,19 +37127,19 @@ function editDistance(a, b) {
   }
   return previous2[b.length];
 }
-function nearMiss(word2, words2) {
+function nearMiss(word2, words3) {
   const typed = word2.toLowerCase();
   const budget = Math.max(1, Math.floor(typed.length / 3));
-  const scored = words2.filter((name) => Math.abs(name.length - typed.length) <= budget).map((name) => ({ name, distance: editDistance(typed, name) }));
+  const scored = words3.filter((name) => Math.abs(name.length - typed.length) <= budget).map((name) => ({ name, distance: editDistance(typed, name) }));
   const nearest = Math.min(budget, ...scored.map((s) => s.distance));
   const names = scored.filter((s) => s.distance === nearest).map((s) => `"${s.name}"`).sort();
   return names.length === 0 ? "" : ` (did you mean ${names.join(" or ")}?)`;
 }
-function parseStyleColor(token, failure2, words2) {
+function parseStyleColor(token, failure2, words3) {
   try {
     return ColorSpec.parse(token);
   } catch (cause) {
-    throw new StyleSyntaxError(`${failure2} "${token}"${nearMiss(token, words2)}: ${String(cause)}`, {
+    throw new StyleSyntaxError(`${failure2} "${token}"${nearMiss(token, words3)}: ${String(cause)}`, {
       cause
     });
   }
@@ -37405,7 +37405,7 @@ function anchorsEqual(a, b) {
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/protocol.js
-var isAscii = (text5) => /^[\x00-\x7F]*$/.test(text5);
+var isAscii = (text6) => /^[\x00-\x7F]*$/.test(text6);
 function drawable(options, chosen, ascii, glyphs = String) {
   return options.asciiOnly === true && !isAscii(glyphs(chosen)) ? ascii : chosen;
 }
@@ -37593,8 +37593,8 @@ var Segment = class _Segment {
   text;
   style;
   control;
-  constructor(text5, style, control2) {
-    this.text = text5;
+  constructor(text6, style, control2) {
+    this.text = text6;
     this.style = style;
     this.control = control2;
   }
@@ -37625,7 +37625,7 @@ var Segment = class _Segment {
     return this.cutAt([position]);
   }
   cutAt(positions) {
-    return cutCells(this.text, positions).map((text5, piece) => new _Segment(text5, piece === 0 ? this.style : this.style?.shiftedBy(positions[piece - 1])));
+    return cutCells(this.text, positions).map((text6, piece) => new _Segment(text6, piece === 0 ? this.style : this.style?.shiftedBy(positions[piece - 1])));
   }
   // --- Static factories ---
   static _line = new _Segment("\n");
@@ -37742,12 +37742,12 @@ var Segment = class _Segment {
         currentLine.push(segment);
         continue;
       }
-      const text5 = segment.text;
-      if (!text5.includes("\n")) {
+      const text6 = segment.text;
+      if (!text6.includes("\n")) {
         currentLine.push(segment);
         continue;
       }
-      const parts = text5.split("\n");
+      const parts = text6.split("\n");
       for (let i2 = 0; i2 < parts.length; i2++) {
         if (i2 > 0) {
           lines2.push(currentLine);
@@ -38572,23 +38572,23 @@ init_globals();
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/wrap.js
 init_globals();
-function* words(text5) {
+function* words(text6) {
   const re = /\s*\S+\s*/y;
-  for (let match = re.exec(text5); match !== null; match = re.exec(text5)) {
+  for (let match = re.exec(text6); match !== null; match = re.exec(text6)) {
     yield match[0];
   }
 }
 function widthOf(word2) {
   return cellLen(word2.trimEnd());
 }
-function wordWidths(text5) {
-  return Array.from(words(text5), widthOf);
+function wordWidths(text6) {
+  return Array.from(words(text6), widthOf);
 }
 function foldWord(word2, width) {
   const pieces = chopCells(word2, width);
   return cellLen(pieces[0]) > width ? ["", ...pieces] : pieces;
 }
-function divideLine(text5, width, options) {
+function divideLine(text6, width, options) {
   if (width <= 0)
     return [];
   const cuts = [];
@@ -38598,7 +38598,7 @@ function divideLine(text5, width, options) {
   };
   let used = 0;
   let wordStart = 0;
-  for (const word2 of words(text5)) {
+  for (const word2 of words(text6)) {
     const wordWidth = widthOf(word2);
     if (width - used >= wordWidth) {
       used += cellLen(word2);
@@ -38628,9 +38628,9 @@ init_globals();
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/fnv1a.js
 init_globals();
 var utf8 = new TextEncoder();
-function fnv1a(text5) {
+function fnv1a(text6) {
   let hash2 = 2166136261;
-  for (const byte of utf8.encode(text5)) {
+  for (const byte of utf8.encode(text6)) {
     hash2 = Math.imul(hash2 ^ byte, 16777619);
   }
   return (hash2 >>> 0).toString(16).padStart(8, "0");
@@ -38696,8 +38696,8 @@ function refuseRenderWrite(owner2) {
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/text.js
-function stripControlChars(text5) {
-  return text5.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F\u202A-\u202E\u2066-\u206F]/g, "");
+function stripControlChars(text6) {
+  return text6.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F\u202A-\u202E\u2066-\u206F]/g, "");
 }
 var TRAILING_WHITESPACE_RE = pattern(/\s+$/);
 function plainOf(line) {
@@ -38786,8 +38786,8 @@ var RichText = class _RichText {
   _spans = new ListState();
   _format;
   _tabSize;
-  constructor(text5, options) {
-    this._text = new State(text5 ? stripControlChars(text5) : "");
+  constructor(text6, options) {
+    this._text = new State(text6 ? stripControlChars(text6) : "");
     this._format = new State({
       // [LAW:single-enforcer] `admitStyle` is the boundary that sanitizes
       // any link URL crossing into a RichText; downstream trusts the invariant.
@@ -38936,8 +38936,8 @@ var RichText = class _RichText {
     return this.slice(resolved, resolved + 1);
   }
   slice(start, end) {
-    const text5 = this._text.get();
-    const len3 = text5.length;
+    const text6 = this._text.get();
+    const len3 = text6.length;
     const s = start ?? 0;
     const e = end ?? len3;
     const resolvedStart = s < 0 ? Math.max(0, len3 + s) : Math.min(s, len3);
@@ -38945,7 +38945,7 @@ var RichText = class _RichText {
     if (resolvedStart >= resolvedEnd) {
       return this.blankCopy();
     }
-    const slicedText = text5.slice(resolvedStart, resolvedEnd);
+    const slicedText = text6.slice(resolvedStart, resolvedEnd);
     const result = this.blankCopy(slicedText);
     for (const span of this._spans.get()) {
       const spanStart = Math.max(span.start, resolvedStart) - resolvedStart;
@@ -38980,12 +38980,12 @@ var RichText = class _RichText {
     return this;
   }
   highlightRegex(pattern2, style) {
-    const text5 = this._text.get();
+    const text6 = this._text.get();
     let count = 0;
     const flags = pattern2.flags.includes("g") ? pattern2.flags : pattern2.flags + "g";
     const re = new RegExp(pattern2.source, flags);
     let match;
-    while ((match = re.exec(text5)) !== null) {
+    while ((match = re.exec(text6)) !== null) {
       if (match[0].length === 0) {
         re.lastIndex++;
         continue;
@@ -39010,10 +39010,10 @@ var RichText = class _RichText {
     }
     return count;
   }
-  highlightWords(words2, style, options) {
+  highlightWords(words3, style, options) {
     const caseSensitive = options?.caseSensitive !== false;
     let count = 0;
-    for (const word2 of words2) {
+    for (const word2 of words3) {
       if (word2.length === 0)
         continue;
       const escaped = word2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -39033,17 +39033,17 @@ var RichText = class _RichText {
     result._spans.set(this._spans.get());
     return result;
   }
-  blankCopy(text5) {
-    return new _RichText(text5 ?? "", { ...this._format.get(), tabSize: this._tabSize });
+  blankCopy(text6) {
+    return new _RichText(text6 ?? "", { ...this._format.get(), tabSize: this._tabSize });
   }
   // --- Splitting ---
   split(separator) {
     const sep2 = separator ?? "\n";
-    const text5 = this._text.get();
+    const text6 = this._text.get();
     const parts = [];
     let start = 0;
     while (true) {
-      const idx = text5.indexOf(sep2, start);
+      const idx = text6.indexOf(sep2, start);
       if (idx === -1) {
         parts.push(this.slice(start));
         break;
@@ -39149,19 +39149,19 @@ var RichText = class _RichText {
     this.expandTabs();
     const mode = options?.mode ?? "right";
     const cells = cellCount(width);
-    const marker = cellFit(stripControlChars(options?.marker ?? "\u2026"), cells);
-    const budget = asCellCol(cells - cellLen(marker));
+    const marker2 = cellFit(stripControlChars(options?.marker ?? "\u2026"), cells);
+    const budget = asCellCol(cells - cellLen(marker2));
     if (mode === "right") {
       this._cropRightTo(budget);
-      if (marker)
-        this._text.set(this._text.get() + marker);
+      if (marker2)
+        this._text.set(this._text.get() + marker2);
       return this;
     }
     if (mode === "left") {
       this._cropLeftTo(budget);
-      if (marker) {
-        this._spans.set(this._spans.get().map((s) => s.move(marker.length)));
-        this._text.set(marker + this._text.get());
+      if (marker2) {
+        this._spans.set(this._spans.get().map((s) => s.move(marker2.length)));
+        this._text.set(marker2 + this._text.get());
       }
       return this;
     }
@@ -39173,7 +39173,7 @@ var RichText = class _RichText {
     const rightText = this._text.get().slice(rightStartCharIdx);
     const droppedStart = leftEndCharIdx;
     const droppedEnd = rightStartCharIdx;
-    const shift = marker.length - (droppedEnd - droppedStart);
+    const shift = marker2.length - (droppedEnd - droppedStart);
     const newSpans = [];
     for (const s of this._spans.get()) {
       if (s.end <= droppedStart) {
@@ -39189,7 +39189,7 @@ var RichText = class _RichText {
         }
       }
     }
-    this._text.set(leftText + marker + rightText);
+    this._text.set(leftText + marker2 + rightText);
     this._spans.set(newSpans);
     return this;
   }
@@ -39241,8 +39241,8 @@ var RichText = class _RichText {
   }
   // --- Token Appending ---
   appendTokens(tokens) {
-    for (const [text5, style] of tokens) {
-      this.append(text5, style);
+    for (const [text6, style] of tokens) {
+      this.append(text6, style);
     }
     return this;
   }
@@ -39255,14 +39255,14 @@ var RichText = class _RichText {
       } else if (part instanceof _RichText) {
         result.append(part);
       } else {
-        const [text5, style] = part;
-        result.append(text5, style);
+        const [text6, style] = part;
+        result.append(text6, style);
       }
     }
     return result;
   }
-  static styled(text5, style) {
-    const result = new _RichText(text5);
+  static styled(text6, style) {
+    const result = new _RichText(text6);
     result.stylize(style);
     return result;
   }
@@ -39362,16 +39362,16 @@ var RichText = class _RichText {
    * always did, and then folds into no piece at all: its range comes out empty
    * and no case handles it.
    */
-  _buildSegments({ text: text5, offsetOf }, base, options) {
-    const clamp = (offset) => Math.max(0, Math.min(offsetOf(offset), text5.length));
+  _buildSegments({ text: text6, offsetOf }, base, options) {
+    const clamp = (offset) => Math.max(0, Math.min(offsetOf(offset), text6.length));
     const inner = /* @__PURE__ */ new Set();
     for (const span of this._spans.get()) {
       inner.add(clamp(span.start));
       inner.add(clamp(span.end));
     }
     inner.delete(0);
-    inner.delete(text5.length);
-    const boundaries = [0, ...[...inner].sort((a, b) => a - b), text5.length];
+    inner.delete(text6.length);
+    const boundaries = [0, ...[...inner].sort((a, b) => a - b), text6.length];
     const pieceAt = new Map(boundaries.map((position, piece) => [position, piece]).reverse());
     const styles = boundaries.slice(0, -1).map(() => base);
     const covered = styles.map(() => false);
@@ -39384,7 +39384,7 @@ var RichText = class _RichText {
         covered[piece] = true;
       }
     }
-    const segments = styles.map((style, piece) => new Segment(text5.slice(boundaries[piece], boundaries[piece + 1]), style.isNull ? void 0 : style));
+    const segments = styles.map((style, piece) => new Segment(text6.slice(boundaries[piece], boundaries[piece + 1]), style.isNull ? void 0 : style));
     return { segments, covered };
   }
   /**
@@ -39463,20 +39463,20 @@ var RichText = class _RichText {
    */
   _fillLine(line, maxWidth, base) {
     const plain = plainOf(line);
-    const words2 = plain.split(" ");
+    const words3 = plain.split(" ");
     if (plain.endsWith(" "))
-      words2.pop();
-    const gaps = words2.length - 1;
+      words3.pop();
+    const gaps = words3.length - 1;
     const spaces = new Array(gaps).fill(1);
-    let filled2 = words2.reduce((total, word2) => total + cellLen(word2), 0) + gaps;
+    let filled2 = words3.reduce((total, word2) => total + cellLen(word2), 0) + gaps;
     for (let turn = 0; filled2 < maxWidth && gaps > 0; turn = (turn + 1) % gaps) {
       spaces[gaps - 1 - turn] += 1;
       filled2 += 1;
     }
     const cuts = [];
     let edge = 0;
-    for (let index = 0; index < words2.length; index += 1) {
-      edge += cellLen(words2[index]);
+    for (let index = 0; index < words3.length; index += 1) {
+      edge += cellLen(words3[index]);
       cuts.push(edge);
       edge += 1;
       if (index < gaps)
@@ -39485,7 +39485,7 @@ var RichText = class _RichText {
     const pieces = Segment.divide(line, cuts);
     const edgeStyle = (word2, at) => word2.filter((segment) => segment.hasText).at(at)?.style ?? base;
     const result = [];
-    for (let index = 0; index < words2.length; index += 1) {
+    for (let index = 0; index < words3.length; index += 1) {
       result.push(...pieces[index * 2]);
       if (index < gaps) {
         const before = edgeStyle(pieces[index * 2], -1);
@@ -39966,11 +39966,11 @@ function shownOn(segment, destination) {
 function segmentToString(segment, destination) {
   if (segment.isControl)
     return "";
-  const { text: text5, style } = shownOn(segment, destination);
-  if (text5.length === 0 || style === void 0)
-    return text5;
+  const { text: text6, style } = shownOn(segment, destination);
+  if (text6.length === 0 || style === void 0)
+    return text6;
   const codes = destination.colorSystem === null ? "" : style.toSgrCodes(destination.colorSystem);
-  const styled = codes.length > 0 ? `\x1B[${codes}m${text5}\x1B[0m` : text5;
+  const styled = codes.length > 0 ? `\x1B[${codes}m${text6}\x1B[0m` : text6;
   const link = destination.hyperlinks ? style.link : void 0;
   return link === void 0 ? styled : `${osc8Open(link)}${styled}${OSC8_CLOSE}`;
 }
@@ -39983,10 +39983,10 @@ function segmentsToString(segments, destination) {
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/embed.js
 init_globals();
-function setIntoLine(text5) {
-  text5.end = "";
-  text5.plain = text5.plain.replaceAll("\n", " ");
-  return text5.expandTabs();
+function setIntoLine(text6) {
+  text6.end = "";
+  text6.plain = text6.plain.replaceAll("\n", " ");
+  return text6.expandTabs();
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/effect.js
@@ -40050,13 +40050,13 @@ var Recolored = class {
       const now2 = moved[k];
       const colors = onScreen(now2, pair.reverse);
       const last2 = runs[runs.length - 1];
-      const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
-      if (last2 !== void 0 && writesAlike(last2.drawn, writes) && sameAttributes(last2.attributes, now2.attributes)) {
+      const writes2 = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
+      if (last2 !== void 0 && writesAlike(last2.drawn, writes2) && sameAttributes(last2.attributes, now2.attributes)) {
         last2.text += glyph;
         last2.cells += cellLen(glyph);
         last2.colors = colors;
       } else {
-        runs.push({ text: glyph, cells: cellLen(glyph), colors, attributes: now2.attributes, drawn: writes });
+        runs.push({ text: glyph, cells: cellLen(glyph), colors, attributes: now2.attributes, drawn: writes2 });
       }
     }
     if (runs.every((run2) => writesAlike(run2.drawn, wire) && sameAttributes(run2.attributes, attributes))) {
@@ -40125,11 +40125,11 @@ var Recolored = class {
         throw new Error(`a seam cell resolved to ${before?.name ?? "nothing"} when drawn and to nothing after an effect moved its neighbours`);
       return terminals.has(now2) ? round2 : drew;
     };
-    const writes = {
+    const writes2 = {
       color: written2(colors.color, was.color, wire.color, drawn.color, rounded.color),
       bgcolor: written2(colors.bgcolor, was.bgcolor, wire.bgcolor, drawn.bgcolor, rounded.bgcolor)
     };
-    return new Segment(segment.text, writesAlike(writes, wire) ? style : style.add(Style.fromColor(writes.color, writes.bgcolor)));
+    return new Segment(segment.text, writesAlike(writes2, wire) ? style : style.add(Style.fromColor(writes2.color, writes2.bgcolor)));
   }
   measure(options) {
     return Measurement.get(options, this.renderable);
@@ -40224,8 +40224,8 @@ function walkGlyphs(segments) {
     });
   });
 }
-function inked(text5) {
-  return text5.trim() !== "";
+function inked(text6) {
+  return text6.trim() !== "";
 }
 function walk(looked) {
   const placed2 = walkGlyphs(looked.map(({ segment }) => segment));
@@ -40279,8 +40279,8 @@ function measured(looked, walked, depth, theme24) {
   const listed = () => everything ??= list3();
   let all2;
   let shown;
-  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
-  const pairs2 = [...new Map(words2.map((pair) => [`${pair.fg.hex}/${pair.bg.hex}/${pair.terminal.fg}/${pair.terminal.bg}/${pair.reverse}`, pair])).values()];
+  const words3 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
+  const pairs2 = [...new Map(words3.map((pair) => [`${pair.fg.hex}/${pair.bg.hex}/${pair.terminal.fg}/${pair.terminal.bg}/${pair.reverse}`, pair])).values()];
   const own2 = (slot) => pairs2.flatMap((pair) => pair.terminal[slot] ? [] : [pair[slot].hex]);
   return {
     all: () => all2 ??= listed().map(({ cell: cell3 }) => cell3),
@@ -41212,13 +41212,13 @@ function showGlyphs(placed2, frame2) {
   standsApart(placed2.flat(), shown.flat());
   return shown;
 }
-function reglyphText(text5, effect, options) {
-  const { placed: placed2, cells } = placeGlyphs([new Segment(text5.plain)], options.key);
-  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame2) => rewritten(text5, placed2[0], showGlyphs(placed2, frame2)[0]));
+function reglyphText(text6, effect, options) {
+  const { placed: placed2, cells } = placeGlyphs([new Segment(text6.plain)], options.key);
+  return Animation.map(effect({ cells, asciiOnly: options.asciiOnly }), (frame2) => rewritten(text6, placed2[0], showGlyphs(placed2, frame2)[0]));
 }
-function rewritten(text5, glyphs, shown) {
+function rewritten(text6, glyphs, shown) {
   if (shown.every((s, i2) => s === glyphs[i2].glyph))
-    return text5;
+    return text6;
   const from = [0];
   const to = [0];
   glyphs.forEach(({ glyph }, i2) => {
@@ -41231,30 +41231,30 @@ function rewritten(text5, glyphs, shown) {
       i2++;
     return i2 === glyphs.length ? to[i2] : to[i2] + Math.min(offset - from[i2], shown[i2].length);
   };
-  const result = text5.blankCopy(shown.join(""));
-  for (const span of text5.spans)
+  const result = text6.blankCopy(shown.join(""));
+  for (const span of text6.spans)
     result.stylize(span.style, moved(span.start), moved(span.end));
   return result;
 }
 var BREAKS = pattern(/[\n\t]/);
 function shows(frame2, cell3) {
-  const text5 = frame2(cell3);
-  if (text5 === cell3.glyph)
-    return text5;
-  if (cellLen(text5) !== cellLen(cell3.glyph) || BREAKS.test(text5) || stripControlChars(text5) !== text5) {
-    throw new RangeError(`a glyph effect turned ${JSON.stringify(cell3.glyph)} at row ${cell3.row}, column ${cell3.col} into ${JSON.stringify(text5)}: it must be ${cellLen(cell3.glyph)} cell(s) wide, with no line break or control character`);
+  const text6 = frame2(cell3);
+  if (text6 === cell3.glyph)
+    return text6;
+  if (cellLen(text6) !== cellLen(cell3.glyph) || BREAKS.test(text6) || stripControlChars(text6) !== text6) {
+    throw new RangeError(`a glyph effect turned ${JSON.stringify(cell3.glyph)} at row ${cell3.row}, column ${cell3.col} into ${JSON.stringify(text6)}: it must be ${cellLen(cell3.glyph)} cell(s) wide, with no line break or control character`);
   }
-  return text5;
+  return text6;
 }
 function standsApart(placed2, shown) {
   const beside2 = (j) => placed2[j]?.cell === void 0 ? "" : shown[j];
-  shown.forEach((text5, i2) => {
+  shown.forEach((text6, i2) => {
     const { glyph, cell: cell3 } = placed2[i2];
-    if (cell3 === void 0 || text5 === glyph)
+    if (cell3 === void 0 || text6 === glyph)
       return;
     const [before, after] = [beside2(i2 - 1), beside2(i2 + 1)];
-    if (graphemes(before + text5 + after).length !== graphemes(before).length + graphemes(text5).length + graphemes(after).length) {
-      throw new RangeError(`a glyph effect turned ${JSON.stringify(glyph)} at row ${cell3.row}, column ${cell3.col} into ${JSON.stringify(text5)}, which joins the cell beside it into one character`);
+    if (graphemes(before + text6 + after).length !== graphemes(before).length + graphemes(text6).length + graphemes(after).length) {
+      throw new RangeError(`a glyph effect turned ${JSON.stringify(glyph)} at row ${cell3.row}, column ${cell3.col} into ${JSON.stringify(text6)}, which joins the cell beside it into one character`);
     }
   });
 }
@@ -41442,12 +41442,12 @@ var FrameSequence = class {
   constructor(frames) {
     this.beat = beat(frames.map((frame2) => frame2.seconds));
     const texts = frames.map((frame2) => setIntoLine(frame2.text.copy()));
-    const widths = texts.map((text5) => text5.cellLength);
+    const widths = texts.map((text6) => text6.cellLength);
     this.width = Math.max(...widths);
-    this._shown = texts.map((text5, i2) => {
-      text5.noWrap = true;
-      text5.overflow = "crop";
-      return text5.padRight(this.width - widths[i2]);
+    this._shown = texts.map((text6, i2) => {
+      text6.noWrap = true;
+      text6.overflow = "crop";
+      return text6.padRight(this.width - widths[i2]);
     });
   }
   /**
@@ -41692,8 +41692,8 @@ function disclosureTrigger(action2, closed, open2) {
 function disclosureTriggerCall(action2, closed, open2) {
   return `action "${action2}" ${closed} ${open2}`;
 }
-function templateLiteral(text5) {
-  return `"${escapeTemplateLiteral(text5)}"`;
+function templateLiteral(text6) {
+  return `"${escapeTemplateLiteral(text6)}"`;
 }
 function disclosureStateVar(key, def) {
   return { kind: "state", key, default: def };
@@ -41788,8 +41788,8 @@ function memoPerPalette() {
 init_globals();
 var is = (a, b) => a === b;
 function sameBy(fields2) {
-  const keys2 = Object.keys(fields2);
-  return (a, b) => keys2.every((key) => fields2[key](a[key], b[key]));
+  const keys3 = Object.keys(fields2);
+  return (a, b) => keys3.every((key) => fields2[key](a[key], b[key]));
 }
 var sameEach = (same2) => (a, b) => a.length === b.length && a.every((item, i2) => same2(item, b[i2]));
 
@@ -42157,11 +42157,11 @@ function textOn2(palette, background, drawnAt) {
   });
 }
 var POLE_TEXT = memoPerPalette();
-function legibleOn(palette, text5, background, drawnAt) {
+function legibleOn(palette, text6, background, drawnAt) {
   return LEGIBLE2(
     palette,
-    `${text5.hex}|${background.hex}|${drawnAt}`,
-    () => ensureContrast(text5, background, TEXT_MIN_CONTRAST, drawnAt)
+    `${text6.hex}|${background.hex}|${drawnAt}`,
+    () => ensureContrast(text6, background, TEXT_MIN_CONTRAST, drawnAt)
   );
 }
 var LEGIBLE2 = memoPerPalette();
@@ -42503,6 +42503,29 @@ function parseSessionInt(raw, range) {
 // src/config/loader/validate-core.ts
 init_globals();
 
+// src/config/ident.ts
+init_globals();
+var IDENTIFIER_TOKEN = "[A-Za-z_][A-Za-z0-9_]*";
+var IDENTIFIER = new RegExp(`^${IDENTIFIER_TOKEN}(?![\\s\\S])`);
+var ESCAPE = "Z";
+var MAX_CODE_POINT = 1114111;
+function escapedIdent(name) {
+  return Array.from(
+    name,
+    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
+      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    )
+  ).join("");
+}
+function unescapedIdent(spelled3) {
+  const name = spelled3.replace(
+    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
+    (escape, hex) => parseInt(hex, 16) > MAX_CODE_POINT ? escape : String.fromCodePoint(parseInt(hex, 16))
+  );
+  return escapedIdent(name) === spelled3 ? name : void 0;
+}
+
 // src/config/dsl-types.ts
 init_globals();
 var DIRECTIONS = ["vertical", "horizontal"];
@@ -42608,8 +42631,8 @@ function settingsOf(seg2) {
   };
 }
 function rangeOf(decl) {
-  const domain = decl?.domain;
-  return typeof domain === "object" && "min" in domain ? domain : void 0;
+  const domain2 = decl?.domain;
+  return typeof domain2 === "object" && "min" in domain2 ? domain2 : void 0;
 }
 function settingOrderProblems(decls, values2) {
   return Object.entries(decls).flatMap(([name, decl]) => {
@@ -42626,35 +42649,35 @@ function settingOrderProblems(decls, values2) {
   });
 }
 function inSettingDomain(decl, value) {
-  const { domain } = decl;
-  if (domain === "bool") return typeof value === "boolean";
-  if (domain === "theme") {
+  const { domain: domain2 } = decl;
+  if (domain2 === "bool") return typeof value === "boolean";
+  if (domain2 === "theme") {
     return typeof value === "string" && isPlacementThemeName(value);
   }
-  if ("min" in domain) {
-    return typeof value === "number" && Number.isInteger(value) && value >= domain.min && value <= domain.max;
+  if ("min" in domain2) {
+    return typeof value === "number" && Number.isInteger(value) && value >= domain2.min && value <= domain2.max;
   }
-  return typeof value === "string" && domain.includes(value);
+  return typeof value === "string" && domain2.includes(value);
 }
 function settingSpelling(value) {
   return String(value);
 }
 function parseSettingSpelling(decl, raw) {
-  const { domain } = decl;
-  if (typeof domain === "object" && "min" in domain) {
-    return parseSessionInt(raw, domain) ?? void 0;
+  const { domain: domain2 } = decl;
+  if (typeof domain2 === "object" && "min" in domain2) {
+    return parseSessionInt(raw, domain2) ?? void 0;
   }
-  if (domain === "bool") return parseSessionBoolean(raw) ?? void 0;
+  if (domain2 === "bool") return parseSessionBoolean(raw) ?? void 0;
   return inSettingDomain(decl, raw) ? raw : void 0;
 }
 function describeSettingDomain(decl) {
-  const { domain } = decl;
-  if (domain === "bool") return "true or false";
-  if (domain === "theme") {
+  const { domain: domain2 } = decl;
+  if (domain2 === "bool") return "true or false";
+  if (domain2 === "theme") {
     return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
   }
-  if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
-  return oneOf(domain);
+  if ("min" in domain2) return `an integer from ${domain2.min} to ${domain2.max}`;
+  return oneOf(domain2);
 }
 var JUSTIFY_MODES = [
   "left",
@@ -42815,20 +42838,20 @@ function oneOfPresent(ctx, schema, path32, raw) {
     return null;
   }
   const arms = schema.arms;
-  const keys2 = Object.keys(arms);
+  const keys3 = Object.keys(arms);
   const present = Object.keys(raw).filter((k) => k in arms);
   const unknown2 = Object.keys(raw).filter((k) => !(k in arms));
   for (const k of unknown2) {
     ctx.issues.push({
       path: `${path32}.${k}`,
-      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
+      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys3.join(", ")}`,
       line: findKeyLine(ctx.source, [...path32.split("."), k])
     });
   }
   if (present.length === 0) {
     ctx.issues.push({
       path: path32,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
+      message: `${schema.noun} must declare exactly one of: ${keys3.join(", ")}`,
       line: findKeyLine(ctx.source, path32.split("."))
     });
     return null;
@@ -42836,7 +42859,7 @@ function oneOfPresent(ctx, schema, path32, raw) {
   if (present.length > 1) {
     ctx.issues.push({
       path: path32,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
+      message: `${schema.noun} must declare exactly one of: ${keys3.join(", ")} (found: ${present.join(", ")})`,
       line: findKeyLine(ctx.source, path32.split("."))
     });
     return null;
@@ -42872,16 +42895,16 @@ function taggedUnion(ctx, schema, path32, raw) {
     });
     return null;
   }
-  const arm2 = arms[tagValue];
+  const arm3 = arms[tagValue];
   const before = ctx.issues.length;
-  const parsed2 = arm2.parse(ctx, path32, raw);
+  const parsed2 = arm3.parse(ctx, path32, raw);
   const spokenFor = new Set(ctx.issues.slice(before).map((i2) => i2.path));
   rejectUnknownKeys(
     ctx,
     path32,
     raw,
     `${tagValue} ${schema.memberNoun} key`,
-    arm2.keys,
+    arm3.keys,
     spokenFor
   );
   return parsed2;
@@ -42895,24 +42918,6 @@ function armFacets(tag, tagValue, fieldMap) {
 function lazy(thunk) {
   return (...args) => thunk()(...args);
 }
-function refine(inner, ...checks) {
-  return (ctx, path32, raw) => {
-    const value = inner(ctx, path32, raw);
-    if (value === null) return null;
-    for (const check of checks) {
-      if (check.ok(value)) continue;
-      const { field, message } = check.issue(value);
-      const at = field === "" ? path32 : `${path32}.${field}`;
-      ctx.issues.push({
-        path: at,
-        message,
-        line: findKeyLine(ctx.source, at.split("."))
-      });
-      return null;
-    }
-    return value;
-  };
-}
 function optionalStringSpec() {
   return {
     required: false,
@@ -42920,7 +42925,7 @@ function optionalStringSpec() {
     parse: (ctx, path32, field, raw) => optionalStringField(ctx, path32, raw, field)
   };
 }
-var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var ENV_NAME = IDENTIFIER;
 function optionalEnvNamesSpec() {
   return {
     required: false,
@@ -43030,18 +43035,17 @@ function optionalEnumSpec(allowed) {
     parse: (ctx, path32, field, raw) => optionalEnum(ctx, path32, raw, field, allowed)
   };
 }
-function objectJson(fieldMap, opts = { closed: true }) {
-  const specs = fieldMap;
+function objectJson(specs, opts = { closed: true }) {
   const properties = {};
-  const required = [];
+  const required2 = [];
   for (const [field, spec] of Object.entries(specs)) {
     properties[field] = spec.json;
-    if (spec.required) required.push(field);
+    if (spec.required) required2.push(field);
   }
   return {
     type: "object",
     properties,
-    ...required.length > 0 && { required },
+    ...required2.length > 0 && { required: required2 },
     ...opts.closed && { additionalProperties: false }
   };
 }
@@ -43054,19 +43058,19 @@ function withConst(base, key, value) {
     [key]: { const: value },
     ...b.properties
   };
-  const required = [key, ...b.required ?? []];
-  return { ...b, properties, required };
+  const required2 = [key, ...b.required ?? []];
+  return { ...b, properties, required: required2 };
 }
 function taggedUnionJson(schema) {
   const arms = schema.arms;
-  return { anyOf: Object.values(arms).map((arm2) => arm2.json) };
+  return { anyOf: Object.values(arms).map((arm3) => arm3.json) };
 }
 function oneOfPresentJson(schema) {
   const arms = schema.arms;
   return {
-    anyOf: Object.entries(arms).map(([key, arm2]) => ({
+    anyOf: Object.entries(arms).map(([key, arm3]) => ({
       type: "object",
-      properties: { [key]: arm2.json },
+      properties: { [key]: arm3.json },
       required: [key],
       additionalProperties: false
     }))
@@ -43216,12 +43220,12 @@ function intSetting(range, floor3, shown) {
     themeDefault: false
   };
 }
-function selection(sessionKey, spec, domain, shown, extra = {}) {
+function selection(sessionKey, spec, domain2, shown, extra = {}) {
   return {
     kind: "selection",
     sessionKey,
     spec,
-    domain,
+    domain: domain2,
     control: shown,
     themeDefault: extra.themeDefault ?? false
   };
@@ -43462,15 +43466,15 @@ var floorOf2 = (field) => valuedRow(field).floor;
 function wireKindOf(field) {
   const row = GLOBAL_FIELDS[field];
   if (row.kind === "text") return "string";
-  const { domain } = row;
-  return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
+  const { domain: domain2 } = row;
+  return domain2 === "bool" ? "boolean" : typeof domain2 === "object" && "min" in domain2 ? "number" : "string";
 }
 function optionDomainOf(key) {
   if (!Object.hasOwn(GLOBAL_FIELDS, key)) return null;
   const row = GLOBAL_FIELDS[key];
   if (row.kind === "text") return null;
-  const { domain } = row;
-  return typeof domain === "object" && "from" in domain && typeof domain.from === "string" ? domain.from : null;
+  const { domain: domain2 } = row;
+  return typeof domain2 === "object" && "from" in domain2 && typeof domain2.from === "string" ? domain2.from : null;
 }
 var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
 var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
@@ -43577,16 +43581,16 @@ function confirms(key, disarm, fires) {
 }
 function confirmStep(key, labels, fires) {
   const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
-  const arm2 = `${key}.arm`;
+  const arm3 = `${key}.arm`;
   const disarm = `${key}.disarm`;
   const armed = `(eq .${key} "${ARMED}")`;
   const confirm = confirms(key, disarm, fires);
   return {
     // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
     // value, read back here.
-    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm3}" "${labels.arm}" }}{{ end }}`,
     actions: {
-      [arm2]: { set: stateKey, to: ARMED },
+      [arm3]: { set: stateKey, to: ARMED },
       [disarm]: { set: stateKey, to: DISARMED },
       ...confirm.actions
     },
@@ -43609,27 +43613,27 @@ var PLAIN_CLICK = "left";
 function gestureName({ button, modifiers }) {
   return [...MODIFIERS.filter((m) => modifiers.has(m)), button].join("+");
 }
-function parseGesture(text5) {
-  const words2 = text5.split("+");
-  const last2 = words2.pop();
+function parseGesture(text6) {
+  const words3 = text6.split("+");
+  const last2 = words3.pop();
   const button = BUTTONS.find((b) => b === last2);
   if (button === void 0)
     return {
       kind: "failed",
-      reason: `"${text5}" is not a gesture: it ends in a button (${BUTTONS.join(", ")}), after any of ${MODIFIERS.join(", ")} joined by +`
+      reason: `"${text6}" is not a gesture: it ends in a button (${BUTTONS.join(", ")}), after any of ${MODIFIERS.join(", ")} joined by +`
     };
   const modifiers = /* @__PURE__ */ new Set();
-  for (const word2 of words2) {
+  for (const word2 of words3) {
     const modifier = MODIFIERS.find((m) => m === word2);
     if (modifier === void 0)
       return {
         kind: "failed",
-        reason: `"${text5}" is not a gesture: "${word2}" is not a modifier (${MODIFIERS.join(", ")})`
+        reason: `"${text6}" is not a gesture: "${word2}" is not a modifier (${MODIFIERS.join(", ")})`
       };
     if (modifiers.has(modifier))
       return {
         kind: "failed",
-        reason: `"${text5}" is not a gesture: it names ${modifier} twice`
+        reason: `"${text6}" is not a gesture: it names ${modifier} twice`
       };
     modifiers.add(modifier);
   }
@@ -43721,27 +43725,6 @@ function isNavigationKey(key) {
 
 // src/config/menu-keys.ts
 init_globals();
-
-// src/config/ident.ts
-init_globals();
-var ESCAPE = "Z";
-var MAX_CODE_POINT = 1114111;
-function escapedIdent(name) {
-  return Array.from(
-    name,
-    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
-      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
-      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
-    )
-  ).join("");
-}
-function unescapedIdent(spelled3) {
-  const name = spelled3.replace(
-    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
-    (escape, hex) => parseInt(hex, 16) > MAX_CODE_POINT ? escape : String.fromCodePoint(parseInt(hex, 16))
-  );
-  return escapedIdent(name) === spelled3 ? name : void 0;
-}
 
 // src/config/placement-identity.ts
 init_globals();
@@ -43995,12 +43978,12 @@ function sayWrite(key, value) {
 }
 var COPIED_LENGTH = 60;
 var ELISION = "...";
-function saidCopy(text5) {
-  const chars = [...text5];
+function saidCopy(text6) {
+  const chars = [...text6];
   const kept2 = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
-  return chars.length <= COPIED_LENGTH ? text5 : `${chars.slice(0, kept2).join("")}${ELISION}${chars.slice(-kept2).join("")}`;
+  return chars.length <= COPIED_LENGTH ? text6 : `${chars.slice(0, kept2).join("")}${ELISION}${chars.slice(-kept2).join("")}`;
 }
-var said = (words2, quoted2 = "") => ({ words: words2, quoted: quoted2 });
+var said = (words3, quoted2 = "") => ({ words: words3, quoted: quoted2 });
 var SAYS = {
   [VERB_SET_STATE]: ([, ...pairs2]) => pairs2.flatMap(
     (key, i2) => i2 % 2 === 0 ? [said(sayWrite(key, pairs2[i2 + 1]))] : []
@@ -44014,8 +43997,8 @@ var SAYS = {
       `turn ${menuOfKey(pageKey2)?.menu ?? pageKey2} ${by.startsWith("-") ? "back" : "forward"} a page`
     )
   ],
-  [VERB_COPY]: ([text5]) => {
-    const copied = saidCopy(text5);
+  [VERB_COPY]: ([text6]) => {
+    const copied = saidCopy(text6);
     return [said(`copy ${copied}`, copied)];
   },
   [VERB_OPEN_VSCODE]: ([target]) => [said(`open ${target} in vs code`, target)],
@@ -44039,7 +44022,7 @@ var SAYS = {
   [VERB_DELETE_PRESET]: ([, layer, name]) => [
     said(`delete preset ${name} from ${layer} config`)
   ],
-  [VERB_RESET_CONFIG]: ([, layer, ...keys2]) => keys2.map((key) => said(`reset ${key} in ${layer} config`)),
+  [VERB_RESET_CONFIG]: ([, layer, ...keys3]) => keys3.map((key) => said(`reset ${key} in ${layer} config`)),
   [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
     said(`edit ${op} in ${key} of ${layer} config`)
   ],
@@ -44054,7 +44037,7 @@ var SAYS = {
   ],
   [VERB_COPY_DIAGNOSTIC]: () => [said("copy diagnostic")]
 };
-var spell = (text5) => encodeURIComponent(text5).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
+var spell = (text6) => encodeURIComponent(text6).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
 function saysOf(effects) {
   const writesSession = (e) => e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE || e.verb === VERB_RING_STATE || e.verb === VERB_TURN_PAGE;
   return [
@@ -44113,16 +44096,16 @@ function parseHandlerUrl(rawUrl) {
     return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
   }
   const rest2 = rawUrl.slice(prefix.length);
-  const slash2 = rest2.indexOf("/");
-  if (slash2 === -1) {
+  const slash3 = rest2.indexOf("/");
+  if (slash3 === -1) {
     return { ok: true, verb: VERB_COPY, value: rest2 };
   }
-  const encoded = rest2.slice(0, slash2);
+  const encoded = rest2.slice(0, slash3);
   try {
     return {
       ok: true,
       verb: decodeURIComponent(encoded),
-      value: rest2.slice(slash2 + 1)
+      value: rest2.slice(slash3 + 1)
     };
   } catch {
     return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
@@ -44265,9 +44248,9 @@ var NEUTRALIZED_RANGES = [
 function isControlChar(code2) {
   return NEUTRALIZED_RANGES.some(([lo, hi]) => code2 >= lo && code2 <= hi);
 }
-function sanitizeText(text5) {
+function sanitizeText(text6) {
   let sanitized = "";
-  for (const ch of text5) {
+  for (const ch of text6) {
     sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
   }
   return sanitized.replace(/\s+/g, " ").trim();
@@ -44491,20 +44474,20 @@ function fromGround(effect, ground) {
 function paintedOn(effect, owners) {
   return (row) => confined(() => effect(row), ...owners)(row);
 }
-function noiseOffset(text5) {
+function noiseOffset(text6) {
   let hash2 = 2166136261;
-  for (let i2 = 0; i2 < text5.length; i2++) {
-    hash2 ^= text5.charCodeAt(i2);
+  for (let i2 = 0; i2 < text6.length; i2++) {
+    hash2 ^= text6.charCodeAt(i2);
     hash2 = Math.imul(hash2, 16777619) >>> 0;
   }
   return hash2 / 4294967296;
 }
 var NOISE_DEPTH = 4096;
-function closingFlash(fill, text5, begins) {
+function closingFlash(fill, text6, begins) {
   const lit = (look, { terminal }) => ({
     ...look,
     bg: terminal.bg ? look.bg : fill,
-    fg: terminal.fg ? look.fg : terminal.bg ? fill : text5
+    fg: terminal.fg ? look.fg : terminal.bg ? fill : text6
   });
   const dark = (colors) => colors;
   const holds3 = CLOSING_FLASH.reduceRight(
@@ -44970,12 +44953,12 @@ function isES6Set(thing) {
   return thing != null && Object.prototype.toString.call(thing) === "[object Set]";
 }
 function getPlainObjectKeys(object2) {
-  const keys2 = Object.keys(object2);
+  const keys3 = Object.keys(object2);
   const symbols2 = Object.getOwnPropertySymbols(object2);
   if (!symbols2.length) {
-    return keys2;
+    return keys3;
   }
-  return [...keys2, ...symbols2.filter((s) => objectPrototype.propertyIsEnumerable.call(object2, s))];
+  return [...keys3, ...symbols2.filter((s) => objectPrototype.propertyIsEnumerable.call(object2, s))];
 }
 var ownKeys = Reflect.ownKeys;
 function stringifyKey(key) {
@@ -47933,13 +47916,13 @@ var ObservableMap = class {
   }
   values() {
     const self2 = this;
-    const keys2 = this.keys();
+    const keys3 = this.keys();
     return makeIterableForMap({
       next() {
         const {
           done,
           value
-        } = keys2.next();
+        } = keys3.next();
         return {
           done,
           value: done ? void 0 : self2.get(value)
@@ -47949,13 +47932,13 @@ var ObservableMap = class {
   }
   entries() {
     const self2 = this;
-    const keys2 = this.keys();
+    const keys3 = this.keys();
     return makeIterableForMap({
       next() {
         const {
           done,
           value
-        } = keys2.next();
+        } = keys3.next();
         return {
           done,
           value: done ? void 0 : [value, self2.get(value)]
@@ -48961,13 +48944,13 @@ function eq(a, b, depth, aStack, bStack) {
       }
     }
   } else {
-    const keys2 = Object.keys(a);
-    const _length = keys2.length;
+    const keys3 = Object.keys(a);
+    const _length = keys3.length;
     if (Object.keys(b).length !== _length) {
       return false;
     }
     for (let i2 = 0; i2 < _length; i2++) {
-      const key = keys2[i2];
+      const key = keys3[i2];
       if (!(hasProp(b, key) && eq(a[key], b[key], depth - 1, aStack, bStack))) {
         return false;
       }
@@ -49053,10 +49036,10 @@ function lookOf(style, depth) {
     ...attrs.length > 0 && { attrs }
   };
 }
-function runOf({ text: text5, style }, depth) {
+function runOf({ text: text6, style }, depth) {
   const link = style === void 0 ? void 0 : linkFromStyle(style);
   return {
-    text: text5,
+    text: text6,
     ...style !== void 0 && depth !== null && lookOf(style, depth),
     ...link !== void 0 && { link }
   };
@@ -49067,9 +49050,9 @@ function runLines(segments, depth) {
     (line) => line.map((segment) => runOf(segment, depth))
   );
 }
-function segmentOf({ text: text5, fg, bg, attrs = [], link }) {
+function segmentOf({ text: text6, fg, bg, attrs = [], link }) {
   return new Segment(
-    text5,
+    text6,
     new Style({
       color: fg,
       bgcolor: bg,
@@ -49233,13 +49216,13 @@ var HANDOFF_SEVERITY = {
   glyph: "\u{1F9EA}"
 };
 var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
-function diagnosticSpan(text5, link) {
-  return { text: sanitizeText(text5), link };
+function diagnosticSpan(text6, link) {
+  return { text: sanitizeText(text6), link };
 }
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
-  const plainOf3 = (text5, severity) => {
-    const made = plainMessage(text5, severity);
+  const plainOf3 = (text6, severity) => {
+    const made = plainMessage(text6, severity);
     for (const m of made) plain.add(m);
     return made;
   };
@@ -49336,7 +49319,7 @@ function viewerRows(list3, at, sessionId2, by, geometry) {
   const body = channelRows(shown, opts, []);
   const colors = colorsOf(shown.severity);
   const style = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const button = (text5, link) => cell(text5, link === null ? style : styleWithLink(style, link));
+  const button = (text6, link) => cell(text6, link === null ? style : styleWithLink(style, link));
   const step4 = (glyph, to) => to === null ? button(" ", null) : button(
     glyph,
     viewerLink(
@@ -49489,14 +49472,14 @@ var CONFIG_FLAGS = {
   "config-only": { type: "string" }
 };
 var isConfigFlag = (name) => Object.hasOwn(CONFIG_FLAGS, name);
-function requestedConfigTarget(argument, environment, flag2 = "config") {
+function requestedConfigTarget(argument, environment2, flag2 = "config") {
   if (argument !== void 0)
     return {
       source: flag2 === "config-only" ? "argument-only" : "argument",
       path: argument
     };
-  if (environment !== void 0) {
-    return { source: "environment", path: environment };
+  if (environment2 !== void 0) {
+    return { source: "environment", path: environment2 };
   }
   return { source: "search" };
 }
@@ -49584,7 +49567,7 @@ init_globals();
 
 // src/config/root.ts
 init_globals();
-var ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var ROW_NAME_RE = IDENTIFIER;
 function positionalRowName(index) {
   return `#${index + 1}`;
 }
@@ -49817,14 +49800,14 @@ function insertNotice(cell3, misses) {
   };
   const trees = /* @__PURE__ */ new Map();
   for (const { cause, tree } of misses) {
-    const words2 = wordsOf(cause);
-    trees.set(words2, [
-      ...trees.get(words2) ?? [],
+    const words3 = wordsOf(cause);
+    trees.set(words3, [
+      ...trees.get(words3) ?? [],
       ...tree === null ? [] : [tree]
     ]);
   }
   const sentences = [...trees].map(
-    ([words2, from]) => `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${words2}${from.length === 0 ? "" : ` (in ${from.join(", ")})`}`
+    ([words3, from]) => `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${words3}${from.length === 0 ? "" : ` (in ${from.join(", ")})`}`
   );
   return advisory(
     [
@@ -49914,30 +49897,30 @@ function unknownOptionDomain(from, perConfigDomains) {
 }
 
 // src/config/setting-control.ts
-var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function describeControlDomain(domain, perConfigDomains, listing = oneOf) {
-  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if (!("min" in domain)) {
+var optionsOf = (domain2) => "from" in domain2 ? domain2.from : domain2.themes;
+function describeControlDomain(domain2, perConfigDomains, listing = oneOf) {
+  if (domain2 === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if (!("min" in domain2)) {
     const { members } = resolveOptionDomain(
-      optionsOf(domain),
+      optionsOf(domain2),
       perConfigDomains
     );
     return listing(members);
   }
-  return `an integer from ${domain.min} to ${domain.max}`;
+  return `an integer from ${domain2.min} to ${domain2.max}`;
 }
 function controlDeclOf(decl) {
   return { label: decl.label, domain: controlDomainOf(decl.domain) };
 }
-function controlDomainOf(domain) {
-  if (domain === "theme") return { themes: PLACEMENT_THEMES };
-  if (domain === "bool") return domain;
-  return "min" in domain ? domain : { from: domain };
+function controlDomainOf(domain2) {
+  if (domain2 === "theme") return { themes: PLACEMENT_THEMES };
+  if (domain2 === "bool") return domain2;
+  return "min" in domain2 ? domain2 : { from: domain2 };
 }
 function settingControl(decl, key, readVar2, name, listKey) {
   const label2 = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
+  const { domain: domain2 } = decl;
+  if (domain2 === "bool") {
     return {
       kind: "inline",
       template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
@@ -49945,14 +49928,14 @@ function settingControl(decl, key, readVar2, name, listKey) {
       variables: {}
     };
   }
-  if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
+  if ("from" in domain2) {
+    return optionPicker(key, name, listKey, domain2.from, (n) => ({
       template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
       rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
     }));
   }
-  if ("themes" in domain) {
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+  if ("themes" in domain2) {
+    return optionPicker(key, name, listKey, domain2.themes, (n) => ({
       template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
       rows: [
         `{{ swatches "${n.apply}" "${n.page}" }}`,
@@ -49962,16 +49945,16 @@ function settingControl(decl, key, readVar2, name, listKey) {
   }
   const step4 = (by) => ({
     set: key,
-    min: domain.min,
-    max: domain.max,
+    min: domain2.min,
+    max: domain2.max,
     by
   });
   return {
     kind: "inline",
     template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
     actions: {
-      [`${name}.down`]: step4(-domain.step),
-      [`${name}.up`]: step4(domain.step)
+      [`${name}.down`]: step4(-domain2.step),
+      [`${name}.up`]: step4(domain2.step)
     },
     variables: {}
   };
@@ -50283,6 +50266,32 @@ init_globals();
 
 // src/config/loader/segments.ts
 init_globals();
+
+// src/click/wire-value.ts
+init_globals();
+var clickDelimiters = [
+  { chars: "/", rule: "slash-free" },
+  { chars: "\r\n", rule: "newline-free" }
+];
+function wireShape(delimiters) {
+  const excluded = delimiters.map(({ chars }) => JSON.stringify(chars).slice(1, -1)).join("");
+  const pattern2 = `^[^${excluded}]+(?![\\s\\S])`;
+  const expression = new RegExp(pattern2);
+  const conditions = ["non-empty", ...delimiters.map(({ rule: rule2 }) => rule2)];
+  const rule = "must be " + conditions.slice(0, -1).join(", ") + ", and " + conditions.at(-1);
+  return {
+    json: { type: "string", minLength: 1, pattern: pattern2 },
+    rule,
+    parse(raw) {
+      return typeof raw === "string" && expression.test(raw) ? raw : null;
+    }
+  };
+}
+var clickValue = wireShape(clickDelimiters);
+var layoutComponent = wireShape([
+  ...clickDelimiters,
+  { chars: ":", rule: "colon-free" }
+]);
 
 // src/config/segment-groups.ts
 init_globals();
@@ -50780,11 +50789,11 @@ var LITERAL_FIELDS = {
   default: optionalStringSpec()
 };
 function inputPathSpec() {
-  const text5 = requireStringSpec();
+  const text6 = requireStringSpec();
   return {
-    ...text5,
+    ...text6,
     parse: (ctx, path32, field, raw) => {
-      const value = text5.parse(ctx, path32, field, raw);
+      const value = text6.parse(ctx, path32, field, raw);
       const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
       return instead === void 0 ? value : reject(
         ctx,
@@ -50883,7 +50892,7 @@ function variablesMapJson() {
 
 // src/config/loader/settings.ts
 init_globals();
-var SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var SETTING_NAME = IDENTIFIER;
 var SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
 var SETTING_VALUE_JSON = {
   anyOf: [{ type: "boolean" }, { type: "string" }, { type: "integer" }]
@@ -50899,7 +50908,7 @@ var SETTING_DECL_JSON = {
         { const: "bool" },
         {
           type: "array",
-          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
+          items: clickValue.json,
           minItems: 1,
           uniqueItems: true
         },
@@ -50932,32 +50941,30 @@ function issue(ctx, path32, message) {
 function parseDomain(ctx, path32, raw) {
   if (raw === "bool") return "bool";
   if (Array.isArray(raw)) {
-    const words2 = raw.filter((m) => typeof m === "string");
-    if (raw.length === 0 || words2.length !== raw.length) {
+    const words3 = raw.filter((m) => typeof m === "string");
+    if (raw.length === 0 || words3.length !== raw.length) {
       return issue(
         ctx,
         path32,
         `a list domain must be a non-empty list of words, got ${JSON.stringify(raw)}`
       );
     }
-    if (new Set(words2).size !== words2.length) {
+    if (new Set(words3).size !== words3.length) {
       return issue(
         ctx,
         path32,
         `a list domain names each word once, got ${JSON.stringify(raw)}`
       );
     }
-    const unwritable2 = words2.filter(
-      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w)
-    );
+    const unwritable2 = words3.filter((w) => clickValue.parse(w) === null);
     if (unwritable2.length > 0) {
       return issue(
         ctx,
         path32,
-        `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
+        `a list domain's words ${clickValue.rule} \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
       );
     }
-    return words2;
+    return words3;
   }
   if (isPlainObject(raw)) {
     const { min: min3, max: max3, step: step4 = 1, atLeast } = raw;
@@ -51008,9 +51015,9 @@ function parseSettingDecl(ctx, path32, raw) {
       `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue(label2)}`
     );
   }
-  const domain = parseDomain(ctx, `${path32}.domain`, raw.domain);
-  if (!labelOk || domain === void 0) return void 0;
-  const decl = { label: label2, domain, default: raw.default };
+  const domain2 = parseDomain(ctx, `${path32}.domain`, raw.domain);
+  if (!labelOk || domain2 === void 0) return void 0;
+  const decl = { label: label2, domain: domain2, default: raw.default };
   if (!isSettingValue(raw.default) || !inSettingDomain(decl, raw.default)) {
     return issue(
       ctx,
@@ -51084,19 +51091,18 @@ function placementIdSpec() {
   return {
     required: false,
     json: {
-      type: "string",
-      minLength: 1,
-      pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`
+      ...layoutComponent.json,
+      not: { pattern: `^(?:${RESERVED_ID_JSON})` }
     },
     parse: (ctx, path32, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v) && !isReservedName(v))
+      if (typeof v === "string" && layoutComponent.parse(v) !== null && !isReservedName(v))
         return v;
       return issue(
         ctx,
         `${path32}.${field}`,
-        `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`
+        `a placement "id" ${layoutComponent.rule}, outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`
       );
     }
   };
@@ -51153,6 +51159,14 @@ function validateSegments(ctx, raw, inherited) {
   }
   const out = {};
   for (const [name, authored] of Object.entries(raw)) {
+    if (layoutComponent.parse(name) === null) {
+      ctx.issues.push({
+        path: `segments.${name}`,
+        message: `segment name ${JSON.stringify(name)} ${layoutComponent.rule} in a layout operation`,
+        line: findKeyLine(ctx.source, ["segments", name])
+      });
+      continue;
+    }
     const decl = isPlainObject(authored) && Object.hasOwn(authored, "missingData") ? Object.fromEntries(
       Object.entries(authored).filter(([key]) => key !== "missingData")
     ) : authored;
@@ -51988,36 +52002,36 @@ var validateRoot = (ctx, path32, raw) => {
     return EMPTY_VERTICAL_NODE;
   }
   if (hasSeg) {
-    const arm2 = record(ctx, SEG_ARM_SCHEMA, path32, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    const arm3 = record(ctx, SEG_ARM_SCHEMA, path32, raw);
+    if (arm3 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "segment",
-      name: arm2.seg,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.id !== void 0 && { id: arm2.id },
-      ...arm2.settings !== void 0 && { settings: arm2.settings }
+      name: arm3.seg,
+      ...arm3.when !== void 0 && { when: arm3.when },
+      ...arm3.id !== void 0 && { id: arm3.id },
+      ...arm3.settings !== void 0 && { settings: arm3.settings }
     };
   }
   if (hasH) {
-    const arm2 = record(ctx, H_ARM_SCHEMA, path32, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    const arm3 = record(ctx, H_ARM_SCHEMA, path32, raw);
+    if (arm3 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "container",
       direction: "horizontal",
-      children: arm2.h,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+      children: arm3.h,
+      ...arm3.when !== void 0 && { when: arm3.when },
+      ...arm3.distribution !== void 0 && { distribution: arm3.distribution }
     };
   }
   if (hasV) {
-    const arm2 = record(ctx, V_ARM_SCHEMA, path32, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    const arm3 = record(ctx, V_ARM_SCHEMA, path32, raw);
+    if (arm3 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "container",
       direction: "vertical",
-      children: arm2.v,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+      children: arm3.v,
+      ...arm3.when !== void 0 && { when: arm3.when },
+      ...arm3.distribution !== void 0 && { distribution: arm3.distribution }
     };
   }
   ctx.issues.push({
@@ -52095,10 +52109,10 @@ function validateInsert(ctx, raw, file) {
   }
   return raw.flatMap((entry, i2) => {
     const path32 = `insert.${i2}`;
-    const arm2 = record(ctx, INSERT_SCHEMA, path32, entry);
-    if (arm2 === null) return [];
+    const arm3 = record(ctx, INSERT_SCHEMA, path32, entry);
+    if (arm3 === null) return [];
     const sides = ["before", "after"].filter(
-      (side) => arm2[side] !== void 0
+      (side) => arm3[side] !== void 0
     );
     if (sides.length !== 1) {
       ctx.issues.push({
@@ -52108,16 +52122,16 @@ function validateInsert(ctx, raw, file) {
       });
       return [];
     }
-    if (isReservedName(arm2.seg)) {
+    if (isReservedName(arm3.seg)) {
       ctx.issues.push({
         path: `${path32}.seg`,
-        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
+        message: `an insert cell places a segment, and "${arm3.seg}" is the bar's own chrome \u2014 name a segment instead`,
         line: findKeyLine(ctx.source, [...path32.split("."), "seg"])
       });
       return [];
     }
     const relation = sides[0];
-    const anchor = arm2[relation];
+    const anchor = arm3[relation];
     if (isReservedName(anchor)) {
       ctx.issues.push({
         path: `${path32}.${relation}`,
@@ -52128,8 +52142,8 @@ function validateInsert(ctx, raw, file) {
     }
     return [
       {
-        seg: arm2.seg,
-        ...arm2.id !== void 0 && { id: arm2.id },
+        seg: arm3.seg,
+        ...arm3.id !== void 0 && { id: arm3.id },
         anchor,
         relation,
         by: { file, entry: path32 }
@@ -52158,14 +52172,14 @@ function groupNameSpec() {
 function groupKeySpec() {
   return {
     required: false,
-    json: { type: "string", minLength: 1 },
+    json: clickValue.json,
     parse: (ctx, path32, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      if (typeof v !== "string" || v === "" || v.includes("/")) {
+      if (typeof v !== "string" || clickValue.parse(v) === null) {
         ctx.issues.push({
           path: `${path32}.${field}`,
-          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
+          message: `a group "key" ${clickValue.rule} (a SessionState key), got ${describeValue(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
         return void 0;
@@ -52793,10 +52807,10 @@ var Lexer = class {
   readIdentifier(start) {
     const startOffset = this.offset;
     while (isIdentPart(this.src[this.offset] ?? "")) this.advanceBy(1);
-    const text5 = this.src.slice(startOffset, this.offset);
-    const kw = KEYWORDS.get(text5);
-    if (kw) return this.makeToken(kw, text5, start);
-    return this.makeToken("Identifier", text5, start);
+    const text6 = this.src.slice(startOffset, this.offset);
+    const kw = KEYWORDS.get(text6);
+    if (kw) return this.makeToken(kw, text6, start);
+    return this.makeToken("Identifier", text6, start);
   }
   skipActionSpaces() {
     while (this.offset < this.src.length) {
@@ -53357,8 +53371,8 @@ function splitVariableIdents(value) {
   return [value.slice(0, dotIdx), ...value.slice(dotIdx + 1).split(".")];
 }
 function numberFromToken(t2) {
-  const text5 = t2.value;
-  const cleaned = text5.replace(/_/g, "");
+  const text6 = t2.value;
+  const cleaned = text6.replace(/_/g, "");
   const isComplex = cleaned.toLowerCase().endsWith("i");
   const body = isComplex ? cleaned.slice(0, -1) : cleaned;
   const isFloat = !isComplex && (body.includes(".") || !body.startsWith("0x") && !body.startsWith("0X") && /[eE]/.test(body) || (body.startsWith("0x") || body.startsWith("0X")) && /[pP]/.test(body));
@@ -53366,7 +53380,7 @@ function numberFromToken(t2) {
   const base = {
     type: "Number",
     pos: t2.pos,
-    text: text5,
+    text: text6,
     isInt,
     isUint: false,
     isFloat,
@@ -53405,9 +53419,9 @@ function runeNumberFromToken(t2, source) {
     intValue: BigInt(inner)
   };
 }
-function parseIntegerLiteral(text5) {
+function parseIntegerLiteral(text6) {
   let sign = 1n;
-  let body = text5;
+  let body = text6;
   if (body.startsWith("+")) body = body.slice(1);
   else if (body.startsWith("-")) {
     sign = -1n;
@@ -53415,8 +53429,8 @@ function parseIntegerLiteral(text5) {
   }
   return sign * BigInt(body);
 }
-function parseFloatLiteral(text5) {
-  return Number(text5);
+function parseFloatLiteral(text6) {
+  return Number(text6);
 }
 function decodeStringLiteral(raw, pos, source) {
   if (raw.startsWith("`")) return raw.slice(1, -1);
@@ -53654,9 +53668,9 @@ function eagerBuiltins(toString3, isT) {
       arity: { kind: "exact" }
     },
     index: {
-      fn: (collection, ...keys2) => {
+      fn: (collection, ...keys3) => {
         let cur = collection;
-        for (const k of keys2) cur = goIndex(cur, k);
+        for (const k of keys3) cur = goIndex(cur, k);
         return cur;
       },
       argTypes: ["collection", "index-key"],
@@ -55985,10 +55999,10 @@ function dig(...args) {
   if (args.length < 3) throw bodyTypeMismatch("dig", 0, "at least 3 arguments (...keys, default, dict)", `${args.length} argument${args.length === 1 ? "" : "s"}`);
   const dict2 = args[args.length - 1];
   const def = args[args.length - 2];
-  const keys2 = args.slice(0, -2);
+  const keys3 = args.slice(0, -2);
   if (!isPlainDict(dict2)) throw bodyTypeMismatch("dig", args.length - 1, "dict", describeKind(dict2));
-  for (let i2 = 0; i2 < keys2.length; i2++) if (typeof keys2[i2] !== "string") throw bodyTypeMismatch("dig", i2, "string", describeKind(keys2[i2]));
-  return digFromDict(dict2, def, keys2, args.length);
+  for (let i2 = 0; i2 < keys3.length; i2++) if (typeof keys3[i2] !== "string") throw bodyTypeMismatch("dig", i2, "string", describeKind(keys3[i2]));
+  return digFromDict(dict2, def, keys3, args.length);
 }
 function digFromDict(d, def, ks, argCount) {
   const k = ks[0];
@@ -56238,15 +56252,15 @@ function untilStep(start, stop2, step4) {
   return v;
 }
 function seq(...params) {
-  let increment = 1;
+  let increment2 = 1;
   switch (params.length) {
     case 0:
       return "";
     case 1: {
       const start = 1;
       const end = params[0];
-      if (end < start) increment = -1;
-      return untilStep(start, end + increment, increment).join(" ");
+      if (end < start) increment2 = -1;
+      return untilStep(start, end + increment2, increment2).join(" ");
     }
     case 2: {
       const start = params[0];
@@ -56259,10 +56273,10 @@ function seq(...params) {
       const step4 = params[1];
       const end = params[2];
       if (end < start) {
-        increment = -1;
+        increment2 = -1;
         if (step4 > 0) return "";
       }
-      return untilStep(start, end + increment, step4).join(" ");
+      return untilStep(start, end + increment2, step4).join(" ");
     }
     default:
       return "";
@@ -57162,14 +57176,14 @@ function checkMenuDecls(ctx, out) {
       }
     }
   }
-  const keys2 = [];
+  const keys3 = [];
   for (const [segName, { template }] of Object.entries(segments)) {
     if (template === void 0 || !segmentReferencesMenu(template)) continue;
     const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
       if (call.kind === "ok" && call.options.key !== void 0)
-        keys2.push({
+        keys3.push({
           path: `segments.${segName}.template`,
           key: call.options.key
         });
@@ -57183,7 +57197,7 @@ function checkMenuDecls(ctx, out) {
       }
     }
   }
-  return keys2;
+  return keys3;
 }
 function identityIssue(apply2) {
   if (apply2 === "") {
@@ -57281,23 +57295,6 @@ function layerRoleOf(raw) {
 }
 
 // src/config/action.ts
-var ACTION_KEYS = [
-  "set",
-  "persist",
-  "copy",
-  "open",
-  "reset",
-  "undo",
-  "redo",
-  "back",
-  "rewind",
-  "save",
-  "preset",
-  "themeDefault",
-  "slash",
-  "run",
-  "do"
-];
 var LAYER_CHOICES = {
   persist: LAYER_ROLES,
   reset: LAYER_ROLES,
@@ -57305,7 +57302,7 @@ var LAYER_CHOICES = {
   themeDefault: LAYER_ROLES,
   save: [...LAYER_ROLES, "ask"]
 };
-var defaultLayer = (choice) => choice ?? DEFAULT_WRITE_LAYER;
+var defaultLayer = (choice2) => choice2 ?? DEFAULT_WRITE_LAYER;
 function resolveActionLayer(action2) {
   if ("save" in action2) return { ...action2, layer: defaultLayer(action2.layer) };
   if ("persist" in action2 || "reset" in action2 || "preset" in action2 || "themeDefault" in action2)
@@ -57479,12 +57476,12 @@ function* templateBlocks(template) {
     open2 = template.indexOf("{{", i2 + 2);
   }
 }
-var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
+var PATH = `${IDENTIFIER_TOKEN}(?:\\.${IDENTIFIER_TOKEN})*`;
 var OPERAND_RE = new RegExp(
   `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
 );
-function operandAt(text5, dot, root) {
-  const m = OPERAND_RE.exec(text5.trimStart());
+function operandAt(text6, dot, root) {
+  const m = OPERAND_RE.exec(text6.trimStart());
   if (m === null) return null;
   const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
   if (base === null) return null;
@@ -57565,8 +57562,8 @@ function callGraph(template, helpers) {
 }
 var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
 function* dotRefs({ code: code2, dot, root }) {
-  const text5 = code2.replace(STRING_LITERAL_RE, "");
-  for (const r of [...text5.matchAll(REF_RE)]) {
+  const text6 = code2.replace(STRING_LITERAL_RE, "");
+  for (const r of [...text6.matchAll(REF_RE)]) {
     const base = r[1] === "$" ? root : dot;
     if (base !== null) yield `${base}${r[2]}`;
   }
@@ -57632,7 +57629,7 @@ function bindsComputedAction(template, helpers) {
   }
   return false;
 }
-var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
+var BARE_NAME_RE = new RegExp(`(?<![\\w.$])${IDENTIFIER_TOKEN}`, "g");
 function templateFunctions(template, helpers) {
   const called2 = /* @__PURE__ */ new Set();
   for (const { code: code2 } of callGraph(template, helpers)) {
@@ -58251,7 +58248,7 @@ var menuControl = (name) => {
 var CONTROL_BY_NAME = perSetting(menuControl);
 var CONTROLS = Object.values(CONTROL_BY_NAME);
 var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
-var markedDisplay = (place) => (text5) => `(print ${templateLiteral(text5)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
+var markedDisplay = (place) => (text6) => `(print ${templateLiteral(text6)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
   controlsUnder(place)
 )}))`;
 var nodesForControl = (name) => {
@@ -58753,13 +58750,13 @@ var ColorSpecError = class extends Error {
   }
 };
 function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text5 } = active2;
+  const { palette, tint, text: text6 } = active2;
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const filled2 = bgSpec !== NO_FILL;
   const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
   active2.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text5 : textOn2(palette, ground, drawnAt);
+  const chosen = (ground) => ground.hex === tint.hex ? text6 : textOn2(palette, ground, drawnAt);
   const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
   return new Style({
     ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
@@ -58973,10 +58970,10 @@ function labelChrome(child, decl, ctx, configure) {
     )
   };
 }
-function labelSegment(ctx, key, child, decl, text5) {
+function labelSegment(ctx, key, child, decl, text6) {
   const name = `${LABEL_NS}${key}:${child.name}`;
   ctx.artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(text5)}" }}`,
+    template: `{{ "${escapeTemplateLiteral(text6)}" }}`,
     ...decl.palette !== void 0 && { palette: decl.palette }
   };
   return name;
@@ -59282,39 +59279,6 @@ function issue2(ctx, path32, message) {
     line: findKeyLine(ctx.source, path32.split("."))
   });
 }
-function validateActionDecl(ctx, path32, raw, home) {
-  if (!isPlainObject(raw)) {
-    issue2(
-      ctx,
-      path32,
-      `${path32} must be an action object, got ${describeType(raw)}`
-    );
-    return null;
-  }
-  if ("persistWhen" in raw) {
-    issue2(
-      ctx,
-      path32,
-      `${path32}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
-    );
-    return null;
-  }
-  const present = ACTION_KEYS.filter((k) => k in raw);
-  if (present.length !== 1) {
-    issue2(
-      ctx,
-      path32,
-      `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
-    );
-    return null;
-  }
-  const key = present[0];
-  const { layer, on: rawOn, ...rest2 } = raw;
-  const on2 = rawOn === void 0 ? {} : validateGestures(ctx, path32, rawOn);
-  const parsed2 = armParsed(ctx, path32, key, layer, rest2, home);
-  if (on2 === null || parsed2 === null) return null;
-  return Object.keys(on2).length === 0 ? parsed2 : { ...parsed2, on: on2 };
-}
 function validateGestures(ctx, path32, raw) {
   if (!isPlainObject(raw)) {
     issue2(
@@ -59356,657 +59320,401 @@ function validateGestures(ctx, path32, raw) {
   }
   return valid ? out : null;
 }
-function armParsed(ctx, path32, key, layer, rest2, home) {
-  const layers = LAYER_CHOICES[key];
-  if (layer === void 0) return actionArms(home)[key](ctx, path32, rest2);
-  if (layers === void 0) {
-    issue2(
-      ctx,
-      `${path32}.layer`,
-      `a ${key} action writes no config, so it names no layer`
-    );
-    return null;
-  }
-  if (!layers.includes(layer)) {
-    issue2(
-      ctx,
-      `${path32}.layer`,
-      `layer must be one of ${layers.join(", ")}, got ${describeValue(layer)}`
-    );
-    return null;
-  }
-  const parsed2 = actionArms(home)[key](ctx, path32, rest2);
-  return parsed2 === null ? null : { ...parsed2, layer };
-}
 function actionHomeOf(filePath2) {
   if (filePath2 === "<default>") return { dir: null };
   return import_node_path4.default.isAbsolute(filePath2) ? { dir: import_node_path4.default.dirname(filePath2) } : { text: filePath2 };
 }
-var actionArms = (home) => ({
-  set: (ctx, path32, raw) => valueSourceAction(ctx, path32, raw, "set", SET_ARMS),
-  persist: (ctx, path32, raw) => valueSourceAction(ctx, path32, raw, "persist", PERSIST_ARMS),
-  copy: templateArm("copy"),
-  open: templateArm("open"),
-  reset: resetArm,
-  undo: markerArm("undo"),
-  redo: markerArm("redo"),
-  back: markerArm("back"),
-  rewind: markerArm("rewind"),
-  save: markerArm("save"),
-  preset: presetArm,
-  themeDefault: themeDefaultArm,
-  slash: slashArm,
-  run: runArm(home),
-  do: doArm
-});
-function templateArm(key) {
-  return (ctx, path32, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (k !== key)
-        issue2(
-          ctx,
-          `${path32}.${k}`,
-          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
-        );
-    }
-    const tmpl = requireString(ctx, path32, raw, key);
-    return tmpl === null ? null : { [key]: tmpl };
-  };
-}
-function resetArm(ctx, path32, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "reset")
-      issue2(
-        ctx,
-        `${path32}.${k}`,
-        `Unknown key "${k}" on a reset action. Expected only: reset`
-      );
-  }
-  const key = slashFreeString(
-    ctx,
-    path32,
-    "reset",
-    raw,
-    `reset key must be non-empty (the config globals field to clear)`,
-    (v) => `reset key "${v}" contains "/" \u2014 keys must be slash-free`
-  );
-  return key === null ? null : { reset: key };
-}
-var MARKER_SUBJECT = {
-  undo: "it steps the session's settings history",
-  redo: "it steps the session's settings history",
-  back: "it steps the session's navigation history",
-  rewind: "it steps the session's settings history back to where edit mode opened",
-  save: "it saves the session's unsaved settings"
-};
-function markerArm(key) {
-  return (ctx, path32, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (k !== key)
-        issue2(
-          ctx,
-          `${path32}.${k}`,
-          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
-        );
-    }
-    if (raw[key] !== true) {
-      issue2(
-        ctx,
-        `${path32}.${key}`,
-        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`
-      );
-      return null;
-    }
-    return { [key]: true };
-  };
-}
-function presetArm(ctx, path32, raw) {
-  const verb = raw.preset;
-  const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
-  for (const k of Object.keys(raw)) {
-    if (!allowed.includes(k))
-      issue2(
-        ctx,
-        `${path32}.${k}`,
-        `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
-      );
-  }
-  if (verb !== "save" && verb !== "delete") {
-    issue2(
-      ctx,
-      `${path32}.preset`,
-      `preset must be "save" or "delete", got ${describeValue(verb)}`
-    );
-    return null;
-  }
-  if (verb === "save") return { preset: "save" };
-  const name = requireString(ctx, path32, raw, "name");
-  return name === null ? null : { preset: "delete", name };
-}
-function themeDefaultArm(ctx, path32, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "themeDefault")
-      issue2(
-        ctx,
-        `${path32}.${k}`,
-        `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
-      );
-  }
-  if (raw.themeDefault !== "save") {
-    issue2(
-      ctx,
-      `${path32}.themeDefault`,
-      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`
-    );
-    return null;
-  }
-  return { themeDefault: "save" };
-}
-function slashArm(ctx, path32, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "slash")
-      issue2(
-        ctx,
-        `${path32}.${k}`,
-        `Unknown key "${k}" on a slash action. Expected only: slash`
-      );
-  }
-  const parsed2 = parseSlashLine(raw.slash);
-  if (parsed2.kind === "refused") {
-    issue2(ctx, `${path32}.slash`, parsed2.reason);
-    return null;
-  }
-  return { slash: parsed2.line };
-}
-var RUN_KEYS = ["run", "env", "refreshes"];
-function runArm(home) {
-  return (ctx, path32, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (!RUN_KEYS.includes(k))
-        issue2(
-          ctx,
-          `${path32}.${k}`,
-          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
-        );
-    }
-    const before = ctx.issues.length;
-    const run2 = raw.run;
-    if (!Array.isArray(run2) || run2.length === 0 || run2.some((item) => typeof item !== "string") || run2[0] === "") {
-      issue2(
-        ctx,
-        `${path32}.run`,
-        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run2)}`
-      );
-    }
-    const env2 = raw.env ?? {};
-    if (!isPlainObject(env2) || Object.entries(env2).some(
-      ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
-    )) {
-      issue2(
-        ctx,
-        `${path32}.env`,
-        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env2)}`
-      );
-    }
-    const refreshes = raw.refreshes ?? [];
-    if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
-      issue2(
-        ctx,
-        `${path32}.refreshes`,
-        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`
-      );
-    }
-    if (!("dir" in home)) {
-      issue2(
-        ctx,
-        `${path32}.run`,
-        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
-      );
-    }
-    if (ctx.issues.length > before || !("dir" in home)) return null;
-    return {
-      run: run2,
-      env: env2,
-      refreshes,
-      cwd: home.dir
-    };
-  };
-}
-var RUN_ARM_JSON = {
-  type: "object",
-  properties: {
-    run: { type: "array", items: { type: "string" }, minItems: 1 },
-    env: {
-      type: "object",
-      propertyNames: { pattern: ENV_NAME.source },
-      additionalProperties: { type: "string" }
-    },
-    refreshes: { type: "array", items: { type: "string", minLength: 1 } }
-  },
-  required: ["run"],
-  additionalProperties: false
-};
-function doArm(ctx, path32, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "do")
-      issue2(
-        ctx,
-        `${path32}.${k}`,
-        `Unknown key "${k}" on a do action. Expected only: do`
-      );
-  }
-  const members = raw.do;
-  if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
-    issue2(
-      ctx,
-      `${path32}.do`,
-      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`
-    );
-    return null;
-  }
-  return { do: members };
-}
-function slashFreeString(ctx, path32, field, raw, emptyMessage, slashMessage) {
-  const v = requireString(ctx, path32, raw, field);
-  if (v === null) return null;
-  const at = `${path32}.${field}`;
-  if (v === "") {
-    issue2(ctx, at, emptyMessage);
-    return null;
-  }
-  if (v.includes("/")) {
-    issue2(ctx, at, slashMessage(v));
-    return null;
-  }
-  return v;
-}
-var DISCRIMINATOR_NOUN = {
-  set: "the SessionState key to write",
-  persist: "the config globals field to write"
-};
-function validateDiscriminatorKey(ctx, path32, raw, discriminator) {
-  const noun = DISCRIMINATOR_NOUN[discriminator];
-  const value = slashFreeString(
-    ctx,
-    path32,
-    discriminator,
-    raw,
-    `${discriminator} key must be non-empty (${noun})`,
-    (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
-  );
-  return value === null ? null : { [discriminator]: value };
-}
-function wireName(discriminator) {
-  return discriminator === "set" ? "set-state" : "set-config";
-}
-var TO_FIELDS_SET = {
-  to: setLiteralSpec("set")
-};
-var TO_FIELDS_PERSIST = {
-  to: setLiteralSpec("persist")
-};
-var FROM_FIELDS_SET = {
-  from: fromSpec("set")
-};
-var FROM_FIELDS_PERSIST = {
-  from: fromSpec("persist")
-};
-var BOUNDED_FIELDS = {
-  min: requireIntSpec(),
-  max: requireIntSpec(),
-  by: requireIntSpec()
-};
-var INT_FIELDS = { int: intMarkerSpec() };
-var CYCLE_FIELDS_SET = {
-  cycle: cycleSpec("set")
-};
-var CYCLE_FIELDS_PERSIST = {
-  cycle: cycleSpec("persist")
-};
-var REMOVE_SEGMENT_FIELDS = {
-  removeSegment: layoutNameSpec("removeSegment")
-};
-var INSERT_SEGMENT_FIELDS = {
-  insertSegment: layoutNameSpec("insertSegment"),
-  anchor: layoutNameSpec("anchor"),
-  relation: relationSpec()
-};
-var INSERT_SEGMENT_FROM_FIELDS = {
-  insertSegmentFrom: fromSpec("persist"),
-  anchor: layoutNameSpec("anchor"),
-  relation: relationSpec()
-};
-var minLessThanMax = {
-  ok: (v) => v.min < v.max,
-  issue: (v) => ({
-    field: "min",
-    message: `min (${v.min}) must be less than max (${v.max})`
-  })
-};
-var byNonZero = {
-  ok: (v) => v.by !== 0,
-  issue: () => ({
-    field: "by",
-    message: `by must be a non-zero integer (the per-click increment; negative steps down)`
-  })
-};
-function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
-  const fullKeys = Object.keys(fieldMap);
-  const detect = detectKeys ?? fullKeys;
-  const keys2 = [discriminator];
-  const inner = (ctx, path32, raw) => fields(ctx, fieldMap, path32, raw);
-  const source = objectJson(fieldMap);
-  return {
-    detect,
-    allowed: [...keys2, ...fullKeys],
-    label: fullKeys.join("/"),
-    json: {
-      type: "object",
-      properties: {
-        ...Object.fromEntries(keys2.map((k) => [k, { type: "string" }])),
-        ...source.properties
-      },
-      required: [...keys2, ...source.required ?? []],
-      additionalProperties: false
-    },
-    parse: checks.length ? refine(inner, ...checks) : inner
-  };
-}
-var SET_ARMS = [
-  valueSourceArm("set", TO_FIELDS_SET),
-  valueSourceArm("set", FROM_FIELDS_SET),
-  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
-  valueSourceArm("set", INT_FIELDS),
-  valueSourceArm("set", CYCLE_FIELDS_SET)
-];
-var PERSIST_ARMS = [
-  valueSourceArm("persist", TO_FIELDS_PERSIST),
-  valueSourceArm("persist", FROM_FIELDS_PERSIST),
-  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
-  valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
-  valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
-  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
-  // their own discriminating field — see valueSourceArm's own comment. They
-  // share "anchor"/"relation" (same position shape, different segment-name
-  // source), so dispatching on the full field set would make EITHER arm
-  // spuriously match an action declaring the other.
-  valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
-  valueSourceArm(
-    "persist",
-    INSERT_SEGMENT_FROM_FIELDS,
-    [],
-    ["insertSegmentFrom"]
-  )
-];
-function valueSourceClauses(discriminator) {
-  const clauses = [
-    `"to" (a literal value)`,
-    `"from" (an option domain \u2014 a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values)`,
-    `"min"/"max"/"by" (a bounded step)`
-  ];
-  if (discriminator === "set")
-    clauses.push(`"int" (an unbounded integer cursor)`);
-  clauses.push(`"cycle" (an enumerated domain stepped in order)`);
-  if (discriminator === "persist") {
-    clauses.push(
-      `"removeSegment" (remove a named segment from the layout)`,
-      `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
-      `"insertSegmentFrom"/"anchor"/"relation" (insert a segment PICKED from an option domain before/after an existing one)`
-    );
-  }
-  return clauses;
-}
-function VALUE_SOURCE_MESSAGE(discriminator) {
-  const clauses = valueSourceClauses(discriminator);
-  const last2 = clauses[clauses.length - 1];
-  const list3 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
-  return `a ${discriminator} action declares exactly one value source: ${list3}`;
-}
-function valueSourceAction(ctx, path32, raw, discriminator, arms) {
-  const keys2 = validateDiscriminatorKey(ctx, path32, raw, discriminator);
-  const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
-  if (present.length !== 1) {
-    issue2(
-      ctx,
-      path32,
-      `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
-    );
-    return null;
-  }
-  const arm2 = present[0];
-  for (const k of Object.keys(raw)) {
-    if (!arm2.allowed.includes(k))
-      issue2(
-        ctx,
-        `${path32}.${k}`,
-        `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
-      );
-  }
-  const payload = arm2.parse(ctx, path32, raw);
-  return keys2 === null || payload === null ? null : { ...keys2, ...payload };
-}
-function setLiteralSpec(discriminator) {
-  const wire = wireName(discriminator);
+function required(json2, read3) {
   return {
     required: true,
-    json: { type: "string" },
-    parse: (ctx, path32, field, raw) => slashFreeString(
-      ctx,
-      path32,
-      field,
-      raw,
-      `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
-      (v) => `${discriminator} value "${v}" contains "/" \u2014 ${discriminator} values must be slash-free`
-    ) ?? void 0
-  };
-}
-function fromSpec(discriminator) {
-  const wire = wireName(discriminator);
-  return {
-    required: true,
-    json: {
-      anyOf: [
-        { type: "string", minLength: 1 },
-        {
-          type: "array",
-          items: { type: "string", minLength: 1 },
-          minItems: 1,
-          uniqueItems: true
-        }
-      ]
-    },
-    parse: (ctx, path32, field, raw) => {
-      const from = raw[field];
-      const at = `${path32}.${field}`;
-      if (typeof from === "string") {
-        if (from === "") {
-          issue2(ctx, at, `${field} must be a non-empty domain name`);
-          return void 0;
-        }
-        return from;
-      }
-      if (Array.isArray(from) && from.every((m) => typeof m === "string")) {
-        const members = from;
-        if (members.length === 0) {
-          issue2(
-            ctx,
-            at,
-            `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`
-          );
-          return void 0;
-        }
-        if (members.some((m) => m === "")) {
-          issue2(
-            ctx,
-            at,
-            `${field} array members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
-          );
-          return void 0;
-        }
-        const slashed = members.filter((m) => m.includes("/"));
-        if (slashed.length > 0) {
-          issue2(
-            ctx,
-            at,
-            `${field} array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
-          );
-          return void 0;
-        }
-        if (new Set(members).size !== members.length) {
-          issue2(
-            ctx,
-            at,
-            `${field} array members must be unique \u2014 a duplicated value would render the same picker option twice`
-          );
-          return void 0;
-        }
-        return members;
-      }
-      issue2(
-        ctx,
-        at,
-        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`
-      );
+    json: json2,
+    parse(ctx, path32, name, raw) {
+      const parsed2 = read3(raw[name], name);
+      if ("value" in parsed2) return parsed2.value;
+      issue2(ctx, path32 + "." + name, parsed2.error);
       return void 0;
     }
   };
 }
-function cycleSpec(discriminator) {
-  const wire = wireName(discriminator);
+function defaulted(spec, fallback) {
+  return { ...spec, required: false, fallback };
+}
+var text3 = required(
+  { type: "string" },
+  (raw, name) => typeof raw === "string" ? { value: raw } : { error: `${name} must be a string, got ${describeValue(raw)}` }
+);
+function choice(values2, requirement) {
+  return required(
+    { enum: values2 },
+    (raw, name) => values2.some((value) => value === raw) ? { value: raw } : { error: `${name} ${requirement}, got ${describeValue(raw)}` }
+  );
+}
+function wireField(shape, subject) {
+  return required(shape.json, (raw, name) => {
+    const value = shape.parse(raw);
+    return value === null ? { error: `${subject ?? name} ${shape.rule}, got ${describeValue(raw)}` } : { value };
+  });
+}
+function words2(minItems, shape, end) {
+  return required(
+    { type: "array", items: shape.json, minItems, uniqueItems: true },
+    (raw, name) => {
+      if (!Array.isArray(raw) || !raw.every((word2) => typeof word2 === "string"))
+        return {
+          error: `${name} must be an array of strings, got ${describeValue(raw)}`
+        };
+      if (raw.length < minItems)
+        return {
+          error: minItems === 2 ? `${name} needs at least two members` : `${name} must declare a non-empty array of values`
+        };
+      const refused2 = raw.find((word2) => shape.parse(word2) === null);
+      if (refused2 !== void 0)
+        return {
+          error: `${name} members ${shape.rule} on the ${end} wire, got ${describeValue(refused2)}`
+        };
+      if (new Set(raw).size !== raw.length)
+        return { error: `${name} array members must be unique` };
+      return { value: raw };
+    }
+  );
+}
+function domain(shape, end) {
+  const list3 = words2(1, shape, end);
   return {
     required: true,
+    json: { anyOf: [{ type: "string", minLength: 1 }, list3.json] },
+    parse(ctx, path32, name, raw, home) {
+      const v = raw[name];
+      if (typeof v !== "string") return list3.parse(ctx, path32, name, raw, home);
+      if (v !== "") return v;
+      issue2(ctx, path32 + "." + name, `${name} must be a non-empty domain name`);
+      return void 0;
+    }
+  };
+}
+var integer = required(
+  { type: "integer" },
+  (v, name) => typeof v === "number" && Number.isInteger(v) ? { value: v } : { error: `${name} must be an integer, got ${describeValue(v)}` }
+);
+var increment = required(
+  { type: "integer", not: { const: 0 } },
+  (v, name) => typeof v === "number" && Number.isInteger(v) && v !== 0 ? { value: v } : { error: `${name} must be a non-zero integer` }
+);
+var gestures = {
+  required: false,
+  json: { $ref: "#/definitions/GestureBindings" },
+  parse: (ctx, path32, name, raw) => validateGestures(ctx, path32, raw[name]) ?? void 0
+};
+var program = required(
+  {
+    type: "array",
+    minItems: 1,
+    items: [{ type: "string", minLength: 1 }],
+    additionalItems: { type: "string" }
+  },
+  (v) => Array.isArray(v) && typeof v[0] === "string" && v[0] !== "" && v.every((x) => typeof x === "string") ? { value: [v[0], ...v.slice(1)] } : {
+    error: `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(v)}`
+  }
+);
+var programInFile = {
+  ...program,
+  parse(ctx, path32, name, raw, home) {
+    const run2 = program.parse(ctx, path32, name, raw, home);
+    if ("text" in home) {
+      issue2(
+        ctx,
+        path32 + "." + name,
+        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
+      );
+      return void 0;
+    }
+    return run2 && { run: run2, cwd: home.dir };
+  }
+};
+var environment = required(
+  {
+    type: "object",
+    propertyNames: { pattern: ENV_NAME.source },
+    additionalProperties: { type: "string" }
+  },
+  (v) => isPlainObject(v) && Object.entries(v).every(
+    ([k, val]) => ENV_NAME.test(k) && typeof val === "string"
+  ) ? { value: v } : {
+    error: `env must map variable names to template strings, got ${describeValue(v)}`
+  }
+);
+var refresh = required(
+  { type: "array", items: { type: "string", minLength: 1 } },
+  (v) => Array.isArray(v) && v.every((item) => typeof item === "string" && item !== "") ? { value: v } : {
+    error: `refreshes must list the names of the sources the program writes, got ${describeValue(v)}`
+  }
+);
+var composition = required(
+  { type: "array", minItems: 2, items: { type: "string", minLength: 1 } },
+  (v) => Array.isArray(v) && v.length >= 2 && v.every((item) => typeof item === "string" && item !== "") ? { value: [v[0], ...v.slice(1)] } : {
+    error: `do must list at least two action names, got ${describeValue(v)}`
+  }
+);
+var slash = required(
+  { type: "string", pattern: SLASH_LINE_PATTERN },
+  (v) => {
+    const parsed2 = parseSlashLine(v);
+    return parsed2.kind === "refused" ? { error: parsed2.reason } : { value: parsed2.line };
+  }
+);
+function readMembers(ctx, path32, raw, home, specs, refine) {
+  const out = {};
+  let valid = true;
+  for (const [name, spec] of Object.entries(specs)) {
+    if (!Object.hasOwn(raw, name) && !spec.required) {
+      if ("fallback" in spec) out[name] = spec.fallback();
+      continue;
+    }
+    const value = spec.parse(ctx, path32, name, raw, home);
+    if (value === void 0) valid = false;
+    else out[name] = value;
+  }
+  refine?.(out);
+  return valid ? out : null;
+}
+function sharedFields(key) {
+  const layers = LAYER_CHOICES[key];
+  return layers ? {
+    on: gestures,
+    layer: defaulted(
+      choice(layers, "must be one of " + layers.join(", ")),
+      () => DEFAULT_WRITE_LAYER
+    )
+  } : { on: gestures };
+}
+function unknownKeys(ctx, path32, raw, key, keys3) {
+  for (const name of Object.keys(raw)) {
+    if (keys3.includes(name)) continue;
+    issue2(
+      ctx,
+      path32 + "." + name,
+      name === "layer" && !LAYER_CHOICES[key] ? `a ${key} action writes no config, so it names no layer. Expected only: ${keys3.join(", ")}` : `Unknown key "${name}" on a ${key} action. Expected only: ${keys3.join(", ")}`
+    );
+  }
+}
+function arm2(key, members, project, description, refine) {
+  const shared = sharedFields(key);
+  const declared = { ...members, ...shared };
+  const keys3 = Object.keys(declared);
+  return {
+    keys: keys3,
     json: {
-      type: "array",
-      items: { type: "string", minLength: 1 },
-      minItems: 2,
-      uniqueItems: true
+      ...objectJson(declared),
+      ...description === void 0 ? {} : { description }
     },
-    parse: (ctx, path32, field, raw) => {
-      const v = raw[field];
-      const at = `${path32}.${field}`;
-      if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
-        issue2(
-          ctx,
-          at,
-          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
-        );
-        return void 0;
-      }
-      const members = v;
-      if (members.length < 2) {
-        issue2(
-          ctx,
-          at,
-          `cycle needs at least two members (one member has no successor \u2014 use a literal "to")`
-        );
-        return void 0;
-      }
-      const empty2 = members.some((m) => m === "");
-      const slashed = members.filter((m) => m.includes("/"));
-      if (empty2) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
-        );
-        return void 0;
-      }
-      if (slashed.length > 0) {
-        issue2(
-          ctx,
-          at,
-          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
-        );
-        return void 0;
-      }
-      if (new Set(members).size !== members.length) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be unique \u2014 the successor of a duplicated member is ambiguous`
-        );
-        return void 0;
-      }
-      return members;
+    parse(ctx, path32, raw, home) {
+      const before = ctx.issues.length;
+      unknownKeys(ctx, path32, raw, key, keys3);
+      const extras = readMembers(ctx, path32, raw, home, shared);
+      const body = readMembers(
+        ctx,
+        path32,
+        raw,
+        home,
+        members,
+        (available) => refine?.(available, ctx, path32)
+      );
+      if (body === null || !extras || ctx.issues.length !== before) return null;
+      const { on: on2, ...layer } = extras;
+      return Object.assign(
+        {},
+        project(body),
+        layer,
+        on2 && Object.keys(on2).length ? { on: on2 } : {}
+      );
     }
   };
 }
-function intMarkerSpec() {
+function sole(a) {
+  return { arms: [a], select: () => a };
+}
+function marker(member) {
+  const key = Object.keys(member)[0];
+  return sole(
+    arm2(
+      key,
+      { [key]: choice([true], "must be the literal true") },
+      () => member
+    )
+  );
+}
+function writes(key) {
+  const end = key === "set" ? "set-state" : "set-config";
+  const destination = wireField(clickValue, key + " key");
+  const address = (value) => key === "set" ? { set: value } : { persist: value };
+  function source(name, specs, project, check, description) {
+    return {
+      name,
+      arm: arm2(
+        key,
+        { [key]: destination, ...specs },
+        (p2) => {
+          const declared = p2;
+          return project(p2, declared[key]);
+        },
+        description,
+        (available, ctx, path32) => {
+          const reason = check?.(available);
+          if (reason) issue2(ctx, path32 + "." + name, reason);
+        }
+      )
+    };
+  }
+  const position = {
+    anchor: wireField(layoutComponent),
+    relation: choice(["before", "after"], 'must be "before" or "after"')
+  };
+  const entries2 = [
+    source("to", { to: wireField(clickValue, key + " value") }, (p2, v) => ({
+      ...address(v),
+      to: p2.to
+    })),
+    source("from", { from: domain(clickValue, end) }, (p2, v) => ({
+      ...address(v),
+      from: p2.from
+    })),
+    source(
+      "min",
+      { min: integer, max: integer, by: increment },
+      (p2, v) => ({ ...address(v), min: p2.min, max: p2.max, by: p2.by }),
+      (v) => v.min === void 0 || v.max === void 0 || v.min < v.max ? null : `min (${v.min}) must be less than max (${v.max})`,
+      "The loader requires min to be less than max."
+    ),
+    source("cycle", { cycle: words2(2, clickValue, end) }, (p2, v) => ({
+      ...address(v),
+      cycle: p2.cycle
+    })),
+    ...key === "set" ? [
+      source(
+        "int",
+        { int: choice([true], "must be the literal true") },
+        (p2, set2) => ({ set: set2, int: p2.int })
+      )
+    ] : [
+      source(
+        "removeSegment",
+        { removeSegment: wireField(layoutComponent) },
+        (p2, persist) => ({ persist, ...p2 })
+      ),
+      source(
+        "insertSegment",
+        { insertSegment: wireField(layoutComponent), ...position },
+        (p2, persist) => ({ persist, ...p2 })
+      ),
+      source(
+        "insertSegmentFrom",
+        { insertSegmentFrom: domain(layoutComponent, end), ...position },
+        (p2, persist) => ({ persist, ...p2 })
+      )
+    ]
+  ];
   return {
-    required: true,
-    json: { const: true },
-    parse: (ctx, path32, field, raw) => {
-      if (raw[field] !== true) {
-        issue2(
-          ctx,
-          `${path32}.${field}`,
-          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(raw[field])}`
-        );
-        return void 0;
-      }
-      return true;
+    arms: entries2.map((e) => e.arm),
+    select(raw, ctx, path32, home) {
+      const found2 = entries2.filter((e) => Object.hasOwn(raw, e.name));
+      if (found2.length === 1) return found2[0].arm;
+      destination.parse(ctx, path32, key, raw, home);
+      return {
+        error: `a ${key} action declares exactly one value source: ${entries2.map((e) => e.name).join(", ")}${found2.length ? " \u2014 found: " + found2.map((e) => e.name).join(", ") : ""}`
+      };
     }
   };
 }
-function layoutNameSpec(field) {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path32, f, raw) => {
-      const v = requireString(ctx, path32, raw, f);
-      if (v === null) return void 0;
-      const at = `${path32}.${f}`;
-      if (v === "") {
-        issue2(ctx, at, `${field} must be non-empty (a segment name)`);
-        return void 0;
-      }
-      if (v.includes("/") || v.includes(":")) {
-        issue2(
-          ctx,
-          at,
-          `${field} "${v}" contains "/" or ":" \u2014 segment names in a layout op must be free of both (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`
-        );
-        return void 0;
-      }
-      return v;
+var presetVerbs = {
+  save: arm2("preset", { preset: choice(["save"], 'must be "save"') }, (p2) => p2),
+  delete: arm2(
+    "preset",
+    { preset: choice(["delete"], 'must be "delete"'), name: text3 },
+    (p2) => p2
+  )
+};
+var registry = {
+  set: writes("set"),
+  persist: writes("persist"),
+  copy: sole(arm2("copy", { copy: text3 }, (p2) => p2)),
+  open: sole(arm2("open", { open: text3 }, (p2) => p2)),
+  reset: sole(
+    arm2("reset", { reset: wireField(clickValue, "reset key") }, (p2) => p2)
+  ),
+  undo: marker({ undo: true }),
+  redo: marker({ redo: true }),
+  back: marker({ back: true }),
+  rewind: marker({ rewind: true }),
+  save: marker({ save: true }),
+  preset: {
+    arms: Object.values(presetVerbs),
+    select(raw) {
+      const verb = raw.preset;
+      return typeof verb === "string" && Object.hasOwn(presetVerbs, verb) ? presetVerbs[verb] : {
+        error: `preset must be ${Object.keys(presetVerbs).map((name) => JSON.stringify(name)).join(" or ")}, got ${describeValue(verb)}`
+      };
     }
-  };
-}
-function relationSpec() {
-  return {
-    required: true,
-    json: { enum: ["before", "after"] },
-    parse: (ctx, path32, field, raw) => {
-      const v = raw[field];
-      if (v !== "before" && v !== "after") {
-        issue2(
-          ctx,
-          `${path32}.${field}`,
-          `relation must be "before" or "after", got ${describeValue(v)}`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function requireIntSpec() {
-  return {
-    required: true,
-    json: { type: "integer" },
-    parse: (ctx, path32, field, raw) => {
-      const v = raw[field];
-      if (typeof v !== "number" || !Number.isInteger(v)) {
-        issue2(
-          ctx,
-          `${path32}.${field}`,
-          `${field} must be an integer, got ${describeValue(v)}`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
+  },
+  themeDefault: sole(
+    arm2(
+      "themeDefault",
+      { themeDefault: choice(["save"], 'must be "save"') },
+      (p2) => p2
+    )
+  ),
+  slash: sole(arm2("slash", { slash }, (p2) => p2)),
+  run: sole(
+    arm2(
+      "run",
+      {
+        run: programInFile,
+        env: defaulted(environment, () => ({})),
+        refreshes: defaulted(refresh, () => [])
+      },
+      ({ run: run2, env: env2, refreshes }) => ({ ...run2, env: env2, refreshes })
+    )
+  ),
+  do: sole(arm2("do", { do: composition }, (p2) => p2))
+};
+var keys2 = Object.keys(registry);
+function validateActionDecl(ctx, path32, raw, home) {
+  if (!isPlainObject(raw)) {
+    issue2(
+      ctx,
+      path32,
+      `${path32} must be an action object, got ${describeType(raw)}`
+    );
+    return null;
+  }
+  if (Object.hasOwn(raw, "persistWhen")) {
+    issue2(
+      ctx,
+      path32,
+      `${path32}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
+    );
+    return null;
+  }
+  const present = keys2.filter((k) => Object.hasOwn(raw, k));
+  if (present.length !== 1) {
+    issue2(
+      ctx,
+      path32,
+      `action must declare exactly one of: ${keys2.join(", ")}${present.length > 1 ? " (found: " + present.join(", ") + ")" : ""}`
+    );
+    return null;
+  }
+  const key = present[0];
+  const family = registry[key];
+  const selected = family.select(raw, ctx, path32, home);
+  if ("error" in selected) {
+    readMembers(ctx, path32, raw, home, sharedFields(key));
+    unknownKeys(ctx, path32, raw, key, [
+      ...new Set(family.arms.flatMap((a) => a.keys))
+    ]);
+    issue2(ctx, path32, selected.error);
+    return null;
+  }
+  return selected.parse(ctx, path32, raw, home);
 }
 
 // src/config/loader/styles.ts
@@ -60034,10 +59742,10 @@ function validateStyles(ctx, raw) {
   }
   const out = {};
   for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/")) {
+    if (clickValue.parse(name) === null) {
       ctx.issues.push({
         path: `styles.${name}`,
-        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        message: `style name ${JSON.stringify(name)} ${clickValue.rule} on the set-state wire`,
         line: findKeyLine(ctx.source, ["styles", name])
       });
       continue;
@@ -60083,10 +59791,10 @@ function validatePresets(ctx, raw) {
   }
   const out = {};
   for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
+    if (clickValue.parse(name) === null) {
       ctx.issues.push({
         path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
+        message: `preset name ${JSON.stringify(name)} ${clickValue.rule} on the set-state wire`,
         line: findKeyLine(ctx.source, ["presets", name])
       });
       continue;
@@ -61163,7 +60871,7 @@ function valueReads({ names, helpers, actions }) {
   });
   const ofTemplate = perTemplate(
     (template) => texts(template).flatMap(
-      (text5) => [...templateReads(text5, helpers).keys()].map((path32) => ({
+      (text6) => [...templateReads(text6, helpers).keys()].map((path32) => ({
         path: path32,
         reaches: variableRead(path32, names)
       }))
@@ -61171,8 +60879,8 @@ function valueReads({ names, helpers, actions }) {
   );
   const calls = perTemplate(
     (template) => new Set(
-      texts(template).flatMap((text5) => [
-        ...templateFunctions(text5, helpers)
+      texts(template).flatMap((text6) => [
+        ...templateFunctions(text6, helpers)
       ])
     )
   );
@@ -61615,7 +61323,7 @@ function withDroppedPlacements(config, owning, inserted) {
   };
 }
 function standIn2(name, cause, placements) {
-  const text5 = `\u26A0 ${name}: ${cause.join("; ")}`;
+  const text6 = `\u26A0 ${name}: ${cause.join("; ")}`;
   const values2 = /* @__PURE__ */ new Map();
   for (const n of placements) {
     for (const [key, value] of Object.entries(n.settings ?? {})) {
@@ -61627,7 +61335,7 @@ function standIn2(name, cause, placements) {
     [...values2].map(([key, vs]) => [key, settingFor(key, vs)])
   );
   return {
-    template: `{{ ${JSON.stringify(text5)} }}`,
+    template: `{{ ${JSON.stringify(text6)} }}`,
     bg: "error",
     description: "stands in for a segment whose plugin did not load",
     settings
@@ -62584,8 +62292,8 @@ function endcapsHome(at) {
   return at[0] === "themeDefaults" ? "globals.endcaps" : [...at, "endcaps"].join(".");
 }
 function undeclaredMemberMessage(domains, at, field, name) {
-  const domain = optionDomainOf(field);
-  const members = domain === null ? void 0 : domains.get(domain)?.members;
+  const domain2 = optionDomainOf(field);
+  const members = domain2 === null ? void 0 : domains.get(domain2)?.members;
   if (members === void 0 || isExpression(name) || members.includes(name)) {
     return null;
   }
@@ -62594,8 +62302,8 @@ function undeclaredMemberMessage(domains, at, field, name) {
 }
 function checkPersistedValues(ctx, name, a, optionDomains) {
   const target = parsePersistTarget(a.persist);
-  const writes = valuesWritten(a, optionDomains);
-  if (target === null || target.scope === "preset-root" || writes === null) {
+  const writes2 = valuesWritten(a, optionDomains);
+  if (target === null || target.scope === "preset-root" || writes2 === null) {
     return;
   }
   if ("min" in a && !holdsInteger(target)) {
@@ -62609,8 +62317,8 @@ function checkPersistedValues(ctx, name, a, optionDomains) {
   const steps2 = persistPath(target);
   const at = steps2.slice(0, -1);
   const reasonOf2 = (raw) => persistedValueIssue(ctx, target, raw) ?? undeclaredMemberMessage(optionDomains, at, steps2[steps2.length - 1], raw);
-  for (const field of new Set(writes.map((w) => w.field))) {
-    const refused2 = writes.filter((w) => w.field === field).flatMap((w) => {
+  for (const field of new Set(writes2.map((w) => w.field))) {
+    const refused2 = writes2.filter((w) => w.field === field).flatMap((w) => {
       const reason = reasonOf2(w.value);
       return reason === null ? [] : [{ value: w.value, reason }];
     });
@@ -62625,9 +62333,9 @@ function checkPersistedValues(ctx, name, a, optionDomains) {
 }
 function checkSettingWrites(ctx, name, a, row, optionDomains) {
   const key = a.set;
-  const { domain } = row;
-  const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
-  if ("min" in a && (domain === "bool" || !("min" in domain))) {
+  const { domain: domain2 } = row;
+  const takes = `${key} takes ${describeControlDomain(domain2, optionDomains)}`;
+  if ("min" in a && (domain2 === "bool" || !("min" in domain2))) {
     ctx.issues.push({
       path: `actions.${name}.min`,
       message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${key} is not an integer range; ${takes}`,
@@ -62635,8 +62343,8 @@ function checkSettingWrites(ctx, name, a, row, optionDomains) {
     });
     return;
   }
-  const writes = valuesWritten(a, optionDomains);
-  if (writes === ANY_INTEGER) {
+  const writes2 = valuesWritten(a, optionDomains);
+  if (writes2 === ANY_INTEGER) {
     ctx.issues.push({
       path: `actions.${name}.int`,
       message: `actions.${name}.int: an int cursor writes whatever integer the template binds, and a click outside the ${key} domain would change nothing; ${takes}`,
@@ -62644,9 +62352,9 @@ function checkSettingWrites(ctx, name, a, row, optionDomains) {
     });
     return;
   }
-  const outside = writes.filter((w) => row.parse(w.value) === null);
+  const outside = writes2.filter((w) => row.parse(w.value) === null);
   if (outside.length === 0) return;
-  if (key === SETTINGS.style.sessionKey && ("from" in a && a.from === "endcaps" || writes.every((w) => isStyleEraEndcaps(w.value)))) {
+  if (key === SETTINGS.style.sessionKey && ("from" in a && a.from === "endcaps" || writes2.every((w) => isStyleEraEndcaps(w.value)))) {
     const endcaps = SETTINGS.endcaps.sessionKey;
     ctx.issues.push(
       "to" in a ? {
@@ -62713,6 +62421,17 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
         line: findKeyLine(ctx.source, ["actions", name, field])
       });
       continue;
+    }
+    if (field === "insertSegmentFrom" && typeof from === "string") {
+      const refused2 = resolveOptionDomain(from, optionDomains).members.find(
+        (value) => layoutComponent.parse(value) === null
+      );
+      if (refused2 !== void 0)
+        ctx.issues.push({
+          path: `actions.${name}.${field}`,
+          message: `actions.${name}: segment name ${JSON.stringify(refused2)} from domain ${from} ${layoutComponent.rule}`,
+          line: findKeyLine(ctx.source, ["actions", name, field])
+        });
     }
     if ("persist" in a) checkPersistedValues(ctx, name, a, optionDomains);
     if (!("set" in a)) continue;
@@ -62781,11 +62500,11 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
       });
       continue;
     }
-    const treeOps = TREE_OP_ARMS.filter((arm2) => arm2 in a);
+    const treeOps = TREE_OP_ARMS.filter((arm3) => arm3 in a);
     if (target.scope !== "preset-root" && treeOps.length > 0) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a "presets.<name>.root" target \u2014 ${treeOps.map((arm2) => `"${arm2}"`).join("/")} is a tree op and applies only to one`,
+        message: `actions.${name}: "${key}" is not a "presets.<name>.root" target \u2014 ${treeOps.map((arm3) => `"${arm3}"`).join("/")} is a tree op and applies only to one`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator])
       });
       continue;
@@ -63057,13 +62776,13 @@ function chainPlaces(resolved, locations2) {
   });
 }
 function configResolutionNotice(resolution) {
-  const words2 = [
+  const words3 = [
     ...noticeLines(resolution),
     ...resolution.unchecked.map(
       (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
     )
   ].join("\n");
-  return words2 === "" ? null : advisory(["config-resolution"], words2);
+  return words3 === "" ? null : advisory(["config-resolution"], words3);
 }
 function noticeLines(resolution) {
   switch (resolution.kind) {
@@ -65211,8 +64930,8 @@ function placementDrafts(config, sessionPick) {
     (preset) => placementDraftsIn(config, preset, sessionPick)
   );
 }
-function placementPickProblems(config, sessionPick, writes) {
-  const written2 = new Map(writes.map((w) => [w.key, w.value]));
+function placementPickProblems(config, sessionPick, writes2) {
+  const written2 = new Map(writes2.map((w) => [w.key, w.value]));
   return presetNames(config.presets).flatMap((preset) => {
     const slots = slotsOf(config, preset);
     const touched = new Set(
@@ -65342,8 +65061,8 @@ function layerForRole(chain2, role) {
 function layerAtPath(chain2, path32) {
   return chain2.find((layer) => layer.path === path32);
 }
-function contentOfText(text5) {
-  return text5 === null ? { kind: "absent" } : { kind: "text", text: text5 };
+function contentOfText(text6) {
+  return text6 === null ? { kind: "absent" } : { kind: "text", text: text6 };
 }
 function writable(content) {
   return content.kind !== "unreadable";
@@ -65379,7 +65098,7 @@ function laneDefaultsAfterReset(config, bundled, project) {
   );
 }
 var called = (lanes) => lanes.map((lane) => LANES[lane].called).join(" and ");
-var capitalized = (text5) => text5.charAt(0).toUpperCase() + text5.slice(1);
+var capitalized = (text6) => text6.charAt(0).toUpperCase() + text6.slice(1);
 function laneHandoff(sessionId2, writable2, lanes, remaining) {
   const personal = writable2.filter((role) => role !== "project");
   const pinned = lanes.filter((lane) => remaining[lane]);
@@ -66697,10 +66416,10 @@ var SourceRegistry = class _SourceRegistry {
     const refreshOf = this.registerCachePolicy(name, cache2);
     const run2 = computed(
       () => {
-        const refresh = refreshOf();
-        return refresh.kind === "ok" ? ok(
-          runOf2({ read: read3, parse: parserIdOf(parse3), refresh: refresh.value })
-        ) : refresh;
+        const refresh2 = refreshOf();
+        return refresh2.kind === "ok" ? ok(
+          runOf2({ read: read3, parse: parserIdOf(parse3), refresh: refresh2.value })
+        ) : refresh2;
       },
       // A failure is equal to another by what it says: a never-answered node
       // draws it, so a key throwing a moving message must move what the cell
@@ -67036,11 +66755,11 @@ var SourceRegistry = class _SourceRegistry {
       }
       case "depends_on": {
         return this.answeredUnder(name, () => {
-          const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-          const waiting = keys2.flatMap(
+          const keys3 = policy.varNames.map((n) => this.store.changeKey(n));
+          const waiting = keys3.flatMap(
             (key) => key.kind === "pending" ? [key] : []
           );
-          return waiting.find((key) => awaits(key.why)) ?? waiting[0] ?? ok(keys2.flatMap((key) => key.kind === "ok" ? [key.value] : []));
+          return waiting.find((key) => awaits(key.why)) ?? waiting[0] ?? ok(keys3.flatMap((key) => key.kind === "ok" ? [key.value] : []));
         });
       }
     }
@@ -67162,25 +66881,25 @@ function sizeCell(cell3, width, how) {
     cell3.align(how.justify, width);
   }
 }
-function cellParts({ lead, text: text5, trail }) {
+function cellParts({ lead, text: text6, trail }) {
   return [
     ...lead === void 0 ? [] : [lead],
-    text5,
+    text6,
     ...trail === void 0 ? [] : [trail]
   ];
 }
-function heldCell({ text: text5, placement, lead, trail }) {
+function heldCell({ text: text6, placement, lead, trail }) {
   return {
-    text: unlinked(text5),
+    text: unlinked(text6),
     placement,
     ...lead !== void 0 && { lead: unlinked(lead) },
     ...trail !== void 0 && { trail: unlinked(trail) }
   };
 }
-function unlinked(text5) {
-  const copy2 = text5.blankCopy(text5.plain);
-  copy2.style = resolvedStyle(text5.style).clearMetaAndLinks();
-  for (const { start, end, style } of text5.spans)
+function unlinked(text6) {
+  const copy2 = text6.blankCopy(text6.plain);
+  copy2.style = resolvedStyle(text6.style).clearMetaAndLinks();
+  for (const { start, end, style } of text6.spans)
     copy2.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
   return copy2;
 }
@@ -67252,9 +66971,9 @@ function fits(cell3, line, options) {
 }
 function dividedToLine(item, line, before, options) {
   if (fits(item.owner, line, options)) return [item];
-  const text5 = item.owner.copy().expandTabs();
+  const text6 = item.owner.copy().expandTabs();
   const indent2 = takenOnLine(before, options);
-  return text5.divide(wrapOffsets(text5.plain, line, indent2)).map((piece, i2) => ({
+  return text6.divide(wrapOffsets(text6.plain, line, indent2)).map((piece, i2) => ({
     ...item,
     owner: piece.truncate(line, { marker: "" }).padLeft(i2 > 0 ? options.padding : 0)
   })).filter(
@@ -67289,8 +67008,8 @@ function filled(row, options) {
   const remainder = deficit - share * demands.length;
   demands.forEach(({ at, how }, i2) => {
     const grow = share + (i2 === demands.length - 1 ? remainder : 0);
-    const { text: text5 } = row[at];
-    sizeCell(text5, text5.cellLength + grow, how);
+    const { text: text6 } = row[at];
+    sizeCell(text6, text6.cellLength + grow, how);
   });
   return items();
 }
@@ -67478,15 +67197,15 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
       };
     }
     if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      const domain2 = resolveOptionDomain(action2.from, perConfigDomains);
       return {
         kind: "set-option",
         key: action2.set,
         stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
+        options: [...domain2.members],
+        paletteOf: domain2.paletteOf,
+        labelOf: domain2.labelOf,
+        library: domain2.library
       };
     }
     if ("int" in action2) {
@@ -67520,16 +67239,16 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
       };
     }
     if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      const domain2 = resolveOptionDomain(action2.from, perConfigDomains);
       return {
         kind: "persist-option",
         key: action2.persist,
         layer,
         stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
+        options: [...domain2.members],
+        paletteOf: domain2.paletteOf,
+        labelOf: domain2.labelOf,
+        library: domain2.library
       };
     }
     if ("cycle" in action2) {
@@ -67564,7 +67283,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
       };
     }
     if ("insertSegmentFrom" in action2) {
-      const domain = resolveOptionDomain(
+      const domain2 = resolveOptionDomain(
         action2.insertSegmentFrom,
         perConfigDomains
       );
@@ -67574,10 +67293,10 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
         layer,
         anchor: action2.anchor,
         relation: action2.relation,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
+        options: [...domain2.members],
+        paletteOf: domain2.paletteOf,
+        labelOf: domain2.labelOf,
+        library: domain2.library
       };
     }
     return {
@@ -67662,8 +67381,8 @@ function clickSession(runtime, reader) {
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");
 }
-function linkFragment(text5, link, active2, base) {
-  const rt = new RichText(text5, {
+function linkFragment(text6, link, active2, base) {
+  const rt = new RichText(text6, {
     style: Style.combine([
       base,
       styleWithLink(new Style({ bold: active2 }), link)
@@ -68053,11 +67772,11 @@ function renderAction(name, displays, runtime) {
       ).effects
     ])
   );
-  const { [HOVER]: hoverBinding, ...gestures } = realized;
+  const { [HOVER]: hoverBinding, ...gestures2 } = realized;
   const hover = hoverBinding ?? realize(runtime.compiled.get(HOVER_REGION), name, name, binding, sessionId2).effects;
   return linkOver(
     display,
-    actionTarget(effects, void 0, { name, gestures, hover }),
+    actionTarget(effects, void 0, { name, gestures: gestures2, hover }),
     active2
   );
 }
@@ -68188,11 +67907,11 @@ function stateCell(palette, background, drawnAt) {
 }
 function decoratedCell({
   tint,
-  text: text5
+  text: text6
 }) {
   return new Style({
     bgcolor: ColorSpec.fromRgba(tint),
-    color: ColorSpec.fromRgba(text5)
+    color: ColorSpec.fromRgba(text6)
   });
 }
 function closeOn(palette, ground, drawnAt) {
@@ -68243,8 +67962,8 @@ function swatch(palette) {
 }
 
 // src/render/option-paint.ts
-var cell2 = (text5, style) => {
-  const drawn = typeof text5 === "string" ? new RichText(text5, { style }) : text5;
+var cell2 = (text6, style) => {
+  const drawn = typeof text6 === "string" ? new RichText(text6, { style }) : text6;
   drawn.overflow = "ignore";
   drawn.end = "";
   return drawn;
@@ -68260,17 +67979,17 @@ function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground)
       ])
     );
   }
-  const text5 = stateCell(active2.palette, ground, drawnAt);
+  const text6 = stateCell(active2.palette, ground, drawnAt);
   return (_position, option, label2, current) => named(
     label2,
-    Style.combine([text5, currentMark(current)]),
+    Style.combine([text6, currentMark(current)]),
     paletteOf(option, render3)
   );
 }
-var named = (label2, text5, palette) => cell2(
+var named = (label2, text6, palette) => cell2(
   RichText.fromFragments([
-    cell2(label2, text5),
-    cell2(" ", text5),
+    cell2(label2, text6),
+    cell2(" ", text6),
     swatch(palette)
   ])
 );
@@ -68278,12 +67997,12 @@ function labelPaint(render3, paletteOf, option, label2) {
   return paletteOf === void 0 ? cell2(label2) : named(label2, void 0, paletteOf(option, render3));
 }
 function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
-  const text5 = stateCell(active2.palette, ground, drawnAt);
+  const text6 = stateCell(active2.palette, ground, drawnAt);
   return (_position, option, _label, current) => cell2(
     RichText.fromFragments([
-      cell2(current ? "[" : " ", text5),
+      cell2(current ? "[" : " ", text6),
       swatch(paletteOf(option, render3)),
-      cell2(current ? "]" : " ", text5)
+      cell2(current ? "]" : " ", text6)
     ])
   );
 }
@@ -68320,8 +68039,8 @@ function chunk2(items, size) {
     (_, n) => items.slice(n * size, (n + 1) * size)
   );
 }
-function fitCells(text5, width) {
-  return new RichText(text5).truncate(width, { marker: "\u2026" }).plain;
+function fitCells(text6, width) {
+  return new RichText(text6).truncate(width, { marker: "\u2026" }).plain;
 }
 
 // src/render/active-segment.ts
@@ -68329,13 +68048,13 @@ init_globals();
 function createActiveSegmentRef(drawnAt) {
   return { current: null, drawnAt };
 }
-function openSegment(ref, placement, palette, disclosure, tint, text5) {
+function openSegment(ref, placement, palette, disclosure, tint, text6) {
   const active2 = {
     placement,
     palette,
     disclosure,
     tint,
-    text: text5,
+    text: text6,
     bg: void 0,
     drops: []
   };
@@ -68384,8 +68103,8 @@ function requireActiveSegment(ref, spelling) {
 // src/render/picker.ts
 var PICKER_PREV = "\u2190";
 var PICKER_NEXT = "\u2192";
-function cellWidth2(text5) {
-  return new RichText(text5).cellLength;
+function cellWidth2(text6) {
+  return new RichText(text6).cellLength;
 }
 function rowBudget(runtime) {
   const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
@@ -68855,8 +68574,8 @@ function swatchesFuncs(runtime, activeSegment) {
 var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
 function previewRows(palette, decor, opens, drawnAt) {
   const band = bandFor(palette, opens, drawnAt);
-  const chosen = (text5, colour) => ({
-    text: text5,
+  const chosen = (text6, colour) => ({
+    text: text6,
     colour,
     ink: textOn2(palette, colour, drawnAt)
   });
@@ -68882,9 +68601,9 @@ function previewRows(palette, decor, opens, drawnAt) {
 }
 function renderRow(groups, available) {
   const cells = groups.flatMap(
-    (group, g) => group.map(({ text: text5, colour, ink }, i2) => ({
+    (group, g) => group.map(({ text: text6, colour, ink }, i2) => ({
       gap: g > 0 && i2 === 0 ? " " : "",
-      cell: new RichText(` ${text5} `, {
+      cell: new RichText(` ${text6} `, {
         style: decoratedCell({ tint: colour, text: ink })
       })
     }))
@@ -69538,7 +69257,7 @@ function drawSegment(node, ctx) {
       ...line,
       place: BODY_PLACE[opens.placement](line)
     }));
-    const leadCell = (text5, style, padding) => applySegmentLayout(fragmentsToCells([text5], style), {
+    const leadCell = (text6, style, padding) => applySegmentLayout(fragmentsToCells([text6], style), {
       ...layoutOf(style),
       width: "auto",
       padding
@@ -69747,9 +69466,9 @@ var sameLook = sameBy({
   decor: sameDecor
 });
 var ViewParts = class {
-  constructor(store, registry, source, view) {
+  constructor(store, registry2, source, view) {
     this.store = store;
-    this.registry = registry;
+    this.registry = registry2;
     this.source = source;
     this.view = observable.box(view, { deep: false });
     this.scope = buildScope(store);
@@ -69764,7 +69483,7 @@ var ViewParts = class {
     const layout = () => this.layout.read();
     this.binding = {
       store,
-      registry,
+      registry: registry2,
       get width() {
         return drawn.width;
       },
@@ -69801,7 +69520,7 @@ var ViewParts = class {
         })
       );
     });
-    registry.bindInputs({
+    registry2.bindInputs({
       session: () => this.view.get().session,
       read: (path32) => this.inputAt(path32),
       run: (digest2) => this.view.get().run(digest2),
@@ -70078,13 +69797,13 @@ var ViewParts = class {
     return this.placement(node).gate().kind !== "hidden";
   }
 };
-function bindView(source, store, registry, view) {
+function bindView(source, store, registry2, view) {
   const parts = source.views.get(store);
   if (parts !== void 0) {
     parts.bind(view);
     return parts;
   }
-  const made = new ViewParts(store, registry, source, view);
+  const made = new ViewParts(store, registry2, source, view);
   source.views.set(store, made);
   return made;
 }
@@ -70356,22 +70075,22 @@ function toSourceParse(parse3, dflt) {
       return { kind: "text", default: dflt };
   }
 }
-function declareOne(registry, name, decl, cwd2, derivation) {
+function declareOne(registry2, name, decl, cwd2, derivation) {
   switch (decl.kind) {
     case "literal":
-      registry.declareLiteral(name, decl.value);
+      registry2.declareLiteral(name, decl.value);
       break;
     case "dropped":
-      registry.declareFailedDocument(name, decl.reason);
+      registry2.declareFailedDocument(name, decl.reason);
       break;
     // [LAW:single-enforcer] A plugin source's reading is read by the managed
     // storage owner and carried by the view's payload at the source's name
     // (src/renderer/render-payload.ts); the view derives the document from it.
     case "source":
-      registry.declareSourceDocument(name);
+      registry2.declareSourceDocument(name);
       break;
     case "input":
-      registry.declareInput(
+      registry2.declareInput(
         name,
         decl.path,
         decl.type,
@@ -70380,17 +70099,17 @@ function declareOne(registry, name, decl, cwd2, derivation) {
       );
       break;
     case "env":
-      registry.declareEnv(name, decl.name, decl.default);
+      registry2.declareEnv(name, decl.name, decl.default);
       break;
     case "file":
-      registry.declareFile(name, decl.path, {
+      registry2.declareFile(name, decl.path, {
         readMode: decl.readMode,
         cache: toCachePolicy(decl.cache),
         parse: toSourceParse(decl.parse, decl.default)
       });
       break;
     case "shell":
-      registry.declareShell(name, decl.command, {
+      registry2.declareShell(name, decl.command, {
         cwd: cwd2,
         env: shellEnvOf(decl.env),
         cache: toCachePolicy(decl.cache),
@@ -70398,20 +70117,20 @@ function declareOne(registry, name, decl, cwd2, derivation) {
       });
       break;
     case "template":
-      registry.declareTemplate(name, decl.template, {
+      registry2.declareTemplate(name, decl.template, {
         type: decl.type,
         varDefault: decl.default,
         derivation
       });
       break;
     case "time":
-      registry.declareTime(name, {
+      registry2.declareTime(name, {
         format: decl.layout,
         varDefault: decl.default
       });
       break;
     case "state":
-      registry.declareState(name, {
+      registry2.declareState(name, {
         key: decl.key,
         read: (raw) => raw ?? decl.default ?? null
       });
@@ -70420,7 +70139,7 @@ function declareOne(registry, name, decl, cwd2, derivation) {
     // every reader of its key shares (src/config/setting-table.ts).
     case "setting": {
       const row = placementRow(decl.slot);
-      registry.declareState(name, {
+      registry2.declareState(name, {
         key: decl.slot.key,
         read: (raw) => settingSpelling(placementFold(row, raw).value)
       });
@@ -70443,13 +70162,13 @@ function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
   return defines;
 }
 var compileAlone = (_key, input) => compileDslConfig(input);
-function registerCompiled(config, registry, cwd2, compile, scopes = EVERY_SCOPE) {
-  const input = compileInputOf(config, registry.region);
+function registerCompiled(config, registry2, cwd2, compile, scopes = EVERY_SCOPE) {
+  const input = compileInputOf(config, registry2.region);
   const key = compileKey(input);
   return {
     compiled: compile(key, input),
     compileKey: key,
-    loadWarnings: declareDslVariables(config, registry, cwd2, scopes)
+    loadWarnings: declareDslVariables(config, registry2, cwd2, scopes)
   };
 }
 function compileInputOf(config, region = systemRegion()) {
@@ -70476,7 +70195,7 @@ function compileInputOf(config, region = systemRegion()) {
 function compileKey(input) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
-function declareDslVariables(config, registry, cwd2, scopes) {
+function declareDslVariables(config, registry2, cwd2, scopes) {
   const scopeOf3 = variableScopes(config);
   const projections = projectionsOf(config);
   const loadWarnings = [];
@@ -70484,7 +70203,7 @@ function declareDslVariables(config, registry, cwd2, scopes) {
     if (!scopes.has(scopeOf3.get(name))) continue;
     try {
       declareOne(
-        registry,
+        registry2,
         name,
         decl,
         cwd2,
@@ -70799,7 +70518,7 @@ function segmentsUnder(node) {
     ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
   ];
 }
-function drawDsl(config, compiled, store, registry, projected, at, opts, selection2) {
+function drawDsl(config, compiled, store, registry2, projected, at, opts, selection2) {
   var _stack = [];
   try {
     const warnings = [];
@@ -70834,7 +70553,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
     const source = {
       config,
       preset,
-      revision: registry.stateRevision(),
+      revision: registry2.stateRevision(),
       width: drawOpts.width
     };
     const record3 = beginRecord(source, returnedBy);
@@ -70882,7 +70601,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
       idleSince: selection2.idleSince,
       timeoutS: selection2.menuTimeout,
       fill: flashFill,
-      text: textOn2(palette, flashFill, registry.drawnAt())
+      text: textOn2(palette, flashFill, registry2.drawnAt())
     };
     const motion = effects.motion(
       effect.value,
@@ -70929,7 +70648,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
           node2,
           palette2,
           region,
-          registry.drawnAt(),
+          registry2.drawnAt(),
           body,
           scope
         ),
@@ -70942,7 +70661,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
         renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
         // [LAW:one-source-of-truth] The row ✕ names the session every other
         // affordance's URL does.
-        closeDisclosure: (key) => disclosureCloseFragment(registry.session(), key),
+        closeDisclosure: (key) => disclosureCloseFragment(registry2.session(), key),
         placed: (node2, lines2) => {
           if (lines2.length > 0) drawnSlots.push(...node2.slots);
           const { id: id2 } = node2.placement;
@@ -70955,7 +70674,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
           node2,
           palette2,
           region,
-          registry.drawnAt()
+          registry2.drawnAt()
         )
       };
       return nodeType(node.kind).render(node, ctx);
@@ -71010,7 +70729,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
         return decided.kind === "stale" ? [{ row: table.globals[name], raw: decided.raw, wears: worn(name) }] : [];
       }),
       ...drawnSlots.flatMap((row) => {
-        const folded2 = placementFold(row, registry.held(row.key));
+        const folded2 = placementFold(row, registry2.held(row.key));
         return folded2.decidedBy.kind === "stale" ? [
           {
             row,
@@ -71022,7 +70741,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
     ];
     for (const warning of staleWarnings(stale, () => configOptionDomains(config)))
       warn(warning);
-    for (const [variable, fault] of registry.cachePolicyFaults())
+    for (const [variable, fault] of registry2.cachePolicyFaults())
       warn({
         kind: "refresh",
         variable,
@@ -71109,17 +70828,11 @@ init_globals();
 init_globals();
 var INT_RE = /^-?\d+$/;
 function makeAllowListValidator(allowed, label2, wire = "set-state") {
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
+  const refused2 = allowed.filter((option) => clickValue.parse(option) === null);
+  if (refused2.length)
     throw new Error(
-      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
+      `makeAllowListValidator(${label2}): options ${clickValue.rule} on the ${wire} wire. Offending values: ${refused2.map((option) => JSON.stringify(option)).join(", ")}`
     );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
-    );
-  }
   const allowedSet = new Set(allowed);
   const allowedList = [...allowed];
   return (raw) => {
@@ -71235,12 +70948,10 @@ function createGate(baseline, daemonWide, derived3, noun) {
     ...derived3
   ];
   for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    if (key.includes("/")) {
+    if (clickValue.parse(key) === null)
       throw new Error(
-        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
+        `${noun} gate: key is required and ${clickValue.rule}, got ${JSON.stringify(key)}`
       );
-    }
     if (Object.hasOwn(baseline, key)) {
       throw new Error(
         `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
@@ -71260,6 +70971,11 @@ function createGate(baseline, daemonWide, derived3, noun) {
           reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
         };
       }
+      if (clickValue.parse(rawValue) === null)
+        return {
+          ok: false,
+          reason: `${noun} value is required and ${clickValue.rule}`
+        };
       return validator(rawValue);
     },
     listKeys: () => [...validators.keys()],
@@ -71375,13 +71091,13 @@ function actionKeySpecs(a, perConfigDomains) {
   ];
 }
 function clearableContributions(config) {
-  const keys2 = /* @__PURE__ */ new Set();
+  const keys3 = /* @__PURE__ */ new Set();
   for (const a of Object.values(config.actions)) {
-    if ("reset" in a) keys2.add(a.reset);
+    if ("reset" in a) keys3.add(a.reset);
     const target = "persist" in a ? parsePersistTarget(a.persist) : null;
-    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
+    if (target?.scope === "preset-root") keys3.add(presetRootKey(target.preset));
   }
-  return [...keys2].map((key) => ({
+  return [...keys3].map((key) => ({
     key,
     spec: { kind: "allow-list", allowed: [] }
   }));
@@ -71684,7 +71400,7 @@ function buildRenderState(load, deps) {
   const projectRaw = layers.find(({ path: path32 }) => path32 === files.project)?.raw;
   const warnings = [];
   const store = new VariableStore(deps.clock);
-  const registry = new SourceRegistry(
+  const registry2 = new SourceRegistry(
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
@@ -71695,18 +71411,18 @@ function buildRenderState(load, deps) {
   try {
     registration = registerCompiled(
       config,
-      registry,
+      registry2,
       cwd2,
       deps.compile ?? compileAlone,
       DIRECTORY_SCOPE
     );
     warnings.push(...registration.loadWarnings);
-    const probe2 = registry.view();
+    const probe2 = registry2.view();
     warnings.push(...declareDslVariables(config, probe2, cwd2, VIEW_SCOPE));
     probe2.dispose();
     deriveActionGates(deps.gates, config);
   } catch (err) {
-    registry.dispose();
+    registry2.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);
     return { kind: "failed", cause: err, warnings };
   }
@@ -71719,7 +71435,7 @@ function buildRenderState(load, deps) {
       loadKey: load.key,
       buildWarnings: warnings,
       store,
-      registry,
+      registry: registry2,
       compiled: registration.compiled,
       // What the menu's resets clear is the user layer's: they name no other.
       authoredRoots: userAuthoredRoots(layers, files.user),
@@ -71813,27 +71529,27 @@ function openView(state, cwd2, facts, {
 }, currentRequest) {
   const sessionId2 = facts.hookData.session_id;
   const request2 = currentRequest === void 0 ? standaloneRequest(facts) : { read: currentRequest, update: void 0 };
-  const registry = state.registry.view();
+  const registry2 = state.registry.view();
   let source;
   try {
-    declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
+    declareDslVariables(state.config, registry2, cwd2, VIEW_SCOPE);
     source = sourceOf({
       sessionId: sessionId2,
       state,
-      store: registry.variableStore,
+      store: registry2.variableStore,
       requested: request2.read,
       configAccess
     });
-    bindView(state.compiled, registry.variableStore, registry, source);
+    bindView(state.compiled, registry2.variableStore, registry2, source);
   } catch (e) {
-    registry.dispose();
+    registry2.dispose();
     throw e;
   }
   const stopChanged = reaction(
     () => [
       source.payload(),
       source.selections(),
-      registry.published(),
+      registry2.published(),
       state.registry.published()
     ],
     () => changed(sessionId2),
@@ -71849,8 +71565,8 @@ function openView(state, cwd2, facts, {
   return {
     sessionId: sessionId2,
     state,
-    store: registry.variableStore,
-    registry,
+    store: registry2.variableStore,
+    registry: registry2,
     configAccess,
     source,
     requested: request2.update,
@@ -71859,22 +71575,22 @@ function openView(state, cwd2, facts, {
     retire: stopChanged,
     dispose: () => {
       stopChanged();
-      return registry.dispose();
+      return registry2.dispose();
     }
   };
 }
 var subscriptionsOf = ({
   state,
-  registry
+  registry: registry2
 }) => [
   ...[...state.sources].map(
     ([source, folder]) => ({ kind: "plugin", source, folder })
   ),
-  ...registrySubscriptions(registry)
+  ...registrySubscriptions(registry2)
 ];
-var registrySubscriptions = (registry) => [
-  ...registry.subscriptions().map((run2) => ({ kind: "run", run: run2 })),
-  ...registry.envSubscriptions().map((name) => ({ kind: "env", name }))
+var registrySubscriptions = (registry2) => [
+  ...registry2.subscriptions().map((run2) => ({ kind: "run", run: run2 })),
+  ...registry2.envSubscriptions().map((name) => ({ kind: "env", name }))
 ];
 var draftKey = (sessionId2) => `edit:${sessionId2}`;
 var RenderCache = class {
@@ -71998,10 +71714,10 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's
   // own heap, plus each compile its entries carry once, however many share it.
   accountedBytes() {
-    const keys2 = new Set(
+    const keys3 = new Set(
       [...this.entries.values()].map((e) => e.state.compileKey)
     );
-    return this.entries.size * ENTRY_BYTES + keys2.size * COMPILE_BYTES + this.views.size * VIEW_BYTES;
+    return this.entries.size * ENTRY_BYTES + keys3.size * COMPILE_BYTES + this.views.size * VIEW_BYTES;
   }
   // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
   // same fields and a renderable state. The renderer reads the data; no
@@ -73408,9 +73124,9 @@ function projectSources(names, read3) {
     PLUGIN_SCOPES.map((scope) => [scope, {}])
   );
   for (const name of names) {
-    const keys2 = name.split(".");
-    const leaf2 = keys2.pop();
-    const parent = keys2.reduce(
+    const keys3 = name.split(".");
+    const leaf2 = keys3.pop();
+    const parent = keys3.reduce(
       (at, key) => at[key] ??= {},
       payload
     );
@@ -73619,10 +73335,10 @@ function inClickMode(frame2, mode) {
 init_globals();
 var KEY = CLICK_ERROR_KEY;
 var CLICK_ERROR_HOLD_S = 5;
-function holdClickError(state, sessionId2, text5, at) {
+function holdClickError(state, sessionId2, text6, at) {
   const record3 = joinedEvent(
     lastClickError(state, sessionId2),
-    text5,
+    text6,
     at
   );
   state.set(sessionId2, KEY, JSON.stringify(record3));
@@ -73652,10 +73368,10 @@ function isClickErrorRecord(raw) {
 }
 function recordOf(raw) {
   const value = JSON.parse(raw);
-  const { text: text5, at, answered, revision: revision2 } = value ?? {};
-  if (typeof text5 !== "string" || typeof at !== "number" || typeof answered !== "boolean" || typeof revision2 !== "number" || !Number.isSafeInteger(revision2) || revision2 < 1)
+  const { text: text6, at, answered, revision: revision2 } = value ?? {};
+  if (typeof text6 !== "string" || typeof at !== "number" || typeof answered !== "boolean" || typeof revision2 !== "number" || !Number.isSafeInteger(revision2) || revision2 < 1)
     throw new Error(`click error record ${raw} is not one this build writes`);
-  return { text: text5, at, answered, revision: revision2 };
+  return { text: text6, at, answered, revision: revision2 };
 }
 
 // src/daemon/foundations/request-event.ts
@@ -73942,7 +73658,7 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
   const questions = repoQuestions(entry.revision.snapshot.repo, sessionId2);
-  const said3 = (kind, text5) => text5 == null ? [] : [{ about: aboutText(kind, text5), text: text5, copy: text5 }];
+  const said3 = (kind, text6) => text6 == null ? [] : [{ about: aboutText(kind, text6), text: text6, copy: text6 }];
   const { daemon: daemon2 } = document;
   const daemonEvents = daemonEventsAt(daemon2.held, at, drawing2.by);
   const threw2 = daemonEvents.filter(isThrew);
@@ -74135,7 +73851,7 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     ...warnings.map(({ tag }) => tag)
   ].join(",") || "-";
   const faults = [
-    ...errors2.map(({ about, text: text5 }) => faultAbout("error", about, text5)),
+    ...errors2.map(({ about, text: text6 }) => faultAbout("error", about, text6)),
     ...standing2.map(
       ({ about, warning }) => faultAbout("warning", about, warning.message)
     ),
@@ -74828,22 +74544,22 @@ init_globals();
 init_globals();
 var import_json54 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
-function parse2(text5) {
-  if (text5 === null) return { kind: "none" };
+function parse2(text6) {
+  if (text6 === null) return { kind: "none" };
   try {
-    return { kind: "document", root: parseDocument(text5) };
+    return { kind: "document", root: parseDocument(text6) };
   } catch (e) {
     if (!(e instanceof Json5EditError)) throw e;
     return { kind: "unparsed" };
   }
 }
-function readAt(text5, parsed2, at) {
-  if (text5 === null) return ABSENT3;
-  if (at.length === 0) return { kind: "file", text: text5 };
-  return parsed2.kind === "document" ? readOf(text5, nodeAt(parsed2.root, at)) : { kind: "file", text: text5 };
+function readAt(text6, parsed2, at) {
+  if (text6 === null) return ABSENT3;
+  if (at.length === 0) return { kind: "file", text: text6 };
+  return parsed2.kind === "document" ? readOf(text6, nodeAt(parsed2.root, at)) : { kind: "file", text: text6 };
 }
-function readOf(text5, node) {
-  return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text5, node) };
+function readOf(text6, node) {
+  return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text6, node) };
 }
 function sameRead(a, b) {
   if (a.kind === "value" && b.kind === "value")
@@ -74902,8 +74618,8 @@ function diffNode(at, beforeText, was, afterText, will) {
   const members = diffMembers(at, beforeText, was, afterText, will);
   return rebuilds(beforeText, members, at, written2) ? members : whole;
 }
-function rebuilds(text5, changes, at, written2) {
-  const result = applyChanges(text5, changes);
+function rebuilds(text6, changes, at, written2) {
+  const result = applyChanges(text6, changes);
   if (result.kind !== "applied") return false;
   const parsed2 = parse2(result.text);
   if (parsed2.kind !== "document") return false;
@@ -74937,8 +74653,8 @@ function diffMembers(at, beforeText, was, afterText, will) {
   });
   return [...gone, ...changed];
 }
-function applyChanges(text5, changes, dialect = JSON5_DIALECT) {
-  let current = text5;
+function applyChanges(text6, changes, dialect = JSON5_DIALECT) {
+  let current = text6;
   for (const change of changes) {
     if (change.at.length === 0 && (current !== null && holdsNoValue(current) || change.op !== "remove" && holdsNoValue(change.text)))
       return { kind: "incomplete", at: [], reason: HOLDS_NO_VALUE };
@@ -74968,22 +74684,22 @@ function movedAncestor(parsed2, at) {
   }
   return null;
 }
-function applied(text5, change, dialect) {
+function applied(text6, change, dialect) {
   if (change.at.length === 0)
     return change.op === "remove" ? null : change.text;
   switch (change.op) {
     case "replace":
-      return setValue(text5, change.at, change.text, dialect);
+      return setValue(text6, change.at, change.text, dialect);
     case "insert":
       return insertValue(
-        text5,
+        text6,
         change.at,
         change.text,
         dialect,
         change.precedes
       );
     case "remove":
-      return deleteValue(text5, change.at, change.at.length - 1);
+      return deleteValue(text6, change.at, change.at.length - 1);
   }
 }
 function addressText(at) {
@@ -75173,13 +74889,13 @@ var MAX_VISITS = 20;
 var MAX_SESSIONS2 = 32;
 var menuKeys = /* @__PURE__ */ new WeakMap();
 function capture2(store, sid, { gate: gate2 }) {
-  let keys2 = menuKeys.get(gate2);
-  if (keys2 === void 0) {
-    keys2 = gate2.listKeys().filter(isNavigationKey);
-    menuKeys.set(gate2, keys2);
+  let keys3 = menuKeys.get(gate2);
+  if (keys3 === void 0) {
+    keys3 = gate2.listKeys().filter(isNavigationKey);
+    menuKeys.set(gate2, keys3);
   }
   const values2 = /* @__PURE__ */ new Map();
-  for (const key of keys2) {
+  for (const key of keys3) {
     const value = store.get(sid, key);
     if (value !== null) values2.set(key, value);
   }
@@ -75246,12 +74962,12 @@ var NavigationHistory = class {
       next2.set(sid, followedBy(timelineOf(sid), visit));
     };
     return {
-      choose: (sid, writes, contextOf) => {
-        if (!before.has(sid) && writes.some(({ key }) => isNavigationKey(key))) {
+      choose: (sid, writes2, contextOf) => {
+        if (!before.has(sid) && writes2.some(({ key }) => isNavigationKey(key))) {
           const context = contextOf();
           before.set(sid, { view: capture2(store, sid, context), context });
         }
-        choose(sid, writes);
+        choose(sid, writes2);
       },
       back: (sid, context) => {
         endVisit(sid);
@@ -75268,21 +74984,21 @@ var NavigationHistory = class {
           throw new BadVerbArgs(
             `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`
           );
-        const writes = movedKeys(at, destination).map((key) => ({
+        const writes2 = movedKeys(at, destination).map((key) => ({
           key,
           value: destination.values.get(key) ?? null
         }));
         runInAction(() => {
           store.setBatch(
             sid,
-            writes.flatMap(
+            writes2.flatMap(
               ({ key, value }) => value === null ? [] : [{ key, value }]
             )
           );
-          for (const { key, value } of writes)
+          for (const { key, value } of writes2)
             if (value === null) store.clear(sid, key);
         });
-        return { writes, discarded };
+        return { writes: writes2, discarded };
       },
       commit: () => {
         for (const sid of before.keys()) endVisit(sid);
@@ -75356,11 +75072,11 @@ var StoredMoves = class {
     putNewest(this.moved, session, this.moved.get(session) ?? "heard");
   }
   drain(write) {
-    const writes = [...this.moved].map(
+    const writes2 = [...this.moved].map(
       ([session, moved]) => write(session, moved)
     );
     this.moved.clear();
-    return writes;
+    return writes2;
   }
 };
 
@@ -75413,15 +75129,15 @@ function withoutRetiredChanges(history) {
     [...retired2].map((key) => ({ part: key, why }))
   );
 }
-var quoted = (keys2) => [...keys2].map((k) => `"${k}"`).join(", ");
+var quoted = (keys3) => [...keys3].map((k) => `"${k}"`).join(", ");
 
 // src/renderer-interface/stored-state.ts
 function parseSessionPicks(value) {
   if (!isPlainObject(value))
     return { kind: "failed", reason: "is not an object" };
-  const keys2 = Object.keys(value);
-  if (keys2.length === 0) return { kind: "failed", reason: "holds no picks" };
-  const bad = keys2.find((key) => typeof value[key] !== "string");
+  const keys3 = Object.keys(value);
+  if (keys3.length === 0) return { kind: "failed", reason: "holds no picks" };
+  const bad = keys3.find((key) => typeof value[key] !== "string");
   return bad === void 0 ? { kind: "ok", value } : {
     kind: "failed",
     reason: `has a ${JSON.stringify(bad)} that is not a string`
@@ -75455,8 +75171,8 @@ function withoutRetiredKeys(picks) {
 
 // src/renderer/session-state.ts
 function recordingView(store, records, onChange) {
-  const recorded2 = (sessionId2, keys2, write) => {
-    const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
+  const recorded2 = (sessionId2, keys3, write) => {
+    const before = keys3.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
     write();
     for (const { key, before: b } of before) {
       onChange(sessionId2, key, b, store.get(sessionId2, key));
@@ -75826,17 +75542,17 @@ var SettingsHistory = class {
       );
     }
     const files = stepped2.flatMap((s) => s.kind === "file" ? [s] : []);
-    const stepTexts = new Map(files.map(({ file, text: text5 }) => [file, text5]));
+    const stepTexts = new Map(files.map(({ file, text: text6 }) => [file, text6]));
     const read3 = (file) => {
-      const text5 = stepTexts.get(file);
-      return text5 === void 0 ? click2.files.read(file) : contentOfText(text5);
+      const text6 = stepTexts.get(file);
+      return text6 === void 0 ? click2.files.read(file) : contentOfText(text6);
     };
-    for (const { file, text: text5 } of files) click2.files.prove(file, text5, read3);
-    for (const { file, text: text5 } of files)
+    for (const { file, text: text6 } of files) click2.files.prove(file, text6, read3);
+    for (const { file, text: text6 } of files)
       click2.files.land(
         file,
         requireLayerText(file, click2.files.read(file)),
-        text5
+        text6
       );
     for (const s of stepped2)
       if (s.kind === "session")
@@ -75942,14 +75658,14 @@ function forgotten({ past, future }, gone) {
 function heldWrites(store) {
   const held = /* @__PURE__ */ new Map();
   const put = (sessionId2, key, value) => {
-    const writes = held.get(sessionId2) ?? /* @__PURE__ */ new Map();
-    writes.set(key, value);
-    held.set(sessionId2, writes);
+    const writes2 = held.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    writes2.set(key, value);
+    held.set(sessionId2, writes2);
   };
   return {
     get: (sessionId2, key) => {
-      const writes = held.get(sessionId2);
-      return writes?.has(key) ? writes.get(key) : store.get(sessionId2, key);
+      const writes2 = held.get(sessionId2);
+      return writes2?.has(key) ? writes2.get(key) : store.get(sessionId2, key);
     },
     revision: (sessionId2) => store.revision(sessionId2),
     writes: (sessionId2) => held.get(sessionId2) ?? /* @__PURE__ */ new Map(),
@@ -75962,12 +75678,12 @@ function heldWrites(store) {
     flush: () => {
       const landed = new Map(held);
       runInAction(() => {
-        for (const [sessionId2, writes] of held) {
-          const sets = [...writes].flatMap(
+        for (const [sessionId2, writes2] of held) {
+          const sets = [...writes2].flatMap(
             ([key, value]) => value === null ? [] : [{ key, value }]
           );
           if (sets.length > 0) store.setBatch(sessionId2, sets);
-          for (const [key, value] of writes)
+          for (const [key, value] of writes2)
             if (value === null) store.clear(sessionId2, key);
         }
         held.clear();
@@ -76151,14 +75867,14 @@ var EditDraft = class {
           rewritten2.set(path32, applied3.text);
         }
         const read3 = (file) => rewritten2.has(file) ? contentOfText(rewritten2.get(file)) : destination.read(file);
-        for (const [file, text5] of rewritten2)
-          destination.prove(file, text5, read3);
-        for (const [file, text5] of rewritten2)
+        for (const [file, text6] of rewritten2)
+          destination.prove(file, text6, read3);
+        for (const [file, text6] of rewritten2)
           committedJournal.file(
             this.session,
             file,
             requireLayerText(file, destination.read(file)),
-            text5
+            text6
           );
         this.land(
           committedJournal.sessionState,
@@ -76171,10 +75887,10 @@ var EditDraft = class {
   // The edit's writes, landed past it, through the router as for a session
   // with no edit: edit mode's own keys end with the edit, and the rest
   // persist.
-  land(into, writes) {
+  land(into, writes2) {
     routedWrites(into, () => null, ENDED).write(
       this.session,
-      [...writes].map(([key, value]) => ({ key, value }))
+      [...writes2].map(([key, value]) => ({ key, value }))
     );
   }
 };
@@ -76392,12 +76108,12 @@ function buildDisclosureNest(config) {
     for (const { key, member } of found2.values()) {
       within3.set(key, (within3.get(key) ?? /* @__PURE__ */ new Set()).add(member));
     }
-    const keys2 = [...within3].map(([key, held]) => ({
+    const keys3 = [...within3].map(([key, held]) => ({
       key,
       outside: new Set([...members.get(key)].filter((m) => !held.has(m)))
     }));
-    closures.set(idOf2(parent), keys2);
-    return keys2;
+    closures.set(idOf2(parent), keys3);
+    return keys3;
   };
   return {
     inside: closure,
@@ -76415,11 +76131,11 @@ function disclosureNest(config) {
   NESTS.set(config, nest);
   return nest;
 }
-function closeNested(nest, read3, writes) {
-  const written2 = new Set(writes.map((w) => w.key));
+function closeNested(nest, read3, writes2) {
+  const written2 = new Set(writes2.map((w) => w.key));
   const held = (key) => read3(key) ?? nest.defaultOf(key);
   const folds = /* @__PURE__ */ new Set();
-  for (const { key, value } of writes) {
+  for (const { key, value } of writes2) {
     const was = held(key);
     if (was === value) continue;
     for (const nested of nest.inside({ key, member: was })) {
@@ -76445,11 +76161,11 @@ function openRoots(nest, read3) {
 // src/renderer/closing-view.ts
 init_globals();
 function closingView(store, nestOf2, log) {
-  const write = (sessionId2, writes, land) => {
+  const write = (sessionId2, writes2, land) => {
     const folds = closeNested(
       nestOf2(sessionId2),
       (key) => store.get(sessionId2, key),
-      writes
+      writes2
     );
     runInAction(() => {
       land();
@@ -76484,9 +76200,9 @@ function persistValueText(key, raw) {
   return JSON.stringify(lifted.value);
 }
 function editedText(file, before) {
-  const text5 = before ?? EMPTY_DOCUMENT;
+  const text6 = before ?? EMPTY_DOCUMENT;
   try {
-    return { text: text5, doc: parseDocument(text5) };
+    return { text: text6, doc: parseDocument(text6) };
   } catch (e) {
     if (!(e instanceof Json5EditError)) throw e;
     throw new BadVerbArgs(
@@ -76627,8 +76343,8 @@ function stagedPathOf(doc, under2, preset) {
 function resetPathOf(doc, under2, target) {
   return target.scope === "preset-root" ? stagedPathOf(doc, under2, target.preset) : persistPath(target);
 }
-function ensureAuthored(text5, { unit }) {
-  return unit === null ? text5 : setValue(text5, unit.path, json5Text(unit.value), JSON5_DIALECT);
+function ensureAuthored(text6, { unit }) {
+  return unit === null ? text6 : setValue(text6, unit.path, json5Text(unit.value), JSON5_DIALECT);
 }
 function requireTarget(key) {
   const target = parsePersistTarget(key);
@@ -76659,8 +76375,8 @@ function writeLayerOf(snapshot, role, isolatedFile, home) {
 var rank = (role) => LAYER_ROLES.indexOf(role);
 function seenBy(layer, read3) {
   const held = (layers) => layers.flatMap((l) => {
-    const text5 = requireLayerText(l.path, read3(l.path));
-    return text5 === null ? [] : [heldLayer(l, text5)];
+    const text6 = requireLayerText(l.path, read3(l.path));
+    return text6 === null ? [] : [heldLayer(l, text6)];
   });
   const { chain: chain2 } = layer.snapshot;
   return {
@@ -76669,13 +76385,13 @@ function seenBy(layer, read3) {
     above: held(chain2.filter((l) => rank(l.role) > rank(layer.role)))
   };
 }
-function heldLayer(layer, text5) {
+function heldLayer(layer, text6) {
   return {
     role: layer.role,
     path: layer.path,
-    content: { kind: "text", text: text5 },
+    content: { kind: "text", text: text6 },
     listed: layer.listed,
-    text: text5
+    text: text6
   };
 }
 function heldSnapshot(into, layers) {
@@ -76718,9 +76434,9 @@ function hiddenBy(into, was, will) {
     writtenConfig(into, will)
   ).filter((p2) => !drawn.has(p2));
 }
-function loadedOrNull(into, text5) {
+function loadedOrNull(into, text6) {
   try {
-    return chainOver(into, text5);
+    return chainOver(into, text6);
   } catch (e) {
     if (e instanceof ConfigError) return null;
     throw e;
@@ -76740,10 +76456,10 @@ function inheritedOf(into) {
     );
   }
 }
-function chainOver(into, text5) {
+function chainOver(into, text6) {
   const layers = [
     ...into.below,
-    ...text5 !== null ? [heldLayer(into, text5)] : [],
+    ...text6 !== null ? [heldLayer(into, text6)] : [],
     ...into.above
   ];
   return loadSnapshot(
@@ -76772,12 +76488,12 @@ function changedPaths(a, b, at = "") {
 function isPlainObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
-function proveLoads(layer, text5, read3) {
-  loadOrRefuse(seenBy(layer, read3), text5);
+function proveLoads(layer, text6, read3) {
+  loadOrRefuse(seenBy(layer, read3), text6);
 }
-function loadOrRefuse(into, text5) {
+function loadOrRefuse(into, text6) {
   try {
-    return chainOver(into, text5);
+    return chainOver(into, text6);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -76806,10 +76522,10 @@ function refuseNewDrops(into, was, will) {
 }
 function readDeclared(file, before, key) {
   const target = requireValueTarget(key);
-  const { text: text5, doc } = editedText(file, before);
+  const { text: text6, doc } = editedText(file, before);
   const node = nodeAt(doc, persistPath(target));
   if (node === void 0) return { kind: "none" };
-  const source = textOf(text5, node);
+  const source = textOf(text6, node);
   if (node.kind === "number" && Number.isInteger(node.value))
     return { kind: "integer", value: node.value };
   return node.kind === "string" ? { kind: "text", value: node.value, source } : { kind: "other", source };
@@ -76820,16 +76536,16 @@ function writeValues(store, into, pairs2) {
 function writeDrafts(store, layer, pairs2, placements) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
-  const { text: text5 } = editedText(into.path, before);
+  const { text: text6 } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const valued = pairs2.reduce(
-    (text6, [key, raw]) => setValue(
-      text6,
-      valuePathOf(parseDocument(text6), under2, requireValueTarget(key)),
+    (text7, [key, raw]) => setValue(
+      text7,
+      valuePathOf(parseDocument(text7), under2, requireValueTarget(key)),
       persistValueText(key, raw),
       JSON5_DIALECT
     ),
-    text5
+    text6
   );
   return commit2(
     store,
@@ -76837,12 +76553,12 @@ function writeDrafts(store, layer, pairs2, placements) {
     before,
     writtenOnly(
       into,
-      () => withPlacements(valued, under2, into.path, placements, (text6) => text6)
+      () => withPlacements(valued, under2, into.path, placements, (text7) => text7)
     ),
     refuseHidden
   );
 }
-function withPlacements(text5, under2, file, placements, own2) {
+function withPlacements(text6, under2, file, placements, own2) {
   const landed = /* @__PURE__ */ new Map();
   return placements.reduce((prior, { preset, id: id2, setting, value }) => {
     const acc = own2(prior, under2, preset, id2);
@@ -76869,46 +76585,46 @@ function withPlacements(text5, under2, file, placements, own2) {
       );
     }
     return set2;
-  }, text5);
+  }, text6);
 }
-function ownRow(text5, under2, preset, id2) {
-  const doc = parseDocument(text5);
+function ownRow(text6, under2, preset, id2) {
+  const doc = parseDocument(text6);
   const own2 = ["presets", preset, "root"];
   for (const [row, { path: path32, unit, node }] of cascadeOf(doc, under2, preset)) {
     if (!hasSegmentRef(node, id2)) continue;
-    if (own2.every((key, i2) => path32[i2] === key)) return text5;
-    const rowText = unit === null ? movableTextOf(text5, node) : json5Text(unit.value);
+    if (own2.every((key, i2) => path32[i2] === key)) return text6;
+    const rowText = unit === null ? movableTextOf(text6, node) : json5Text(unit.value);
     if (row !== TREE_BLOCK) {
-      return setValue(text5, [...own2, "rows", row], rowText, JSON5_DIALECT);
+      return setValue(text6, [...own2, "rows", row], rowText, JSON5_DIALECT);
     }
     if (presetLayer(doc, under2, preset) !== null) {
       throw new BadVerbArgs(
         `cannot give preset "${preset}" its own copy of ${path32.join(".")}: it already stages rows of its own over that tree`
       );
     }
-    return setValue(text5, own2, rowText, JSON5_DIALECT);
+    return setValue(text6, own2, rowText, JSON5_DIALECT);
   }
-  return text5;
+  return text6;
 }
-function deleteAtPath(text5, under2, path32) {
+function deleteAtPath(text6, under2, path32) {
   const ownPreset = path32[0] === "presets" && path32.length > 2 && under2.presets[path32[1]] === void 0;
-  return deleteValue(text5, path32, ownPreset ? 2 : 0);
+  return deleteValue(text6, path32, ownPreset ? 2 : 0);
 }
-function deleteValues(store, layer, keys2) {
+function deleteValues(store, layer, keys3) {
   const into = seenBy(layer, (file) => store.read(file));
-  const targets = keys2.map(requireTarget);
+  const targets = keys3.map(requireTarget);
   const before = requireLayerText(into.path, store.read(into.path));
-  const { text: text5 } = editedText(into.path, before);
+  const { text: text6 } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const after = targets.reduce(
-    (text6, target) => deleteAtPath(
-      text6,
+    (text7, target) => deleteAtPath(
+      text7,
       under2,
-      resetPathOf(parseDocument(text6), under2, target)
+      resetPathOf(parseDocument(text7), under2, target)
     ),
-    text5
+    text6
   );
-  if (after === text5) return;
+  if (after === text6) return;
   commit2(store, into, before, after, releases);
 }
 var SAVED_PRESET_PREFIX = "custom-";
@@ -76940,7 +76656,7 @@ function freePresetName(doc, under2, into) {
 function writePreset(store, layer, from, globals, picks, placements) {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
-  const { text: text5, doc } = editedText(into.path, before);
+  const { text: text6, doc } = editedText(into.path, before);
   const under2 = inheritedOf(into);
   const name = freePresetName(doc, under2, into);
   const own2 = ["presets", name];
@@ -76949,7 +76665,7 @@ function writePreset(store, layer, from, globals, picks, placements) {
     ...staged === null ? [] : [
       [
         [...own2, "root"],
-        staged.unit === null ? movableTextOf(text5, staged.fragment) : json5Text(staged.unit.value)
+        staged.unit === null ? movableTextOf(text6, staged.fragment) : json5Text(staged.unit.value)
       ]
     ],
     ...Object.keys(globals).length === 0 ? [] : [[[...own2, "globals"], json5Text(globals)]]
@@ -76962,8 +76678,8 @@ function writePreset(store, layer, from, globals, picks, placements) {
     ];
   });
   const after = [...copied, ...pinned].reduce(
-    (text6, [at, value]) => setValue(text6, at, value, JSON5_DIALECT),
-    setValue(text5, own2, "{}", JSON5_DIALECT)
+    (text7, [at, value]) => setValue(text7, at, value, JSON5_DIALECT),
+    setValue(text6, own2, "{}", JSON5_DIALECT)
   );
   const placed2 = writtenOnly(
     into,
@@ -76998,7 +76714,7 @@ function deletePreset(store, layer, name) {
   }
   const own2 = ["presets", name];
   const before = requireLayerText(into.path, store.read(into.path));
-  const { text: text5, doc } = editedText(into.path, before);
+  const { text: text6, doc } = editedText(into.path, before);
   if (nodeAt(doc, own2) === void 0) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": ${into.path} declares no ${own2.join(".")} \u2014 the bar you clicked is stale; it reloads on the next render`
@@ -77013,7 +76729,7 @@ function deletePreset(store, layer, name) {
     store,
     into,
     before,
-    paths2.reduce((text6, at) => deleteAtPath(text6, under2, at), text5),
+    paths2.reduce((text7, at) => deleteAtPath(text7, under2, at), text6),
     releases
   );
 }
@@ -77024,14 +76740,14 @@ function applyLayoutOp(store, layer, key, op, suffix) {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
   const before = requireLayerText(into.path, store.read(into.path));
-  const { text: text5, doc } = editedText(into.path, before);
+  const { text: text6, doc } = editedText(into.path, before);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const under2 = inheritedOf(into);
   const placement = writtenOnly(
     into,
     () => layoutPlacementOf(doc, under2, target.preset, subject)
   );
-  const authored = ensureAuthored(text5, placement);
+  const authored = ensureAuthored(text6, placement);
   const { after, placed: placed2 } = spliceOp(
     authored,
     placement.path,
@@ -77052,14 +76768,14 @@ function applyLayoutOp(store, layer, key, op, suffix) {
   commit2(store, into, before, after, refuseHidden);
   return placed2;
 }
-function spliceOp(text5, path32, op, suffix, rendered) {
+function spliceOp(text6, path32, op, suffix, rendered) {
   switch (op.op) {
     case "remove":
-      return { after: removeSegmentRef(text5, path32, op.target), placed: null };
+      return { after: removeSegmentRef(text6, path32, op.target), placed: null };
     case "insert": {
       const placed2 = mintPlacement(op.segment, op.anchor, rendered(), suffix);
       return {
-        after: insertSegmentRef(text5, path32, placed2, op.anchor, op.relation),
+        after: insertSegmentRef(text6, path32, placed2, op.anchor, op.relation),
         placed: placed2
       };
     }
@@ -77140,12 +76856,12 @@ function requireDrawer(by) {
 var copyDiagnostic = (args, ctx) => {
   const [by = "", key = ""] = args;
   const sid = ctx.session;
-  const text5 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
-  if (text5 === void 0)
+  const text6 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
+  if (text6 === void 0)
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open the indicator beside the settings door again and copy from there`
     );
-  ask(ctx, { kind: "copy", session: sid, text: text5 });
+  ask(ctx, { kind: "copy", session: sid, text: text6 });
 };
 var setState = (rest2, ctx) => {
   const sid = ctx.session;
@@ -77229,8 +76945,8 @@ var stepState = (args, ctx) => {
     `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
   );
 };
-function refuseDisorderedPicks(ctx, verb, writes) {
-  const picks = writes.filter((w) => isPlacementDraftKey(w.key));
+function refuseDisorderedPicks(ctx, verb, writes2) {
+  const picks = writes2.filter((w) => isPlacementDraftKey(w.key));
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -77284,13 +77000,13 @@ function changeLanded(ctx, { session, consequence, outcome }, effects) {
   ctx.log("warn", `config change: ${reason} (session=${session})`);
   holdClickError(ctx.sessionState, session, reason, ctx.now());
 }
-function proveLoadsAsLayer(ctx, origin, file, text5, read3) {
+function proveLoadsAsLayer(ctx, origin, file, text6, read3) {
   const layer = origin === null ? void 0 : layerAtPath(ctx.snapshotFor(origin).chain, file);
   if (origin === null || layer === void 0)
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from \u2014 its step is not taken`
     );
-  proveLoads(heldLayer2(ctx, origin, layer.role), text5, read3);
+  proveLoads(heldLayer2(ctx, origin, layer.role), text6, read3);
 }
 function sessionConfig(ctx) {
   return ctx.configFor(sessionOrigin(ctx));
@@ -77417,8 +77133,8 @@ function headFor(config, name) {
 }
 function optionsOf2(config, head) {
   if ("cycle" in head) return head.cycle;
-  const domain = "from" in head ? head.from : "insertSegmentFrom" in head ? head.insertSegmentFrom : void 0;
-  return domain === void 0 ? void 0 : resolveOptionDomain(domain, configOptionDomains(config)).members;
+  const domain2 = "from" in head ? head.from : "insertSegmentFrom" in head ? head.insertSegmentFrom : void 0;
+  return domain2 === void 0 ? void 0 : resolveOptionDomain(domain2, configOptionDomains(config)).members;
 }
 function ringHeld(ctx, config, head) {
   const options = "from" in head || "cycle" in head ? optionsOf2(config, head) : void 0;
@@ -77501,16 +77217,16 @@ function ringStatePairs(args, ctx) {
   );
   return [ring.key, next2, ...turn];
 }
-function landStateWrites(writes, ctx) {
+function landStateWrites(writes2, ctx) {
   setState(
-    writes.flatMap(
+    writes2.flatMap(
       ({ verb, args }) => verb === VERB_RING_STATE ? ringStatePairs(args, ctx) : args
     ),
     ctx
   );
 }
-function declaredName(file, text5, key) {
-  const declared = readDeclared(file, text5, key);
+function declaredName(file, text6, key) {
+  const declared = readDeclared(file, text6, key);
   return declared.kind === "text" ? declared.value : void 0;
 }
 var ringConfig = (args, ctx) => {
@@ -77717,17 +77433,17 @@ var deletePreset2 = (args, ctx) => {
 };
 var resetConfig = (args, ctx) => {
   const sid = ctx.session;
-  const { role, args: keys2 } = configArgs("reset-config", args);
+  const { role, args: keys3 } = configArgs("reset-config", args);
   const origin = sessionOrigin(ctx);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
-  const unknown2 = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
+  const unknown2 = keys3.length === 0 ? [""] : keys3.filter((k) => !known.includes(k));
   if (unknown2.length > 0) {
     throw new BadVerbArgs(
       `reset-config: unknown config key "${unknown2.join('", "')}" (have: ${known.join(", ")})`
     );
   }
   const into = heldLayer2(ctx, origin, role);
-  const layers = keys2.map(resetLayers);
+  const layers = keys3.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
   deleteValues(editStore(ctx, sid), into, fileKeys);
@@ -77778,11 +77494,11 @@ var undo = (_args, ctx) => {
 };
 var back = (_args, ctx) => {
   const sid = ctx.session;
-  const { writes, discarded } = ctx.menu.back(
+  const { writes: writes2, discarded } = ctx.menu.back(
     sid,
     menuContext(ctx, sid, sessionConfig(ctx))
   );
-  const restored = writes.map(({ key, value }) => `${key}=${value ?? "\u2205"}`).join(" ");
+  const restored = writes2.map(({ key, value }) => `${key}=${value ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 var rewind = (_args, ctx) => {
@@ -77799,7 +77515,7 @@ var redo = (_args, ctx) => {
   const step4 = ctx.journal.redo(sid);
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
-var slash = (args, ctx) => {
+var slash2 = (args, ctx) => {
   const [line = ""] = args;
   const sid = ctx.session;
   const declared = Object.values(
@@ -77869,7 +77585,7 @@ var SESSION_HANDLERS = {
   [VERB_REDO]: redo,
   [VERB_BACK]: back,
   [VERB_REWIND]: rewind,
-  [VERB_SLASH]: slash,
+  [VERB_SLASH]: slash2,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
 var reported = (step4, message) => step4.kind === "state-writes" ? message : `${step4.verb}: ${message}`;
@@ -77914,7 +77630,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
     roleOf: (file) => ctx.configWrites.roleOf(file),
     pathOf: (role) => ctx.configWrites.pathOf(role),
-    prove: (file, text5, read3) => proveLoadsAsLayer(ctx, origin, file, text5, read3)
+    prove: (file, text6, read3) => proveLoadsAsLayer(ctx, origin, file, text6, read3)
   };
   const draft = origin === null || ctx.edits.revision(origin, sid) === null ? null : ctx.edits.draft(sid);
   const scoped = draft === null ? ctx : {
@@ -77923,15 +77639,15 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     configFor: (of) => ctx.configFor(of, sid)
   };
   const edit = draft?.begin(
-    (file, text5, read3) => proveLoadsAsLayer(scoped, origin, file, text5, read3)
+    (file, text6, read3) => proveLoadsAsLayer(scoped, origin, file, text6, read3)
   );
   const journal = edit?.journal ?? ctx.history.begin(files);
   const aside = heldAside();
-  const writes = edit !== void 0 ? journal.sessionState : routedWrites(journal.sessionState, () => null, aside);
+  const writes2 = edit !== void 0 ? journal.sessionState : routedWrites(journal.sessionState, () => null, aside);
   const requested = {};
   const failures = [];
   const sessionState = closingView(
-    writes,
+    writes2,
     (target) => target === sid ? nestOf(scoped, origin) : NO_NEST,
     (line) => ctx.log("info", line)
   );
@@ -78289,14 +78005,14 @@ function buildDebugSnapshot(what, state) {
 }
 function introspectVars(state) {
   if (state === null) return [];
-  const { store, registry, config } = state;
+  const { store, registry: registry2, config } = state;
   const sourceByName = buildSourceKindIndex(config);
   const names = store.names().sort();
   const out = [];
   for (const name of names) {
     const node = store.getNode(name);
     const value = valueOf2(node);
-    const err = registry.getLastError(name);
+    const err = registry2.getLastError(name);
     out.push({
       name,
       source: sourceByName.get(name) ?? null,
@@ -79384,10 +79100,10 @@ function noted(e, staged, removal) {
     error.message += `; the staged file ${staged} was left behind: ${removal.message}`;
   return error;
 }
-function writeAtomic(at, text5, mode) {
+function writeAtomic(at, text6, mode) {
   const file = resolvedTarget(at);
   fs_default.mkdirSync(import_node_path10.default.dirname(file), { recursive: true });
-  publishByRename(file, text5, mode ?? filePermissions(file));
+  publishByRename(file, text6, mode ?? filePermissions(file));
 }
 function filePermissions(file) {
   const mode = fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
@@ -79503,9 +79219,9 @@ var clipped = (line) => {
   }
   return line;
 };
-function saidBy(r, text5) {
+function saidBy(r, text6) {
   if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
-  const t2 = text5.trim();
+  const t2 = text6.trim();
   const firstEnd = t2.search(/[\r\n]/);
   if (firstEnd === -1) return clipped(t2);
   const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
@@ -79693,7 +79409,7 @@ var timedOutError = (timeoutMs) => `timed out after ${timeoutMs / 1e3} s`;
 function capture3(state, category, stream, ends) {
   const { stats } = state.scope;
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
-  let text5 = "";
+  let text6 = "";
   let bytes = 0;
   let dropped2 = 0;
   let onEnd = ends;
@@ -79714,7 +79430,7 @@ function capture3(state, category, stream, ends) {
       return;
     }
     const room = Math.max(0, MAX_CAPTURED_BYTES - bytes);
-    text5 += decoder.write(chunk3.subarray(0, room));
+    text6 += decoder.write(chunk3.subarray(0, room));
     bytes += chunk3.length;
     if (bytes > MAX_CAPTURED_BYTES) onEnd.full();
   });
@@ -79722,8 +79438,8 @@ function capture3(state, category, stream, ends) {
     take: () => {
       if (onEnd === null) return "";
       onEnd = null;
-      const whole = text5 + decoder.end();
-      text5 = "";
+      const whole = text6 + decoder.end();
+      text6 = "";
       return whole;
     },
     // Whatever outlives the launch — a refused child, a descendant that left
@@ -79751,10 +79467,10 @@ function hold(state, category, pipe, end) {
   stats?.onDrainOpen(category);
 }
 var inputEnd = () => "closed";
-function feed(input, text5) {
+function feed(input, text6) {
   input.on("error", () => {
   });
-  input.end(text5);
+  input.end(text6);
 }
 var captured = (stdinInput) => ({
   read: (state, category, stream, ends) => capture3(state, category, stream, ends),
@@ -79769,8 +79485,8 @@ function relay(state, category, stream, ends, heard) {
     ends.failed(err);
   });
   stream?.on("data", (chunk3) => {
-    const text5 = decoder.write(chunk3);
-    if (text5 !== "") heard(text5);
+    const text6 = decoder.write(chunk3);
+    if (text6 !== "") heard(text6);
   });
   return {
     take: () => {
@@ -79803,9 +79519,9 @@ function launchChannel(state, opts) {
     get pid() {
       return pid2;
     },
-    write: (text5) => {
+    write: (text6) => {
       if (input !== null && !input.writableEnded && !input.destroyed)
-        input.write(text5);
+        input.write(text6);
     },
     end: () => {
       input?.end();
@@ -80363,8 +80079,8 @@ var Stream = class extends import_events2.EventEmitter {
     this.encoding = encoding;
     return this;
   }
-  chunk(text5) {
-    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text5) : text5);
+  chunk(text6) {
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text6) : text6);
   }
   pipe() {
     return this;
@@ -80385,10 +80101,10 @@ var Stream = class extends import_events2.EventEmitter {
 };
 var nextPid = 5e3;
 function spawn(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
+  const program2 = programs.get(cmd.split("/").pop());
   const child = Object.assign(new import_events2.EventEmitter(), {
     // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === void 0 ? void 0 : nextPid++,
+    pid: program2 === void 0 ? void 0 : nextPid++,
     stdout: new Stream(),
     stderr: new Stream(),
     stdin: new Stream(),
@@ -80402,11 +80118,11 @@ function spawn(cmd, args = [], opts = {}) {
     }
   });
   setTimeout(() => {
-    if (program === void 0) {
+    if (program2 === void 0) {
       child.emit("error", enoent(cmd));
       return;
     }
-    const run2 = program(args, opts.cwd);
+    const run2 = program2(args, opts.cwd);
     if (run2 === RESIDENT) return;
     if (run2.stdout) child.stdout.chunk(run2.stdout);
     if (run2.stderr) child.stderr.chunk(run2.stderr);
@@ -80419,9 +80135,9 @@ function spawn(cmd, args = [], opts = {}) {
   return child;
 }
 function spawnSync(cmd, args = [], opts = {}) {
-  const program = programs.get(cmd.split("/").pop());
-  if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
-  const run2 = program(args, opts.cwd);
+  const program2 = programs.get(cmd.split("/").pop());
+  if (program2 === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
+  const run2 = program2(args, opts.cwd);
   if (run2 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
   return { pid: nextPid++, status: run2.code, signal: null, stdout: run2.stdout, stderr: run2.stderr ?? "", output: [null, run2.stdout, run2.stderr ?? ""] };
 }
@@ -80566,7 +80282,7 @@ var SOURCE_VERSION = "v1";
 var LINK_KEY_ID_CHARS = 8;
 var LINK_KEY_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 var LINK_KEY_ID_DOMAIN = "cc-candybar link key id";
-var isLinkKeyId = (text5) => text5.length === LINK_KEY_ID_CHARS && [...text5].every((c) => LINK_KEY_ID_ALPHABET.includes(c));
+var isLinkKeyId = (text6) => text6.length === LINK_KEY_ID_CHARS && [...text6].every((c) => LINK_KEY_ID_ALPHABET.includes(c));
 function base64url(bytes) {
   return import_buffer.Buffer.from(bytes).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
@@ -80715,14 +80431,14 @@ function linkSignerOver(key) {
 function linksOf2({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
-    for (const { link, text: text5 } of runs.filter((run2) => run2.text !== "")) {
+    for (const { link, text: text6 } of runs.filter((run2) => run2.text !== "")) {
       const url = link === void 0 ? void 0 : hrefOfDrawnLink(link);
       const last2 = stretches.at(-1);
-      if (last2 !== void 0 && last2.url === url) last2.text += text5;
-      else stretches.push({ url, text: text5 });
+      if (last2 !== void 0 && last2.url === url) last2.text += text6;
+      else stretches.push({ url, text: text6 });
     }
     return stretches.flatMap(
-      ({ url, text: text5 }) => url === void 0 ? [] : [{ url, text: text5.trim() }]
+      ({ url, text: text6 }) => url === void 0 ? [] : [{ url, text: text6.trim() }]
     );
   });
 }
@@ -80852,9 +80568,9 @@ function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
     const paths2 = [];
     for (const candidate of candidates) {
       paths2.push(candidate);
-      let text5;
+      let text6;
       try {
-        text5 = readText(candidate);
+        text6 = readText(candidate);
       } catch (e) {
         const result = {
           kind: "failed",
@@ -80863,12 +80579,12 @@ function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
         };
         return { result, paths: paths2, source: candidate, text: null };
       }
-      if (text5 === null) continue;
+      if (text6 === null) continue;
       return {
-        result: documentAt(candidate, text5, parse3),
+        result: documentAt(candidate, text6, parse3),
         paths: paths2,
         source: candidate,
-        text: text5
+        text: text6
       };
     }
     return { result: ok(empty2), paths: paths2, source: null, text: null };
@@ -80877,10 +80593,10 @@ function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
     const observed2 = observe2();
     const { current, setAside: setAside2 } = writeBase(observed2, empty2);
     const { source } = observed2;
-    const text5 = observed2.result.kind === "ok" ? observed2.text : null;
+    const text6 = observed2.result.kind === "ok" ? observed2.text : null;
     const value = next2(current);
     const promote = source !== null && source !== file;
-    const rewrite = promote || setAside2 !== null || value !== current ? { file, was: source === file ? text5 : null, will: textOf2(value) } : null;
+    const rewrite = promote || setAside2 !== null || value !== current ? { file, was: source === file ? text6 : null, will: textOf2(value) } : null;
     try {
       const old = previousName(file, previous2, source);
       const retire = old === null || old === setAside2?.file ? null : { from: old, to: `${old}.migrated-${randomUUID()}` };
@@ -80920,10 +80636,10 @@ function previousName(file, previous2, source) {
   const oldEntry = entry(previous2);
   return linkChain(file).some((hop) => entry(hop) === oldEntry) ? null : previous2;
 }
-function documentAt(file, text5, parse3) {
+function documentAt(file, text6, parse3) {
   let doc;
   try {
-    doc = JSON.parse(text5);
+    doc = JSON.parse(text6);
   } catch (e) {
     return {
       kind: "failed",
@@ -80966,7 +80682,7 @@ var UndoLog = class {
 };
 
 // src/daemon/file-rewrites.ts
-var writeConfigFile = (file, text5, mode) => text5 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text5, mode);
+var writeConfigFile = (file, text6, mode) => text6 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text6, mode);
 function setAside(file) {
   const from = resolvedTarget(file);
   const to = `${from}.unread-${randomUUID()}`;
@@ -81408,9 +81124,9 @@ var SessionBook = class {
   // The session's newest request: what it says the session is, saved when
   // it moved, and otherwise only its place, which the file takes within the
   // order period.
-  heard(req, environment) {
+  heard(req, environment2) {
     const session = req.hookData.session_id;
-    this.environments.set(session, environment);
+    this.environments.set(session, environment2);
     this.forget(
       this.book.take([{ kind: "put", key: session, value: durableOf(req) }])
     );
@@ -81433,8 +81149,8 @@ var SessionBook = class {
   // environment of the same reported session. Only the directory is durable.
   programContextOf(session) {
     const durable = this.book.get(session);
-    const environment = this.environmentOf(session);
-    return durable !== void 0 && environment.kind === "ok" ? { cwd: durable.origin.cwd, environment: environment.value } : null;
+    const environment2 = this.environmentOf(session);
+    return durable !== void 0 && environment2.kind === "ok" ? { cwd: durable.origin.cwd, environment: environment2.value } : null;
   }
   reportedFor(session, key) {
     const held = this.environments.get(session);
@@ -81507,10 +81223,10 @@ var Runs = class {
   // fresh.
   start(run2) {
     if (this.closed) throw new Error("run owner used after close");
-    const environment = this.deps.environmentOf(run2.session);
-    if (environment.kind === "failed") {
+    const environment2 = this.deps.environmentOf(run2.session);
+    if (environment2.kind === "failed") {
       this.refused++;
-      const reason = `not run: ${environment.reason}`;
+      const reason = `not run: ${environment2.reason}`;
       return Promise.resolve({
         outcome: { kind: "failed", reason },
         said: `program=${valueOf(run2.program)} ended=refused \u2014 ${reason}`
@@ -81522,18 +81238,18 @@ var Runs = class {
     const abort = new AbortController();
     this.inFlight.add(abort);
     this.started++;
-    const { program, args } = run2;
-    const inheritsEnvironment = Object.keys(environment.value).length + Object.keys(run2.env).length > 0;
+    const { program: program2, args } = run2;
+    const inheritsEnvironment = Object.keys(environment2.value).length + Object.keys(run2.env).length > 0;
     const startedAt = this.deps.clock.monotonic();
     return this.deps.launch({
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path14.default.resolve(run2.cwd, program) : program,
+      bin: program2.includes("/") ? import_node_path14.default.resolve(run2.cwd, program2) : program2,
       args: [...args],
       // [LAW:single-enforcer] The program's own variables over its
       // session's environment, laid here for every click's run.
-      environment: environment.value,
+      environment: environment2.value,
       envOverlay: run2.env,
       cwd: run2.cwd,
       timeoutMs: this.timeoutMs,
@@ -82807,9 +82523,9 @@ var SourceRuns = class {
       },
       every: ({
         run: {
-          identity: { refresh }
+          identity: { refresh: refresh2 }
         }
-      }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
+      }) => refresh2.kind === "ttl" ? { okMs: refresh2.durationMs, failedMs: refresh2.durationMs } : null,
       watch: ({ digest: digest2, run: { identity: identity3 } }, changed) => {
         if (identity3.refresh.kind !== "watch_file") return NO_WATCH();
         const unsubscribe = this.watchMgr.subscribe(
@@ -82842,9 +82558,9 @@ var SourceRuns = class {
   // standing fault, so the bar draws the source's fallback beside a ⚠ that
   // says why. A shell run for a session whose environment the host does not
   // hold is refused the same way: the host's own is never a session's.
-  declare(holds3, judged, environment) {
+  declare(holds3, judged, environment2) {
     const { digest: digest2 } = judged;
-    const run2 = sessionRunOf(judged, environment);
+    const run2 = sessionRunOf(judged, environment2);
     if (run2.kind === "failed") {
       const lane2 = settledLane(failed(run2.reason, "read"));
       return { digest: digest2, current: () => lane2.current(), fault: () => run2.reason };
@@ -82874,24 +82590,24 @@ var SourceRuns = class {
     this.watchMgr.dispose();
   }
 };
-function declareRuns(sourceRuns, holds3, runs, environment, take) {
+function declareRuns(sourceRuns, holds3, runs, environment2, take) {
   return new Map(
     [...runs].map(([digest2, judged]) => [
       digest2,
-      take(digest2, () => sourceRuns.declare(holds3, judged, environment))
+      take(digest2, () => sourceRuns.declare(holds3, judged, environment2))
     ])
   );
 }
-function sessionRunOf(judged, environment) {
+function sessionRunOf(judged, environment2) {
   if (judged.kind === "refused")
     return { kind: "failed", reason: `refused: ${judged.reason}` };
   const { run: run2 } = judged;
   const { read: read3 } = run2.identity;
   if (read3.kind === "file")
     return { kind: "ok", value: { digest: run2.digest, run: run2, env: {} } };
-  if (environment.kind === "failed")
-    return { kind: "failed", reason: `not run: ${environment.reason}` };
-  const session = environment.value;
+  if (environment2.kind === "failed")
+    return { kind: "failed", reason: `not run: ${environment2.reason}` };
+  const session = environment2.value;
   const env2 = Object.fromEntries(
     read3.env.flatMap((name) => {
       const value = ownValue(session, name);
@@ -82944,7 +82660,7 @@ function gitAt({
   ];
 }
 function declareLanes(owners, holds3, facts, sources) {
-  const { environment } = facts;
+  const { environment: environment2 } = facts;
   const pane = facts.hints.tmux ?? null;
   const faults = [];
   const declare = (lane, take) => {
@@ -82996,7 +82712,7 @@ function declareLanes(owners, holds3, facts, sources) {
       owners.sourceRuns,
       holds3,
       sources.runs,
-      environment,
+      environment2,
       (digest2, take) => ({
         digest: digest2,
         fault: () => null,
@@ -83009,7 +82725,7 @@ function declareLanes(owners, holds3, facts, sources) {
       sources.env.map((name) => [
         name,
         settledLane(
-          environment.kind === "failed" ? failed(environment.reason, "read") : variableOf(environment.value, name)
+          environment2.kind === "failed" ? failed(environment2.reason, "read") : variableOf(environment2.value, name)
         )
       ])
     )
@@ -83175,12 +82891,12 @@ var msOf2 = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, recipient, facts) {
+async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment2, id2, recipient, facts) {
   const { req, error: checkoutError } = located(arrived2, locate);
   const session = req.hookData.session_id;
   const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
   const abandoned = () => !closing.aborted && recipient.gone();
-  const worldState = collector.requested(req, environment);
+  const worldState = collector.requested(req, environment2);
   const release3 = collector.holding(session);
   let configured;
   let drawing2 = null;
@@ -84278,14 +83994,14 @@ function parseOwner(raw) {
   });
   if (typeof raw !== "object" || raw === null)
     return bad("owner is an object of id, gestures and hover");
-  const { id: id2, gestures, hover } = raw;
+  const { id: id2, gestures: gestures2, hover } = raw;
   if (typeof id2 !== "string" || id2 === "")
     return bad("owner.id is a non-empty string");
-  if (!Array.isArray(gestures))
+  if (!Array.isArray(gestures2))
     return bad("owner.gestures is a list of the gestures delivered");
   if (hover !== null && typeof hover !== "string")
     return bad("owner.hover is the hovered action's name, or null");
-  const delivered = parseDelivered(gestures);
+  const delivered = parseDelivered(gestures2);
   if (delivered.kind !== "ok")
     return bad(`owner.gestures: ${delivered.reason}`);
   return {
@@ -85555,7 +85271,7 @@ var leaf = (is2) => ({
 var number = leaf(
   (value) => typeof value === "number" && Number.isFinite(value)
 );
-var text3 = leaf((value) => typeof value === "string");
+var text4 = leaf((value) => typeof value === "string");
 var flag = leaf((value) => typeof value === "boolean");
 var word = (members) => leaf((value) => typeof value === "string" && Object.hasOwn(members, value));
 var oneOf2 = (members) => leaf(
@@ -85586,8 +85302,8 @@ var tagged = (arms) => ({
   misses: (value, at) => {
     if (!isRecord2(value)) return [at];
     const tag = value.kind;
-    const arm2 = typeof tag === "string" && Object.hasOwn(arms, tag) ? arms[tag] : void 0;
-    return arm2 === void 0 ? [below(at, "kind")] : fieldMisses(arm2, value, at);
+    const arm3 = typeof tag === "string" && Object.hasOwn(arms, tag) ? arms[tag] : void 0;
+    return arm3 === void 0 ? [below(at, "kind")] : fieldMisses(arm3, value, at);
   }
 });
 
@@ -85598,7 +85314,7 @@ var RATES = object({
   cache_read: number,
   cache_write_5m: number
 });
-var MODELS = entries(text3, RATES);
+var MODELS = entries(text4, RATES);
 var CACHE_FILE = object({
   data: MODELS,
   timestamp: number
@@ -85919,9 +85635,9 @@ var import_node_path21 = __toESM(require_path_browserify(), 1);
 // src/utils/transcript-activity.ts
 init_globals();
 var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
-function slashCommand(text5) {
-  if (typeof text5 !== "string") return void 0;
-  return COMMAND_NAME.exec(text5)?.[1];
+function slashCommand(text6) {
+  if (typeof text6 !== "string") return void 0;
+  return COMMAND_NAME.exec(text6)?.[1];
 }
 function todoItems(input) {
   const todos2 = input?.todos;
@@ -85931,9 +85647,9 @@ function todoItems(input) {
     if (typeof raw !== "object" || raw === null) continue;
     const { content, activeForm, status } = raw;
     const active2 = status === "in_progress";
-    const text5 = active2 && typeof activeForm === "string" ? activeForm : content;
-    if (typeof text5 !== "string") continue;
-    items.push({ text: text5, active: active2, done: status === "completed" });
+    const text6 = active2 && typeof activeForm === "string" ? activeForm : content;
+    if (typeof text6 !== "string") continue;
+    items.push({ text: text6, active: active2, done: status === "completed" });
   }
   return items;
 }
@@ -86061,10 +85777,10 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
   }
   return ok({ paths: paths2, longLines, unowned });
 }
-function sidechainOwnerOf(text5, sessionId2) {
-  const end = text5.indexOf("\n");
+function sidechainOwnerOf(text6, sessionId2) {
+  const end = text6.indexOf("\n");
   if (end < 0) return { kind: "unwritten" };
-  const line = jsonLine(text5.slice(0, end));
+  const line = jsonLine(text6.slice(0, end));
   switch (line.kind) {
     case "blank":
       return { kind: "unknown", reason: "is blank" };
@@ -86085,9 +85801,9 @@ function userEntryOf(parsed2) {
   if (firstBlockType(msg) === "tool_result") return "tool-result";
   const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
   if (origin !== void 0 && origin !== "human") return "turn";
-  const text5 = turnText(msg?.content).trimStart();
-  if (text5.startsWith("[Request interrupted by user")) return "interrupt";
-  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text5) ? "claude-code" : "prompt";
+  const text6 = turnText(msg?.content).trimStart();
+  if (text6.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text6) ? "claude-code" : "prompt";
 }
 var TURN_GOES_ON = /* @__PURE__ */ new Set([
   void 0,
@@ -86204,9 +85920,9 @@ function lineOf(line) {
       return entryOf3(read3.value);
   }
 }
-function parseJsonlLines(text5, after, dropped2) {
+function parseJsonlLines(text6, after, dropped2) {
   const entries2 = [];
-  const lines2 = text5.split("\n");
+  const lines2 = text6.split("\n");
   let lost = dropped2;
   for (const [index, line] of lines2.entries()) {
     const read3 = lineOf(line);
@@ -86572,15 +86288,15 @@ var SessionUsageStore = class {
   // first and whenever the other lands, so it reads, records and logs once.
   // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
   refresh(sessionId2, transcriptPath, by) {
-    let refresh = null;
+    let refresh2 = null;
     const once2 = () => {
-      if (refresh !== null) return refresh;
+      if (refresh2 !== null) return refresh2;
       const stamp2 = statStamp(transcriptPath);
-      refresh = {
+      refresh2 = {
         stamp: stamp2,
         record: this.refreshed(sessionId2, transcriptPath, stamp2, by)
       };
-      return refresh;
+      return refresh2;
     };
     return {
       // [LAW:no-silent-failure] A failed transcript parse flows out as
@@ -86692,8 +86408,8 @@ var SessionUsageStore = class {
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
-  async observed(sessionId2, refresh, nowMs) {
-    const { stamp: stamp2, record: refreshed } = refresh();
+  async observed(sessionId2, refresh2, nowMs) {
+    const { stamp: stamp2, record: refreshed } = refresh2();
     return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const record3 = await refreshed;
       if (record3.kind === "failed") {
@@ -87040,9 +86756,9 @@ var checkoutFiles = {
   text: (file) => probe(file, () => readRegularTextSync(file))
 };
 function gitDirNamed(root, files = checkoutFiles) {
-  const text5 = files.text(import_node_path23.default.join(root, ".git"));
-  if (text5.kind !== "ok") return text5;
-  const named2 = text5.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+  const text6 = files.text(import_node_path23.default.join(root, ".git"));
+  if (text6.kind !== "ok") return text6;
+  const named2 = text6.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
   return named2 === void 0 ? failed(`${import_node_path23.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path23.default.resolve(root, named2));
 }
 function sharedExcludeOf(root) {
@@ -87059,9 +86775,9 @@ function sharedExcludeOf(root) {
   return ok(import_node_path23.default.join(shared, "info", "exclude"));
 }
 function commonDirOf(gitDir, files = checkoutFiles) {
-  const text5 = files.text(import_node_path23.default.join(gitDir, "commondir"));
-  if (text5.kind !== "ok") return text5;
-  const common = text5.value.trim();
+  const text6 = files.text(import_node_path23.default.join(gitDir, "commondir"));
+  if (text6.kind !== "ok") return text6;
+  const common = text6.value.trim();
   return common === "" ? failed(`${import_node_path23.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path23.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
@@ -87458,9 +87174,9 @@ var GitService = class {
       "refs",
       "stash"
     );
-    let text5;
+    let text6;
     try {
-      text5 = fs_default.readFileSync(reflog, "utf-8");
+      text6 = fs_default.readFileSync(reflog, "utf-8");
     } catch (e) {
       if (e.code === "ENOENT") return ok(0);
       return failed(
@@ -87468,7 +87184,7 @@ var GitService = class {
         "read"
       );
     }
-    const entries2 = text5.trim();
+    const entries2 = text6.trim();
     return ok(entries2 ? entries2.split("\n").length : 0);
   }
   // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
@@ -88185,28 +87901,28 @@ function readClaudeSettingsText(settingsPath) {
     throw new Error(`cannot read ${messageOf(error)}`, { cause: error });
   }
 }
-function parseClaudeSettings(settingsPath, text5) {
-  if (text5 === null) return { text: text5, edited: EMPTY_DOCUMENT, document: {} };
+function parseClaudeSettings(settingsPath, text6) {
+  if (text6 === null) return { text: text6, edited: EMPTY_DOCUMENT, document: {} };
   let parsed2;
   try {
-    parsed2 = JSON_DIALECT.parse(text5);
+    parsed2 = JSON_DIALECT.parse(text6);
   } catch (e) {
     throw cannotRead(settingsPath, e);
   }
   if (!isJsonObject(parsed2)) {
     throw new Error(`cannot read ${settingsPath}: not a JSON object`);
   }
-  return { text: text5, edited: text5, document: parsed2 };
+  return { text: text6, edited: text6, document: parsed2 };
 }
 function readClaudeSettingsOutcome(settingsPath) {
-  let text5;
+  let text6;
   try {
-    text5 = readClaudeSettingsText(settingsPath);
+    text6 = readClaudeSettingsText(settingsPath);
   } catch (e) {
     return failed(messageOf(e), "read");
   }
   try {
-    return ok(parseClaudeSettings(settingsPath, text5).document);
+    return ok(parseClaudeSettings(settingsPath, text6).document);
   } catch (e) {
     return failed(messageOf(e), "parse");
   }
@@ -88355,8 +88071,8 @@ async function findLastCacheActivityTs(transcriptPath) {
   }
   return ABSENT2;
 }
-function scanLastCacheTs(text5, fromStart) {
-  const lines2 = text5.split("\n");
+function scanLastCacheTs(text6, fromStart) {
+  const lines2 = text6.split("\n");
   const start = fromStart ? 0 : 1;
   for (let i2 = lines2.length - 1; i2 >= start; i2--) {
     const line = lines2[i2];
@@ -88397,22 +88113,22 @@ var import_node_path25 = __toESM(require_path_browserify(), 1);
 // src/var-system/parse.ts
 init_globals();
 var LINE_BREAK = /\r\n|\r|\n/g;
-var textParser = (text5) => ok(text5.replace(LINE_BREAK, " ").trim());
+var textParser = (text6) => ok(text6.replace(LINE_BREAK, " ").trim());
 function regexParser(regex) {
-  return (text5) => {
-    const m = regex.exec(text5);
+  return (text6) => {
+    const m = regex.exec(text6);
     const group = m?.[1];
     return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
   };
 }
-var jsonParser = (text5) => {
+var jsonParser = (text6) => {
   try {
-    return ok(JSON.parse(text5));
+    return ok(JSON.parse(text6));
   } catch (e) {
     return failed(`JSON parse failed: ${e.message}`, "parse");
   }
 };
-var jsonDocumentParser = (text5) => text5.trim() === "" ? ABSENT2 : jsonParser(text5);
+var jsonDocumentParser = (text6) => text6.trim() === "" ? ABSENT2 : jsonParser(text6);
 
 // src/daemon/cache/managed-storage.ts
 var DAY_MS3 = 24 * 60 * 60 * 1e3;
@@ -89818,10 +89534,10 @@ var request = refuse3("https.request");
 var createInterface = refuse3("readline.createInterface");
 var createRequire = refuse3("module.createRequire");
 var json = refuse3("stream/consumers.json");
-var text4 = refuse3("stream/consumers.text");
+var text5 = refuse3("stream/consumers.text");
 var writeHeapSnapshot = refuse3("v8.writeHeapSnapshot");
 var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text4, writeHeapSnapshot, getHeapStatistics };
+var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text5, writeHeapSnapshot, getHeapStatistics };
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -89896,13 +89612,13 @@ function footprintCharge(run2) {
     };
   };
 }
-function physFootprintsOf(text5) {
+function physFootprintsOf(text6) {
   const byPid = /* @__PURE__ */ new Map();
   const unnamed = [];
   let header = null;
   let pid2 = null;
   let opened = false;
-  for (const line of text5.split("\n")) {
+  for (const line of text6.split("\n")) {
     if (/^=+$/.test(line)) {
       if (!opened) [header, pid2] = [null, null];
       opened = !opened;
@@ -89946,8 +89662,8 @@ function fileProbe(path32) {
     name: path32,
     read: async () => {
       try {
-        const text5 = fs_default.readFileSync(path32, "utf8");
-        return text5.trim().length > 0 ? { kind: "text", text: text5 } : { kind: "unavailable", reason: "empty file" };
+        const text6 = fs_default.readFileSync(path32, "utf8");
+        return text6.trim().length > 0 ? { kind: "text", text: text6 } : { kind: "unavailable", reason: "empty file" };
       } catch (e) {
         return { kind: "unavailable", reason: e.message };
       }
@@ -90139,7 +89855,7 @@ function makeLimits(deps) {
       nearAt: nearAtOf(limit)
     };
   }
-  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
+  function arm3(intervalMs = DEFAULT_CHECK_INTERVAL) {
     const tick = async () => {
       let breached = false;
       try {
@@ -90161,7 +89877,7 @@ function makeLimits(deps) {
     check,
     host: () => memoryOf(HOST_KEY, deps.pid),
     renderer: (process2) => memoryOf(rendererKey(process2), process2.pid),
-    arm: arm2,
+    arm: arm3,
     disarm
   };
 }
@@ -90205,11 +89921,11 @@ var STAMP = /^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z-/;
 function breachedOf(identity3) {
   const stamp2 = STAMP.exec(identity3);
   if (stamp2 === null) return null;
-  const words2 = identity3.slice(stamp2[0].length).split("-");
-  const pid2 = words2.pop();
+  const words3 = identity3.slice(stamp2[0].length).split("-");
+  const pid2 = words3.pop();
   if (pid2 === void 0 || !/^\d+$/.test(pid2)) return null;
-  if (words2.length === 0 || words2.join("-") === "host") return { kind: "host" };
-  const [kind, ...name] = words2;
+  if (words3.length === 0 || words3.join("-") === "host") return { kind: "host" };
+  const [kind, ...name] = words3;
   const renderer = kind === "renderer" ? parsedRendererName(name.join("-")) : null;
   return renderer === null ? null : { kind: "renderer", name: renderer };
 }
@@ -90275,7 +89991,7 @@ function realLimitsDeps(startedAtMs, shutdown, owner2, overrides = {}) {
     // identity, so it shares a permission — a post-mortem pair where one half is
     // world-readable and the other is not invites exactly the "is this
     // sensitive?" question at the worst moment to be asking it.
-    writeMemoryReport: (file, text5) => fs_default.writeFileSync(file, text5, { mode: 384 }),
+    writeMemoryReport: (file, text6) => fs_default.writeFileSync(file, text6, { mode: 384 }),
     writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
     writeLogNow: owner2.writeLogNow,
     listArtifacts: () => breachArtifacts(dir),
@@ -90481,8 +90197,8 @@ function parserOf(parse3) {
       return jsonDocumentParser;
   }
 }
-function refusalOf2({ identity: { read: read3, refresh } }) {
-  return (read3.kind === "file" ? absolute("file.path", read3.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (read3.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
+function refusalOf2({ identity: { read: read3, refresh: refresh2 } }) {
+  return (read3.kind === "file" ? absolute("file.path", read3.path) : null) ?? (refresh2.kind === "watch_file" ? absolute("cache.watch_file", refresh2.path) : null) ?? (read3.kind === "shell" && refresh2.kind === "ttl" && refresh2.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh2.durationMs}ms` : null);
 }
 function absolute(where, path32) {
   return (0, import_node_path28.isAbsolute)(path32) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path32)}`;
@@ -90503,12 +90219,12 @@ function capturing(pattern2) {
 var SESSION_SWEEP_MS = 15e4;
 var locatorOf = ({
   context: { hookData: hookData2, cwd: cwd2, hints },
-  environment
+  environment: environment2
 }) => ({
   hookData: hookData2,
   cwd: cwd2,
   hints,
-  environment
+  environment: environment2
 });
 var sourcesOf2 = (subscriptions, prior) => ({
   plugins: new Map(
@@ -90563,8 +90279,8 @@ var Collector = class {
   // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
-  requested(context, environment) {
-    const request2 = { context, environment };
+  requested(context, environment2) {
+    const request2 = { context, environment: environment2 };
     const sessionId2 = context.hookData.session_id;
     const document = runInAction(() => {
       const held = this.records.get(sessionId2);
@@ -90759,9 +90475,9 @@ var Collector = class {
       this.reader({ ...record3, request: request2 })
     );
   }
-  reader(keys2) {
+  reader(keys3) {
     const holds3 = new Holds();
-    const declared = observable.box(this.declared(keys2, holds3), {
+    const declared = observable.box(this.declared(keys3, holds3), {
       deep: false
     });
     const owners = computed(() => this.read(declared.get()));
@@ -90771,7 +90487,7 @@ var Collector = class {
       inputs: computed(() => ({
         owners: owners.get(),
         daemon: this.daemon.get(),
-        windowIssue: this.deps.windowIssue?.(keys2.session)
+        windowIssue: this.deps.windowIssue?.(keys3.session)
       }))
     };
   }
@@ -91335,9 +91051,9 @@ var FrameFeeds = class {
       this.deps.watchingChanged(sessionId2, false);
     }
     this.announce();
-    const writes = [...follower.writes];
+    const writes2 = [...follower.writes];
     follower.writes.clear();
-    for (const write of writes) settleWrite(write, false);
+    for (const write of writes2) settleWrite(write, false);
   }
   shown(sessionId2) {
     const noted2 = this.requests.get(sessionId2);
@@ -91972,8 +91688,8 @@ var rowOption = (row) => `@cc-candybar-row-${row}`;
 var formatOption = (index) => `status-format[${index}]`;
 function sameFormats(a, b) {
   if (a === null) return false;
-  const keys2 = Object.keys(a);
-  return keys2.length === Object.keys(b).length && keys2.every((k) => a[Number(k)] === b[Number(k)]);
+  const keys3 = Object.keys(a);
+  return keys3.length === Object.keys(b).length && keys3.every((k) => a[Number(k)] === b[Number(k)]);
 }
 function tmuxArg(value) {
   return value.endsWith(";") ? `${value.slice(0, -1)}\\;` : value;
@@ -92113,7 +91829,7 @@ function bindingRestorePlan(prior, listKeys, socket) {
 }
 function validFormats(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(
-    ([index, text5]) => /^[0-4]$/.test(index) && typeof text5 === "string"
+    ([index, text6]) => /^[0-4]$/.test(index) && typeof text6 === "string"
   );
 }
 function priorLayout(raw) {
@@ -92212,8 +91928,8 @@ var RetiredTmuxStatus = class {
       return;
     }
     if (record3.owner !== this.owner) return;
-    const [keys2 = ""] = await this.ask(socket, ROOT_KEYS);
-    const plan = bindingRestorePlan(record3.prior, keys2, socket);
+    const [keys3 = ""] = await this.ask(socket, ROOT_KEYS);
+    const plan = bindingRestorePlan(record3.prior, keys3, socket);
     for (const step4 of plan.steps)
       await this.command(socket, step4.command, step4.stdin);
     this.log(
@@ -93094,15 +92810,15 @@ function authorizeRun(signer, pending2, captures) {
       kind: "failed",
       reason: `run ${action2}: malformed arguments or environment`
     };
-  const [program, ...args] = argv2;
-  if (program === void 0 || program === "")
+  const [program2, ...args] = argv2;
+  if (program2 === void 0 || program2 === "")
     return {
       kind: "failed",
       reason: `run ${action2}: the program evaluated to nothing`
     };
   return {
     kind: "ok",
-    value: { ...request2, program, args, env: Object.fromEntries(env2) }
+    value: { ...request2, program: program2, args, env: Object.fromEntries(env2) }
   };
 }
 
@@ -93187,20 +92903,20 @@ var SCOPE = word({
 var DELIVERY = tagged({
   delivering: { unreported: list2(number), missedSince: nullable(number) },
   stalled: { missedSince: number },
-  unmeasured: { since: number, reason: text3, missedSince: nullable(number) }
+  unmeasured: { since: number, reason: text4, missedSince: nullable(number) }
 });
 var CLIENT_HINT = object({
   kind: oneOf2(CLIENT_KINDS),
-  bundle: text3,
-  source: nullable(text3)
+  bundle: text4,
+  source: nullable(text4)
 });
 var SIGHTING = object({
   client: nullable(CLIENT_HINT),
   termCols: nullable(number),
   rateLimits: oneOf2(RATE_LIMITS_SEEN),
-  claudeConfigDir: text3,
-  projectDir: text3,
-  transcript: object({ path: text3, answered: flag }),
+  claudeConfigDir: text4,
+  projectDir: text4,
+  transcript: object({ path: text4, answered: flag }),
   frame: oneOf2(FRAMES_SEEN),
   role: oneOf2(SIGHTING_ROLES),
   sessionId: parsedText((raw) => {
@@ -93211,15 +92927,15 @@ var SIGHTING = object({
 });
 var USAGE = tagged({
   read: { sizes: object({ rss: number, heapTotal: number }) },
-  unread: { why: text3 }
+  unread: { why: text4 }
 });
 var CHARGE = tagged({
   charged: {
     measure: word({ phys_footprint: true, rss: true }),
     bytes: number
   },
-  "stand-in": { rss: number, gap: number, unread: text3 },
-  unread: { gap: number, unread: text3 }
+  "stand-in": { rss: number, gap: number, unread: text4 },
+  unread: { gap: number, unread: text4 }
 });
 var READING = tagged({
   unmeasured: {},
@@ -93262,21 +92978,21 @@ var PANEL = object({
   name: parsedText(parsedRendererName),
   process: tagged({
     "in-host": {},
-    "not-running": { why: text3 },
+    "not-running": { why: text4 },
     process: { memory: PROCESS_MEMORY }
   }),
-  mailbox: object({ holder: nullable(text3), heldMs: number, queued: number }),
+  mailbox: object({ holder: nullable(text4), heldMs: number, queued: number }),
   stats: tagged({
     ok: { value: RENDERER_STATS_SHAPE },
-    failed: { reason: text3 }
+    failed: { reason: text4 }
   })
 });
 var STATS_SHAPE = object({
   pid: number,
-  version: text3,
-  sourceDigest: nullable(text3),
+  version: text4,
+  sourceDigest: nullable(text4),
   protocolVersion: number,
-  startedAt: text3,
+  startedAt: text4,
   uptimeSec: number,
   rssBytes: number,
   heapUsedBytes: number,
@@ -93292,7 +93008,7 @@ var STATS_SHAPE = object({
     took: DURATIONS
   }),
   tasksThrew: number,
-  unknownHookFields: list2(text3),
+  unknownHookFields: list2(text4),
   gitCache: object({
     size: number,
     held: number,
@@ -93310,7 +93026,7 @@ var STATS_SHAPE = object({
   sources: object({
     records: list2(
       object({
-        name: text3,
+        name: text4,
         scope: SCOPE,
         refreshes: REFRESHES,
         failures: number,
@@ -93391,19 +93107,19 @@ var STATS_SHAPE = object({
     total: number,
     inFlight: number,
     lastMinute: number,
-    byCategory: entries(text3, number),
-    refused: entries(text3, number),
+    byCategory: entries(text4, number),
+    refused: entries(text4, number),
     draining: number,
     drainedBytes: number,
     drainsCut: number,
     pipeErrors: number,
-    durations: entries(text3, DURATIONS)
+    durations: entries(text4, DURATIONS)
   }),
   clients: list2(SIGHTING),
-  bundle: text3,
+  bundle: text4,
   linkKeyId: tagged({
-    ok: { value: text3 },
-    failed: { reason: text3 }
+    ok: { value: text4 },
+    failed: { reason: text4 }
   }),
   host: PROCESS_MEMORY,
   renderers: list2(PANEL)
@@ -93727,14 +93443,14 @@ function excludeRewrite(file, rewrites, readText, entryOf4) {
   const exclude = resolvedTarget(at.value);
   const prior = rewrites.get(entryOf4(exclude));
   const was = prior === void 0 ? readText(exclude) : prior.was;
-  const text5 = prior === void 0 ? was ?? "" : prior.will ?? "";
+  const text6 = prior === void 0 ? was ?? "" : prior.will ?? "";
   const entry = `/${import_node_path32.default.relative(root, file).split(import_node_path32.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
-  if (text5.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT2;
-  const lead = text5 === "" || text5.endsWith("\n") ? "" : "\n";
+  if (text6.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT2;
+  const lead = text6 === "" || text6.endsWith("\n") ? "" : "\n";
   return ok({
     file: prior?.file ?? exclude,
     was,
-    will: `${text5}${lead}${entry}
+    will: `${text6}${lead}${entry}
 `
   });
 }
@@ -94174,9 +93890,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
   };
   const notTaken = (what, failure2) => {
-    const text5 = `renderer ${name}'s ${what} could not be taken: ${failure2.detail}`;
-    log("error", text5);
-    world.unheard(text5);
+    const text6 = `renderer ${name}'s ${what} could not be taken: ${failure2.detail}`;
+    log("error", text6);
+    world.unheard(text6);
   };
   const recordTaken = (what, operation) => {
     try {
@@ -94536,8 +94252,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     },
     // Each failed `due` is its own turn's line: the run is said once, on
     // every bar.
-    said: (text5) => world.unheard(text5),
-    log: (text5) => log("info", text5)
+    said: (text6) => world.unheard(text6),
+    log: (text6) => log("info", text6)
   });
   return {
     name,
@@ -94601,10 +94317,10 @@ var HeldStores = class {
   // taking says it on every bar; a write behind says its failure where it
   // lands. The renderer holds the refused write too, and the store's next
   // write saves the copy held here whole.
-  take(writes) {
+  take(writes2) {
     const sessions = [];
     const history = [];
-    for (const write of writes)
+    for (const write of writes2)
       switch (write.store) {
         case "session-state":
           sessions.push(write);
@@ -94675,9 +94391,9 @@ function contextProblem(request2) {
     return "the client hook contains unrecognized data; record with a supported hook payload";
   return refusedHints(request2, request2.hints).length > 0 ? "the client supplied unparsed hints; record with a supported statusline client" : null;
 }
-function configTextProblem(text5) {
+function configTextProblem(text6) {
   try {
-    const actions = entryOf(parseDocument(text5), "actions")?.value;
+    const actions = entryOf(parseDocument(text6), "actions")?.value;
     if (actions?.kind !== "object") return null;
     for (const { value } of actions.entries) {
       if (entryOf(value, "run") === void 0) continue;
@@ -95435,11 +95151,11 @@ function readShared(world, source = diskFiles) {
     files,
     // The same bytes can name different physical files relative to their
     // layers. Parse the reference names once and resolve them at each layer.
-    references: (text5) => {
-      const held = included.get(text5);
+    references: (text6) => {
+      const held = included.get(text6);
       if (held !== void 0) return held;
-      const names = pluginRefs(text5);
-      included.set(text5, names);
+      const names = pluginRefs(text6);
+      included.set(text6, names);
       return names;
     }
   };
@@ -95525,8 +95241,8 @@ function layerOf(role, file, content, home, batch = {
     )
   };
 }
-function pluginRefs(text5) {
-  const syntax = parseJson5Syntax(text5);
+function pluginRefs(text6) {
+  const syntax = parseJson5Syntax(text6);
   if (syntax.kind === "invalid") return [];
   const json2 = syntax.value;
   return typeof json2 === "object" && json2 !== null && "plugins" in json2 ? pluginList(json2.plugins) ?? [] : [];
@@ -95630,10 +95346,10 @@ var ConfigText = class {
         }
         this.bytes -= held.bytes;
       }
-      const text5 = opened.text();
-      const bytes = text5.length * 2;
+      const text6 = opened.text();
+      const bytes = text6.length * 2;
       if (bytes <= MAX_BYTES2 && polledEntryOf(opened.stat()) === entry) {
-        this.held.set(key, { entry, text: text5, bytes });
+        this.held.set(key, { entry, text: text6, bytes });
         this.bytes += bytes;
         for (const [oldest, entry2] of this.held) {
           if (this.held.size <= MAX_ENTRIES4 && this.bytes <= MAX_BYTES2) break;
@@ -95641,7 +95357,7 @@ var ConfigText = class {
           this.bytes -= entry2.bytes;
         }
       }
-      return { entry, text: text5 };
+      return { entry, text: text6 };
     });
   }
   clear() {
@@ -95656,9 +95372,9 @@ var ConfigDiscovery = class {
     this.deps = deps;
     this.texts = new ConfigText(deps.openText);
     this.watches = deps.watchers.batch(() => {
-      const keys2 = [...this.invalidated];
+      const keys3 = [...this.invalidated];
       this.invalidated.clear();
-      this.heard(keys2, "config-watch", "observed");
+      this.heard(keys3, "config-watch", "observed");
     });
   }
   deps;
@@ -95832,17 +95548,17 @@ var ConfigDiscovery = class {
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  heard(keys2, why, recover) {
+  heard(keys3, why, recover) {
     if (this.closed) return;
-    this.refreshed(keys2, why, recover, null);
+    this.refreshed(keys3, why, recover, null);
   }
   // [LAW:no-silent-failure] Origins discovered again and what moved published;
   // an origin that cannot be observed keeps its last snapshot for a retry,
   // and what it threw is its own task's, handed to the clock before the batch
   // publishes: a failure is a value the batch carries, so neither a reporter
   // nor a publish that throws can cut the batch short or lose it.
-  refreshed(keys2, why, recover, writer) {
-    const { moved, failed: failed3 } = this.rediscovered(keys2, why, recover);
+  refreshed(keys3, why, recover, writer) {
+    const { moved, failed: failed3 } = this.rediscovered(keys3, why, recover);
     for (const { key, thrown: thrown2 } of failed3)
       this.deps.clock.failed(`config discovery ${key}`, thrown2);
     return this.publish(moved, writer);
@@ -95864,13 +95580,13 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(keys2, why, recover) {
-    if (keys2.length === 0) return { moved: [], failed: [] };
+  rediscovered(keys3, why, recover) {
+    if (keys3.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
     const moved = [];
     const observed2 = [];
     const failed3 = [];
-    for (const key of keys2) {
+    for (const key of keys3) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
       let found2;
@@ -95892,7 +95608,7 @@ var ConfigDiscovery = class {
     }
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved.length} failed=${failed3.length}`
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys3.length} moved=${moved.length} failed=${failed3.length}`
     );
     this.reloaded(recover === "observed" ? observed2 : moved);
     return { moved, failed: failed3 };
@@ -95919,9 +95635,9 @@ var ConfigDiscovery = class {
       ...this.deps.files?.(),
       stateText: (file) => {
         const target = resolvedTarget(file);
-        const text5 = readTextIfPresent(target, readText);
-        if (text5 === null) observed2.set(target, absentPolledEntry);
-        return text5;
+        const text6 = readTextIfPresent(target, readText);
+        if (text6 === null) observed2.set(target, absentPolledEntry);
+        return text6;
       }
     });
     return {
@@ -96030,7 +95746,7 @@ function retainMetadata(read3) {
 }
 function observed(read3, clock, retain = () => true) {
   const paths2 = /* @__PURE__ */ new Map();
-  const refresh = (file) => {
+  const refresh2 = (file) => {
     const value = read3(file);
     paths2.delete(file);
     if (file.length > MAX_RETAINED_CHARACTERS || !retain(value)) return value;
@@ -96045,21 +95761,21 @@ function observed(read3, clock, retain = () => true) {
     // [LAW:no-ambient-temporal-coupling] A redraw never extends freshness.
     held: (file) => {
       const seen = paths2.get(file);
-      return seen !== void 0 && clock.monotonic() < seen.expires ? seen.value : refresh(file);
+      return seen !== void 0 && clock.monotonic() < seen.expires ? seen.value : refresh2(file);
     },
-    fresh: () => oncePerPath(refresh)
+    fresh: () => oncePerPath(refresh2)
   };
 }
 function checkoutObservations(files, clock) {
   const stat3 = observed(files.stat, clock);
   const lstat2 = observed(files.lstat, clock);
   const realpath2 = observed(files.realpath, clock, retainMetadata);
-  const text5 = observed(files.text, clock, retainMetadata);
+  const text6 = observed(files.text, clock, retainMetadata);
   const held = {
     stat: stat3.held,
     lstat: lstat2.held,
     realpath: realpath2.held,
-    text: text5.held
+    text: text6.held
   };
   return {
     location: (dir) => checkoutLocation(dir, held),
@@ -96070,7 +95786,7 @@ function checkoutObservations(files, clock) {
         stat: stat3.fresh(),
         lstat: lstat2.fresh(),
         realpath: realpath2.fresh(),
-        text: text5.fresh()
+        text: text6.fresh()
       };
       return {
         checkout: (dir) => checkoutOf(dir, fresh),
@@ -96118,28 +95834,28 @@ function createDaemon(inputs) {
   const launchPipes = new RecurringEvents(
     clock,
     "launch-pipes",
-    (text5) => text5,
-    (text5, more, at) => joinedEvent(null, `${text5}${recurrence(more)}`, at),
+    (text6) => text6,
+    (text6, more, at) => joinedEvent(null, `${text6}${recurrence(more)}`, at),
     restateOnceBuilt
   );
   const storeLoads = new RecurringEvents(
     clock,
     "store-load",
     ({ file }) => file,
-    ({ text: text5 }, more, at) => joinedEvent(null, `${text5}${recurrence(more)}`, at),
+    ({ text: text6 }, more, at) => joinedEvent(null, `${text6}${recurrence(more)}`, at),
     restateOnceBuilt
   );
   const unsaved = /* @__PURE__ */ new Map();
   const storeReported = (reports) => {
     for (const report2 of reports) {
       const { file, found: found2 } = report2;
-      const text5 = reportText(report2);
-      log(text5 === null ? "info" : "warn", reportLine(report2));
-      if (text5 === null) continue;
+      const text6 = reportText(report2);
+      log(text6 === null ? "info" : "warn", reportLine(report2));
+      if (text6 === null) continue;
       if (found2.kind === "refused") {
-        unsaved.set(file, { kind: "store-unsaved", file, message: text5 });
+        unsaved.set(file, { kind: "store-unsaved", file, message: text6 });
         restateOnceBuilt();
-      } else storeLoads.occur({ file, text: text5 });
+      } else storeLoads.occur({ file, text: text6 });
     }
   };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
@@ -96629,7 +96345,7 @@ function createDaemon(inputs) {
           });
           frameFeeds.took(name, routed, settled3);
         },
-        stored: (writes) => stores.take(writes),
+        stored: (writes2) => stores.take(writes2),
         holding: (session) => collector.holding(session),
         recorded: () => {
         }
@@ -96643,11 +96359,11 @@ function createDaemon(inputs) {
         closing: cancelling,
         acknowledgeDisplayed,
         reported: storeReported,
-        unheard: (text5, fromEnvironment) => {
+        unheard: (text6, fromEnvironment) => {
           const prior = actFailed.event();
           actFailed.hold(
             environmentOutput(
-              joinedEvent(prior, text5, instant()),
+              joinedEvent(prior, text6, instant()),
               fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
             )
           );
@@ -96670,10 +96386,10 @@ function createDaemon(inputs) {
       );
     }
   };
-  const rendererFor = (request2, environment, order2) => {
+  const rendererFor = (request2, environment2, order2) => {
     const session = request2.hookData.session_id;
     const route = routes.get(session);
-    const asked = environment.kind === "ok" ? variableOf(environment.value, "CC_CANDYBAR_NAME") : null;
+    const asked = environment2.kind === "ok" ? variableOf(environment2.value, "CC_CANDYBAR_NAME") : null;
     const client = request2.hints.client;
     let name = client?.kind === "frames" && route !== void 0 ? route.name : inputs.rendererName;
     if (asked?.kind === "ok") {
@@ -97444,7 +97160,7 @@ var events = /* @__PURE__ */ new Set([
   "after-set-option"
 ]);
 var globalContext = "%4294967296";
-var command = (...words2) => words2.map(singleQuoted).join(" ");
+var command = (...words3) => words3.map(singleQuoted).join(" ");
 var paneIds = "#{session_id} #{window_id} #{pane_id}";
 var paneFacts = "P #{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active} #{?mouse,1,0} #{pane_pid} #{?pane_tty,#{pane_tty},-}";
 function scopeArgs(scope) {
@@ -97563,17 +97279,17 @@ var ObserverServer = class {
   }
   async arm() {
     const probe2 = "after-set-hook[" + serverObserverHookPrefix + "probe]";
-    const keys2 = await runTmuxAsync(
+    const keys3 = await runTmuxAsync(
       this.launcher,
       { socket: this.socket },
       "frames.visibility",
       ["-N", "show-hooks", "-g", probe2]
     );
-    if (keys2.kind === "ok") this.namedSlots = true;
-    else if (keys2.kind !== "failed" || !["invalid option: ", "ambiguous option: "].some(
-      (diagnostic) => keys2.reason.includes(diagnostic + probe2)
+    if (keys3.kind === "ok") this.namedSlots = true;
+    else if (keys3.kind !== "failed" || !["invalid option: ", "ambiguous option: "].some(
+      (diagnostic) => keys3.reason.includes(diagnostic + probe2)
     ))
-      throw new Error(keys2.reason);
+      throw new Error(keys3.reason);
     const edit = "#{||:#{==:#{hook},after-set-hook},#{==:#{hook},after-set-option}}";
     const observerEdit = `#{||:#{m:@${serverObserverHookPrefix}*,#{hook_argument_0}},#{m:*${serverObserverHookPrefix}*,#{hook_argument_1}}}`;
     const wake = `if-shell -F '#{${this.waiting}}' { set-option -su ${this.waiting} ; wait-for -S ${this.prefix} }`;
@@ -97860,36 +97576,36 @@ init_globals();
 
 // src/daemon/legacy-bar-pane.ts
 init_globals();
-function matchesLegacyCommand(text5, expected) {
+function matchesLegacyCommand(text6, expected) {
   let offset = 0;
   for (const [index, wanted] of expected.entries()) {
-    if (index && text5[offset++] !== " ") return false;
-    const quote2 = text5[offset] === "'" || text5[offset] === '"' ? text5[offset++] : void 0;
+    if (index && text6[offset++] !== " ") return false;
+    const quote2 = text6[offset] === "'" || text6[offset] === '"' ? text6[offset++] : void 0;
     let actual = "";
-    while (offset < text5.length) {
-      const ch = text5[offset];
+    while (offset < text6.length) {
+      const ch = text6[offset];
       if (quote2 ? ch === quote2 : ch === " ") break;
       offset++;
       if (ch !== "\\") {
         actual += ch;
         continue;
       }
-      const escaped = text5[offset++];
+      const escaped = text6[offset++];
       if (escaped === void 0) return false;
       if (escaped === "t") actual += "	";
       else if (escaped === "n") actual += "\n";
       else if (escaped === "r") actual += "\r";
       else if (/[0-7]/.test(escaped)) {
-        const octal = escaped + text5.slice(offset, offset + 2);
+        const octal = escaped + text6.slice(offset, offset + 2);
         if (!/^[0-7]{3}$/.test(octal)) return false;
         actual += String.fromCharCode(parseInt(octal, 8));
         offset += 2;
       } else actual += escaped;
     }
-    if (quote2 && text5[offset++] !== quote2) return false;
+    if (quote2 && text6[offset++] !== quote2) return false;
     if (actual !== wanted) return false;
   }
-  return offset === text5.length;
+  return offset === text6.length;
 }
 async function legacyPeerOn(launcher, followerPid, socket) {
   if (process.platform !== "darwin" || followerPid === process.pid)
@@ -97963,8 +97679,8 @@ function productionBarPaneEdge(launcher) {
   };
   return {
     async find(source, serverPid, host) {
-      const marker = owner(source, serverPid, host);
-      const text5 = await run2(source, [
+      const marker2 = owner(source, serverPid, host);
+      const text6 = await run2(source, [
         "display-message",
         "-p",
         "#{pid}",
@@ -97972,14 +97688,14 @@ function productionBarPaneEdge(launcher) {
         "list-panes",
         "-a",
         "-f",
-        `#{||:#{m:*${marker} *,#{pane_start_command}},#{m:* bar-pane *,#{pane_start_command}}}`,
+        `#{||:#{m:*${marker2} *,#{pane_start_command}},#{m:* bar-pane *,#{pane_start_command}}}`,
         "-F",
         "#{pane_id} #{pane_pid} #{pane_start_command}"
       ]);
-      const [pid2, ...rows] = text5.trimEnd().split("\n");
+      const [pid2, ...rows] = text6.trimEnd().split("\n");
       if (pid2 !== String(serverPid))
         throw new Error("tmux returned a different server");
-      const prefix = PRINTED_GATE + marker + " ";
+      const prefix = PRINTED_GATE + marker2 + " ";
       const found2 = /* @__PURE__ */ new Map();
       for (const line of rows) {
         const [drawing2, root, ...rest2] = line.split(" ");
@@ -98770,16 +98486,16 @@ async function render2(size) {
     refused: null
   };
 }
-function copy(text5) {
+function copy(text6) {
   let writing;
   try {
-    writing = navigator.clipboard.writeText(text5);
+    writing = navigator.clipboard.writeText(text6);
   } catch (e) {
     writing = Promise.reject(e);
   }
   return writing.then(
     () => null,
-    (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text5}`
+    (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text6}`
   );
 }
 async function click(url, size) {
