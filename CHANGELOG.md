@@ -1,3 +1,9 @@
+## [1.244.3](https://github.com/promptctl/cc-candybar/compare/v1.244.2...v1.244.3) (2026-11-27)
+
+### Bug Fixes
+
+* **renderer:** report the state actually lost on restart ([#983](https://github.com/promptctl/cc-candybar/issues/983)) ([381022e](https://github.com/promptctl/cc-candybar/commit/381022e93253b0c5cb6870ad8f26b4c1c80dde27))
+
 ## [1.244.2](https://github.com/promptctl/cc-candybar/compare/v1.244.1...v1.244.2) (2026-11-27)
 
 ### Bug Fixes
