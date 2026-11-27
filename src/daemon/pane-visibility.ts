@@ -2,52 +2,6 @@ import type { TmuxHint } from "../tmux-hint.js";
 import type { TmuxServerObserver } from "./tmux-server-observer.js";
 import type { DaemonLogger } from "../utils/logger.js";
 
-// One line per pane: its id, its session's id, how many clients that session
-// has attached, and whether its window is the session's current one, zoomed,
-// and itself the active pane.
-export const LIST_PANES_FORMAT =
-  "#{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active}";
-
-// One line per client: the id of the session it is attached to, whether it is
-// a control-mode client (iTerm2's `tmux -CC`).
-export const LIST_CLIENTS_FORMAT = "#{session_id} #{client_control_mode}";
-
-// The sessions a control-mode client is attached to. Such a client draws each
-// of the session's windows as a native window of its own, any number of which
-// can be on screen at once.
-export function controlledSessions(listClients: string): ReadonlySet<string> {
-  const controlled = new Set<string>();
-  for (const line of listClients.split("\n")) {
-    const [session, control] = line.trim().split(" ");
-    if (session !== undefined && control === "1") controlled.add(session);
-  }
-  return controlled;
-}
-
-// The panes a client is showing: of a session at least one client is attached
-// to, in a window that is its session's current one — or any of its windows,
-// when a control-mode client draws them all — and, when that window is zoomed,
-// only its active pane.
-export function shownPanes(
-  listPanes: string,
-  controlled: ReadonlySet<string>,
-): ReadonlySet<string> {
-  const shown = new Set<string>();
-  for (const line of listPanes.split("\n")) {
-    const [pane, session, attached, current, zoomed, active] = line
-      .trim()
-      .split(" ");
-    if (pane === undefined || pane === "" || session === undefined) continue;
-    if (
-      Number(attached) > 0 &&
-      (current === "1" || controlled.has(session)) &&
-      (zoomed !== "1" || active === "1")
-    )
-      shown.add(pane);
-  }
-  return shown;
-}
-
 export interface PaneFacts {
   readonly shown: boolean;
   readonly zoomed: boolean;

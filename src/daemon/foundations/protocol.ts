@@ -528,10 +528,8 @@ export interface PointerRequest {
   owner: OwnerFacts;
 }
 
-// Which session last rendered from a tmux pane: the session of the daemon's
-// newest render request whose client reported that pane. A tmux bar pane
-// (lane C) knows the pane it draws beside, not the session in it, which
-// changes on a /clear; it asks again to follow.
+// Older pane followers ask for the session confirmed for this physical source.
+// Current followers enroll once and receive changes on their stream.
 export interface PaneSessionRequest {
   v: number;
   kind: "pane-session";

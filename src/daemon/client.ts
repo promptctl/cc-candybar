@@ -138,8 +138,7 @@ export async function tryRenderViaDaemon(
   );
 }
 
-// The session that last rendered from a tmux pane (PaneSessionRequest), or
-// null when the daemon holds no request from it.
+// The session confirmed for the source pane, or null while ownership is unknown.
 export function trySessionInPane(
   world: ClientWorld,
   socket: string,

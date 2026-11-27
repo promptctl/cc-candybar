@@ -39,7 +39,7 @@ function rig(existing?: ManagedPane) {
   };
   const feeds = new FrameFeeds({
     shown: () => true,
-    watching: () => () => {},
+    watchingChanged: () => {},
     log: () => {},
     requestChanged: () => {},
     publishFrame: () => {

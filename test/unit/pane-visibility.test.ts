@@ -1,8 +1,6 @@
 import {
   PaneVisibility,
   readServerView,
-  controlledSessions,
-  shownPanes,
 } from "../../src/daemon/pane-visibility";
 import type { TmuxServerObserver } from "../../src/daemon/tmux-server-observer";
 
@@ -12,40 +10,29 @@ const hint = (socket: string, pane: string) => ({
   truecolor: null,
 });
 
-// What a status line shows (lane C's tmux status line,
-// candybar-animation-wbxz.oy3.w5t): each pane's session, and per session the
-// current pane of a client that draws a status line — a control-mode client
-// draws none.
-describe("shownPanes", () => {
-  test("a pane is shown in its session's current window, while a client is attached", () => {
-    const out = [
-      "%1 $1 1 1 0 1", // shown
-      "%2 $1 1 1 0 0", // shown: a split pane beside the active one
-      "%3 $1 1 0 0 1", // another window of that session
-      "%4 $2 0 1 0 1", // a session nobody is attached to
-      "%5 $3 2 1 1 1", // zoomed, and the active pane: shown
-      "%6 $3 2 1 1 0", // zoomed under another pane
-      "",
-    ].join("\n");
-    expect([...shownPanes(out, new Set())].sort()).toEqual(["%1", "%2", "%5"]);
-  });
-
-  test("every window of a session a control-mode client draws can be on screen", () => {
-    const clients = ["$1 1", "$2 0", ""].join("\n");
-    expect([...controlledSessions(clients)]).toEqual(["$1"]);
-    const out = [
-      "%1 $1 1 0 0 1", // another window, drawn natively by tmux -CC
-      "%2 $1 1 0 1 0", // zoomed under another pane, still hidden
-      "%3 $2 1 0 0 1", // another window of a plainly attached session
-      "",
-    ].join("\n");
-    expect([...shownPanes(out, controlledSessions(clients))]).toEqual(["%1"]);
-  });
-});
-
 const snapshot = (pid: number, ...rows: string[]) =>
   [`B ${pid}`, ...rows, `E ${pid}`].join("\n");
 const row = "P %1 $1 1 1 0 1 1 45 /dev/ttys001";
+
+test("the snapshot shows attached current windows and every control-mode window, respecting zoom", () => {
+  const panes = (...clients: string[]) =>
+    readServerView(
+      snapshot(
+        7,
+        "P %1 $1 1 1 0 1 1 41 /dev/tty1",
+        "P %2 $1 1 1 0 0 1 42 /dev/tty2",
+        "P %3 $1 1 0 0 1 1 43 /dev/tty3",
+        "P %4 $2 0 1 0 1 1 44 /dev/tty4",
+        "P %5 $3 2 1 1 1 1 45 /dev/tty5",
+        "P %6 $3 2 1 1 0 1 46 /dev/tty6",
+        ...clients,
+      ),
+    ).panes;
+  const shown = (...clients: string[]) =>
+    [...panes(...clients)].filter(([, pane]) => pane.shown).map(([id]) => id);
+  expect(shown("C $1 0")).toEqual(["%1", "%2", "%5"]);
+  expect(shown("C $1 1", "C $3 1")).toEqual(["%1", "%2", "%3", "%5"]);
+});
 
 test("linked panes are shown in the union of sessions; mouse describes visible clients", () => {
   const linked = "P %1 $2 1 0 0 1 0 45 /dev/ttys001";

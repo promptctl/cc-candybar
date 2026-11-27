@@ -1,26 +1,19 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readlinkSync,
-  rmSync,
-} from "node:fs";
+import { paneSessionRecord } from "../helpers/pane-session-record";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { systemTimekeeper } from "../scripts/lib/system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import {
   systemWatchDirectory,
   WatcherRegistry,
-} from "../src/daemon/cache/watchers";
-import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { systemProbe } from "../src/daemon/process-fingerprint";
+} from "../../src/daemon/cache/watchers";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import {
   createTmuxSourceEdges,
   TmuxSourceAuthority,
-} from "../src/daemon/tmux-source-authority";
-import { writeAtomic } from "../src/utils/atomic-write";
-import { processLauncher } from "./helpers/host";
-import { tmuxServer, type TmuxServer } from "./helpers/private-tmux";
+} from "../../src/daemon/tmux-source-authority";
+import { processLauncher } from "../helpers/host";
+import { tmuxServer, type TmuxServer } from "../helpers/private-tmux";
 
 test("a legacy render finds only the interactive record on its own private pane, including an atomic /clear before the next render", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "candy-owner-"));
@@ -70,33 +63,7 @@ test("a legacy render finds only the interactive record on its own private pane,
     const [a, b] = targets;
     expect(a!.source.pane).toBe(b!.source.pane);
     const pid = a!.pid;
-    const start = await systemProbe(processLauncher).startTime(pid);
-    if (start.kind !== "start") throw new Error(start.detail);
-    const info =
-      process.platform === "linux"
-        ? {
-            pidDomain: `linux::${readlinkSync(`/proc/${pid}/ns/pid`)}`,
-            procStart: readFileSync(`/proc/${pid}/stat`, "utf8")
-              .split(") ")
-              .at(-1)!
-              .split(" ")[19],
-          }
-        : { pidDomain: "darwin", procStart: start.token };
-    const records = path.join(root, "sessions");
-    mkdirSync(records);
-    const file = path.join(records, `${pid}.json`);
-    const put = (sessionId: string, procStart = info.procStart) =>
-      writeAtomic(
-        file,
-        JSON.stringify({
-          ...info,
-          pid,
-          kind: "interactive",
-          entrypoint: "cli",
-          sessionId,
-          procStart,
-        }),
-      );
+    const put = paneSessionRecord(root, pid);
     put(first, "reused-pid");
     await authority.report(a!.source, first, undefined, root);
     expect(authority.session(a!.source)).toBeNull();
