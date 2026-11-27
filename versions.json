@@ -2,6 +2,140 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-986",
+      "ref": "refs/pull/986/merge",
+      "sha": "e626194906073ed894ee6f879db90f6dbe97339a",
+      "timestamp": "2026-11-27T20:16:21.738Z",
+      "commits": [
+        {
+          "sha": "e626194906073ed894ee6f879db90f6dbe97339a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T13:15:03-07:00",
+          "message": "Merge b5cf82ce8d9eadf302e4383e2b15d1648271e3a3 into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+        },
+        {
+          "sha": "b5cf82ce8d9eadf302e4383e2b15d1648271e3a3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T13:14:14-07:00",
+          "message": "feat(renderer): carry live feed history across renderer switches\n"
+        },
+        {
+          "sha": "9ef7b86ccb050282b493bcccc319886fec95dfcd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T12:54:35-07:00",
+          "message": "test(renderer): drive pending layout through host source observations\n"
+        },
+        {
+          "sha": "12fecdef12211e8d98e4a670211e6df35707916e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T12:52:47-07:00",
+          "message": "feat(sources): resume document reads at their original settle deadline\n"
+        },
+        {
+          "sha": "5d5dff7aace83194819e7015b47291d7ac457bd0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T12:29:46-07:00",
+          "message": "feat(renderer): resume accepted surface presentations across peers\n"
+        },
+        {
+          "sha": "ef6c481d7d4bc0821094327c3880eac77c45d54e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T11:42:36-07:00",
+          "message": "fix(renderer): carry the selected configuration across peer handoffs\n"
+        },
+        {
+          "sha": "1e974c969edc4b411cf659d6d2688f09f4aef8dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T11:22:51-07:00",
+          "message": "feat(renderer): keep open edits and private history across peer switches\n"
+        },
+        {
+          "sha": "e9892d3ca743da616c73d6263198a18a971547e6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T11:00:54-07:00",
+          "message": "perf(renderer): invalidate only the draft pick a gesture changes\n"
+        },
+        {
+          "sha": "f27c8490b6469374cedac97e885a846b41ddf1dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T10:56:10-07:00",
+          "message": "feat(renderer): share menu Back visits and cursor across peers\n"
+        },
+        {
+          "sha": "4e2180569776dd4efaf9747e90cfe487565544a2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T10:27:33-07:00",
+          "message": "fix(click): bind held controls to their displayed configuration\n"
+        },
+        {
+          "sha": "df15c40dd4037286686c385c287815f9fd606ea4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T10:03:23-07:00",
+          "message": "fix(daemon): enforce shared session limits at the host commit\n"
+        },
+        {
+          "sha": "5fe0f4475206b8c5716436ce14577604178209c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T09:50:14-07:00",
+          "message": "fix(daemon): retain config undo when the issuing renderer exits\n"
+        },
+        {
+          "sha": "13160ed0c3180dc4f7ba2b903df1737187d56977",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T09:35:37-07:00",
+          "message": "feat(renderer): stream host session revisions to running peers\n"
+        },
+        {
+          "sha": "04a7a2b47abb00815a4f602b9998745e8682cf23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T09:05:36-07:00",
+          "message": "fix(daemon): order session gestures through their host commit\n"
+        },
+        {
+          "sha": "8c82cfd47f78d5c09feabb291216ae4f93333b00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T08:53:29-07:00",
+          "message": "feat(daemon): journal shared session state across renderer profiles\n"
+        },
+        {
+          "sha": "3238f0bb5f208c1dc326c213bd4660087baba9f0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T08:21:44-07:00",
+          "message": "feat(renderer): replicate undo history as ordered changes\n"
+        },
+        {
+          "sha": "744656ba26d94ad480d9495daa4ed0f975dbcb2c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T08:05:45-07:00",
+          "message": "feat(renderer): send sparse session picks and verify historical recordings\n"
+        },
+        {
+          "sha": "fa5df2a2e8af6db3e3ce714d6cfd68c316a2ef1a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T07:47:39-07:00",
+          "message": "perf(renderer): observe individual session picks and revisions\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "178959ffe42bb2cd02ac6aa6bdf6369c11281adc",
