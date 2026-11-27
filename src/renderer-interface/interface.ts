@@ -49,11 +49,16 @@ import type { ConfigSnapshot } from "../config/config-snapshot";
 import type { Locations } from "../config/loader/chain-places";
 import type { LiveSessionState, StoreWrite } from "./stored-state";
 import type { RegionalSettings } from "../utils/region.js";
+import type {
+  IdleUpdate,
+  PresentationInput,
+  ProposedPresentation,
+} from "./presentation.js";
 
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 33;
+export const RENDERER_WIRE_VERSION = 34;
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
@@ -141,6 +146,7 @@ export function timed(
 export interface EventInput extends Readings {
   readonly kind: "event";
   readonly event: Event;
+  readonly presentation?: PresentationInput;
 }
 
 // [LAW:one-source-of-truth] The same event session is held while the turn
@@ -375,6 +381,7 @@ export type EffectOutcome =
 // for a subscriber leaves as `RendererOutput.frames`, which the host publishes.
 export interface Present {
   readonly kind: "present";
+  readonly proposal?: ProposedPresentation;
   readonly id: EffectId;
   readonly session: SessionId;
   readonly surface: "statusline";
@@ -561,6 +568,7 @@ interface RendererDeclaration extends RendererDiagnostics {
 export type FeedFrame<Body = WireFrame> =
   | {
       readonly kind: "drawn";
+      readonly proposal?: ProposedPresentation;
       readonly displayed?: DisplayedConfig;
       readonly receipt: EffectId;
       readonly bar: Body;
@@ -620,5 +628,6 @@ export type TurnOutcome = {
 // write answers nothing, so it is no effect, and no `effect-done` comes back.
 export type RendererOutput = TurnOutcome &
   RendererDeclaration & {
+    readonly idle?: readonly IdleUpdate[];
     readonly frames: readonly PushedFrame[];
   };

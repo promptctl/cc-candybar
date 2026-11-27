@@ -142,6 +142,15 @@ export class HostSessionImage {
     return this.drafts.get(session) !== undefined;
   }
 
+  holds(session: SessionId): boolean {
+    return (
+      this.picks.has(session) ||
+      this.histories.get(session) !== undefined ||
+      this.hasDraft(session) ||
+      this.navigation.has(session)
+    );
+  }
+
   snapshot(scope: "live"): LiveSessionState;
   snapshot(scope: "durable"): StoredState;
   snapshot(scope: "live" | "durable"): LiveSessionState {

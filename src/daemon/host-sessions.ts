@@ -35,6 +35,7 @@ export type PublishedSession = (
   writes: readonly StoreWrite[],
 ) => void;
 export interface SessionStores {
+  holds(session: SessionId): boolean;
   retire(session: SessionId, published: PublishedSession): void;
   load(): readonly StoreReport[];
   current(name: RendererName): SessionCheckpoint<LiveSessionState>;
@@ -77,6 +78,9 @@ export class HostSessions implements SessionStores {
     for (const { writes, heard } of early)
       this.prepare(writes, undefined, heard)();
     return seed.reports;
+  }
+  holds(session: SessionId): boolean {
+    return this.image?.holds(session) ?? false;
   }
   current(name: RendererName): SessionCheckpoint<LiveSessionState> {
     if (!this.image)

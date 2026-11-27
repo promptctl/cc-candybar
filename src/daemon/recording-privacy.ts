@@ -31,7 +31,11 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import type { WorldState } from "../facts/world-state.js";
-import { configSessionDecision } from "../renderer-interface/interface.js";
+import {
+  configSessionDecision,
+  sessionOfEvent,
+} from "../renderer-interface/interface.js";
+import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { WireFrame } from "../render/frame.js";
 import type {
   ConfigOffer,
@@ -52,6 +56,8 @@ const ACTION_ENVIRONMENT =
   "a run action supplies environment values; record without its environment overlay";
 const UNKNOWN_CONFIG =
   "config or plugin text could not be inspected for action environments; fix its syntax before recording";
+const UNVERIFIED_PRESENTATION =
+  "a retained presentation has unverified source data";
 const UNKNOWN_PROFILE =
   "saved renderer state contains values of unknown origin; record from a fresh daemon state directory";
 
@@ -156,9 +162,12 @@ function offerProblem({ config, retained }: ConfigOffer): string | null {
 // [LAW:single-enforcer] Every input kind has one export disposition. The
 // check reads the checked renderer input, never the host's environment book.
 export function recordingInputProblem(
-  { event }: EventInput,
+  { event, presentation }: EventInput,
   controls?: RecordingControls,
 ): string | null {
+  for (const { resume } of presentation?.sessions ?? [])
+    if (resume && resume.exportProblem !== null)
+      return resume.exportProblem ?? UNVERIFIED_PRESENTATION;
   switch (event.kind) {
     case "start":
       for (const { context, worldState } of event.sessions) {
@@ -560,4 +569,138 @@ export function recordingBootProblem({ stored }: RendererBoot): string | null {
     if (problem !== null) return problem;
   }
   return null;
+}
+
+// A capture can start after the frame that supplied a held row. Classify
+// each session at its actual input boundary while the provenance still
+// exists. Keep the verdict, never a second copy of its inputs.
+export class PresentationPrivacy {
+  private controls = new RecordingControls();
+  private readonly privateState = new Map<SessionId, string>();
+  private readonly privateViews = new Map<SessionId, string>();
+  private readonly views = new Map<SessionId, string>();
+  private readonly privateOrigins = new Map<string, string>();
+  private seeded = false;
+
+  boot(boot: RendererBoot): void {
+    this.controls = new RecordingControls();
+    this.privateState.clear();
+    this.privateViews.clear();
+    this.views.clear();
+    this.privateOrigins.clear();
+    this.seeded = true;
+    const { sessions, history, navigation, drafts } = boot.stored;
+    const keys = new Set([
+      ...Object.keys(sessions),
+      ...Object.keys(history),
+      ...Object.keys(navigation ?? {}),
+      ...Object.keys(drafts ?? {}),
+    ] as SessionId[]);
+    for (const key of keys) {
+      const one = <T>(
+        values?: Readonly<Record<SessionId, T>>,
+      ): Record<SessionId, T> =>
+        values && Object.hasOwn(values, key) ? { [key]: values[key]! } : {};
+      const problem = recordingBootProblem({
+        ...boot,
+        stored: {
+          sessions: one(sessions),
+          history: one(history),
+          navigation: one(navigation),
+          drafts: one(drafts),
+        },
+      });
+      if (problem) this.privateState.set(key, problem);
+    }
+  }
+
+  committed(
+    writes: readonly StoreWrite[],
+    held: (session: SessionId) => boolean,
+  ): void {
+    for (const write of writes) {
+      const reason = recordingWritesProblem([write], this.controls);
+      if (reason) this.privateState.set(write.key, reason);
+      if (this.privateState.has(write.key) && !held(write.key))
+        this.privateState.delete(write.key);
+    }
+  }
+
+  private offered(origin: RenderOrigin, offer: ConfigOffer): void {
+    const key = originKey(origin);
+    const reason = offerProblem(offer);
+    if (reason === null) return;
+    this.privateOrigins.set(key, reason);
+    for (const [session, selected] of this.views)
+      if (selected === key) this.privateViews.set(session, reason);
+  }
+
+  input(input: EventInput): void {
+    const { event } = input;
+    for (const { session, resume } of input.presentation?.sessions ?? [])
+      if (resume && resume.exportProblem !== null)
+        this.privateViews.set(
+          session,
+          resume.exportProblem ?? UNVERIFIED_PRESENTATION,
+        );
+    if (event.kind === "start") {
+      for (const offer of event.configs) this.offered(offer.origin, offer);
+      for (const { context, worldState } of event.sessions)
+        this.input({
+          ...input,
+          presentation: undefined,
+          event: { kind: "context", context, worldState },
+        });
+      return;
+    }
+    if (event.kind === "config") this.offered(event.origin, event);
+    const session = sessionOfEvent(event);
+    if (session === null) return;
+    if (event.kind === "retire") {
+      this.controls.forget(session);
+      this.privateViews.delete(session);
+      this.views.delete(session);
+      return;
+    }
+    if (event.kind === "context") {
+      const key = originKey(event.context.requested);
+      this.views.set(session, key);
+      if (event.handoff) this.offered(event.context.requested, event.handoff);
+      const reason = this.privateOrigins.get(key);
+      if (reason) this.privateViews.set(session, reason);
+    }
+    if (!this.privateViews.has(session)) {
+      const reason = recordingInputProblem(
+        { ...input, presentation: undefined },
+        this.controls,
+      );
+      if (reason) this.privateViews.set(session, reason);
+    }
+  }
+
+  output(input: EventInput, output: RendererOutput): void {
+    const bad = recordingOutputProblem(output, this.controls);
+    if (bad) {
+      const sid = sessionOfEvent(input.event);
+      if (sid) this.privateViews.set(sid, bad);
+      for (const { session } of drawnFrames(output))
+        this.privateViews.set(session, bad);
+      for (const write of output.stored)
+        if (this.views.has(write.key)) this.privateViews.set(write.key, bad);
+    }
+    if (this.privateOrigins.size) {
+      const held = new Set(output.subscriptions.configs.map(originKey));
+      for (const origin of this.privateOrigins.keys())
+        if (!held.has(origin)) this.privateOrigins.delete(origin);
+    }
+  }
+
+  problem(session: SessionId): string | null {
+    const stored = this.privateState.get(session);
+    if (stored && this.views.has(session))
+      this.privateViews.set(session, stored);
+    return this.seeded
+      ? (stored ?? this.privateViews.get(session) ?? null)
+      : UNVERIFIED_PRESENTATION;
+  }
 }

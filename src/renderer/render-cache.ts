@@ -30,7 +30,12 @@ import {
 } from "../config/config-snapshot.js";
 import type { Drawing, LaneSwitches } from "../config/lanes.js";
 import { laneDefaultsAfterReset } from "./lane-handoff.js";
-import { PresentedFrames, type FrameCandidate } from "./presented-frames.js";
+import {
+  PresentedFrames,
+  type FrameCandidate,
+  type PortableDraw,
+} from "./presented-frames.js";
+import type { PresentedSession } from "../renderer-interface/presentation.js";
 import type { EffectId } from "../renderer-interface/interface.js";
 import {
   loadSnapshot,
@@ -1196,6 +1201,20 @@ export class RenderCache<
       view.presentationTargets.feed = Symbol();
     }
   });
+  private readonly restoring = new Map<
+    SessionId,
+    { saved: PresentedSession; revision: number; localRevision: number }
+  >();
+
+  resumePresentation(
+    saved: PresentedSession,
+    revision: number,
+    localRevision: number,
+  ): void {
+    const view = this.views.get(saved.session);
+    if (view) this.presentations.resume(saved, view, revision, localRevision);
+    else this.restoring.set(saved.session, { saved, revision, localRevision });
+  }
   // Every view the cache serves or served, until reclaimed.
   private readonly viewHolds = new Map<SessionView<S, F>, ViewHold>();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -1645,6 +1664,16 @@ export class RenderCache<
     }
     this.openFailures.delete(sessionId);
     runInAction(() => this.views.set(sessionId, view));
+    const saved = this.restoring.get(sessionId);
+    if (saved) {
+      this.presentations.resume(
+        saved.saved,
+        view,
+        saved.revision,
+        saved.localRevision,
+      );
+      this.restoring.delete(sessionId);
+    }
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
@@ -1714,6 +1743,7 @@ export class RenderCache<
   // [LAW:single-enforcer] The host ended the session (its collector's
   // sweep): its view closes, and the failure no feed shows goes with it.
   retireSession(sessionId: SessionId): void {
+    this.restoring.delete(sessionId);
     this.openFailures.delete(sessionId);
     const view = this.views.get(sessionId);
     if (view !== undefined) this.retireView(view, "idle");
@@ -2144,10 +2174,14 @@ export class RenderCache<
 
   // [LAW:single-enforcer] Receipt targets live as long as their view and
   // surface do. The owner accepts only an observation from the current one.
-  acceptFrame(id: EffectId, candidate: FrameCandidate) {
+  acceptFrame(
+    id: EffectId,
+    candidate: FrameCandidate,
+    portable?: PortableDraw,
+  ) {
     const { session, by, target } = candidate;
     return this.views.get(session)?.presentationTargets[by] === target
-      ? this.presentations.accept(id, candidate)
+      ? this.presentations.accept(id, candidate, portable)
       : null;
   }
 

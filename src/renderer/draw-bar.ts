@@ -119,7 +119,12 @@ import {
   frameWarnings,
   warningChanges,
 } from "./render-warnings.js";
-import type { Acceptance, FrameCandidate } from "./presented-frames.js";
+import type {
+  Acceptance,
+  FrameCandidate,
+  PortableDraw,
+} from "./presented-frames.js";
+import type { ProposedPresentation } from "../renderer-interface/presentation.js";
 import {
   renderFailure,
   rendererFailureOf,
@@ -178,7 +183,7 @@ export function renderFrame(
       handedOffTo(lanes, following),
     );
     const handoff = statusline === bar ? null : statusline;
-    const receipt = prepare({
+    const { id: receipt, ...presentation } = prepare({
       candidate,
       clickShown: null,
     });
@@ -187,6 +192,7 @@ export function renderFrame(
         kind: "drawn",
         displayed: displayedConfig(setup),
         receipt,
+        ...presentation,
         bar,
         handoff,
         displayedEvents: eventsShown,
@@ -879,6 +885,7 @@ export function drawRender(
       session: sessionId,
       by: drawing.by,
       target,
+      loadKey: state.loadKey,
       frame: {
         config,
         layout: { record: memory.record, segments },
@@ -1097,9 +1104,13 @@ export function answerRequest(
 export interface Delivery {
   readonly candidate: FrameCandidate;
   readonly clickShown: ClickErrorRecord | null;
+  readonly portable?: PortableDraw;
 }
 
-export type PrepareDelivery = (delivery: Delivery) => EffectId;
+export type PrepareDelivery = (delivery: Delivery) => {
+  id: EffectId;
+  proposal?: ProposedPresentation;
+};
 
 // [LAW:single-enforcer] Only the current surface's accepted receipt may
 // commit the renderer's layout or answer its session's click error.
@@ -1109,7 +1120,11 @@ export function deliver(
   delivery: Delivery,
 ): Acceptance | null {
   const { candidate, clickShown } = delivery;
-  const accepted = parts.renderCache.acceptFrame(id, candidate);
+  const accepted = parts.renderCache.acceptFrame(
+    id,
+    candidate,
+    delivery.portable,
+  );
   if (accepted === null) return null;
   if (clickShown !== null)
     answeredClickError(parts.sessionState, candidate.session, clickShown);

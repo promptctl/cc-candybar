@@ -117,6 +117,7 @@ test("the running host records two independent renderer sessions for offline rep
     const frame = await draw(primarySession);
     expect(textOf(frame)).toContain("recorded-source padding=1");
     expect(textOf(frame)).toContain(LOCALIZED);
+    expect(textOf(await draw(primarySession))).toContain("recorded-source padding=1");
     const afterStart = mainStarts();
     expect(afterStart).toHaveLength(2);
     expect(afterStart[1]).not.toBe(first[0]);
@@ -187,6 +188,13 @@ test("the running host records two independent renderer sessions for offline rep
     });
     const primaryReplay = await replay(mainCapture, alternate);
     const primaryFrames = replayedFrames(primaryReplay.stdout);
+    const primaryRecords: RecordingEntry[] = fs.readFileSync(mainCapture, "utf8").trimEnd().split("\n").map(line => JSON.parse(line));
+    const firstReceipt = primaryRecords.findIndex(entry => entry.kind === "turn" && entry.input.event.kind === "effect-done");
+    expect(firstReceipt).toBeGreaterThan(0);
+    const repeatedContexts = primaryRecords.slice(firstReceipt + 1).flatMap(entry =>
+      entry.kind === "turn" && entry.input.event.kind === "context" ? [entry.input] : []);
+    expect(repeatedContexts.length).toBeGreaterThan(0);
+    expect(repeatedContexts.some(input => input.presentation?.sessions.some(s => s.resume))).toBe(false);
     expect(new Set(primaryFrames.map(({ session }) => session))).toEqual(new Set([primarySession]));
     expect(primaryFrames.some(({ frame }) => textOf(frame).includes("recorded-source padding=1"))).toBe(true);
     expect(primaryFrames.some(({ frame }) => textOf(frame).includes(LOCALIZED))).toBe(true);

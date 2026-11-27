@@ -1410,7 +1410,7 @@ describe("a feed's frame", () => {
         null,
         (candidate) => {
           candidates.push(candidate);
-          return parts.mint();
+          return {id: parts.mint()};
         },
       );
     const changedBefore = changed.length;

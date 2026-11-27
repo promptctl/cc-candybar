@@ -547,6 +547,7 @@ function copyCandidate(
     session: view.sessionId,
     by,
     target: view.presentationTargets[by],
+    loadKey: view.state.loadKey,
     frame: {
       layout: { record: drawn.memory.record, segments: drawn.segments },
       motion: drawn.memory.motion,

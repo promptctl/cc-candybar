@@ -57,3 +57,31 @@ function canonical(value: unknown): unknown {
   }
   return value;
 }
+
+// Two decoded JSON5 values are the same value. A JSON5 value is null, a
+// boolean, a number (NaN equal to itself), a string, an array or a plain
+// object, so this needs no runtime's deep equality.
+export function samePlainValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (
+    typeof a !== "object" ||
+    typeof b !== "object" ||
+    a === null ||
+    b === null ||
+    Array.isArray(a) !== Array.isArray(b)
+  )
+    return false;
+  const ak = Object.keys(a);
+  const bk = Object.keys(b);
+  return (
+    ak.length === bk.length &&
+    ak.every(
+      (k) =>
+        Object.hasOwn(b, k) &&
+        samePlainValue(
+          (a as Record<string, unknown>)[k],
+          (b as Record<string, unknown>)[k],
+        ),
+    )
+  );
+}

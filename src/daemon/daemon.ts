@@ -75,6 +75,8 @@ import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, readingsAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
+import { HostPresentations } from "./host-presentations.js";
+import { PresentationPrivacy } from "./recording-privacy.js";
 import type { PublishedSession, SessionStores } from "./host-sessions.js";
 import {
   reportLine,
@@ -532,9 +534,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     inputs.rendererEntry ?? bundle.path,
   );
   const renderers = new Map<RendererName, RendererRuntime>();
+  const presentations = new HostPresentations();
   const publishSession =
     (writer: string): PublishedSession =>
     (revision, accepted) => {
+      presentations.changed(revision, accepted);
       const commit = encodeSessionCommit({
         kind: "session-commit",
         revision,
@@ -544,6 +548,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       const recipients: string[] = [];
       for (const [peer, target] of renderers) {
         const generation = target.link.observe(commit);
+        if (generation !== null)
+          target.privacy.committed(accepted, (sid) => stores.holds(sid));
         if (generation !== null) recipients.push(`${peer}[${generation}]`);
       }
       log(
@@ -741,7 +747,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       reconcileTmux(req?.hints.tmux?.socket, req ?? undefined);
     },
     shown: (req) => paneVisibility.shown(req.hints.tmux),
-    watchingChanged: () => reconcileTmux(),
+    watchingChanged: (session, watching) => {
+      if (!watching) presentations.stopFeed(session);
+      reconcileTmux();
+    },
     deliver: async (make) => {
       const sent = await Promise.all(
         [...renderers.values()].map(({ renderer }) =>
@@ -867,6 +876,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       const session =
         event.kind === "retire" ? event.session : event.worldState.session;
       if (event.kind === "retire") {
+        presentations.retire(session);
         configDiscovery.retire(session);
         clock.detach("retire shared session", () =>
           stores.retire(session, publishSession("host")),
@@ -897,6 +907,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
 
   interface RendererRuntime {
+    readonly privacy: PresentationPrivacy;
     readonly reported: string;
     readonly entry: string;
     readonly link: RendererLink;
@@ -944,16 +955,19 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
+    const privacy = new PresentationPrivacy();
     // [LAW:one-source-of-truth] Every generation starts from the host image.
     const boot = (): RendererBoot => {
       const { revision, state } = stores.current(name);
-      return {
+      const input = {
         stored: state,
         sessionRevision: revision,
         locations: locs,
         region: inputs.region,
         memoryLimitBytes,
       };
+      privacy.boot(input);
+      return input;
     };
     const prepared = inputs.renderer({
       name,
@@ -962,7 +976,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       recording: () => recordings?.generation(name),
       node: bundle.node,
     });
-    return { name, reported, entry, prepared };
+    return { name, reported, entry, prepared, privacy };
   }
 
   const connectRenderer = ({
@@ -970,6 +984,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported,
     entry,
     prepared,
+    privacy,
   }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
     const link = prepared.start({
       log,
@@ -1019,7 +1034,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const renderer = rendererHost(
       name,
       clock,
-      link.renderer,
+      {
+        answer: async (input) => {
+          privacy.input(input);
+          const output = await link.renderer.answer(input);
+          privacy.output(input, output);
+          return output;
+        },
+      },
       log,
       {
         subscribed: (subscriptions) => {
@@ -1050,6 +1072,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       },
       {
         sessionWriter: (session, land) => sessionWriters.run(session, land),
+        presentationTurn: (input, observed) =>
+          presentations.turn(
+            input,
+            observed,
+            () =>
+              Object.keys(viewersOf(name, frameFeeds.viewers())) as SessionId[],
+            (sid) => privacy.problem(sid),
+            (sid) => nameOf(sid) === name,
+          ),
         authorizeRun: (request, captures) =>
           authorizeRun(linkSigner, request, captures),
         perform: (act) => acts.perform(act),
@@ -1075,7 +1106,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         },
       },
     );
-    return { reported, entry, link, renderer };
+    return { reported, entry, link, renderer, privacy };
   };
 
   const primary = connectRenderer(primaryPrepared);

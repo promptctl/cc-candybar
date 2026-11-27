@@ -34,6 +34,7 @@ import {
 import type { RunReading } from "../../src/daemon/readings";
 import {
   RecordingControls,
+  PresentationPrivacy,
   recordingBootProblem,
   recordingInputProblem,
   recordingOutputProblem,
@@ -227,6 +228,19 @@ test("a selected environment value that the real renderer echoes disqualifies it
     expect(problem).toMatch(/environment source supplied a value/);
     expect(problem).not.toContain(SECRET);
   }
+});
+
+test("a resumed surface keeps the refusal of an earlier private source after its value leaves the world", () => {
+  const proof = new PresentationPrivacy();
+  proof.boot(BOOT);
+  const context = checked().req;
+  const secret = facts(new Map([[SELECTED, variableOf({[SELECTED]: SECRET}, SELECTED)]]));
+  proof.input(input({kind: "context", context, worldState: secret}));
+  proof.input(input({kind: "world-state", worldState: facts()}));
+  const reason = proof.problem(SESSION);
+  expect(reason).toMatch(/environment source supplied a value/);
+  expect(reason).not.toContain(SECRET);
+  expect(proof.problem(sessionIdOf("other"))).toBeNull();
 });
 
 test("an environment declaration without a value is recordable, including absent, pending and failed facts", () => {

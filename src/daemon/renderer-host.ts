@@ -25,6 +25,10 @@
 // the config it needs held, and a click's consequence reads the config its
 // landing left.
 
+import type {
+  PresentationTurn,
+  PresentationReader,
+} from "./host-presentations.js";
 import {
   isCommand,
   sessionOfEvent,
@@ -34,6 +38,7 @@ import {
   type CommandReply,
   type ReplyTo,
   type Effect,
+  type EffectId,
   type EffectOutcome,
   type Event,
   type EventInput,
@@ -149,6 +154,10 @@ type MadeClick =
 // the daemon's close has begun, and where an act's failure goes that no
 // session's bar can hold.
 export interface HostWorld {
+  readonly presentationTurn?: (
+    input: EventInput,
+    observed: PresentationReader,
+  ) => PresentationTurn | undefined;
   // All renderer mailboxes draw their session writer from the same daemon.
   sessionWriter<T>(session: SessionId, land: () => Promise<T>): Promise<T>;
   readonly authorizeRun: (
@@ -308,6 +317,8 @@ export function rendererHost(
     (name) => `renderer ${name} mailbox`,
   );
   let generation = 0;
+  let observedPresentations: PresentationReader = new WeakMap();
+  const receiptObservations = new Map<EffectId, () => void>();
   const stamped = stampedOf(clock);
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
   // when: its answer, its changes landing and their `effect-done` turns.
@@ -460,22 +471,42 @@ export function rendererHost(
     captures: readonly RunEvidence[] = [],
     actsOn: ActsOn = "daemon",
   ): Promise<Slotted> => {
-    if (input.event.kind === "start") generation++;
-    const receipt = receiptFor(generation);
+    if (input.event.kind === "start") {
+      generation++;
+      observedPresentations = new WeakMap();
+      receiptObservations.clear();
+    }
+    const issuer = generation;
     const session = sessionOfEvent(input.event);
     let release = (): void => {};
     let output: Timed<RendererOutput>;
     let sentAt: Monotonic;
+    let presentation: PresentationTurn | undefined;
+    let accepted: ReturnType<PresentationTurn["drawn"]> | undefined;
     try {
       if (session !== null) release = collector.holding(session);
+      presentation = world.presentationTurn?.(input, observedPresentations);
       sentAt = clock.monotonic();
-      output = await renderer.answer(input);
+      output = await renderer.answer(presentation?.input ?? input);
+      if (output.kind === "answered") presentation?.received();
+      if (input.event.kind === "effect-done") {
+        const received = receiptObservations.get(input.event.of);
+        receiptObservations.delete(input.event.of);
+        if (output.kind === "answered") received?.();
+      }
     } catch (thrown) {
       recordTaken("session release", release);
       const failure = failureOf(thrown);
       if (input.event.kind === "start") endedStart(failure);
       return unanswered(failure, queuedMs);
     }
+    if (presentation) {
+      const drawing = presentation;
+      accepted =
+        recordTaken("presentation proposals", () => drawing.drawn(output)) ??
+        undefined;
+    }
+    const receipt = receiptFor(issuer, accepted);
     recordDiagnostics(output.diagnostics);
     if (isCommand(input.event)) {
       if (output.kind === "answered") requireReply(input.event, output.reply);
@@ -1022,14 +1053,19 @@ export function rendererHost(
   // Worker-local effect IDs start again at boot. A socket can finish after
   // its worker exits, or while the replacement's start is heading the mailbox.
   const receiptFor =
-    (issuer: number): SettlePresentation =>
+    (
+      issuer: number,
+      take?: ReturnType<PresentationTurn["drawn"]>,
+    ): SettlePresentation =>
     (effect, reason) => {
+      const received = take?.(effect.id, reason === null);
       // [LAW:effects-at-boundaries] The write can acknowledge a daemon
       // event after its renderer has gone. Only the local receipt needs
       // the generation that issued it.
       if (reason === null && effect.displayedEvents !== undefined)
         world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
+      if (received) receiptObservations.set(effect.id, received);
       const retired = "the renderer that drew the frame has ended";
       unawaited("frame receipt", () =>
         deliver(
@@ -1041,7 +1077,9 @@ export function rendererHost(
                 )
               : { kind: "down", message: retired, detail: retired },
           [["effect", String(effect.id)]],
-        ),
+        ).finally(() => {
+          if (issuer === generation) receiptObservations.delete(effect.id);
+        }),
       );
     };
   // An act's, once it ended: its `effect-done` joins the mailbox.

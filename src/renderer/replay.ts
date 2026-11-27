@@ -146,11 +146,20 @@ function inputOf(
     !Number.isFinite(value.tick) ||
     !isPlainObject(value.event) ||
     typeof value.event.kind !== "string" ||
-    Object.keys(value).length !== 4
+    Object.keys(value).length !==
+      (wireVersion >= 34 && Object.hasOwn(value, "presentation") ? 5 : 4)
   ) {
     throw new Error(`recording line ${line} has an invalid renderer input`);
   }
   const { event } = value;
+  if (
+    Object.hasOwn(value, "presentation") &&
+    (!isPlainObject(value.presentation) ||
+      !Number.isSafeInteger(value.presentation.order) ||
+      Number(value.presentation.order) <= 0 ||
+      !Array.isArray(value.presentation.sessions))
+  )
+    throw new Error(`recording line ${line} has an invalid presentation input`);
   const fields = ownValue(EVENT_FIELDS, value.event.kind);
   if (
     fields === undefined ||

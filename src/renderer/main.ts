@@ -24,6 +24,7 @@ import {
   retireSession,
   viewLanes,
   type Delivery,
+  type PrepareDelivery,
   type RendererParts,
 } from "./draw-bar.js";
 import { TurnTime } from "./turn-time.js";
@@ -42,6 +43,7 @@ import {
   type MainRendererParts,
 } from "./verbs/port.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
+import type { PresentationInput } from "../renderer-interface/presentation.js";
 import {
   historyAfter,
   type SessionHistory,
@@ -128,11 +130,21 @@ export function mainRenderer(
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, Delivery>();
-  const prepare = (delivery: Delivery): EffectId => {
-    const id = parts.mint();
-    deliveries.set(id, delivery);
-    return id;
-  };
+  const prepareFor =
+    (input?: PresentationInput): PrepareDelivery =>
+    (delivery) => {
+      const id = parts.mint();
+      if (input === undefined) {
+        deliveries.set(id, delivery);
+        return { id };
+      }
+      const { portable, proposal } = parts.renderCache.presentations.propose(
+        delivery.candidate,
+        input,
+      );
+      deliveries.set(id, { ...delivery, portable });
+      return { id, proposal };
+    };
   // The subscriptions this renderer last returned: none before its first turn.
   let subscriptions: Subscriptions = {
     sources: {},
@@ -240,6 +252,7 @@ export function mainRenderer(
     record: RequestFacts,
     effects: Effect[],
     frames: PushedFrame[],
+    prepare: PrepareDelivery,
   ): void => {
     switch (event.kind) {
       case "start": {
@@ -273,6 +286,7 @@ export function mainRenderer(
                 record,
                 effects,
                 frames,
+                prepare,
               ),
           ]),
           // A live session gets its cache entry before idle entries warm,
@@ -351,7 +365,7 @@ export function mainRenderer(
         opening.delete(current.hookData.session_id);
         effects.push({
           kind: "present",
-          id: prepare(delivery),
+          ...prepare(delivery),
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
@@ -649,11 +663,32 @@ export function mainRenderer(
           const effects: Effect[] = [];
           const frames: PushedFrame[] = [];
           const { event } = input;
-          const { outcome, ...declaration } = ending(event, () =>
-            isCommand(event)
+          const order = input.presentation?.order;
+          using idle =
+            order === undefined
+              ? undefined
+              : menuIdle.reporting((session) => {
+                  parts.renderCache.presentations.idleMoved(session, order);
+                });
+          const { outcome, ...declaration } = ending(event, () => {
+            for (const { resume, revision } of input.presentation?.sessions ??
+              [])
+              if (resume)
+                parts.renderCache.resumePresentation(
+                  resume,
+                  revision,
+                  parts.edits.view.revision(resume.session),
+                );
+            return isCommand(event)
               ? command(event)
-              : notify(event, record, effects, frames),
-          );
+              : notify(
+                  event,
+                  record,
+                  effects,
+                  frames,
+                  prepareFor(input.presentation),
+                );
+          });
           return {
             ...(outcome.kind === "answered"
               ? {
@@ -666,6 +701,7 @@ export function mainRenderer(
             effects,
             record,
             frames,
+            ...(idle?.changes.length && { idle: idle.changes }),
             ...declaration,
           };
         }),
