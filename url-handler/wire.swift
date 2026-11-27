@@ -296,7 +296,8 @@ enum Verdict: Equatable {
   case accepted(acts: [DesktopAct]?)
   // The link was refused: one the bar never drew, or one changed since.
   case refused(String)
-  // The daemon could not take the click at all (it was closing).
+  // The daemon answered that it could not take the click, and why: it never
+  // ran it. A click that ran and failed is `accepted` with its failure in `acts`.
   case failed(String)
 }
 
@@ -311,13 +312,18 @@ func verdictOf(_ body: Data) -> Verdict? {
     guard let why = said["error"] as? String else { return nil }
     return said["code"] as? String == ERROR_CODE_BAD_REQUEST ? .refused(why) : .failed(why)
   }
+  // The click's own failure follows the acts it asked, whatever shape they came in.
+  var failure: [DesktopAct] = []
+  switch said[DESKTOP_ERROR_KEY] {
+  case nil: break
+  case let reason as String: failure = [.failed(reason)]
+  default: failure = [.malformed("\(DESKTOP_ERROR_KEY) is not a string")]
+  }
   guard let raw = said[DESKTOP_ACTS_KEY] else { return .accepted(acts: nil) }
   guard let list = raw as? [Any] else {
-    return .accepted(acts: [.malformed("\(DESKTOP_ACTS_KEY) is not a list")])
+    return .accepted(acts: [.malformed("\(DESKTOP_ACTS_KEY) is not a list")] + failure)
   }
-  var acts = list.map(desktopAct)
-  if let reason = said[DESKTOP_ERROR_KEY] as? String { acts.append(.failed(reason)) }
-  return .accepted(acts: acts)
+  return .accepted(acts: list.map(desktopAct) + failure)
 }
 
 // What this app does once the daemon has accepted the click: each act in the

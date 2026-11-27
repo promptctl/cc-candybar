@@ -1002,7 +1002,8 @@ function readUrlFrame(
 // the moment it is read and run to its outcome after. A link that does not
 // open is refused here, as a bad request on the click's event and in the
 // verdict, whose writer shows it as a notification, never dropped. A verb's
-// own failure is held on the bar, so the verdict does not say it twice.
+// own failure is held on the bar; a writer told once its click landed is also
+// told it (`landedReply`), because it never sees the bar.
 function urlClick(
   parts: DaemonParts,
   frame: Record<string, unknown>,

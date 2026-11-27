@@ -29,10 +29,12 @@
 // arrived, and only carrying out what it asked (the pasteboard, the editor)
 // runs on the main thread.
 //
-// [LAW:no-silent-failure] The app sees three failures: a frame that could not
+// [LAW:no-silent-failure] The app sees four failures: a frame that could not
 // be written, a frame written that got no verdict it could read (the click may
-// still land, so it is told as unconfirmed, never as lost), and a link the
-// daemon refused (one the bar never drew, or one changed since). Each is
+// still land, so it is told as unconfirmed, never as lost), a link the
+// daemon refused (one the bar never drew, or one changed since), and a click
+// the daemon answered it could not take, in the reason it gave: the forward
+// worked, so that is told as the daemon's, never as a dead forward. Each is
 // written to the unified log under the app's subsystem (`log stream
 // --predicate 'subsystem == "com.cccandybar.url-handler"'`) and told to the
 // user as a macOS user notification carrying what was observed or the
@@ -83,6 +85,10 @@ enum Forward {
   case refused(String)
   // The frame was written, and no verdict on it could be read.
   case unconfirmed(String)
+  // The daemon answered that it could not take the click, for the reason it
+  // gave: the forward carried the frame and the verdict back.
+  case daemonFailed(String)
+  // The frame never reached the daemon.
   case failed(String)
 }
 
@@ -253,9 +259,9 @@ func verdict(_ fd: Int32, waiting: Int32) -> Forward {
   switch read {
   case .accepted(let acts): return .delivered(acts: acts)
   // A refusal of the link is a bad request; any other failure is the daemon's
-  // own (it was closing), which lost the click.
+  // own, said by the daemon.
   case .refused(let why): return .refused(why)
-  case .failed(let why): return .failed(why)
+  case .failed(let why): return .daemonFailed(why)
   }
 }
 
@@ -275,6 +281,7 @@ func verdict(_ fd: Int32, waiting: Int32) -> Forward {
 // them chose not to be told this way, and there is no second channel.
 let lostClickNotice = "lost-click"
 let refusedClickNotice = "refused-click"
+let failedClickNotice = "failed-click"
 
 func notify(_ title: String, _ why: String, _ identifier: String) {
   let center = UNUserNotificationCenter.current()
@@ -356,6 +363,9 @@ func conclude(_ link: String, via routed: Route, _ sent: Forward) {
   case .unconfirmed(let why):
     log.error("unconfirmed \(link, privacy: .private) at \(socket, privacy: .public): \(why, privacy: .public)")
     notify("Click unconfirmed", why, lostClickNotice)
+  case .daemonFailed(let why):
+    log.error("failed \(link, privacy: .private) at \(socket, privacy: .public): \(why, privacy: .public)")
+    notify("Click failed", why, failedClickNotice)
   case .failed(let why):
     log.error("lost \(link, privacy: .private) to \(socket, privacy: .public): \(why, privacy: .public)")
     notify("Click not delivered", why, lostClickNotice)

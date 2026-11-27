@@ -30,6 +30,7 @@ import { authorizeRun } from "../src/daemon/foundations/run-authorization";
 import { VERB_RUN, type RunEvidence } from "../src/click/wire";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { testActs } from "./helpers/click";
+import { ACTS_ON_DAEMON, type ActsOn } from "../src/daemon/foundations/protocol";
 import { readTextIfPresent } from "../src/utils/regular-text";
 
 const S = sessionIdOf("s");
@@ -154,7 +155,7 @@ function hostOver(
     },
     world,
   );
-  const turn = (runEvidence?: readonly RunEvidence[], actsOn: "daemon" | "desktop" = "daemon") =>
+  const turn = (runEvidence?: readonly RunEvidence[], actsOn: ActsOn = ACTS_ON_DAEMON) =>
     runEvidence === undefined
       ? host.answer(() => ({ kind: "event", event: { kind: "due" } }))
       : host.answerClick(S, actsOn, () => ({
@@ -446,11 +447,16 @@ describe("the performer's acts for the desktop", () => {
     expect(lines).toEqual([expect.stringMatching(/^warn act kind=open .* outcome=failed /)]);
   });
 
-  test("an act that is not a copy or open is performed here whatever the destination", async () => {
-    const outcome = await performer().perform(
-      { kind: "type-slash", id: ++ids as EffectId, session: S, pane: { paneId: "%1" } as never, line: "/x" as never },
-      "desktop",
-    );
-    expect(outcome.kind).not.toBe("desktop");
+  test("an act that is not a copy or open ends the same whatever the destination", async () => {
+    const slash: HostAct = {
+      kind: "type-slash",
+      id: ++ids as EffectId,
+      session: S,
+      pane: { paneId: "%1" } as never,
+      line: "/x" as never,
+    };
+    const here = await performer().perform(slash, "daemon");
+    expect(here.kind).not.toBe("desktop");
+    expect(await performer().perform(slash, "desktop")).toEqual(here);
   });
 });

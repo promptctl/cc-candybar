@@ -330,6 +330,22 @@ describe("a frame that asks for its acts on the desktop", () => {
     expect(h.copied).toEqual([]);
   });
 
+  // The daemon's own failure to carry the click out (a removed path) is the
+  // same verdict as a verb's refusal: the link was taken, then the click failed.
+  test("an open whose path is gone since the draw is a taken link whose click failed", async () => {
+    const h = host();
+    const gone = effectsUrl([
+      { verb: VERB_OPEN_VSCODE, args: [`${__dirname}/removed-since-the-draw`] },
+    ]);
+    const answered = await desktopFrame(h, TEST_SIGNER.signLink(gone));
+    expect((await landed(answered)).resp).toEqual({
+      ok: true,
+      output: "",
+      desktopActs: [],
+      desktopError: expect.stringMatching(/open: /),
+    });
+  });
+
   test("a failure its writer never took is said by the daemon, though no act went with it", async () => {
     const h = host();
     const failing = effectsUrl([

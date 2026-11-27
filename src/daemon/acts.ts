@@ -6,9 +6,9 @@
 
 import { stat } from "node:fs/promises";
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
-import type { ACTS_ON_DAEMON } from "./foundations/protocol.js";
 import {
   ACTS_ON_DESKTOP,
+  type ACTS_ON_DAEMON,
   type ActsOn,
   type DesktopAct,
 } from "./foundations/protocol.js";
@@ -101,20 +101,24 @@ function nameOf(act: HostAct): string {
 }
 
 // [LAW:types-are-the-program] How an act ended: its outcome, and what its
-// line says of it — what it did, or why it did not, or that it was handed on.
-interface Done {
-  readonly outcome: HostOutcome;
-  readonly said: string;
-}
+// line says of it — what it did, or why it did not.
+type Done = RunEnd;
 const did = (said: string): Done => ({ outcome: { kind: "ok" }, said });
 const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
   outcome,
   said: outcome.reason,
 });
 
+// An act that ended by being handed to the desktop. Only the desktop's branch
+// of `performed` makes one: no performer in the table can.
+interface HandedOn {
+  readonly outcome: ForDesktop;
+  readonly said: string;
+}
+
 // [LAW:single-enforcer] An act's line, in the one format, whoever says it: what
 // it did or why it did not, or that it was handed to the desktop.
-export const actLine = (
+const actLine = (
   act: HostAct,
   outcome: HostOutcome["kind"],
   said: string,
@@ -198,6 +202,8 @@ export class Acts {
     const { outcome, said } = this.deps.closing()
       ? not({ kind: "closing", reason: "the daemon is closing" })
       : await this.performed(act, actsOn);
+    // [LAW:nothing-unseen] An act handed to the desktop is said on its act line
+    // as any act is.
     this.deps.log(
       outcome.kind === "ok" ||
         outcome.kind === "closing" ||
@@ -211,11 +217,17 @@ export class Acts {
       : { ...outcome, reason: `${nameOf(act)}: ${outcome.reason}` };
   }
 
-  private async performed(act: HostAct, actsOn: ActsOn): Promise<Done> {
+  private async performed(
+    act: HostAct,
+    actsOn: ActsOn,
+  ): Promise<Done | HandedOn> {
     try {
       // [LAW:effects-at-boundaries] The desktop's acts are decided against the
       // filesystem the click was drawn on, so a path gone since the draw fails
       // here, as an act's own failure does.
+      // [LAW:dataflow-not-control-flow] exception: only a copy and an open have
+      // a form the desktop carries out; every other kind is performed here
+      // whatever the destination, so the branch is on whether one exists.
       const desktop =
         actsOn === ACTS_ON_DESKTOP ? await desktopActOf(act) : null;
       if (desktop !== null)

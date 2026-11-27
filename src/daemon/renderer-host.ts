@@ -416,8 +416,8 @@ export function rendererHost(
   const inSlot = async (
     input: EventInput,
     queuedMs: number,
-    captures: readonly RunEvidence[],
     actsOn: ActsOn,
+    captures: readonly RunEvidence[] = [],
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -606,8 +606,9 @@ export function rendererHost(
       } else acts.push(effect);
     }
 
-    // [LAW:single-enforcer] The connection owns the destination. Only the
-    // acts of this writer's click can leave in its reply.
+    // [LAW:single-enforcer] The performer decides what the destination means
+    // for an act (src/daemon/acts.ts); the host only says which one this turn
+    // acts on. Only the acts of this writer's click can leave in its reply.
     const performed = (act: HostAct): Promise<HostOutcome> =>
       world.perform(act, actsOn);
     let before: Promise<unknown> = Promise.resolve();
@@ -863,12 +864,7 @@ export function rendererHost(
         settled: Promise.resolve([{ kind: "failed", reason: made.message }]),
       };
     const input = stamped(made);
-    const { received, turn, settled } = await inSlot(
-      input,
-      0,
-      [],
-      ACTS_ON_DAEMON,
-    );
+    const { received, turn, settled } = await inSlot(input, 0, ACTS_ON_DAEMON);
     record(input.event, [["why", why]], turn);
     // A config failure belongs to the turn that requested its delivery.
     const threw: readonly EffectOutcome[] =
@@ -970,7 +966,7 @@ export function rendererHost(
     outcome: EffectOutcome,
   ): Promise<{ readonly settled: Promise<EffectOutcome> }> => {
     const input = stamped(doneOf(effect, outcome));
-    const { turn, settled } = await inSlot(input, 0, [], ACTS_ON_DAEMON);
+    const { turn, settled } = await inSlot(input, 0, ACTS_ON_DAEMON);
     record(input.event, [["effect", String(effect.id)]], turn);
     return { settled: settled.then(() => outcome) };
   };
@@ -1090,8 +1086,8 @@ export function rendererHost(
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
-          (made.event.kind === "click" ? made.runEvidence : undefined) ?? [],
           actsOn,
+          made.event.kind === "click" ? made.runEvidence : undefined,
         );
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         if (made.event.kind === "click" && restore !== undefined)

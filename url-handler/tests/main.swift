@@ -142,6 +142,14 @@ expect(
   .accepted(acts: [.malformed("desktopActs is not a list")]),
   "acts that are no list")
 expect(
+  verdictOf(json(#"{"ok":true,"output":"","desktopActs":"copy","desktopError":"boom"}"#)),
+  .accepted(acts: [.malformed("desktopActs is not a list"), .failed("boom")]),
+  "a failure beside acts that are no list is kept")
+expect(
+  verdictOf(json(#"{"ok":true,"output":"","desktopActs":[],"desktopError":7}"#)),
+  .accepted(acts: [.malformed("desktopError is not a string")]),
+  "a failure that is no string is told, not dropped")
+expect(
   verdictOf(json(#"{"ok":false,"code":"BAD_REQUEST","error":"no"}"#)),
   .refused("no"),
   "a refused link")
