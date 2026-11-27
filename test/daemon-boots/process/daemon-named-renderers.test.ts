@@ -82,6 +82,39 @@ function cacheEntry(id: string, timestamp: string): string {
   );
 }
 
+test("a subscriber waiting before the first request follows that request to an already running named renderer", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-waiting-peer", builtDaemon);
+  const session = "waiting-for-first-request";
+  const config = path.join(daemon.stateDir, "feed.json5");
+  const draw = (sid: string) => frameRequest(daemon.sockPath, {
+    ...renderBody(sid, daemon.stateDir, {}, ["cc-candybar", "--config-only", config]),
+    env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+    client: { kind: "node", bundle: worktreeBuilt, source: null },
+  });
+  try {
+    fs.writeFileSync(config, JSON.stringify({
+      globals: { experimentalPane: true },
+      segments: { status: { template: "named subscription" } },
+      root: { h: ["status"] },
+    }));
+    await draw("warm-peer");
+    const pane = observePane(daemon.sockPath, session);
+    try {
+      await until(
+        () => fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8")
+          .includes(`feed sid="${session}" opened`),
+        "the default renderer holding the subscription before its first request",
+      );
+      await draw(session);
+      await pane.waitFor(line => line.includes("named subscription"), "the first named frame on the existing connection");
+    } finally {
+      pane.close();
+    }
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
 test("live renderer processes observe a signed click and one undo step across a route switch", async () => {
   const daemon = await spawnIsolatedDaemon("ccb-live-session", builtDaemon);
   try {

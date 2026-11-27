@@ -12,6 +12,7 @@ import { isIntegerPresentation } from "../utils/integer-presentation.js";
 import { ZonedCalendar } from "../utils/calendar.js";
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
+import { validFeedAdvances, validFeedUpdates } from "./feed-history.js";
 import { compareStructural } from "mobx";
 import { isStoreWrite, liveSessionStateOf } from "./stored-state.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
@@ -451,6 +452,15 @@ export function rendererOverLines(deps: {
             );
             return true;
           }
+          if (
+            heard.output.feedUpdates !== undefined &&
+            !validFeedUpdates(heard.output.feedUpdates)
+          ) {
+            reject(
+              new Error(`renderer output ${heard.n} has invalid feed updates`),
+            );
+            return true;
+          }
           const output = received(heard.output, heard.n);
           if (output === null)
             reject(
@@ -479,10 +489,24 @@ export function rendererOverLines(deps: {
           deps.fault("renderer sent an invalid observation wake");
           return;
         }
+        if (
+          line.advances !== undefined &&
+          (!validFeedAdvances(line.advances) ||
+            line.wake === undefined ||
+            !line.advances.length ||
+            Math.min(...line.advances.map(({ next }) => next)) !== line.wake)
+        ) {
+          deps.fault("renderer sent invalid feed advances");
+          return;
+        }
         const diagnostics = rendererDiagnosticsFrom(line.diagnostics, () =>
           deps.fault("renderer sent invalid observation diagnostics"),
         );
-        deps.observed({ wake: line.wake, diagnostics });
+        deps.observed({
+          wake: line.wake,
+          diagnostics,
+          ...(line.advances && { advances: line.advances }),
+        });
         return;
       }
       case "heap-chunk": {

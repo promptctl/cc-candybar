@@ -162,9 +162,12 @@ function offerProblem({ config, retained }: ConfigOffer): string | null {
 // [LAW:single-enforcer] Every input kind has one export disposition. The
 // check reads the checked renderer input, never the host's environment book.
 export function recordingInputProblem(
-  { event, presentation }: EventInput,
+  { event, presentation, feedResumes }: EventInput,
   controls?: RecordingControls,
 ): string | null {
+  for (const feed of feedResumes ?? [])
+    if (feed.exportProblem !== null)
+      return feed.exportProblem ?? UNVERIFIED_PRESENTATION;
   for (const { resume } of presentation?.sessions ?? [])
     if (resume && resume.exportProblem !== null)
       return resume.exportProblem ?? UNVERIFIED_PRESENTATION;
@@ -637,6 +640,12 @@ export class PresentationPrivacy {
 
   input(input: EventInput): void {
     const { event } = input;
+    for (const feed of input.feedResumes ?? [])
+      if (feed.exportProblem !== null)
+        this.privateViews.set(
+          feed.session,
+          feed.exportProblem ?? UNVERIFIED_PRESENTATION,
+        );
     for (const { session, resume } of input.presentation?.sessions ?? [])
       if (resume && resume.exportProblem !== null)
         this.privateViews.set(
@@ -649,6 +658,7 @@ export class PresentationPrivacy {
         this.input({
           ...input,
           presentation: undefined,
+          feedResumes: undefined,
           event: { kind: "context", context, worldState },
         });
       return;
@@ -671,7 +681,7 @@ export class PresentationPrivacy {
     }
     if (!this.privateViews.has(session)) {
       const reason = recordingInputProblem(
-        { ...input, presentation: undefined },
+        { ...input, presentation: undefined, feedResumes: undefined },
         this.controls,
       );
       if (reason) this.privateViews.set(session, reason);

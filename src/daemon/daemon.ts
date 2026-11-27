@@ -75,6 +75,7 @@ import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, readingsAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
+import { HostFeedHistory } from "./host-feed-history.js";
 import { HostPresentations } from "./host-presentations.js";
 import { PresentationPrivacy } from "./recording-privacy.js";
 import type { PublishedSession, SessionStores } from "./host-sessions.js";
@@ -535,6 +536,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   );
   const renderers = new Map<RendererName, RendererRuntime>();
   const presentations = new HostPresentations();
+  const feedHistory = new HostFeedHistory();
   const publishSession =
     (writer: string): PublishedSession =>
     (revision, accepted) => {
@@ -748,6 +750,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     },
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watchingChanged: (session, watching) => {
+      feedHistory.watching(session, watching);
       if (!watching) presentations.stopFeed(session);
       reconcileTmux();
     },
@@ -877,6 +880,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         event.kind === "retire" ? event.session : event.worldState.session;
       if (event.kind === "retire") {
         presentations.retire(session);
+        feedHistory.watching(session, false);
         configDiscovery.retire(session);
         clock.detach("retire shared session", () =>
           stores.retire(session, publishSession("host")),
@@ -986,10 +990,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     prepared,
     privacy,
   }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
+    let feedReader = {};
     const link = prepared.start({
       log,
       clock,
-      observed: ({ wake, diagnostics }) => {
+      observed: ({ wake, diagnostics, advances }) => {
+        if (advances) feedHistory.advanced(feedReader, advances);
         if (wake !== undefined) renderer.advance(wake);
         if (diagnostics !== undefined) writeLogLines(log, diagnostics);
       },
@@ -1036,9 +1042,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       clock,
       {
         answer: async (input) => {
-          privacy.input(input);
-          const output = await link.renderer.answer(input);
-          privacy.output(input, output);
+          if (input.event.kind === "start") feedReader = {};
+          const feed = feedHistory.turn(
+            input,
+            feedReader,
+            (sid) => nameOf(sid) === name,
+          );
+          privacy.input(feed.input);
+          const output = await link.renderer.answer(feed.input);
+          privacy.output(feed.input, output);
+          feed.took(output, (sid) => privacy.problem(sid));
           return output;
         },
       },
@@ -1182,13 +1195,20 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     }
 
     if (route === undefined || order >= route.order) {
+      // A subscriber may already be waiting on the default renderer before
+      // the session selects its first renderer. That live feed moves too.
+      const previous = nameOf(session);
       configDiscovery.route(session, name, request.requested);
       routes.set(session, { name, order });
-      if (route !== undefined && route.name !== name) {
+      if (
+        previous !== name &&
+        (route !== undefined || frameFeeds.isWatched(session))
+      ) {
+        feedHistory.moved(session);
         // Routing changes the aggregate even when neither renderer's
         // declarations moved. Apply the existing plans under the new owner.
         aggregate();
-        const former = renderers.get(route.name);
+        const former = renderers.get(previous);
         if (former !== undefined)
           clock.detach(
             `renderer ${former.renderer.name} retire ${session}`,

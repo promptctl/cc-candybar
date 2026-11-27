@@ -47,6 +47,7 @@ import type { RenderOrigin } from "../config-hint";
 import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
 import type { Locations } from "../config/loader/chain-places";
+import type { FeedAdvance, FeedResume, FeedUpdate } from "./feed-history.js";
 import type { LiveSessionState, StoreWrite } from "./stored-state";
 import type { RegionalSettings } from "../utils/region.js";
 import type {
@@ -58,7 +59,7 @@ import type {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 35;
+export const RENDERER_WIRE_VERSION = 36;
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
@@ -105,6 +106,7 @@ export interface SessionRenderer extends Renderer {
 }
 
 export interface SessionObservation extends RendererDiagnostics {
+  readonly advances?: readonly FeedAdvance[];
   readonly wake?: Tick;
 }
 
@@ -147,6 +149,7 @@ export interface EventInput extends Readings {
   readonly kind: "event";
   readonly event: Event;
   readonly presentation?: PresentationInput;
+  readonly feedResumes?: readonly FeedResume[];
 }
 
 // [LAW:one-source-of-truth] The same event session is held while the turn
@@ -629,5 +632,6 @@ export type TurnOutcome = {
 export type RendererOutput = TurnOutcome &
   RendererDeclaration & {
     readonly idle?: readonly IdleUpdate[];
+    readonly feedUpdates?: readonly FeedUpdate[];
     readonly frames: readonly PushedFrame[];
   };

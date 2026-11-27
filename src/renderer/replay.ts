@@ -32,6 +32,7 @@ import {
   type StoredState,
 } from "../renderer-interface/stored-state.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
+import { validFeedResumes } from "../renderer-interface/feed-history.js";
 import { mainRendererOf } from "./main.js";
 
 // [LAW:parse-dont-validate] Admit known event arms with their required
@@ -147,7 +148,9 @@ function inputOf(
     !isPlainObject(value.event) ||
     typeof value.event.kind !== "string" ||
     Object.keys(value).length !==
-      (wireVersion >= 34 && Object.hasOwn(value, "presentation") ? 5 : 4)
+      4 +
+        Number(wireVersion >= 34 && Object.hasOwn(value, "presentation")) +
+        Number(wireVersion >= 36 && Object.hasOwn(value, "feedResumes"))
   ) {
     throw new Error(`recording line ${line} has an invalid renderer input`);
   }
@@ -160,6 +163,12 @@ function inputOf(
       !Array.isArray(value.presentation.sessions))
   )
     throw new Error(`recording line ${line} has an invalid presentation input`);
+  if (
+    Object.hasOwn(value, "feedResumes") &&
+    ((event.kind !== "start" && event.kind !== "viewers") ||
+      !validFeedResumes(value.feedResumes))
+  )
+    throw new Error(`recording line ${line} has an invalid feed handoff`);
   const fields = ownValue(EVENT_FIELDS, value.event.kind);
   if (
     fields === undefined ||

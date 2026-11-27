@@ -97,6 +97,7 @@ import {
   type SessionRenderer,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
+import type { FeedResume } from "../renderer-interface/feed-history.js";
 import { ConfigWrites } from "./config-writes.js";
 import { Kept } from "../var-system/store.js";
 import { compareStructural, computed, reaction, runInAction } from "mobx";
@@ -123,6 +124,7 @@ type Stores = Readonly<Record<StoreWrite["store"], HeldStore>>;
 export function mainRenderer(
   parts: MainRendererParts,
   stores: Stores,
+  wireVersion: number = RENDERER_WIRE_VERSION,
 ): Renderer {
   const { time, turnLog, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -253,6 +255,7 @@ export function mainRenderer(
     effects: Effect[],
     frames: PushedFrame[],
     prepare: PrepareDelivery,
+    feedResumes?: readonly FeedResume[],
   ): void => {
     switch (event.kind) {
       case "start": {
@@ -273,33 +276,35 @@ export function mainRenderer(
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
         // each whatever another's opening, its offer, or a feed, threw.
-        runEach([
-          () => feeds.view(event.viewers, time.tick),
-          // A session's offer and its opening are steps of their own: an
-          // offer that throws still records the latest config, and the
-          // session's context still opens over it.
-          ...event.sessions.flatMap(({ context, worldState }) => [
-            () => offered(context.requested),
+        const open = () =>
+          runEach([
+            () => feeds.view(event.viewers, time.tick, feedResumes),
+            // A session's offer and its opening are steps of their own: an
+            // offer that throws still records the latest config, and the
+            // session's context still opens over it.
+            ...event.sessions.flatMap(({ context, worldState }) => [
+              () => offered(context.requested),
+              () =>
+                notify(
+                  { kind: "context", context, worldState },
+                  record,
+                  effects,
+                  frames,
+                  prepare,
+                ),
+            ]),
+            // A live session gets its cache entry before idle entries warm,
+            // so they cannot take the budget a pinned view needs.
             () =>
-              notify(
-                { kind: "context", context, worldState },
-                record,
-                effects,
-                frames,
-                prepare,
+              runEach(
+                [...configs.values()].map(({ origin, retained }) => () => {
+                  offered(origin);
+                  if (retained !== undefined)
+                    parts.renderCache.getOrCreate(origin);
+                }),
               ),
-          ]),
-          // A live session gets its cache entry before idle entries warm,
-          // so they cannot take the budget a pinned view needs.
-          () =>
-            runEach(
-              [...configs.values()].map(({ origin, retained }) => () => {
-                offered(origin);
-                if (retained !== undefined)
-                  parts.renderCache.getOrCreate(origin);
-              }),
-            ),
-        ]);
+          ]);
+        feeds.rebuildViews(feedResumes, open);
         return;
       }
       case "context": {
@@ -460,7 +465,7 @@ export function mainRenderer(
         return;
       }
       case "viewers":
-        feeds.view(event.viewers, time.tick);
+        feeds.view(event.viewers, time.tick, feedResumes);
         return;
       case "due": {
         const busy = new Set(event.pendingClicks);
@@ -663,6 +668,7 @@ export function mainRenderer(
           const effects: Effect[] = [];
           const frames: PushedFrame[] = [];
           const { event } = input;
+          using feedsReport = wireVersion >= 36 ? feeds.reporting() : undefined;
           const order = input.presentation?.order;
           using idle =
             order === undefined
@@ -687,9 +693,12 @@ export function mainRenderer(
                   effects,
                   frames,
                   prepareFor(input.presentation),
+                  input.feedResumes,
                 );
           });
+          const feedUpdates = feedsReport?.updates();
           return {
+            ...(feedUpdates?.length && { feedUpdates }),
             ...(outcome.kind === "answered"
               ? {
                   kind: "answered" as const,
@@ -945,6 +954,7 @@ function build(
       navigation: navigationHistory,
       draft: edits,
     },
+    wireVersion,
   );
   let revision = inputs.sessionRevision;
   return {
@@ -978,29 +988,32 @@ function build(
           const applyDrafts = edits.prepare(
             commit.writes.filter((w) => w.store === "draft"),
           );
-          return feeds.observe(() =>
-            runInAction(() => {
-              let at = 0;
-              for (const write of commit.writes) {
-                if (write.store === "navigation" || write.store === "draft")
-                  continue;
-                else if (write.store === "session-state") store.observe(write);
-                else if (write.kind === "heard")
-                  settingsHistory.observeHearing(write.key);
-                else settingsHistory.observe(write.key, histories[at++]!);
-              }
-              for (const [key, timeline] of navigation)
-                navigationHistory.observe(key, timeline);
-              const refreshed = applyDrafts();
-              revision = commit.revision;
-              for (const sid of refreshed) {
-                renderCache.refreshEditedView(sid);
-                // A passive peer can hear an entire edit without ever
-                // owning this session's view. Release its local revision
-                // when the edit ends, just as a view retirement would.
-                if (worldStates.contextOf(sid) === null) edits.retire(sid);
-              }
-            }),
+          return feeds.observe(
+            () =>
+              runInAction(() => {
+                let at = 0;
+                for (const write of commit.writes) {
+                  if (write.store === "navigation" || write.store === "draft")
+                    continue;
+                  else if (write.store === "session-state")
+                    store.observe(write);
+                  else if (write.kind === "heard")
+                    settingsHistory.observeHearing(write.key);
+                  else settingsHistory.observe(write.key, histories[at++]!);
+                }
+                for (const [key, timeline] of navigation)
+                  navigationHistory.observe(key, timeline);
+                const refreshed = applyDrafts();
+                revision = commit.revision;
+                for (const sid of refreshed) {
+                  renderCache.refreshEditedView(sid);
+                  // A passive peer can hear an entire edit without ever
+                  // owning this session's view. Release its local revision
+                  // when the edit ends, just as a view retirement would.
+                  if (worldStates.contextOf(sid) === null) edits.retire(sid);
+                }
+              }),
+            wireVersion >= 36,
           );
         }),
       ),

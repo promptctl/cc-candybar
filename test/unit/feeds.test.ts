@@ -17,10 +17,13 @@ import {
   type FeedDraw,
   type FeedPeriods,
 } from "../../src/renderer/feeds";
+import { HostFeedHistory } from "../../src/daemon/host-feed-history";
+import { recordingInputProblem } from "../../src/daemon/recording-privacy";
 import { UNFOLLOWED, type Lane, type LaneFeeds } from "../../src/config/lanes";
 import type { Frame } from "../../src/render/frame";
 import type {
   EffectId,
+  EventInput,
   PushedFrame,
   SessionViewers,
   Viewers,
@@ -216,7 +219,10 @@ describe("a feed's life", () => {
     const viewersChangedAt = (moving + interval) / 1000;
     view({ [S]: watched(false), [T]: watched() }, viewersChangedAt)(r.feeds);
     view({ [S]: watched(), [T]: watched() }, viewersChangedAt)(r.feeds);
-    view({ [S]: watched(true, ["pane", "statusline"]), [T]: watched() }, viewersChangedAt)(r.feeds);
+    view(
+      { [S]: watched(true, ["pane", "statusline"]), [T]: watched() },
+      viewersChangedAt,
+    )(r.feeds);
     const frames: PushedFrame[] = [];
     for (let ms = moving + interval; ms < recovery * 1000; ms += interval)
       frames.push(...wakeAndDraw(ms / 1000));
@@ -227,7 +233,9 @@ describe("a feed's life", () => {
     for (const cause of thrown) expect(cause).toBe(failure);
     expect(frames.length).toBeGreaterThan(still / moving);
     expect(
-      frames.every(({ session, frame }) => session === T && frame.kind === "drawn"),
+      frames.every(
+        ({ session, frame }) => session === T && frame.kind === "drawn",
+      ),
     ).toBe(true);
 
     r.script.throwsFor = null;
@@ -235,7 +243,10 @@ describe("a feed's life", () => {
     expect(wakeAndDraw(recovery)).toContainEqual(
       expect.objectContaining({
         session: S,
-        frame: expect.objectContaining({ kind: "drawn", bar: draw("recovered") }),
+        frame: expect.objectContaining({
+          kind: "drawn",
+          bar: draw("recovered"),
+        }),
       }),
     );
     r.script.bar = "still responsive";
@@ -560,5 +571,168 @@ describe("noteSent", () => {
     const rate: Tick[] = [];
     for (const t of [0, 0.5, 0.9, 1.2, 1.4]) noteSent(rate, tick(t));
     expect(rate).toEqual([0.5, 0.9, 1.2, 1.4]);
+  });
+});
+
+describe("a live subscription moving between renderers", () => {
+  const viewers = { [S]: watched(true, ["statusline", "pane"]) };
+  const input = (event: EventInput["event"], time: number): EventInput => ({
+    kind: "event",
+    event,
+    at: time as Instant,
+    tick: tick(time),
+  });
+  function subscription() {
+    const host = new HostFeedHistory();
+    host.watching(S, true);
+    const enter = (
+      r: ReturnType<typeof rig>,
+      time: number,
+      seen: Viewers = viewers,
+    ) => {
+      const turn = host.turn(
+        input({ kind: "viewers", viewers: seen }, time),
+        r,
+        () => true,
+      );
+      using report = r.feeds.reporting();
+      r.feeds.view(seen, tick(time), turn.input.feedResumes);
+      turn.took({ frames: [], feedUpdates: report.updates() }, () => null);
+      return turn.input;
+    };
+    const due = (
+      r: ReturnType<typeof rig>,
+      time: number,
+      reason: string | null = null,
+    ) => {
+      const turn = host.turn(input({ kind: "due" }, time), r, () => true);
+      const frames: PushedFrame[] = [];
+      using report = r.feeds.reporting();
+      try {
+        r.turn(time, frames);
+      } finally {
+        turn.took({ frames, feedUpdates: report.updates() }, () => reason);
+      }
+      return frames;
+    };
+    return { host, enter, due };
+  }
+
+  test("uses both attempted draws, even before delivery, and preserves each surface's rate and absolute deadline", () => {
+    const { host, enter, due } = subscription();
+    const a = rig(),
+      b = rig();
+    enter(a, 0);
+    due(a, 0);
+    a.script.bar = b.script.bar = "second bar";
+    a.feeds.wake(S, "interaction", tick(0.1));
+    due(a, 0.1, "private source");
+    host.moved(S);
+    const handoff = enter(b, 0.15);
+    expect(recordingInputProblem(handoff)).toBe("private source");
+    expect(b.feeds.feedsOf(S, tick(0.15))).toEqual(
+      a.feeds.feedsOf(S, tick(0.15)),
+    );
+    expect(b.feeds.feedsOf(S, tick(0.15))).toMatchObject({
+      pane: { fps: 2 },
+      statusline: { fps: 1 },
+    });
+    expect(b.feeds.next()).toBe(1.1);
+    expect(enter(b, 0.16).feedResumes).toBeUndefined();
+    b.feeds.wake(S, "interaction", tick(0.2));
+    due(b, 0.2);
+    expect(b.feeds.feedsOf(S, tick(0.2))).toMatchObject({
+      pane: { fps: 2 },
+      statusline: { fps: 1 },
+    });
+    expect(b.feeds.feedsOf(S, tick(1))).toMatchObject({
+      pane: { fps: 1 },
+      statusline: { fps: 0 },
+    });
+    enter(b, 1.01, { [S]: watched(true, ["statusline"]) });
+    enter(b, 1.02);
+    expect(b.feeds.feedsOf(S, tick(1.02)).pane.fps).toBe(0);
+  });
+
+  test("one-way state advances only the owning reader's feed and late answers cannot resurrect a closed subscription", () => {
+    const { host, enter, due } = subscription();
+    const a = rig(),
+      b = rig();
+    enter(a, 0);
+    due(a, 0);
+    const observed = a.feeds.observe(
+      () => a.feeds.wake(S, "state", tick(0.12)),
+      true,
+    );
+    host.advanced(a, observed.advances!);
+    const old = host.turn(input({ kind: "due" }, 0.13), a, () => true);
+    host.moved(S);
+    host.advanced(a, [{ sequence: 100, session: S, next: tick(0.1) }]);
+    enter(b, 0.14);
+    expect(b.feeds.next()).toBe(0.12);
+    due(b, 0.14);
+    host.watching(S, false);
+    host.watching(S, true);
+    enter(b, 0.2);
+    old.took(
+      {
+        frames: [],
+        feedUpdates: [
+          {
+            sequence: 100,
+            session: S,
+            schedule: { kind: "retry", next: tick(20) },
+          },
+        ],
+      },
+      () => null,
+    );
+    expect(b.feeds.next()).toBe(0.2);
+    expect(b.feeds.feedsOf(S, tick(0.2)).pane.fps).toBe(0);
+    expect(enter(a, 0.21).feedResumes?.[0]?.history?.schedule.next).toBe(0.2);
+  });
+
+  test("the later wake survives when its observation arrives before the numbered frame answer", () => {
+    const { host, enter } = subscription();
+    const a = rig(),
+      b = rig();
+    enter(a, 0);
+    const flight = host.turn(input({ kind: "due" }, 0), a, () => true);
+    let result;
+    {
+      using report = a.feeds.reporting();
+      result = { frames: a.turn(0), feedUpdates: report.updates() };
+    }
+    const changed = a.feeds.observe(
+      () => a.feeds.wake(S, "state", tick(0.04)),
+      true,
+    );
+    host.advanced(a, changed.advances!);
+    flight.took(result, () => null);
+    host.moved(S);
+    enter(b, 0.05);
+    expect(b.feeds.next()).toBe(0.04);
+    expect(b.feeds.feedsOf(S, tick(0.05)).pane.fps).toBe(1);
+  });
+
+  test("a retry retains its original deadline and a waiting feed waits until the view becomes available", () => {
+    const { host, enter, due } = subscription();
+    const a = rig(),
+      b = rig();
+    enter(a, 0);
+    a.script.throwsFor = { session: S, cause: Error("draw failed") };
+    expect(() => due(a, 0.1)).toThrow("draw failed");
+    host.moved(S);
+    enter(b, 0.2);
+    b.feeds.wake(S, "interaction", tick(0.2));
+    expect(b.feeds.next()).toBe(1.1);
+    b.script.view = false;
+    due(b, 1.1);
+    host.moved(S);
+    a.script.throwsFor = null;
+    enter(a, 1.2);
+    expect(a.feeds.next()).toBeNull();
+    a.feeds.wake(S, "data", tick(1.3));
+    expect(due(a, 1.3)).toHaveLength(1);
   });
 });
