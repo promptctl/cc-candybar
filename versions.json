@@ -2,116 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-977",
-      "ref": "refs/pull/977/merge",
-      "sha": "0a27db866b6201d7592bcb8452d53c2ca63e8f53",
-      "timestamp": "2026-11-27T03:56:09.042Z",
-      "commits": [
-        {
-          "sha": "0a27db866b6201d7592bcb8452d53c2ca63e8f53",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T03:55:09Z",
-          "message": "Merge 7505cd630d21aaeea7b4e3d603ff983c94b45988 into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
-        },
-        {
-          "sha": "7505cd630d21aaeea7b4e3d603ff983c94b45988",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:54:56-07:00",
-          "message": "fix(launcher): retain the output drain turn on ordinary exit\n"
-        },
-        {
-          "sha": "2f2a736a03780557ff5ef6ec95910e7efcc8bea1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:50:37-07:00",
-          "message": "fix(launcher): retire an observed process group before draining its pipes\n"
-        },
-        {
-          "sha": "30d274bf0e35ce3d6dbad126ad88f1e3d194a5ff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:41:54-07:00",
-          "message": "Stop polling terminated shell groups after daemon close\n"
-        },
-        {
-          "sha": "02f63be1b176f277fbb9ce6abe0d36f44b5da5ba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:25:37-07:00",
-          "message": "fix(proc): close the fake child input when its reader exits\n"
-        },
-        {
-          "sha": "5b24bc2c1786b22de31785733624bf8aa569fe0a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:28:23-07:00",
-          "message": "test: observe timer retirement after all fixture cleanups\n"
-        },
-        {
-          "sha": "96973ea9708782aed4cbed456471318c888ca7b8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:16:37-07:00",
-          "message": "test: report leaked periods in the Jest file that armed them\n"
-        },
-        {
-          "sha": "7f2f6319dd9b160de7d70c8bab20293737209340",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:16:37-07:00",
-          "message": "fix(launcher): retire deferred group checks when a launch settles\n"
-        },
-        {
-          "sha": "2db97c981abedb99089141fc73e6136d409eb21e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:16:37-07:00",
-          "message": "test(persistence): drive pending session writes through flush and shutdown\n"
-        },
-        {
-          "sha": "8ea8f58fc637110eccc040e82977f839555e2f9e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:15:40-07:00",
-          "message": "test(plugins): establish the input for each native action check\n"
-        },
-        {
-          "sha": "d1555578865db6d66a6c156a0b7882f6a57a71fa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:11:18-07:00",
-          "message": "fix: preserve pipe exit verdicts and verify lifecycle contracts by delivery\n"
-        },
-        {
-          "sha": "d19b9ef44b703a7de1b3c43806edd34ede303633",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:10:08-07:00",
-          "message": "test(daemon): verify host lifecycle from owned events\n"
-        },
-        {
-          "sha": "b2f6d4576f27cf834cda42d996ddfe845158f4ba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:12:18-07:00",
-          "message": "test: retire failure quarantine and retain file-scoped fixture cleanup\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "7370e44ab6e6cb940a0df316b3d0b49f4b4899b6",
-      "timestamp": "2026-11-27T03:15:54.052Z",
+      "sha": "648ab81867f4dd06cace3a3aa26f10ed956a7050",
+      "timestamp": "2026-11-27T03:58:26.741Z",
       "commits": [
         {
-          "sha": "7370e44ab6e6cb940a0df316b3d0b49f4b4899b6",
+          "sha": "648ab81867f4dd06cace3a3aa26f10ed956a7050",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T20:14:47-07:00",
-          "message": "refactor(watchers): drive directory events at the host boundary (#976)\n\n* refactor(watchers): drive directory events at the host boundary\n\n* refactor(watchers): require each owner to choose directory delivery\n\n* test(plugins): deliver the source notification once through its fixture"
+          "timestamp": "2026-11-26T20:57:32-07:00",
+          "message": "fix(lifecycle): retire settled launcher work and verify daemon shutdown (#977)\n\n* test: retire failure quarantine and retain file-scoped fixture cleanup\n\n* test(daemon): verify host lifecycle from owned events\n\n* fix: preserve pipe exit verdicts and verify lifecycle contracts by delivery\n\n* test(plugins): establish the input for each native action check\n\n* test(persistence): drive pending session writes through flush and shutdown\n\n* fix(launcher): retire deferred group checks when a launch settles\n\n* test: report leaked periods in the Jest file that armed them\n\n* test: observe timer retirement after all fixture cleanups\n\n* fix(proc): close the fake child input when its reader exits\n\n* Stop polling terminated shell groups after daemon close\n\n* fix(launcher): retire an observed process group before draining its pipes\n\n* fix(launcher): retain the output drain turn on ordinary exit"
         }
       ]
     }

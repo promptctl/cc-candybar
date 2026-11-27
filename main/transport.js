@@ -79179,6 +79179,10 @@ init_globals();
 // src/proc/launch.ts
 init_globals();
 
+// src/proc/pipe.ts
+init_globals();
+var peerClosedPipe = (error) => error.code === "EPIPE" || error.code === "ECONNRESET";
+
 // site/shims/fs.ts
 init_globals();
 var import_memfs = __toESM(require_lib8(), 1);
@@ -79251,7 +79255,12 @@ function clockOver(source, report2) {
     now: () => source.now(),
     monotonic: () => source.monotonic(),
     after: (task, ms, fire, options) => source.timer(ms, run2(task, fire), options),
-    every: (task, ms, fire, options) => source.interval(ms, run2(task, fire), options),
+    every: (task, ms, fire, options) => {
+      const callback = Object.defineProperty(run2(task, fire), "name", {
+        value: task
+      });
+      return source.interval(ms, callback, options);
+    },
     defer: (task, fire) => source.turn(run2(task, fire)),
     detach: (task, fire) => {
       let settled3;
@@ -79311,15 +79320,15 @@ function publishByRename(file, bytes, mode) {
     );
   }
 }
-async function publishByRenameAsync(file, bytes, mode, signal) {
+async function publishByRenameAsync(file, bytes, mode, signal, files = fs_default.promises) {
   const staged = stagedName(file);
   try {
-    await fs_default.promises.writeFile(staged, bytes, { flag: "wx", mode, signal });
-    if (mode !== void 0) await fs_default.promises.chmod(staged, mode);
+    await files.writeFile(staged, bytes, { flag: "wx", mode, signal });
+    if (mode !== void 0) await files.chmod(staged, mode);
     signal?.throwIfAborted();
-    await fs_default.promises.rename(staged, file);
+    await files.rename(staged, file);
   } catch (e) {
-    const removal = await fs_default.promises.rm(staged, { force: true }).then(() => null, asError);
+    const removal = await files.rm(staged, { force: true }).then(() => null, asError);
     throw noted(e, staged, removal);
   }
 }
@@ -79612,6 +79621,8 @@ function unguard(state, group) {
   state.liveGroups.delete(group);
   state.lifeline?.pipe.write(`- ${group}
 `);
+  if (state.scope.signal.aborted && state.liveGroups.size === 0)
+    endLifeline(state);
 }
 function endLifeline(state) {
   const line = state.lifeline;
@@ -79778,7 +79789,13 @@ async function launchPiped(state, opts, pipes) {
       return;
     }
     const group = child.pid;
+    let guarded = group;
     if (group !== void 0) guard(state, group);
+    const releaseGroup = () => {
+      if (guarded === void 0) return;
+      unguard(state, guarded);
+      guarded = void 0;
+    };
     const exited = new Promise((end) => child.once("exit", end));
     const input = child.stdin;
     child.stdin = null;
@@ -79809,6 +79826,7 @@ async function launchPiped(state, opts, pipes) {
     let timer = null;
     let killTimer = null;
     let groupEndTimer = null;
+    let concludeTurn = null;
     let terminated = null;
     const onAbort = () => terminate("aborted");
     const unlisten = () => {
@@ -79821,8 +79839,9 @@ async function launchPiped(state, opts, pipes) {
       timer?.();
       killTimer?.();
       groupEndTimer?.();
+      concludeTurn?.();
       unlisten();
-      if (group !== void 0) unguard(state, group);
+      releaseGroup();
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
       child.off("close", conclude);
       child.off("error", onError);
@@ -79860,12 +79879,21 @@ async function launchPiped(state, opts, pipes) {
       }
     };
     const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
-    const concludeNextTurn = () => clock.defer(tasks.conclude, concludeWithGroup);
+    const concludeNextTurn = () => {
+      if (!settled3)
+        concludeTurn ??= clock.defer(tasks.conclude, concludeWithGroup);
+    };
+    const groupEnded = () => {
+      releaseGroup();
+      killTimer?.();
+      if (state.scope.signal.aborted) concludeWithGroup();
+      else concludeNextTurn();
+    };
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
-        if (settled3) return;
+        if (settled3 || guarded === void 0) return;
         if (spawner.groupGone(group)) {
-          concludeNextTurn();
+          groupEnded();
           return;
         }
         groupEndTimer = clock.after(
@@ -79874,17 +79902,22 @@ async function launchPiped(state, opts, pipes) {
           () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS))
         );
       };
-      afterExit(
-        tasks.groupEnd,
-        () => clock.defer(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS))
-      );
+      afterExit(tasks.groupEnd, () => {
+        if (settled3) return;
+        if (terminated !== null) awaitGroupEnd(GROUP_END_POLL_MIN_MS);
+        else
+          groupEndTimer = clock.defer(
+            tasks.groupEnd,
+            () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)
+          );
+      });
     }
     const terminate = (cause) => {
       if (terminated !== null) return;
       const ended = child.exitCode !== null || child.signalCode !== null;
-      if (ended && group !== void 0 && spawner.groupGone(group)) {
+      if (ended && (guarded === void 0 || spawner.groupGone(guarded))) {
         terminated = cause === "timeout" ? null : cause;
-        concludeNextTurn();
+        groupEnded();
         return;
       }
       terminated = cause;
@@ -79893,7 +79926,7 @@ async function launchPiped(state, opts, pipes) {
       const pid2 = child.pid;
       if (pid2 !== void 0) {
         killTimer = clock.after(tasks.killGrace, TIMEOUT_KILL_GRACE_MS, () => {
-          signal(pid2, "SIGKILL");
+          if (!spawner.groupGone(pid2)) signal(pid2, "SIGKILL");
           afterExit(tasks.conclude, concludeNextTurn);
         });
         signal(pid2, "SIGTERM");
@@ -79924,18 +79957,7 @@ async function launchPiped(state, opts, pipes) {
         });
         return;
       }
-      if (code2 === 0) {
-        settle3({ ok: true, ...output(), exitCode: code2 });
-        return;
-      }
-      const reason = signal2 ? "signal" : "non-zero";
-      settle3({
-        ok: false,
-        reason,
-        ...output(),
-        exitCode: code2,
-        signal: signal2
-      });
+      settle3(childVerdict(code2, signal2, output()));
     };
     child.on("close", conclude);
     if (opts.timeoutMs && opts.timeoutMs > 0) {
@@ -79949,6 +79971,16 @@ async function launchPiped(state, opts, pipes) {
     state.inFlight.add(onAbort);
     pipes.opened(input, group ?? null);
   });
+}
+function childVerdict(exitCode, signal, output) {
+  if (exitCode === 0) return { ok: true, ...output, exitCode };
+  return {
+    ok: false,
+    reason: signal ? "signal" : "non-zero",
+    ...output,
+    exitCode,
+    signal
+  };
 }
 function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
@@ -79969,30 +80001,19 @@ function launchBlocking(state, opts) {
     const stdout2 = typeof result.stdout === "string" ? result.stdout : "";
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
     const code2 = result.error?.code;
-    if (result.error && code2 !== "EPIPE" && code2 !== "ECONNRESET") {
-      const reason2 = code2 === "ETIMEDOUT" ? "timeout" : "spawn-error";
+    if (result.error && (!peerClosedPipe(result.error) || result.status === null && result.signal === null)) {
+      const reason = code2 === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
         ok: false,
-        reason: reason2,
+        reason,
         stdout: stdout2,
         stderr: stderr2,
         exitCode: null,
         signal: result.signal ?? null,
-        error: reason2 === "timeout" ? timedOutError(opts.timeoutMs ?? 0) : spawnErrorText(result.error, opts.cwd)
+        error: reason === "timeout" ? timedOutError(opts.timeoutMs ?? 0) : spawnErrorText(result.error, opts.cwd)
       };
     }
-    if (result.status === 0) {
-      return { ok: true, stdout: stdout2, stderr: stderr2, exitCode: result.status };
-    }
-    const reason = result.signal ? "signal" : "non-zero";
-    return {
-      ok: false,
-      reason,
-      stdout: stdout2,
-      stderr: stderr2,
-      exitCode: result.status,
-      signal: result.signal ?? null
-    };
+    return childVerdict(result.status, result.signal, { stdout: stdout2, stderr: stderr2 });
   } catch (err) {
     stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
@@ -80211,7 +80232,7 @@ function launcherWithState(owner, clock, spawner) {
     () => {
       state.inFlight.forEach((end) => end());
       state.drains.forEach((pipe) => pipe.destroy());
-      endLifeline(state);
+      if (state.liveGroups.size === 0) endLifeline(state);
     },
     { once: true }
   );
@@ -80940,13 +80961,19 @@ function sessionFileOnDisk(kind, filePath2) {
   };
 }
 var LANDED = { ok: true };
+async function publishSession(filePath2, body) {
+  const file = resolvedTarget(filePath2);
+  await fs_default.promises.mkdir(import_node_path12.default.dirname(file), { recursive: true });
+  await publishByRenameAsync(file, body, 384);
+}
 var SessionFile = class {
-  constructor(kind, filePath2, clock, debounceMs = 500, logger = quietLogger) {
+  constructor(kind, filePath2, clock, debounceMs = 500, logger = quietLogger, publish = publishSession) {
     this.kind = kind;
     this.filePath = filePath2;
     this.clock = clock;
     this.debounceMs = debounceMs;
     this.logger = logger;
+    this.publish = publish;
     this.disk = sessionFileOnDisk(kind, filePath2);
     this.file = filePath2;
   }
@@ -80955,6 +80982,7 @@ var SessionFile = class {
   clock;
   debounceMs;
   logger;
+  publish;
   file;
   disk;
   // What clears the debounce timer while one is armed.
@@ -81038,9 +81066,7 @@ var SessionFile = class {
     try {
       body = this.body(snapshot);
       heldMs = elapsedMs(this.clock, started2);
-      const file = resolvedTarget(this.filePath);
-      await fs_default.promises.mkdir(import_node_path12.default.dirname(file), { recursive: true });
-      await publishByRenameAsync(file, body, 384);
+      await this.publish(this.filePath, body);
     } catch (e) {
       const error = asError(e);
       this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
