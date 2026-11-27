@@ -1,4 +1,3 @@
-import path from "node:path";
 import ts from "typescript";
 import { isJavaScript } from "./import-zones.mjs";
 import { inventory } from "./lib/code-inventory.js";
@@ -14,25 +13,15 @@ else {
     getCurrentDirectory: () => REPO,
     getNewLine: () => "\n",
   };
-  for (const { parsed, sources } of projects) {
-    const js = sources
-      .map(({ path: file }) => path.resolve(REPO, file))
-      .filter(isJavaScript);
-    const declarations = parsed.fileNames.filter((file) =>
-      /\.d\.[cm]?ts$/.test(file),
-    );
-    // [LAW:one-way-deps] JS shares its environment and declarations with TS.
-    // Only JS may infer unannotated parameters as any. Every TS file still
-    // receives all of the strict program's diagnostics.
-    for (const [roots, options, checkingJs] of [
-      [parsed.fileNames, parsed.options, false],
-      [
-        [...js, ...declarations],
-        { ...parsed.options, checkJs: true, noImplicitAny: false },
-        true,
-      ],
-    ] as const) {
-      const program = ts.createProgram(roots, options);
+  for (const { parsed } of projects) {
+    // A runtime's ambient declarations can live in any of its source modules.
+    // Check both languages over the same program roots, keeping unannotated
+    // parameters permissible only when reporting JavaScript diagnostics.
+    for (const checkingJs of [false, true]) {
+      const options = checkingJs
+        ? { ...parsed.options, checkJs: true, noImplicitAny: false }
+        : parsed.options;
+      const program = ts.createProgram(parsed.fileNames, options);
       const diagnostics = [
         ...program.getOptionsDiagnostics(),
         ...program.getGlobalDiagnostics(),

@@ -55,7 +55,14 @@ test("normal typecheck judges JavaScript in each environment, strict TS and decl
       "resources/bar-window/owned.js",
       wrong + "document.body; process.pid; expect(1);",
     );
-    write("test/owned.cjs", wrong + "expect(1); process.pid; document.body;");
+    write(
+      "test/fixture-environment.ts",
+      "export {}; declare global { function releaseTestFixture(cleanup: () => Promise<void>): void; }",
+    );
+    write(
+      "test/owned.cjs",
+      wrong + "expect(1); process.pid; releaseTestFixture(async () => {}); document.body;",
+    );
     write("src/owned.ts", "export function read(input){return input;}");
     write("src/owned.d.mts", "export type Missing = AbsentOwnedDeclaration;");
     const diagnostics = check().split("\n").filter(Boolean);
