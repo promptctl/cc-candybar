@@ -1,10 +1,14 @@
+import fs from "node:fs";
+import { publishByRename } from "../../src/utils/atomic-write.ts";
 import path from "node:path";
 import { isBuiltin } from "node:module";
 import { build } from "esbuild";
 import type { TsdownPlugin } from "tsdown";
 import { mayImport, zoneOf } from "../import-zones.mjs";
 import {
-  RENDERER_DIGEST_FILE,
+  RUNTIME_MANIFEST,
+  manifestOf,
+  obsoleteRendererFiles,
   rendererAssetName,
   rendererDigest,
 } from "../../src/install/renderer-asset.ts";
@@ -53,6 +57,10 @@ export function bundleRenderer(root: string) {
 export function portableRenderer(root: string): TsdownPlugin {
   const entry = path.join(root, "src/renderer/main.ts");
   let file: string;
+  let digest: string;
+  let bytes: Uint8Array;
+  let previous: string | undefined;
+  const dist = path.join(root, "dist");
   return {
     name: "cc-candybar:portable-renderer",
     async buildStart() {
@@ -75,18 +83,9 @@ export function portableRenderer(root: string): TsdownPlugin {
         )
       )
         this.error("Portable renderer must be a single self-contained module");
-      const digest = rendererDigest(output.contents);
+      digest = rendererDigest(output.contents);
       file = "./" + rendererAssetName(digest);
-      this.emitFile({
-        type: "asset",
-        fileName: file.slice(2),
-        source: output.contents,
-      });
-      this.emitFile({
-        type: "asset",
-        fileName: RENDERER_DIGEST_FILE,
-        source: digest + "\n",
-      });
+      bytes = output.contents;
     },
     resolveId: {
       order: "pre",
@@ -105,17 +104,38 @@ export function portableRenderer(root: string): TsdownPlugin {
     },
     generateBundle(_options, output) {
       // A new consumer or import spelling must not silently bundle a Node copy.
+      const cli = output["index.mjs"];
       if (
         this.getModuleInfo(entry) ||
-        !Object.values(output).some(
-          (chunk) =>
-            chunk.type === "chunk" &&
-            chunk.imports.some(
-              (specifier) => specifier === file || "./" + specifier === file,
-            ),
+        cli?.type !== "chunk" ||
+        !cli.imports.some(
+          (specifier) => specifier === file || "./" + specifier === file,
         )
       )
         this.error("The CLI must import its emitted portable renderer");
+      // Publish the immutable import before the bundler exposes its new CLI.
+      // A source checkout and an installer both have live readers during upgrades.
+      fs.mkdirSync(dist, { recursive: true });
+      const manifest = path.join(dist, RUNTIME_MANIFEST);
+      previous = fs.existsSync(manifest)
+        ? manifestOf(fs.readFileSync(manifest, "utf8"))?.renderer
+        : undefined;
+      publishByRename(path.join(dist, file), bytes, 0o644);
+      this.emitFile({
+        type: "asset",
+        fileName: RUNTIME_MANIFEST,
+        source:
+          JSON.stringify({ cli: rendererDigest(cli.code), renderer: digest }) +
+          "\n",
+      });
+    },
+    writeBundle() {
+      for (const obsolete of obsoleteRendererFiles(
+        fs.readdirSync(dist),
+        previous,
+        digest,
+      ))
+        fs.rmSync(path.join(dist, obsolete), { force: true });
     },
   };
 }

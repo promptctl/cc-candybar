@@ -483,6 +483,20 @@ export function serveRenderer(deps: {
   return (line) => {
     switch (line.kind) {
       case "input":
+        if (
+          line.input.event.kind === "click" &&
+          (typeof line.input.event.placementSeed !== "string" ||
+            !line.input.event.placementSeed)
+        ) {
+          send({
+            kind: "rejected",
+            n: line.n,
+            failure: rendererFailureOf(
+              new Error("renderer click has no placement seed"),
+            ),
+          });
+          return;
+        }
         // [LAW:no-silent-failure] An input whose answer rejected is answered
         // as that input's failure, never left to end the process.
         void renderer.answer(line.input).then(

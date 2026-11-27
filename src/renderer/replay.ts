@@ -115,7 +115,11 @@ function lineEntry(raw: string, line: number): Record<string, unknown> {
   return value;
 }
 
-function inputOf(value: unknown, line: number): EventInput {
+function inputOf(
+  value: unknown,
+  line: number,
+  historical: boolean,
+): EventInput {
   if (
     !isPlainObject(value) ||
     value.kind !== "event" ||
@@ -136,23 +140,20 @@ function inputOf(value: unknown, line: number): EventInput {
     fields.some((field) => !Object.hasOwn(event, field))
   )
     throw new Error(`recording line ${line} has an invalid renderer event`);
-  if (
-    event.kind === "click" &&
-    event.placementSeed === undefined &&
-    isPlainObject(event.click) &&
-    Array.isArray(event.click.steps) &&
-    event.click.steps.some(
-      (step: unknown) =>
-        isPlainObject(step) &&
-        step.verb === VERB_APPLY_LAYOUT_OP &&
-        Array.isArray(step.args) &&
-        typeof step.args[2] === "string" &&
-        decodeLayoutOp(step.args[2])?.op === "insert",
-    )
-  )
-    throw new Error(
-      `recording line ${line} cannot reproduce a layout insertion without its placement seed`,
-    );
+  if (event.kind === "click") {
+    if (historical && !Object.hasOwn(event, "placementSeed")) {
+      // The historical click may have been refused before it needed an ID.
+      // An empty seed fails only when the renderer actually mints a placement.
+      event.placementSeed = "";
+    } else if (
+      typeof event.placementSeed !== "string" ||
+      !event.placementSeed
+    ) {
+      throw new Error(
+        `recording line ${line} has an invalid click placement seed`,
+      );
+    }
+  }
   // The checked envelope holds the same payload taken by the private wire.
   return value as unknown as EventInput;
 }
@@ -197,6 +198,7 @@ function verify<T>(
   actual: T,
   label: string,
   field: string,
+  note = "",
 ): T {
   let value: unknown;
   try {
@@ -205,7 +207,8 @@ function verify<T>(
     throw new Error(`${label} could not be encoded as JSON`);
   }
   const changed = firstDifference(expected, value, field);
-  if (changed !== undefined) throw new Error(`${label} differs at ${changed}`);
+  if (changed !== undefined)
+    throw new Error(`${label} differs at ${changed}${note}`);
   // This detached copy was encoded from the typed production result.
   return value as T;
 }
@@ -248,6 +251,7 @@ export async function replayRecording(
   onTurn?: (input: EventInput, output: RendererOutput) => void,
 ): Promise<{ turns: number }> {
   let renderer: Renderer | null = null;
+  let historical = false;
   let ended = false;
   let line = 0;
   let turns = 0;
@@ -261,6 +265,7 @@ export async function replayRecording(
         throw new Error("recording line 1 must be a boot entry");
       requireFields(entry, "boot", line);
       const boot = constructionOf(entry);
+      historical = entry.wireVersion === 22;
       verify(entry.result, boot.result, "recording boot", "result");
       renderer = boot.renderer;
     } else if (entry.kind === "turn") {
@@ -269,7 +274,7 @@ export async function replayRecording(
         throw new Error(
           `recording line ${line} has a turn after refused construction`,
         );
-      const input = inputOf(entry.input, line);
+      const input = inputOf(entry.input, line, historical);
       turns++;
       let actual: RendererOutput;
       try {
@@ -282,6 +287,19 @@ export async function replayRecording(
         actual,
         `recording turn ${turns}`,
         "output",
+        input.event.kind === "click" &&
+          input.event.placementSeed === "" &&
+          input.event.click?.scope === "session" &&
+          Array.isArray(input.event.click.steps) &&
+          input.event.click.steps.some(
+            (step) =>
+              step.kind === "session" &&
+              step.verb === VERB_APPLY_LAYOUT_OP &&
+              typeof step.args?.[2] === "string" &&
+              decodeLayoutOp(step.args[2])?.op === "insert",
+          )
+          ? " (this historical insertion had no recorded placement seed)"
+          : "",
       );
       onTurn?.(input, output);
     } else if (entry.kind === "end") {

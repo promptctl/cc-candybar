@@ -58,12 +58,12 @@ function checkout(version: string): string {
     "bin/cc-candybar": `#!/bin/sh\n# shim ${version}\n`,
     "bin/cc-candybar-url-handler-native": `MACHO ${version}`,
   };
-  packagedRuntime(dir, version);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
     fs.writeFileSync(path.join(dir, file), text);
   }
+  packagedRuntime(dir, version);
   return path.join(dir, "dist", "index.mjs");
 }
 

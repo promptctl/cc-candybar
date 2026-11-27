@@ -546,3 +546,10 @@ test("projecting a thrown value never evaluates its metadata accessors", () => {
   expect(rendererFailureOf(error).detail).toContain("value: [Accessor]");
   expect(get).not.toHaveBeenCalled();
 });
+
+test("native exceptions and uninspectable objects keep an answer", () => {
+  expect(rendererFailureOf(new DOMException("Disconnect", "AbortError"))).toMatchObject({ message: "Disconnect", detail: "AbortError: Disconnect" });
+  expect(rendererFailureOf(new Proxy(new Map(), {})).detail).toContain("Uninspectable");
+  const re = Object.defineProperty(/foo/g, "source", { get() { throw new Error("getter"); } });
+  expect(rendererFailureOf(re).detail).toBe("/foo/g");
+});

@@ -127,7 +127,7 @@ An open pane feed keeps its config entry pinned when its view fails to open. A s
 
 ### The renderer interface
 
-The build packages the renderer constructor as a self-contained browser ES module. The daemon's Node transport and offline replay import that module directly. In a package or installation, `dist/renderer.sha256` identifies `dist/renderer-<digest>.mjs`. A host can load the module and call `mainRendererOf(boot)`, then pass stamped inputs to the resulting renderer's `answer` method. The build checks the complete dependency graph, including package imports. Clicks carry a host-generated seed so layout insertions produce the same placement IDs on replay.
+The build packages the renderer constructor as a self-contained browser ES module. The daemon's Node transport and offline replay import that module directly. In a package or installation, `dist/runtime.json` identifies `dist/renderer-<digest>.mjs`. A host can load the module and call `mainRendererOf(boot)`, then pass stamped inputs to the resulting renderer's `answer` method. The build checks the complete dependency graph, including package imports. Clicks carry a host-generated seed so layout insertions produce the same placement IDs on replay.
 
 The in-process and child-process transports use the same renderer contract. The host constructs each renderer with resolved locations, its memory limit and stored values. Construction can succeed or refuse and can produce diagnostics in either case. The host keeps the session environment and the link-signing key. [Renderer contract](../../src/renderer-interface/interface.ts)
 

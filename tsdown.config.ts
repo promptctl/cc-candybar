@@ -41,7 +41,8 @@ export default defineConfig([{
 	format: 'esm',
 	target: 'node18',
 	platform: 'node',
-	clean: true,
+	// A checkout can be serving the last build. The renderer publisher collects superseded modules.
+	clean: false,
 	minify: true,
 	nodeProtocol: true,
 	// Bundle all npm deps (rich-js etc.) into the output so the standalone

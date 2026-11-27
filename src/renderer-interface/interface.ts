@@ -269,8 +269,8 @@ export type Notification =
       // A click admitted by the host, with its decoded arguments.
       readonly kind: "click";
       readonly click: AdmittedClick;
-      // Older recordings predate the input that reproduces an insertion.
-      readonly placementSeed?: string;
+      // The host owns the identity from which this click mints placement IDs.
+      readonly placementSeed: string;
       // The host's snapshot when this origin has yet to be delivered.
       readonly coldConfig?: ConfigSnapshot;
       // A scoped click's context, once the host has heard from its session.

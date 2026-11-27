@@ -75,7 +75,7 @@ test("a transcript's dropped lines and a sidechain whose owner cannot be told ar
     const { verb, value } = clickOf(url);
     answered(
       await handIn(r, {
-        kind: "click",
+        kind: "click", placementSeed: "test-click",
         click: admitClick(verb, value, TEST_SIGNER).click,
         context: {
           session,

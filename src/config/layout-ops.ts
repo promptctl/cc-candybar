@@ -77,7 +77,7 @@ export interface NewPlacement {
 
 // [LAW:effects-at-boundaries] Each admitted click owns one candidate stream.
 // A recorded click repeats its choices, including retries against live IDs.
-export function placementSuffixes(seed: string | undefined): () => string {
+export function placementSuffixes(seed: string): () => string {
   let index = 0;
   return () => {
     if (typeof seed !== "string" || seed.length === 0)

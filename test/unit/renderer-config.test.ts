@@ -367,7 +367,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   const sendClick = ({ admitted }: ReturnType<typeof click>) =>
     turn(
       {
-        kind: "click",
+        kind: "click", placementSeed: "test-click",
         click: admitted.click,
         context: { session, durable: { origin }, live: null },
       },
@@ -510,7 +510,7 @@ test("a click on a session with no live context uses its cold config in the clic
   const palette = [...listResolvablePaletteNames()][0]!;
   const landed = answered(
     await handIn(r, {
-      kind: "click",
+      kind: "click", placementSeed: "test-click",
       click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER).click,
       coldConfig: snapshotOf(CONFIG),
       // Read back from the book after a restart: no live part.
@@ -555,7 +555,7 @@ test("a recorded click reproduces the complete change for two layout insertions"
   expect(ids(changes).size).toBe(2);
   expect(await record(JSON.parse(JSON.stringify(click)))).toEqual(output);
   expect(ids(answered(await record({ ...click, placementSeed: "another-click" })).effects)).not.toEqual(ids(changes));
-  expect(await record({ ...click, placementSeed: undefined })).toMatchObject({
+  expect(await record({ ...click, placementSeed: "" })).toMatchObject({
     kind: "threw", failure: { message: expect.stringContaining("placement seed") },
   });
 });

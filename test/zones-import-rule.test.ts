@@ -83,6 +83,7 @@ const REFUSED = {
   restToRendererDir: { file: IN_REST, code: imp("../renderer/verbs") },
   startToRest: { file: IN_START, code: imp("../daemon/x") },
   sharedToRenderer: { file: IN_SHARED, code: imp("../renderer/draw-bar") },
+  rendererToUrlParser: { file: IN_RENDERER, code: imp("node:url") },
   sharedToStart: { file: IN_SHARED, code: imp("../renderer/main") },
   // A root builds the renderer in process, so only the entry reaches one: an
   // edge into a root from anywhere else would carry the renderer with it.
@@ -234,7 +235,6 @@ const ALLOWED = {
     file: IN_PROCESS,
     code: imp("./renderer/draw-bar"),
   },
-  rendererToUrlParser: { file: IN_RENDERER, code: imp("node:url") },
   processToTransport: { file: IN_PROCESS, code: imp("node:process") },
   entryToRoot: { file: "src/index.ts", code: imp("./renderer-process") },
   foundationsInside: { file: IN_FOUNDATIONS, code: imp("./gates") },

@@ -40,7 +40,6 @@ describe("assembling the URL handler app", () => {
   // the binary sits where `just install-url-handler` leaves it.
   const checkout = (forwarder: string | null): string => {
     const root = path.join(home, "checkout");
-    packagedRuntime(root);
     for (const dir of ["dist/cc-extra", "src", "bin"]) {
       fs.mkdirSync(path.join(root, dir), { recursive: true });
     }
@@ -60,6 +59,7 @@ describe("assembling the URL handler app", () => {
         forwarder,
       );
     }
+    packagedRuntime(root);
     return path.join(root, "dist", "index.mjs");
   };
 

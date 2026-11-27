@@ -114,7 +114,6 @@ test.each([
       { encoding: "utf8" },
     );
   try {
-    packagedRuntime(checkout);
     for (const dir of ["src", "dist/cc-extra", "bin"])
       fs.mkdirSync(path.join(checkout, dir), { recursive: true });
     fs.mkdirSync(home);
@@ -126,6 +125,7 @@ test.each([
       "bin/cc-candybar-url-handler-native": "forwarder",
     }))
       fs.writeFileSync(path.join(checkout, file), bytes);
+    packagedRuntime(checkout);
     expect(invoke("initial").status).toBe(0);
     fs.writeFileSync(
       settings,
@@ -134,6 +134,7 @@ test.each([
       }),
     );
     fs.writeFileSync(entry, "// replacement release");
+    packagedRuntime(checkout);
     expect(invoke(when, "force").signal).toBe("SIGKILL");
     const externallyEdited = when === "registration then external edit";
     if (externallyEdited)

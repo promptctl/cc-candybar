@@ -1,7 +1,9 @@
 import {
   rendererAssetOf,
   rendererAssetName,
-  RENDERER_DIGEST_FILE,
+  RUNTIME_MANIFEST,
+  manifestOf,
+  obsoleteRendererFiles,
   type RendererAsset,
 } from "./renderer-asset.js";
 import { OWNER_CONTEXT, whyFailed } from "../proc/launcher.js";
@@ -290,7 +292,7 @@ function runtimeSources(
   }
   return {
     dist: sourceDist,
-    renderer: rendererAssetOf(path.dirname(sourceDist)),
+    renderer: rendererAssetOf(path.dirname(sourceDist), sourceDist),
     entry,
     attach,
     preload,
@@ -303,22 +305,16 @@ function stageRenderer(
   asset: RendererAsset,
 ): void {
   const name = rendererAssetName(asset.digest);
-  const manifest = path.join(dist, RENDERER_DIGEST_FILE);
-  const previous = readTextIfPresent(manifest)?.trimEnd();
+  const manifest = path.join(dist, RUNTIME_MANIFEST);
+  const previous = manifestOf(readTextIfPresent(manifest) ?? "")?.renderer;
   changes.replaceFile(path.join(dist, name), asset.bytes, 0o644);
-  changes.replaceFile(manifest, asset.digest + "\n", 0o644);
-  // [LAW:no-ambient-temporal-coupling] The old and new CLI each name their
-  // own immutable module. Retain the previous generation across the switch
-  // so an overlapping launch can finish resolving its static imports.
-  if (!previous || previous === asset.digest) return;
-  const keep = rendererAssetName(previous);
-  for (const file of fs.readdirSync(dist))
-    if (
-      /^renderer-[0-9a-f]{64}\.mjs$/.test(file) &&
-      file !== keep &&
-      file !== name
-    )
-      changes.remove(path.join(dist, file));
+  changes.replaceFile(manifest, asset.manifest, 0o644);
+  for (const file of obsoleteRendererFiles(
+    fs.readdirSync(dist),
+    previous,
+    asset.digest,
+  ))
+    changes.remove(path.join(dist, file));
 }
 
 // Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
@@ -340,7 +336,11 @@ function stageRuntime(
   changes.mkdir(path.dirname(distPath));
   changes.mkdir(path.dirname(binPath));
   stageRenderer(changes, path.dirname(distPath), sources.renderer);
-  stageFile(changes, sources.dist, distPath);
+  changes.replaceFile(
+    distPath,
+    sources.renderer.cli,
+    fs.statSync(sources.dist).mode & 0o777,
+  );
   if (platform === "darwin") stageWindow(sources.dist, dir, changes, launcher);
   // A directory staged whole, so no file of an older launcher outlives it.
   changes.replaceDir(path.join(path.dirname(distPath), ATTACH_DIR), (staging) =>

@@ -41,3 +41,15 @@ test("several throws come out together, in the order the steps ran", () => {
 test("steps that all run cleanly throw nothing", () => {
   expect(() => runEach([() => {}, () => {}])).not.toThrow();
 });
+
+test("deep, shared and uninspectable values preserve all aggregate members", () => {
+  let deep: unknown = "deep";
+  for (let i=0;i<10000;i++) deep = { left: deep, right: deep };
+  const unsafe = Object.defineProperty(new Error(), "message", { get() { throw new Error("getter"); } });
+  const errors = [deep, unsafe, { unsafe }, Proxy.revocable({}, {}).proxy];
+  let aggregate: unknown;
+  try { runEach(errors.map(value => () => { throw value; })); } catch (e) { aggregate = e; }
+  expect(aggregate).toBeInstanceOf(AggregateError);
+  expect((aggregate as AggregateError).message.length).toBeLessThan(4200);
+  (aggregate as AggregateError).errors.forEach((value, index) => expect(value).toBe(errors[index]));
+});

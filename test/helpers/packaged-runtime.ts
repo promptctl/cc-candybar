@@ -1,4 +1,4 @@
-import { RENDERER_DIGEST_FILE, rendererAssetName, rendererDigest, rendererAssetOf } from "../../src/install/renderer-asset";
+import { RUNTIME_MANIFEST, rendererAssetName, rendererDigest, rendererAssetOf } from "../../src/install/renderer-asset";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -7,7 +7,7 @@ export function packagedRuntime(root: string, version = "fixture"): void {
   const renderer = "export const version = " + JSON.stringify(version);
   const digest = rendererDigest(Buffer.from(renderer));
   const files: Record<string, string> = {
-    ["dist/" + RENDERER_DIGEST_FILE]: digest + "\n",
+    ["dist/" + RUNTIME_MANIFEST]: JSON.stringify({ cli: rendererDigest(fs.readFileSync(path.join(root,"dist","index.mjs"))), renderer: digest }) + "\n",
     ["dist/" + rendererAssetName(digest)]: renderer,
     "bin/cc-candybar-window": "fixture image",
     "bin/cc-candybar-window.source": "a".repeat(64) + "\n",
