@@ -1,3 +1,9 @@
+## [1.245.1](https://github.com/promptctl/cc-candybar/compare/v1.245.0...v1.245.1) (2026-11-27)
+
+### Bug Fixes
+
+* **renderer:** make regional and temporal inputs reproducible ([#985](https://github.com/promptctl/cc-candybar/issues/985)) ([45e11fe](https://github.com/promptctl/cc-candybar/commit/45e11fecc7f7b958692daf8c8320094d983823c3))
+
 ## [1.245.0](https://github.com/promptctl/cc-candybar/compare/v1.244.3...v1.245.0) (2026-11-27)
 
 ### Features
