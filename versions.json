@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "59949da179994f9735daa010c71c696f055a4fa5",
-      "timestamp": "2026-11-27T23:37:48.613Z",
+      "sha": "c58b95107c5a86fe47b9bbbb112c88530570c486",
+      "timestamp": "2026-11-27T23:41:06.613Z",
       "commits": [
         {
-          "sha": "59949da179994f9735daa010c71c696f055a4fa5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T16:36:29-07:00",
-          "message": "fix(stored-state): a per-session file whose write fails stands behind on every bar (#988)"
+          "sha": "c58b95107c5a86fe47b9bbbb112c88530570c486",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-27T23:39:55Z",
+          "message": "chore(release): set `package.json` to 1.245.3\n\n## [1.245.3](https://github.com/promptctl/cc-candybar/compare/v1.245.2...v1.245.3) (2026-11-27)\n\n### Bug Fixes\n\n* **stored-state:** a per-session file whose write fails stands behind on every bar ([#988](https://github.com/promptctl/cc-candybar/issues/988)) ([59949da](https://github.com/promptctl/cc-candybar/commit/59949da179994f9735daa010c71c696f055a4fa5))\n"
         }
       ]
     },
