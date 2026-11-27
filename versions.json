@@ -2,6 +2,91 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-978",
+      "ref": "refs/pull/978/merge",
+      "sha": "ab1fd534df1ae270f12de51539252ede7be9fdb8",
+      "timestamp": "2026-11-27T04:22:26.310Z",
+      "commits": [
+        {
+          "sha": "ab1fd534df1ae270f12de51539252ede7be9fdb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:21:24-07:00",
+          "message": "Merge 943fb6dc4e8fca0f43359653fef0ab92266331fe into 957eac95789f30efd7fc089c422843cf36d06300\n"
+        },
+        {
+          "sha": "943fb6dc4e8fca0f43359653fef0ab92266331fe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:20:48-07:00",
+          "message": "fix(tmux): release superseded unobserved sources and verify hidden cadence\n"
+        },
+        {
+          "sha": "0ab55095793e38050ad7defe5509ea3dc81b6ac5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:19:05-07:00",
+          "message": "Recover unacknowledged tmux splits on a verified source report\n"
+        },
+        {
+          "sha": "5e6ee920fd1a10421830d05e3aa5bb0c0f727200",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:15:27-07:00",
+          "message": "fix(tmux): distinguish observer hooks from window configuration edits\n"
+        },
+        {
+          "sha": "a22a2758f251f37bd0778c9551c2f2838dabc6a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:15:56-07:00",
+          "message": "test(tmux): verify packaged pane handoff across hide, clear and return\n"
+        },
+        {
+          "sha": "9dff01cc4a2f3e078018e29601e07973a4879957",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:10:18-07:00",
+          "message": "feat(tmux): observe private server metadata without attaching or polling\n"
+        },
+        {
+          "sha": "d1809a2c5eafa202a745b6ae0c154eceba3d203f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:09:59-07:00",
+          "message": "fix: follow the enrolled tmux pane across session changes\n"
+        },
+        {
+          "sha": "24e7a702e358d37bab7093a21fa97131fe298c60",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:08:29-07:00",
+          "message": "Retain unresolved source claims across a disconnected observer\n"
+        },
+        {
+          "sha": "48aa261e743d44575642bfda87e255d70244e823",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:06:21-07:00",
+          "message": "Confirm pane ownership with foreground Claude process records\n"
+        },
+        {
+          "sha": "1885d837df67f3e88b7a0ba3393b30ac85827438",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:08:10-07:00",
+          "message": "fix(tmux): preserve source verification across unrelated renders\n"
+        },
+        {
+          "sha": "bb8c699596aadab38cee3d0382fb04c6e1bb9663",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:59:31-07:00",
+          "message": "refactor(tmux): share pane facts across interested host consumers\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "957eac95789f30efd7fc089c422843cf36d06300",
