@@ -4,15 +4,22 @@
     {
       "version": "pr-986",
       "ref": "refs/pull/986/merge",
-      "sha": "e626194906073ed894ee6f879db90f6dbe97339a",
-      "timestamp": "2026-11-27T20:16:21.738Z",
+      "sha": "c911c2ffdd31d5e745b2e1144288897b399a9e32",
+      "timestamp": "2026-11-27T20:24:46.964Z",
       "commits": [
         {
-          "sha": "e626194906073ed894ee6f879db90f6dbe97339a",
+          "sha": "c911c2ffdd31d5e745b2e1144288897b399a9e32",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T13:15:03-07:00",
-          "message": "Merge b5cf82ce8d9eadf302e4383e2b15d1648271e3a3 into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+          "timestamp": "2026-11-27T20:23:43Z",
+          "message": "Merge 28a3a5c1192822d638e5d4bf3795a07e4e1fde2e into 178959ffe42bb2cd02ac6aa6bdf6369c11281adc\n"
+        },
+        {
+          "sha": "28a3a5c1192822d638e5d4bf3795a07e4e1fde2e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T13:23:30-07:00",
+          "message": "test(daemon): exercise export recovery from a saved legacy profile\n"
         },
         {
           "sha": "b5cf82ce8d9eadf302e4383e2b15d1648271e3a3",
