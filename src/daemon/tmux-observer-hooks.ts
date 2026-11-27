@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Launcher } from "../proc/launcher.js";
-import { runTmuxAsync } from "../proc/tmux.js";
+import { runTmuxAsync, serverObserverHookPrefix } from "../proc/tmux.js";
 import { singleQuoted } from "../shell-word.js";
 
 const events = new Set([
@@ -67,6 +67,7 @@ export class ObserverServer {
   private readonly live: string;
   private readonly expected: string;
   private readonly hook: string;
+  private namedSlots = false;
   constructor(
     private readonly launcher: Launcher,
     readonly socket: string,
@@ -75,7 +76,7 @@ export class ObserverServer {
   ) {
     if (!/^[0-9a-f]{32}$/.test(token) || !/^[1-9]\d*$/.test(pid))
       throw new Error("invalid tmux observer identity");
-    this.prefix = "ccb_observer_" + token;
+    this.prefix = serverObserverHookPrefix + token;
     this.action = "@" + this.prefix;
     this.live = this.action + "_live";
     this.dirty = this.action + "_dirty";
@@ -169,6 +170,24 @@ export class ObserverServer {
     return [...slots.values()];
   }
   async arm() {
+    // Probe the addressed server. A keyed slot lets the floating-window
+    // owner distinguish host registration from a user's geometry-hook edits.
+    const probe = "after-set-hook[" + serverObserverHookPrefix + "probe]";
+    const keys = await runTmuxAsync(
+      this.launcher,
+      { socket: this.socket },
+      "frames.visibility",
+      ["-N", "show-hooks", "-g", probe],
+    );
+    if (keys.kind === "ok") this.namedSlots = true;
+    else if (
+      keys.kind !== "failed" ||
+      !["invalid option: ", "ambiguous option: "].some((diagnostic) =>
+        keys.reason.includes(diagnostic + probe),
+      )
+    )
+      throw new Error(keys.reason);
+
     // Keep event work in the tmux server. A single transition to dirty owns
     // the classic wait channel's one pending wake, including between clients.
     const edit =
@@ -221,8 +240,10 @@ export class ObserverServer {
           .readUInt32BE(0) %
           1_000_000_000) +
         100_000;
-      while (indices.has(String(index))) index++;
-      const ref = name + "[" + index + "]";
+      const keyAt = (n: number) =>
+        this.namedSlots ? this.prefix + "_" + n : String(n);
+      while (indices.has(keyAt(index))) index++;
+      const ref = name + "[" + keyAt(index) + "]";
       references.set(key, ref);
       const install = command(
         "set-option",
@@ -317,7 +338,10 @@ export class ObserverServer {
     const lines: string[] = [];
     for (const { scope, name, indices } of slots) {
       for (const [index, body] of indices) {
-        if (body !== this.hook || !/^\d+$/.test(index)) continue;
+        const suffix = index.startsWith(this.prefix + "_")
+          ? index.slice(this.prefix.length + 1)
+          : index;
+        if (body !== this.hook || !/^\d+$/.test(suffix)) continue;
         const ref = name + "[" + index + "]",
           target = scope.startsWith("g") ? globalContext : scope;
         lines.push(
