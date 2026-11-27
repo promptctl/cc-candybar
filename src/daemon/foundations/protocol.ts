@@ -439,10 +439,12 @@ export type DesktopAct =
 // [LAW:types-are-the-program] The verdict of a click whose acts leave for its
 // writer: the link was accepted, and always the acts, in the order asked, even
 // when the click then failed, because a click that fails after asking one still
-// asked it. The click's own failure is held where any click's is (its bar, or
-// the daemon's warning), not said twice. A link refused is answered by the
-// ordinary refusal, at once, with no acts. No other response carries them: the
-// plain ok says so in its type.
+// asked it. The click's failure, whatever it asked, rides as `desktopError`, so
+// a failed response says only that the daemon could not take or answer the
+// click, and why: the link was refused, or its verdict could not be framed. The
+// forward carried it, so the writer tells that reason as the daemon's. A link
+// refused is answered by the ordinary refusal, at once, with no acts. No other
+// response carries them: the plain ok says so in its type.
 // Mirrored by url-handler/wire.swift.
 export interface ClickVerdict {
   ok: true;

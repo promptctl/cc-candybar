@@ -999,7 +999,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       {
         authorizeRun: (request, captures) =>
           authorizeRun(linkSigner, request, captures),
-        perform: (act) => acts.perform(act),
+        perform: (act, actsOn) => acts.perform(act, actsOn),
         stateDir: paths.state,
         configs: configDiscovery.forRenderer(name),
         writeConfigFile: inputs.writeConfigFile,

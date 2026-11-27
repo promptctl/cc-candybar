@@ -1850,9 +1850,8 @@ describe("the session's config, ahead of its request", () => {
         encodeSegments([session]),
         TEST_SIGNER,
       ).click;
-      const result = await host.answerClick(session, () => ({
+      const result = await host.answerClick(session, "desktop", () => ({
         kind: "event",
-        actsOn: "desktop",
         event: { kind: "click", placementSeed: "test-click", click, context: heardContextOf(clicked) },
       }));
       expect(result).toMatchObject({

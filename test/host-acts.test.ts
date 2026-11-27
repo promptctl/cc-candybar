@@ -29,6 +29,8 @@ import { NO_CONFIGS } from "./helpers/renderers";
 import { authorizeRun } from "../src/daemon/foundations/run-authorization";
 import { VERB_RUN, type RunEvidence } from "../src/click/wire";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { testActs } from "./helpers/click";
+import { ACTS_ON_DAEMON, type ActsOn } from "../src/daemon/foundations/protocol";
 import { readTextIfPresent } from "../src/utils/regular-text";
 
 const S = sessionIdOf("s");
@@ -153,31 +155,28 @@ function hostOver(
     },
     world,
   );
-  const turn = (runEvidence?: readonly RunEvidence[], actsOn: "daemon" | "desktop" = "daemon") =>
-    host.answer(() =>
-      runEvidence === undefined
-        ? { kind: "event", event: { kind: "due" } }
-        : {
-            kind: "event",
-            runEvidence,
-            actsOn,
-            event: {
-              kind: "click", placementSeed: "test-click",
-              click: {
-                scope: "session",
+  const turn = (runEvidence?: readonly RunEvidence[], actsOn: ActsOn = ACTS_ON_DAEMON) =>
+    runEvidence === undefined
+      ? host.answer(() => ({ kind: "event", event: { kind: "due" } }))
+      : host.answerClick(S, actsOn, () => ({
+          kind: "event",
+          runEvidence,
+          event: {
+            kind: "click", placementSeed: "test-click",
+            click: {
+              scope: "session",
+              verb: VERB_RUN,
+              session: S,
+              steps: runEvidence.map(({ action }, capture) => ({
+                kind: "run",
                 verb: VERB_RUN,
-                session: S,
-                steps: runEvidence.map(({ action }, capture) => ({
-                  kind: "run",
-                  verb: VERB_RUN,
-                  action,
-                  capture,
-                })),
-              },
-              context: null,
+                action,
+                capture,
+              })),
             },
+            context: null,
           },
-    );
+        }));
   return { turn, did, unheard, heard };
 }
 
@@ -364,11 +363,20 @@ test("a session's failed act its renderer heard is its renderer's to show", asyn
 
 // [LAW:verifiable-goals] The click's connection decides where its acts go.
 describe("a click forwarded from the desktop", () => {
-  test("hands copies and remote files to its own writer in order", async () => {
+  test("its acts are performed for the desktop, and what the performer hands over is settled in order", async () => {
     const copied = copy();
     const opened: Act = { kind: "open", id: ++ids as EffectId, session: S, target: file };
-    const { turn, did } = hostOver([copied, opened]);
+    const destinations: string[] = [];
+    const { turn, did } = hostOver([copied, opened], {
+      perform: async (act, actsOn) => {
+        destinations.push(`${act.kind} ${actsOn}`);
+        return act.kind === "copy"
+          ? { kind: "desktop", act: { kind: "copy", text: "x" } }
+          : { kind: "desktop", act: { kind: "open", target: file, file: true } };
+      },
+    });
     const answered = await turn([], "desktop");
+    expect(destinations).toEqual(["copy desktop", "open desktop"]);
     expect(did).toEqual([`done ${copied.id} ok`, `done ${opened.id} ok`]);
     expect(answered.settled).toEqual([
       { kind: "desktop", act: { kind: "copy", text: "x" } },
@@ -379,5 +387,81 @@ describe("a click forwarded from the desktop", () => {
   test("closes without handing over an act after shutdown begins", async () => {
     const { turn } = hostOver([copy()], { closing: () => true });
     expect((await turn([], "desktop")).settled.map((o) => o.kind)).toEqual(["closing"]);
+  });
+
+  test("a click that is not forwarded performs its acts on the daemon's own machine", async () => {
+    const destinations: string[] = [];
+    const { turn } = hostOver([copy()], {
+      perform: async (act, actsOn) => {
+        destinations.push(`${act.kind} ${actsOn}`);
+        return { kind: "ok" };
+      },
+    });
+    await turn([], "daemon");
+    expect(destinations).toEqual(["copy daemon"]);
+  });
+});
+
+// [LAW:single-enforcer] A copy or open for the desktop is performed by the one
+// performer every act is: closing refuses it, its act line is written, and a
+// throw becomes its failure.
+describe("the performer's acts for the desktop", () => {
+  const lines: string[] = [];
+  const performer = (closing = false) =>
+    testActs((level, text) => void lines.push(`${level} ${text}`), { closing: () => closing });
+  const open = (target: string): HostAct => ({
+    kind: "open",
+    id: ++ids as EffectId,
+    session: S,
+    target,
+  });
+  beforeEach(() => void (lines.length = 0));
+
+  test("hands over a copy, and an open as a file or a directory by what the path is", async () => {
+    const acts = performer();
+    const copied = copy() as HostAct;
+    expect(await acts.perform(copied, "desktop")).toEqual({
+      kind: "desktop",
+      act: { kind: "copy", text: "x" },
+    });
+    expect(await acts.perform(open(file), "desktop")).toEqual({
+      kind: "desktop",
+      act: { kind: "open", target: file, file: true },
+    });
+    expect(await acts.perform(open(dir), "desktop")).toEqual({
+      kind: "desktop",
+      act: { kind: "open", target: dir, file: false },
+    });
+    expect(lines).toEqual([
+      `info act kind=copy sid=s id=${copied.id} outcome=desktop — copy: handed to the desktop`,
+      expect.stringMatching(/^info act kind=open .* outcome=desktop — open: handed to the desktop$/),
+      expect.stringMatching(/^info act kind=open .* outcome=desktop — open: handed to the desktop$/),
+    ]);
+  });
+
+  test("refuses an act once the daemon is closing, and says so on its line", async () => {
+    const outcome = await performer(true).perform(copy() as HostAct, "desktop");
+    expect(outcome).toMatchObject({ kind: "closing" });
+    expect(lines).toEqual([expect.stringMatching(/^info act kind=copy .* outcome=closing /)]);
+  });
+
+  test("a path gone since the draw is the act's failure, said on its line", async () => {
+    const gone = path.join(dir, "removed");
+    const outcome = await performer().perform(open(gone), "desktop");
+    expect(outcome).toMatchObject({ kind: "failed", reason: expect.stringContaining("open: ") });
+    expect(lines).toEqual([expect.stringMatching(/^warn act kind=open .* outcome=failed /)]);
+  });
+
+  test("an act that is not a copy or open ends the same whatever the destination", async () => {
+    const slash: HostAct = {
+      kind: "type-slash",
+      id: ++ids as EffectId,
+      session: S,
+      pane: { paneId: "%1" } as never,
+      line: "/x" as never,
+    };
+    const here = await performer().perform(slash, "daemon");
+    expect(here.kind).not.toBe("desktop");
+    expect(await performer().perform(slash, "desktop")).toEqual(here);
   });
 });

@@ -1002,7 +1002,8 @@ function readUrlFrame(
 // the moment it is read and run to its outcome after. A link that does not
 // open is refused here, as a bad request on the click's event and in the
 // verdict, whose writer shows it as a notification, never dropped. A verb's
-// own failure is held on the bar, so the verdict does not say it twice.
+// own failure is held on the bar; a writer told once its click landed is also
+// told it (`landedReply`), because it never sees the bar.
 function urlClick(
   parts: DaemonParts,
   frame: Record<string, unknown>,
@@ -1040,14 +1041,15 @@ function urlClick(
 }
 
 // [LAW:single-enforcer] The verdict of a writer told once its click landed: the
-// acts it left for the writer to carry out. Its failure is held as any click's
-// is, on its bar or in the daemon's warning, as for a writer told at once.
+// acts it left for the writer to carry out, and its failure when it failed,
+// whether or not it asked for any act. One shape says "the link was taken and
+// its click then failed", so the writer never mistakes a verb's own failure for
+// a link refused or a forward that took nothing. The bar holds the failure too,
+// as for any click.
 // [LAW:no-silent-failure] A verdict its writer never took (it gave up waiting,
-// or the verdict could not be sent) takes its acts with it, and the daemon says
-// so.
+// or the verdict could not be sent) takes its acts and its failure with it, and
+// the daemon says so.
 function landedReply(parts: DaemonParts, { desktop, outcome }: Clicked): Reply {
-  if (desktop.length === 0 && outcome.kind !== "ok")
-    return stay(clickReply(outcome));
   const reply: Reply = replyOf(
     {
       ok: true,
@@ -1057,10 +1059,16 @@ function landedReply(parts: DaemonParts, { desktop, outcome }: Clicked): Reply {
     },
     null,
     (taken) => {
-      if (!taken && desktop.length > 0)
+      const lost = [
+        ...(desktop.length > 0
+          ? [`${desktop.length} copy or open act(s)`]
+          : []),
+        ...(outcome.kind === "ok" ? [] : ["the click's failure"]),
+      ];
+      if (!taken && lost.length > 0)
         parts.log(
           "warn",
-          `${desktop.length} copy or open act(s) for the machine the URL handler runs on were not carried out: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`,
+          `${lost.join(" and ")} for the machine the URL handler runs on did not reach it: ${reply.unsent === null ? "it left before the verdict that carries them" : `the verdict could not be sent: ${reply.unsent.message}`}`,
         );
     },
   );
@@ -1152,13 +1160,12 @@ async function handleClick(
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
   // client took a TIMEOUT never lands, since TIMEOUT told that client it did
   // not run, and one whose client left while it waited has no one to answer.
-  const delivered = await target.answerClick(session, () =>
+  const delivered = await target.answerClick(session, actsOn, () =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))
       : {
           kind: "event",
           runEvidence,
-          actsOn,
           event: {
             kind: "click",
             click: admitted,

@@ -111,8 +111,8 @@ describe("tmux pane effects", () => {
       pane: TMUX,
       line: line as never,
     });
-    const first = acts.perform(slash("/compact"));
-    const second = acts.perform(slash("/clear"));
+    const first = acts.perform(slash("/compact"), "daemon");
+    const second = acts.perform(slash("/clear"), "daemon");
     await new Promise((r) => setImmediate(r));
     expect(typing).toEqual(["start /compact"]);
     typed();
@@ -145,7 +145,7 @@ describe("tmux pane effects", () => {
       session: SID,
       pane: TMUX,
       line: "/compact" as never,
-    });
+    }, "daemon");
     const cleanup = expect(acts.inPaneTurn(TMUX,removed)).rejects.toThrow(
       "the daemon closed",
     );
@@ -171,7 +171,7 @@ describe("tmux pane effects", () => {
       session: SID,
       pane: TMUX,
       line: "/compact" as never,
-    });
+    }, "daemon");
     split();
     await opening;
     expect(await slash).toEqual({ kind: "ok" });

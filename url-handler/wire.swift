@@ -296,8 +296,35 @@ enum Verdict: Equatable {
   case accepted(acts: [DesktopAct]?)
   // The link was refused: one the bar never drew, or one changed since.
   case refused(String)
-  // The daemon could not take the click at all (it was closing).
+  // The daemon answered that it could not take or answer the click, and why.
+  // A click that ran and failed is `accepted` with its failure in `acts`.
   case failed(String)
+}
+
+// What the app made of a click it sent.
+enum Forward: Equatable {
+  // The daemon took the link, and said what the click asked of this Mac.
+  case delivered(acts: [DesktopAct]?)
+  // The daemon refused the link, for the reason it gave.
+  case refused(String)
+  // The frame was written, and no verdict on it could be read.
+  case unconfirmed(String)
+  // The daemon answered that it could not take or answer the click, for the
+  // reason it gave: the forward carried the frame and the verdict back.
+  case daemonFailed(String)
+  // The frame never reached the daemon.
+  case failed(String)
+}
+
+// What a verdict the app read comes to. A refusal of the link is a bad request;
+// any other failure is the daemon's own, said by the daemon, so it is never
+// worded as a forward that took nothing.
+func told(_ verdict: Verdict) -> Forward {
+  switch verdict {
+  case .accepted(let acts): return .delivered(acts: acts)
+  case .refused(let why): return .refused(why)
+  case .failed(let why): return .daemonFailed(why)
+  }
 }
 
 // The verdict, or nil when the bytes are not one this app reads. The failure's
@@ -311,13 +338,23 @@ func verdictOf(_ body: Data) -> Verdict? {
     guard let why = said["error"] as? String else { return nil }
     return said["code"] as? String == ERROR_CODE_BAD_REQUEST ? .refused(why) : .failed(why)
   }
-  guard let raw = said[DESKTOP_ACTS_KEY] else { return .accepted(acts: nil) }
-  guard let list = raw as? [Any] else {
-    return .accepted(acts: [.malformed("\(DESKTOP_ACTS_KEY) is not a list")])
+  // The click's own failure follows the acts it asked, whatever shape they came in.
+  var failure: [DesktopAct] = []
+  switch said[DESKTOP_ERROR_KEY] {
+  case nil: break
+  case let reason as String: failure = [.failed(reason)]
+  default: failure = [.malformed("\(DESKTOP_ERROR_KEY) is not a string")]
   }
-  var acts = list.map(desktopAct)
-  if let reason = said[DESKTOP_ERROR_KEY] as? String { acts.append(.failed(reason)) }
-  return .accepted(acts: acts)
+  // No acts key is a daemon older than this app, which never says a failure
+  // either: a failure with no acts is a shape this daemon does not send.
+  guard let raw = said[DESKTOP_ACTS_KEY] else {
+    return .accepted(
+      acts: failure.isEmpty ? nil : [.malformed("\(DESKTOP_ACTS_KEY) is missing")] + failure)
+  }
+  guard let list = raw as? [Any] else {
+    return .accepted(acts: [.malformed("\(DESKTOP_ACTS_KEY) is not a list")] + failure)
+  }
+  return .accepted(acts: list.map(desktopAct) + failure)
 }
 
 // What this app does once the daemon has accepted the click: each act in the
@@ -326,6 +363,8 @@ enum Step: Equatable {
   case copy(String)
   case open(String)
   case tell(String)
+  // The click itself failed, after the acts it asked: not an act left undone.
+  case clickFailed(String)
 }
 
 // [LAW:no-silent-failure] A click that asked for acts and got none it can carry
@@ -361,7 +400,7 @@ func steps(for acts: [DesktopAct]?, via route: Route) -> [Step] {
           "cannot open \(target): this ssh forward names its host \"\(word)\", which is no host alias this app can hand an editor"
         )
       }
-    case .failed(let why): return .tell(why)
+    case .failed(let why): return .clickFailed(why)
     case .unknown(let kind):
       return .tell("the daemon asked for \"\(kind)\", which this app does not do")
     case .malformed(let why):
