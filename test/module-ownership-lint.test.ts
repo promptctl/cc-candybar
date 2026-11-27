@@ -1,5 +1,7 @@
 // Exercise the normal owner and caller configurations at the same paths the
 // application and test commands lint. The caller's alias never grants access.
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -365,6 +367,123 @@ test("the resolved module and its selected exports identify the owner", () =>
   verify(application, {}));
 test("suite ownership follows the same edges with its own native adapters", () =>
   verify(suite, { overrideConfigFile: "eslint.tests.config.mjs" }));
+
+test("native loader identity survives exports, aliases and static member reads", () => {
+  const load = "('node:child_process').spawn";
+  const messages = lintCases(
+    {
+      exported: src(
+        `export const native = require('node:module'); export const run = native.createRequire(__filename)${load};`,
+      ),
+      awaited: src(
+        `export const native = await import('module'); export const run = native.createRequire(import.meta.url)${load};`,
+      ),
+      equals: src(
+        `export import native = require('module'); export const run = native.createRequire(__filename)${load};`,
+      ),
+      factory: src(
+        `import {Module as M} from 'module'; const make = M.createRequire; export const use = make(import.meta.url); export const run = use${load};`,
+      ),
+      nested: src(
+        `const {Module: C} = process.getBuiltinModule('module'); export const run = C.Module.createRequire(__filename)${load};`,
+      ),
+      cycle: src(
+        `const m=require('module'); var f=m.createRequire; var f=f; var read=f(__filename); var read=read; read${load};`,
+      ),
+      separate: src(
+        `import * as native from 'node:module'; export {native}; export const run=native.createRequire(import.meta.url)${load};`,
+      ),
+      classExport: src("export {Module} from 'node:module';"),
+      rawLoader: src(
+        "import {Module} from 'node:module'; consume(Module.createRequire);",
+      ),
+      erased: src(
+        "export {type createRequire, builtinModules} from 'node:module'; export {type Module} from 'module';",
+      ),
+      ordinary: src(
+        "const obj = {Module: {createRequire:(s:string)=>s}}; export const use=obj.Module.createRequire('child_process');",
+      ),
+      metadata: src(
+        "import {Module} from 'node:module'; export const paths=Module.builtinModules;",
+      ),
+      processArgument: src(
+        "function spy(obj: unknown, key: string){} spy(process, 'exit');",
+      ),
+    },
+    {},
+  );
+  const maker = expect.stringContaining(
+    "`createRequire` is used other than by a call",
+  );
+  const loader = expect.stringContaining(
+    "A `createRequire` loader is used other than by a call",
+  );
+  const owned = expect.stringContaining(processOwner);
+  const expected = {
+    exported: [maker, owned],
+    awaited: [maker, owned],
+    equals: [maker, owned],
+    factory: [loader, owned],
+    nested: [owned],
+    cycle: [owned],
+    separate: [maker, owned],
+    classExport: [maker],
+    rawLoader: [maker],
+    erased: [],
+    ordinary: [],
+    metadata: [],
+    processArgument: [],
+  };
+  for (const name of Object.keys(expected) as (keyof typeof expected)[]) {
+    expect({
+      [name]: messages[name]
+        .filter(
+          (m) => m.ruleId === "zones/import-direction" || m.ruleId === null,
+        )
+        .map((m) => m.message),
+    }).toEqual({ [name]: expected[name] });
+  }
+});
+
+test("suite imports through symlinks have the physical module's owner", () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "module-owner-"));
+  try {
+    const checkout = path.join(folder, "checkout");
+    const target = path.join("src", "proc", "system-launcher.ts");
+    const link = path.join(folder, "linked-adapter.ts");
+    fs.symlinkSync(REPO, checkout, "dir");
+    fs.symlinkSync(path.join(REPO, target), link, "file");
+    const cases = Object.fromEntries(
+      [
+        path.join(checkout, target),
+        link,
+        path.join(checkout, target.replace(/\.ts$/, ".js")),
+      ].map((file, n) => [
+        `owned${n}`,
+        [
+          testFile(
+            `export {systemLauncher} from ${JSON.stringify(pathToFileURL(file).href)};`,
+          ),
+          fakeLauncher,
+        ] as const,
+      ]),
+    );
+    verify(
+      {
+        ...cases,
+        other: [
+          testFile(
+            `export {systemLauncher} from ${JSON.stringify(pathToFileURL(path.join(folder, "unrelated.ts")).href)};`,
+          ),
+          null,
+        ],
+      },
+      { overrideConfigFile: "eslint.tests.config.mjs" },
+    );
+  } finally {
+    fs.rmSync(folder, { recursive: true });
+  }
+});
 
 test("a tool can use its own launcher outside the application and suite", () => {
   verify(

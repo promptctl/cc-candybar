@@ -5,7 +5,8 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import globals from "globals";
 import fs from "node:fs";
-import { isBuiltin } from "node:module";
+import * as nodeModule from "node:module";
+import * as nodeProcess from "node:process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CODE_GLOB, JS_GLOB, mayImport, mayLoadRendererModule, NO_ZONE, packageZoneOf, TEST_ROOTS, withoutExtension, TS_GLOB, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
@@ -274,19 +275,32 @@ if (unexplained.length > 0)
 // import (`../verbs`) is its index's. Relative to this file, not ESLint's cwd,
 // so an editor or runner started in a subdirectory keys the same modules.
 const REPO_ROOT = fs.realpathSync(import.meta.dirname);
-const moduleKey = (abs) => withoutExtension(path.relative(REPO_ROOT, abs));
-// A directory's real path, through its nearest ancestor on disk, so an unsaved
-// buffer in a directory not yet made keys like its saved self.
-const realDir = (dir) =>
-  fs.existsSync(dir)
-    ? fs.realpathSync(dir)
-    : path.join(realDir(path.dirname(dir)), path.basename(dir));
+// The caller and its target use the same physical checkout. For an emitted
+// extension or an unsaved editor buffer, resolve the nearest existing ancestor.
+const physicalPath = (file) =>
+  fs.existsSync(file)
+    ? fs.realpathSync(file)
+    : path.join(physicalPath(path.dirname(file)), path.basename(file));
+const moduleKey = (file) =>
+  withoutExtension(path.relative(REPO_ROOT, physicalPath(file)));
+
+// Node exposes its native default through named exports too (notably Module).
+// Derive namespace projections from the public objects the runtime supplies.
+const selfExports = (namespace) =>
+  new Set(
+    Object.keys(namespace).filter(
+      (name) => namespace[name] === namespace.default,
+    ),
+  );
+const moduleSelf = selfExports(nodeModule);
+const processSelf = selfExports(nodeProcess);
 
 const CLOCK_KEY = withoutExtension(CLOCK_FILE);
 // Whether an import brings in types alone, which carry no clock.
 const typeOnly = (node) =>
   node.type === "TSImportType" ||
-  (node.type === "TSExternalModuleReference" && node.parent.importKind === "type") ||
+  (node.type === "TSExternalModuleReference" &&
+    node.parent.importKind === "type") ||
   node.importKind === "type" ||
   node.exportKind === "type" ||
   (node.specifiers?.length > 0 &&
@@ -297,14 +311,15 @@ const typeOnly = (node) =>
 const importDirection = {
   meta: { type: "problem", schema: [{ enum: ["suite"] }] },
   create(context) {
-    // Through the real path of the file's directory, so a file reached by a
-    // symlinked path keys as the module it is.
-    const dir = realDir(path.resolve(path.dirname(context.filename)));
-    const file = path.relative(REPO_ROOT, path.join(dir, path.basename(context.filename)));
+    const filename = physicalPath(path.resolve(context.filename));
+    const dir = path.dirname(filename);
+    const file = path.relative(REPO_ROOT, filename);
     const from = withoutExtension(file);
     const policy = context.options[0] ?? "app";
     const directions = policy !== "suite";
-    const ownedHere = moduleOwnership[policy].filter((rule) => rule.applies(file));
+    const ownedHere = moduleOwnership[policy].filter((rule) =>
+      rule.applies(file),
+    );
     // [LAW:no-silent-failure] A key outside the repo is in no zone, so the rule
     // refuses it rather than calling it rest and passing every edge.
     const outside = (key) => key.startsWith("..") || path.isAbsolute(key);
@@ -321,10 +336,16 @@ const importDirection = {
     if (fromZone === NO_ZONE) {
       return {
         Program: (node) =>
-          context.report({ node, message: `${from}: ${REFUSAL[NO_ZONE]} [LAW:one-way-deps]` }),
+          context.report({
+            node,
+            message: `${from}: ${REFUSAL[NO_ZONE]} [LAW:one-way-deps]`,
+          }),
       };
     }
-    const rendering = fromZone === "renderer" || fromZone === "start" || fromZone === "renderer-process";
+    const rendering =
+      fromZone === "renderer" ||
+      fromZone === "start" ||
+      fromZone === "renderer-process";
     // Where an edge's source leads: a package, whose zone is the one that
     // owns it or none; a path in the repo, whose zone is its row's; or a path
     // outside the repo, which is in no zone.
@@ -377,7 +398,7 @@ const importDirection = {
       const module =
         to.kind === "path"
           ? to.name
-          : isBuiltin(source)
+          : nodeModule.isBuiltin(source)
             ? `node:${source.replace(/^node:/, "")}`
             : null;
       const rules = ownedHere.filter((rule) => rule.modules.includes(module));
@@ -440,7 +461,7 @@ const importDirection = {
     // and the loader `createRequire` makes, under whatever name it is bound
     // to. A loader it reads is used by a call with its source, which is
     // judged, or by `.resolve`, which locates and loads nothing. Any other use
-    // (an alias, `.call`, an export) carries it where no lint follows, so it
+    // (such as `.call` or an export) carries it where no lint follows, so it
     // is refused. Namespace projections follow their lexical bindings.
     // Reflection and evaluation of assembled code are outside this rule.
     const refuseUse = (node, what) =>
@@ -450,47 +471,63 @@ const importDirection = {
       });
     // Each read of a variable a declaration binds, by its name in the
     // declaration.
-    const readsOf = (declaration, name) =>
+    const readsOf = (declaration, name, valuesOnly = false) =>
       context.sourceCode
         .getDeclaredVariables(declaration)
         .filter((variable) => variable.name === name)
         .flatMap((variable) => variable.references)
-        .filter((reference) => !reference.init)
+        .filter(
+          (reference) =>
+            !reference.init &&
+            (!valuesOnly || reference.isValueReference !== false),
+        )
         .map((reference) => reference.identifier);
     const calledAs = (node) =>
       node.parent.type === "CallExpression" && node.parent.callee === node;
-    // An expression whose value is a loader, judged where it stands.
-    const loaderUse = (node, base, what, builtinsOnly = false) => {
-      const { parent } = node;
-      if (calledAs(node)) {
-        const source = parent.arguments[0]
-          ? sourceOf(parent.arguments[0])
-          : null;
-        // getBuiltinModule returns undefined for file and package specifiers.
-        if (!builtinsOnly || source === null || isBuiltin(source))
-          check(parent, source, base);
-        return;
+    const exportedBinding = (declaration) =>
+      declaration.type === "VariableDeclarator"
+        ? declaration.parent.parent.type === "ExportNamedDeclaration"
+        : declaration.parent.type === "ExportNamedDeclaration";
+    // An exported binding escapes this file and may still be used within it.
+    // Visit each lexical read once, even when a var aliases itself.
+    const followLoader = (start, what, use) => {
+      const reads = new Set([start]);
+      for (const node of reads) {
+        const declaration = node.parent;
+        if (
+          declaration.type === "VariableDeclarator" &&
+          declaration.init === node &&
+          declaration.id.type === "Identifier"
+        ) {
+          if (exportedBinding(declaration)) refuseUse(node, what);
+          for (const read of readsOf(declaration, declaration.id.name, true))
+            reads.add(read);
+        } else use(node);
       }
-      if (
-        parent.type === "MemberExpression" &&
-        parent.object === node &&
-        !parent.computed &&
-        parent.property.name === "resolve" &&
-        calledAs(parent)
-      )
-        return;
-      if (
-        parent.type === "VariableDeclarator" &&
-        parent.init === node &&
-        parent.id.type === "Identifier" &&
-        parent.parent.parent.type !== "ExportNamedDeclaration"
-      ) {
-        for (const read of readsOf(parent, parent.id.name))
-          loaderUse(read, base, what, builtinsOnly);
-        return;
-      }
-      refuseUse(node, what);
     };
+    // An expression whose value is a loader, judged where it stands.
+    const loaderUse = (start, base, what, builtinsOnly = false) =>
+      followLoader(start, what, (node) => {
+        const { parent } = node;
+        if (calledAs(node)) {
+          const source = parent.arguments[0]
+            ? sourceOf(parent.arguments[0])
+            : null;
+          // getBuiltinModule returns undefined for file and package specifiers.
+          if (!builtinsOnly || source === null || nodeModule.isBuiltin(source))
+            check(parent, source, base);
+          return;
+        }
+        if (
+          parent.type === "MemberExpression" &&
+          parent.object === node &&
+          !parent.computed &&
+          parent.property.name === "resolve" &&
+          calledAs(parent)
+        )
+          return;
+        refuseUse(node, what);
+      });
     // A createRequire loader resolves relative sources from the declared
     // file or directory when its path or file URL is known.
     const isGlobal = (node, name) => {
@@ -551,14 +588,16 @@ const importDirection = {
       }
       return filename.endsWith(path.sep) ? filename : path.dirname(filename);
     };
-    const makerUse = (node) =>
-      calledAs(node)
-        ? loaderUse(
+    const makerUse = (start) =>
+      followLoader(start, "`createRequire`", (node) => {
+        if (calledAs(node))
+          loaderUse(
             node.parent,
             baseOf(node.parent),
             "A `createRequire` loader",
-          )
-        : refuseUse(node, "`createRequire`");
+          );
+        else refuseUse(node, "`createRequire`");
+      });
     const builtinUse = (node) =>
       loaderUse(node, dir, "`getBuiltinModule`", true);
     // A key's name: an identifier's, or a string's when computed.
@@ -568,31 +607,33 @@ const importDirection = {
     // module namespace. Observe literal projections through lexical bindings.
     // Passing a namespace on grants all its exports; an awaited dynamic import
     // grants the namespace, while passing its promise on does the same.
-    const exportNames = (edge, builtin, loaders) => {
+    const exportNames = (edge, builtin, native) => {
       const names = new Set();
       const seen = new Set();
       const all = () => names.add(null);
+      const escape = (value) => {
+        all();
+        if (native && !typeOnly(edge))
+          for (const name of Object.keys(native.methods))
+            refuseUse(value, `\`${name}\``);
+      };
       const binding = (declaration, id, promise = false) => {
-        if (
-          declaration.type === "VariableDeclarator" &&
-          declaration.parent.parent.type === "ExportNamedDeclaration"
-        )
-          return all();
+        if (exportedBinding(declaration)) escape(id);
         const reads = readsOf(declaration, id.name);
         if (!reads.length) all();
         for (const read of reads) use(read, promise);
       };
       const select = (name, next, access) => {
-        if (access && loaders && Object.hasOwn(loaders, name))
-          access(loaders[name]);
-        if (builtin && name === "default") next();
+        if (access && native && Object.hasOwn(native.methods, name))
+          access(native.methods[name]);
+        if (builtin && (name === "default" || native?.self.has(name))) next();
         else names.add(name);
       };
       const pattern = (id, declaration, promise) => {
         if (id.type === "Identifier") return binding(declaration, id, promise);
-        if (promise || id.type !== "ObjectPattern") return all();
+        if (promise || id.type !== "ObjectPattern") return escape(id);
         for (const property of id.properties) {
-          if (property.type !== "Property") all();
+          if (property.type !== "Property") escape(property);
           else
             select(
               keyOf(property.key, property.computed),
@@ -603,7 +644,16 @@ const importDirection = {
                     property,
                     `\`${keyOf(property.key, property.computed)}\``,
                   );
-                for (const read of readsOf(declaration, property.value.name))
+                if (exportedBinding(declaration))
+                  refuseUse(
+                    property,
+                    `\`${keyOf(property.key, property.computed)}\``,
+                  );
+                for (const read of readsOf(
+                  declaration,
+                  property.value.name,
+                  true,
+                ))
                   act(read);
               },
             );
@@ -616,7 +666,8 @@ const importDirection = {
         // Loading only for side effects names no export, as in a bare ESM import.
         if (
           parent.type === "ExpressionStatement" ||
-          (parent.type === "UnaryExpression" && parent.operator === "void")
+          (parent.type === "UnaryExpression" &&
+            ["void", "typeof"].includes(parent.operator))
         )
           return;
         if (
@@ -665,7 +716,17 @@ const importDirection = {
             () => use(parent),
           );
         }
-        all();
+        // An opaque consumer of an object may read any owned export. Only a
+        // statically selected loader, or a namespace granted across a module
+        // boundary, proves the file passed on a native loader.
+        if (
+          parent.type === "ExportDefaultDeclaration" ||
+          (parent.type === "ExportSpecifier" &&
+            !typeOnly(parent) &&
+            !typeOnly(parent.parent))
+        )
+          escape(value);
+        else all();
       };
       if (edge.type === "ImportDeclaration") {
         for (const spec of edge.specifiers) {
@@ -681,16 +742,23 @@ const importDirection = {
               () => binding(spec, spec.local),
               (act) => {
                 if (typeOnly(edge) || spec.importKind === "type") return;
-                for (const read of readsOf(spec, spec.local.name)) act(read);
+                for (const read of readsOf(spec, spec.local.name, true))
+                  act(read);
               },
             );
           }
         }
       } else if (edge.type === "ExportNamedDeclaration") {
-        for (const spec of edge.specifiers)
-          select(keyOf(spec.local, false), all, (act) => {
-            if (!typeOnly(edge)) act(spec.local);
-          });
+        for (const spec of edge.specifiers) {
+          const erased = typeOnly(edge) || typeOnly(spec);
+          select(
+            keyOf(spec.local, false),
+            () => (erased ? all() : escape(spec)),
+            (act) => {
+              if (!erased) act(spec.local);
+            },
+          );
+        }
       } else if (edge.type === "TSImportType") {
         let qualifier = edge.qualifier;
         while (qualifier?.type === "TSQualifiedName")
@@ -699,8 +767,7 @@ const importDirection = {
         else use(edge);
       } else if (edge.type === "TSExternalModuleReference") {
         const declaration = edge.parent;
-        if (declaration.parent.type === "ExportNamedDeclaration") all();
-        else binding(declaration, declaration.id);
+        binding(declaration, declaration.id);
       } else if (
         edge.type === "Identifier" ||
         edge.type === "CallExpression" ||
@@ -708,18 +775,20 @@ const importDirection = {
       ) {
         use(edge, edge.type === "ImportExpression");
       } else {
-        all(); // Star re-export or triple-slash reference.
-        if (edge.type === "ExportAllDeclaration" && !typeOnly(edge) && loaders)
-          for (const name of Object.keys(loaders))
-            refuseUse(edge, `\`${name}\``);
+        if (edge.type === "ExportAllDeclaration" && !typeOnly(edge))
+          escape(edge);
+        else all(); // Type-only re-export or triple-slash reference.
       }
       return names;
     };
     // Native loader identity flows from Node's namespace through its
     // projections and lexical bindings. A same-named method on data is data.
     const nativeLoaders = {
-      "node:module": { createRequire: makerUse },
-      "node:process": { getBuiltinModule: builtinUse },
+      "node:module": { self: moduleSelf, methods: { createRequire: makerUse } },
+      "node:process": {
+        self: processSelf,
+        methods: { getBuiltinModule: builtinUse },
+      },
     };
     // The spellings of an edge it reads: `import`, `export … from`,
     // `import()`, the type `import("…").T`, `import x = require("…")`, a
@@ -782,7 +851,8 @@ const importDirection = {
           for (const prop of pattern.properties) {
             if (prop.type !== "Property") continue;
             const name = keyOf(prop.key, prop.computed);
-            if (Object.hasOwn(loaders, name)) refuseUse(prop, `\`${name}\``);
+            if (Object.hasOwn(loaders.methods, name) || loaders.self.has(name))
+              refuseUse(prop, `\`${name}\``);
           }
         }
       },
