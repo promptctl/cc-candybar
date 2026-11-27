@@ -1,3 +1,9 @@
+## [1.244.1](https://github.com/promptctl/cc-candybar/compare/v1.244.0...v1.244.1) (2026-11-27)
+
+### Bug Fixes
+
+* **lint:** enforce module ownership on resolved imports ([#981](https://github.com/promptctl/cc-candybar/issues/981)) ([6dfc458](https://github.com/promptctl/cc-candybar/commit/6dfc458879136a9734d598708f6975003ea6b4ee))
+
 ## [1.244.0](https://github.com/promptctl/cc-candybar/compare/v1.243.1...v1.244.0) (2026-11-27)
 
 ### Features
