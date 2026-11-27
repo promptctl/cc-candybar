@@ -37,6 +37,7 @@ import {
   recordingBootProblem,
   recordingInputProblem,
   recordingOutputProblem,
+  recordingWritesProblem,
 } from "../../src/daemon/recording-privacy";
 import type { WorldState } from "../../src/facts/world-state";
 import { parseFrame, textOf } from "../../src/render/frame";
@@ -735,4 +736,39 @@ test("boot preserves built-in state and layer history and refuses unsupported hi
   });
   expect(oldLayer).toMatch(/run action supplies environment/);
   expect(oldLayer).not.toContain(ACTION_SECRET);
+});
+
+test("recording inspects each end of a Back visit, including visits ahead of the cursor", () => {
+  const visit = [
+    { key: SETTINGS_ANCHOR, from: "private-destination", to: DISCLOSURE_OPEN },
+  ];
+  const restored = {
+    ...BOOT,
+    stored: {
+      ...BOOT.stored,
+      navigation: { [SESSION]: { visits: [visit], cursor: 0 } },
+    },
+  };
+  expect(recordingBootProblem(restored)).toMatch(/unknown origin/);
+  expect(
+    recordingWritesProblem([
+      {
+        store: "navigation",
+        kind: "navigate",
+        key: SESSION,
+        edit: { kind: "visit", changes: visit },
+      },
+    ]),
+  ).toMatch(/unknown origin/);
+  const allowed = [{ ...visit[0]!, from: null }];
+  expect(
+    recordingWritesProblem([
+      {
+        store: "navigation",
+        kind: "navigate",
+        key: SESSION,
+        edit: { kind: "visit", changes: allowed },
+      },
+    ]),
+  ).toBeNull();
 });

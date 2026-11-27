@@ -7,13 +7,14 @@ import type { RendererName } from "./foundations/renderer-name.js";
 import {
   EMPTY_STORED_STATE,
   type StoredState,
+  type LiveSessionState,
   type StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { HostSessionImage, type DurableWrite } from "./host-session-image.js";
 
-export interface SessionCheckpoint {
+export interface SessionCheckpoint<State extends StoredState = StoredState> {
   readonly revision: number;
-  readonly state: StoredState;
+  readonly state: State;
 }
 export interface SessionPersistence {
   register(name: RendererName): void;
@@ -31,7 +32,7 @@ export interface SessionPersistence {
 
 export interface SessionStores {
   load(): readonly StoreReport[];
-  current(name: RendererName): SessionCheckpoint;
+  current(name: RendererName): SessionCheckpoint<LiveSessionState>;
   prepare(
     writes: readonly StoreWrite[],
     published?: (revision: number, writes: readonly StoreWrite[]) => void,
@@ -72,7 +73,7 @@ export class HostSessions implements SessionStores {
       this.prepare(writes, undefined, heard)();
     return seed.reports;
   }
-  current(name: RendererName): SessionCheckpoint {
+  current(name: RendererName): SessionCheckpoint<LiveSessionState> {
     if (!this.image)
       throw new Error("shared session state read before loading");
     if (!this.closed && !this.names.has(name)) {

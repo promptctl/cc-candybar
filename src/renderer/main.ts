@@ -58,6 +58,7 @@ import { floorOf } from "../config/globals-fields.js";
 import { EditTransactions } from "./edit-transaction.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
+import { stageNavigation } from "../renderer-interface/navigation.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
@@ -110,7 +111,7 @@ type ReplyByKind = { [K in CommandKind]: ReplyTo<K> };
 // it: a request moves its session to the newest end, and the turn's writes
 // are what moved since the last drain.
 interface HeldStore {
-  heard(session: SessionId): void;
+  heard?(session: SessionId): void;
   drain(): readonly StoreWrite[];
 }
 type Stores = Readonly<Record<StoreWrite["store"], HeldStore>>;
@@ -269,7 +270,7 @@ export function mainRenderer(
         noteFacts(record, { encoding: context.encoding });
         // Historical wires proposed recency from the renderer. Live stores
         // defer to the host that received the request.
-        for (const store of Object.values(stores)) store.heard(session);
+        for (const store of Object.values(stores)) store.heard?.(session);
         // [LAW:one-source-of-truth] A view cannot observe a new context
         // while it is still bound to the previous origin's config.
         runInAction(() => {
@@ -683,13 +684,20 @@ export function mainRendererOf(
   inputs: RendererBoot,
   identifyCompile?: StateDeps["identifyCompile"],
   capacity: CapacityOwner = "host",
+  sharedNavigation = true,
 ): RendererConstruction {
   const turnLog = new TurnLog();
   return turnLog.during<RendererConstruction>(() => {
     try {
       return {
         kind: "built",
-        renderer: build(inputs, turnLog, identifyCompile, capacity),
+        renderer: build(
+          inputs,
+          turnLog,
+          identifyCompile,
+          capacity,
+          sharedNavigation,
+        ),
       };
     } catch (thrown) {
       return { kind: "refused", failure: rendererFailureOf(thrown) };
@@ -702,6 +710,7 @@ function build(
   turnLog: TurnLog,
   identifyCompile: StateDeps["identifyCompile"],
   capacity: CapacityOwner,
+  sharedNavigation: boolean,
 ): SessionRenderer {
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
@@ -732,7 +741,10 @@ function build(
   const actFailed = (session: SessionId, reason: string): void =>
     holdClickError(sessionState, session, reason, now());
   const acts = new ActsOnTheirWay(mint, actFailed);
-  const navigationHistory = new NavigationHistory();
+  const navigationHistory = new NavigationHistory(
+    sharedNavigation,
+    inputs.stored.navigation,
+  );
   const worldStates = new WorldStates();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
@@ -865,12 +877,17 @@ function build(
       configWrites,
       sessionStats: () => store.stats(),
     },
-    { "session-state": store, "settings-history": settingsHistory },
+    {
+      "session-state": store,
+      "settings-history": settingsHistory,
+      navigation: navigationHistory,
+    },
   );
   let revision = inputs.sessionRevision;
   return {
     answer: (input) => {
       settingsHistory.beginInput();
+      navigationHistory.beginInput();
       return core.answer(input);
     },
     observe: (commit) =>
@@ -892,15 +909,21 @@ function build(
             staged.set(write.key, next);
             histories.push(next);
           }
+          const navigation = stageNavigation(commit.writes, (key) =>
+            navigationHistory.beforeCommit(key),
+          );
           return feeds.observe(() =>
             runInAction(() => {
               let at = 0;
               for (const write of commit.writes) {
-                if (write.store === "session-state") store.observe(write);
+                if (write.store === "navigation") continue;
+                else if (write.store === "session-state") store.observe(write);
                 else if (write.kind === "heard")
                   settingsHistory.observeHearing(write.key);
                 else settingsHistory.observe(write.key, histories[at++]!);
               }
+              for (const [key, timeline] of navigation)
+                navigationHistory.observe(key, timeline);
               revision = commit.revision;
             }),
           );

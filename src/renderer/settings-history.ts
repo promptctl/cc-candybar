@@ -29,6 +29,7 @@
 // publishes none of it. Private drafts use the same journal inside the edit.
 
 import { observable, runInAction } from "mobx";
+import type { SessionKeyChange } from "../renderer-interface/session-state.js";
 import type { DaemonLogger } from "../utils/logger";
 import { recordingView } from "./session-state";
 import { type SessionStateRW } from "../renderer-interface/session-state";
@@ -56,7 +57,7 @@ import { requireLayerText, type ConfigWrites } from "./config-writes.js";
 import { contentOfText, type LayerContent } from "../config/config-snapshot.js";
 import type {
   StoredState,
-  StoreWrite,
+  ProfileWrite,
 } from "../renderer-interface/stored-state.js";
 import { digestOf } from "../utils/plain.js";
 import {
@@ -115,9 +116,12 @@ export interface Journal {
   undo(sessionId: SessionId): Step;
   redo(sessionId: SessionId): Step;
   writes(sessionId: SessionId): ReadonlyMap<string, string | null>;
+  // A menu gesture opens its visit partway through a compound click. Only
+  // keys written by that click can differ from this point when it ends.
+  changesSince(sessionId: SessionId): () => readonly SessionKeyChange[];
   // The host can take these decisions with the guarded file batch. Reading
   // them publishes neither the picks nor the history to the local view.
-  proposed(): readonly StoreWrite[];
+  proposed(): readonly ProfileWrite[];
   // [LAW:no-ambient-temporal-coupling] The session writes it landed, handed
   // back as a value, so no reader asks for them after they are gone.
   commit(): ClickWrites;
@@ -168,9 +172,9 @@ export class SettingsHistory {
     if (this.owner !== "private") this.moved.heard(sessionId);
   }
 
-  drain(): StoreWrite[] {
+  drain(): ProfileWrite[] {
     const writes = this.moved.drain(
-      (key, moved): StoreWrite =>
+      (key, moved): ProfileWrite =>
         moved === "heard"
           ? { kind: "heard", store: "settings-history", key }
           : {
@@ -282,9 +286,22 @@ export class SettingsHistory {
     return {
       sessionState,
       writes: held.writes,
+      changesSince: (session) => {
+        const first = new Map(held.writes(session));
+        return () => {
+          const changes: SessionKeyChange[] = [];
+          for (const [key, to] of held.writes(session)) {
+            const from = first.has(key)
+              ? first.get(key)!
+              : this.sessionState.get(session, key);
+            if (from !== to) changes.push({ key, from, to });
+          }
+          return changes;
+        };
+      },
       proposed: () => {
         step();
-        const writes: StoreWrite[] = [];
+        const writes: ProfileWrite[] = [];
         for (const [key, picks] of held.entries) {
           const changes = [...picks].filter(
             ([k, value]) => this.sessionState.get(key, k) !== value,

@@ -7,6 +7,12 @@ import {
   HistoryIndex,
   MAX_PICK_SESSIONS,
 } from "../renderer-interface/session-capacity.js";
+import {
+  EMPTY_TIMELINE,
+  MAX_NAVIGATION_SESSIONS,
+  stageNavigation,
+  type Timeline,
+} from "../renderer-interface/navigation.js";
 import { RecencyMap } from "../utils/recency.js";
 import {
   durableHistory,
@@ -21,7 +27,9 @@ import {
 } from "../renderer-interface/history-storage.js";
 import {
   durablePickValue,
-  isStoreWrite,
+  isProfileWrite,
+  type ProfileWrite,
+  type LiveSessionState,
   type StoreWrite,
   type StoredState,
 } from "../renderer-interface/stored-state.js";
@@ -36,7 +44,7 @@ interface Cut {
   readonly clearFuture: boolean;
 }
 export type DurableEdit = HistoryEdit | Cut;
-export type DurableWrite = StoreWrite<DurableEdit>;
+export type DurableWrite = ProfileWrite<DurableEdit>;
 
 // [LAW:parse-dont-validate] A valid checksum establishes the recorded bytes.
 // Admit only decisions this build knows how to apply to its recovered state.
@@ -50,7 +58,7 @@ export function durableWritesOf(raw: unknown): readonly DurableWrite[] {
       count(e.past) &&
       count(e.future) &&
       typeof e.clearFuture === "boolean");
-  if (!Array.isArray(raw) || !raw.every((v) => isStoreWrite(v, edit)))
+  if (!Array.isArray(raw) || !raw.every((v) => isProfileWrite(v, edit)))
     throw new Error("invalid durable session changes");
   return raw;
 }
@@ -119,6 +127,7 @@ function publicEdits(
 export class HostSessionImage {
   private readonly picks = new RecencyMap<SessionId, Map<string, string>>();
   private readonly histories: HistoryIndex;
+  private readonly navigation = new RecencyMap<SessionId, Timeline>();
   constructor(seed: StoredState, purpose: "live" | "recovery" = "live") {
     this.histories = new HistoryIndex(purpose === "live");
     for (const [id, picks] of Object.entries(seed.sessions))
@@ -127,7 +136,9 @@ export class HostSessionImage {
       this.setHistory(id as SessionId, history);
   }
 
-  snapshot(scope: "live" | "durable"): StoredState {
+  snapshot(scope: "live"): LiveSessionState;
+  snapshot(scope: "durable"): StoredState;
+  snapshot(scope: "live" | "durable"): LiveSessionState {
     const sessions = new Map<SessionId, Readonly<Record<string, string>>>();
     for (const [id, values] of this.picks) {
       if (scope === "live") sessions.set(id, Object.fromEntries(values));
@@ -146,10 +157,14 @@ export class HostSessionImage {
     return {
       sessions: Object.fromEntries(sessions),
       history: Object.fromEntries(history),
+      ...(scope === "live" &&
+        this.navigation.size > 0 && {
+          navigation: Object.fromEntries(this.navigation),
+        }),
     };
   }
 
-  private pick(write: Exclude<StoreWrite, { kind: "steps" }>): void {
+  private pick(write: Exclude<ProfileWrite, { kind: "steps" }>): void {
     if (write.kind === "heard") {
       (write.store === "session-state" ? this.picks : this.histories).touch(
         write.key,
@@ -211,6 +226,11 @@ export class HostSessionImage {
       writes.push(steps);
       durable.push({ ...steps, edits: publicEdits(prior, edit, next) });
     }
+    while (this.navigation.size > MAX_NAVIGATION_SESSIONS) {
+      const key = this.navigation.oldest!;
+      this.navigation.delete(key);
+      writes.push({ kind: "drop", store: "navigation", key });
+    }
     return { writes, durable };
   }
 
@@ -221,6 +241,10 @@ export class HostSessionImage {
     // One bad peer message cannot land half a transaction.
     const staged = new Map<SessionId, SessionHistory>();
     const histories: Array<{ next: SessionHistory; edits: DurableEdit[] }> = [];
+    const navigation = stageNavigation(
+      writes,
+      (key) => this.navigation.get(key) ?? EMPTY_TIMELINE,
+    );
     for (const write of writes) {
       if (write.kind !== "steps") continue;
       let prior =
@@ -235,7 +259,7 @@ export class HostSessionImage {
       histories.push({ next: prior, edits });
     }
     return () => {
-      const durable = this.apply(writes, histories);
+      const durable = this.apply(writes, histories, navigation);
       const expired = this.bound();
       if (!expired.writes.length) return { writes, durable };
       return {
@@ -248,10 +272,12 @@ export class HostSessionImage {
   private apply(
     writes: readonly StoreWrite[],
     histories: ReadonlyArray<{ next: SessionHistory; edits: DurableEdit[] }>,
+    navigation: ReadonlyMap<SessionId, Timeline>,
   ): DurableWrite[] {
     let at = 0;
     const durable: DurableWrite[] = [];
     for (const write of writes) {
+      if (write.store === "navigation") continue;
       const heard = {
         kind: "heard",
         store: write.store,
@@ -282,6 +308,10 @@ export class HostSessionImage {
         this.pick(write);
         durable.push(write);
       }
+    }
+    for (const [key, timeline] of navigation) {
+      if (timeline.visits.length) this.navigation.set(key, timeline);
+      else this.navigation.delete(key);
     }
     return durable;
   }

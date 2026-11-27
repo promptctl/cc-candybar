@@ -13,8 +13,7 @@ import { ZonedCalendar } from "../utils/calendar.js";
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import { compareStructural } from "mobx";
-import { isStoreWrite, storedStateOf } from "./stored-state.js";
-import { isHistoryEdit } from "./history-storage.js";
+import { isStoreWrite, liveSessionStateOf } from "./stored-state.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import {
   CrossedFailure,
@@ -38,7 +37,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 30;
+export const RENDERER_WIRE_VERSION = 31;
 export const SESSION_DELIVERY_LIMIT = {
   revisions: 256,
   bytes: 1024 * 1024,
@@ -57,7 +56,7 @@ function isSessionCommit(raw: unknown): raw is SessionCommit {
     Number.isFinite(raw.tick) &&
     Array.isArray(raw.writes) &&
     raw.writes.length > 0 &&
-    raw.writes.every((w) => isStoreWrite(w, isHistoryEdit))
+    raw.writes.every(isStoreWrite)
   );
 }
 
@@ -71,8 +70,9 @@ type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 // capacity edits in a host commit may affect sessions the peer never saw.
 function isRendererWrite(raw: unknown) {
   return (
-    isStoreWrite(raw, isHistoryEdit) &&
+    isStoreWrite(raw) &&
     (raw.kind === "patch" ||
+      raw.kind === "navigate" ||
       (raw.kind === "steps" &&
         raw.edits.length > 0 &&
         raw.edits.every(
@@ -170,7 +170,7 @@ export function rendererBootFrom(raw: unknown): RendererBoot {
     locations: { home, configHome, dataHome, dataDirs },
     region: { locale, timeZone, integers },
     memoryLimitBytes,
-    stored: storedStateOf(boot.stored),
+    stored: liveSessionStateOf(boot.stored),
   };
 }
 

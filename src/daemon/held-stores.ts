@@ -13,7 +13,7 @@ import {
 import { runEach, throwAll } from "../utils/run-each.js";
 import type {
   StoredState,
-  StoreWrite,
+  ProfileWrite,
 } from "../renderer-interface/stored-state.js";
 import { storedPicksAfter } from "../renderer-interface/stored-state.js";
 import type { Timekeeper } from "../time.js";
@@ -100,7 +100,7 @@ export class HeldStores {
   // taking says it on every bar; a write behind says its failure where it
   // lands. The renderer holds the refused write too, and the store's next
   // write saves the copy held here whole.
-  take(writes: readonly StoreWrite[]): void {
+  take(writes: readonly ProfileWrite[]): void {
     const sessions: Array<HeldChange<SessionPicks>> = [];
     const history: Array<HeldChange<SessionHistory>> = [];
     for (const write of writes)

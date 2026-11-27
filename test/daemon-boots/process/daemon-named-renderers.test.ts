@@ -188,6 +188,83 @@ test("live renderer processes observe a signed click and one undo step across a 
   }
 });
 
+test("peers and a replacement share Back visits and the cursor after a guarded menu gesture", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-peer-back", builtDaemon);
+  try {
+    const dir = fs.mkdtempSync(path.join(daemon.stateDir, "project-"));
+    const config = path.join(dir, "bar.json5");
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { padding: 1 },
+        actions: {
+          open: { set: "nav.menu", to: "open" },
+          close: { set: "nav.menu", to: "closed" },
+          back: { back: true },
+          wider: { persist: "padding", by: 1, min: 0, max: 5, layer: "user" },
+          enter: { do: ["open", "wider"] },
+        },
+        variables: {
+          menu: { kind: "state", key: "nav.menu", default: "closed" },
+          depth: {
+            kind: "input",
+            path: "navigation.back",
+            type: "number",
+            default: 0,
+          },
+        },
+        segments: {
+          nav: {
+            template:
+              'menu={{ .menu }} depth={{ .depth }} {{ action "enter" "ENTER" }} {{ action "close" "CLOSE" }} {{ action "back" "BACK" }}',
+          },
+        },
+        root: { h: ["nav"] },
+      }),
+    );
+    const sid = sessionIdOf("back-across-peers");
+    const draw = (named: boolean) =>
+      frameRequest(daemon.sockPath, {
+        ...renderBody(sid, dir, {}, ["cc-candybar", "--config-only", config]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: worktreeBuilt, source: null },
+        }),
+      });
+    const press = async (named: boolean, label: string) => {
+      const bar = await draw(named);
+      const control = linksOf(bar).find((link) => link.text === label);
+      if (!control) throw new Error("missing " + label + " in " + textOf(bar));
+      await click(daemon.sockPath, control.url);
+    };
+    expect(textOf(await draw(true))).toContain("menu=closed depth=0");
+    await press(false, "ENTER");
+    expect(textOf(await draw(true))).toContain("menu=open depth=1");
+    await press(true, "CLOSE");
+    expect(textOf(await draw(false))).toContain("menu=closed depth=2");
+    await press(false, "BACK");
+    expect(textOf(await draw(true))).toContain("menu=open depth=1");
+    const log = () =>
+      fs.readFileSync(path.join(daemon.stateDir, "daemon.log"), "utf8");
+    const pid = /renderer worktree\[1\] started pid=(\d+)/.exec(log());
+    if (!pid) throw new Error("the named renderer did not start");
+    process.kill(Number(pid[1]), "SIGKILL");
+    await until(
+      () => /renderer worktree\[2\] started pid=/.test(log()),
+      "the replacement renderer starts",
+      8000,
+    );
+    expect(textOf(await draw(true))).toContain("menu=open depth=1");
+    await press(true, "BACK");
+    expect(textOf(await draw(false))).toContain("menu=closed depth=0");
+    expect(JSON5.parse(fs.readFileSync(config, "utf8")).globals.padding).toBe(
+      2,
+    );
+  } finally {
+    await daemon.cleanup();
+  }
+});
+
 test("a held file control stays bound to its displayed origin across config and peer switches", async () => {
   const daemon = await spawnIsolatedDaemon("ccb-pinned-origin", builtDaemon);
   try {

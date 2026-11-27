@@ -3,6 +3,12 @@
 
 import type { SessionId } from "../daemon/foundations/session-id";
 
+export interface SessionKeyChange {
+  readonly key: string;
+  readonly from: string | null;
+  readonly to: string | null;
+}
+
 export interface SessionStateReader {
   get(sessionId: SessionId, key: string): string | null;
   // The store's revision when this session's state last changed — a write

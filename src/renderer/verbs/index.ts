@@ -1682,7 +1682,7 @@ function journaled<C extends DaemonContext>(
   // edit holds its own Back steps, which end with it; outside one, Back sees
   // the journal, which no edit-mode key reaches.
   const navigation = (edit?.navigation ?? ctx.navigation).begin(
-    journal.sessionState,
+    journal,
     sessionState.setBatch,
   );
   try {
@@ -1726,14 +1726,14 @@ function journaled<C extends DaemonContext>(
     const failed: unknown[] = [];
     let visits: EndedVisits = new Map();
     try {
-      visits = navigation.commit();
+      visits = navigation.commit(sessionCommitted && edit === undefined);
     } catch (e) {
       failed.push(e);
     }
     // The one way an edit ends: its Back steps land outside it, and its view
     // is redrawn without it.
     const end = (): void => {
-      ctx.navigation.landOutsideEdit(visits);
+      ctx.navigation.landOutsideEdit(visits, sessionCommitted);
       ctx.edits.close(sid);
       ctx.editViewChanged(sid);
     };
@@ -1777,12 +1777,14 @@ function journaled<C extends DaemonContext>(
     throwAll(failed);
   };
   try {
-    ctx.configWrites.seal(
-      effects,
-      sid,
-      consequence,
-      () => (saved ?? (edit === undefined ? journal : null))?.proposed() ?? [],
-    );
+    ctx.configWrites.seal(effects, sid, consequence, () => [
+      ...((saved ?? (edit === undefined ? journal : null))?.proposed() ?? []),
+      ...(edit === undefined
+        ? navigation.proposed()
+        : saved !== null
+          ? ctx.navigation.proposedOutside(navigation.visits())
+          : []),
+    ]);
   } catch (e) {
     failures.push(e);
   }

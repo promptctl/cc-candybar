@@ -271,6 +271,7 @@ export interface RangeParams {
 // renders and by no other the daemon happens to hold.
 export interface Gate {
   validate(key: string, rawValue: string): ValidateResult;
+  hasKey(key: string): boolean;
   listKeys(): readonly string[];
   rangeParamsFor(key: string): RangeParams | null;
 }
@@ -343,6 +344,7 @@ function createGate(
         };
       return validator(rawValue);
     },
+    hasKey: (key) => validators.has(key),
     listKeys: () => [...validators.keys()],
     rangeParamsFor: (key) => ranges.get(key) ?? null,
   };

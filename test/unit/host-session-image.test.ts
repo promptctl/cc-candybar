@@ -131,7 +131,7 @@ test("one host revision evicts the least recently heard pick and history across 
       edits: [{ kind: "clear" }],
     },
   ]);
-  peer.recover(writes);
+  peer.prepare(writes)();
   disk.recover(durable);
   expect(peer.snapshot("live")).toEqual(host.snapshot("live"));
   expect(disk.snapshot("live")).toEqual(host.snapshot("durable"));
@@ -167,4 +167,48 @@ test("a private step can trim the oldest public step without reaching disk", () 
   disk.recover(durable);
   expect(disk.snapshot("live")).toEqual(EMPTY_STORED_STATE);
   expect(host.snapshot("durable")).toEqual(EMPTY_STORED_STATE);
+});
+
+test("Back history is live across peers, its cap drops the oldest session, and a stale cursor cannot partly commit a pick", () => {
+  const host = new HostSessionImage(EMPTY_STORED_STATE);
+  const keys = Array.from({ length: 33 }, (_, i) => sessionIdOf("nav-" + i));
+  const visit = (key: typeof a): StoreWrite => ({
+    store: "navigation",
+    kind: "navigate",
+    key,
+    edit: {
+      kind: "visit",
+      changes: [{ key: "custom.menu", from: null, to: "private-destination" }],
+    },
+  });
+  for (const key of keys.slice(0, 32)) {
+    expect(host.prepare([visit(key)])().durable).toEqual([]);
+  }
+  const newest = keys.at(-1)!;
+  const { writes, durable } = host.prepare([visit(newest)])();
+  expect(writes).toEqual([
+    visit(newest),
+    { store: "navigation", kind: "drop", key: keys[0] },
+  ]);
+  expect(durable).toEqual([]);
+  expect(Object.keys(host.snapshot("live").navigation!)).toEqual(keys.slice(1));
+  expect(host.snapshot("durable")).toEqual(EMPTY_STORED_STATE);
+  expect(() =>
+    host.prepare([
+      {
+        store: "session-state",
+        kind: "patch",
+        key: newest,
+        changes: { padding: "3" },
+      },
+      {
+        store: "navigation",
+        kind: "navigate",
+        key: newest,
+        edit: { kind: "back", at: 2, discard: [] },
+      },
+    ]),
+  ).toThrow(/expected cursor 2/);
+  expect(host.snapshot("live").sessions).toEqual({});
+  expect(host.snapshot("live").navigation![newest]?.cursor).toBe(1);
 });

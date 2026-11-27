@@ -7,7 +7,7 @@ import type {
 } from "../renderer-interface/session-state";
 import type {
   StoredState,
-  StoreWrite,
+  ProfileWrite,
 } from "../renderer-interface/stored-state";
 import { RecencyMap } from "../utils/recency";
 import { MAX_PICK_SESSIONS } from "../renderer-interface/session-capacity.js";
@@ -170,7 +170,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // has already admitted. Updating its read projection authors no writes.
   observe(
     write:
-      | Extract<StoreWrite, { store: "session-state" }>
+      | Extract<ProfileWrite, { store: "session-state" }>
       | { kind: "heard"; key: SessionId },
   ): void {
     if (write.kind === "heard") {
@@ -232,8 +232,8 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // [LAW:dataflow-not-control-flow] Coalesce writes to a key before crossing
   // the wire. Recency is the order of each session's last move, even when
   // several sessions were edited and one was heard again.
-  drain(): StoreWrite[] {
-    const writes = this.moved.drain((key, move): StoreWrite => {
+  drain(): ProfileWrite[] {
+    const writes = this.moved.drain((key, move): ProfileWrite => {
       if (move === "heard")
         return { kind: "heard", store: "session-state", key };
       if (this.maxSessions !== "host" && !this.sessions.has(key))

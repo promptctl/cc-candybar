@@ -263,7 +263,7 @@ function historicalOutputs(
     }),
     stored: output.stored.map((write) => {
       if (wireVersion >= 26) return write;
-      if (write.kind === "heard") return write;
+      if (write.store === "navigation" || write.kind === "heard") return write;
       if (write.store === "settings-history") {
         const next = historyAfterEdits(histories.get(write.key), write.edits);
         if (next === null) histories.delete(write.key);
@@ -337,6 +337,7 @@ function constructionOf(entry: Record<string, unknown>): {
     boot,
     legacyRegion ? legacyCompileKey : undefined,
     wireVersion < 29 ? "renderer" : "host",
+    wireVersion >= 31,
   );
   if (built.kind === "refused")
     return {

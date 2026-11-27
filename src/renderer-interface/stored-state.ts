@@ -9,6 +9,12 @@ import {
   type SessionId,
 } from "../daemon/foundations/session-id";
 import { isPlainObject } from "../config/loader/validate-core";
+import {
+  isNavigationEdit,
+  parseTimeline,
+  type NavigationWrite,
+  type Timeline,
+} from "./navigation.js";
 import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
 import { kept, type Kept } from "../daemon/foundations/stored-file";
@@ -18,6 +24,7 @@ import { CLICK_ERROR_KEY, isMenuStateKey } from "../config/reserved-names";
 import { isClickErrorRecord } from "../daemon/foundations/click-error";
 import {
   parseSessionHistory,
+  isHistoryEdit,
   type HistoryState,
   type HistoryEdit,
 } from "./history-storage";
@@ -27,6 +34,12 @@ import {
 export interface StoredState {
   readonly sessions: Readonly<Record<SessionId, SessionPicks>>;
   readonly history: HistoryState;
+}
+
+// [LAW:types-are-the-program] A peer boot also carries the host's live
+// navigation. The durable profile has no field that can store its visits.
+export interface LiveSessionState extends StoredState {
+  readonly navigation?: Readonly<Record<SessionId, Timeline>>;
 }
 
 export type SessionPicks = Readonly<Record<string, string>>;
@@ -95,31 +108,50 @@ export function withoutRetiredKeys(
 
 // [LAW:parse-dont-validate] A replacement can run a different build. A boot
 // admits the complete profile or gives the host a reason it could not start.
-export function storedStateOf(raw: unknown): StoredState {
+function profileFields(raw: unknown) {
   if (!isPlainObject(raw))
     throw new Error("renderer boot has no stored profile");
-  const sessionsOf = <V>(
-    name: keyof StoredState,
-    parse: (value: unknown) => Asked<V>,
-  ): Readonly<Record<SessionId, V>> => {
-    const entries = raw[name];
-    if (!isPlainObject(entries))
-      throw new Error(`renderer boot stored.${name} must be an object`);
-    return Object.fromEntries(
-      Object.entries(entries).map(([key, value]) => {
-        const session = sessionIdOf(key);
-        const result = parse(value);
-        if (result.kind === "failed")
-          throw new Error(
-            `renderer boot stored.${name} entry ${session} ${result.reason}`,
-          );
-        return [session, result.value];
-      }),
-    );
-  };
+  return raw;
+}
+
+function sessionsOf<V>(
+  entries: unknown,
+  name: keyof LiveSessionState,
+  parse: (value: unknown) => Asked<V>,
+): Readonly<Record<SessionId, V>> {
+  if (!isPlainObject(entries))
+    throw new Error(`renderer boot stored.${name} must be an object`);
+  return Object.fromEntries(
+    Object.entries(entries).map(([key, value]) => {
+      const session = sessionIdOf(key);
+      const result = parse(value);
+      if (result.kind === "failed")
+        throw new Error(
+          `renderer boot stored.${name} entry ${session} ${result.reason}`,
+        );
+      return [session, result.value];
+    }),
+  );
+}
+
+function profileOf(fields: Record<string, unknown>): StoredState {
   return {
-    sessions: sessionsOf("sessions", parseSessionPicks),
-    history: sessionsOf("history", parseSessionHistory),
+    sessions: sessionsOf(fields.sessions, "sessions", parseSessionPicks),
+    history: sessionsOf(fields.history, "history", parseSessionHistory),
+  };
+}
+
+export function storedStateOf(raw: unknown): StoredState {
+  return profileOf(profileFields(raw));
+}
+
+export function liveSessionStateOf(raw: unknown): LiveSessionState {
+  const fields = profileFields(raw);
+  return {
+    ...profileOf(fields),
+    ...(fields.navigation !== undefined && {
+      navigation: sessionsOf(fields.navigation, "navigation", parseTimeline),
+    }),
   };
 }
 
@@ -172,7 +204,7 @@ export function storedPicksAfter(
   return Object.keys(picks).length ? picks : null;
 }
 
-export type StoreWrite<Edit = HistoryEdit> =
+export type ProfileWrite<Edit = HistoryEdit> =
   | PickWrite
   | {
       readonly kind: "steps";
@@ -188,10 +220,10 @@ export type StoreWrite<Edit = HistoryEdit> =
 
 // [LAW:parse-dont-validate] The process wire and the durable journal share
 // the pick vocabulary. Only a journal also accepts privacy-preserving cuts.
-export function isStoreWrite<E>(
+export function isProfileWrite<E>(
   v: unknown,
   edit: (raw: unknown) => raw is E,
-): v is StoreWrite<E> {
+): v is ProfileWrite<E> {
   if (!isPlainObject(v) || !parseSessionId(v.key).ok) return false;
   const fields = Object.keys(v).length;
   if (v.store === "settings-history")
@@ -214,7 +246,22 @@ export function isStoreWrite<E>(
   );
 }
 
+export type StoreWrite = ProfileWrite | NavigationWrite;
+
+export function isStoreWrite(raw: unknown): raw is StoreWrite {
+  if (!isPlainObject(raw) || raw.store !== "navigation")
+    return isProfileWrite(raw, isHistoryEdit);
+  return (
+    parseSessionId(raw.key).ok &&
+    (raw.kind === "drop"
+      ? Object.keys(raw).length === 3
+      : raw.kind === "navigate" &&
+        Object.keys(raw).length === 4 &&
+        isNavigationEdit(raw.edit))
+  );
+}
+
 // [LAW:types-are-the-program] Plain data, so a boot and a turn's output carry
 // them as they are.
-export const STORED_CROSSES: Crosses<StoredState> = true;
+export const STORED_CROSSES: Crosses<LiveSessionState> = true;
 export const WRITES_CROSS: Crosses<StoreWrite> = true;

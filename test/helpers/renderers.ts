@@ -46,6 +46,7 @@ export function eventRenderer(
 // nothing.
 const noneStored = { heard: (): void => {}, drain: (): readonly [] => [] };
 export const NOTHING_STORED = {
+  navigation: noneStored,
   "session-state": noneStored,
   "settings-history": noneStored,
 };

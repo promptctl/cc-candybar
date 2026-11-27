@@ -1,3 +1,4 @@
+import type { Visit } from "../renderer-interface/navigation.js";
 import { VERB_SET_STATE } from "../click/wire.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { DrawnEffect } from "../render/drawn-link.js";
@@ -320,20 +321,44 @@ export function recordingOutputProblem(
   return null;
 }
 
+function visitProblem(
+  visit: Visit,
+  offered?: (key: string, value: string | null) => boolean,
+): string | null {
+  for (const { key, from, to } of visit) {
+    // A drawn authored value proves the key's name. Only that value and
+    // absence at the other end of its visit have known provenance.
+    const publicValue = (value: string | null) =>
+      knownPick(key, value) || offered?.(key, value) === true;
+    if (
+      from === to ||
+      (from !== null && !publicValue(from)) ||
+      (to !== null && !publicValue(to))
+    )
+      return UNKNOWN_PROFILE;
+  }
+  return null;
+}
+
 export function recordingWritesProblem(
   writes: readonly StoreWrite[],
   controls?: RecordingControls,
 ): string | null {
   for (const write of writes) {
     const problem =
-      write.kind === "patch"
-        ? picksProblem(
-            write.changes,
+      write.kind === "navigate" && write.edit.kind === "visit"
+        ? visitProblem(
+            write.edit.changes,
             (key, value) => controls?.offers(write.key, key, value) === true,
           )
-        : write.kind === "steps"
-          ? editsProblem(write.edits)
-          : null;
+        : write.kind === "patch"
+          ? picksProblem(
+              write.changes,
+              (key, value) => controls?.offers(write.key, key, value) === true,
+            )
+          : write.kind === "steps"
+            ? editsProblem(write.edits)
+            : null;
     if (problem !== null) return problem;
   }
   return null;
@@ -435,6 +460,9 @@ function editsProblem(edits: readonly HistoryEdit[]): string | null {
 // [LAW:single-enforcer] Starting a capture and appending a turn inspect the
 // same state, including names of erased picks and both sides of an undo.
 export function recordingBootProblem({ stored }: RendererBoot): string | null {
+  for (const timeline of Object.values(stored.navigation ?? {}))
+    for (const visit of timeline.visits)
+      if (visitProblem(visit) !== null) return UNKNOWN_PROFILE;
   for (const picks of Object.values(stored.sessions)) {
     const problem = picksProblem(picks);
     if (problem !== null) return problem;

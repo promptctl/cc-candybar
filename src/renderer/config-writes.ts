@@ -3,8 +3,8 @@
 // renderer writes, and with them its answers to the trust book, which decide
 // which config a session renders. A click reads and writes only the layers of
 // its session's origin. The first guarded effect carries the picks and undo
-// changes that the host publishes with a successful file batch. The renderer
-// keeps its local draft and navigation work until the receipt tells it how
+// changes and Back visits that the host publishes with a successful file batch.
+// The renderer keeps its local draft until the receipt tells it how
 // the file batch landed. Receipts follow the config reload in the same slot.
 
 import { diffChanges } from "../config/config-changes.js";

@@ -88,6 +88,7 @@ function rig(
       configWrites: { close: () => fault.closeJournal?.(say) },
     },
     {
+      navigation: { drain: () => [] },
       "session-state": {
         heard: (session) => state.heard(session),
         drain: () => {
