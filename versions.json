@@ -4,15 +4,22 @@
     {
       "version": "pr-982",
       "ref": "refs/pull/982/merge",
-      "sha": "26391f36ad4ce72c6f36cbf7d5a57168256e1736",
-      "timestamp": "2026-11-27T05:30:41.491Z",
+      "sha": "e63fe8333a5a89a6d7a54735927cad3edbb1982e",
+      "timestamp": "2026-11-27T05:32:38.182Z",
       "commits": [
         {
-          "sha": "26391f36ad4ce72c6f36cbf7d5a57168256e1736",
+          "sha": "e63fe8333a5a89a6d7a54735927cad3edbb1982e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T05:29:37Z",
-          "message": "Merge 699e5c6fec94fb0fba56df44c14acdca99256823 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+          "timestamp": "2026-11-27T05:31:27Z",
+          "message": "Merge b22d3f5e642a2b99ae36ae88d34834c5efbd7448 into f0abfe24617b4d61ff9da09fa07d246e524d18fe\n"
+        },
+        {
+          "sha": "b22d3f5e642a2b99ae36ae88d34834c5efbd7448",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T22:31:15-07:00",
+          "message": "fix(tooling): check the working directory through both source gates\n"
         },
         {
           "sha": "699e5c6fec94fb0fba56df44c14acdca99256823",
