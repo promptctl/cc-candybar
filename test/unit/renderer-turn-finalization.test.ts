@@ -553,3 +553,13 @@ test("native exceptions and uninspectable objects keep an answer", () => {
   const re = Object.defineProperty(/foo/g, "source", { get() { throw new Error("getter"); } });
   expect(rendererFailureOf(re).detail).toBe("/foo/g");
 });
+
+test("each aggregate slot counts against the diagnostic budget", () => {
+  const values = new Array(10000);
+  for (let i = 0; i < values.length; i++)
+    Object.defineProperty(values, i, { get() { throw new Error("unread"); } });
+  const descriptor = jest.fn(Reflect.getOwnPropertyDescriptor);
+  const error = Object.assign(new AggregateError([]), { errors: new Proxy(values, { getOwnPropertyDescriptor: descriptor }) });
+  expect(rendererFailureOf(error).detail).toContain("…");
+  expect(descriptor.mock.calls.length).toBeLessThanOrEqual(100);
+});

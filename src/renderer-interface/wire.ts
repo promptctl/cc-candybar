@@ -480,26 +480,21 @@ export function serveRenderer(deps: {
     send({ kind: "output", n, output: { ...rest, wake, ...updates } });
     sent = subscriptions;
   };
+  const answerInput = async (input: EventInput) => {
+    if (
+      input.event.kind === "click" &&
+      (typeof input.event.placementSeed !== "string" ||
+        !input.event.placementSeed)
+    )
+      throw new Error("renderer click has no placement seed");
+    return renderer.answer(input);
+  };
   return (line) => {
     switch (line.kind) {
       case "input":
-        if (
-          line.input.event.kind === "click" &&
-          (typeof line.input.event.placementSeed !== "string" ||
-            !line.input.event.placementSeed)
-        ) {
-          send({
-            kind: "rejected",
-            n: line.n,
-            failure: rendererFailureOf(
-              new Error("renderer click has no placement seed"),
-            ),
-          });
-          return;
-        }
         // [LAW:no-silent-failure] An input whose answer rejected is answered
         // as that input's failure, never left to end the process.
-        void renderer.answer(line.input).then(
+        void answerInput(line.input).then(
           (output) => answer(line.n, output),
           (thrown: unknown) =>
             send({

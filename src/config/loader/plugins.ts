@@ -43,7 +43,7 @@ import {
 import { refuseMintedKeys } from "./authored-keys.js";
 import { checkMenuDecls } from "./menu-synth.js";
 import { resolveFrom, resolveUserPath } from "../../utils/user-path.js";
-import { type Checkout } from "../../utils/git-root.js";
+import type { Checkout } from "../../utils/git-root.js";
 import type { PluginFile } from "../config-snapshot.js";
 import {
   isPlainObject,

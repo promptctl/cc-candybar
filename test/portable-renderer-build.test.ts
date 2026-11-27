@@ -21,6 +21,13 @@ test("the portable build rejects static and computed dependencies inside a packa
         { encoding: "utf8" });
     };
     expect(build("export const mainRendererOf = () => 1;").status).toBe(0);
+    const entry = path.join(src, "main.ts");
+    const pkgExport = fs.readFileSync(entry, "utf8");
+    fs.writeFileSync(entry, 'import type { Stats } from "node:fs";\n' + pkgExport);
+    expect(build("export const mainRendererOf = () => 1;").status).toBe(0);
+    fs.writeFileSync(entry, 'import { readFileSync } from "node:fs";\n' + pkgExport);
+    expect(build("export const mainRendererOf = () => 1;").stderr).toContain("Portable renderer imports node:fs");
+    fs.writeFileSync(entry, pkgExport);
     for (const [body, reason] of [
       ['import "node:fs"; export const mainRendererOf = () => 1;', "Portable renderer imports node:fs"],
       ['export const mainRendererOf = () => import("fs/promises");', "Portable renderer imports fs/promises"],

@@ -95,9 +95,9 @@ export function describeValue(
           : undefined;
       if (Array.isArray(errors)) {
         for (let i = 0; i < errors.length && remaining > 0; i++) {
+          remaining--;
           const field = Object.getOwnPropertyDescriptor(errors, i);
           if (field) lines.push(`errors[${i}]: ${descriptorText(field)}`);
-          else remaining--;
         }
       }
       for (const key of Object.keys(item)) {

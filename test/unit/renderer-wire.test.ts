@@ -415,6 +415,17 @@ describe("the renderer over lines", () => {
     ]);
   });
 
+  test("a malformed input rejects just its turn and the worker answers the next ping", async () => {
+    const output: RendererLine[] = [];
+    const receive = serveRenderer({ renderer: talkingRenderer(), send: line => output.push(line),
+      memory: () => ({ rss: 1, heapTotal: 1 }), heapSnapshot: async () => {} });
+    receive({ kind: "input", n: 15, input: { kind: "event" } } as HostLine);
+    await Promise.resolve();
+    expect(output).toEqual([expect.objectContaining({ kind: "rejected", n: 15 })]);
+    receive({ kind: "ping", n: 16 });
+    expect(output.at(-1)).toEqual({ kind: "ping", n: 16, usage: { rss: 1, heapTotal: 1 } });
+  });
+
   test("a command that rejected fails as it does in this process, its failure kept", async () => {
     const here = talkingRenderer().answer(command("close-views"));
     const there = linesOver().renderer.answer(command("close-views"));

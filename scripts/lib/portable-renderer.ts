@@ -24,6 +24,7 @@ export function bundleRenderer(root: string) {
     platform: "browser",
     format: "esm",
     target: "es2022",
+    tsconfigRaw: { compilerOptions: { verbatimModuleSyntax: true } },
     // The regular histogram entry carries the repository's pako patch.
     mainFields: ["module", "main"],
     logOverride: {
