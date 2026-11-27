@@ -4,15 +4,22 @@
     {
       "version": "pr-977",
       "ref": "refs/pull/977/merge",
-      "sha": "852ead58689da6e70f87ca757e05af02a7be3c97",
-      "timestamp": "2026-11-27T03:53:25.700Z",
+      "sha": "0a27db866b6201d7592bcb8452d53c2ca63e8f53",
+      "timestamp": "2026-11-27T03:56:09.042Z",
       "commits": [
         {
-          "sha": "852ead58689da6e70f87ca757e05af02a7be3c97",
+          "sha": "0a27db866b6201d7592bcb8452d53c2ca63e8f53",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-27T03:52:27Z",
-          "message": "Merge 2f2a736a03780557ff5ef6ec95910e7efcc8bea1 into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
+          "timestamp": "2026-11-27T03:55:09Z",
+          "message": "Merge 7505cd630d21aaeea7b4e3d603ff983c94b45988 into 7370e44ab6e6cb940a0df316b3d0b49f4b4899b6\n"
+        },
+        {
+          "sha": "7505cd630d21aaeea7b4e3d603ff983c94b45988",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T20:54:56-07:00",
+          "message": "fix(launcher): retain the output drain turn on ordinary exit\n"
         },
         {
           "sha": "2f2a736a03780557ff5ef6ec95910e7efcc8bea1",

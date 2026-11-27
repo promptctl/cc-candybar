@@ -79621,7 +79621,8 @@ function unguard(state, group) {
   state.liveGroups.delete(group);
   state.lifeline?.pipe.write(`- ${group}
 `);
-  if (state.scope.signal.aborted && state.liveGroups.size === 0) endLifeline(state);
+  if (state.scope.signal.aborted && state.liveGroups.size === 0)
+    endLifeline(state);
 }
 function endLifeline(state) {
   const line = state.lifeline;
@@ -79901,7 +79902,15 @@ async function launchPiped(state, opts, pipes) {
           () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS))
         );
       };
-      afterExit(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS));
+      afterExit(tasks.groupEnd, () => {
+        if (settled3) return;
+        if (terminated !== null) awaitGroupEnd(GROUP_END_POLL_MIN_MS);
+        else
+          groupEndTimer = clock.defer(
+            tasks.groupEnd,
+            () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)
+          );
+      });
     }
     const terminate = (cause) => {
       if (terminated !== null) return;
