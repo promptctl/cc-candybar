@@ -80200,7 +80200,13 @@ function launchJob(state, opts, files) {
           child.unref();
           state.unreaped.set(child, opts.category);
           ended.resolve();
-          throw error;
+          state.scope.observeWarnings({
+            kind: "job-signal-refused",
+            error: new Error(
+              `SIGKILL refused for unreleased ${opts.category} job (pid ${pid2}): ${error instanceof Error ? error.message : String(error)}`,
+              { cause: error }
+            )
+          });
         }
       }
     );
@@ -80310,6 +80316,10 @@ function launcherWithState(owner2, clock, spawner) {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
       observeWarnings: (change) => {
+        if (change.kind === "job-signal-refused") {
+          process.emitWarning(change.error);
+          return;
+        }
         const message = change.kind === "launch-pipes" ? change.text : change.fault === null ? null : lifelineMessage(change.fault);
         if (message !== null) process.emitWarning(message);
       },
@@ -96173,6 +96183,10 @@ function createDaemon(inputs) {
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
+      if (change.kind === "job-signal-refused") {
+        clock.failed("unreleased job termination", change.error);
+        return;
+      }
       if (change.kind === "launch-pipes") {
         log("warn", change.text);
         launchPipes.occur(change.text);

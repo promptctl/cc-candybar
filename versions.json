@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-979",
+      "ref": "refs/pull/979/merge",
+      "sha": "cdd1771af2d5c88c30cc767bbd72bc972aa6f193",
+      "timestamp": "2026-11-27T04:49:08.461Z",
+      "commits": [
+        {
+          "sha": "cdd1771af2d5c88c30cc767bbd72bc972aa6f193",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-27T04:48:04Z",
+          "message": "Merge f9d15ce02cddd0ae13fca4623f0b7d7ac183d41c into 64b9d9010d34954ec5ffbf748a1d755d845544fb\n"
+        },
+        {
+          "sha": "f9d15ce02cddd0ae13fca4623f0b7d7ac183d41c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:47:50-07:00",
+          "message": "fix(proc): report refused job escalation without throwing from its timer\n"
+        },
+        {
+          "sha": "2cab199122a63ebd607d7ea4a06a45b44e927588",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:39:22-07:00",
+          "message": "fix(proc): reap unreleased jobs and detach the gate on transfer\n"
+        },
+        {
+          "sha": "89bd89423a8d6975be7aa7aa19d1a830324538d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:32:31-07:00",
+          "message": "fix(bench): measure the signed settings controls drawn by the fixture\n"
+        },
+        {
+          "sha": "c18187cfe067e3296aedaa3c2678729bc48c28e7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-26T21:24:33-07:00",
+          "message": "refactor(proc): require launcher ownership and explicit child context\n"
+        }
+      ]
+    },
+    {
       "version": "pr-980",
       "ref": "refs/pull/980/merge",
       "sha": "3f99726f50857ca7ed3833f448818145fb2b6ca5",
@@ -34,42 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-26T21:29:59-07:00",
           "message": "refactor(config): share authored wire values and identifier rules with click admission\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-979",
-      "ref": "refs/pull/979/merge",
-      "sha": "552a367c4ed706c7c987b9956ee287f52da0e181",
-      "timestamp": "2026-11-27T04:41:26.513Z",
-      "commits": [
-        {
-          "sha": "552a367c4ed706c7c987b9956ee287f52da0e181",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:39:51-07:00",
-          "message": "Merge 2cab199122a63ebd607d7ea4a06a45b44e927588 into 64b9d9010d34954ec5ffbf748a1d755d845544fb\n"
-        },
-        {
-          "sha": "2cab199122a63ebd607d7ea4a06a45b44e927588",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:39:22-07:00",
-          "message": "fix(proc): reap unreleased jobs and detach the gate on transfer\n"
-        },
-        {
-          "sha": "89bd89423a8d6975be7aa7aa19d1a830324538d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:32:31-07:00",
-          "message": "fix(bench): measure the signed settings controls drawn by the fixture\n"
-        },
-        {
-          "sha": "c18187cfe067e3296aedaa3c2678729bc48c28e7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-26T21:24:33-07:00",
-          "message": "refactor(proc): require launcher ownership and explicit child context\n"
         }
       ]
     },
