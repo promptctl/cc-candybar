@@ -16,6 +16,10 @@ import { click, frameRequest, observePane, renderBody } from "../../helpers/daem
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../../scripts/lib/until";
 
+// This case runs a real daemon through two recorded sessions, a reload and a
+// replay: CI takes 21 to 33 s, past the suite's 30 s.
+jest.setTimeout(60_000);
+
 const exec = promisify(execFile);
 const BUNDLE = path.resolve("dist/index.mjs");
 const ENV_NAME = "CCB_RECORDING_TEST_VALUE";
