@@ -16568,12 +16568,12 @@ var require_browser = __commonJS({
   "node_modules/.pnpm/abort-controller@3.0.0/node_modules/abort-controller/browser.js"(exports2, module2) {
     "use strict";
     init_globals();
-    var { AbortController: AbortController2, AbortSignal } = typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : (
+    var { AbortController: AbortController2, AbortSignal: AbortSignal2 } = typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : (
       /* otherwise */
       void 0
     );
     module2.exports = AbortController2;
-    module2.exports.AbortSignal = AbortSignal;
+    module2.exports.AbortSignal = AbortSignal2;
     module2.exports.default = AbortController2;
   }
 });
@@ -16589,7 +16589,7 @@ var require_util4 = __commonJS({
       codes: { ERR_INVALID_ARG_TYPE }
     } = require_errors3();
     var { kResistStopPropagation, AggregateError: AggregateError2, SymbolDispose } = require_primordials2();
-    var AbortSignal = globalThis.AbortSignal || require_browser().AbortSignal;
+    var AbortSignal2 = globalThis.AbortSignal || require_browser().AbortSignal;
     var AbortController2 = globalThis.AbortController || require_browser().AbortController;
     var AsyncFunction = Object.getPrototypeOf(async function() {
     }).constructor;
@@ -16690,7 +16690,7 @@ var require_util4 = __commonJS({
           }
         };
       },
-      AbortSignalAny: AbortSignal.any || function AbortSignalAny(signals) {
+      AbortSignalAny: AbortSignal2.any || function AbortSignalAny(signals) {
         if (signals.length === 1) {
           return signals[0];
         }
@@ -79467,8 +79467,61 @@ function withoutRepositoryScopedEnv(env2) {
   );
 }
 
+// src/proc/launcher.ts
+init_globals();
+var INHERIT_FROM_OWNER = /* @__PURE__ */ Symbol("inherit from launcher owner");
+var OWNER_CONTEXT = Object.freeze({
+  cwd: INHERIT_FROM_OWNER,
+  environment: INHERIT_FROM_OWNER
+});
+function launcherIn(launcher, context) {
+  return { launch: (opts) => launcher.launch({ ...opts, ...context }) };
+}
+function whyFailed(r) {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+    case "spawn-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+var SAID_LINE_CHARS = 200;
+var clipped = (line) => {
+  const kept2 = [];
+  for (const ch of line) {
+    if (kept2.length === SAID_LINE_CHARS) return `${kept2.join("")}\u2026`;
+    kept2.push(ch);
+  }
+  return line;
+};
+function saidBy(r, text5) {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t2 = text5.trim();
+  const firstEnd = t2.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t2);
+  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
+  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
+}
+function failureText(r, where = "") {
+  const said3 = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said3 === "" ? "" : `: ${said3}`}`;
+}
+
 // src/proc/launch.ts
-function spawnErrorText(err, cwd2) {
+function childDirectory(cwd2) {
+  return cwd2 === INHERIT_FROM_OWNER ? void 0 : cwd2;
+}
+function spawnErrorText(err, chosen) {
+  const cwd2 = childDirectory(chosen);
   if (!types.isNativeError(err)) return String(err);
   const code2 = err.code;
   return code2 === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
@@ -79496,7 +79549,7 @@ function checkRateLimit(lastStartAt, category, now2) {
 }
 function childEnv(scope, opts) {
   const env2 = {
-    ...opts.environment ?? withoutRepositoryScopedEnv(scope.inherited)
+    ...opts.environment === INHERIT_FROM_OWNER ? withoutRepositoryScopedEnv(scope.inherited) : opts.environment
   };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
@@ -79580,13 +79633,14 @@ function spawnLifeline(state) {
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
-      env: childEnv(state.scope, {}),
+      cwd: childDirectory(OWNER_CONTEXT.cwd),
+      env: childEnv(state.scope, OWNER_CONTEXT),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
   } catch (err) {
     stats?.onEnd("lifeline", elapsedMs(clock, t0));
-    setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
+    setFault(state, `did not start: ${spawnErrorText(err, OWNER_CONTEXT.cwd)}`);
     return null;
   }
   stats?.onEnd("lifeline", elapsedMs(clock, t0));
@@ -79773,7 +79827,7 @@ async function launchPiped(state, opts, pipes) {
     let child;
     try {
       child = spawner.spawn(opts.bin, opts.args ?? [], {
-        cwd: opts.cwd,
+        cwd: childDirectory(opts.cwd),
         env: childEnv(state.scope, opts),
         stdio: ["pipe", "pipe", "pipe"],
         detached: true
@@ -79993,7 +80047,7 @@ function launchBlocking(state, opts) {
   stats?.onStart(opts.category);
   try {
     const result = state.spawner.spawnSync(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
+      cwd: childDirectory(opts.cwd),
       env: childEnv(state.scope, opts),
       input: opts.stdinInput,
       timeout: opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : void 0,
@@ -80044,7 +80098,7 @@ function launchDetachedSyncInner(state, opts) {
   let child;
   try {
     child = state.spawner.spawn(opts.bin, opts.args ?? [], {
-      cwd: opts.cwd,
+      cwd: childDirectory(opts.cwd),
       env: childEnv(state.scope, opts),
       detached: true,
       stdio: "ignore"
@@ -80100,7 +80154,7 @@ function launchJob(state, opts, files) {
         ...opts.args ?? []
       ],
       {
-        cwd: opts.cwd,
+        cwd: childDirectory(opts.cwd),
         env: childEnv(state.scope, opts),
         detached: true,
         stdio: ["pipe", "ignore", "ignore"]
@@ -80115,28 +80169,76 @@ function launchJob(state, opts, files) {
     };
   }
   stats?.onEnd(opts.category, elapsedMs(clock, t0));
-  child.once("error", () => {
-  });
+  child.once("error", ignoreJobStreamError);
   const pid2 = child.pid;
   const gate2 = child.stdin;
-  gate2.on("error", () => {
-  });
-  if (pid2 === void 0) {
-    gate2.destroy();
+  if (!gate2 || pid2 === void 0) {
+    gate2?.on("error", ignoreJobStreamError);
+    gate2?.destroy();
     return {
       ok: false,
       reason: "spawn-error",
-      error: `spawn(/bin/sh): no pid (shell not found or unexecutable)`
+      error: "spawn(/bin/sh): no job pid or input pipe"
     };
   }
+  gate2.on("error", ignoreJobStreamError);
   child.unref();
   gate2.unref();
+  const withdraw = () => {
+    if (!state.inFlight.delete(withdraw)) return;
+    child.off("close", forgotten2);
+    child.ref();
+    const ended = Promise.withResolvers();
+    const cancel = clock.after(
+      "unreleased job termination",
+      TIMEOUT_KILL_GRACE_MS,
+      () => {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        try {
+          state.spawner.signalGroup(pid2, "SIGKILL");
+        } catch (error) {
+          child.unref();
+          state.unreaped.set(child, opts.category);
+          ended.resolve();
+          state.scope.observeWarnings({
+            kind: "job-signal-refused",
+            error: new Error(
+              `SIGKILL refused for unreleased ${opts.category} job (pid ${pid2}): ${error instanceof Error ? error.message : String(error)}`,
+              { cause: error }
+            )
+          });
+        }
+      }
+    );
+    child.once("close", () => {
+      cancel();
+      state.unreaped.delete(child);
+      ended.resolve();
+    });
+    state.scope.clock.detach(
+      "unreleased job close",
+      () => track(state, ended.promise)
+    );
+    gate2.end();
+  };
+  const forgotten2 = () => {
+    state.inFlight.delete(withdraw);
+  };
+  child.once("close", forgotten2);
+  state.inFlight.add(withdraw);
+  if (state.scope.signal.aborted) withdraw();
   return {
     ok: true,
     pid: pid2,
-    release: () => gate2.end("go\n"),
-    withdraw: () => gate2.end()
+    release() {
+      if (!state.inFlight.delete(withdraw)) return;
+      child.off("close", forgotten2);
+      gate2.end("go\n");
+    },
+    withdraw
   };
+}
+function ignoreJobStreamError() {
 }
 function endJob(spawner, clock, pid2, status, end) {
   const signal = () => {
@@ -80214,10 +80316,13 @@ function launcherWithState(owner2, clock, spawner) {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
       observeWarnings: (change) => {
+        if (change.kind === "job-signal-refused") {
+          process.emitWarning(change.error);
+          return;
+        }
         const message = change.kind === "launch-pipes" ? change.text : change.fault === null ? null : lifelineMessage(change.fault);
         if (message !== null) process.emitWarning(message);
       },
-      signal: new AbortController().signal,
       ...owner2,
       clock
     },
@@ -80421,7 +80526,10 @@ var machineHost = () => ({
 function worldOver(clock) {
   return {
     host: machineHost(),
-    launcher: systemOneShotLauncher({ inherited: process.env }, clock),
+    launcher: systemOneShotLauncher(
+      { inherited: process.env, signal: AbortSignal.any([]) },
+      clock
+    ),
     clock
   };
 }
@@ -81343,47 +81451,6 @@ var SessionBook = class {
 // src/daemon/runs.ts
 init_globals();
 var import_node_path14 = __toESM(require_path_browserify(), 1);
-
-// src/proc/launcher.ts
-init_globals();
-function whyFailed(r) {
-  switch (r.reason) {
-    case "non-zero":
-      return `exited with code ${r.exitCode}`;
-    case "signal":
-      return `killed by ${r.signal ?? "a signal"}`;
-    // These are whole sentences: the launcher wrote them.
-    case "timeout":
-    case "output-limit":
-    case "rate-limited":
-    case "pipe-error":
-    case "spawn-error":
-      return r.error ?? r.reason;
-    default:
-      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
-  }
-}
-var SAID_LINE_CHARS = 200;
-var clipped = (line) => {
-  const kept2 = [];
-  for (const ch of line) {
-    if (kept2.length === SAID_LINE_CHARS) return `${kept2.join("")}\u2026`;
-    kept2.push(ch);
-  }
-  return line;
-};
-function saidBy(r, text5) {
-  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
-  const t2 = text5.trim();
-  const firstEnd = t2.search(/[\r\n]/);
-  if (firstEnd === -1) return clipped(t2);
-  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
-  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
-}
-function failureText(r, where = "") {
-  const said3 = saidBy(r, r.stderr);
-  return `${whyFailed(r)}${where}${said3 === "" ? "" : `: ${said3}`}`;
-}
 
 // src/daemon/environment-output.ts
 init_globals();
@@ -87118,6 +87185,7 @@ var GitService = class {
   // daemon's own GitDataProvider already extends this class.
   async execGitAsync(args, options) {
     return this.launcher.launch({
+      environment: INHERIT_FROM_OWNER,
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -87526,6 +87594,7 @@ var GitService = class {
   // LaunchResult so classifyForgePr maps every termination cause to an Outcome.
   async execForgeAsync(bin, args, options) {
     return this.launcher.launch({
+      environment: INHERIT_FROM_OWNER,
       bin,
       args: [...args],
       cwd: options.cwd,
@@ -87969,6 +88038,15 @@ function tmuxRun(result, args, socket) {
   };
 }
 async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
+  return runTmuxIn(
+    launcherIn(launcher, OWNER_CONTEXT),
+    hint,
+    category,
+    args,
+    stdinInput
+  );
+}
+async function runTmuxIn(launcher, hint, category, args, stdinInput) {
   return tmuxRun(
     await launcher.launch(invocation(hint, category, args, stdinInput)),
     args,
@@ -89791,6 +89869,7 @@ function platformProbes(launcher, platform3, pid2) {
 function chargeProbe(launcher, platform3) {
   return platform3 === "darwin" ? footprintCharge(
     (args) => launcher.launch({
+      ...OWNER_CONTEXT,
       bin: FOOTPRINT,
       args,
       timeoutMs: PROBE_TIMEOUT_MS,
@@ -89846,6 +89925,7 @@ function commandProbe(launcher, bin, args) {
     name: `${bin} ${args.join(" ")}`,
     read: async () => {
       const result = await launcher.launch({
+        ...OWNER_CONTEXT,
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,
@@ -91574,6 +91654,7 @@ function createTmuxSourceEdges(launcher, watchers) {
       if (!/^\/dev\/(?:tty[a-zA-Z0-9]+|pts\/\d+)$/.test(pane.tty))
         return unknown("invalid source pane tty");
       const result = await launcher.launch({
+        ...OWNER_CONTEXT,
         bin: "ps",
         args: [
           "-t",
@@ -92469,6 +92550,7 @@ var WindowFollowers = class {
     const termination = new AbortController();
     let cancelDeadline;
     const channel = this.launcher.launchChannel({
+      ...OWNER_CONTEXT,
       signal: termination.signal,
       bin: this.host.node[0],
       args: [
@@ -96101,6 +96183,10 @@ function createDaemon(inputs) {
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
+      if (change.kind === "job-signal-refused") {
+        clock.failed("unreleased job termination", change.error);
+        return;
+      }
       if (change.kind === "launch-pipes") {
         log("warn", change.text);
         launchPipes.occur(change.text);
@@ -96230,15 +96316,13 @@ function createDaemon(inputs) {
     launch: clickLaunchVia(edge),
     claudeInput: inputs.claudeInput(edge)
   });
-  const desktopPrograms = programs2(launcher);
+  const desktopPrograms = programs2(launcherIn(launcher, OWNER_CONTEXT));
   const acts = new Acts({
     detach: clock.detach,
     programsFor: (session) => {
       const context = session === null ? null : sessionBook.programContextOf(session);
       if (context === null) return desktopPrograms;
-      return programs2({
-        launch: (options) => launcher.launch({ ...options, ...context })
-      });
+      return programs2(launcherIn(launcher, context));
     },
     run: (run2) => runs.start(run2),
     // [LAW:single-enforcer] The pane queue reads the same phase as ingress
@@ -97224,7 +97308,7 @@ init_globals();
 var THEN = ";";
 var BUFFER = "cc-candybar-slash";
 async function tmux(launcher, hint, category, args, stdinInput) {
-  const run2 = await runTmuxAsync(launcher, hint, category, args, stdinInput);
+  const run2 = await runTmuxIn(launcher, hint, category, args, stdinInput);
   if (run2.kind === "failed") throw new Error(run2.reason);
   return run2;
 }
@@ -97577,6 +97661,7 @@ var ObserverServer = class {
   }
   async wait(signal) {
     const r = await this.launcher.launch({
+      ...OWNER_CONTEXT,
       bin: "tmux",
       // A single non-yielding tmux command queue checks for unread work and
       // subscribes. If work already exists it returns immediately. A wake
@@ -97744,6 +97829,7 @@ function productionTmuxServerObserver(launcher, node, bundle, tmp) {
           return;
         }
         const ran = launcher.launchDetachedSync({
+          ...OWNER_CONTEXT,
           bin: node[0],
           args: [
             ...node.slice(1),
@@ -97809,6 +97895,7 @@ async function legacyPeerOn(launcher, followerPid, socket) {
   if (process.platform !== "darwin" || followerPid === process.pid)
     return false;
   const got = await launcher.launch({
+    ...OWNER_CONTEXT,
     bin: "/usr/sbin/lsof",
     args: ["-anP", "-p", `${process.pid},${followerPid}`, "-U", "-F0pfdn"],
     timeoutMs: 2e3,
@@ -97929,6 +98016,7 @@ function productionBarPaneEdge(launcher) {
       if (!INSTANCE.test(instance))
         throw new Error("invalid bar pane instance");
       const which = await launcher.launch({
+        ...OWNER_CONTEXT,
         bin: "/bin/sh",
         args: ["-c", "command -v tmux"],
         category: "lane.tmux",
