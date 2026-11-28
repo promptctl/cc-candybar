@@ -2,7 +2,7 @@
 // the flash it wears first (brandon-menus-sjhy.my3): `menuTimeout` seconds after
 // the session's last click, the flash ending at exactly that instant. The
 // renderer's idle close (src/renderer/menu-idle.ts) and the render's flash
-// (`SessionEffects.motion`) both read the deadline from here, so the flash
+// (`SurfaceMemory.motion`) both read the deadline from here, so the flash
 // cannot end anywhere but where the menu closes.
 //
 // [LAW:effects-at-boundaries] Pure: instants in, a time or a hold out.

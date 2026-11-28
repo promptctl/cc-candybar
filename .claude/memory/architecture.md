@@ -13,7 +13,7 @@ The daemon speaks JSON lines over the renderer child’s standard input and outp
 - It ends on its stdin's EOF, so it dies with a host killed with no cleanup; the launcher's lifeline is no part of that.
 - While no renderer is live an input fails at once rather than starting one, because a request per tick that spawns would be a fork storm under a crash loop.
 
-A request is answered by the frame its renderer presents. A request or feed keeps what its frame showed only when the host confirms it. The socket settles every receipt, including a buffered frame that was replaced and a write that threw. An exit that forgets leaks an otherwise unshown record. Surface layouts and shared session motion follow draw order, so a delayed receipt cannot restore an old view or rewind the animation clock.
+A request is answered by the frame its renderer presents. A request or feed keeps what its frame showed only when the host confirms it. The socket settles every receipt, including a buffered frame that was replaced and a write that threw. An exit that forgets leaks an otherwise unshown record. Each surface's layout and animation clock follow draw order, so a delayed receipt cannot restore an old view or rewind the clock.
 
 The native statusline client can recover a cold host. It shows the session’s last good frame or a waiting indicator while the host starts. A timeout includes a command for inspecting the failure.
 

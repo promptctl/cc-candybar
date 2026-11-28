@@ -1,5 +1,4 @@
 import {
-  combinedWarnings,
   describeWarning,
   frameWarnings,
   warningChanges,
@@ -47,17 +46,6 @@ test("equal warnings compare by their facts and preserve occurrences", () => {
       .moved,
   ).toBe(false);
   expect(warningChanges(of("both", "local"), prior).moved).toBe(true);
-  expect(
-    combinedWarnings([
-      prior,
-      frameWarnings([same, warning("elsewhere"), same], []),
-    ]),
-  ).toEqual([
-    warning("both"),
-    warning("local"),
-    warning("both"),
-    warning("elsewhere"),
-  ]);
 });
 
 test("the fault comparison reports complete faults when their contents change", () => {

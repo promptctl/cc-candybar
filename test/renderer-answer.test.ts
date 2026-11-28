@@ -10,6 +10,10 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import {
+  holdClickError,
+  lastClickError,
+} from "../src/daemon/foundations/click-error";
 import { fakeMetrics } from "../scripts/lib/draw-fixtures/payload-owners";
 import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
 import { requestEvent } from "../src/daemon/foundations/request-event";
@@ -30,7 +34,9 @@ import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
   Event,
+  LaneViewers,
   Notification,
+  Presentation,
   Renderer,
   RendererOutput,
   RequestId,
@@ -39,7 +45,7 @@ import type {
 import { mainRenderer } from "../src/renderer/main";
 import {
   drawRender,
-  renderFrame,
+  renderFrames,
   setUpRender,
   type Delivery,
   type RendererParts,
@@ -48,7 +54,14 @@ import { FEED_PERIODS, Feeds } from "../src/renderer/feeds";
 import { renderWidth } from "../src/renderer/render-payload";
 import { parseFrame, textOf } from "../src/render/frame";
 import { MAX_VIEWER_ROWS } from "../src/render/diagnostics";
-import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { DIAGNOSTICS_VIEWING } from "../src/config/door";
+import type { Pointer } from "../src/click/gesture";
+import {
+  ANSWERING,
+  MOVING_FPS,
+  UNFOLLOWED_FEEDS,
+  type Lane,
+} from "../src/config/lanes";
 import { CLICK_MODE_KEY } from "../src/config/click-mode";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import {
@@ -109,7 +122,7 @@ import { writeStatePlan } from "./helpers/state-file";
 import {
   hearingEvents,
   hostHeld,
-  NO_ACTS,
+  noActs, NO_CONFIGS,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -168,17 +181,8 @@ function renderer(
       verbs,
     }),
     feeds: new Feeds({
-      draw: (session, fps, readings, following, lanes, pointer, prepare) =>
-        renderFrame(
-          parts,
-          session,
-          fps,
-          readings,
-          following,
-          lanes,
-          pointer,
-          prepare,
-        ),
+      draw: (session, lanes, fps, readings, laneFeeds, prepare) =>
+        renderFrames(parts, session, lanes, fps, readings, laneFeeds, prepare),
       pin: (session) => rig.cache.pin(session),
       log: (level, message) => logged.push(`${level} ${message}`),
       periods: FEED_PERIODS,
@@ -365,7 +369,7 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-function presentation(rig: SessionRig, by: "request" | "feed") {
+function presentation(rig: SessionRig, by: Lane) {
   const view = viewOf(rig);
   return view === null
     ? undefined
@@ -376,6 +380,7 @@ const done = (
   r: Renderer,
   { session, id: of }: Pick<Effect, "session" | "id">,
   ok: boolean,
+  presentation: Presentation = "presented",
 ) =>
   r.answer({
     kind: "event",
@@ -384,7 +389,9 @@ const done = (
       kind: "effect-done",
       session,
       of,
-      outcome: ok ? { kind: "ok" } : { kind: "failed", reason: "left" },
+      outcome: ok
+        ? { kind: "ok", presentation }
+        : { kind: "failed", reason: "left" },
     },
   });
 
@@ -396,12 +403,22 @@ const threw = (output: RendererOutput) => {
 
 
 
-const followFeed = (r: Renderer) =>
+// One subscriber drawing a lane, in its first turn.
+const DRAWING: LaneViewers = {
+  subscribers: 1,
+  drawing: true,
+  pointer: null,
+  turn: 1,
+};
+
+// A follower on `lane` watches the session. Lane B draws Claude Code's own
+// statusline, the surface a request's answer is shown on.
+const followFeed = (r: Renderer, lane: Lane = "statusline") =>
   handIn(r, {
     kind: "viewers",
     viewers: {
       [SESSION]: {
-        lanes: { statusline: { subscribers: 1, drawing: true } }, pointer: null,
+        lanes: { [lane]: DRAWING },
         shown: true,
         joined: 1,
       },
@@ -453,7 +470,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
       recorded: () => {},
       holding: () => () => {},
     },
-    { ...NO_ACTS, configs: discovery },
+    { ...noActs(), configs: discovery },
   );
   cleanups.push(() => host.closeWake());
   const submit = (event: Notification) =>
@@ -691,7 +708,7 @@ describe("a statusline request", () => {
         kind: "start",
         viewers: {
           [SESSION]: {
-            lanes: { pane: { drawing: true, subscribers: 1 } }, pointer: null,
+            lanes: { pane: DRAWING },
             shown: true,
             joined: 1,
           },
@@ -1019,16 +1036,16 @@ describe("a statusline request", () => {
   test("a dropped statusline reply preserves the last delivered layout and segment cells", async () => {
     const t = renderer();
     const first = presentOf(answered(await request(t)).effects);
-    expect(presentation(t.rig, "request")).toBeUndefined();
+    expect(presentation(t.rig, "statusline")).toBeUndefined();
     await done(t.r, first, true);
-    const record = presentation(t.rig, "request");
-    const segments = presentation(t.rig, "request")?.segments;
+    const record = presentation(t.rig, "statusline");
+    const segments = presentation(t.rig, "statusline")?.segments;
     expect(record).toBeDefined();
     const next = presentOf(answered(await request(t)).effects);
-    expect(presentation(t.rig, "request")).toBe(record);
+    expect(presentation(t.rig, "statusline")).toBe(record);
     await done(t.r, next, false);
-    expect(presentation(t.rig, "request")).toBe(record);
-    expect(presentation(t.rig, "request")?.segments).toBe(segments);
+    expect(presentation(t.rig, "statusline")).toBe(record);
+    expect(presentation(t.rig, "statusline")?.segments).toBe(segments);
   });
 
   test("a late statusline receipt cannot replace a newer delivered frame", async () => {
@@ -1036,10 +1053,10 @@ describe("a statusline request", () => {
     const older = presentOf(answered(await request(t)).effects);
     const newer = presentOf(answered(await request(t)).effects);
     answered(await done(t.r, newer, true));
-    const accepted = presentation(t.rig, "request");
+    const accepted = presentation(t.rig, "statusline");
     expect(accepted).toBeDefined();
     answered(await done(t.r, older, true));
-    expect(presentation(t.rig, "request")).toBe(accepted);
+    expect(presentation(t.rig, "statusline")).toBe(accepted);
     expect(t.recorded).toHaveLength(1);
   });
 
@@ -1048,9 +1065,9 @@ describe("a statusline request", () => {
     const older = presentOf(answered(await request(t)).effects);
     const newer = presentOf(answered(await request(t)).effects);
     answered(await done(t.r, newer, false));
-    expect(presentation(t.rig, "request")).toBeUndefined();
+    expect(presentation(t.rig, "statusline")).toBeUndefined();
     answered(await done(t.r, older, true));
-    expect(presentation(t.rig, "request")).toBeDefined();
+    expect(presentation(t.rig, "statusline")).toBeDefined();
     expect(t.recorded).toHaveLength(1);
   });
 
@@ -1073,12 +1090,12 @@ describe("a draw", () => {
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
     const deliveries = recorded.length;
-    const record = presentation(rig, "request");
-    const cells = presentation(rig, "request")?.segments;
-    const motion = parts.renderCache.presentations.effects(SESSION).lastFrame();
+    const record = presentation(rig, "statusline");
+    const cells = presentation(rig, "statusline")?.segments;
+    const motion = parts.renderCache.presentations.effects(SESSION, "statusline").lastFrame();
     const warned = parts.renderCache.presentations.diagnostics(
       SESSION,
-      "request",
+      "statusline",
     );
     const draw = () => {
       using setup = setUpRender(parts, checked(), READ, []);
@@ -1087,21 +1104,20 @@ describe("a draw", () => {
         setup,
         ANSWERING,
         UNFOLLOWED_FEEDS,
-        null,
-      );
+      )("statusline", null, []);
       return { drawn, candidate };
     };
     const first = draw();
     const second = draw();
     expect(second.drawn).toEqual(first.drawn);
     expect(second.candidate).toEqual(first.candidate);
-    expect(presentation(rig, "request")).toBe(record);
-    expect(presentation(rig, "request")?.segments).toBe(cells);
-    expect(parts.renderCache.presentations.effects(SESSION).lastFrame()).toBe(
+    expect(presentation(rig, "statusline")).toBe(record);
+    expect(presentation(rig, "statusline")?.segments).toBe(cells);
+    expect(parts.renderCache.presentations.effects(SESSION, "statusline").lastFrame()).toBe(
       motion,
     );
     expect(
-      parts.renderCache.presentations.diagnostics(SESSION, "request"),
+      parts.renderCache.presentations.diagnostics(SESSION, "statusline"),
     ).toBe(warned);
     expect(recorded).toHaveLength(deliveries);
   });
@@ -1122,8 +1138,7 @@ describe("a draw", () => {
       setup,
       ANSWERING,
       UNFOLLOWED_FEEDS,
-      null,
-    );
+    )("statusline", null, []);
     expect(candidate.frame.menu.shown).toBe(shown);
   });
 });
@@ -1152,7 +1167,7 @@ describe("a feed's frame", () => {
           kind: "viewers",
           viewers: {
             [SESSION]: {
-              lanes: { pane: { drawing: true, subscribers: 1 } }, pointer: null,
+              lanes: { pane: DRAWING },
               shown: true,
               joined: 1,
             },
@@ -1185,7 +1200,7 @@ describe("a feed's frame", () => {
           kind: "viewers",
           viewers: {
             [SESSION]: {
-              lanes: { pane: { drawing: true, subscribers: 1 } }, pointer: null,
+              lanes: { pane: DRAWING },
               shown: true,
               joined: 1,
             },
@@ -1215,40 +1230,47 @@ describe("a feed's frame", () => {
         openFailure: () => ({ error: new Error("the view would not open") }),
       },
     } as unknown as RendererParts;
-    const frame = renderFrame(
+    const frames = renderFrames(
       parts,
       SESSION,
+      [
+        ["statusline", DRAWING],
+        ["pane", DRAWING],
+      ],
       30,
       READ,
-      new Set(["pane"]),
       UNFOLLOWED_FEEDS,
-      null,
       () => {
         throw new Error("a failed draw requested a receipt");
       },
-    )!;
-    expect(frame.frame).toEqual({
-      kind: "failed",
-      message: "the view would not open",
-    });
-    expect(frame.failure).not.toBeNull();
+    );
+    // A view that would not open fails every lane, each naming its own.
+    expect(
+      frames?.map(([lane, { frame, failure }]) => [lane, frame, failure?.line]),
+    ).toEqual(
+      (["statusline", "pane"] as const).map((lane) => [
+        lane,
+        { kind: "failed", message: "the view would not open" },
+        expect.stringMatching(new RegExp(`^frame lane=${lane} `)),
+      ]),
+    );
   });
 
   test("a due frame records its shown copies only after its receipt is accepted", async () => {
     const t = renderer();
     const { r, recorded, rig } = t;
     await configure(t, checked());
-    const by: string[] = [];
+    const by: Lane[] = [];
     const accept = rig.cache.acceptFrame.bind(rig.cache);
     rig.cache.acceptFrame = (id, candidate) => {
       const result = accept(id, candidate);
-      if (result !== null) by.push(candidate.by);
+      if (result !== null) by.push(candidate.surface);
       return result;
     };
-    answered(await followFeed(r));
+    answered(await followFeed(r, "pane"));
     const frame = await dueFrame(r);
     expect(recorded).toEqual([]);
-    expect(presentation(rig, "feed")).toBeUndefined();
+    expect(presentation(rig, "pane")).toBeUndefined();
     const delivered = answered(
       await done(r, { session: SESSION, id: frame.receipt }, true),
     );
@@ -1257,7 +1279,7 @@ describe("a feed's frame", () => {
       expect.stringContaining("--bogus"),
     ]);
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
-    expect(by).toEqual(["feed"]);
+    expect(by).toEqual(["pane"]);
     const same = await dueFrame(r, 1);
     const confirmed = answered(
       await done(r, { session: SESSION, id: same.receipt }, true),
@@ -1265,33 +1287,33 @@ describe("a feed's frame", () => {
     expect(confirmed.record).toEqual([]);
   });
 
-  // [LAW:effects-at-boundaries] The record and transitions are a surface's
-  // own; the animation clock is the session's, one for both.
-  test("leaves the request's record of the view as it was, beside its own, under the session's one clock", async () => {
+  // [LAW:effects-at-boundaries] The record, transitions and animation clock
+  // are a surface's own.
+  test("leaves the request's record of the view as it was, beside its own", async () => {
     const { r, parts, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
-    const answeredRecord = presentation(rig, "request");
+    const answeredRecord = presentation(rig, "statusline");
     expect(answeredRecord).toBeDefined();
-    answered(await followFeed(r));
+    answered(await followFeed(r, "pane"));
     const frame = await dueFrame(r);
-    expect(presentation(rig, "feed")).toBeUndefined();
+    expect(presentation(rig, "pane")).toBeUndefined();
     answered(await done(r, { session: SESSION, id: frame.receipt }, true));
-    expect(presentation(rig, "request")).toBe(answeredRecord);
-    const feedRecord = presentation(rig, "feed");
+    expect(presentation(rig, "statusline")).toBe(answeredRecord);
+    const feedRecord = presentation(rig, "pane");
     expect(feedRecord).toBeDefined();
     expect(feedRecord).not.toBe(answeredRecord);
     const nextRequest = presentOf(answered(await request({ r, rig })).effects);
     answered(await done(r, nextRequest, true));
-    expect(presentation(rig, "feed")).toBe(feedRecord);
+    expect(presentation(rig, "pane")).toBe(feedRecord);
     expect(parts.renderCache.presentations.stats().effects.sessions).toBe(1);
   });
 
-  test("an older feed receipt keeps its layout without rewinding the newer request's motion", async () => {
+  test("an older feed receipt keeps its layout without moving the newer request's clock", async () => {
     const t = renderer();
     const initial = presentOf(answered(await request(t)).effects);
     answered(await done(t.r, initial, true));
-    answered(await followFeed(t.r));
+    answered(await followFeed(t.r, "pane"));
     const feed = await dueFrame(t.r, 1);
     const requestFrame = presentOf(
       answered(
@@ -1302,14 +1324,22 @@ describe("a feed's frame", () => {
       ).effects,
     );
     answered(await done(t.r, requestFrame, true));
-    const motion = t.rig.cache.presentations.effects(SESSION).lastFrame();
+    const effects = t.rig.cache.presentations;
+    const motion = effects.effects(SESSION, "statusline").lastFrame();
     expect(motion.t).toBe(3);
-    const requestLayout = presentation(t.rig, "request");
+    // Each surface's own clock.
+    const clock = (surface: Lane) =>
+      effects.effects(SESSION, surface).clockAt((READ.at + 4) as Instant, 2)
+        .timeline;
+    const newest = clock("statusline");
+    const requestLayout = presentation(t.rig, "statusline");
 
     answered(await done(t.r, { session: SESSION, id: feed.receipt }, true));
-    expect(presentation(t.rig, "feed")).toBeDefined();
-    expect(presentation(t.rig, "request")).toBe(requestLayout);
-    expect(t.rig.cache.presentations.effects(SESSION).lastFrame()).toBe(motion);
+    expect(presentation(t.rig, "pane")).toBeDefined();
+    expect(presentation(t.rig, "statusline")).toBe(requestLayout);
+    expect(effects.effects(SESSION, "statusline").lastFrame()).toBe(motion);
+    expect(clock("statusline")).toEqual(newest);
+    expect(effects.effects(SESSION, "pane").lastFrame()).not.toBe(motion);
   });
 
   test("a dropped frame preserves the last accepted layout, cells and copies", async () => {
@@ -1333,12 +1363,12 @@ describe("a feed's frame", () => {
       }),
     );
     await configure(t, context);
-    answered(await followFeed(t.r));
+    answered(await followFeed(t.r, "pane"));
     const first = await dueFrame(t.r);
     expect(textOf(parseFrame(first.bar))).not.toContain("ADDED");
     answered(await done(t.r, { session: SESSION, id: first.receipt }, true));
     const view = viewOf(t.rig)!;
-    const prior = presentation(t.rig, "feed");
+    const prior = presentation(t.rig, "pane");
     expect(prior).toBeDefined();
     const deliveries = t.recorded.length;
 
@@ -1352,17 +1382,53 @@ describe("a feed's frame", () => {
     const next = await dueFrame(t.r, 2);
     expect(textOf(parseFrame(next.bar))).toContain("ADDED");
     expect(viewOf(t.rig)).toBe(view);
-    expect(presentation(t.rig, "feed")).toBe(prior);
+    expect(presentation(t.rig, "pane")).toBe(prior);
     answered(await done(t.r, { session: SESSION, id: next.receipt }, false));
-    expect(presentation(t.rig, "feed")).toBe(prior);
-    expect(presentation(t.rig, "feed")?.segments).toBe(prior?.segments);
+    expect(presentation(t.rig, "pane")).toBe(prior);
+    expect(presentation(t.rig, "pane")?.segments).toBe(prior?.segments);
     expect(t.recorded).toHaveLength(deliveries);
   });
+
+  test("a frame no display showed records why", async () => {
+    const t = renderer();
+    await configure(t, checked());
+    answered(await followFeed(t.r, "pane"));
+    const frame = await dueFrame(t.r);
+    const lost = answered(
+      await done(t.r, { session: SESSION, id: frame.receipt }, false),
+    );
+    expect(lost.record).toEqual(
+      expect.arrayContaining([
+        ["delivery", "failed"],
+        ["reason", "left"],
+      ]),
+    );
+  });
+
+  // The click error is owed past its hold to Claude Code's statusline, so a
+  // pane's frame that showed it leaves it owed there.
+  test.each([
+    ["pane", false],
+    ["statusline", true],
+  ] as const)(
+    "a presented %s frame that showed the click error answers it: %s",
+    async (lane, answers) => {
+      const t = renderer();
+      await configure(t, checked());
+      holdClickError(t.rig.sessionState, SESSION, "the click failed", READ.at);
+      answered(await followFeed(t.r, lane));
+      const frame = await dueFrame(t.r);
+      answered(await done(t.r, { session: SESSION, id: frame.receipt }, true));
+      expect(lastClickError(t.rig.sessionState, SESSION)?.answered).toBe(
+        answers,
+      );
+    },
+  );
 
   test("draws unsigned clickable addresses for the host to publish", async () => {
     const t = renderer();
     await configure(t, checked());
-    answered(await followFeed(t.r));
+    answered(await followFeed(t.r, "pane"));
     const frame = await dueFrame(t.r);
     const links = linksOf(parseFrame(frame.bar)).filter(({ url }) =>
       isBarLink(url),
@@ -1377,20 +1443,39 @@ describe("a feed's frame", () => {
   });
 
   // A feed that opens again draws its first frame, fading nothing in from
-  // what the closed one last showed.
-  test("whose feed closed leaves no record of it, and the request's stands", async () => {
-    const { r, parts, rig } = renderer();
+  // what the closed one last showed: the host no longer offers it.
+  test("whose feed's turn passed leaves no record of it, and the request's stands", async () => {
+    const { r, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
-    answered(await followFeed(r));
+    answered(await followFeed(r, "pane"));
     const frame = await dueFrame(r);
     answered(await done(r, { session: SESSION, id: frame.receipt }, true));
-    expect(presentation(rig, "feed")).toBeDefined();
+    const shown = presentation(rig, "pane");
+    expect(shown).toBeDefined();
+    // A frame whose turn passed before its delivery is not the record, and
+    // the reason is said.
     const pending = await dueFrame(r, 1);
-    parts.renderCache.stopDrawing(SESSION, "feed");
-    answered(await done(r, { session: SESSION, id: pending.receipt }, true));
-    expect(presentation(rig, "feed")).toBeUndefined();
-    expect(presentation(rig, "request")).toBeDefined();
+    const turned = answered(
+      await done(r, { session: SESSION, id: pending.receipt }, true, "turned"),
+    );
+    expect(turned.record).toContainEqual(["presentation", "turned"]);
+    expect(presentation(rig, "pane")).toBe(shown);
+    answered(
+      await r.answer({
+        kind: "event",
+        ...READ,
+        event: { kind: "due" },
+        presentation: {
+          order: 1000,
+          sessions: [
+            { session: SESSION, revision: 0, bases: { statusline: present.id } },
+          ],
+        },
+      }),
+    );
+    expect(presentation(rig, "pane")).toBeUndefined();
+    expect(presentation(rig, "statusline")).toBeDefined();
   });
 
   // A wake while a frame is out is owed a frame after it, so a draw that woke
@@ -1400,28 +1485,182 @@ describe("a feed's frame", () => {
     answered(await request({ r, rig }));
     const candidates: Delivery[] = [];
     const draw = (at: Instant) =>
-      renderFrame(
+      renderFrames(
         parts,
         SESSION,
+        [["pane", DRAWING]],
         MOVING_FPS,
         { at, tick: 0 as Tick },
-        new Set(),
         UNFOLLOWED_FEEDS,
-        null,
         (candidate) => {
           candidates.push(candidate);
-          return {id: parts.mint()};
+          return { id: parts.mint() };
         },
-      );
+      )?.[0]?.[1];
     const changedBefore = changed.length;
     const revision = rig.sessionState.latestRevision();
     expect(draw(AT)?.failure).toBeNull();
     expect(draw((AT + 1) as Instant)?.failure).toBeNull();
     expect(candidates).toHaveLength(2);
-    expect(presentation(rig, "feed")).toBeUndefined();
+    expect(presentation(rig, "pane")).toBeUndefined();
     expect(changed.slice(changedBefore)).toEqual([]);
     expect(rig.sessionState.latestRevision()).toBe(revision);
   });
+});
+
+// [LAW:one-source-of-truth] Each surface is drawn its own frame, from the
+// session's state and its own pointer and accepted presentation.
+describe("each surface's frame", () => {
+  // A pane under a pointer standing on the `open` action, delivering every
+  // gesture a mode stands for.
+  const hovered: Pointer = {
+    gestures: ["left", "alt+left", "hover"],
+    hover: "open",
+  };
+  // `tip` shows only where the pointer stands on `open`, wearing an effect
+  // of its own, so its clock is a placement's.
+  const HOVER_TIP = {
+    actions: { open: { set: "panel", to: "open" } },
+    variables: { panel: { kind: "state", key: "panel", default: "shut" } },
+    segments: {
+      opener: { template: '{{ action "open" "▸ panel" }}' },
+      tip: { template: "TIP", when: '{{ eq .hover "open" }}' },
+    },
+    root: {
+      h: ["opener", { seg: "tip", id: "tipTag", settings: { effect: "pulse" } }],
+    },
+  };
+
+  async function surfaces() {
+    const t = renderer();
+    const context = checked();
+    fs.writeFileSync(
+      path.join(dir, "config.json5"),
+      JSON.stringify(HOVER_TIP),
+    );
+    await configure(t, context);
+    // One surface's frame drawn `elapsed` seconds in, kept only by `accept`.
+    // Every lane named drawn in one call, as a feed draws them at one tick.
+    const drawAll = (
+      lanes: ReadonlyArray<readonly [Lane, Pointer | null]>,
+      elapsed: number,
+    ) => {
+      const deliveries: Delivery[] = [];
+      const drawn = renderFrames(
+        t.parts,
+        SESSION,
+        lanes.map(([lane, pointer]) => [lane, { ...DRAWING, pointer }] as const),
+        MOVING_FPS,
+        {
+          at: (READ.at + elapsed) as Instant,
+          tick: (READ.tick + elapsed) as Tick,
+        },
+        UNFOLLOWED_FEEDS,
+        (made) => {
+          deliveries.push(made);
+          return { id: t.parts.mint() };
+        },
+      );
+      if (drawn === null) throw new Error("the session drew no bar");
+      return drawn.map(([surface, { frame }], i) => {
+        const delivery = deliveries[i];
+        if (frame.kind !== "drawn" || delivery === undefined)
+          throw new Error(`the ${surface} drew no bar`);
+        return { surface, frame, candidate: delivery.candidate };
+      });
+    };
+    const draw = (surface: Lane, pointer: Pointer | null, elapsed: number) => {
+      const [{ frame, candidate }] = drawAll([[surface, pointer]], elapsed) as [
+        ReturnType<typeof drawAll>[number],
+      ];
+      return {
+        bar: frame.bar,
+        text: textOf(parseFrame(frame.bar)),
+        own: candidate.frame.motion.frame.own,
+        accept: () =>
+          expect(
+            t.parts.renderCache.acceptFrame(frame.receipt, candidate),
+          ).not.toBeNull(),
+      };
+    };
+    return { t, draw, drawAll };
+  }
+
+  // [LAW:one-source-of-truth] A feed draws every lane following the session
+  // from one setup; each lane's frame is still its own.
+  test("draws each lane in one call the frame its own draw would be", async () => {
+    const { draw, drawAll } = await surfaces();
+    const together = drawAll(
+      [
+        ["statusline", null],
+        ["pane", hovered],
+      ],
+      0,
+    );
+    expect(together.map(({ surface, frame }) => [surface, frame.bar])).toEqual([
+      ["statusline", draw("statusline", null, 0).bar],
+      ["pane", draw("pane", hovered, 0).bar],
+    ]);
+  });
+
+  test("reads its own surface's hover and gestures: the pane draws the hovered tip and no mode button, the statusline the button and no tip", async () => {
+    const { draw } = await surfaces();
+    const pane = draw("pane", hovered, 0);
+    const line = draw("statusline", null, 0);
+    expect(pane.text).toContain("TIP");
+    expect(pane.text).not.toContain("☝");
+    expect(line.text).not.toContain("TIP");
+    expect(line.text).toContain("☝");
+  });
+
+  // [LAW:verifiable-goals] Purity across surfaces: a surface's next frame is
+  // the same whether or not another surface's frame was accepted between.
+  test("is the same whether or not another surface's frame, drawing other placements, was accepted in between", async () => {
+    const { draw } = await surfaces();
+    draw("pane", hovered, 0).accept();
+    const pane = draw("pane", hovered, 2);
+    const line = draw("statusline", null, 3);
+    draw("statusline", null, 1).accept();
+    // The tip only the pane draws keeps its clock across the statusline's
+    // frame, which draws no tip.
+    const paneAfter = draw("pane", hovered, 2);
+    expect(paneAfter.bar).toEqual(pane.bar);
+    expect(paneAfter.own).toEqual([
+      expect.objectContaining({ placement: "tipTag", t: 2 }),
+    ]);
+    draw("pane", hovered, 2.5).accept();
+    expect(draw("statusline", null, 3).bar).toEqual(line.bar);
+  });
+
+  // [LAW:no-ambient-temporal-coupling] The idle period that ends a click mode
+  // is the session's, so a surface that delivers the mode's gesture itself,
+  // and draws in plain click, still reports the mode as open.
+  test("reports a stored click mode to the idle clock on a surface that delivers its gesture", async () => {
+    const { t, draw } = await surfaces();
+    t.rig.sessionState.set(SESSION, CLICK_MODE_KEY, "alt");
+    using setup = setUpRender(t.parts, checked(), READ, []);
+    const { candidate } = drawRender(
+      t.parts,
+      setup,
+      { by: "feed", fps: MOVING_FPS },
+      UNFOLLOWED_FEEDS,
+    )("pane", hovered, []);
+    expect(candidate.frame.menu.shown).toBe(true);
+    expect(draw("statusline", null, 0).text).toContain("⌥");
+    expect(draw("pane", hovered, 0).text).not.toContain("⌥");
+  });
+});
+
+test("a request answered while a pane follows is the whole bar", async () => {
+  const t = renderer();
+  answered(await followFeed(t.r, "pane"));
+  const present = presentOf(answered(await request(t)).effects);
+  const followed = await dueFrame(t.r);
+  // Only the rate cell tells them apart: a request is polled, a feed pushed.
+  const rateless = (bar: typeof present.frame) =>
+    textOf(parseFrame(bar)).replace(/ *(polled|≤\d+ fps) */, " RATE ");
+  expect(rateless(present.frame)).toBe(rateless(followed.bar));
+  expect(textOf(parseFrame(present.frame))).toContain("polled");
 });
 
 describe("the world state the host hands in", () => {
@@ -1538,10 +1777,10 @@ function productionAnswer(
     () => {},
     unfollowedCollector(t.rig.served.collector),
     {
-      ...NO_ACTS,
+      ...noActs(),
       unheard: (text) => void t.logged.push(text),
       configs: {
-        ...NO_ACTS.configs,
+        ...NO_CONFIGS,
         follow: discovery.follow.bind(discovery),
         snapshotOf: discovery.snapshotOf.bind(discovery),
         ...override,
@@ -1602,7 +1841,7 @@ describe("the session's config, ahead of its request", () => {
       hostHeld(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+      { ...noActs(), configs: t.rig.cache.configs.discovery },
     );
     cleanups.push(() => host.closeWake());
     // Its origin's config was delivered, so the next context opens the view itself.
@@ -1668,7 +1907,8 @@ describe("the session's config, ahead of its request", () => {
       expect.objectContaining({
         kind: "effect-done",
         session: SESSION,
-        outcome: { kind: "ok" },
+        // The host's verdict: Claude Code's statusline shows the answer.
+        outcome: { kind: "ok", presentation: "presented" },
       }),
     ]);
     expect(t.recorded).toHaveLength(1);
@@ -1813,9 +2053,9 @@ describe("the session's config, ahead of its request", () => {
         () => {},
         unfollowedCollector({ subscribed() {}, holding: () => () => {} }),
         {
-          ...NO_ACTS,
+          ...noActs(),
           configs: {
-            ...NO_ACTS.configs,
+            ...NO_CONFIGS,
             follow() {},
             snapshotOf(origin) {
               if (origin.cwd === waiting.requested.cwd && refuseFirstSnapshot) {
@@ -2005,7 +2245,7 @@ describe("two requests of one session at different keys", () => {
       ),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+      { ...noActs(), configs: t.rig.cache.configs.discovery },
     );
     t.rig.served.route(host);
     const ask = (pane: string, id: number) =>
@@ -2108,7 +2348,7 @@ test("overlapping requests draw the latest pane with each client's width, then a
     ),
     () => {},
     unfollowedCollector(collector),
-    { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+    { ...noActs(), configs: t.rig.cache.configs.discovery },
   );
   t.rig.served.route(host);
   let resumeOlder = (): void => {};
@@ -2200,21 +2440,49 @@ test("overlapping requests draw the latest pane with each client's width, then a
 test("diagnostics use the requesting client's rows or its own default ceiling", async () => {
   const t = renderer();
   const current = checked(undefined, "config.json5", { termRows: 18 });
+  // An error of many lines, so a viewer open on it fills any ceiling.
+  fs.writeFileSync(
+    path.join(dir, "config.json5"),
+    JSON.stringify({
+      root: { h: Array.from({ length: 30 }, (_, i) => `missing${i}`) },
+    }),
+  );
   await configure(t, current);
-  for (const [terminal, rows] of [
-    [{ termRows: 4 }, 4],
-    [{}, MAX_VIEWER_ROWS],
-  ] as const) {
+  const draw = (terminal: Pick<ReaderRenderRequest, "termRows">) => {
     using setup = setUpRender(t.parts, current, READ, [], terminal);
-    const { drawn } = drawRender(
+    return drawRender(
       t.parts,
       setup,
       ANSWERING,
       UNFOLLOWED_FEEDS,
-      null,
-    );
-    expect(drawn.geometry.rows).toBe(rows);
-  }
+    )("statusline", null, []).drawn.body.rows;
+  };
+  // Shows the viewer where a click on the drawn bar would: the first link
+  // whose description starts `described` (any link, when empty).
+  const viewing = (described: string) => {
+    const opens = draw({})
+      .flatMap((row) => row.runs)
+      .flatMap(({ link }) =>
+        typeof link === "object" &&
+        link?.kind === "action" &&
+        (described === "" || link.description?.startsWith(described))
+          ? link.effects
+          : [],
+      )
+      .flatMap((effect) => ("args" in effect ? [effect.args] : []))
+      .find((args) => args[1] === DIAGNOSTICS_VIEWING);
+    if (opens === undefined) throw new Error(`no ${described} link`);
+    t.rig.sessionState.set(SESSION, DIAGNOSTICS_VIEWING, opens[2]!);
+  };
+  // The indicator opens the first message, the flag; its › steps to the
+  // config's error.
+  viewing("");
+  viewing("show diagnostic 2");
+  for (const [terminal, rows] of [
+    [{ termRows: 4 }, 4],
+    [{}, MAX_VIEWER_ROWS],
+  ] as const)
+    expect(draw(terminal)).toHaveLength(rows);
 });
 
 describe("a click", () => {

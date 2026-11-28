@@ -28,7 +28,7 @@ import {
 } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
-import { SessionEffects } from "../src/render/effect";
+import { SurfaceMemory } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import type { BuildLineOptions } from "../src/render/strip";
 import type { Instant } from "../src/utils/instant";
@@ -80,7 +80,7 @@ function rig(
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp/proj",
   });
-  const effects = new SessionEffects<RenderedLine>(SID);
+  const effects = new SurfaceMemory<RenderedLine>(SID);
   return {
     effects,
     draw: (seconds: number, payload: object = PAYLOAD): Frame =>

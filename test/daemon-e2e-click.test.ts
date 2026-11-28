@@ -14,6 +14,7 @@ import {
 } from "../src/daemon/foundations/protocol";
 import type { RequestId } from "../src/renderer-interface/interface";
 import { timeoutResponse } from "../src/daemon/foundations/request-deadline";
+import type { DaemonEndpoint } from "../scripts/lib/daemon/wire";
 import { click } from "./helpers/daemon-e2e";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
@@ -78,15 +79,28 @@ test("a click answered TIMEOUT is sent again, and is done on the answer it then 
   }
 });
 
+// [LAW:no-ambient-temporal-coupling] The budget is wall time, so the case
+// holds the wall and each answer spends a tenth of a second of it: the asks
+// spend the budget, not how fast the machine runs one round trip.
 test("a click answered TIMEOUT until the budget is spent fails naming TIMEOUT", async () => {
-  const daemon = await answering(TIMEOUT);
+  jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
   try {
-    await expect(click(daemon.sockPath, URL, 150)).rejects.toThrow(
+    let clicks = 0;
+    const daemon: DaemonEndpoint = {
+      send: async () => {
+        jest.setSystemTime(Date.now() + 100);
+        return TIMEOUT(++clicks);
+      },
+      // A click reads no log.
+      log: "/nonexistent/daemon.log",
+      now: () => Date.now(),
+    };
+    await expect(click(daemon, URL, 150)).rejects.toThrow(
       /click failed: .*\(TIMEOUT\)/,
     );
-    expect(daemon.clicks()).toBeGreaterThan(1);
+    expect(clicks).toBe(2);
   } finally {
-    await daemon.close();
+    jest.useRealTimers();
   }
 });
 

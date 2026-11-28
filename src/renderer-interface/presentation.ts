@@ -1,17 +1,22 @@
 // [LAW:no-ambient-temporal-coupling] A draw's order is the host's order of
 // dispatch. Its delivery token belongs to the worker and can restart at boot.
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { Drawing } from "../config/lanes.js";
+import type { Lane } from "../config/lanes.js";
 import type { HeldLayout } from "../render/held-layout.js";
-import type { HeldMotion } from "../render/effect.js";
+import type { HeldEffects, SurfaceClock } from "../render/effect.js";
 import type { RenderWarning } from "../dsl/render.js";
 import type { Tick } from "../utils/instant.js";
 import type { Crosses } from "./crosses.js";
 
-export type DrawSurface = Drawing["by"];
 export const MAX_PRESENTED_SESSIONS = 256;
+// [LAW:types-are-the-program] What one surface last showed, keyed by its lane:
+// the surface it was shown on, never who asked for the draw. Hover, a
+// transition, the animation clock and what a copy click copies are facts of
+// one surface, so a record two surfaces shared would be wrong for one of them.
 export interface HeldSurface {
   readonly layout: HeldLayout;
+  readonly clock: SurfaceClock;
+  readonly effects: HeldEffects;
   readonly copies: ReadonlyArray<readonly [string, string]>;
   readonly warnings: readonly RenderWarning[];
   readonly faults: string;
@@ -36,10 +41,7 @@ export interface PresentedSession {
   // The host classifies the inputs from which these retained cells came.
   // Only a proven image can become the first input of an exported recording.
   readonly exportProblem: string | null;
-  readonly surfaces: Readonly<
-    Partial<Record<DrawSurface, Ordered<HeldSurface>>>
-  >;
-  readonly motion: Ordered<HeldMotion>;
+  readonly surfaces: Readonly<Partial<Record<Lane, Ordered<HeldSurface>>>>;
   readonly idle: Ordered<HeldIdle>;
 }
 
@@ -50,8 +52,7 @@ export interface PresentationInput {
   readonly sessions: ReadonlyArray<{
     readonly session: SessionId;
     readonly revision: number;
-    readonly bases: Readonly<Partial<Record<DrawSurface, number>>>;
-    readonly motion: number;
+    readonly bases: Readonly<Partial<Record<Lane, number>>>;
     readonly resume?: PresentedSession;
   }>;
 }
@@ -69,16 +70,19 @@ export interface SurfaceChange {
   readonly placements?: Changes<HeldLayout["placements"]>;
   readonly rules?: HeldLayout["rules"];
   readonly passages?: HeldLayout["passages"];
+  readonly clock?: ClockChange;
+  readonly effects?: {
+    readonly placements?: Changes<HeldEffects["placements"]>;
+    readonly made?: Changes<HeldEffects["made"]>;
+  };
   readonly copies?: Changes<HeldSurface["copies"]>;
   readonly warnings?: readonly RenderWarning[];
   readonly faults?: string;
 }
 
-export interface MotionChange {
-  readonly anchor?: HeldMotion["anchor"];
-  readonly inForce?: HeldMotion["inForce"];
-  readonly placements?: Changes<HeldMotion["placements"]>;
-  readonly made?: Changes<HeldMotion["made"]>;
+export interface ClockChange {
+  readonly anchor?: SurfaceClock["anchor"];
+  readonly inForce?: SurfaceClock["inForce"];
 }
 
 export type Proposal<Value, Change> =
@@ -87,7 +91,6 @@ export type Proposal<Value, Change> =
 
 export interface ProposedPresentation {
   readonly surface: Proposal<HeldSurface, SurfaceChange>;
-  readonly motion: Proposal<HeldMotion, MotionChange>;
   readonly menu: PresentedMenu;
 }
 
@@ -126,8 +129,17 @@ export function surfaceAfter(
   change: SurfaceChange,
 ): HeldSurface {
   if (Object.keys(change).length === 0) return prior;
-  const { placements, copies, rules, passages, source, warnings, faults } =
-    change;
+  const {
+    placements,
+    copies,
+    rules,
+    passages,
+    source,
+    clock,
+    effects,
+    warnings,
+    faults,
+  } = change;
   return {
     layout:
       source || placements || rules || passages !== undefined
@@ -139,22 +151,30 @@ export function surfaceAfter(
             passages: passages === undefined ? prior.layout.passages : passages,
           }
         : prior.layout,
+    clock: clock ? clockAfter(prior.clock, clock) : prior.clock,
+    effects: effects
+      ? {
+          placements: applyEntries(
+            prior.effects.placements,
+            effects.placements,
+          ),
+          made: applyEntries(prior.effects.made, effects.made),
+        }
+      : prior.effects,
     copies: applyEntries(prior.copies, copies),
     warnings: warnings ?? prior.warnings,
     faults: faults ?? prior.faults,
   };
 }
 
-export function motionAfter(
-  prior: HeldMotion,
-  change: MotionChange,
-): HeldMotion {
+export function clockAfter(
+  prior: SurfaceClock,
+  change: ClockChange,
+): SurfaceClock {
   if (Object.keys(change).length === 0) return prior;
   return {
     anchor: change.anchor ?? prior.anchor,
     inForce: change.inForce === undefined ? prior.inForce : change.inForce,
-    placements: applyEntries(prior.placements, change.placements),
-    made: applyEntries(prior.made, change.made),
   };
 }
 
@@ -169,4 +189,18 @@ export function idleAfterDraw(
   if (tick < prior.since) return prior;
   const since = shown && !prior.shown ? tick : prior.since;
   return { since, shown, timeoutS };
+}
+
+// [LAW:one-source-of-truth] The session's one idle record after a surface
+// drawn at `order`. Its menus are open while any surface drawn at that order
+// shows one, so a surface whose menu is closed cannot restart another's
+// idle period; an older draw moves nothing.
+export function idleOfDraw(
+  prior: Ordered<HeldIdle> | undefined,
+  order: number,
+  menu: PresentedMenu & { readonly tick: Tick },
+): Ordered<HeldIdle> {
+  if (prior !== undefined && order < prior.order) return prior;
+  const shown = menu.shown || (prior?.order === order && prior.value.shown);
+  return { order, value: idleAfterDraw(prior?.value, { ...menu, shown }) };
 }

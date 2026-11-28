@@ -3,7 +3,6 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
-import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { textOf } from "../../../src/render/frame";
 import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import { logLines } from "../../../scripts/lib/daemon/log";
@@ -16,7 +15,7 @@ import {
   spawnDaemonWithEnv,
 } from "../../helpers/spawn-isolated-daemon";
 
-test("the packaged pane keeps the handoff while hidden and draws the new session on return", async () => {
+test("the packaged pane keeps following while hidden, beside the statusline's own bar, and draws the new session on return", async () => {
   const world = prepareIsolatedDaemonEnv("ccb-pane");
   const tmux = tmuxServer(world.root, { cols: 100, rows: 32 });
   const terminal = path.join(world.root, "terminal.sock");
@@ -96,7 +95,8 @@ test("the packaged pane keeps the handoff while hidden and draws the new session
       () => capture(drawing).includes("first"),
       when("first packaged frame"),
     );
-    expect(await request("first", configs[0]!)).toContain(HANDOFF_BUTTON);
+    // The statusline keeps drawing its own bar while the pane follows.
+    expect(await request("first", configs[0]!)).toContain("first");
     const away = tmux
       .run("new-window", "-PF", "#{pane_id}", "-t", "bar", "-n", "away", "cat")
       .trim();
@@ -109,7 +109,7 @@ test("the packaged pane keeps the handoff while hidden and draws the new session
         ),
       when("only the newly selected window is visible"),
     );
-    expect(await request("first", configs[0]!)).toContain(HANDOFF_BUTTON);
+    expect(await request("first", configs[0]!)).toContain("first");
     await request("after-clear", configs[1]!, pid);
     await request("unrelated", configs[0]!, process.pid);
     expect(await session()).toBe("first");
@@ -119,7 +119,7 @@ test("the packaged pane keeps the handoff while hidden and draws the new session
       when("record replacement moves ownership"),
     );
     expect(await request("after-clear", configs[1]!, pid)).toContain(
-      HANDOFF_BUTTON,
+      "after-clear",
     );
     expect(capture(drawing)).not.toContain("after-clear");
     tmux.run("select-window", "-t", main);

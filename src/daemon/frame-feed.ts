@@ -22,9 +22,9 @@ import type { FrameSource } from "../click/link-signer.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
 import {
-  answerOf,
   LANES,
   LANE_NAMES,
+  perLane,
   type Lane,
   type LaneSwitches,
 } from "../config/lanes";
@@ -34,6 +34,7 @@ import type { FeedStats } from "./foundations/stats-snapshot";
 import type { LogLevel } from "../utils/logger";
 import { sameDaemonEvent, type DaemonEvent } from "../utils/event-hold.js";
 import type { Pointer } from "../click/gesture";
+import { drawsNow, type LaneTurn, type LaneTurns } from "./host-presentations";
 import type {
   FeedFrame,
   LaneViewers,
@@ -45,9 +46,13 @@ import type {
 // A subscriber holds the ANSI answer for its own display.
 type Delivered = (delivered: boolean) => void;
 
-// [LAW:one-source-of-truth] A follower that sees the pointer over the bar it
-// draws: its id, and what it last said of the pointer. Held by the feed for as
-// long as the follower's subscription stands.
+// How a frame a renderer drew ended: null once a subscriber showed it, or why
+// none did.
+export type SettleFrame = (pushed: PushedFrame, unshown: string | null) => void;
+
+// [LAW:one-source-of-truth] A follower that sees the pointer over the surface
+// it draws: its id, and what it last said of the pointer. Held by the feed for
+// as long as the follower's subscription stands.
 export interface PointerOwner {
   readonly id: string;
   readonly pointer: Pointer;
@@ -62,7 +67,7 @@ export interface Subscriber {
   readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
   readonly drawing: () => boolean;
-  // An enrolled pane keeps its handoff while hidden. Only a shown, current
+  // An enrolled pane keeps following while hidden. Only a shown, current
   // assignment can confirm that its physical display took an offered frame.
   readonly presenting?: () => boolean;
 }
@@ -80,6 +85,9 @@ export interface FeedDeps<Req> {
   shown(req: Req): boolean;
   // A session gained its first subscriber or lost its last one.
   watchingChanged(session: SessionId, watching: boolean): void;
+  // Whether the host holds an image of the session's presentation, whose
+  // surfaces carry the turns they were drawn under.
+  presents(session: SessionId): boolean;
   // [LAW:single-enforcer] Hands the renderer every session's viewers, as
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
@@ -116,30 +124,33 @@ interface Follower {
 
 // An owner's facts of its pointer as the feed holds them, and `said`: where its
 // last word came in the order of the feed's owners' words, which is what makes
-// one owner's pointer the session's.
+// one owner's pointer its lane's.
 interface HeldPointer extends PointerOwner {
   readonly said: number;
 }
 
 interface Watched {
   readonly followers: Map<Subscriber, Follower>;
-  // The last frame drawn: what a subscriber is handed as it joins.
-  last: EncodedFeed | null;
+  // Each lane's last frame drawn: what a subscriber of that lane is handed as
+  // it joins.
+  readonly last: Map<Lane, EncodedAnswer>;
   // [LAW:single-enforcer] Only the host knows when a new subscriber needs a
   // first draw. Its demand survives count-preserving viewer coalescing.
   frameDemand: number;
   pushed: number;
 }
 
-// [LAW:one-source-of-truth] The session's pointer is the one the owner that
-// spoke last holds, whatever lane it follows: the pointer is where the user
-// last moved it, and an owner that opens or reconnects speaks for itself once.
-// It is derived from who follows the session, never stored beside them, so
-// when that owner ends the one that spoke before it owns the pointer again.
-function ownerOf(watched: Watched): HeldPointer | null {
+// [LAW:one-source-of-truth] A lane's pointer is the one its owner that spoke
+// last holds: the pointer over that surface is where the user last moved it,
+// and an owner that opens or reconnects speaks for itself once. Each surface
+// is drawn from its own pointer, never another lane's. It is derived from who
+// follows the session, never stored beside them, so when that owner ends the
+// one that spoke before it owns the lane's pointer again.
+function ownerOf(watched: Watched, lane: Lane): HeldPointer | null {
   let found: HeldPointer | null = null;
   for (const [sub, { owner }] of watched.followers)
     if (
+      sub.lane === lane &&
       sub.presenting?.() !== false &&
       owner !== null &&
       (found === null || owner.said > found.said)
@@ -148,22 +159,27 @@ function ownerOf(watched: Watched): HeldPointer | null {
   return found;
 }
 
+// Whether any subscriber of the session follows `lane`.
+const followsLane = (watched: Watched, lane: Lane): boolean =>
+  [...watched.followers.keys()].some((sub) => sub.lane === lane);
+
+// Who owns each lane's pointer: what an owner change is told against.
+type Owners = Readonly<Record<Lane, string | null>>;
+const ownersOf = (watched: Watched | undefined): Owners =>
+  perLane((lane) =>
+    watched === undefined ? null : (ownerOf(watched, lane)?.id ?? null),
+  );
+
+// A frame as a lane's subscribers are sent it, and the failure it is when it
+// is one.
 interface EncodedAnswer {
   readonly json: string;
   readonly displayedEvents?: readonly DaemonEvent[];
 }
 
-// A frame as its subscribers are sent it: each lane's answer, and the failure
-// it is when it is one, which every lane is sent alike.
-interface EncodedFeed {
-  answer(lane: Lane): EncodedAnswer;
-  readonly failure: string | null;
-}
-
-const failedFeed = (refusal: Refusal): EncodedFeed => {
-  const encoded = { json: JSON.stringify(refusal) };
-  return { answer: () => encoded, failure: encoded.json };
-};
+const failedAnswer = (refusal: Refusal): EncodedAnswer => ({
+  json: JSON.stringify(refusal),
+});
 
 function covers(prior: EncodedAnswer, offered: EncodedAnswer): boolean {
   if (prior.json !== offered.json) return false;
@@ -186,42 +202,21 @@ function settleWrite(write: PendingWrite, delivered: boolean): void {
   done?.(delivered);
 }
 
-// [LAW:single-enforcer] Encode the host's structured frame once for all of
-// its subscribers. With no separate handoff there is only one presentation.
+// [LAW:single-enforcer] Encode a lane's frame once, in the encoding its lane
+// names, for all of that lane's subscribers. A throw is the caller's: a
+// failure of this frame alone.
 function encodeFeed(
+  lane: Lane,
   frame: FeedFrame,
   publish: PublishFrame,
   source: FrameSource,
-): EncodedFeed {
-  if (frame.kind === "failed") return failedFeed(failedWith(frame.message));
-  // [LAW:one-source-of-truth] Each lane's answer is its own value: the frame
-  // it shows (the bar, or the statusline's handoff) in the encoding its lane
-  // names, so one lane's bytes never change with another's. Each body is
-  // published once, whichever lanes show it.
-  const bar = publish(frame.bar, source);
-  const shown = {
-    resp: bar,
-    statusline: frame.handoff === null ? bar : publish(frame.handoff, source),
-  };
-  // [LAW:carrying-cost] A lane's answer is built when a subscriber of that
-  // lane is first offered it, so a session one lane follows pays for one
-  // encode of its frame.
-  const answers = new Map<Lane, EncodedAnswer>();
+): EncodedAnswer {
+  if (frame.kind === "failed") return failedAnswer(failedWith(frame.message));
   return {
-    answer(lane) {
-      let answer = answers.get(lane);
-      if (answer === undefined) {
-        answer = {
-          json: JSON.stringify(
-            FEED_ANSWERS[LANES[lane].encoding](answerOf(shown, lane)),
-          ),
-          displayedEvents: frame.displayedEvents,
-        };
-        answers.set(lane, answer);
-      }
-      return answer;
-    },
-    failure: null,
+    json: JSON.stringify(
+      FEED_ANSWERS[LANES[lane].encoding](publish(frame.bar, source)),
+    ),
+    displayedEvents: frame.displayedEvents,
   };
 }
 
@@ -235,8 +230,15 @@ type Delivery = "current" | "owed" | "closed";
  * [LAW:no-shared-mutable-globals] Every session's latest request and every
  * watched session's subscribers: one owner, the host.
  */
-export class FrameFeeds<Req> {
+export class FrameFeeds<Req> implements LaneTurns {
   private readonly requests = new Map<SessionId, Noted<Req>>();
+  // [LAW:one-source-of-truth] Each session lane's turn: a number minted from
+  // one sequence each time the lane gains its first subscriber or loses its
+  // last, so no two periods of any lane share one. A lane never followed
+  // reads 0. A session's turns last while it is watched or the host holds its
+  // presentation: the lifetime of every draw and record that carries one.
+  private readonly turns = new Map<SessionId, Partial<Record<Lane, number>>>();
+  private turnsMinted = 0;
   private readonly watched = new Map<SessionId, Watched>();
   // The lanes each session with a view switches on, as the renderer's last
   // output said: a subscriber is gated by its lane.
@@ -320,7 +322,7 @@ export class FrameFeeds<Req> {
     if (watched === undefined) {
       watched = {
         followers: new Map(),
-        last: null,
+        last: new Map(),
         frameDemand: 0,
         pushed: 0,
       };
@@ -334,9 +336,11 @@ export class FrameFeeds<Req> {
       writes: new Set(),
       owner: sub.owner === null ? null : this.held(sub.owner),
     };
-    const owned = ownerOf(watched)?.id ?? null;
+    const owned = ownersOf(watched);
+    const laneJoined = !followsLane(watched, sub.lane);
     watched.followers.set(sub, follower);
     this.ownerMoved(sessionId, owned, watched);
+    if (laneJoined) this.turn(sessionId, sub.lane);
     this.handover(sessionId, watched, sub, follower);
     this.deps.log(
       "info",
@@ -355,11 +359,12 @@ export class FrameFeeds<Req> {
     sub: Subscriber,
     follower: Follower,
   ): void {
-    if (watched.last === null) {
+    const last = watched.last.get(sub.lane);
+    if (last === undefined) {
       watched.frameDemand = ++this.frameDemands;
       return;
     }
-    this.send(sessionId, watched, sub, watched.last, (delivered) => {
+    this.send(sessionId, watched, sub, last, (delivered) => {
       if (
         !delivered &&
         watched.followers.get(sub) === follower &&
@@ -378,8 +383,8 @@ export class FrameFeeds<Req> {
     return { ...owner, said: ++this.ownersSaid };
   }
 
-  // An owner's report of its pointer: held for the owner, which then owns the
-  // session's pointer, and the renderer is handed the change like any change
+  // An owner's report of its pointer: held for the owner, which then owns its
+  // lane's pointer, and the renderer is handed the change like any change
   // of who watches. An owner that does not follow the session is refused.
   pointerOf(
     sessionId: SessionId,
@@ -400,7 +405,7 @@ export class FrameFeeds<Req> {
         reason: `no owner ${JSON.stringify(owner.id)} follows session ${JSON.stringify(sessionId)}`,
       };
     // A stream that reconnects over its old one holds the owner's facts twice.
-    const owned = ownerOf(watched)?.id ?? null;
+    const owned = ownersOf(watched);
     const admitted = this.held(owner);
     for (const follower of reporting) follower.owner = admitted;
     this.ownerMoved(sessionId, owned, watched);
@@ -408,19 +413,50 @@ export class FrameFeeds<Req> {
     return { kind: "ok" };
   }
 
-  // [LAW:nothing-unseen] Who holds a session's pointer is said when it changes
+  // [LAW:nothing-unseen] Who holds a lane's pointer is said when it changes
   // hands, not on each report, which move at the pointer's speed.
   private ownerMoved(
     sessionId: SessionId,
-    before: string | null,
+    before: Owners,
     watched: Watched | undefined,
   ): void {
-    const after = watched === undefined ? null : (ownerOf(watched)?.id ?? null);
-    if (after !== before)
-      this.deps.log(
-        "info",
-        `feed sid=${JSON.stringify(sessionId)} pointer owner=${JSON.stringify(after)} was=${JSON.stringify(before)}`,
-      );
+    const after = ownersOf(watched);
+    for (const lane of LANE_NAMES)
+      if (after[lane] !== before[lane])
+        this.deps.log(
+          "info",
+          `feed sid=${JSON.stringify(sessionId)} lane=${lane} pointer owner=${JSON.stringify(after[lane])} was=${JSON.stringify(before[lane])}`,
+        );
+  }
+
+  // The lane's turn: 0 until it is first followed.
+  turnOf(session: SessionId, lane: Lane): number {
+    return this.turns.get(session)?.[lane] ?? 0;
+  }
+
+  laneOf(session: SessionId, lane: Lane): LaneTurn {
+    return {
+      turn: this.turnOf(session, lane),
+      followed: this.follows(session, lane),
+    };
+  }
+
+  follows(session: SessionId, lane: Lane): boolean {
+    const watched = this.watched.get(session);
+    return watched !== undefined && followsLane(watched, lane);
+  }
+
+  // The lane's drawer changed. The session's turns are trimmed oldest first
+  // past the bound, never while anything carries them.
+  private turn(session: SessionId, lane: Lane): void {
+    const turns = { ...this.turns.get(session), [lane]: ++this.turnsMinted };
+    this.turns.delete(session);
+    this.turns.set(session, turns);
+    for (const oldest of this.turns.keys()) {
+      if (this.turns.size <= MAX_REQUESTS) break;
+      if (!this.watched.has(oldest) && !this.deps.presents(oldest))
+        this.turns.delete(oldest);
+    }
   }
 
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
@@ -438,8 +474,9 @@ export class FrameFeeds<Req> {
   }
 
   // [LAW:one-source-of-truth] Who watches each session now, whole, as the
-  // renderer's feeds are handed it: each lane's subscribers and whether any
-  // draws the bar now, and whether the session's pane is on a screen.
+  // renderer's feeds are handed it: each lane's subscribers, whether any draws
+  // the bar now and the pointer over its surface, and whether the session's
+  // pane is on a screen.
   viewers(): Viewers {
     const viewers: Record<SessionId, SessionViewers> = {};
     for (const [sessionId, watched] of this.watched)
@@ -448,26 +485,24 @@ export class FrameFeeds<Req> {
   }
 
   private seen(sessionId: SessionId, watched: Watched): SessionViewers {
-    const lanes: Partial<Record<Lane, LaneViewers>> = {};
-    for (const sub of watched.followers.keys()) {
-      const seen = lanes[sub.lane];
-      lanes[sub.lane] = {
-        ...seen,
-        subscribers: (seen?.subscribers ?? 0) + 1,
-        drawing: (seen?.drawing ?? false) || sub.drawing(),
+    const followers = [...watched.followers.keys()];
+    // [LAW:one-source-of-truth] Each followed lane's facts, once per lane and
+    // in the lanes' own order, so a replacement within a lane that changes
+    // follower order still reads as the same view. Its pointer is its owner's.
+    const lanes = LANE_NAMES.flatMap((lane) => {
+      const subs = followers.filter((sub) => sub.lane === lane);
+      if (subs.length === 0) return [];
+      const viewers: LaneViewers = {
+        subscribers: subs.length,
+        drawing: subs.some((sub) => sub.drawing()),
+        pointer: ownerOf(watched, lane)?.pointer ?? null,
+        turn: this.turnOf(sessionId, lane),
       };
-    }
-    // Follower insertion order can change on a replacement within a lane.
-    // Emit the lane facts in the same order so that it remains the same view.
+      return [[lane, viewers] as const];
+    });
     return {
-      lanes: Object.fromEntries(
-        LANE_NAMES.flatMap((lane) => {
-          const viewed = lanes[lane];
-          return viewed === undefined ? [] : [[lane, viewed]];
-        }),
-      ),
-      pointer: ownerOf(watched)?.pointer ?? null,
-      shown: [...watched.followers.keys()].some(
+      lanes: Object.fromEntries(lanes),
+      shown: followers.some(
         (sub) => sub.presenting?.() ?? this.shown(sessionId),
       ),
       joined: watched.frameDemand,
@@ -526,50 +561,57 @@ export class FrameFeeds<Req> {
       }
   }
 
-  // The frames a renderer's turn drew: each kept as its session's last, and
-  // sent to each of its subscribers whose lane's answer it changed.
+  // The frames a renderer's turn drew: each kept as its lane's last while the
+  // lane has a subscriber, and sent to each of that lane's subscribers it
+  // changed. Each settles shown, or with why it was not.
   took(
     renderer: RendererName,
     frames: readonly PushedFrame[],
-    settled: (pushed: PushedFrame, delivered: boolean) => void,
+    settled: SettleFrame,
   ): void {
     for (const pushed of frames) {
-      const { session, frame } = pushed;
+      const { session, lane, turn, frame } = pushed;
       const watched = this.watched.get(session);
       if (watched === undefined) {
-        settled(pushed, false);
+        settled(pushed, "no subscriber follows its session");
         continue;
       }
-      let encoded: EncodedFeed;
-      let drawn = frame.kind === "drawn";
+      let encoded: EncodedAnswer;
+      let unsent: string | null =
+        frame.kind === "drawn" ? null : "its frame failed";
       try {
-        encoded = encodeFeed(frame, this.deps.publishFrame, {
+        encoded = encodeFeed(lane, frame, this.deps.publishFrame, {
           renderer,
           session,
           displayed: frame.kind === "drawn" ? frame.displayed : undefined,
         });
-        // [LAW:no-silent-failure] The answers this frame is about to be offered
-        // are built here, where a failure is this frame's, not a later
-        // subscriber's or another session's.
-        for (const { lane } of watched.followers.keys()) encoded.answer(lane);
       } catch (error) {
         // [LAW:no-silent-failure] A bad presentation is visible to the lane,
-        // and leaves other sessions' frames deliverable.
+        // and leaves other lanes' and sessions' frames deliverable.
         const refused = renderFailed(error);
-        encoded = failedFeed(refused);
-        if (watched.last?.failure !== encoded.failure)
+        encoded = failedAnswer(refused);
+        if (watched.last.get(lane)?.json !== encoded.json)
           this.deps.log(
             "error",
-            `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused.error)}`,
+            `frame sid=${JSON.stringify(session)} lane=${lane} error=${JSON.stringify(refused.error)}`,
           );
-        drawn = false;
+        unsent = refused.error;
       }
-      watched.last = encoded;
-      if (drawn) {
-        this.publish(session, watched, encoded, (ok) => settled(pushed, ok));
+      // [LAW:single-enforcer] A frame its lane's feed no longer draws (one
+      // drawn for an earlier turn of the lane, or for a lane no one follows)
+      // is shown nowhere: not kept, not sent, never presented.
+      if (!drawsNow(this, session, { by: "feed", lane, turn })) {
+        settled(pushed, "its lane's turn ended before it was sent");
+        continue;
+      }
+      watched.last.set(lane, encoded);
+      if (unsent === null) {
+        this.publish(session, watched, lane, encoded, (ok) =>
+          settled(pushed, ok ? null : "no subscriber showed it"),
+        );
       } else {
-        this.publish(session, watched, encoded);
-        settled(pushed, false);
+        this.publish(session, watched, lane, encoded);
+        settled(pushed, unsent);
       }
     }
   }
@@ -577,14 +619,18 @@ export class FrameFeeds<Req> {
   private publish(
     session: SessionId,
     watched: Watched,
-    encoded: EncodedFeed,
+    lane: Lane,
+    encoded: EncodedAnswer,
     settled?: Delivered,
   ): void {
-    const subscribers = [...watched.followers.keys()];
+    const subscribers = [...watched.followers.keys()].filter(
+      (sub) => sub.lane === lane,
+    );
     let remaining = subscribers.length;
     let complete = false;
-    // [LAW:single-enforcer] Any confirmed lane presents the draw. Failures
-    // finish it only when every subscriber in this publication has declined.
+    // [LAW:single-enforcer] Any confirmed subscriber presents the draw.
+    // Failures finish it only when every subscriber in this publication has
+    // declined.
     const done: Delivered | undefined =
       settled &&
       ((delivered) => {
@@ -642,17 +688,23 @@ export class FrameFeeds<Req> {
     const watched = this.watched.get(sessionId);
     const follower = watched?.followers.get(sub);
     if (watched === undefined || follower === undefined) return;
-    const owned = ownerOf(watched)?.id ?? null;
+    const owned = ownersOf(watched);
     watched.followers.delete(sub);
     this.ownerMoved(sessionId, owned, watched);
+    const laneLeft = !followsLane(watched, sub.lane);
+    if (laneLeft) {
+      watched.last.delete(sub.lane);
+      this.turn(sessionId, sub.lane);
+    }
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId);
       this.deps.log(
         "info",
         `feed sid=${JSON.stringify(sessionId)} unwatched pushed=${watched.pushed}`,
       );
-      this.deps.watchingChanged(sessionId, false);
     }
+    if (watched.followers.size === 0)
+      this.deps.watchingChanged(sessionId, false);
     this.announce();
     const writes = [...follower.writes];
     follower.writes.clear();
@@ -670,7 +722,7 @@ export class FrameFeeds<Req> {
     session: SessionId,
     watched: Watched,
     sub: Subscriber,
-    encoded: EncodedFeed,
+    answer: EncodedAnswer,
     done?: Delivered,
   ): void {
     const follower = watched.followers.get(sub);
@@ -678,7 +730,6 @@ export class FrameFeeds<Req> {
       done?.(false);
       return;
     }
-    const answer = encoded.answer(sub.lane);
     let latest: PendingWrite | undefined;
     for (const write of follower.writes) latest = write;
     if (latest !== undefined && covers(latest.answer, answer)) {

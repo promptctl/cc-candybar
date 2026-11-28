@@ -14,6 +14,7 @@ import {
 } from "./daemon/foundations/renderer-name.js";
 import type { RecordingCommand } from "./daemon/foundations/recording-command.js";
 import type { WireFrame } from "./render/frame.js";
+import type { Lane } from "./config/lanes.js";
 import type {
   EventInput,
   RendererOutput,
@@ -122,11 +123,7 @@ function replayArgs(args: readonly string[]): {
 
 function collectFrames(lines: string[]): ReplayTurn {
   let bytes = 0;
-  const emit = (
-    session: string,
-    surface: "statusline" | "bar",
-    frame: WireFrame,
-  ): void => {
+  const emit = (session: string, surface: Lane, frame: WireFrame): void => {
     const line = JSON.stringify({ session, surface, frame }) + "\n";
     bytes += Buffer.byteLength(line);
     // [LAW:carrying-cost] Frame export holds output until verification.
@@ -142,11 +139,8 @@ function collectFrames(lines: string[]): ReplayTurn {
       if (effect.kind === "present")
         emit(effect.session, effect.surface, effect.frame);
     }
-    for (const { session, frame } of output.frames) {
-      if (frame.kind !== "drawn") continue;
-      emit(session, "bar", frame.bar);
-      if (frame.handoff !== null) emit(session, "statusline", frame.handoff);
-    }
+    for (const { session, lane, frame } of output.frames)
+      if (frame.kind === "drawn") emit(session, lane, frame.bar);
   };
 }
 

@@ -19,17 +19,15 @@ import {
   type ClientHints,
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
-import type { EffectId } from "../renderer-interface/interface";
+import type { EffectId, LaneViewers } from "../renderer-interface/interface";
 import { repoQuestions } from "../config/repo-question";
 import {
-  writableRoles,
   type CacheEntry,
   type RenderCache,
   type DslRenderState,
   type SessionHold,
   type SessionView,
 } from "./render-cache";
-import { roleOf } from "../daemon/foundations/sighting-roles";
 import { partsOf } from "../dsl/parts.js";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { standIn, type Frame } from "../render/frame.js";
@@ -50,7 +48,6 @@ import { transcriptLossText } from "../utils/transcript-loss.js";
 import type { PendingRead } from "../var-system/types.js";
 import { isPending } from "../utils/outcome.js";
 import {
-  editGlobalsOf,
   laneSwitches,
   declaredLanes,
   resolveEffectiveGlobals,
@@ -58,14 +55,11 @@ import {
 import type { PassageFrame } from "../render/effect.js";
 import {
   feedsFact,
-  LANES,
   LANE_NAMES,
-  perLane,
   ANSWERING,
   type Drawing,
   type Lane,
   type LaneFeeds,
-  type LaneSwitches,
   type DeclaredLanes,
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
@@ -75,6 +69,7 @@ import { inClickMode } from "../render/click-mode-frame.js";
 import {
   CLICK_MODE_KEY,
   HOVER_KEY,
+  clickModeOf,
   modeInForce,
   modeIsOpen,
 } from "../config/click-mode.js";
@@ -85,7 +80,6 @@ import {
   clickErrorAt,
   type ClickErrorRecord,
 } from "../daemon/foundations/click-error.js";
-import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   aboutKind,
   aboutSubject,
@@ -98,8 +92,6 @@ import {
   diagnosticCopies,
   type SourcedText,
   diagnosticsProjection,
-  handoffRows,
-  type DiagnosticList,
   viewedIndex,
   viewerRowCap,
   viewerRows,
@@ -139,77 +131,105 @@ export interface RendererParts {
   readonly worldStates: WorldStates;
   // What the feeds know of who watches each session, which a request's
   // answer hands the bar to and shows the rate of.
-  readonly feeds: Pick<Feeds, "following" | "feedsOf">;
+  readonly feeds: Pick<Feeds, "feedsOf">;
 }
 
-// One frame of a subscribed session, drawn from its latest request at this
-// instant, by the render a request gets. The host presents the bar or its
-// statusline handoff, and the bar moves when its effects say it does.
+// One frame of a subscribed session for each lane that follows it, drawn
+// from its latest request at this instant, by the render a request gets, and
+// each from that lane's own pointer and accepted presentation. The bar moves
+// when its effects say it does.
 // [LAW:parse-dont-validate] The request the session's view is declared with
 // crossed the checkpoint when it arrived, so a frame draws by it without
-// asking again. Null while the session has no view: a frame opens none.
+// asking again. Null while the session has no view: a frame opens none, and
+// every lane draws from the one view.
 // [LAW:nothing-unseen] A frame that throws carries the render event a throwing
-// request writes, for the feed to log when that failure first shows; the
-// feed summarizes the frames that render.
+// request writes, naming its lane, for the feed to log when that lane's
+// failure first shows; the feed summarizes the frames that render.
 // [LAW:effects-at-boundaries] Synchronous by type: a frame reads every value
 // as its owner stored it (the view's payload), so it performs no I/O and
 // refreshes no source — the collector's triggers made those refreshes,
 // and an event, never a frame, opened the view it draws.
-export function renderFrame(
+export function renderFrames(
   parts: RendererParts,
   sessionId: SessionId,
+  // Each lane the frames are drawn for, with its viewers: the turn it is
+  // drawn under, and what its follower says of the pointer over it, if one
+  // does.
+  lanes: ReadonlyArray<readonly [Lane, LaneViewers]>,
   fps: number,
-  // The instant the frame is drawn for, and the tick of the turn drawing it.
+  // The instant the frames are drawn for, and the tick of the turn drawing
+  // them.
   readings: Readings,
-  // Which lanes follow the session and draw it now, and what each was sent
-  // of late, as the feed knows them.
-  following: ReadonlySet<Lane>,
+  // What each lane following the session was sent of late, as the feed
+  // knows them.
   feeds: LaneFeeds,
-  // What the follower that owns the session's pointer says of it, if one does.
-  pointer: Pointer | null,
   prepare: PrepareDelivery,
-): FeedDraw | null {
+): ReadonlyArray<readonly [Lane, FeedDraw]> | null {
   const facts: RequestFacts = [];
+  const failed = (
+    [lane, { turn }]: readonly [Lane, LaneViewers],
+    error: unknown,
+    noted: RequestFacts,
+  ) => {
+    const outcome = renderFailure(rendererFailureOf(error));
+    const { level, line } = drawEvent("render", noted, outcome);
+    const draw: FeedDraw = {
+      frame: { kind: "failed", message: outcome.message },
+      turn,
+      evaluated: 0,
+      cellBreaks: 0,
+      failure: { level, line: `frame lane=${lane} ${line}` },
+    };
+    return [lane, draw] as const;
+  };
   try {
     using setup = setUpFrame(parts, sessionId, readings, facts);
     if (setup === null) return null;
-    const { drawn, evaluated, cellBreaks, lanes, candidate, eventsShown } =
-      drawRender(parts, setup, { by: "feed", fps }, feeds, pointer);
-    const bar = drawn.body;
-    const { frame: statusline } = statuslineOf(
-      setup,
-      parts.sessionState,
-      drawn,
-      handedOffTo(lanes, following),
-    );
-    const handoff = statusline === bar ? null : statusline;
-    const { id: receipt, ...presentation } = prepare({
-      candidate,
-      clickShown: null,
+    const drawSurface = drawRender(parts, setup, { by: "feed", fps }, feeds);
+    return lanes.map((viewed) => {
+      const [lane, { pointer, turn }] = viewed;
+      // [LAW:one-source-of-truth] Each lane's event: the session's facts,
+      // then its own surface's.
+      const noted: RequestFacts = [...facts];
+      try {
+        const {
+          drawn,
+          evaluated,
+          cellBreaks,
+          candidate,
+          eventsShown,
+          clickShown,
+        } = drawSurface(lane, pointer, noted);
+        const { id: receipt, ...presentation } = prepare({
+          kind: "frame",
+          candidate,
+          // [LAW:one-source-of-truth] The click error is owed past its hold
+          // to Claude Code's statusline, so only a draw shown there answers
+          // it: the statusline lane's frame, which cc-extra shows in place
+          // of the command's answer, and never a pane's or a window's.
+          clickShown: lane === "statusline" ? clickShown : null,
+        });
+        const draw: FeedDraw = {
+          frame: {
+            kind: "drawn",
+            displayed: displayedConfig(setup),
+            receipt,
+            ...presentation,
+            bar: drawn.body,
+            displayedEvents: eventsShown,
+          },
+          turn,
+          evaluated,
+          cellBreaks,
+          failure: null,
+        };
+        return [lane, draw] as const;
+      } catch (error) {
+        return failed(viewed, error, noted);
+      }
     });
-    return {
-      frame: {
-        kind: "drawn",
-        displayed: displayedConfig(setup),
-        receipt,
-        ...presentation,
-        bar,
-        handoff,
-        displayedEvents: eventsShown,
-      },
-      evaluated,
-      cellBreaks,
-      failure: null,
-    };
   } catch (error) {
-    const outcome = renderFailure(rendererFailureOf(error));
-    const { level, line } = drawEvent("render", facts, outcome);
-    return {
-      frame: { kind: "failed", message: outcome.message },
-      evaluated: 0,
-      cellBreaks: 0,
-      failure: { level, line: `frame ${line}` },
-    };
+    return lanes.map((viewed) => failed(viewed, error, facts));
   }
 }
 
@@ -437,21 +457,22 @@ function setUpDraw(
   }
 }
 
-// [LAW:one-source-of-truth] The one draw of a render, a request's or a
-// frame's: synchronous, so between its payload's values and its bytes nothing
-// is awaited and nothing refreshed. Returns the bar at the setup's instant. A
-// throw is the caller's to record.
-export function drawRender(
-  parts: RendererParts,
-  setup: RenderSetup,
-  drawing: Drawing,
-  // What each lane following the session was sent of late, as the bar's rate
-  // cell shows it.
-  feeds: LaneFeeds,
-  // The pointer of the follower that owns the session's, which only a fed bar has:
-  // the request path draws for no pointer of its own.
+// [LAW:types-are-the-program] The surfaces a drawer draws: a request draws
+// Claude Code's statusline, and a feed any lane that follows the session.
+export type SurfaceOf<D extends Drawing> = D extends { readonly by: "request" }
+  ? "statusline"
+  : Lane;
+
+// One surface's draw from a session's draw: the surface it is shown on, whose
+// accepted presentation it continues and records; the pointer over it, which
+// only a fed surface's follower reports; and the facts its event notes.
+export type DrawSurface<D extends Drawing> = (
+  surface: SurfaceOf<D>,
   pointer: Pointer | null,
-): {
+  facts: RequestFacts,
+) => DrawnSurface;
+
+export interface DrawnSurface {
   drawn: DrawnBar;
   evaluated: number;
   cellBreaks: number;
@@ -460,10 +481,25 @@ export function drawRender(
   // renderer's end, an act that failed, a task that threw), which an answer
   // carrying them marks answered.
   eventsShown: readonly DaemonEvent[] | undefined;
-  // Which animation lanes the session's settings switch on, as drawn.
-  lanes: LaneSwitches;
   candidate: FrameCandidate;
-} {
+}
+
+// [LAW:one-source-of-truth] The one draw of a render, a request's or a
+// frame's: synchronous, so between its payload's values and its bytes nothing
+// is awaited and nothing refreshed. What the session shows every surface at
+// the setup's instant is read once, and each surface is drawn from it
+// (`DrawSurface`) at that instant. A throw is the caller's to record.
+// [LAW:carrying-cost] A feed drawing three lanes reads the session's facts
+// once a tick, not once a lane.
+export function drawRender<D extends Drawing>(
+  parts: RendererParts,
+  setup: RenderSetup,
+  // Who asked for the draw, which says what its answer still owes.
+  drawing: D,
+  // What each lane following the session was sent of late, as the bar's rate
+  // cell shows it.
+  feeds: LaneFeeds,
+): DrawSurface<D> {
   const {
     sessionState,
     renderCache: { presentations },
@@ -630,50 +666,6 @@ export function drawRender(
       }),
     ),
   ];
-  // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
-  // indicator reads it as the `diagnostics` projection and the viewer pages
-  // the same object, so the two cannot disagree within a frame. Walk warnings
-  // come from the session's accepted frame on this surface and the other
-  // surface's accepted frame on the same config.
-  const config = presentations.configOf(state.config);
-  const target = view.presentationTargets[drawing.by];
-  const diagnostics = collectDiagnostics(
-    sessionId,
-    drawing.by,
-    errors,
-    questions,
-    [
-      ...standing.map(({ about, warning }) => ({
-        about,
-        text: warning.message,
-        copy: warning.message,
-      })),
-      // A render warning is about its whole description.
-      ...presentations
-        .warnings(sessionId, drawing.by, config)
-        .map(({ key, warning }) => ({
-          about: aboutText(warning.kind, key),
-          text: warning.message,
-          copy: warning.message,
-        })),
-    ],
-  );
-  // [LAW:one-source-of-truth] The mode this draw is in, once: the session's,
-  // unless the surface of the follower that owns the pointer (a link's, with none)
-  // delivers its gesture itself. Hover, the frame's links and whether the idle
-  // clock runs all read this one value; the idle close resets the session's
-  // own, which is what a lane that does not deliver the gesture reads.
-  const mode = modeInForce(
-    sessionState.get(sessionId, CLICK_MODE_KEY),
-    surfaceOf(pointer),
-  );
-  const projected = {
-    diagnostics: diagnosticsProjection(diagnostics),
-    drawing,
-    feeds,
-    ...pointerFacts(pointer, mode, sessionState.get(sessionId, HOVER_KEY)),
-    ...instantFacts(document.builtins, at, view.registry.calendar),
-  };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   const sources = sourceSummaryOf(
     [...view.state.sources.keys()],
@@ -685,223 +677,265 @@ export function drawRender(
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
     pr: prFactOf(payload.git),
-    feeds: feedsFact(projected.feeds),
+    feeds: feedsFact(feeds),
   });
   // [LAW:one-source-of-truth] The options drawDsl draws with are the SAME
   // `effective` struct the payload was just built from, projected by the one
   // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
   // computation to drift from it.
   const renderOpts = renderOptionsOf(effective, width);
-  const effects = presentations.effects(sessionId);
-  // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
-  // its opening): the draw hands only its own instant's facts.
-  // [LAW:no-silent-failure] What the walk had to settle for itself and could
-  // not honour (`RenderWarning`) is this frame's own, recorded for its
-  // renderer by the turn that keeps the frame, so the bar still renders and
-  // the indicator counts them.
-  const draw = () =>
-    drawDsl(
-      state.config,
-      state.compiled,
-      view.store,
-      view.registry,
-      projected,
-      at,
-      renderOpts,
-      // [LAW:one-source-of-truth] The draw's own settings, the session's
-      // effect memory and the record of the surface's last frame of the view.
-      // The theme, style and effect are not among them: the view's slots settle
-      // those names (src/dsl/parts.ts), the same ones its payload's `.effective`
-      // fields read.
-      {
-        ...effective,
-        effects,
-        record: presentations.layout(sessionId, drawing.by, target)?.record,
-        idleSince: idleSince ?? undefined,
-      },
+  return (surface, pointer, facts) => {
+    // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
+    // indicator reads it as the `diagnostics` projection and the viewer pages
+    // the same object, so the two cannot disagree within a frame. Walk warnings
+    // come from the session's accepted frame on this surface.
+    const target = view.presentationTargets[surface];
+    const diagnostics = collectDiagnostics(
+      sessionId,
+      surface,
+      errors,
+      questions,
+      [
+        ...standing.map(({ about, warning }) => ({
+          about,
+          text: warning.message,
+          copy: warning.message,
+        })),
+        // A render warning is about its whole description.
+        ...presentations
+          .warnings(sessionId, surface)
+          .map(({ key, warning }) => ({
+            about: aboutText(warning.kind, key),
+            text: warning.message,
+            copy: warning.message,
+          })),
+      ],
     );
-  // [LAW:one-source-of-truth] Template term.cols and the physical strip use
-  // the same width, including a client whose request waited through a resize.
-  const {
-    frame: drawnFrame,
-    waited,
-    memory,
-    warnings: drawnWarnings,
-    segments,
-    evaluated,
-    cellBreaks,
-    rules,
-  } = width === payload.term.cols
-    ? draw()
-    : partsOf(state.compiled, view.store).withTerminalWidth(width, draw);
-  // [LAW:one-source-of-truth] What each copy click this frame mints copies,
-  // read back when the click runs (the copy-diagnostic verb): the list this
-  // renderer last delivered, never text carried in the link. Recorded when
-  // the frame reaches its client, so a draw that throws, or an answer that
-  // never arrives, leaves the shown frame's copies.
-  const copies = diagnosticCopies(diagnostics);
-  // [LAW:single-enforcer] The one place the click mode picks the links a frame
-  // shows: a cell is drawn once, so no cell reads the mode
-  // (src/render/click-mode-frame.ts).
-  const frame = inClickMode(drawnFrame, mode);
-  // [LAW:one-source-of-truth] The idle period this walk drew with.
-  noteFacts(facts, {
-    menuIdle:
-      idleSince === null
-        ? "-"
-        : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`,
-  });
-  // [LAW:no-silent-failure] Every frame records what it warned; a record that
-  // moved is shown by the renderer's next frame: a feed's next spaced frame,
-  // a request's next poll. Nothing wakes for it, since a frame whose own
-  // indicator moves what it warns would wake itself forever.
-  const geometry: DiagnosticGeometry = {
-    width,
-    rows,
-    // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
-    // the depth the frame is encoded at.
-    colorCompatibility: frame.depth,
-  };
-  // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
-  // place: open only while the message it was opened on is in this list.
-  const viewing = viewedIndex(
-    sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
-    diagnostics,
-  );
-  const body: Frame =
-    viewing === null
-      ? frame
-      : standIn(
-          frame,
-          viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
-        );
-  const fx = memory.motion.frame;
-  // Each placement wearing its own effect, on its own clock; `-` for none.
-  const own =
-    fx.own
-      .map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`)
-      .join(",") || "-";
-  // Each placement fading in, and each dissolving out, on its own clock;
-  // `-` for none.
-  const passages = (frames: readonly PassageFrame[]): string =>
-    frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-  // [LAW:nothing-unseen] Each warning this frame met, those standing before
-  // it and its own walk's, in order; `-` for none. A rule's tag names
-  // the slot that fell to its floor (`rule:style`), and a refresh's the
-  // variable that stopped (`refresh:stamp`), so the event says which.
-  const warnings = drawnWarnings.map(describeWarning);
-  const warned =
-    [
-      ...standing.map(({ warning }) =>
-        warning.kind === "file-events"
-          ? `${warning.kind}:${warning.state}`
-          : warning.kind,
-      ),
-      ...warnings.map(({ tag }) => tag),
-    ].join(",") || "-";
-  // [LAW:nothing-unseen] Every fault this frame met, each whole, at the level
-  // the bar's list shows it: the errors, the warnings standing before the
-  // draw and the walk's own warnings. Noted whole when
-  // it moved since the renderer's last record of the session, so a reader
-  // learns what the frame could not honour without its viewer, and `kept`
-  // otherwise, so an unchanged bar costs no message per tick.
-  const faults: ReadonlyArray<Fault<FaultKind>> = [
-    ...errors.map(({ about, text }) => faultAbout("error", about, text)),
-    ...standing.map(({ about, warning }) =>
-      faultAbout("warning", about, warning.message),
-    ),
-    ...warnings.map(({ warning, subject }) =>
-      faultOf("warning", warning.kind, warning.message, subject),
-    ),
-  ];
-  const diagnosticsRecord = frameWarnings(warnings, faults);
-  const change = warningChanges(
-    diagnosticsRecord,
-    presentations.diagnostics(sessionId, drawing.by),
-  );
-  noteFacts(facts, {
-    faults: change.faults,
-    effect: fx.effect,
-    effectT: fx.t.toFixed(3),
-    // The rate the session's animation clock ran at for this frame.
-    speed: `${fx.speed}x`,
-    effectRows: `${fx.made}made/${fx.reused}reused`,
-    effectOwn: own,
-    fadeBasis: fx.basis,
-    stateRev: String(fx.revision),
-    fades: passages(fx.fades),
-    leaves: passages(fx.leaves),
-    // What the body drew: whether anything on it changes without new data.
-    motion: body.motion,
-    // How many of the view's parts it evaluated: between data changes, only
-    // those that read the instant (src/dsl/parts.ts).
-    evaluated: String(evaluated),
-    // How many strip items dividing cells too wide for a line added.
-    cellBreaks: String(cellBreaks),
-    // The sources it drew as not answered yet; `-` for none.
-    pending: body.pending.join(",") || "-",
-    // Each globals rule in force, as its slot settled it: `kept` outside the
-    // draw, `per-draw` at this frame's instant; `-` for none.
-    rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
-    err: errors.length > 0 ? "Y" : "N",
-    clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
-    // Each pipe event as this frame showed it, in the order held: `-` for
-    // none at all.
-    pipeEvent:
-      daemonWarnings
-        .filter(({ warning }) => warning.kind === "launch-pipes")
-        .map(({ warning }) => warning.hold)
-        .join(",") || "-",
-    // How many repositories the bar asked about.
-    ask: String(questions.length),
-    warn: warned,
-    // What the indicator counted, and whether this frame's warnings moved
-    // its renderer's record (`new`) or matched it (`kept`).
-    diag: String(diagnostics.length),
-    warnRecord: change.moved ? "new" : "kept",
-    // The message the viewer showed in the body's place, `-` while closed.
-    viewer:
-      viewing === null
-        ? "-"
-        : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`,
-  });
-  return {
-    drawn: {
-      body,
-      // What the body drew as not answered yet, and the document it drew
-      // from; a viewer standing in for the body drew none.
-      waited: viewing === null ? waited : [],
-      document,
-      viewerOpen: viewing !== null,
+    // [LAW:one-source-of-truth] The mode this draw is in, once: the session's,
+    // unless this surface's pointer (a link's, with none) delivers its gesture
+    // itself. Hover and the frame's links read this one value.
+    const mode = modeInForce(
+      sessionState.get(sessionId, CLICK_MODE_KEY),
+      surfaceOf(pointer),
+    );
+    const projected = {
+      diagnostics: diagnosticsProjection(diagnostics),
+      drawing,
+      feeds,
+      ...pointerFacts(pointer, mode, sessionState.get(sessionId, HOVER_KEY)),
+      ...instantFacts(document.builtins, at, view.registry.calendar),
+    };
+    const effects = presentations.effects(sessionId, surface);
+    // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
+    // its opening): the draw hands only its own instant's facts.
+    // [LAW:no-silent-failure] What the walk had to settle for itself and could
+    // not honour (`RenderWarning`) is this frame's own, recorded for its
+    // renderer by the turn that keeps the frame, so the bar still renders and
+    // the indicator counts them.
+    const draw = () =>
+      drawDsl(
+        state.config,
+        state.compiled,
+        view.store,
+        view.registry,
+        projected,
+        at,
+        renderOpts,
+        // [LAW:one-source-of-truth] The draw's own settings, the session's
+        // effect memory and the record of the surface's last frame of the view.
+        // The theme, style and effect are not among them: the view's slots settle
+        // those names (src/dsl/parts.ts), the same ones its payload's `.effective`
+        // fields read.
+        {
+          ...effective,
+          effects,
+          record: presentations.layout(sessionId, surface, target)?.record,
+          idleSince: idleSince ?? undefined,
+        },
+      );
+    // [LAW:one-source-of-truth] Template term.cols and the physical strip use
+    // the same width, including a client whose request waited through a resize.
+    const {
+      frame: drawnFrame,
+      waited,
+      memory,
+      warnings: drawnWarnings,
+      segments,
+      evaluated,
+      cellBreaks,
+      rules,
+    } = width === payload.term.cols
+      ? draw()
+      : partsOf(state.compiled, view.store).withTerminalWidth(width, draw);
+    // [LAW:one-source-of-truth] What each copy click this frame mints copies,
+    // read back when the click runs (the copy-diagnostic verb): the list this
+    // renderer last delivered, never text carried in the link. Recorded when
+    // the frame reaches its client, so a draw that throws, or an answer that
+    // never arrives, leaves the shown frame's copies.
+    const copies = diagnosticCopies(diagnostics);
+    // [LAW:single-enforcer] The one place the click mode picks the links a frame
+    // shows: a cell is drawn once, so no cell reads the mode
+    // (src/render/click-mode-frame.ts).
+    const frame = inClickMode(drawnFrame, mode);
+    // [LAW:one-source-of-truth] The idle period this walk drew with.
+    noteFacts(facts, {
+      menuIdle:
+        idleSince === null
+          ? "-"
+          : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`,
+    });
+    // [LAW:no-silent-failure] Every frame records what it warned; a record that
+    // moved is shown by the renderer's next frame: a feed's next spaced frame,
+    // a request's next poll. Nothing wakes for it, since a frame whose own
+    // indicator moves what it warns would wake itself forever.
+    const geometry: DiagnosticGeometry = {
+      width,
+      rows,
+      // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
+      // the depth the frame is encoded at.
+      colorCompatibility: frame.depth,
+    };
+    // [LAW:dataflow-not-control-flow] The viewer, while open, takes the body's
+    // place: open only while the message it was opened on is in this list.
+    const viewing = viewedIndex(
+      sessionState.get(sessionId, DIAGNOSTICS_VIEWING),
       diagnostics,
-      geometry,
-    },
-    evaluated,
-    cellBreaks,
-    clickShown,
-    eventsShown: eventsShown.length > 0 ? eventsShown : undefined,
-    lanes,
-    candidate: {
-      session: sessionId,
-      by: drawing.by,
-      target,
-      loadKey: state.loadKey,
-      frame: {
-        config,
-        layout: { record: memory.record, segments },
-        motion: memory.motion,
-        diagnostics: diagnosticsRecord,
-        copies,
-        menu: {
-          tick: readings.tick,
-          // [LAW:no-ambient-temporal-coupling] A click mode the user left on
-          // is open state as a menu is: the same idle period ends it.
-          shown:
-            frame.rows.some((row) => row.kind === "menu") || modeIsOpen(mode),
-          timeoutS: effective.menuTimeout,
+    );
+    const body: Frame =
+      viewing === null
+        ? frame
+        : standIn(
+            frame,
+            viewerRows(diagnostics, viewing, sessionId, surface, geometry),
+          );
+    const fx = memory.motion.frame;
+    // Each placement wearing its own effect, on its own clock; `-` for none.
+    const own =
+      fx.own
+        .map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`)
+        .join(",") || "-";
+    // Each placement fading in, and each dissolving out, on its own clock;
+    // `-` for none.
+    const passages = (frames: readonly PassageFrame[]): string =>
+      frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
+    // [LAW:nothing-unseen] Each warning this frame met, those standing before
+    // it and its own walk's, in order; `-` for none. A rule's tag names
+    // the slot that fell to its floor (`rule:style`), and a refresh's the
+    // variable that stopped (`refresh:stamp`), so the event says which.
+    const warnings = drawnWarnings.map(describeWarning);
+    const warned =
+      [
+        ...standing.map(({ warning }) =>
+          warning.kind === "file-events"
+            ? `${warning.kind}:${warning.state}`
+            : warning.kind,
+        ),
+        ...warnings.map(({ tag }) => tag),
+      ].join(",") || "-";
+    // [LAW:nothing-unseen] Every fault this frame met, each whole, at the level
+    // the bar's list shows it: the errors, the warnings standing before the
+    // draw and the walk's own warnings. Noted whole when
+    // it moved since the renderer's last record of the session, so a reader
+    // learns what the frame could not honour without its viewer, and `kept`
+    // otherwise, so an unchanged bar costs no message per tick.
+    const faults: ReadonlyArray<Fault<FaultKind>> = [
+      ...errors.map(({ about, text }) => faultAbout("error", about, text)),
+      ...standing.map(({ about, warning }) =>
+        faultAbout("warning", about, warning.message),
+      ),
+      ...warnings.map(({ warning, subject }) =>
+        faultOf("warning", warning.kind, warning.message, subject),
+      ),
+    ];
+    const diagnosticsRecord = frameWarnings(warnings, faults);
+    const change = warningChanges(
+      diagnosticsRecord,
+      presentations.diagnostics(sessionId, surface),
+    );
+    noteFacts(facts, {
+      faults: change.faults,
+      effect: fx.effect,
+      effectT: fx.t.toFixed(3),
+      // The rate the surface's animation clock ran at for this frame.
+      speed: `${fx.speed}x`,
+      effectRows: `${fx.made}made/${fx.reused}reused`,
+      effectOwn: own,
+      fadeBasis: fx.basis,
+      stateRev: String(fx.revision),
+      fades: passages(fx.fades),
+      leaves: passages(fx.leaves),
+      // What the body drew: whether anything on it changes without new data.
+      motion: body.motion,
+      // How many of the view's parts it evaluated: between data changes, only
+      // those that read the instant (src/dsl/parts.ts).
+      evaluated: String(evaluated),
+      // How many strip items dividing cells too wide for a line added.
+      cellBreaks: String(cellBreaks),
+      // The sources it drew as not answered yet; `-` for none.
+      pending: body.pending.join(",") || "-",
+      // Each globals rule in force, as its slot settled it: `kept` outside the
+      // draw, `per-draw` at this frame's instant; `-` for none.
+      rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
+      err: errors.length > 0 ? "Y" : "N",
+      clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+      // Each pipe event as this frame showed it, in the order held: `-` for
+      // none at all.
+      pipeEvent:
+        daemonWarnings
+          .filter(({ warning }) => warning.kind === "launch-pipes")
+          .map(({ warning }) => warning.hold)
+          .join(",") || "-",
+      // How many repositories the bar asked about.
+      ask: String(questions.length),
+      warn: warned,
+      // What the indicator counted, and whether this frame's warnings moved
+      // its renderer's record (`new`) or matched it (`kept`).
+      diag: String(diagnostics.length),
+      warnRecord: change.moved ? "new" : "kept",
+      // The message the viewer showed in the body's place, `-` while closed.
+      viewer:
+        viewing === null
+          ? "-"
+          : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`,
+    });
+    return {
+      drawn: {
+        body,
+        // What the body drew as not answered yet, and the document it drew
+        // from; a viewer standing in for the body drew none.
+        waited: viewing === null ? waited : [],
+        document,
+      },
+      evaluated,
+      cellBreaks,
+      clickShown,
+      eventsShown: eventsShown.length > 0 ? eventsShown : undefined,
+      candidate: {
+        session: sessionId,
+        surface,
+        target,
+        loadKey: state.loadKey,
+        frame: {
+          layout: { record: memory.record, segments },
+          motion: memory.motion,
+          diagnostics: diagnosticsRecord,
+          copies,
+          menu: {
+            tick: readings.tick,
+            // [LAW:no-ambient-temporal-coupling] A click mode the user left on
+            // is open state as a menu is: the same idle period ends it. The
+            // period is the session's, so it reads the stored mode, never the
+            // mode in force on this one surface.
+            shown:
+              frame.rows.some((row) => row.kind === "menu") ||
+              modeIsOpen(
+                clickModeOf(sessionState.get(sessionId, CLICK_MODE_KEY)),
+              ),
+            timeoutS: effective.menuTimeout,
+          },
         },
       },
-    },
+    };
   };
 }
 
@@ -1022,23 +1056,18 @@ const alone = (warning: StandingWarning): Standing => ({
   about: aboutKind(warning.kind),
 });
 
-// What one render drew: the body — the bar, or the viewer in its place — and
-// what the statusline's handoff line is drawn from: whether the body is the
-// viewer, the draw's one diagnostic list, and the geometry.
+// What one render drew: the body — the bar, or the viewer in its place — what
+// it owes, and the document it drew from.
 interface DrawnBar {
   readonly body: Frame;
   readonly waited: readonly PendingRead[];
   readonly document: WorldState;
-  readonly viewerOpen: boolean;
-  readonly diagnostics: DiagnosticList;
-  readonly geometry: DiagnosticGeometry;
 }
 
 // A render request's answer: the bar drawn for its client.
 export interface RequestAnswer {
   readonly displayed?: DisplayedConfig;
-  // What this request's client is shown: the statusline's frame to Claude
-  // Code's statusline, the bar to a client drawing it itself.
+  // What this request's client is shown: the bar.
   readonly frame: Frame;
   readonly displayedEvents?: readonly DaemonEvent[];
   // [LAW:single-enforcer] What the frame still owes, said by the draw that
@@ -1063,25 +1092,16 @@ export function answerRequest(
     facts,
     presentation,
   );
-  const { drawn, clickShown, eventsShown, lanes, candidate } = drawRender(
+  // [LAW:one-source-of-truth] A request is Claude Code's statusline asking:
+  // its answer is drawn for that surface, which the host presents while no
+  // lane B frame paints it.
+  const { drawn, clickShown, eventsShown, candidate } = drawRender(
     parts,
     setup,
     ANSWERING,
     feeds.feedsOf(sessionId, time.tick),
-    null,
-  );
-  const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
-  // A `frames` display draws the bar itself; Claude Code's statusline hands
-  // it to the lanes drawing it elsewhere.
-  const toStatusline = roleOf(presentation.client ?? null) === "statusline";
-  const { frame, waited } = toStatusline
-    ? statuslineOf(setup, parts.sessionState, drawn, elsewhere)
-    : { frame: drawn.body, waited: drawn.waited };
-  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How
-  // long the turn took is the host's `drew=`, timed around the turn.
-  noteFacts(facts, {
-    handoff: (toStatusline ? elsewhere : []).join(",") || "-",
-  });
+  )("statusline", null, facts);
+  const { body: frame, waited } = drawn;
   const awaiting = awaitingOf(waited, drawn.document);
   // [LAW:nothing-unseen] What the frame owes, by name; `-` for nothing.
   noteFacts(facts, {
@@ -1092,17 +1112,18 @@ export function answerRequest(
     displayed: displayedConfig(setup),
     displayedEvents: eventsShown,
     awaiting,
-    delivery: {
-      candidate,
-      clickShown,
-    },
+    delivery: { kind: "answer", candidate, clickShown },
   };
 }
 
-// What a frame that reached its client showed, which its delivery records:
-// what its copy clicks copy and the session's click error.
+// [LAW:types-are-the-program] What a frame the host presented records: the
+// surface's presentation and the click error it showed. A feed's frame, which
+// has no render event, also notes on the turn the faults it was accepted with.
 export interface Delivery {
+  readonly kind: "answer" | "frame";
   readonly candidate: FrameCandidate;
+  // The click error the draw showed on Claude Code's statusline, which a
+  // presented draw has answered.
   readonly clickShown: ClickErrorRecord | null;
   readonly portable?: PortableDraw;
 }
@@ -1119,64 +1140,18 @@ export function deliver(
   id: EffectId,
   delivery: Delivery,
 ): Acceptance | null {
-  const { candidate, clickShown } = delivery;
+  const { candidate } = delivery;
   const accepted = parts.renderCache.acceptFrame(
     id,
     candidate,
     delivery.portable,
   );
   if (accepted === null) return null;
-  if (clickShown !== null)
-    answeredClickError(parts.sessionState, candidate.session, clickShown);
-  return accepted;
-}
-
-// What Claude Code's statusline shows of `drawn`: the bar, or — while lanes
-// draw it `elsewhere` — the handoff line, which says where, with the bar's
-// indicator after it. [LAW:one-source-of-truth] The indicator reads the draw's
-// one list, and its click opens the one viewer: while it is open the statusline
-// shows it, the same body the lanes draw. [LAW:single-enforcer] It says what
-// the frame it returns drew as not answered yet, so the frame and what it owes
-// are decided together: the handoff line stands in for the bar and draws none
-// of the bar's.
-function statuslineOf(
-  { sessionId, state, view }: RenderSetup,
-  picks: SessionStateRW,
-  drawn: DrawnBar,
-  elsewhere: readonly Lane[],
-): { readonly frame: Frame; readonly waited: readonly PendingRead[] } {
-  const first = elsewhere[0];
-  if (first === undefined || drawn.viewerOpen)
-    return { frame: drawn.body, waited: drawn.waited };
-
-  const effective = view.source.effective();
-  const defaultsAfterReset = state.remainingLanes.get(effective.preset);
-  if (defaultsAfterReset === undefined)
-    throw new Error(
-      `No lane reset defaults for resolved preset '${effective.preset}'`,
+  if (delivery.clickShown !== null)
+    answeredClickError(
+      parts.sessionState,
+      candidate.session,
+      delivery.clickShown,
     );
-  const editGlobals = editGlobalsOf(state.config, (key) =>
-    picks.get(sessionId, key),
-  );
-  const remaining = perLane(
-    (lane) =>
-      editGlobals[LANES[lane].switch.setting] ?? defaultsAfterReset[lane],
-  );
-  return {
-    frame: standIn(
-      drawn.body,
-      handoffRows(
-        laneHandoff(
-          sessionId,
-          writableRoles(view.configAccess()),
-          [first, ...elsewhere.slice(1)],
-          remaining,
-        ),
-        drawn.diagnostics,
-        sessionId,
-        drawn.geometry,
-      ),
-    ),
-    waited: [],
-  };
+  return accepted;
 }

@@ -2,6 +2,7 @@ import type { DraftBase, DraftChange } from "../renderer-interface/draft.js";
 import type { Visit } from "../renderer-interface/navigation.js";
 import { VERB_SET_STATE } from "../click/wire.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { Lane } from "../config/lanes.js";
 import type { DrawnEffect } from "../render/drawn-link.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import { HOVER_KEY, NO_HOVER } from "../config/click-mode.js";
@@ -255,22 +256,20 @@ function* frameEffects({ rows }: WireFrame): Generator<DrawnEffect> {
     }
 }
 
-type RecordedSurface = "statusline" | "bar";
+// The surface a recorded frame was shown on: a request's on the statusline,
+// a feed's on its lane's.
 interface RecordedFrame {
   session: SessionId;
-  surface: RecordedSurface;
+  surface: Lane;
   frame: WireFrame;
 }
 
 function* drawnFrames(output: RendererOutput): Generator<RecordedFrame> {
   for (const effect of output.effects)
     if (effect.kind === "present") yield effect;
-  for (const { session, frame } of output.frames) {
-    if (frame.kind !== "drawn") continue;
-    yield { session, surface: "bar", frame: frame.bar };
-    if (frame.handoff !== null)
-      yield { session, surface: "statusline", frame: frame.handoff };
-  }
+  for (const { session, lane, frame } of output.frames)
+    if (frame.kind === "drawn")
+      yield { session, surface: lane, frame: frame.bar };
 }
 
 // [LAW:no-ambient-temporal-coupling] A recording can identify an authored
@@ -279,7 +278,7 @@ function* drawnFrames(output: RendererOutput): Generator<RecordedFrame> {
 export class RecordingControls {
   private readonly sessions = new Map<
     SessionId,
-    Map<RecordedSurface, ReadonlySet<string>>
+    Map<Lane, ReadonlySet<string>>
   >();
 
   offers(session: SessionId, key: string, value: string | null): boolean {
@@ -295,8 +294,7 @@ export class RecordingControls {
     pairs: ReadonlySet<string>,
   ): void {
     const surfaces =
-      this.sessions.get(session) ??
-      new Map<RecordedSurface, ReadonlySet<string>>();
+      this.sessions.get(session) ?? new Map<Lane, ReadonlySet<string>>();
     if (pairs.size > 0) surfaces.set(surface, pairs);
     else surfaces.delete(surface);
     if (surfaces.size > 0) this.sessions.set(session, surfaces);

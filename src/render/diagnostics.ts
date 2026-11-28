@@ -18,7 +18,7 @@ import { RichText, Style, asCellCol, chopCells } from "@promptctl/rich-js";
 import { VERB_COPY_DIAGNOSTIC, VERB_SET_STATE } from "../click/wire.js";
 import type { About } from "../config/about.js";
 import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
-import type { Drawing } from "../config/lanes.js";
+import type { Lane } from "../config/lanes.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import {
   DIAGNOSTIC_ERROR_COLORS,
@@ -86,14 +86,6 @@ export const APPROVAL_SEVERITY: DiagnosticSeverity = {
   level: "info",
   glyph: "🔒",
 };
-// The statusline handing the bar off to an animation lane that draws it
-// elsewhere (src/renderer/lane-handoff.ts): it says where the bar is drawn for as
-// long as a lane is on, and its glyph is the lanes' own.
-export const HANDOFF_SEVERITY: DiagnosticSeverity = {
-  level: "info",
-  glyph: "🧪",
-};
-
 // The colours a message at `severity` is drawn in.
 const colorsOf = (severity: DiagnosticSeverity): DiagnosticColors =>
   DIAGNOSTIC_LEVELS[severity.level].colors;
@@ -129,8 +121,7 @@ export interface DiagnosticMessage {
 }
 
 // What a line drawn in a message's colours reads: its severity and its lines.
-// The handoff line is one, never listed, so it copies nothing by key.
-export type ChannelMessage = Pick<DiagnosticMessage, "severity" | "lines">;
+type ChannelMessage = Pick<DiagnosticMessage, "severity" | "lines">;
 
 // [LAW:types-are-the-program] Every message one draw owes its reader, in the
 // order the viewer pages them: worst level first, stamped so by its one
@@ -157,9 +148,9 @@ export interface SourcedText {
 // whitespace, control characters — is no message, decided here.
 export function collectDiagnostics(
   sessionId: string,
-  // The renderer drawing the list: a copy click names it, so the daemon
-  // reads the list that surface shows.
-  by: Drawing["by"],
+  // The surface the list is drawn on: a copy click names it, so the
+  // renderer reads the list that surface shows.
+  by: Lane,
   errors: readonly SourcedText[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly SourcedText[],
@@ -239,11 +230,11 @@ export function diagnosticCopies(
 }
 
 // [LAW:single-enforcer] The one click that copies a message, for ⧉ and its
-// first line alike: the daemon reads what it copies from the frame renderer
-// `by` last delivered for the session when the click runs.
+// first line alike: the renderer reads what it copies from the frame the
+// surface `by` last accepted for the session when the click runs.
 function copyLink(
   sessionId: string,
-  by: Drawing["by"],
+  by: Lane,
   key: string,
   position: number,
 ): DrawnAction {
@@ -376,7 +367,7 @@ export function viewerRows(
   list: DiagnosticList,
   at: ViewerPosition,
   sessionId: string,
-  by: Drawing["by"],
+  by: Lane,
   geometry: DiagnosticGeometry,
 ): readonly Row[] {
   const { index } = at;
@@ -465,34 +456,6 @@ export function viewerRows(
         : rows;
     return [...header, ...shownRows];
   }
-}
-
-// [LAW:single-enforcer] The statusline's handoff line (src/renderer/lane-handoff.ts)
-// with the indicator after it: the bar it hands off carries the indicator
-// beside its door, and the statusline is what a person reads when that bar is
-// somewhere they are not looking. The indicator is the door's own — the same
-// projection, the same colours, its click opening the same viewer, which the
-// statusline then draws in the handoff line's place.
-export function handoffRows(
-  handoff: ChannelMessage,
-  list: DiagnosticList,
-  sessionId: string,
-  geometry: DiagnosticGeometry,
-): readonly Row[] {
-  const { label, fg, bg, open } = diagnosticsProjection(list);
-  const indicator =
-    label === ""
-      ? []
-      : [
-          cell(
-            label,
-            styleWithLink(
-              new Style({ bgcolor: bg, color: fg }),
-              viewerLink(sessionId, open),
-            ),
-          ),
-        ];
-  return channelRows(handoff, viewerOptions(geometry), indicator);
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.

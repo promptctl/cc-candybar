@@ -17,7 +17,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -52,13 +51,10 @@ import {
   refusedClick,
   render,
   renderBody,
-  renderRequest,
   urlWriting,
   drawnLink,
 } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
-import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
-import { linksOf } from "../../../src/click/read";
 import { decodeAnsi, Style } from "@promptctl/rich-js";
 import {
   composeBar,
@@ -75,7 +71,6 @@ import { writeAtomic } from "../../../src/utils/atomic-write";
 import { until, type Condition } from "../../../scripts/lib/until";
 import { elapsedMs } from "../../../src/time";
 import {
-  keptRenders,
   loggedLines,
   logLines,
   renderEventsOf,
@@ -111,11 +106,10 @@ const CONFIGS = {
   beat: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames 1 "tick" 1 "tock" }}' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
   fileLane: `{ segments: { mark: { template: 'a configured mark' } }, root: { h: ['mark'] } }`,
-  // The pane alone draws the bar elsewhere. It has its own file, since
-  // the statusline's reset button rewrites the file it names.
-  handoff: `{ globals: { experimentalPane: true }, segments: { mark: { template: 'a handed-off mark' } }, root: { h: ['mark'] } }`,
+  // The pane draws the bar too.
+  paned: `{ globals: { experimentalPane: true }, segments: { mark: { template: 'a paned mark' } }, root: { h: ['mark'] } }`,
   // The same over a bar in motion.
-  handoffMoving: `{ globals: { effect: "sparkle", experimentalPane: true }, segments: { mark: { template: 'a moving mark' } }, root: { h: ['mark'] } }`,
+  panedMoving: `{ globals: { effect: "sparkle", experimentalPane: true }, segments: { mark: { template: 'a moving mark' } }, root: { h: ['mark'] } }`,
   // Moves, and carries a load warning (a duplicate key) the indicator
   // shows on every frame.
   warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalPane: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
@@ -126,8 +120,7 @@ const CONFIGS = {
   // pointer is on.
   pointed: `{ globals: { experimentalPane: true, experimentalWindow: true }, segments: { mark: { template: '{{ if eq .hover "" }}no hover{{ else }}over {{ .hover }}{{ end }} on {{ .surface }}' } }, root: { h: ['mark'] } }`,
   toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
-  // The same door drawn in a window that follows the session. Its own file,
-  // since the handoff's reset button rewrites the file it names.
+  // The same door drawn in a window that follows the session.
   windowed: `{ globals: { experimentalWindow: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
@@ -308,10 +301,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // count includes has arrived: comparing after close raced the frames still
     // in flight, which closing drops.
     let after = before;
+    const watchedMs = 2000;
     const frames = await framesOf(
       "feed-moving",
       async ({ received, waitFor }) => {
-        await sleep(2000);
+        await sleep(watchedMs);
         after = await feedStats();
         const sent = after.pushed - before.pushed;
         await waitFor(
@@ -330,9 +324,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // An unchanged frame is never sent twice.
     for (let i = 1; i < frames.length; i++)
       expect(frames[i]!.resp).not.toEqual(frames[i - 1]!.resp);
-    // The daemon draws at 30 a second while the bar moves; half that leaves
-    // room for a slow CI box, and is far past Claude Code's one a second.
-    expect(after.drawn - before.drawn).toBeGreaterThanOrEqual(30);
+    // [LAW:verifiable-goals] A moving bar draws at the moving rate, which is
+    // told from the still rate by more draws than the still period allows in
+    // the time watched (one more for a draw at each end). How far past it a
+    // run gets says how busy the machine was, so nothing asserts it.
+    const stillMost = Math.floor(watchedMs / FEED_PERIODS.still) + 2;
+    expect(after.drawn - before.drawn).toBeGreaterThan(stillMost);
     // Every frame the daemon counted reached the subscriber; any after the
     // count are frames it pushed while the stream was still open.
     expect(pushed.length).toBeGreaterThanOrEqual(after.pushed - before.pushed);
@@ -356,9 +353,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(events[0]).toContain(" feeds=- ");
     const fps = /feeds=statusline:1sub\/(\d+)fps\/shown /u.exec(events.at(-1)!);
     expect(fps).not.toBeNull();
-    // 30 a second while the bar moves; a third of that leaves room for a slow
-    // CI box, and is far past the one a second a polled bar reaches.
-    expect(Number(fps![1])).toBeGreaterThanOrEqual(10);
+    // The moving rate, told from the still rate by more frames in the trailing
+    // second than the still period allows (one more for a frame at its edge).
+    expect(Number(fps![1])).toBeGreaterThan(1000 / FEED_PERIODS.still + 1);
   });
 
   test("a still bar is pushed once, and not again while nothing changes", async () => {
@@ -839,45 +836,42 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   const subscribeUntilEnd = (sessionId: string, lane: Lane) => {
     const frames: Response[] = [];
     let end: StreamEnd | null = null;
-    const ended = new Promise<StreamEnd>((resolve) =>
-      openFrameStream(
+    let opened: FrameStream | undefined;
+    const ended = new Promise<StreamEnd>((resolve) => {
+      opened = openFrameStream(
         sockPath,
         sessionId,
         lane,
         (resp) => frames.push(resp),
         (e) => resolve((end = e)),
-      ),
-    );
+      );
+    });
     // The frames so far, or the stream's end, thrown, once it has ended.
     const live = (): ReadonlyArray<Response> => {
       if (end !== null)
         throw new Error(`the ${lane} stream ended: ${JSON.stringify(end)}`);
       return frames;
     };
-    return { frames, ended, live };
+    return { frames, ended, live, close: () => opened!.close() };
   };
-  // A reader of the handoff line is told what the line is: still text, over a
-  // bar that can move again once its button brings it back.
-  test("the handoff line over a moving bar is a Frame that can move, and its bytes are the statusline's", async () => {
-    const sid = "feed-handoff-moving";
-    const body = renderBody(sid, projectDir, {}, args("handoffMoving"));
-    await frameRequest(sockPath, body);
+  // [LAW:one-source-of-truth] Lane B is Claude Code's own statusline: a pane
+  // following the session is drawn its own frame and leaves the statusline
+  // drawing the whole bar, still or moving.
+  test.each([
+    ["paned", "a paned mark"],
+    ["panedMoving", "a moving mark"],
+  ] as const)("while a pane follows the %s bar, Claude Code's statusline keeps drawing the whole bar", async (config, mark) => {
+    const sid = `feed-${config}`;
+    const body = renderBody(sid, projectDir, {}, args(config));
+    expect(textOf(await frameRequest(sockPath, body))).toContain(mark);
     const stream = subscribeUntilEnd(sid, "pane");
-    await until(() => stream.live().length > 0, "the stream's frame");
-    const output = await renderRequest(sockPath, body);
-    const frame = await frameRequest(sockPath, body);
-    expect(textOf(frame)).toContain(HANDOFF_BUTTON);
-    expect(frame).toMatchObject({
-      motion: "can-move",
-      nextChange: Infinity,
-      pending: [],
-    });
-    expect(composeBar(frame)).toBe(output);
-    await click(
-      sockPath,
-      linksOf(frame).find((l) => l.text.includes("⟲"))!.url,
-    );
-    await stream.ended;
+    try {
+      await until(() => stream.live().length > 0, "the stream's frame");
+      expect(barText(stream.frames[0]!)).toEqual(expect.stringContaining(mark));
+      expect(textOf(await frameRequest(sockPath, body))).toContain(mark);
+    } finally {
+      stream.close();
+    }
   });
 
   // The daemon log's lines for `sid`: its render events, and how each of its
@@ -893,82 +887,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       sockPath,
       drawnLink(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }])),
     );
-
-  // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
-  // the tmux pane, we should NOT show the original bar except a
-  // single line that contains a button to reset those settings".
-  test("while the pane draws the bar, Claude Code's statusline is one small row whose button brings the bar back", async () => {
-    const sid = "feed-handoff";
-    const body = renderBody(sid, projectDir, {}, args("handoff"));
-    // The switch alone draws nothing: with no pane following the session, the
-    // statusline keeps the bar.
-    expect(
-      textOf(await render(sockPath, sid, projectDir, {}, args("handoff"))),
-    ).toContain("a handed-off mark");
-    // A reply whose deadline is already past records an attempt without a draw.
-    const expired = await sendDaemonRequest(
-      sockPath,
-      { ...body, v: PROTOCOL_VERSION, kind: "render", deadline: 1 },
-      5_000,
-    );
-    if (expired.ok || expired.code !== "TIMEOUT" || expired.request === undefined)
-      throw new Error(
-        `expected a timeout for the expired draw: ${JSON.stringify(expired)}`,
-      );
-    await until(
-      () =>
-        renderEvents(sid).some(
-          (line) =>
-            line.includes(` req=${expired.request} `) &&
-            line.includes(" outcome=abandoned "),
-        ),
-      "the expired request's abandoned render event",
-    );
-    // [LAW:nothing-unseen] Every frame the statusline received so far kept
-    // the bar. Use the same log selection as the render retry helpers.
-    for (const event of await renderLines(env, sid))
-      expect(event).toMatch(/ handoff=- /);
-    // The stream draws the whole bar.
-    const stream = subscribeUntilEnd(sid, "pane");
-    await until(() => stream.live().length > 0, "the stream's frame");
-    expect(barText(stream.frames[0]!)).toEqual(
-      expect.stringContaining("a handed-off mark"),
-    );
-    const handedOff = await render(
-      sockPath,
-      sid,
-      projectDir,
-      {},
-      args("handoff"),
-    );
-    expect(textOf(handedOff).trim().split("\n")).toEqual([
-      `🧪 ${HANDOFF_BUTTON}`,
-    ]);
-    // A reader asking for the Frame is answered the line the statusline shows.
-    const handoffFrame = await frameRequest(sockPath, body);
-    expect(composeBar(handoffFrame)).toBe(await renderRequest(sockPath, body));
-    expect(handoffFrame).toMatchObject({ nextChange: Infinity, pending: [] });
-    // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
-    // as one more event than a count read before the render: a retry of the
-    // first render can land its event after that count is taken.
-    await loggedLines(
-      env,
-      (lines) => keptRenders(lines, sid),
-      (found) => / handoff=pane /.test(found.at(-1) ?? ""),
-      "the handoff render's event",
-    );
-    const button = linksOf(handedOff).find((l) => l.text.includes("⟲"));
-    await click(sockPath, button!.url);
-    // The reset took the lane's setting out of the file it was in.
-    expect(
-      readFileSync(path.join(projectDir, "handoff.json5"), "utf8"),
-    ).not.toContain("experimentalPane");
-    expect(
-      textOf(await render(sockPath, sid, projectDir, {}, args("handoff"))),
-    ).toContain("a handed-off mark");
-    // The pane subscription ends once its preference is off.
-    expect(await stream.ended).toMatchObject({ kind: "refused" });
-  });
 
   test("a height-blocked window measures the menu closing in the interactive statusline", async () => {
     const sid = "feed-window-inset-height";
@@ -1001,7 +919,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await waitForHeight(opened.rows.length);
       const fallback = await draw();
       expect(textOf(fallback)).toContain("door shut");
-      expect(textOf(fallback)).not.toContain(HANDOFF_BUTTON);
       await click(sockPath, linkTo(fallback, "✖"));
       await waitForHeight(closed.rows.length);
       expect(textOf(await draw())).toContain("door shut");
@@ -1026,91 +943,73 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     }
   });
 
-  // [LAW:verifiable-goals] The window replaces the statusline as the pane
-  // does, from the Frame: its follower clicks a link read off a run, and the
-  // handoff row's button turns the window off and brings the bar back.
-  test("a window follower clicks the links its frames carry, and while it follows, the statusline's handoff button ends it switched off", async () => {
+  // [LAW:verifiable-goals] The window draws from the Frame: its follower
+  // clicks a link read off a run, and the statusline, drawn its own frame of
+  // the same session, shows what the click did.
+  test("a window follower clicks the links its frames carry, and the statusline draws the bar the click left", async () => {
     const sid = "feed-window";
-    // With no window following, the statusline keeps the bar.
     expect(
       textOf(await render(sockPath, sid, projectDir, {}, args("windowed"))),
     ).toContain("door shut");
     const stream = subscribeUntilEnd(sid, "window");
-    await until(() => stream.live().length > 0, "the window's frame");
-    // A window is pushed the Frame, not the ANSI.
-    expect(stream.frames[0]).not.toHaveProperty("output");
-    const first = frameOf(stream.frames[0]!)!;
-    expect(textOf(first)).toContain("door shut");
-    // The windowed door's actions are the toggle's.
-    await click(sockPath, urlWriting(first, "face", "open", TOGGLE_CONFIG));
-    await until(
-      () => stream.live().some((resp) => plainOf(resp)?.includes("door open")),
-      "the clicked window",
-    );
-    const handedOff = await render(sockPath, sid, projectDir, {}, args("windowed"));
-    expect(textOf(handedOff).trim().split("\n")).toEqual([
-      // This fixture has no attaching tty. Its manual window subscriber
-      // receives the bar and the handoff still shows the native setup warning.
-      `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
-    ]);
-    await loggedLines(
-      env,
-      (lines) => keptRenders(lines, sid),
-      (found) => / handoff=window /.test(found.at(-1) ?? ""),
-      "the handoff render's event",
-    );
-    const button = linksOf(handedOff).find((l) => l.text.includes("⟲"));
-    await click(sockPath, button!.url);
-    expect(
-      readFileSync(path.join(projectDir, "windowed.json5"), "utf8"),
-    ).not.toContain("experimentalWindow");
-    // The statusline draws the bar again, as the click left it.
-    expect(
-      textOf(await render(sockPath, sid, projectDir, {}, args("windowed"))),
-    ).toContain("door open");
-    expect(await stream.ended).toMatchObject({
-      kind: "refused",
-      resp: { code: "SWITCHED_OFF" },
-    });
+    try {
+      await until(() => stream.live().length > 0, "the window's frame");
+      // A window is pushed the Frame, not the ANSI.
+      expect(stream.frames[0]).not.toHaveProperty("output");
+      const first = frameOf(stream.frames[0]!)!;
+      expect(textOf(first)).toContain("door shut");
+      // The windowed door's actions are the toggle's.
+      await click(sockPath, urlWriting(first, "face", "open", TOGGLE_CONFIG));
+      await until(
+        () =>
+          stream.live().some((resp) => plainOf(resp)?.includes("door open")),
+        "the clicked window",
+      );
+      expect(
+        textOf(await render(sockPath, sid, projectDir, {}, args("windowed"))),
+      ).toContain("door open");
+    } finally {
+      stream.close();
+    }
   });
 
-  // The bar is handed off whole: the lane drawing it carries the indicator,
-  // and so does the statusline's handoff line, whose indicator opens the same
-  // viewer there. The message itself is never drawn twice.
-  test("a handed-off statusline carries the bar's indicator, which opens the viewer in the statusline", async () => {
-    const sid = "feed-handoff-warned";
+  // Each surface draws the bar's indicator, and the statusline's opens the
+  // viewer there. The message itself is drawn only in the viewer.
+  test("a statusline a pane follows carries the bar's indicator, which opens the viewer in the statusline", async () => {
+    const sid = "feed-pane-warned";
     await render(sockPath, sid, projectDir, {}, args("warned"));
     const stream = subscribeUntilEnd(sid, "pane");
-    await until(
-      () => stream.live().some((f) => String(barText(f)).includes("⚠ 1")),
-      "a stream frame carrying the indicator",
-    );
-    const handedOff = await render(
-      sockPath,
-      sid,
-      projectDir,
-      {},
-      args("warned"),
-    );
-    expect(textOf(handedOff).trim().split("\n")).toEqual([
-      `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
-    ]);
-    expect(textOf(handedOff)).not.toContain('duplicate key "effect"');
-    const last = String(barText(stream.live().at(-1)!));
-    expect(last).toContain("a warned mark");
-    expect(last.match(/⚠/g)).toHaveLength(1);
-    expect(last).not.toContain("duplicate key");
-    // The statusline's indicator opens the viewer, drawn in the statusline.
-    await click(sockPath, viewerLink(handedOff, "open")!.url);
-    const viewer = pageOf(
-      await render(sockPath, sid, projectDir, {}, args("warned")),
-    );
-    expect(viewer.position).toBe("1/1");
-    expect(viewer.text).toContain('duplicate key "effect"');
-    await click(sockPath, viewerLink(viewer.rendered, "✕")!.url);
-    expect(
-      textOf(await render(sockPath, sid, projectDir, {}, args("warned"))),
-    ).toContain(HANDOFF_BUTTON);
+    try {
+      await until(
+        () => stream.live().some((f) => String(barText(f)).includes("⚠ 1")),
+        "a stream frame carrying the indicator",
+      );
+      const statusline = await render(
+        sockPath,
+        sid,
+        projectDir,
+        {},
+        args("warned"),
+      );
+      const bars = [textOf(statusline), String(barText(stream.live().at(-1)!))];
+      for (const bar of bars) {
+        expect(bar).toContain("a warned mark");
+        expect(bar.match(/⚠/g)).toHaveLength(1);
+        expect(bar).not.toContain("duplicate key");
+      }
+      await click(sockPath, viewerLink(statusline, "open")!.url);
+      const viewer = pageOf(
+        await render(sockPath, sid, projectDir, {}, args("warned")),
+      );
+      expect(viewer.position).toBe("1/1");
+      expect(viewer.text).toContain('duplicate key "effect"');
+      await click(sockPath, viewerLink(viewer.rendered, "✕")!.url);
+      expect(
+        textOf(await render(sockPath, sid, projectDir, {}, args("warned"))),
+      ).toContain("a warned mark");
+    } finally {
+      stream.close();
+    }
   });
 
   // A subscribe naming no lane is a client from before the toggles, told to
@@ -1325,9 +1224,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       sockPath,
       effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]),
     );
-    // The statusline lane draws the bar where Claude Code does, so with it
-    // followed a render answers the bar, where a lane that draws it elsewhere
-    // would answer the handoff row.
+    // With the statusline lane followed, a render still answers the bar.
     await framesOf(
       sid,
       async ({ received, waitFor }) => {

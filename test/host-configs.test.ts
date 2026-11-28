@@ -42,7 +42,7 @@ import { type Monotonic } from "../src/time";
 import { handClock } from "./helpers/hand-clock";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { readTextIfPresent } from "../src/utils/regular-text";
-import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
+import { eventRenderer, hostHeld, noActs, NO_CONFIGS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "../scripts/lib/host";
 import { admitClick, encodeSegments, VERB_UNDO } from "../src/click/wire";
@@ -107,7 +107,7 @@ function hostOver(
   const declarations: RendererOutput["subscriptions"][] = [];
   let followed: readonly RenderOrigin[] = [];
   const configs: HostWorld["configs"] = {
-    ...NO_ACTS.configs,
+    ...NO_CONFIGS,
     follow: (origins) => {
       follows.push(origins);
       followed = origins;
@@ -147,7 +147,7 @@ function hostOver(
       recorded: () => {},
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       stateDir: path.join(dir, "state"),
       configs: bound?.configs ?? configs,
       writeConfigFile: bound?.writeConfigFile,
@@ -296,7 +296,7 @@ test.each(["unreadable", "restored", "unrestored"] as const)(
       {
         name: MAIN_RENDERER,
         configs: {
-          ...NO_ACTS.configs,
+          ...NO_CONFIGS,
           follow: () => {},
           snapshotOf: () => SNAPSHOT,
           path: (_origin, role) => destinations[role],

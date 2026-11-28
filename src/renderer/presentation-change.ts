@@ -1,10 +1,10 @@
-// [LAW:effects-at-boundaries] Compare the facts that can survive a handoff.
+// [LAW:effects-at-boundaries] Compare the facts a surface's next draw reads.
 // A ticking effect changes its pixels without changing its placement recipe.
 import { samePlainValue } from "../utils/plain.js";
-import type { HeldMotion } from "../render/effect.js";
+import type { SurfaceClock } from "../render/effect.js";
 import type {
   HeldSurface,
-  MotionChange,
+  ClockChange,
   Ordered,
   Proposal,
   SurfaceChange,
@@ -38,12 +38,25 @@ export function surfaceChange(
     source.preset !== prior.preset ||
     source.revision !== prior.revision;
   const changedPlacements = edits(prior.placements, placements);
+  const effectPlacements = edits(
+    before.effects.placements,
+    after.effects.placements,
+  );
+  const made = edits(before.effects.made, after.effects.made);
   const copies = edits(before.copies, after.copies);
+  const clock = clockChange(before.clock, after.clock);
   return {
     ...(changedSource && { source }),
     ...(changedPlacements && { placements: changedPlacements }),
     ...(!samePlainValue(prior.rules, rules) && { rules }),
     ...(!samePlainValue(prior.passages, passages) && { passages }),
+    ...(Object.keys(clock).length > 0 && { clock }),
+    ...((effectPlacements || made) && {
+      effects: {
+        ...(effectPlacements && { placements: effectPlacements }),
+        ...(made && { made }),
+      },
+    }),
     ...(copies && { copies }),
     ...(!samePlainValue(before.warnings, after.warnings) && {
       warnings: after.warnings,
@@ -52,12 +65,7 @@ export function surfaceChange(
   };
 }
 
-export function motionChange(
-  before: HeldMotion,
-  after: HeldMotion,
-): MotionChange {
-  const placements = edits(before.placements, after.placements);
-  const made = edits(before.made, after.made);
+function clockChange(before: SurfaceClock, after: SurfaceClock): ClockChange {
   return {
     ...(!samePlainValue(before.anchor, after.anchor) && {
       anchor: after.anchor,
@@ -65,8 +73,6 @@ export function motionChange(
     ...(!samePlainValue(before.inForce, after.inForce) && {
       inForce: after.inForce,
     }),
-    ...(placements && { placements }),
-    ...(made && { made }),
   };
 }
 

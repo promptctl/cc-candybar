@@ -2,10 +2,7 @@ import { DeclaredSurfaces } from "../../src/daemon/declared-bar-panes";
 import type { BarPaneEdge, ManagedPane } from "../../src/daemon/lane-setup";
 import type { PaneHello, PaneStream } from "../../src/daemon/pane-subscription";
 import { FrameFeeds } from "../../src/daemon/frame-feed";
-import {
-  followingOf,
-  type Viewers,
-} from "../../src/renderer-interface/interface";
+import type { Viewers } from "../../src/renderer-interface/interface";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { heldClock } from "../helpers/held-clock";
 
@@ -46,6 +43,7 @@ function rig(existing?: ManagedPane) {
       throw Error("no frame expected");
     },
     acknowledgeDisplayed: () => {},
+    presents: () => false,
     deliver: async (make) => {
       viewers.push(make());
       return { kind: "answered" };
@@ -123,12 +121,13 @@ test("hidden and unknown placement retain the acknowledged handoff, move once on
   expect(r.feeds.getStats().subscribers).toBe(0);
   r.observe();
   r.surfaces.enroll(r.hello(), r.stream);
-  expect(followingOf(r.feeds.viewers()[a])).toEqual(new Set(["pane"]));
+  expect(r.feeds.viewers()[a]?.lanes).toEqual({
+    pane: expect.objectContaining({ drawing: true }),
+  });
   r.observe(true, false);
   expect(r.feeds.viewers()[a]).toMatchObject({
     shown: false,
-    lanes: { pane: { subscribers: 1, drawing: true } },
-    pointer: null,
+    lanes: { pane: { subscribers: 1, drawing: true, pointer: null } },
   });
   r.surfaces.observed(source.socket, null);
   expect(r.feeds.getStats().subscribers).toBe(1);

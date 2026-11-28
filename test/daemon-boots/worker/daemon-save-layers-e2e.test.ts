@@ -14,12 +14,7 @@ import path from "node:path";
 
 import { linksOf } from "../../../src/click/read";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
-import {
-  openFrameStream,
-  type StreamEnd,
-} from "../../../src/daemon/client-frames";
 import { textOf } from "../../../src/render/frame";
-import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { click, linkTo, render, renderUntil } from "../../helpers/daemon-e2e";
 import {
@@ -28,7 +23,6 @@ import {
 } from "../../helpers/in-worker-daemon";
 import { answerRepo } from "../../helpers/repo-approval";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(60_000);
 
@@ -42,7 +36,6 @@ const git = (cwd: string, ...args: string[]): string =>
 
 interface Case {
   readonly daemon: InWorkerDaemon;
-  readonly sockPath: string;
   readonly project: string;
   readonly userFile: string;
   readonly projectFile: string;
@@ -54,8 +47,7 @@ async function withProject(
   config: string,
   body: (c: Case) => Promise<void>,
 ): Promise<void> {
-  const { env, sockPath, removeTmpDirs } =
-    prepareIsolatedDaemonEnv("ccb-layers");
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-layers");
   const project = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "ccb-layers-repo-")),
   );
@@ -73,7 +65,6 @@ async function withProject(
   try {
     await body({
       daemon,
-      sockPath,
       project,
       userFile,
       projectFile: path.join(project, ".cc-candybar.json5"),
@@ -214,53 +205,6 @@ describe("save writes the layer it is asked for", () => {
         await click(daemon, linkTo(ready, "✓ save"));
         expect(globalsOf(userFile)).toMatchObject({ autoWrap: false });
         expect(fs.existsSync(projectFile)).toBe(false);
-      },
-    );
-  });
-
-  test("the pane handoff explains when the pane stays enabled by project config", async () => {
-    await withProject(
-      ASKING,
-      async ({ daemon, project, projectFile, sockPath }) => {
-        const checkedIn = "{ globals: { experimentalPane: true } }";
-        fs.writeFileSync(projectFile, checkedIn);
-        git(project, "add", ".cc-candybar.json5");
-        git(project, "commit", "-q", "-m", "enable the pane");
-        await daemon.listen(sockPath);
-        await render(daemon, SID, project);
-
-        let sent = false;
-        let ended: StreamEnd | null = null;
-        const feed = openFrameStream(
-          sockPath,
-          SID,
-          "pane",
-          () => {
-            sent = true;
-          },
-          (end) => {
-            ended = end;
-          },
-        );
-        try {
-          await until(() => {
-            if (ended !== null)
-              throw new Error(
-                `the pane stream ended: ${JSON.stringify(ended)}`,
-              );
-            return sent;
-          }, "the project-enabled pane frame");
-          const frame = await render(daemon, SID, project);
-          expect(textOf(frame)).toContain(
-            "The pane stays enabled by its config",
-          );
-          expect(linksOf(frame).map(({ text }) => text)).not.toContain(
-            HANDOFF_BUTTON,
-          );
-          expect(fs.readFileSync(projectFile, "utf8")).toBe(checkedIn);
-        } finally {
-          feed.close();
-        }
       },
     );
   });

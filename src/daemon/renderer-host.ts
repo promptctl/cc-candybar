@@ -29,6 +29,7 @@ import type {
   PresentationTurn,
   PresentationReader,
 } from "./host-presentations.js";
+import type { SettleFrame } from "./frame-feed.js";
 import {
   isCommand,
   sessionOfEvent,
@@ -154,7 +155,9 @@ type MadeClick =
 // the daemon's close has begun, and where an act's failure goes that no
 // session's bar can hold.
 export interface HostWorld {
-  readonly presentationTurn?: (
+  // [LAW:single-enforcer] The one authority that says whether a delivered
+  // draw presents; a renderer accepts only the draws it says do.
+  readonly presentationTurn: (
     input: EventInput,
     observed: PresentationReader,
   ) => PresentationTurn | undefined;
@@ -294,7 +297,7 @@ export function rendererHost(
     // send each subscriber what changed for it.
     readonly frames: (
       frames: readonly PushedFrame[],
-      settled: (frame: PushedFrame, delivered: boolean) => void,
+      settled: SettleFrame,
     ) => void;
     // [LAW:single-enforcer] Where every output's stored writes go: the host's
     // copy of the renderer's stores, before any later input.
@@ -485,7 +488,7 @@ export function rendererHost(
     let accepted: ReturnType<PresentationTurn["drawn"]> | undefined;
     try {
       if (session !== null) release = collector.holding(session);
-      presentation = world.presentationTurn?.(input, observedPresentations);
+      presentation = world.presentationTurn(input, observedPresentations);
       sentAt = clock.monotonic();
       output = await renderer.answer(presentation?.input ?? input);
       if (output.kind === "answered") presentation?.received();
@@ -877,20 +880,15 @@ export function rendererHost(
           frame.kind === "drawn" ? [frame.receipt] : [],
         ),
       );
-      const settled = (
-        { session, frame }: PushedFrame,
-        delivered: boolean,
-      ): void => {
+      const settled: SettleFrame = ({ session, frame }, unshown) => {
         if (frame.kind === "drawn" && owed.delete(frame.receipt))
-          receipt(
-            { session, id: frame.receipt },
-            delivered ? null : "no subscriber took the frame",
-          );
+          receipt({ session, id: frame.receipt }, unshown);
       };
       if (
         recordTaken("frames", () => collector.frames(frames, settled)) === null
       )
-        for (const frame of frames) settled(frame, false);
+        for (const frame of frames)
+          settled(frame, "the host's feeds threw taking it");
     }
     if (!adoptDemand) return { kind: "following", named: [] };
     const named: RenderOrigin[] = [];
@@ -1058,14 +1056,21 @@ export function rendererHost(
       take?: ReturnType<PresentationTurn["drawn"]>,
     ): SettlePresentation =>
     (effect, reason) => {
-      const received = take?.(effect.id, reason === null);
+      const verdict = reason === null ? take?.(effect.id) : undefined;
+      // A turn with no presentation to pin presents nothing.
+      const presentation = verdict?.presentation ?? "unshown";
       // [LAW:effects-at-boundaries] The write can acknowledge a daemon
       // event after its renderer has gone. Only the local receipt needs
       // the generation that issued it.
-      if (reason === null && effect.displayedEvents !== undefined)
+      // [LAW:one-source-of-truth] An answer shows its events only where the
+      // host presented it, the one fact that also answers its click error:
+      // one its client discards, or that lost the statusline to its lane's
+      // feed, acknowledges none.
+      if (presentation === "presented" && effect.displayedEvents !== undefined)
         world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
-      if (received) receiptObservations.set(effect.id, received);
+      if (verdict?.presentation === "presented")
+        receiptObservations.set(effect.id, verdict.settle);
       const retired = "the renderer that drew the frame has ended";
       unawaited("frame receipt", () =>
         deliver(
@@ -1073,7 +1078,9 @@ export function rendererHost(
             issuer === generation
               ? doneOf(
                   effect,
-                  reason === null ? { kind: "ok" } : { kind: "failed", reason },
+                  reason !== null
+                    ? { kind: "failed", reason }
+                    : { kind: "ok", presentation },
                 )
               : { kind: "down", message: retired, detail: retired },
           [["effect", String(effect.id)]],

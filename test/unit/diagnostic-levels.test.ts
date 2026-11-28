@@ -1,5 +1,5 @@
 // [LAW:behavior-not-structure] What the door's indicator says for each level a
-// list can hold: an offer or a question is information, never a warning, and
+// list can hold: a notice or a question is information, never a warning, and
 // a list that also holds something going wrong reads as its worst level and
 // opens on a message of that level.
 
@@ -7,10 +7,7 @@ import { RichText } from "@promptctl/rich-js";
 import {
   APPROVAL_SEVERITY,
   collectDiagnostics,
-  diagnosticSpan,
   diagnosticsProjection,
-  handoffRows,
-  HANDOFF_SEVERITY,
   viewedIndex,
   type DiagnosticMessage,
 } from "../../src/render/diagnostics";
@@ -22,10 +19,8 @@ import {
 } from "../../src/render/diagnostic-style";
 
 const SID = "sid-1";
-const offer = shaped(
-  HANDOFF_SEVERITY,
-  "Drawing in a tmux pane.",
-);
+const NOTICE_SEVERITY = { level: "info", glyph: "🧪" } as const;
+const offer = shaped(NOTICE_SEVERITY, "Drawing in a tmux pane.");
 const question = shaped(APPROVAL_SEVERITY, "run this repository's config?");
 const list = (
   errors: readonly string[],
@@ -34,7 +29,7 @@ const list = (
 ) =>
   collectDiagnostics(
     SID,
-    "request",
+    "statusline",
     errors.map(sourced),
     notices,
     warnings.map(sourced),
@@ -48,7 +43,7 @@ const opened = (shown: ReturnType<typeof list>) => {
 
 describe("a list with nothing wrong in it", () => {
   test.each([
-    ["a handoff notice", offer],
+    ["a notice", offer],
     ["a repository question", question],
   ])("%s alone is ℹ 1 in the info colours, no ⚠ and no amber", (_, message) => {
     const projected = diagnosticsProjection(list([], [message], []));
@@ -62,7 +57,7 @@ describe("a list with nothing wrong in it", () => {
 
   test("ℹ 9+ stays within four cells", () => {
     const many = Array.from({ length: 10 }, (_, i) =>
-      shaped(HANDOFF_SEVERITY, `offer ${i}`),
+      shaped(NOTICE_SEVERITY, `offer ${i}`),
     );
     const { label } = diagnosticsProjection(list([], many, []));
     expect(label).toBe("ℹ 9+");
@@ -94,25 +89,5 @@ describe("a list that also holds something wrong reads as its worst level", () =
       offer.message,
     ]);
     expect(opened(shown)).toBe("an error");
-  });
-});
-
-describe("the handoff line", () => {
-  test("is followed by an indicator in the list's worst level", () => {
-    const handoff = {
-      severity: HANDOFF_SEVERITY,
-      lines: [[diagnosticSpan("[⟲ claude]", null)]],
-    } as const;
-    const rows = handoffRows(handoff, list(["an error"], [offer], []), SID, {
-      width: 80,
-      rows: 20,
-      colorCompatibility: "truecolor",
-    });
-    const runs = rows.flatMap((row) => row.runs);
-    const indicator = runs.findIndex((run) => run.text.startsWith("⚠ 2"));
-    expect(indicator).toBeGreaterThan(0);
-    expect({ fg: runs[indicator]!.fg, bg: runs[indicator]!.bg }).toEqual(
-      DIAGNOSTIC_ERROR_COLORS,
-    );
   });
 });

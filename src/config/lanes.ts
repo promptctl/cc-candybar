@@ -12,35 +12,26 @@ import {
 // way: `when: '{{ ne .tmux.pane "" }}'`.
 export const IN_TMUX = 'ne .tmux.pane ""';
 
-// `handsOff` is whether a lane draws the bar somewhere other than the
-// statusline: while it is on, the statusline hands off to it
-// (src/renderer/lane-handoff.ts). Lane B draws the statusline itself, so it
-// hands off nowhere. `encoding` is what its subscribers are pushed
-// (src/render/encodings.ts), and `called` is what prose calls it.
+// Each lane is a surface the bar is shown on, drawn its own frame. `encoding`
+// is what its subscribers are pushed (src/render/encodings.ts).
 // [LAW:one-source-of-truth] Settings, the feed and the protocol derive the
-// available displays from this table.
+// available surfaces from this table.
 export const LANES = {
   statusline: {
     switch: { setting: "experimentalStatusline", on: true },
     label: "🧪 statusline (B)",
-    handsOff: false,
     encoding: "ansi",
-    called: "the statusline",
   },
   pane: {
     switch: { setting: "experimentalPane", on: true },
     label: "🧪 tmux pane (C)",
-    handsOff: true,
     encoding: "hit-mapped",
-    called: "the pane",
   },
   // The native window the bar floats in beside the session's terminal.
   window: {
     switch: { setting: "experimentalWindow", on: true },
     label: "🧪 window (D)",
-    handsOff: true,
     encoding: "frame",
-    called: "the window",
   },
 } as const satisfies Readonly<
   Record<
@@ -48,9 +39,7 @@ export const LANES = {
     {
       readonly switch: { readonly setting: string; readonly on: boolean };
       readonly label: string;
-      readonly handsOff: boolean;
       readonly encoding: FeedEncoding;
-      readonly called: string;
     }
   >
 >;
@@ -64,9 +53,9 @@ export type DeclaredLanes = LaneSwitches & {
 
 export type Lane = keyof typeof LANES;
 
-// [LAW:one-source-of-truth] Whether a lane's follower may own the session's
-// pointer: only one whose frames say where a pointer can act, since the hover
-// it reports is the action it found there.
+// [LAW:one-source-of-truth] Whether a lane's follower may report the pointer
+// over its surface: only one whose frames say where a pointer can act, since
+// the hover it reports is the action it found there.
 export const ownsPointer = (lane: Lane): boolean =>
   SAYS_WHERE_POINTER_ACTS[LANES[lane].encoding];
 export type LaneSwitch = (typeof LANES)[Lane]["switch"];
@@ -111,7 +100,7 @@ export type LaneFeeds = Readonly<Record<Lane, LaneFeed>>;
 export type Drawing =
   | { readonly by: "request" }
   | { readonly by: "feed"; readonly fps: number };
-export const ANSWERING: Drawing = { by: "request" };
+export const ANSWERING = { by: "request" } as const satisfies Drawing;
 export const DRAWING_VAR = "drawing";
 export const drawingVar = (field: "by" | "fps"): `drawing.${typeof field}` =>
   `${DRAWING_VAR}.${field}`;
@@ -137,14 +126,6 @@ export function perLane<T>(
 
 // A session no lane follows, on every lane.
 export const UNFOLLOWED_FEEDS: LaneFeeds = perLane(() => UNFOLLOWED);
-
-// [LAW:one-source-of-truth] What a lane is sent of a frame's two answers: a
-// lane drawing the bar elsewhere draws the bar, and the one drawing it in the
-// statusline draws what the statusline shows.
-export const answerOf = <Answer>(
-  answers: { readonly resp: Answer; readonly statusline: Answer },
-  lane: Lane,
-): Answer => (LANES[lane].handsOff ? answers.resp : answers.statusline);
 
 // [LAW:parse-dont-validate] The one crossing from a wire string to a Lane.
 export function parseLane(raw: unknown): Lane | null {

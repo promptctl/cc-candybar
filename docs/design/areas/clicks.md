@@ -45,7 +45,7 @@ The URL needs no handler change to pass through: `open` on a `to/…` link reach
 | Link | Now |
 |---|---|
 | Actions, menus, pickers, carousels, close fragments | Already through it |
-| Diagnostics, repo questions, handoff | Built with only a session id today, so each gets the minter. They live in the renderer |
+| Diagnostics, repo questions | Built with only a session id today, so each gets the minter. They live in the renderer |
 | Config-authored | A template function mints in the renderer. `{{ link }}` with a literal `cc-candybar://` is refused at load |
 | Install test URL | Removed |
 

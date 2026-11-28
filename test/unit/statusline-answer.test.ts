@@ -16,11 +16,17 @@ import {
   eventRenderer,
   hearingEvents,
   hostHeld,
-  NO_ACTS,
+  noActs,
+  NO_CONFIGS,
 } from "../helpers/renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { HostPresentations } from "../../src/daemon/host-presentations";
+import type { HostWorld } from "../../src/daemon/renderer-host";
+import type { HeldSurface } from "../../src/renderer-interface/presentation";
+import type { DaemonEvent } from "../../src/utils/event-hold";
+import type { Instant } from "../../src/utils/instant";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
 import type { Moved } from "../../src/daemon/collector";
@@ -190,6 +196,8 @@ interface Meets {
   readonly closing?: AbortSignal;
   // Whether the client has hung up.
   readonly gone?: () => boolean;
+  // The host's world, when the case reads what a delivery did to it.
+  readonly world?: HostWorld;
 }
 
 async function answer(
@@ -221,7 +229,7 @@ async function answer(
         recorded: () => {},
         holding,
       },
-      NO_ACTS,
+      meets.world ?? noActs(),
     ),
     publishingFrames(TEST_SIGNER),
     {
@@ -265,10 +273,67 @@ test("the request's present answers it, in the request's encoding, with each tur
   expect(facts.has("encoded")).toBe(true);
   answered.settled(true);
   await drained();
+  // The scripted present proposes nothing, so it presents nowhere.
   expect(heard).toEqual([
-    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "ok" } },
+    {
+      kind: "effect-done",
+      session: SESSION,
+      of: 1,
+      outcome: { kind: "ok", presentation: "unshown" },
+    },
   ]);
 });
+
+// A daemon event shows only where the host presented the answer carrying it:
+// one drawn while the statusline's feed draws in its place shows nothing.
+test.each([
+  [false, "presented"],
+  [true, "turned"],
+] as const)(
+  "an answer drawn while the statusline lane is followed (%s) is %s, and acknowledges its events only if presented",
+  async (followed, presentation) => {
+    const acknowledged: DaemonEvent[] = [];
+    const presentations = new HostPresentations({
+      laneOf: () => ({ turn: 0, followed }),
+    });
+    const world: HostWorld = {
+      ...noActs(),
+      presentationTurn: (input, observed) =>
+        presentations.turn(input, observed, () => [], () => null, () => true),
+      acknowledgeDisplayed: (events) => void acknowledged.push(...events),
+    };
+    const shown: DaemonEvent = {
+      kind: "act-failed",
+      about: "act-failed",
+      event: { text: "an act failed", at: 7 as Instant, answered: false },
+    };
+    const { renderer, heard } = scripted(
+      output([
+        {
+          ...present(1),
+          displayedEvents: [shown],
+          // The host holds the surface whole, unread.
+          proposal: {
+            surface: { kind: "whole", value: {} as HeldSurface },
+            menu: { shown: false, timeoutS: 30 },
+          },
+        },
+      ]),
+    );
+    const { answered } = await answer(renderer, [], [], undefined, { world });
+    answered.settled(true);
+    await drained();
+    expect(heard).toEqual([
+      {
+        kind: "effect-done",
+        session: SESSION,
+        of: 1,
+        outcome: { kind: "ok", presentation },
+      },
+    ]);
+    expect(acknowledged).toEqual(presentation === "presented" ? [shown] : []);
+  },
+);
 
 test("the client's sighting is the presented frame's motion: a handoff line's, not the hidden bar's", async () => {
   const handoff = standIn({ ...FRAME, motion: "moves" }, FRAME.rows);
@@ -470,10 +535,10 @@ test("a new session context retries its failed config with the same declaration,
       holding: () => () => {},
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       unheard: (why) => void unheard.push(why),
       configs: {
-        ...NO_ACTS.configs,
+        ...NO_CONFIGS,
         follow,
         snapshotOf: () => ({
           chain: [],
@@ -863,7 +928,7 @@ describe("the request's draws, and its wait for what a draw owes", () => {
         recorded: () => {},
         holding: () => () => {},
       },
-      NO_ACTS,
+      noActs(),
     );
     const answering = answerStatusline(
       host,

@@ -4,11 +4,13 @@
 import type { Lane } from "../config/lanes.js";
 import type {
   EventInput,
+  FeedFrame,
   RendererOutput,
 } from "../renderer-interface/interface.js";
 import {
   activeTicks,
   comparisonOf,
+  sameTurn,
   type FeedAdvance,
   type FeedHistory,
   type FeedResume,
@@ -96,9 +98,9 @@ export class HostFeedHistory {
         problem: (session: SessionId) => string | null,
       ) => {
         if (!output.feedUpdates?.length) return;
-        const frames = new Map(
-          output.frames.map(({ session, frame }) => [session, frame]),
-        );
+        const frames = new Map<SessionId, Array<[Lane, FeedFrame]>>();
+        for (const { session, lane, frame } of output.frames)
+          frames.set(session, [...(frames.get(session) ?? []), [lane, frame]]);
         for (const update of output.feedUpdates) {
           const { session, schedule, changed } = update;
           const slot = this.watched.get(session);
@@ -115,16 +117,20 @@ export class HostFeedHistory {
             throw new Error(
               `feed for ${session} reported a schedule without viewers`,
             );
-          const frame = frames.get(session);
+          const drawn = frames.get(session);
+          const kept = (lane: Lane): boolean =>
+            sameTurn(seen, history?.viewers, lane);
           let rates = history?.rates ?? {};
           if (update.viewers || changed?.length) {
-            const kept: Partial<Record<Lane, readonly Tick[]>> = {};
+            const next: Partial<Record<Lane, readonly Tick[]>> = {};
             for (const lane of Object.keys(seen.lanes) as Lane[]) {
-              const ticks = activeTicks(rates[lane] ?? [], tick);
+              const ticks = kept(lane)
+                ? activeTicks(rates[lane] ?? [], tick)
+                : [];
               if (changed?.includes(lane)) ticks.push(tick);
-              kept[lane] = ticks;
+              next[lane] = ticks;
             }
-            rates = kept;
+            rates = next;
           }
           // An observation can arrive while the promise for an earlier turn
           // is landing. Keep the later schedule while accepting the actual
@@ -135,10 +141,20 @@ export class HostFeedHistory {
             viewers: seen,
             schedule: slot.latest.schedule,
             rates,
-            last: frame ? tick : (history?.last ?? null),
-            frame: frame ? comparisonOf(frame) : (history?.frame ?? null),
+            last: drawn ? tick : (history?.last ?? null),
+            frames: Object.fromEntries(
+              (Object.keys(seen.lanes) as Lane[]).flatMap((lane) => {
+                const now = drawn?.find(([of]) => of === lane)?.[1];
+                const held = now
+                  ? comparisonOf(now)
+                  : kept(lane)
+                    ? history?.frames[lane]
+                    : undefined;
+                return held ? [[lane, held]] : [];
+              }),
+            ),
           };
-          if (frame) slot.exportProblem = problem(session);
+          if (drawn) slot.exportProblem = problem(session);
           if (update.viewers) slot.installed = true;
         }
       },

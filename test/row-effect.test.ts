@@ -26,7 +26,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { SessionEffects } from "../src/render/effect";
+import { SurfaceMemory } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import {
   decideEffectName,
@@ -79,7 +79,7 @@ function renderer(
   readonly render: (
     effect: EffectName | undefined,
     when: Instant,
-    effects?: SessionEffects<RenderedLine>,
+    effects?: SurfaceMemory<RenderedLine>,
     payload?: object,
   ) => Frame;
   readonly dispose: () => void;
@@ -127,7 +127,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("none draws the bytes a render with no effect named draws", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(render("none", at(30), new SessionEffects<RenderedLine>("s")).rows).toEqual(
+      expect(render("none", at(30), new SurfaceMemory<RenderedLine>("s")).rows).toEqual(
         render(undefined, at(30)).rows,
       );
     } finally {
@@ -140,7 +140,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     (loop) => {
       const { render, dispose } = renderer(BAR);
       try {
-        const effects = new SessionEffects<RenderedLine>("s");
+        const effects = new SurfaceMemory<RenderedLine>("s");
         const instants = [0, 7, 30, 61, 200, 450];
         // Brought into force at the first instant, so t counts from there.
         const drawn = instants.map((s) => render(loop, at(s), effects));
@@ -160,7 +160,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("pulse starts at rest: its first frame is none's bytes", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      expect(render("pulse", at(5), new SessionEffects<RenderedLine>("s")).rows).toEqual(
+      expect(render("pulse", at(5), new SurfaceMemory<RenderedLine>("s")).rows).toEqual(
         render("none", at(5)).rows,
       );
     } finally {
@@ -171,12 +171,12 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("an effect's clock starts when it comes into force, not at the first render", () => {
     const { render, dispose } = renderer(BAR);
     try {
-      const late = new SessionEffects<RenderedLine>("s");
+      const late = new SurfaceMemory<RenderedLine>("s");
       render("none", at(0), late);
       // Pulse came into force at 300: its first frame is at rest.
       expect(render("pulse", at(300), late).rows).toEqual(render("none", at(300)).rows);
       // On a session where pulse has been on since 0, the same stretch moves.
-      const early = new SessionEffects<RenderedLine>("s");
+      const early = new SurfaceMemory<RenderedLine>("s");
       render("pulse", at(0), early);
       const moved = [100, 200, 300].some(
         (s) => !sameDraw(render("pulse", at(s), early), render("none", at(s))),
@@ -190,7 +190,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test.each(LOOPS)("under colorCompatibility none, %s draws what none draws", (loop) => {
     const { render, dispose } = renderer(BAR, "none");
     try {
-      const effects = new SessionEffects<RenderedLine>("s");
+      const effects = new SurfaceMemory<RenderedLine>("s");
       for (const s of [0, 30, 200]) {
         expect(render(loop, at(s), effects).rows).toEqual(render("none", at(s)).rows);
       }
@@ -202,7 +202,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   test("a rule flips the effect as the payload changes", () => {
     const { render, dispose } = renderer(RULED);
     try {
-      const effects = new SessionEffects<RenderedLine>("s");
+      const effects = new SurfaceMemory<RenderedLine>("s");
       const quiet = render(undefined, at(0), effects);
       expect(textOf(quiet)).toContain("fx=none");
       // A tool starts: the rule names shimmer, whose clock starts now. Every
@@ -226,7 +226,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   });
 
   test("a session holds the effects of the rows its latest render drew, and no others", () => {
-    const effects = new SessionEffects<RenderedLine>("s");
+    const effects = new SurfaceMemory<RenderedLine>("s");
     const draw = (when: Instant, rows: number): void => {
       const motion = effects.motion(
         "shimmer",
@@ -252,7 +252,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   });
 
   test("a row says when it next changes: now while its loop moves, never while every part holds still", () => {
-    const effects = new SessionEffects<RenderedLine>("s");
+    const effects = new SurfaceMemory<RenderedLine>("s");
     const motion = effects.motion("shimmer", effects.clockAt(at(7), 1), STILL_FRAME);
     const moving = motion.row("flow.own#0", "bar", []);
     if (moving.kind !== "moving") throw new Error("shimmer is still");
@@ -291,7 +291,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
       const bottom = ({ rows }: Frame): readonly Run[] =>
         rows.find(({ runs }) => plainOf(runs).includes("bottom row"))!.runs;
       for (const loop of LOOPS) {
-        const effects = new SessionEffects<RenderedLine>("s");
+        const effects = new SurfaceMemory<RenderedLine>("s");
         closed.render(loop, at(0), effects);
         const before = closed.render(loop, at(30), effects);
         const after = opened.render(loop, at(30), effects);
@@ -336,7 +336,7 @@ describe("the wheel paces each segment by where it sits", () => {
   test("segments of one fill at different places turn to different colours, from the frame they all began in", () => {
     const { render, dispose } = renderer(WHEELED);
     try {
-      const effects = new SessionEffects<RenderedLine>("s");
+      const effects = new SurfaceMemory<RenderedLine>("s");
       const first = render("wheel", at(5), effects);
       expect(first.rows).toEqual(render("none", at(5)).rows);
       expect(new Set(SEGMENTS.map((word) => fillOf(first, word))).size).toBe(1);

@@ -28,8 +28,7 @@ import {
   type ConfigSnapshot,
   type RepoQuestion,
 } from "../config/config-snapshot.js";
-import type { Drawing, LaneSwitches } from "../config/lanes.js";
-import { laneDefaultsAfterReset } from "./lane-handoff.js";
+import { LANE_NAMES, perLane, type Lane } from "../config/lanes.js";
 import {
   PresentedFrames,
   type FrameCandidate,
@@ -307,7 +306,6 @@ export interface DslRenderState {
   readonly configPath: string | null;
   // The roles of the chain a click can write — what the save offers.
   readonly writable: readonly LayerRole[];
-  readonly remainingLanes: ReadonlyMap<string, LaneSwitches>;
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
   // [LAW:no-ambient-temporal-coupling] Each plugin source the config
@@ -743,7 +741,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // chain — there is no "skip validate" path that typechecks downstream.
   const { layers, config, installed, dropped } = loaded;
   const userRaw = layers.find(({ path }) => path === files.user)?.raw ?? {};
-  const projectRaw = layers.find(({ path }) => path === files.project)?.raw;
   // [LAW:one-source-of-truth] The advisories the build earns are facts of the
   // state it builds, carried on it, so a reload that keeps the state keeps
   // them too.
@@ -827,11 +824,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       fileHeldSettings: fileHeldSettings(userRaw),
       configPath: files.user,
       writable: files.writable,
-      remainingLanes: laneDefaultsAfterReset(
-        config,
-        loaded.base,
-        projectRaw ?? {},
-      ),
       plugins: {
         checkout: installed.checkout,
         // What renders, as the loader decided it: a nearer layer's load or
@@ -978,7 +970,9 @@ export interface SessionView<
   readonly source: S;
   // [LAW:types-are-the-program] A receipt holds only this identity, so the
   // view and its registry cannot be kept alive by the transport.
-  readonly presentationTargets: Record<Drawing["by"], symbol>;
+  // One per surface: a frame accepted on one surface never stands for
+  // another's.
+  readonly presentationTargets: Record<Lane, symbol>;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.
@@ -1116,7 +1110,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     source,
     requested: request.update,
     facts: request.read,
-    presentationTargets: { request: Symbol(), feed: Symbol() },
+    presentationTargets: perLane(() => Symbol()),
     retire: stopChanged,
     dispose: () => {
       stopChanged();
@@ -1198,10 +1192,8 @@ export class RenderCache<
   );
   readonly presentations = new PresentedFrames((session) => {
     const view = this.views.get(session);
-    if (view !== undefined) {
-      view.presentationTargets.request = Symbol();
-      view.presentationTargets.feed = Symbol();
-    }
+    if (view !== undefined)
+      for (const lane of LANE_NAMES) view.presentationTargets[lane] = Symbol();
   });
   private readonly restoring = new Map<
     SessionId,
@@ -2181,28 +2173,23 @@ export class RenderCache<
     candidate: FrameCandidate,
     portable?: PortableDraw,
   ) {
-    const { session, by, target } = candidate;
-    return this.views.get(session)?.presentationTargets[by] === target
+    const { session, surface, target } = candidate;
+    return this.views.get(session)?.presentationTargets[surface] === target
       ? this.presentations.accept(id, candidate, portable)
       : null;
   }
 
-  // What the diagnostic under `key` copies in the frame renderer `by` last
-  // delivered for the session; undefined while that renderer's last frame
-  // did not list it. Reads, never opens, like latestView.
-  drawnCopy(
-    sessionId: SessionId,
-    by: Drawing["by"],
-    key: string,
-  ): string | undefined {
+  // What the diagnostic under `key` copies in the frame the surface `by`
+  // last accepted for the session; undefined while that frame did not list
+  // it. Reads, never opens, like latestView.
+  drawnCopy(sessionId: SessionId, by: Lane, key: string): string | undefined {
     return this.presentations.copy(sessionId, by, key);
   }
 
-  // Closing a feed retires that surface's presentation and the receipts
-  // still on their way to it.
-  stopDrawing(sessionId: SessionId, by: Drawing["by"]): void {
-    const view = this.views.get(sessionId);
-    if (view !== undefined) view.presentationTargets[by] = Symbol();
-    this.presentations.stopDrawing(sessionId, by);
+  offeredPresentation(
+    sessionId: SessionId,
+    bases: Partial<Record<Lane, number>>,
+  ): void {
+    this.presentations.offered(sessionId, bases);
   }
 }

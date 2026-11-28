@@ -17,7 +17,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { settingsOf, type ValidatedConfig } from "../src/config/dsl-types";
-import { SessionEffects } from "../src/render/effect";
+import { SurfaceMemory } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import { menuStateKey } from "../src/config/menu-keys";
 import { decideEffectName, EFFECT_NAMES, type EffectName } from "../src/themes";
@@ -73,7 +73,7 @@ function renderer(
   readonly render: (
     bar: EffectName,
     when: Instant,
-    effects: SessionEffects<RenderedLine>,
+    effects: SurfaceMemory<RenderedLine>,
   ) => Frame;
   readonly dispose: () => void;
 } {
@@ -137,8 +137,8 @@ describe("a placement's effect setting", () => {
       const plain = renderer(row(`"middle"`, seat));
       const pulsing = renderer(row(PULSE, seat));
       try {
-        const plainFx = new SessionEffects<RenderedLine>("s");
-        const pulsingFx = new SessionEffects<RenderedLine>("s");
+        const plainFx = new SurfaceMemory<RenderedLine>("s");
+        const pulsingFx = new SurfaceMemory<RenderedLine>("s");
         let moved = false;
         for (const s of INSTANTS) {
           const before = plain.render(bar, at(s), plainFx);
@@ -176,10 +176,10 @@ describe("a placement's effect setting", () => {
     try {
       // The session has drawn the plain row since 0; pulse comes into force on
       // the middle placement at 300, so its first frame is at rest.
-      const effects = new SessionEffects<RenderedLine>("s");
+      const effects = new SurfaceMemory<RenderedLine>("s");
       plain.render("none", at(0), effects);
       expect(pulsing.render("none", at(300), effects).rows).toEqual(
-        plain.render("none", at(300), new SessionEffects<RenderedLine>("s")).rows,
+        plain.render("none", at(300), new SurfaceMemory<RenderedLine>("s")).rows,
       );
       expect(effects.lastFrame().own).toEqual([
         { placement: "middle", effect: "pulse", t: 0 },
@@ -200,7 +200,7 @@ describe("a placement's effect setting", () => {
   test("none stands a placement still on a moving bar", () => {
     const still = renderer(row(`{ seg: "middle", settings: { effect: "none" } }`));
     try {
-      const effects = new SessionEffects<RenderedLine>("s");
+      const effects = new SurfaceMemory<RenderedLine>("s");
       const frames = INSTANTS.map((s) => still.render("shimmer", at(s), effects));
       const middle = frames.map((frame) => {
         const { runs } = frame.rows.find((r) => plainOf(r.runs).includes("MIDDLE"))!;
@@ -224,8 +224,8 @@ describe("a placement's effect setting", () => {
       row(`{ seg: "middle", id: "bar", settings: { effect: "pulse" } }`),
     );
     try {
-      const plainFx = new SessionEffects<RenderedLine>("s");
-      const namedFx = new SessionEffects<RenderedLine>("s");
+      const plainFx = new SurfaceMemory<RenderedLine>("s");
+      const namedFx = new SurfaceMemory<RenderedLine>("s");
       const differs = INSTANTS.some(
         (s) =>
           !sameDraw(named.render("shimmer", at(s), namedFx), plain.render("shimmer", at(s), plainFx)),
@@ -264,7 +264,7 @@ describe("a placement's effect setting", () => {
       )]: "applyTheme",
     });
     try {
-      const effects = new SessionEffects<RenderedLine>("s");
+      const effects = new SurfaceMemory<RenderedLine>("s");
       const frames = INSTANTS.map((s) => open.render("shimmer", at(s), effects));
       const band = frames.map(({ rows }) => rows.find((r) => plainOf(r.runs).includes("✕"))!);
       expect(band[0]).toBeDefined();
