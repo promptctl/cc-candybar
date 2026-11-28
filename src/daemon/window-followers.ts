@@ -32,6 +32,7 @@ interface Following {
 // follower releases the reservation before a replacement can claim that pane.
 export class WindowFollowers {
   private desired: ReadonlyMap<SessionId, WindowDemand> = new Map();
+  private observed: ReadonlySet<string> = new Set();
   private readonly active = new Map<SessionId, Following>();
   private readonly issues = observable.map<SessionId, string>();
   private readonly waiting = new Map<
@@ -72,8 +73,25 @@ export class WindowFollowers {
         follower.channel.write(JSON.stringify({ kind: "tmux" }) + "\n");
   }
 
-  declare(desired: ReadonlyMap<SessionId, WindowDemand>) {
+  // The tmux servers a wanted follower lays out on, which the host observes.
+  sockets(): ReadonlySet<string> {
+    return this.observed;
+  }
+
+  // Answers whether the servers to observe changed.
+  declare(desired: ReadonlyMap<SessionId, WindowDemand>): boolean {
     this.desired = desired;
+    const observed = new Set(
+      this.supported
+        ? [...desired.values()].flatMap((want) =>
+            want.pane ? [want.pane.socket] : [],
+          )
+        : [],
+    );
+    const moved =
+      observed.size !== this.observed.size ||
+      [...observed].some((socket) => !this.observed.has(socket));
+    this.observed = observed;
     for (const [sid, wait] of this.waiting) {
       const pane = desired.get(sid)?.pane;
       if (!pane || paneKey(pane) !== wait.target) {
@@ -84,6 +102,7 @@ export class WindowFollowers {
     for (const session of [...this.issues.keys()])
       if (!desired.has(session)) this.report(session, "");
     this.reconcile();
+    return moved;
   }
 
   private reconcile() {
