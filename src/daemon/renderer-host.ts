@@ -487,7 +487,7 @@ export function rendererHost(
     let accepted: ReturnType<PresentationTurn["drawn"]> | undefined;
     try {
       if (session !== null) release = collector.holding(session);
-      presentation = world.presentationTurn?.(input, observedPresentations);
+      presentation = world.presentationTurn(input, observedPresentations);
       sentAt = clock.monotonic();
       output = await renderer.answer(presentation?.input ?? input);
       if (output.kind === "answered") presentation?.received();
@@ -1060,14 +1060,23 @@ export function rendererHost(
       take?: ReturnType<PresentationTurn["drawn"]>,
     ): SettlePresentation =>
     (effect, reason) => {
-      const received = take?.(effect.id, reason === null);
+      const verdict = reason === null ? take?.(effect.id) : undefined;
+      // A turn with no presentation to pin presents nothing.
+      const presentation = verdict?.presentation ?? "unshown";
       // [LAW:effects-at-boundaries] The write can acknowledge a daemon
       // event after its renderer has gone. Only the local receipt needs
       // the generation that issued it.
-      if (reason === null && effect.displayedEvents !== undefined)
+      // [LAW:one-source-of-truth] An event is shown by a write a display
+      // shows, so an answer its client discards acknowledges none.
+      if (
+        reason === null &&
+        presentation !== "unshown" &&
+        effect.displayedEvents !== undefined
+      )
         world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
-      if (received) receiptObservations.set(effect.id, received);
+      if (verdict?.presentation === "presented")
+        receiptObservations.set(effect.id, verdict.settle);
       const retired = "the renderer that drew the frame has ended";
       unawaited("frame receipt", () =>
         deliver(
@@ -1077,7 +1086,7 @@ export function rendererHost(
                   effect,
                   reason !== null
                     ? { kind: "failed", reason }
-                    : { kind: "ok", ...(received && { presented: true }) },
+                    : { kind: "ok", presentation },
                 )
               : { kind: "down", message: retired, detail: retired },
           [["effect", String(effect.id)]],

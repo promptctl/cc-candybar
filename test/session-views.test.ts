@@ -575,12 +575,12 @@ test("a copy click reads the frame its own surface last delivered, not another's
   expect(cache.drawnCopy(S_COPY, "statusline", "7")).toBe("before the fix");
   expect(cache.drawnCopy(S_COPY, "pane", "7")).toBe("after the fix");
   expect(cache.drawnCopy(S_COPY, "statusline", "8")).toBeUndefined();
-  // A surface whose drawer turns takes its list with it, and only its own:
-  // the next drawer's frame lists its own copies.
-  cache.stopDrawing(S_COPY, "pane");
+  // A surface the host no longer offers takes its list with it, and only its
+  // own: the next drawer's frame lists its own copies.
+  cache.offeredPresentation(S_COPY, { statusline: 1 });
   expect(cache.drawnCopy(S_COPY, "pane", "7")).toBeUndefined();
   expect(cache.drawnCopy(S_COPY, "statusline", "7")).toBe("before the fix");
-  cache.stopDrawing(S_COPY, "statusline");
+  cache.offeredPresentation(S_COPY, {});
   expect(cache.drawnCopy(S_COPY, "statusline", "7")).toBeUndefined();
 });
 
@@ -596,7 +596,7 @@ test("the segment inspector reads the newest delivered layout still in the view"
   cache.acceptFrame(2 as EffectId, feed);
   cache.acceptFrame(1 as EffectId, request);
   expect(inspected()).toBe(feed.frame.layout);
-  cache.stopDrawing(view.sessionId, "pane");
+  cache.offeredPresentation(view.sessionId, { statusline: 1 });
   expect(inspected()).toBe(request.frame.layout);
 });
 

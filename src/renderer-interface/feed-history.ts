@@ -3,7 +3,7 @@
 // already. The host and renderer keep the same projection of that frame.
 import { compareStructural } from "mobx";
 import { isPlainObject } from "../config/loader/validate-core.js";
-import { LANES, type Lane } from "../config/lanes.js";
+import { parseLane, type Lane } from "../config/lanes.js";
 import type { Frame, Row, WireFrame } from "../render/frame.js";
 import type { Instant, Tick } from "../utils/instant.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -113,25 +113,26 @@ function isSchedule(value: unknown): boolean {
 // [LAW:parse-dont-validate] A draw and its comparison refer to exactly
 // the same attempt. Check the pairing before the host can publish a frame,
 // including an answer which omitted the history field altogether. A session's
-// attempt is one frame per lane, each lane at most once.
+// attempt is one frame per lane, each lane at most once, drawn under a turn,
+// and a lane it says changed is one it drew.
 export function validFeedUpdates(value: unknown, frames: unknown): boolean {
   if (!Array.isArray(frames)) return false;
   if (value === undefined) return frames.length === 0;
   if (!Array.isArray(value)) return false;
-  const attempts = new Set<string>();
-  const drawn = new Set<string>();
+  // Each session's attempt: the lanes it drew.
+  const attempts = new Map<string, Set<Lane>>();
   for (const frame of frames) {
+    const lane = isPlainObject(frame) ? parseLane(frame.lane) : null;
     if (
-      !isPlainObject(frame) ||
+      lane === null ||
       typeof frame.session !== "string" ||
-      typeof frame.lane !== "string" ||
-      !Object.hasOwn(LANES, frame.lane)
+      !Number.isSafeInteger(frame.turn) ||
+      Number(frame.turn) < 0
     )
       return false;
-    const key = JSON.stringify([frame.session, frame.lane]);
-    if (drawn.has(key)) return false;
-    drawn.add(key);
-    attempts.add(frame.session);
+    const drawn = attempts.get(frame.session) ?? new Set<Lane>();
+    if (drawn.has(lane)) return false;
+    attempts.set(frame.session, drawn.add(lane));
   }
   const seen = new Set<string>();
   for (const update of value) {
@@ -152,12 +153,15 @@ export function validFeedUpdates(value: unknown, frames: unknown): boolean {
       return false;
     seen.add(update.session);
     if (update.changed === undefined) continue;
+    const drawn = attempts.get(update.session);
+    attempts.delete(update.session);
     if (
-      !attempts.delete(update.session) ||
+      drawn === undefined ||
       !Array.isArray(update.changed) ||
-      !update.changed.every(
-        (lane) => typeof lane === "string" && Object.hasOwn(LANES, lane),
-      ) ||
+      !update.changed.every((raw) => {
+        const lane = parseLane(raw);
+        return lane !== null && drawn.has(lane);
+      }) ||
       new Set(update.changed).size !== update.changed.length
     )
       return false;
@@ -204,14 +208,14 @@ export function validFeedResumes(value: unknown): boolean {
           isPlainObject(h.rates) &&
           Object.entries(h.rates).every(
             ([lane, ticks]) =>
-              Object.hasOwn(LANES, lane) &&
+              parseLane(lane) !== null &&
               Array.isArray(ticks) &&
               ticks.every(Number.isFinite),
           ) &&
           isPlainObject(h.frames) &&
           Object.entries(h.frames).every(
             ([lane, frame]) =>
-              Object.hasOwn(LANES, lane) &&
+              parseLane(lane) !== null &&
               isPlainObject(frame) &&
               (frame.kind === "failed"
                 ? typeof frame.message === "string"

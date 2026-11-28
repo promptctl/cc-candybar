@@ -19,7 +19,7 @@ import {
   type ClientHints,
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
-import type { EffectId } from "../renderer-interface/interface";
+import type { EffectId, LaneViewers } from "../renderer-interface/interface";
 import { repoQuestions } from "../config/repo-question";
 import {
   type CacheEntry,
@@ -152,9 +152,10 @@ export interface RendererParts {
 export function renderFrames(
   parts: RendererParts,
   sessionId: SessionId,
-  // Each lane the frames are drawn for, with what its follower says of the
-  // pointer over it, if one does.
-  lanes: ReadonlyArray<readonly [Lane, Pointer | null]>,
+  // Each lane the frames are drawn for, with its viewers: the turn it is
+  // drawn under, and what its follower says of the pointer over it, if one
+  // does.
+  lanes: ReadonlyArray<readonly [Lane, LaneViewers]>,
   fps: number,
   // The instant the frames are drawn for, and the tick of the turn drawing
   // them.
@@ -165,11 +166,16 @@ export function renderFrames(
   prepare: PrepareDelivery,
 ): ReadonlyArray<readonly [Lane, FeedDraw]> | null {
   const facts: RequestFacts = [];
-  const failed = (lane: Lane, error: unknown, noted: RequestFacts) => {
+  const failed = (
+    [lane, { turn }]: readonly [Lane, LaneViewers],
+    error: unknown,
+    noted: RequestFacts,
+  ) => {
     const outcome = renderFailure(rendererFailureOf(error));
     const { level, line } = drawEvent("render", noted, outcome);
     const draw: FeedDraw = {
       frame: { kind: "failed", message: outcome.message },
+      turn,
       evaluated: 0,
       cellBreaks: 0,
       failure: { level, line: `frame lane=${lane} ${line}` },
@@ -180,16 +186,24 @@ export function renderFrames(
     using setup = setUpFrame(parts, sessionId, readings, facts);
     if (setup === null) return null;
     const drawSurface = drawRender(parts, setup, { by: "feed", fps }, feeds);
-    return lanes.map(([lane, pointer]) => {
+    return lanes.map((viewed) => {
+      const [lane, { pointer, turn }] = viewed;
       // [LAW:one-source-of-truth] Each lane's event: the session's facts,
       // then its own surface's.
       const noted: RequestFacts = [...facts];
       try {
-        const { drawn, evaluated, cellBreaks, candidate, eventsShown } =
-          drawSurface(lane, pointer, noted);
+        const {
+          drawn,
+          evaluated,
+          cellBreaks,
+          candidate,
+          eventsShown,
+          clickShown,
+        } = drawSurface(lane, pointer, noted);
         const { id: receipt, ...presentation } = prepare({
           kind: "frame",
           candidate,
+          clickShown,
         });
         const draw: FeedDraw = {
           frame: {
@@ -200,17 +214,18 @@ export function renderFrames(
             bar: drawn.body,
             displayedEvents: eventsShown,
           },
+          turn,
           evaluated,
           cellBreaks,
           failure: null,
         };
         return [lane, draw] as const;
       } catch (error) {
-        return failed(lane, error, noted);
+        return failed(viewed, error, noted);
       }
     });
   } catch (error) {
-    return lanes.map(([lane]) => failed(lane, error, facts));
+    return lanes.map((viewed) => failed(viewed, error, facts));
   }
 }
 
@@ -1097,20 +1112,17 @@ export function answerRequest(
   };
 }
 
-// [LAW:types-are-the-program] What a frame the host presented records, by
-// what drew it: a request's answer records the click error it carried, and a
-// feed's frame, which has no render event, notes the faults it was accepted
-// with on the turn. Both record the surface's presentation.
-export type Delivery = (
-  | {
-      readonly kind: "answer";
-      readonly clickShown: ClickErrorRecord | null;
-    }
-  | { readonly kind: "frame" }
-) & {
+// [LAW:types-are-the-program] What a frame the host presented records: the
+// surface's presentation and the click error it showed. A feed's frame, which
+// has no render event, also notes on the turn the faults it was accepted with.
+export interface Delivery {
+  readonly kind: "answer" | "frame";
   readonly candidate: FrameCandidate;
+  // [LAW:one-source-of-truth] The click error the draw showed: a display
+  // that showed it, a feed's as much as Claude Code's, has answered it.
+  readonly clickShown: ClickErrorRecord | null;
   readonly portable?: PortableDraw;
-};
+}
 
 export type PrepareDelivery = (delivery: Delivery) => {
   id: EffectId;
@@ -1131,7 +1143,7 @@ export function deliver(
     delivery.portable,
   );
   if (accepted === null) return null;
-  if (delivery.kind === "answer" && delivery.clickShown !== null)
+  if (delivery.clickShown !== null)
     answeredClickError(
       parts.sessionState,
       candidate.session,

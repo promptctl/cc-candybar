@@ -2186,11 +2186,10 @@ export class RenderCache<
     return this.presentations.copy(sessionId, by, key);
   }
 
-  // A lane's drawer changed (its first subscriber joined or its last left):
-  // what the old drawer showed retires with the receipts still on their way.
-  stopDrawing(sessionId: SessionId, by: Lane): void {
-    const view = this.views.get(sessionId);
-    if (view !== undefined) view.presentationTargets[by] = Symbol();
-    this.presentations.stopDrawing(sessionId, by);
+  offeredPresentation(
+    sessionId: SessionId,
+    bases: Partial<Record<Lane, number>>,
+  ): void {
+    this.presentations.offered(sessionId, bases);
   }
 }

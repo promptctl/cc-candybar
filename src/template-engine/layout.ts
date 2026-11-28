@@ -176,7 +176,7 @@ export interface LaidCell {
   readonly fill?: CellSizing;
   // The placement the cell belongs to and the effect it wears — the bar's or
   // its own (brandon-effects-2gka.bm1): a demand like `fill`, settled where the
-  // row's strip is drawn (`SessionEffects.motion`), the one place the row's
+  // row's strip is drawn (`SurfaceMemory.motion`), the one place the row's
   // items and the bar's effect are both in hand — which is also where a
   // placement fading in (brandon-effects-2gka.631) or dissolving out
   // (brandon-effects-2gka.3vt) has its transition confined to its own cells.

@@ -45,16 +45,23 @@ const draw = (text: string, nextChange = Infinity): Frame => ({
   pending: [],
 });
 
-// A session watched on `lanes`, each with one subscriber drawing it.
+// A session watched on `lanes`, each with one subscriber drawing it, in the
+// lane's first turn unless `turns` says otherwise.
 const watched = (
   shown = true,
   lanes: readonly Lane[] = ["pane"],
   pointers: Partial<Record<Lane, Pointer>> = {},
+  turns: Partial<Record<Lane, number>> = {},
 ): SessionViewers => ({
   lanes: Object.fromEntries(
     lanes.map((lane) => [
       lane,
-      { subscribers: 1, drawing: true, pointer: pointers[lane] ?? null },
+      {
+        subscribers: 1,
+        drawing: true,
+        pointer: pointers[lane] ?? null,
+        turn: turns[lane] ?? 1,
+      },
     ]),
   ),
   shown,
@@ -94,7 +101,7 @@ function rig() {
   const logged: string[] = [];
   const feeds = new Feeds({
     draw: (session, lanes, fps, { at, tick }, laneFeeds) => {
-      for (const [surface, pointer] of lanes)
+      for (const [surface, { pointer }] of lanes)
         draws.push({
           session,
           surface,
@@ -107,10 +114,11 @@ function rig() {
       if (session === script.throwsFor?.session) throw script.throwsFor.cause;
       if (!script.view) return null;
       return lanes.map(
-        ([surface]) =>
+        ([surface, { turn }]) =>
           [
             surface,
             {
+              turn,
               frame:
                 script.failure === null
                   ? {
@@ -134,7 +142,6 @@ function rig() {
       pins.push(`pin ${session}`);
       return () => void pins.push(`unpin ${session}`);
     },
-    turned: (session, lane) => void pins.push(`turned ${session} ${lane}`),
     log: (level, line) => void logged.push(`${level} ${line}`),
     periods: PERIODS,
   });
@@ -172,16 +179,11 @@ describe("a feed's life", () => {
   test("opens for a session the viewers name, pinning its view, and closes for one they no longer name, summing up what it drew", () => {
     const r = rig();
     view({ [S]: watched() })(r.feeds);
-    expect(r.pins).toEqual([`pin ${S}`, `turned ${S} pane`]);
+    expect(r.pins).toEqual([`pin ${S}`]);
     expect(r.feeds.next()).toBe(0);
     r.turn(0);
     r.feeds.view({}, tick(2));
-    expect(r.pins).toEqual([
-      `pin ${S}`,
-      `turned ${S} pane`,
-      `turned ${S} pane`,
-      `unpin ${S}`,
-    ]);
+    expect(r.pins).toEqual([`pin ${S}`, `unpin ${S}`]);
     expect(r.feeds.next()).toBeNull();
     expect(r.logged.at(-1)).toMatch(
       /^info feed sid="s" closed lanes=pane:1 for=2s drawn=1 .*latenessHistogram=/,
@@ -194,7 +196,7 @@ describe("a feed's life", () => {
     expect(() => view({ [S]: watched(), [T]: watched() })(r.feeds)).toThrow(
       "s broke",
     );
-    expect(r.pins).toEqual([`pin ${T}`, `turned ${T} pane`]);
+    expect(r.pins).toEqual([`pin ${T}`]);
   });
 
   test("a feed whose draw throws keeps no other feed's frame from going out, and its throw is the turn's", () => {
@@ -297,11 +299,13 @@ describe("a feed's life", () => {
       {
         session: S,
         lane: "statusline",
+        turn: 1,
         frame: { kind: "drawn", receipt: 1, bar: draw("s") },
       },
       {
         session: S,
         lane: "pane",
+        turn: 1,
         frame: { kind: "drawn", receipt: 2, bar: draw("r") },
       },
     ]);
@@ -312,20 +316,23 @@ describe("a feed's life", () => {
     expect(r.feeds.drawn()).toBe(1);
   });
 
-  test("a lane's surface retires as its drawer turns, when it joins the viewers and when it leaves, and only that lane's", () => {
+  test("each lane's frame carries the turn of the lane it was drawn under", () => {
     const r = rig();
-    view({ [S]: watched(true, ["pane", "window"]) })(r.feeds);
-    expect(r.pins).toEqual([
-      `pin ${S}`,
-      `turned ${S} pane`,
-      `turned ${S} window`,
+    view({ [S]: watched(true, ["pane", "window"], {}, { window: 4 }) })(
+      r.feeds,
+    );
+    expect(r.turn(0).map(({ lane, turn }) => [lane, turn])).toEqual([
+      ["pane", 1],
+      ["window", 4],
     ]);
-    r.turn(0);
-    r.feeds.view({ [S]: watched(true, ["window"]) }, tick(0.5));
-    expect(r.pins.slice(3)).toEqual([`turned ${S} pane`]);
-    expect(r.turn(1).map(({ lane }) => lane)).toEqual(["window"]);
-    r.feeds.view({}, tick(1.5));
-    expect(r.pins.slice(4)).toEqual([`turned ${S} window`, `unpin ${S}`]);
+    r.feeds.view(
+      { [S]: watched(true, ["pane", "window"], {}, { pane: 3, window: 4 }) },
+      tick(0.5),
+    );
+    expect(r.turn(1).map(({ lane, turn }) => [lane, turn])).toEqual([
+      ["pane", 3],
+      ["window", 4],
+    ]);
   });
 
   test("only the closing summary writes the lateness histogram; a running summary comes once a minute", () => {
@@ -529,6 +536,7 @@ describe("a frame that failed", () => {
       {
         session: S,
         lane: "pane",
+        turn: 1,
         frame: { kind: "failed", message: "render broke" },
       },
     ]);
@@ -543,6 +551,7 @@ describe("a frame that failed", () => {
       {
         session: S,
         lane: "pane",
+        turn: 1,
         frame: { kind: "drawn", receipt: 1, bar: draw("corrected") },
       },
     ]);
@@ -601,6 +610,15 @@ describe("feedsOf: what each lane was sent of late", () => {
     expect(r.feeds.feedsOf(S, tick(0.5)).pane.fps).toBe(1);
     r.feeds.view({ [S]: watched(true, ["statusline"]) }, tick(0.5));
     r.feeds.view({ [S]: watched(true, ["pane"]) }, tick(0.5));
+    expect(r.feeds.feedsOf(S, tick(0.5)).pane.fps).toBe(0);
+  });
+
+  test("a lane's count starts again with its next turn, though the viewers between read alike", () => {
+    const r = rig();
+    view({ [S]: watched(true, ["pane"]) })(r.feeds);
+    r.turn(0);
+    expect(r.feeds.feedsOf(S, tick(0.5)).pane.fps).toBe(1);
+    r.feeds.view({ [S]: watched(true, ["pane"], {}, { pane: 3 }) }, tick(0.5));
     expect(r.feeds.feedsOf(S, tick(0.5)).pane.fps).toBe(0);
   });
 

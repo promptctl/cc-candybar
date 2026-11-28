@@ -519,7 +519,7 @@ export interface OwnerFacts {
 }
 
 // A change of an owner's facts. The host accepts it from any owner following
-// the session, which then holds the session's pointer: an owner that has ended
+// the session, which then holds its lane's pointer: an owner that has ended
 // follows nothing, and is refused.
 export interface PointerRequest {
   v: number;

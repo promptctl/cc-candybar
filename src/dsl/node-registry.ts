@@ -320,7 +320,7 @@ export interface NodeRenderCtx {
   // [LAW:locality-or-seam] The session's record of what the last frame drew,
   // as the walk meets it: a placement reports the lines it drew this frame and
   // returns what comes back — those, or, while it dissolves off the bar, the
-  // rows it last drew in place of its own (`SessionEffects.motion`,
+  // rows it last drew in place of its own (`SurfaceMemory.motion`,
   // brandon-effects-2gka.3vt).
   placed(node: CompiledSegmentNode, lines: RenderedLines): RenderedLines;
   // What the view's last drawn frame showed of the placement `id`: none in a

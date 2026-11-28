@@ -9,7 +9,7 @@
 // placement whose value is not answered yet draws its loading cell from it,
 // at the width it held; a placement that appears fades in, and one that leaves
 // dissolves out replaying its rows, by comparing against it
-// (`SessionEffects.motion`). It is kept whatever `globals.transitions` says,
+// (`SurfaceMemory.motion`). It is kept whatever `globals.transitions` says,
 // and it is no observable: writing it wakes nothing. Each surface keeps its
 // own: a request's answer and a feed's frames draw at their own widths and
 // roots, so a frame compared against the other's would fade and dissolve

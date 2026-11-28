@@ -1,10 +1,10 @@
 // [LAW:effects-at-boundaries] Compare the facts a surface's next draw reads.
 // A ticking effect changes its pixels without changing its placement recipe.
 import { samePlainValue } from "../utils/plain.js";
-import type { HeldMotion } from "../render/effect.js";
+import type { SurfaceClock } from "../render/effect.js";
 import type {
   HeldSurface,
-  MotionChange,
+  ClockChange,
   Ordered,
   Proposal,
   SurfaceChange,
@@ -44,7 +44,7 @@ export function surfaceChange(
   );
   const made = edits(before.effects.made, after.effects.made);
   const copies = edits(before.copies, after.copies);
-  const clock = motionChange(before.clock, after.clock);
+  const clock = clockChange(before.clock, after.clock);
   return {
     ...(changedSource && { source }),
     ...(changedPlacements && { placements: changedPlacements }),
@@ -65,7 +65,7 @@ export function surfaceChange(
   };
 }
 
-function motionChange(before: HeldMotion, after: HeldMotion): MotionChange {
+function clockChange(before: SurfaceClock, after: SurfaceClock): ClockChange {
   return {
     ...(!samePlainValue(before.anchor, after.anchor) && {
       anchor: after.anchor,

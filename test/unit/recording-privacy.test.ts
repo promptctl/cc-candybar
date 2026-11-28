@@ -456,6 +456,7 @@ test("the output check sees the evaluated run environment in ordinary and pane f
   const pane = {
     session: SESSION,
     lane: "pane" as const,
+    turn: 1,
     frame: {
       kind: "drawn" as const,
       receipt: 1 as EffectId,

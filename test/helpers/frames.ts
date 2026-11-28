@@ -7,7 +7,7 @@ import type {
   FrameClock,
   FrameTransitions,
   MenuFlash,
-  SessionEffects,
+  SurfaceMemory,
 } from "../../src/render/effect.js";
 import {
   beginRecord,
@@ -25,7 +25,7 @@ export const surfaceRecord = <Line>(): SurfaceRecord<Line> => ({
 });
 
 export function framed<Line>(
-  fx: SessionEffects<Line>,
+  fx: SurfaceMemory<Line>,
   surface: SurfaceRecord<Line>,
   name: EffectName,
   clock: FrameClock,

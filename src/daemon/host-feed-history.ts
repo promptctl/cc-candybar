@@ -117,11 +117,18 @@ export class HostFeedHistory {
               `feed for ${session} reported a schedule without viewers`,
             );
           const drawn = frames.get(session);
+          // [LAW:one-source-of-truth] A lane's rate and last frame are kept
+          // for one turn of the lane, as the renderer keeps them.
+          const sameTurn = (lane: Lane): boolean =>
+            seen.lanes[lane] !== undefined &&
+            seen.lanes[lane].turn === history?.viewers.lanes[lane]?.turn;
           let rates = history?.rates ?? {};
           if (update.viewers || changed?.length) {
             const kept: Partial<Record<Lane, readonly Tick[]>> = {};
             for (const lane of Object.keys(seen.lanes) as Lane[]) {
-              const ticks = activeTicks(rates[lane] ?? [], tick);
+              const ticks = sameTurn(lane)
+                ? activeTicks(rates[lane] ?? [], tick)
+                : [];
               if (changed?.includes(lane)) ticks.push(tick);
               kept[lane] = ticks;
             }
@@ -137,11 +144,14 @@ export class HostFeedHistory {
             schedule: slot.latest.schedule,
             rates,
             last: drawn ? tick : (history?.last ?? null),
-            // A lane that left takes its last frame with it.
             frames: Object.fromEntries(
               (Object.keys(seen.lanes) as Lane[]).flatMap((lane) => {
                 const now = drawn?.find(([of]) => of === lane)?.[1];
-                const kept = now ? comparisonOf(now) : history?.frames[lane];
+                const kept = now
+                  ? comparisonOf(now)
+                  : sameTurn(lane)
+                    ? history?.frames[lane]
+                    : undefined;
                 return kept ? [[lane, kept]] : [];
               }),
             ),

@@ -24,7 +24,7 @@ import { compileDslConfig, compileInputOf, compileKey, declareDslVariables, EVER
 import { lastBinding } from "./helpers/render-binding";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { SessionEffects, type RowItem } from "../src/render/effect";
+import { SurfaceMemory, type RowItem } from "../src/render/effect";
 import { framed, surfaceRecord } from "./helpers/frames";
 import { drawnChars, shown } from "./helpers/seams";
 import type { RenderedLine } from "../src/dsl/node-registry";
@@ -105,7 +105,7 @@ function renderer(
     palette: () => drawn().look!.palette,
     render: (
       { shown, when }: Frame,
-      effects: SessionEffects<RenderedLine>,
+      effects: SurfaceMemory<RenderedLine>,
       selection: { transitions?: boolean; bar?: EffectName } = {},
     ): DrawnFrame =>
       drawPayload(
@@ -155,8 +155,8 @@ describe("a placement that appears fades in", () => {
       const on = renderer(ROW);
       const off = renderer(ROW);
       try {
-        const onFx = new SessionEffects<RenderedLine>("s");
-        const offFx = new SessionEffects<RenderedLine>("s");
+        const onFx = new SurfaceMemory<RenderedLine>("s");
+        const offFx = new SurfaceMemory<RenderedLine>("s");
         for (const frame of FRAMES) {
           const faded = on.render(frame, onFx, { transitions: true, bar });
           const plain = off.render(frame, offFx, { transitions: false, bar });
@@ -192,7 +192,7 @@ describe("a placement that appears fades in", () => {
   const risesFrom = (cfg: ValidatedConfig): { row: DrawnFrame; bar: string } => {
     const on = renderer(cfg);
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       const row = on.render({ shown: true, when: at(S) }, fx, { transitions: true });
       const bar = resolveColorRef(on.palette(), "background").hex.toLowerCase();
@@ -233,7 +233,7 @@ describe("a placement that appears fades in", () => {
   test("its event says what the frame compared against, and what is fading in on what clock", () => {
     const on = renderer(ROW);
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
       on.render({ shown: true, when: at(S) }, fx, { transitions: true });
@@ -259,8 +259,8 @@ describe("a placement that appears fades in", () => {
     const on = renderer(config("{ transitions: true }"));
     const off = renderer(ROW);
     try {
-      const onFx = new SessionEffects<RenderedLine>("s");
-      const offFx = new SessionEffects<RenderedLine>("s");
+      const onFx = new SurfaceMemory<RenderedLine>("s");
+      const offFx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, onFx);
       off.render({ shown: false, when: at(0) }, offFx);
       const shown = { shown: true, when: at(S + 10) };
@@ -279,8 +279,8 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const off = renderer(ROW);
     try {
       const frame = { shown: true, when: at(S) };
-      expect(on.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: true }).rows).toEqual(
-        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }).rows,
+      expect(on.render(frame, new SurfaceMemory<RenderedLine>("s"), { transitions: true }).rows).toEqual(
+        off.render(frame, new SurfaceMemory<RenderedLine>("s"), { transitions: false }).rows,
       );
     } finally {
       on.dispose();
@@ -292,7 +292,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const on = renderer(ROW);
     const off = renderer(ROW, on.session);
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: true, when: at(S) }, fx, { transitions: true });
       expect(fx.lastFrame().fades).toEqual([{ placement: "middle", t: 0 }]);
@@ -307,7 +307,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
         fades: [],
       });
       expect(opened.rows).toEqual(
-        off.render(frame, new SessionEffects<RenderedLine>("s"), { transitions: false }).rows,
+        off.render(frame, new SurfaceMemory<RenderedLine>("s"), { transitions: false }).rows,
       );
     } finally {
       on.dispose();
@@ -322,7 +322,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
       const journal = history.begin(NO_LAYERS);
       journal.sessionState.set(SID_S, "theme", "nord");
       journal.commit();
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: false, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("compared");
@@ -345,7 +345,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const first = renderer(loaded, new SessionState(), shared);
     const reloaded = renderer(again, new SessionState(), shared);
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       first.render({ shown: false, when: at(0) }, fx, { transitions: true });
       reloaded.render({ shown: true, when: at(S) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
@@ -363,7 +363,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     // Another load: the loader builds a new config object, as a reload does.
     const reloaded = renderer(config());
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       first.render({ shown: false, when: at(0) }, fx, { transitions: true });
       reloaded.render({ shown: true, when: at(S) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
@@ -376,7 +376,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
   test("leaving arrange mode shows the bar at once", () => {
     const on = renderer(ROW);
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.session.set(SID_S, "edit.mode", "arrange");
       on.render({ shown: true, when: at(0) }, fx, { transitions: true });
       on.session.set(SID_S, "edit.mode", "closed");
@@ -417,7 +417,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   const left = ["left"];
 
   test("a frame never drawn is never compared against", () => {
-    const fx = new SessionEffects<string>("s");
+    const fx = new SurfaceMemory<string>("s");
     const memory = surfaceRecord<string>();
     const first = framed(fx, memory, "none", fx.clockAt(at(0), 1), fades);
     first.placed("left", left);
@@ -437,7 +437,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
     });
   });
   test("a placement that laid no cell of its own draws what it returned, and is kept as nothing", () => {
-    const fx = new SessionEffects<string>("s");
+    const fx = new SurfaceMemory<string>("s");
     const memory = surfaceRecord<string>();
     framed(fx, memory, "none", fx.clockAt(at(0), 1), fades).drawn();
     const motion = framed(fx, memory, "none", fx.clockAt(at(1), 1), fades);
@@ -447,7 +447,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   });
 
   test("a placement reached twice in one frame is a loud error", () => {
-    const fx = new SessionEffects<string>("s");
+    const fx = new SurfaceMemory<string>("s");
     const memory = surfaceRecord<string>();
     const motion = framed(fx, memory, "none", fx.clockAt(at(0), 1), fades);
     motion.placed("left", left);

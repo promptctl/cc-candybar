@@ -352,7 +352,13 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     return { link, admitted };
   };
   const acknowledge = (of: EffectId) =>
-    turn({ kind: "effect-done", session, of, outcome: { kind: "ok" } }, 0);
+    turn(
+      {
+        kind: "effect-done", session, of,
+        outcome: { kind: "ok", presentation: "presented" },
+      },
+      0,
+    );
   answered(await acknowledge(first.id));
   const sendClick = ({ admitted }: ReturnType<typeof click>) =>
     turn(
@@ -392,7 +398,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     kind: "viewers",
     viewers: {
       [session]: {
-        lanes: { pane: { subscribers: 1, drawing: true, pointer: null } },
+        lanes: { pane: { subscribers: 1, drawing: true, pointer: null, turn: 1 } },
         shown: true,
         joined: 1,
       },

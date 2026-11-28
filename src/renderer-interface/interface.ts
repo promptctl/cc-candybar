@@ -350,19 +350,34 @@ export interface LaneViewers {
   // the pointer is over this surface: null while none reports one. Each
   // surface's frame is drawn from its own pointer, never another surface's.
   readonly pointer: Pointer | null;
+  // [LAW:one-source-of-truth] The lane's turn as the host minted it when its
+  // first subscriber of this period joined: a frame is drawn under it, and a
+  // new one means the lane's drawer changed, even when the viewers between
+  // two deliveries read alike.
+  readonly turn: number;
 }
 
 // Every session someone watches, whole: a session absent has no viewer.
 export type Viewers = Readonly<Record<SessionId, SessionViewers>>;
 
+// [LAW:nothing-unseen] What became of a delivered present or frame, by the
+// host's verdict: presented as its surface's presentation, or why not (its
+// session's image retired, its lane's drawer turned, a newer draw of its
+// surface presented first, or it was never one a display shows).
+export type Presentation =
+  | "presented"
+  | "retired"
+  | "turned"
+  | "superseded"
+  | "unshown";
+
 export type EffectOutcome =
   | {
       readonly kind: "ok";
       readonly sessionCommitted?: true;
-      // [LAW:single-enforcer] A present or frame the host took as its
-      // surface's presentation: the host's verdict, the only one the renderer
-      // records a delivery by.
-      readonly presented?: true;
+      // [LAW:single-enforcer] The host's verdict on a delivered draw, the
+      // only one the renderer records a delivery by.
+      readonly presentation?: Presentation;
     }
   | { readonly kind: "failed"; readonly reason: string }
   // Refused before it acted: a change to a setting that moved since the
@@ -583,6 +598,9 @@ export type FeedFrame<Body = WireFrame> =
 export interface PushedFrame {
   readonly session: SessionId;
   readonly lane: Lane;
+  // The lane's turn the frame was drawn under, from the viewers it was drawn
+  // for. The host sends and presents only a frame of the lane's current turn.
+  readonly turn: number;
   // Read through `parseFrame`: Infinity crosses as null.
   readonly frame: FeedFrame;
 }

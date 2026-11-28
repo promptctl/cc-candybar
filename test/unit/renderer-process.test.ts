@@ -866,6 +866,7 @@ describe("ids a renderer mints", () => {
   const drawn = (receipt: number) => ({
     session: SESSION,
     lane: "pane" as const,
+    turn: 1,
     frame: {
       kind: "drawn" as const,
       receipt: receipt as EffectId,
@@ -875,6 +876,7 @@ describe("ids a renderer mints", () => {
   const dropped = {
     session: SESSION,
     lane: "window" as const,
+    turn: 1,
     frame: { kind: "failed" as const, message: "no frame drawn" },
   };
   // An output carrying `frames`, with the feed update every attempted frame

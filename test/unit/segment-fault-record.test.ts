@@ -68,7 +68,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
         session,
         of: presentOf(output.effects).id,
         outcome: delivered
-          ? { kind: "ok", presented: true }
+          ? { kind: "ok", presentation: "presented" }
           : { kind: "failed", reason: "client disconnected" },
       }),
     );

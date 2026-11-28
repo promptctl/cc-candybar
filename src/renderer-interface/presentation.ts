@@ -3,7 +3,7 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { Lane } from "../config/lanes.js";
 import type { HeldLayout } from "../render/held-layout.js";
-import type { HeldEffects, HeldMotion } from "../render/effect.js";
+import type { HeldEffects, SurfaceClock } from "../render/effect.js";
 import type { RenderWarning } from "../dsl/render.js";
 import type { Tick } from "../utils/instant.js";
 import type { Crosses } from "./crosses.js";
@@ -15,7 +15,7 @@ export const MAX_PRESENTED_SESSIONS = 256;
 // one surface, so a record two surfaces shared would be wrong for one of them.
 export interface HeldSurface {
   readonly layout: HeldLayout;
-  readonly clock: HeldMotion;
+  readonly clock: SurfaceClock;
   readonly effects: HeldEffects;
   readonly copies: ReadonlyArray<readonly [string, string]>;
   readonly warnings: readonly RenderWarning[];
@@ -70,7 +70,7 @@ export interface SurfaceChange {
   readonly placements?: Changes<HeldLayout["placements"]>;
   readonly rules?: HeldLayout["rules"];
   readonly passages?: HeldLayout["passages"];
-  readonly clock?: MotionChange;
+  readonly clock?: ClockChange;
   readonly effects?: {
     readonly placements?: Changes<HeldEffects["placements"]>;
     readonly made?: Changes<HeldEffects["made"]>;
@@ -80,9 +80,9 @@ export interface SurfaceChange {
   readonly faults?: string;
 }
 
-export interface MotionChange {
-  readonly anchor?: HeldMotion["anchor"];
-  readonly inForce?: HeldMotion["inForce"];
+export interface ClockChange {
+  readonly anchor?: SurfaceClock["anchor"];
+  readonly inForce?: SurfaceClock["inForce"];
 }
 
 export type Proposal<Value, Change> =
@@ -151,7 +151,7 @@ export function surfaceAfter(
             passages: passages === undefined ? prior.layout.passages : passages,
           }
         : prior.layout,
-    clock: clock ? motionAfter(prior.clock, clock) : prior.clock,
+    clock: clock ? clockAfter(prior.clock, clock) : prior.clock,
     effects: effects
       ? {
           placements: applyEntries(
@@ -167,10 +167,10 @@ export function surfaceAfter(
   };
 }
 
-export function motionAfter(
-  prior: HeldMotion,
-  change: MotionChange,
-): HeldMotion {
+export function clockAfter(
+  prior: SurfaceClock,
+  change: ClockChange,
+): SurfaceClock {
   if (Object.keys(change).length === 0) return prior;
   return {
     anchor: change.anchor ?? prior.anchor,
@@ -189,4 +189,18 @@ export function idleAfterDraw(
   if (tick < prior.since) return prior;
   const since = shown && !prior.shown ? tick : prior.since;
   return { since, shown, timeoutS };
+}
+
+// [LAW:one-source-of-truth] The session's one idle record after a surface
+// drawn at `order`. Its menus are open while any surface drawn at that order
+// shows one, so a surface whose menu is closed cannot restart another's
+// idle period; an older draw moves nothing.
+export function idleOfDraw(
+  prior: Ordered<HeldIdle> | undefined,
+  order: number,
+  menu: PresentedMenu & { readonly tick: Tick },
+): Ordered<HeldIdle> {
+  if (prior !== undefined && order < prior.order) return prior;
+  const shown = menu.shown || (prior?.order === order && prior.value.shown);
+  return { order, value: idleAfterDraw(prior?.value, { ...menu, shown }) };
 }

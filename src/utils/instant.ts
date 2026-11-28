@@ -26,7 +26,7 @@ export const instantAt = (clock: Pick<Timekeeper, "now">): Instant =>
 // time does.
 // [LAW:types-are-the-program] Branded apart from Instant, so a wall instant
 // cannot be subtracted from an animation stamp, or handed to an animation where
-// animation time is meant: `SessionEffects.clockAt` is the one way in.
+// animation time is meant: `SurfaceMemory.clockAt` is the one way in.
 export type AnimationTime = number & {
   readonly __animationTime: unique symbol;
 };

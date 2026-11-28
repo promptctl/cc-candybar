@@ -5,6 +5,7 @@ import type { Effect, Event, EventInput, RendererBoot, RequestId } from "../../s
 import { contextOf, snapshotOf, worldStateOf } from "../helpers/main-renderer";
 import { RECORDING_VERSION, type RecordingEntry } from "../../src/renderer-interface/recording";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import type { FeedResume } from "../../src/renderer-interface/feed-history";
 import { RENDERER_WIRE_VERSION } from "../../src/renderer-interface/wire";
 import { mainRendererOf } from "../../src/renderer/main";
 import { replayRecording } from "../../src/renderer/replay";
@@ -255,15 +256,15 @@ describe("a recording from before each lane drew its own frame", () => {
       kind: "viewers",
       viewers: {
         [session]: {
-          lanes: { pane: { subscribers: 1, drawing: true, pointer: null } },
+          lanes: { pane: { subscribers: 1, drawing: true, pointer: null, turn: 1 } },
           shown: true,
           joined: 1,
         },
       },
     },
   ];
-  // Each event's turn, as this wire records it.
-  async function turns() {
+  // Each event's turn, as this wire records it, the viewers' with `handoff`.
+  async function turns(handoff?: readonly FeedResume[]) {
     const built = mainRendererOf(settings);
     if (built.kind === "refused") throw new Error("fixture renderer refused construction");
     const recorded = [];
@@ -272,6 +273,7 @@ describe("a recording from before each lane drew its own frame", () => {
       const input: EventInput = {
         kind: "event", event, at: 1 as Instant, tick: 0 as Tick,
         presentation: { order: order + 1, sessions: [] },
+        ...(event.kind === "viewers" && handoff && { feedResumes: handoff }),
       };
       const json = JSON.stringify(input);
       const output = await built.renderer.answer(JSON.parse(json));
@@ -297,6 +299,7 @@ describe("a recording from before each lane drew its own frame", () => {
     };
     const watched = viewers!.input.event.viewers[session];
     delete watched.lanes.pane.pointer;
+    delete watched.lanes.pane.turn;
     watched.pointer = null;
     return [start!, request!, viewers!];
   }
@@ -313,6 +316,13 @@ describe("a recording from before each lane drew its own frame", () => {
     const shown = tampered[1]!.output.effects.find((effect: Effect) => effect.kind === "present");
     shown.frame = `${shown.frame} and more`;
     await expect(replayed(36, tampered)).rejects.toThrow("recording turn 2 differs at output.effects");
+  });
+
+  test("replays a feed handoff of a session never drawn", async () => {
+    const handoff: FeedResume[] = [{ session, history: null, exportProblem: null }];
+    const recorded = legacy(await turns(handoff));
+    expect(recorded[2]!.input.feedResumes).toEqual(handoff);
+    await expect(replayed(36, recorded)).resolves.toEqual({ turns: 3 });
   });
 
   test("refuses outputs that carry feed frames", async () => {

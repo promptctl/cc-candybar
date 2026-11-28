@@ -30,7 +30,9 @@ import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
   Event,
+  LaneViewers,
   Notification,
+  Presentation,
   Renderer,
   RendererOutput,
   RequestId,
@@ -177,7 +179,6 @@ function renderer(
     feeds: new Feeds({
       draw: (session, lanes, fps, readings, laneFeeds, prepare) =>
         renderFrames(parts, session, lanes, fps, readings, laneFeeds, prepare),
-      turned: (session, lane) => rig.cache.stopDrawing(session, lane),
       pin: (session) => rig.cache.pin(session),
       log: (level, message) => logged.push(`${level} ${message}`),
       periods: FEED_PERIODS,
@@ -375,6 +376,7 @@ const done = (
   r: Renderer,
   { session, id: of }: Pick<Effect, "session" | "id">,
   ok: boolean,
+  presentation: Presentation = "presented",
 ) =>
   r.answer({
     kind: "event",
@@ -384,7 +386,7 @@ const done = (
       session,
       of,
       outcome: ok
-        ? { kind: "ok", presented: true }
+        ? { kind: "ok", presentation }
         : { kind: "failed", reason: "left" },
     },
   });
@@ -397,6 +399,14 @@ const threw = (output: RendererOutput) => {
 
 
 
+// One subscriber drawing a lane, in its first turn.
+const DRAWING: LaneViewers = {
+  subscribers: 1,
+  drawing: true,
+  pointer: null,
+  turn: 1,
+};
+
 // A follower on `lane` watches the session. Lane B draws Claude Code's own
 // statusline, the surface a request's answer is shown on.
 const followFeed = (r: Renderer, lane: Lane = "statusline") =>
@@ -404,7 +414,7 @@ const followFeed = (r: Renderer, lane: Lane = "statusline") =>
     kind: "viewers",
     viewers: {
       [SESSION]: {
-        lanes: { [lane]: { subscribers: 1, drawing: true, pointer: null } },
+        lanes: { [lane]: DRAWING },
         shown: true,
         joined: 1,
       },
@@ -694,7 +704,7 @@ describe("a statusline request", () => {
         kind: "start",
         viewers: {
           [SESSION]: {
-            lanes: { pane: { drawing: true, subscribers: 1, pointer: null } },
+            lanes: { pane: DRAWING },
             shown: true,
             joined: 1,
           },
@@ -1153,7 +1163,7 @@ describe("a feed's frame", () => {
           kind: "viewers",
           viewers: {
             [SESSION]: {
-              lanes: { pane: { drawing: true, subscribers: 1, pointer: null } },
+              lanes: { pane: DRAWING },
               shown: true,
               joined: 1,
             },
@@ -1186,7 +1196,7 @@ describe("a feed's frame", () => {
           kind: "viewers",
           viewers: {
             [SESSION]: {
-              lanes: { pane: { drawing: true, subscribers: 1, pointer: null } },
+              lanes: { pane: DRAWING },
               shown: true,
               joined: 1,
             },
@@ -1220,8 +1230,8 @@ describe("a feed's frame", () => {
       parts,
       SESSION,
       [
-        ["statusline", null],
-        ["pane", null],
+        ["statusline", DRAWING],
+        ["pane", DRAWING],
       ],
       30,
       READ,
@@ -1393,18 +1403,37 @@ describe("a feed's frame", () => {
   });
 
   // A feed that opens again draws its first frame, fading nothing in from
-  // what the closed one last showed.
-  test("whose feed closed leaves no record of it, and the request's stands", async () => {
-    const { r, parts, rig } = renderer();
+  // what the closed one last showed: the host no longer offers it.
+  test("whose feed's turn passed leaves no record of it, and the request's stands", async () => {
+    const { r, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
     answered(await followFeed(r, "pane"));
     const frame = await dueFrame(r);
     answered(await done(r, { session: SESSION, id: frame.receipt }, true));
-    expect(presentation(rig, "pane")).toBeDefined();
+    const shown = presentation(rig, "pane");
+    expect(shown).toBeDefined();
+    // A frame whose turn passed before its delivery is not the record, and
+    // the reason is said.
     const pending = await dueFrame(r, 1);
-    parts.renderCache.stopDrawing(SESSION, "pane");
-    answered(await done(r, { session: SESSION, id: pending.receipt }, true));
+    const turned = answered(
+      await done(r, { session: SESSION, id: pending.receipt }, true, "turned"),
+    );
+    expect(turned.record).toContainEqual(["presentation", "turned"]);
+    expect(presentation(rig, "pane")).toBe(shown);
+    answered(
+      await r.answer({
+        kind: "event",
+        ...READ,
+        event: { kind: "due" },
+        presentation: {
+          order: 1000,
+          sessions: [
+            { session: SESSION, revision: 0, bases: { statusline: present.id } },
+          ],
+        },
+      }),
+    );
     expect(presentation(rig, "pane")).toBeUndefined();
     expect(presentation(rig, "statusline")).toBeDefined();
   });
@@ -1419,7 +1448,7 @@ describe("a feed's frame", () => {
       renderFrames(
         parts,
         SESSION,
-        [["pane", null]],
+        [["pane", DRAWING]],
         MOVING_FPS,
         { at, tick: 0 as Tick },
         UNFOLLOWED_FEEDS,
@@ -1480,7 +1509,7 @@ describe("each surface's frame", () => {
       const drawn = renderFrames(
         t.parts,
         SESSION,
-        lanes,
+        lanes.map(([lane, pointer]) => [lane, { ...DRAWING, pointer }] as const),
         MOVING_FPS,
         {
           at: (READ.at + elapsed) as Instant,
@@ -1839,7 +1868,7 @@ describe("the session's config, ahead of its request", () => {
         kind: "effect-done",
         session: SESSION,
         // The host's verdict: Claude Code's statusline shows the answer.
-        outcome: { kind: "ok", presented: true },
+        outcome: { kind: "ok", presentation: "presented" },
       }),
     ]);
     expect(t.recorded).toHaveLength(1);

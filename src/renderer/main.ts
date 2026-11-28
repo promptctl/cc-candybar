@@ -49,6 +49,7 @@ import {
   type SessionHistory,
 } from "../renderer-interface/history-storage.js";
 import { createGates } from "../daemon/foundations/gates.js";
+import { roleOf } from "../daemon/foundations/sighting-roles.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type {
@@ -368,9 +369,16 @@ export function mainRenderer(
           answerRequest(parts, current, event.context.hints, record);
         // Its answer opened the session's view, so it waits for none.
         opening.delete(current.hookData.session_id);
+        // [LAW:one-source-of-truth] A `cc-candybar frames` client discards
+        // its answer, so only Claude Code's own statusline client shows one,
+        // and an answer no display shows proposes no presentation.
+        const { id, proposal } = prepare(delivery);
+        const shown =
+          roleOf(event.context.hints.client ?? null) === "statusline";
         effects.push({
           kind: "present",
-          ...prepare(delivery),
+          id,
+          ...(shown && proposal && { proposal }),
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
@@ -417,8 +425,18 @@ export function mainRenderer(
           );
         deliveries.delete(event.of);
         // [LAW:single-enforcer] Only a draw the host presented records its
-        // surface's presentation.
-        if (event.outcome.kind === "ok" && event.outcome.presented) {
+        // surface's presentation; one it did not says why.
+        if (event.outcome.kind !== "ok") return;
+        const { presentation } = event.outcome;
+        // [LAW:no-silent-failure] A delivered draw always carries the
+        // host's verdict.
+        if (presentation === undefined)
+          throw new Error(
+            `effect-done for delivery ${event.of} carries no presentation verdict`,
+          );
+        if (presentation !== "presented")
+          record.push(["presentation", presentation]);
+        else {
           const accepted = deliver(parts, event.of, delivery);
           if (
             delivery.kind === "frame" &&
@@ -682,14 +700,16 @@ export function mainRenderer(
                   parts.renderCache.presentations.idleMoved(session, order);
                 });
           const { outcome, ...declaration } = ending(event, () => {
-            for (const { resume, revision } of input.presentation?.sessions ??
-              [])
+            for (const { session, resume, revision, bases } of input
+              .presentation?.sessions ?? []) {
               if (resume)
                 parts.renderCache.resumePresentation(
                   resume,
                   revision,
                   parts.edits.view.revision(resume.session),
                 );
+              parts.renderCache.offeredPresentation(session, bases);
+            }
             return isCommand(event)
               ? command(event)
               : notify(
@@ -893,9 +913,6 @@ function build(
   const feeds: Feeds = new Feeds({
     draw: (sessionId, lanes, fps, readings, laneFeeds, prepare) =>
       renderFrames(parts, sessionId, lanes, fps, readings, laneFeeds, prepare),
-    // [LAW:single-enforcer] A lane joining or leaving is the one moment its
-    // surface's drawer changes, so what the old drawer showed retires.
-    turned: (sessionId, lane) => renderCache.stopDrawing(sessionId, lane),
     pin,
     log,
     periods: FEED_PERIODS,

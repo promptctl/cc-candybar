@@ -1,4 +1,5 @@
 import {
+  idleOfDraw,
   MAX_PRESENTED_SESSIONS,
   proposedValue,
   surfaceAfter,
@@ -9,9 +10,9 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import type { DrawnFrame } from "../dsl/render.js";
 import {
   CompiledEffects,
-  SessionEffects,
+  SurfaceMemory,
   holdEffects,
-  holdMotion,
+  holdClock,
   restoreEffects,
   type KeptMotion,
 } from "../render/effect.js";
@@ -27,12 +28,7 @@ import { surfaceChange, proposeValue } from "./presentation-change.js";
 import type { RichText } from "@promptctl/rich-js";
 import type { EffectId } from "../renderer-interface/interface.js";
 import { KEPT_FAULTS } from "../renderer-interface/noted-faults.js";
-import {
-  idleAfterDraw,
-  MenuIdle,
-  type DrawnMenu,
-  type Idle,
-} from "./menu-idle.js";
+import { MenuIdle, type DrawnMenu, type Idle } from "./menu-idle.js";
 import {
   describeWarning,
   warningChanges,
@@ -72,9 +68,8 @@ interface AcceptedFrame extends Omit<
   // Once its view retires, keep presentation facts that do not hold a layout.
   readonly layout: FrameLayout | null;
   readonly copies: FrameObservation["copies"] | null;
-  // What this surface's frame drew and its clock, for its next draw; null for
-  // a surface whose drawer changed, which draws again from the start.
-  readonly motion: KeptMotion | null;
+  // What this surface's frame drew and its clock, for its next draw.
+  readonly motion: KeptMotion;
 }
 
 interface SessionFrames {
@@ -168,7 +163,7 @@ export class PresentedFrames {
     const known = prior?.surfaces[by]?.portable;
     const surface: HeldSurface = {
       layout: holdLayout(frame.layout.record, loadKey, bases?.revision ?? 0),
-      clock: holdMotion(frame.motion),
+      clock: holdClock(frame.motion),
       effects: holdEffects(frame.motion),
       copies: [...frame.copies],
       warnings: frame.diagnostics.warnings.map((w) => w.warning),
@@ -258,12 +253,17 @@ export class PresentedFrames {
     };
     const change = warningChanges(surface.diagnostics, previous?.diagnostics);
     this.sessions.delete(session);
+    const idle = idleOfDraw(
+      prior.idle && {
+        order: prior.idleOrder ?? latest?.order ?? -1,
+        value: prior.idle,
+      },
+      order,
+      menu,
+    );
     this.store(session, {
       surfaces: { ...prior.surfaces, [by]: next },
-      idle:
-        order >= (prior.idleOrder ?? latest?.order ?? -1)
-          ? idleAfterDraw(prior.idle, menu)
-          : prior.idle,
+      idle: idle.value,
       idleOrder: Math.max(prior.idleOrder ?? -1, order),
     });
     return { faults: change.faults === KEPT_FAULTS ? null : change.faults };
@@ -312,10 +312,10 @@ export class PresentedFrames {
 
   // What the surface's next draw reads: its accepted frame's effects and
   // clock, and none for a surface that draws from the start.
-  effects(session: SessionId, by: Lane): SessionEffects<RenderedLine> {
-    return new SessionEffects(
+  effects(session: SessionId, by: Lane): SurfaceMemory<RenderedLine> {
+    return new SurfaceMemory(
       session,
-      this.on(session, by)?.motion ?? undefined,
+      this.on(session, by)?.motion,
       this.compiled,
     );
   }
@@ -346,25 +346,22 @@ export class PresentedFrames {
     this.sessions.set(session, { ...prior, surfaces });
   }
 
-  stopDrawing(session: SessionId, by: Lane): void {
+  // [LAW:one-source-of-truth] The host's image is the presentation. A
+  // surface it no longer offers at this surface's order (its lane's drawer
+  // turned, or its image retired) is no record a draw continues: it fades
+  // its placements in and starts its clock as one never drawn would.
+  offered(session: SessionId, bases: Partial<Record<Lane, number>>): void {
     const prior = this.sessions.get(session);
-    const held = prior?.surfaces[by];
-    if (prior === undefined || held === undefined) return;
-    this.sessions.set(session, {
-      ...prior,
-      surfaces: {
-        ...prior.surfaces,
-        [by]: {
-          ...held,
-          layout: null,
-          copies: null,
-          portable: undefined,
-          // A surface whose drawer changed fades its placements in and starts
-          // its clock when it is drawn again, as one never drawn would.
-          motion: null,
-        },
-      },
-    });
+    if (prior === undefined) return;
+    const stale = LANE_NAMES.filter(
+      (lane) =>
+        prior.surfaces[lane] !== undefined &&
+        prior.surfaces[lane].order !== bases[lane],
+    );
+    if (stale.length === 0) return;
+    const surfaces = { ...prior.surfaces };
+    for (const lane of stale) delete surfaces[lane];
+    this.sessions.set(session, { ...prior, surfaces });
   }
 
   retire(session: SessionId): void {
@@ -382,7 +379,7 @@ export class PresentedFrames {
       if (LANE_NAMES.some((by) => held.surfaces[by]?.motion)) sessions++;
       for (const by of LANE_NAMES) {
         const surface = held.surfaces[by];
-        for (const effectsOfRow of surface?.motion?.made.values() ?? [])
+        for (const effectsOfRow of surface?.motion.made.values() ?? [])
           effects += effectsOfRow.size;
         passages += surface?.layout?.record.passages?.size ?? 0;
       }

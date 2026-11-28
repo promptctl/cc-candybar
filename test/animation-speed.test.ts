@@ -15,7 +15,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { SessionEffects, type RowItem } from "../src/render/effect";
+import { SurfaceMemory, type RowItem } from "../src/render/effect";
 import { framed, surfaceRecord, type SurfaceRecord } from "./helpers/frames";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import {
@@ -42,7 +42,7 @@ const STILL_FRAME = {
 
 // The bar's loop drawn at `when`, at `speed`: the effect's own t that frame.
 const loopT = (
-  fx: SessionEffects<string>,
+  fx: SurfaceMemory<string>,
   when: Instant,
   speed: AnimationSpeedName,
 ): number => {
@@ -63,11 +63,11 @@ const everySpeed = <Row extends readonly unknown[]>(
 
 describe("the bar's loop runs at the session's animation speed", () => {
   test("repeated draws and a fresh peer use the same anchor until the playback rate changes", () => {
-    const active = new SessionEffects<string>("s");
+    const active = new SurfaceMemory<string>("s");
     const start = active.clockAt(at(0), 5);
     const first = active.motion("shimmer", start, STILL_FRAME).memory().motion;
     active.keep(first);
-    const peer = new SessionEffects<string>("s", { ...first, anchor: JSON.parse(JSON.stringify(start.timeline)) });
+    const peer = new SurfaceMemory<string>("s", { ...first, anchor: JSON.parse(JSON.stringify(start.timeline)) });
     for (let frame = 1; frame <= 120; frame++) {
       const when = at(frame / 60);
       const clock = active.clockAt(when, 5);
@@ -85,14 +85,14 @@ describe("the bar's loop runs at the session's animation speed", () => {
       "20x": [200],
     }),
   )("ten seconds at %s are %d seconds of the loop", (speed, t) => {
-    const fx = new SessionEffects<string>("s");
+    const fx = new SurfaceMemory<string>("s");
     loopT(fx, at(0), speed);
     expect(loopT(fx, at(10), speed)).toBeCloseTo(t, 9);
     expect(fx.lastFrame().speed).toBe(ANIMATION_SPEEDS[speed]);
   });
 
   test("a change of speed moves no loop to another phase: only its pace changes", () => {
-    const fx = new SessionEffects<string>("s");
+    const fx = new SurfaceMemory<string>("s");
     loopT(fx, at(0), "1x");
     expect(loopT(fx, at(10), "1x")).toBeCloseTo(10, 9);
     // The frame the speed changes in reads where the loop already was.
@@ -104,7 +104,7 @@ describe("the bar's loop runs at the session's animation speed", () => {
   });
 
   test("a frame that is never drawn moves the clock by nothing", () => {
-    const fx = new SessionEffects<string>("s");
+    const fx = new SurfaceMemory<string>("s");
     loopT(fx, at(0), "1x");
     // A render reads the clock at 20x and throws before it is drawn.
     fx.motion("shimmer", fx.clockAt(at(5), 20), STILL_FRAME);
@@ -139,7 +139,7 @@ describe("a fade runs at the session's animation speed", () => {
   // One frame drawn at `when` and `speed`, `shown` saying whether `left` draws
   // in it; what is fading in after it.
   const frame = (
-    fx: SessionEffects<string>,
+    fx: SurfaceMemory<string>,
     memory: SurfaceRecord<string>,
     when: Instant,
     speed: AnimationSpeedName,
@@ -168,7 +168,7 @@ describe("a fade runs at the session's animation speed", () => {
       "20x": [1.5, []],
     }),
   )("at %s, a twenty-second fade %s s in is %j", (speed, later, fading) => {
-    const fx = new SessionEffects<string>("s");
+    const fx = new SurfaceMemory<string>("s");
     const memory = surfaceRecord<string>();
     frame(fx, memory, at(0), speed, false);
     expect(frame(fx, memory, at(1), speed, true)).toEqual([
@@ -209,7 +209,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     const compiled = registerDslConfig(CONFIG, registry, {
       cwd: "/tmp",
     });
-    const effects = new SessionEffects<RenderedLine>("s");
+    const effects = new SurfaceMemory<RenderedLine>("s");
     try {
       return seconds
         .map((s) =>

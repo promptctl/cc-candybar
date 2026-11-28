@@ -192,6 +192,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
       {
         session,
         lane: "pane",
+        turn: 1,
         frame: {
           kind: "drawn",
           receipt: 2 as EffectId,
@@ -223,6 +224,15 @@ test("both presentation paths carry the displayed event in their turn's answer",
     { ...output, feedUpdates: undefined },
     { ...output, frames: [] },
     { ...output, frames: [...output.frames, ...output.frames] },
+    // A lane counted as changed that the session drew no frame for.
+    {
+      ...output,
+      feedUpdates: [
+        { ...output.feedUpdates![0]!, changed: ["window"] as const },
+      ],
+    },
+    // A frame drawn under no turn.
+    { ...output, frames: [{ ...output.frames[0]!, turn: -1 }] },
   ]) {
     const broken = linesOver(undefined, {
       renderer: timed(

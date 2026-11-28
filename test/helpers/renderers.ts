@@ -8,7 +8,10 @@ import type {
 } from "../../src/renderer-interface/interface";
 import { timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
-import { HostPresentations } from "../../src/daemon/host-presentations";
+import {
+  HostPresentations,
+  type LaneTurns,
+} from "../../src/daemon/host-presentations";
 import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
@@ -75,6 +78,13 @@ export const NO_CONFIGS: HostWorld["configs"] = {
   },
 };
 
+// Lanes no subscriber ever followed: each is in its first turn.
+const UNFOLLOWED: LaneTurns = {
+  turnOf: () => 0,
+  current: (_session, _lane, turn) => turn === 0,
+  follows: () => false,
+};
+
 // The world of a rig whose renderer asks no act: one it is handed fails by
 // name, its renderer names no origin, the daemon is not closing, and an act's
 // failure no bar holds would be the rig's bug.
@@ -83,7 +93,7 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 // alone holds it, no session's export is refused, and the host owns every
 // session.
 export const presenting = (): HostWorld["presentationTurn"] => {
-  const presentations = new HostPresentations();
+  const presentations = new HostPresentations(UNFOLLOWED);
   return (input, observed) =>
     presentations.turn(
       input,

@@ -266,8 +266,14 @@ test("the request's present answers it, in the request's encoding, with each tur
   expect(facts.has("encoded")).toBe(true);
   answered.settled(true);
   await drained();
+  // The scripted present proposes nothing, so it presents nowhere.
   expect(heard).toEqual([
-    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "ok" } },
+    {
+      kind: "effect-done",
+      session: SESSION,
+      of: 1,
+      outcome: { kind: "ok", presentation: "unshown" },
+    },
   ]);
 });
 

@@ -31,7 +31,7 @@ import {
   type DrawnFrame,
 } from "../src/dsl/render";
 import { LOADING_GLYPH, type RenderedLine } from "../src/dsl/node-registry";
-import { holdEffects, holdMotion, restoreEffects, SessionEffects } from "../src/render/effect";
+import { holdEffects, holdClock, restoreEffects, SurfaceMemory } from "../src/render/effect";
 import { holdLayout, restoreLayout } from "../src/render/held-layout";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
@@ -123,7 +123,7 @@ function renderer(cfg: ValidatedConfig) {
       runInAction(() => document.set({ reading: { ...ok(value), at: AT }, fault: null })),
     unanswer: () =>
       runInAction(() => document.set({ reading: pendingOf("unread"), fault: null, beforeRead: null })),
-    draw: (width = 160, state?: {visible: boolean; effects: SessionEffects<RenderedLine>; elapsed: number; record?: DrawnFrame["memory"]["record"]}): Drawn => {
+    draw: (width = 160, state?: {visible: boolean; effects: SurfaceMemory<RenderedLine>; elapsed: number; record?: DrawnFrame["memory"]["record"]}): Drawn => {
       const { frame, warnings, memory } = drawPayload(
         cfg,
         compiled,
@@ -167,7 +167,7 @@ test("a fresh narrow peer holds a pending cell at its drawn width during a neigh
   const home = renderer(config(content, flag));
   const reload = config(content, flag);
   const peer = renderer(reload);
-  const effects = new SessionEffects<RenderedLine>("s");
+  const effects = new SurfaceMemory<RenderedLine>("s");
   try {
     home.answer({label: "wide resolved cell"});
     home.draw(34, {visible: true, effects, elapsed: 0});
@@ -176,11 +176,11 @@ test("a fresh narrow peer holds a pending cell at its drawn width during a neigh
     expect(textOf(accepted.frame)).toContain("DEPARTING");
     home.unanswer();
     peer.unanswer();
-    const saved = {layout: holdLayout(accepted.memory.record, "resolved"), motion: holdMotion(accepted.memory.motion), effects: holdEffects(accepted.memory.motion)};
+    const saved = {layout: holdLayout(accepted.memory.record, "resolved"), motion: holdClock(accepted.memory.motion), effects: holdEffects(accepted.memory.motion)};
     const restored: typeof saved = JSON.parse(JSON.stringify(saved));
     const now = {visible: false, elapsed: 8};
     const expected = home.draw(34, {...now, effects});
-    const actual = peer.draw(34, {...now, effects: new SessionEffects("s", {...restored.motion, ...restoreEffects(restored.effects)}),
+    const actual = peer.draw(34, {...now, effects: new SurfaceMemory("s", {...restored.motion, ...restoreEffects(restored.effects)}),
       record: restoreLayout(restored.layout, {config: reload, loadKey: "resolved"})});
     expect(actual.frame.pending).toContain("doc");
     expect(textOf(actual.frame)).toContain(LOADING_GLYPH);

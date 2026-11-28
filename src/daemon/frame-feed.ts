@@ -80,9 +80,6 @@ export interface FeedDeps<Req> {
   shown(req: Req): boolean;
   // A session gained its first subscriber or lost its last one.
   watchingChanged(session: SessionId, watching: boolean): void;
-  // A lane of the session gained its first subscriber or lost its last: its
-  // surface's drawer changed.
-  laneFollowed(session: SessionId, lane: Lane, followed: boolean): void;
   // [LAW:single-enforcer] Hands the renderer every session's viewers, as
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
@@ -227,6 +224,12 @@ type Delivery = "current" | "owed" | "closed";
  */
 export class FrameFeeds<Req> {
   private readonly requests = new Map<SessionId, Noted<Req>>();
+  // [LAW:one-source-of-truth] Each session lane's turn: a number minted from
+  // one sequence each time the lane gains its first subscriber or loses its
+  // last, so no two periods of any lane share one. A lane never followed
+  // reads 0, as does one whose session was trimmed.
+  private readonly turns = new Map<SessionId, Partial<Record<Lane, number>>>();
+  private turnsMinted = 0;
   private readonly watched = new Map<SessionId, Watched>();
   // The lanes each session with a view switches on, as the renderer's last
   // output said: a subscriber is gated by its lane.
@@ -328,7 +331,7 @@ export class FrameFeeds<Req> {
     const laneJoined = !followsLane(watched, sub.lane);
     watched.followers.set(sub, follower);
     this.ownerMoved(sessionId, owned, watched);
-    if (laneJoined) this.deps.laneFollowed(sessionId, sub.lane, true);
+    if (laneJoined) this.turn(sessionId, sub.lane);
     this.handover(sessionId, watched, sub, follower);
     this.deps.log(
       "info",
@@ -417,6 +420,34 @@ export class FrameFeeds<Req> {
         );
   }
 
+  // The lane's turn: 0 until it is first followed.
+  turnOf(session: SessionId, lane: Lane): number {
+    return this.turns.get(session)?.[lane] ?? 0;
+  }
+
+  // [LAW:single-enforcer] Whether a draw made under `turn` still draws its
+  // lane: the one check that decides both what is sent and what presents.
+  current(session: SessionId, lane: Lane, turn: number): boolean {
+    return turn === this.turnOf(session, lane);
+  }
+
+  follows(session: SessionId, lane: Lane): boolean {
+    const watched = this.watched.get(session);
+    return watched !== undefined && followsLane(watched, lane);
+  }
+
+  // The lane's drawer changed. The session's turns are trimmed oldest first
+  // past the bound, never a watched one's.
+  private turn(session: SessionId, lane: Lane): void {
+    const turns = { ...this.turns.get(session), [lane]: ++this.turnsMinted };
+    this.turns.delete(session);
+    this.turns.set(session, turns);
+    for (const oldest of this.turns.keys()) {
+      if (this.turns.size <= MAX_REQUESTS) break;
+      if (!this.watched.has(oldest)) this.turns.delete(oldest);
+    }
+  }
+
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
   // its world state read.
   isWatched(sessionId: SessionId): boolean {
@@ -454,6 +485,7 @@ export class FrameFeeds<Req> {
         subscribers: subs.length,
         drawing: subs.some((sub) => sub.drawing()),
         pointer: ownerOf(watched, lane)?.pointer ?? null,
+        turn: this.turnOf(sessionId, lane),
       };
       return [[lane, viewers] as const];
     });
@@ -553,9 +585,17 @@ export class FrameFeeds<Req> {
           );
         drawn = false;
       }
-      // [LAW:one-source-of-truth] A lane's last frame lives exactly as long as
-      // the lane has a subscriber: one drawn before its last left is not kept.
-      if (followsLane(watched, lane)) watched.last.set(lane, encoded);
+      // [LAW:single-enforcer] A frame drawn for an earlier turn of its lane,
+      // or for a lane no one follows, is shown nowhere: not kept, not sent,
+      // never presented.
+      if (
+        !this.follows(session, lane) ||
+        !this.current(session, lane, pushed.turn)
+      ) {
+        settled(pushed, false);
+        continue;
+      }
+      watched.last.set(lane, encoded);
       if (drawn) {
         this.publish(session, watched, lane, encoded, (ok) =>
           settled(pushed, ok),
@@ -643,7 +683,10 @@ export class FrameFeeds<Req> {
     watched.followers.delete(sub);
     this.ownerMoved(sessionId, owned, watched);
     const laneLeft = !followsLane(watched, sub.lane);
-    if (laneLeft) watched.last.delete(sub.lane);
+    if (laneLeft) {
+      watched.last.delete(sub.lane);
+      this.turn(sessionId, sub.lane);
+    }
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId);
       this.deps.log(
@@ -651,7 +694,6 @@ export class FrameFeeds<Req> {
         `feed sid=${JSON.stringify(sessionId)} unwatched pushed=${watched.pushed}`,
       );
     }
-    if (laneLeft) this.deps.laneFollowed(sessionId, sub.lane, false);
     if (watched.followers.size === 0)
       this.deps.watchingChanged(sessionId, false);
     this.announce();

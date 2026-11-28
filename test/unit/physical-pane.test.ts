@@ -37,7 +37,6 @@ function rig(existing?: ManagedPane) {
   const feeds = new FrameFeeds({
     shown: () => true,
     watchingChanged: () => {},
-    laneFollowed: () => {},
     log: () => {},
     requestChanged: () => {},
     publishFrame: () => {

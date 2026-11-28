@@ -99,6 +99,7 @@ const commandSession = sessionIdOf("command-session");
 const offeredFrame: PushedFrame = {
   session: commandSession,
   lane: "pane",
+  turn: 1,
   frame: { kind: "failed", message: "an unrelated frame" },
 };
 const offeredEffect: Effect = {
@@ -433,6 +434,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
   const pushed: PushedFrame = {
     session: sessionIdOf("s"),
     lane: "pane",
+    turn: 1,
     frame: {
       kind: "drawn",
       receipt: 1 as EffectId,
@@ -487,6 +489,7 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
   const pushed: PushedFrame = {
     session,
     lane: "pane",
+    turn: 1,
     frame: {
       kind: "drawn", receipt,
       bar: { depth: "none", rows: [], nextChange: null, motion: "still", pending: [] },
@@ -1068,6 +1071,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
               {
                 session,
                 lane: "pane",
+                turn: 1,
                 frame: {
                   kind: "drawn",
                   receipt: 1 as EffectId,

@@ -29,9 +29,9 @@ import {
 } from "../config/lanes.js";
 import type { Frame } from "../render/frame.js";
 import type { PrepareDelivery } from "./draw-bar.js";
-import type { Pointer } from "../click/gesture.js";
 import {
   type FeedFrame,
+  type LaneViewers,
   type PushedFrame,
   type SessionViewers,
   type Viewers,
@@ -102,6 +102,8 @@ const SUMMARY_EVERY_S = 60;
 // One draw, what it cost in parts, and the render event if it failed.
 export interface FeedDraw {
   readonly frame: FeedFrame<Frame>;
+  // The lane's turn it was drawn under, from the viewers it was drawn for.
+  readonly turn: number;
   // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
   readonly evaluated: number;
   // How many strip items dividing cells too wide for a line added.
@@ -119,15 +121,12 @@ export interface FeedDeps {
   // still.
   readonly draw: (
     sessionId: SessionId,
-    lanes: ReadonlyArray<readonly [Lane, Pointer | null]>,
+    lanes: ReadonlyArray<readonly [Lane, LaneViewers]>,
     fps: number,
     readings: Readings,
     feeds: LaneFeeds,
     prepare: PrepareDelivery,
   ) => ReadonlyArray<readonly [Lane, FeedDraw]> | null;
-  // A lane started or stopped following the session: its surface's drawer
-  // changed.
-  readonly turned: (sessionId: SessionId, lane: Lane) => void;
   // [LAW:no-ambient-temporal-coupling] Holds the session's view open from the
   // feed's open to its close, and wakes the feed whenever the session's own
   // state changes: the feed being open is what keeps them.
@@ -309,7 +308,7 @@ export class Feeds {
     }
     const before = feed.viewers;
     feed.viewers = seen;
-    this.keepRates(feed);
+    this.keepRates(feed, before);
     const cause =
       before.shown !== seen.shown
         ? "visibility"
@@ -461,7 +460,7 @@ export class Feeds {
       unpin: this.deps.pin(sessionId),
     };
     this.feeds.set(sessionId, feed);
-    this.keepRates(feed);
+    this.keepRates(feed, null);
     this.report(feed, { viewers: true });
     this.deps.log(
       "info",
@@ -472,31 +471,24 @@ export class Feeds {
 
   private close(feed: Feed, tick: Tick): void {
     this.feeds.delete(feed.sessionId);
-    runEach([
-      ...[...feed.rates.keys()].map(
-        (lane) => () => this.deps.turned(feed.sessionId, lane),
-      ),
-      () => feed.unpin(),
-    ]);
+    feed.unpin();
     this.summarize(feed, "closed", tick);
   }
 
-  // [LAW:one-source-of-truth] A lane's rate and last frame are kept from its
-  // first subscriber joining to its last leaving, both by the one list of
-  // lanes that follow the session, and its surface's drawer turns at each.
-  private keepRates(feed: Feed): void {
+  // [LAW:one-source-of-truth] A lane's rate and last frame are kept for one
+  // turn of the lane, as the host minted it: a new turn starts both over,
+  // even one the viewers between two deliveries read alike.
+  private keepRates(feed: Feed, before: SessionViewers | null): void {
     const { lanes } = feed.viewers;
-    const followed = (lane: Lane): boolean => lanes[lane] !== undefined;
-    const turned = LANE_NAMES.filter(
-      (lane) => feed.rates.has(lane) !== followed(lane),
-    );
-    for (const lane of turned)
-      if (followed(lane)) feed.rates.set(lane, []);
-      else feed.rates.delete(lane);
+    const kept = (lane: Lane): boolean =>
+      lanes[lane] !== undefined &&
+      lanes[lane].turn === before?.lanes[lane]?.turn;
+    for (const lane of LANE_NAMES)
+      if (lanes[lane] === undefined) feed.rates.delete(lane);
+      else if (!kept(lane)) feed.rates.set(lane, []);
     feed.frames = Object.fromEntries(
-      Object.entries(feed.frames).filter(([lane]) => followed(lane as Lane)),
+      Object.entries(feed.frames).filter(([lane]) => kept(lane as Lane)),
     );
-    runEach(turned.map((lane) => () => this.deps.turned(feed.sessionId, lane)));
   }
 
   // [LAW:single-enforcer] The interval between scheduled frames, in
@@ -529,7 +521,7 @@ export class Feeds {
       feed.sessionId,
       LANE_NAMES.flatMap((lane) => {
         const seen = feed.viewers.lanes[lane];
-        return seen === undefined ? [] : [[lane, seen.pointer] as const];
+        return seen === undefined ? [] : [[lane, seen] as const];
       }),
       fps,
       { at: drawAt, tick },
@@ -573,9 +565,10 @@ export class Feeds {
     feed.frames = frames;
     this.schedule(feed, nextChange, drawAt, tick);
     this.report(feed, { changed: changes });
-    return drawn.map(([lane, { frame }]) => ({
+    return drawn.map(([lane, { frame, turn }]) => ({
       session: feed.sessionId,
       lane,
+      turn,
       frame,
     }));
   }

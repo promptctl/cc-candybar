@@ -535,7 +535,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     inputs.rendererEntry ?? bundle.path,
   );
   const renderers = new Map<RendererName, RendererRuntime>();
-  const presentations = new HostPresentations();
+  // [LAW:one-source-of-truth] Each lane's turn is the subscriber book's; the
+  // presentations read it, holding none of their own.
+  const presentations = new HostPresentations({
+    turnOf: (session, lane) => frameFeeds.turnOf(session, lane),
+    current: (session, lane, turn) => frameFeeds.current(session, lane, turn),
+    follows: (session, lane) => frameFeeds.follows(session, lane),
+  });
   const feedHistory = new HostFeedHistory();
   const publishSession =
     (writer: string): PublishedSession =>
@@ -753,8 +759,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       feedHistory.watching(session, watching);
       reconcileTmux();
     },
-    laneFollowed: (session, lane, followed) =>
-      presentations.feedTurned(session, lane, followed),
     deliver: async (make) => {
       const sent = await Promise.all(
         [...renderers.values()].map(({ renderer }) =>

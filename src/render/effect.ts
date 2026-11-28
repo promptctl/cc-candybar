@@ -100,11 +100,11 @@ export interface FrameMotion<Line> {
     kind: RowKind,
     items: readonly RowItem[],
   ) => RowMotion;
-  // The session's motion as the frame leaves it (`SessionEffects.keep`), and
+  // The surface's motion as the frame leaves it (`SurfaceMemory.keep`), and
   // the passages in flight, which go with the surface's record of the frame
   // (`FrameRecord.passages`).
   readonly memory: () => {
-    readonly motion: SessionMotion;
+    readonly motion: SurfaceMotion;
     readonly passages: ReadonlyMap<string, Passage> | null;
   };
 }
@@ -159,7 +159,7 @@ interface InForce {
 // clock (brandon-menus-sjhy.nt2): the wall instant the frame is drawn at, and
 // the surface's animation timeline — rich-js's map from the host clock to
 // animation time, at the speed it runs at from this frame on. Read once before
-// the walk (`SessionEffects.clockAt`) and handed to every consumer — the
+// the walk (`SurfaceMemory.clockAt`) and handed to every consumer — the
 // templates' `frames`, and `motion` — so all of a frame's animations run on one
 // timeline; kept as the clock's anchor once the frame is drawn.
 // [LAW:one-source-of-truth] Every animation of a frame is drawn at `wall` and
@@ -421,17 +421,16 @@ export interface SurfaceEffects {
 // What a surface's last kept frame left for its next draw to read.
 export type KeptMotion = SurfaceClock &
   SurfaceEffects &
-  Partial<Pick<SessionMotion, "frame">>;
+  Partial<Pick<SurfaceMotion, "frame">>;
 type MotionState = SurfaceClock & SurfaceEffects;
 
-export interface SessionMotion extends MotionState {
+export interface SurfaceMotion extends MotionState {
   // [LAW:nothing-unseen] What the latest frame wore, for the render's event.
   readonly frame: EffectFrame;
 }
 
 // Only these facts affect the next draw. Per-draw timing and diagnostics
 // belong to the turn that produced them.
-export type HeldMotion = SurfaceClock;
 export interface HeldEffects {
   readonly placements: ReadonlyArray<readonly [string, InForce]>;
   readonly made: ReadonlyArray<
@@ -439,7 +438,7 @@ export interface HeldEffects {
   >;
 }
 
-export const holdMotion = ({ anchor, inForce }: SurfaceClock): HeldMotion => ({
+export const holdClock = ({ anchor, inForce }: SurfaceClock): SurfaceClock => ({
   anchor,
   inForce,
 });
@@ -465,7 +464,7 @@ export const NO_EFFECTS: SurfaceEffects = {
   made: new Map(),
 };
 
-const NO_MOTION: SessionMotion = {
+const NO_MOTION: SurfaceMotion = {
   inForce: null,
   anchor: Timeline.play(0),
   ...NO_EFFECTS,
@@ -491,7 +490,7 @@ const NO_MOTION: SessionMotion = {
  * one writer; a sample drawer that chains frames with no host to accept them
  * writes it through `keep`.
  */
-export class SessionEffects<Line> {
+export class SurfaceMemory<Line> {
   constructor(
     private readonly key: string,
     private kept: KeptMotion = NO_MOTION,
@@ -505,13 +504,15 @@ export class SessionEffects<Line> {
     return this.kept.frame ?? NO_MOTION.frame;
   }
 
-  // The effects this session holds: the ones its latest frame drew.
+  // The effects this surface holds: the ones its latest frame drew.
   get heldCount(): number {
     return [...this.kept.made.values()].reduce((n, row) => n + row.size, 0);
   }
 
   // The motion a frame drawn from this memory returned, for the next frame.
-  keep(motion: SessionMotion): void {
+  // [LAW:single-enforcer] exception: the renderer writes a surface's memory
+  // only by accepting a presented frame; this is for drawers with no host.
+  keep(motion: SurfaceMotion): void {
     this.kept = motion;
   }
 

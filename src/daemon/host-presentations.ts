@@ -4,12 +4,12 @@ import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import {
   type EventInput,
   type EffectId,
+  type Presentation,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
-import { LANE_NAMES, perLane, type Lane } from "../config/lanes.js";
-import { roleOf } from "./foundations/sighting-roles.js";
+import { LANE_NAMES, type Lane } from "../config/lanes.js";
 import {
-  idleAfterDraw,
+  idleOfDraw,
   MAX_PRESENTED_SESSIONS,
   surfaceAfter,
   proposedValue,
@@ -20,40 +20,46 @@ import {
 
 export type PresentationReader = WeakMap<object, WeakSet<object>>;
 
-// [LAW:no-ambient-temporal-coupling] A lane's feed as an epoch: a new value
-// each time the lane gains its first subscriber or loses its last. A draw
-// presents only under the epoch it was drawn in.
-interface FeedEpoch {
-  readonly followed: boolean;
+// [LAW:one-source-of-truth] Each lane's turn, as the host's subscriber book
+// owns it. Each surface has one drawer at a time: its lane's feed while the
+// lane is followed, and Claude Code's statusline request while it is not,
+// since cc-extra's statusline push shows a pushed frame in place of the
+// command's answer. A turn is one drawer's period, so a draw presents only
+// under the turn it was drawn in, and a surface drawn under an earlier turn is
+// no longer the one shown.
+export interface LaneTurns {
+  turnOf(session: SessionId, lane: Lane): number;
+  current(session: SessionId, lane: Lane, turn: number): boolean;
+  follows(session: SessionId, lane: Lane): boolean;
 }
-// [LAW:single-enforcer] Each surface has one drawer at a time: its lane's
-// feed while the lane is followed, and Claude Code's statusline request while
-// it is not, since cc-extra's statusline push shows a pushed frame in place
-// of the command's answer.
-type Drawer = "request" | "feed";
-const drawerOf = ({ followed }: FeedEpoch): Drawer =>
-  followed ? "feed" : "request";
 
 interface Slot {
   image?: PresentedSession;
+  // The turn each surface of the image was drawn under.
+  readonly turns: Partial<Record<Lane, number>>;
   readonly exportProblems: Partial<Record<Lane, string | null>>;
   revision: number;
-  readonly feeds: Record<Lane, FeedEpoch>;
   readonly began: number;
 }
 interface Pinned {
   readonly slot: Slot;
-  readonly feeds: Readonly<Record<Lane, FeedEpoch>>;
   readonly prior?: PresentedSession;
   readonly observed: WeakSet<object>;
+  // The statusline's turn while Claude Code's request draws it, null while
+  // its lane's feed does.
+  readonly requestTurn: number | null;
 }
+
+// What a delivered draw does to the image: presents, and says so once its
+// write is observed, or says why it does not.
+type Verdict =
+  | { readonly presentation: "presented"; readonly settle: () => void }
+  | { readonly presentation: Exclude<Presentation, "presented"> };
 
 export interface PresentationTurn {
   readonly input: EventInput;
   readonly received: () => void;
-  readonly drawn: (
-    output: RendererOutput,
-  ) => (id: EffectId, delivered: boolean) => (() => void) | undefined;
+  readonly drawn: (output: RendererOutput) => (id: EffectId) => Verdict;
 }
 
 // [LAW:single-enforcer] A socket's successful write is the sole writer of a
@@ -62,26 +68,36 @@ export interface PresentationTurn {
 export class HostPresentations {
   private order = 0;
   private readonly live = new Map<SessionId, Slot>();
-  constructor(private readonly limit = MAX_PRESENTED_SESSIONS) {}
+  constructor(
+    private readonly lanes: LaneTurns,
+    private readonly limit = MAX_PRESENTED_SESSIONS,
+  ) {}
 
   retire(session: SessionId): void {
     this.live.delete(session);
   }
 
-  // A lane gained its first subscriber or lost its last: its surface's drawer
-  // changed, so what the old drawer showed retires with the draws still on
-  // their way to it.
-  feedTurned(session: SessionId, lane: Lane, followed: boolean): void {
-    const slot = followed ? this.hold(session) : this.live.get(session);
-    if (!slot) return;
-    slot.feeds[lane] = { followed };
-    delete slot.exportProblems[lane];
-    if (!slot.image?.surfaces[lane]) return;
-    const { [lane]: _retired, ...surfaces } = slot.image.surfaces;
-    slot.image = {
-      ...slot.image,
-      surfaces,
-      exportProblem: exportProblemOf(slot),
+  // [LAW:one-source-of-truth] The image as it stands: only the surfaces drawn
+  // under their lane's current turn. What an earlier drawer showed is derived
+  // away, never removed by an event the book would have to hear.
+  private currentOf(
+    session: SessionId,
+    slot: Slot,
+  ): PresentedSession | undefined {
+    const { image } = slot;
+    if (!image) return undefined;
+    const current = LANE_NAMES.filter(
+      (lane) =>
+        image.surfaces[lane] !== undefined &&
+        this.lanes.current(session, lane, slot.turns[lane] ?? 0),
+    );
+    if (current.length === Object.keys(image.surfaces).length) return image;
+    return {
+      ...image,
+      surfaces: Object.fromEntries(
+        current.map((lane) => [lane, image.surfaces[lane]]),
+      ),
+      exportProblem: exportProblemOf(slot, current),
     };
   }
 
@@ -103,9 +119,9 @@ export class HostPresentations {
 
   private hold(session: SessionId): Slot {
     const prior = this.live.get(session) ?? {
+      turns: {},
       exportProblems: {},
       revision: 0,
-      feeds: perLane(() => ({ followed: false })),
       began: this.order,
     };
     this.live.delete(session);
@@ -159,10 +175,20 @@ export class HostPresentations {
         observed = new WeakSet();
         reader.set(slot, observed);
       }
-      const prior = slot.image;
-      pinned.set(session, { slot, prior, observed, feeds: { ...slot.feeds } });
+      const prior = this.currentOf(session, slot);
+      pinned.set(session, {
+        slot,
+        prior,
+        observed,
+        requestTurn: this.lanes.follows(session, "statusline")
+          ? null
+          : this.lanes.turnOf(session, "statusline"),
+      });
+      // [LAW:one-source-of-truth] A draw is offered the image even when there
+      // is none, so the renderer drops a record the host no longer holds (an
+      // evicted slot's) rather than continue its motion.
       if (!prior) {
-        if (slot.revision)
+        if (draws || slot.revision)
           offers.push({ session, revision: slot.revision, bases: {} });
         continue;
       }
@@ -215,25 +241,26 @@ export class HostPresentations {
           slot.image = { ...slot.image, idle };
           reader.get(slot)?.add(idle);
         }
-        const pending = new Map<EffectId, () => (() => void) | undefined>();
+        const pending = new Map<EffectId, () => Verdict>();
         const stage = (
           id: EffectId,
           session: SessionId,
           by: Lane,
-          drawer: Drawer,
+          turn: number | null,
           proposal?: ProposedPresentation,
         ) => {
-          if (!proposal) return;
           const base = pinned.get(session);
-          // A due already in the mailbox can still draw for a subscription
-          // whose last viewer left. Its feed cannot advance an absent slot.
-          if (!base) return;
+          // A draw with no proposal (a client that shows no answer) or none
+          // to continue presents nowhere; nor does a request's answer while
+          // the statusline's feed draws it, nor a due's frame for a slot that
+          // retired while it waited in the mailbox.
+          if (!proposal || !base || turn === null) return;
           pending.set(
             id,
             this.proposed(
               session,
               by,
-              drawer,
+              turn,
               order,
               input.tick,
               base,
@@ -242,89 +269,84 @@ export class HostPresentations {
             ),
           );
         };
-        // [LAW:one-source-of-truth] A `cc-candybar frames` client discards
-        // its request's answer, so only Claude Code's own statusline client
-        // shows one.
-        const shownByClaude =
-          event.kind === "request" &&
-          roleOf(event.context.hints.client ?? null) === "statusline";
         for (const effect of output.effects)
-          if (effect.kind === "present" && shownByClaude)
+          if (effect.kind === "present")
             stage(
               effect.id,
               effect.session,
               effect.surface,
-              "request",
+              pinned.get(effect.session)?.requestTurn ?? null,
               effect.proposal,
             );
-        for (const { session, lane, frame } of output.frames)
+        for (const { session, lane, turn, frame } of output.frames)
           if (frame.kind === "drawn")
-            stage(frame.receipt, session, lane, "feed", frame.proposal);
-        return (id, delivered) => {
+            stage(frame.receipt, session, lane, turn, frame.proposal);
+        return (id) => {
           const take = pending.get(id);
           pending.delete(id);
-          return delivered ? take?.() : undefined;
+          return take?.() ?? { presentation: "unshown" };
         };
       },
     };
   }
-  // What the delivery of a draw does to the image: the surface's next record
-  // when it presents, and undefined when it does not.
+  // What the delivery of a draw made under `turn` does to the image.
   private proposed(
     session: SessionId,
     by: Lane,
-    drawer: Drawer,
+    turn: number,
     order: number,
     tick: Tick,
     base: Pinned,
     proposal: ProposedPresentation,
     problem: string | null,
-  ): () => (() => void) | undefined {
+  ): () => Verdict {
     const { prior, slot, observed } = base;
-    const epoch = base.feeds[by];
     const { surface, menu } = proposal;
     const nextSurface = {
       order,
       value: proposedValue(prior?.surfaces[by], surface, surfaceAfter),
     };
     return () => {
+      if (this.live.get(session) !== slot) return { presentation: "retired" };
+      // [LAW:single-enforcer] The check that decided whether a feed's frame
+      // was sent decides whether it presents.
+      if (!this.lanes.current(session, by, turn))
+        return { presentation: "turned" };
       const current = slot.image;
-      if (
-        this.live.get(session) !== slot ||
-        slot.feeds[by] !== epoch ||
-        drawerOf(epoch) !== drawer ||
-        order <= (current?.surfaces[by]?.order ?? -1)
-      )
-        return undefined;
+      const held = current?.surfaces[by];
+      if (held && slot.turns[by] === turn && order <= held.order)
+        return { presentation: "superseded" };
+      slot.turns[by] = turn;
       slot.exportProblems[by] = problem;
+      const surfaces = { ...current?.surfaces, [by]: nextSurface };
       slot.image = {
         session,
-        surfaces: { ...current?.surfaces, [by]: nextSurface },
-        exportProblem: exportProblemOf(slot),
-        idle:
-          !current || order >= current.idle.order
-            ? {
-                order,
-                value: idleAfterDraw(current?.idle.value, {
-                  ...menu,
-                  tick,
-                }),
-              }
-            : current.idle,
+        surfaces,
+        exportProblem: exportProblemOf(
+          slot,
+          LANE_NAMES.filter((lane) => surfaces[lane] !== undefined),
+        ),
+        idle: idleOfDraw(current?.idle, order, { ...menu, tick }),
       };
       const drawnIdle =
         slot.image.idle.order === order ? slot.image.idle : undefined;
-      return () => {
-        observed.add(nextSurface);
-        if (drawnIdle) observed.add(drawnIdle);
+      return {
+        presentation: "presented",
+        settle: () => {
+          observed.add(nextSurface);
+          if (drawnIdle) observed.add(drawnIdle);
+        },
       };
     };
   }
 }
 
-// [LAW:nothing-unseen] Every surface's export problem, each named by its lane.
-const exportProblemOf = (slot: Slot): string | null =>
-  LANE_NAMES.flatMap((lane) => {
-    const problem = slot.exportProblems[lane];
-    return problem == null ? [] : [`${lane}: ${problem}`];
-  }).join("; ") || null;
+// [LAW:nothing-unseen] Every shown surface's export problem, each named by
+// its lane.
+const exportProblemOf = (slot: Slot, lanes: readonly Lane[]): string | null =>
+  lanes
+    .flatMap((lane) => {
+      const problem = slot.exportProblems[lane];
+      return problem == null ? [] : [`${lane}: ${problem}`];
+    })
+    .join("; ") || null;

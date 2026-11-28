@@ -20,7 +20,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import type { RenderedLine } from "../src/dsl/node-registry";
-import { SessionEffects, holdMotion, holdEffects, restoreEffects } from "../src/render/effect";
+import { SurfaceMemory, holdClock, holdEffects, restoreEffects } from "../src/render/effect";
 import type { FrameRecord } from "../src/render/frame-memory";
 import { holdLayout, restoreLayout } from "../src/render/held-layout";
 import { decideEffectName, type EffectName } from "../src/themes";
@@ -88,7 +88,7 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
   };
   const draw = (
       { shown, when, width = 160, dark = false }: Frame,
-      effects: SessionEffects<RenderedLine>,
+      effects: SurfaceMemory<RenderedLine>,
       transitions: boolean,
       bar: EffectName = "none",
       record?: FrameRecord<RenderedLine>,
@@ -117,20 +117,20 @@ test("a new renderer resumes a narrow dissolving row at its accepted phase", () 
   const home = renderer(config("segment"));
   const reload = config("segment");
   const peer = renderer(reload);
-  const homeFx = new SessionEffects<RenderedLine>("s");
+  const homeFx = new SurfaceMemory<RenderedLine>("s");
   const visible = { shown: true, width: 34, when: at(0) };
   const gone = { ...visible, shown: false, when: at(S) };
   try {
     expect(linkUrls(home.render(visible, homeFx, true, "shimmer"))).toContain(LINK);
     const leaving = home.draw(gone, homeFx, true, "shimmer");
     expect(leaving.frame.rows.length).toBeGreaterThan(1);
-    const held = { layout: holdLayout(leaving.memory.record, "same load"), motion: holdMotion(leaving.memory.motion), effects: holdEffects(leaving.memory.motion) };
+    const held = { layout: holdLayout(leaving.memory.record, "same load"), motion: holdClock(leaving.memory.motion), effects: holdEffects(leaving.memory.motion) };
     const wire = JSON.stringify(held);
     expect(wire).not.toContain(LINK);
     const arrived: typeof held = JSON.parse(wire);
     expect(restoreLayout(arrived.layout, {config: reload, loadKey: "other load"})).toBeUndefined();
     const predecessor = restoreLayout(arrived.layout, {config: reload, loadKey: "same load"});
-    const peerFx = new SessionEffects<RenderedLine>("s", {...arrived.motion, ...restoreEffects(arrived.effects)});
+    const peerFx = new SurfaceMemory<RenderedLine>("s", {...arrived.motion, ...restoreEffects(arrived.effects)});
     for (const elapsed of [7, 15, 30]) {
       const input = { ...gone, when: at(S + elapsed) };
       const expected = home.render(input, homeFx, true, "shimmer");
@@ -176,8 +176,8 @@ describe.each(["segment", "container"] as const)(
         const on = renderer(ROW);
         const off = renderer(ROW);
         try {
-          const onFx = new SessionEffects<RenderedLine>("s");
-          const offFx = new SessionEffects<RenderedLine>("s");
+          const onFx = new SurfaceMemory<RenderedLine>("s");
+          const offFx = new SurfaceMemory<RenderedLine>("s");
           const both = (frame: Frame) => ({
             on: on.render(frame, onFx, true, bar),
             off: off.render(frame, offFx, false, bar),
@@ -227,7 +227,7 @@ describe.each(["segment", "container"] as const)(
     test("it offers nothing to click while it leaves, and is never evaluated again", () => {
       const on = renderer(ROW);
       try {
-        const fx = new SessionEffects<RenderedLine>("s");
+        const fx = new SurfaceMemory<RenderedLine>("s");
         on.render({ shown: true, when: at(0) }, fx, true);
         expect(linkUrls(on.render(before, fx, true))).toContain(LINK);
         for (const since of [0, 1, 15, 29]) {
@@ -245,7 +245,7 @@ describe.each(["segment", "container"] as const)(
     test("its event names it leaving on its dissolve's clock", () => {
       const on = renderer(ROW);
       try {
-        const fx = new SessionEffects<RenderedLine>("s");
+        const fx = new SurfaceMemory<RenderedLine>("s");
         on.render({ shown: true, when: at(0) }, fx, true);
         on.render(before, fx, true);
         expect(fx.lastFrame()).toMatchObject({ fades: [], leaves: [] });
@@ -267,7 +267,7 @@ describe.each(["segment", "container"] as const)(
     test("drawn again before its dissolve is over, it stops leaving and fades in", () => {
       const on = renderer(ROW);
       try {
-        const fx = new SessionEffects<RenderedLine>("s");
+        const fx = new SurfaceMemory<RenderedLine>("s");
         on.render({ shown: true, when: at(0) }, fx, true);
         on.render(before, fx, true);
         on.render(leaving(0), fx, true);
@@ -308,7 +308,7 @@ describe("a trigger replays its own row only while nothing hangs open under it",
     const off = renderer(cfg, on.session);
     try {
       if (open) on.session.set(S_ID, "groups.more", "more");
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: true, when: at(0) }, fx, true);
       const drawn = textOf(on.render({ shown: true, when: at(1) }, fx, true));
       expect(drawn).toContain("MORE");
@@ -317,7 +317,7 @@ describe("a trigger replays its own row only while nothing hangs open under it",
       return {
         fx,
         on: on.render(frame, fx, true),
-        off: off.render(frame, new SessionEffects<RenderedLine>("s"), false),
+        off: off.render(frame, new SurfaceMemory<RenderedLine>("s"), false),
       };
     } finally {
       on.dispose();
@@ -346,7 +346,7 @@ describe("a write to the session's state ends every dissolve in flight", () => {
     const on = renderer(ROW);
     const off = renderer(ROW, on.session);
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: true, when: at(0) }, fx, true);
       on.render({ shown: false, when: at(S) }, fx, true);
       on.render({ shown: false, when: at(S + 10) }, fx, true);
@@ -355,7 +355,7 @@ describe("a write to the session's state ends every dissolve in flight", () => {
       const frame = { shown: false, when: at(S + 11) };
       const result = {
         on: on.render(frame, fx, true),
-        off: off.render(frame, new SessionEffects<RenderedLine>("s"), false),
+        off: off.render(frame, new SurfaceMemory<RenderedLine>("s"), false),
       };
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", leaves: [] });
       return result;
@@ -411,7 +411,7 @@ describe("another width ends every dissolve in flight; another palette does not"
     const on = renderer(ROW);
     const off = renderer(ROW);
     try {
-      const fx = new SessionEffects<RenderedLine>("s");
+      const fx = new SurfaceMemory<RenderedLine>("s");
       on.render({ shown: true, when: at(0) }, fx, true);
       on.render({ shown: false, when: at(S) }, fx, true);
       expect(fx.lastFrame().leaves).toEqual([{ placement: "middle", t: 0 }]);
@@ -419,7 +419,7 @@ describe("another width ends every dissolve in flight; another palette does not"
       return {
         fx,
         on: on.render(frame, fx, true),
-        off: off.render(frame, new SessionEffects<RenderedLine>("s"), false),
+        off: off.render(frame, new SurfaceMemory<RenderedLine>("s"), false),
       };
     } finally {
       on.dispose();

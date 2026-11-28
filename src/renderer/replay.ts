@@ -203,10 +203,11 @@ function inputOf(
 }
 
 // Wire 37 keys every presentation fact, the animation clock included, by the
-// surface a frame is shown on, draws each followed lane its own frame, and
-// records a delivery only by the host's `presented` verdict. Older wires keyed
-// presentation by drawer (`request`, `feed`), held one clock and one pointer
-// per session, and recorded every present that reached its client.
+// surface a frame is shown on, draws each followed lane its own frame under
+// the lane's turn, and records a delivery only when the host's verdict is
+// `presented`. Older wires keyed presentation by drawer (`request`, `feed`),
+// held one clock and one pointer per session, had no lane turns, and recorded
+// every present that reached its client.
 const SURFACE_WIRE = 37;
 
 // [LAW:parse-dont-validate] The one upgrade of an older wire's input to wire
@@ -226,7 +227,8 @@ function surfaceInputOf(
   const object = (raw: unknown, what: string): Record<string, unknown> =>
     isPlainObject(raw) ? raw : refuse(what);
   // The session's one pointer named no surface, so no lane's frame is drawn
-  // with it.
+  // with it. An older wire minted no turns: every lane reads the one turn 0,
+  // and the recording's outputs carry no frame that one would stamp.
   const seenOf = (raw: unknown) => {
     const { pointer: _sessionPointer, ...seen } = object(raw, "viewers");
     return {
@@ -234,7 +236,7 @@ function surfaceInputOf(
       lanes: Object.fromEntries(
         Object.entries(object(seen.lanes, "viewers")).map(([lane, viewers]) => [
           lane,
-          { ...object(viewers, "viewers"), pointer: null },
+          { ...object(viewers, "viewers"), pointer: null, turn: 0 },
         ]),
       ),
     };
@@ -300,7 +302,9 @@ function surfaceInputOf(
     // Every present that reached its client was recorded as shown.
     ...(event.kind === "effect-done" &&
       presents.has(event.of) &&
-      outcome?.kind === "ok" && { outcome: { ...outcome, presented: true } }),
+      outcome?.kind === "ok" && {
+        outcome: { ...outcome, presentation: "presented" },
+      }),
   };
   const { presentation, feedResumes } = value;
   return {
@@ -335,6 +339,8 @@ function surfaceInputOf(
         : refuse("a feed handoff")
       ).map((raw: unknown) => {
         const resume = object(raw, "a feed handoff");
+        // A watched session never drawn hands off no history.
+        if (resume.history === null) return resume;
         const { frame: _drawnForEveryLane, ...history } = object(
           resume.history,
           "a feed handoff",

@@ -57,10 +57,10 @@ import {
 import { fitRow } from "../render/fill.js";
 import type { Frame } from "../render/frame.js";
 import {
-  SessionEffects,
+  SurfaceMemory,
   type MenuFlash,
   type RowKind,
-  type SessionMotion,
+  type SurfaceMotion,
 } from "../render/effect.js";
 import {
   beginRecord,
@@ -1220,11 +1220,11 @@ export interface DrawnFrame {
   readonly waited: readonly PendingRead[];
   // [LAW:effects-at-boundaries] What the frame leaves, which the draw writes
   // nowhere: the surface's record of it (handed to its next draw as
-  // `DrawSelection.record`) and the session's motion (`SessionEffects.keep`).
+  // `DrawSelection.record`) and the surface's motion (`SurfaceMemory.keep`).
   // A caller drawing one frame keeps neither.
   readonly memory: {
     readonly record: FrameRecord<RenderedLine>;
-    readonly motion: SessionMotion;
+    readonly motion: SurfaceMotion;
   };
   // [LAW:no-silent-failure] What the render had to settle for itself and
   // could not honour (`RenderWarning`). The render goes on — a throw would
@@ -1316,7 +1316,7 @@ export type DrawSelection = Pick<
   // own t = 0) and the effects already made for its rows. The daemon hands
   // each session its own; an omitting caller draws with a fresh one, so its
   // render is the effect's calm first frame.
-  readonly effects?: SessionEffects<RenderedLine>;
+  readonly effects?: SurfaceMemory<RenderedLine>;
   // The record of the last frame the drawing surface kept of the view: what
   // each placement drew and the transitions in flight. An omitting caller
   // draws a first frame, so nothing in it fades in or dissolves out and no
@@ -1353,7 +1353,7 @@ export function drawDsl(
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` run through this timeline, and
   // the effects below through the same one (brandon-menus-sjhy.nt2).
-  const effects = selection.effects ?? new SessionEffects<RenderedLine>("");
+  const effects = selection.effects ?? new SurfaceMemory<RenderedLine>("");
   const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection.animationSpeed]);
   // [LAW:one-source-of-truth] The instant this render draws at, bound to the
   // engines' one clock for the walk and unbound on every exit: every time read

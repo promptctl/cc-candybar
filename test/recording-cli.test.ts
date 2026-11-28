@@ -59,14 +59,21 @@ const output: RendererOutput = {
     {
       session,
       lane: "pane",
+      turn: 1,
       frame: { kind: "drawn", receipt: 2 as EffectId, bar: pane },
     },
     {
       session,
       lane: "window",
+      turn: 1,
       frame: { kind: "drawn", receipt: 3 as EffectId, bar: window },
     },
-    { session, lane: "pane", frame: { kind: "failed", message: "no draw" } },
+    {
+      session,
+      lane: "pane",
+      turn: 1,
+      frame: { kind: "failed", message: "no draw" },
+    },
   ],
 };
 
@@ -148,6 +155,7 @@ test("frame export caps UTF-8 bytes and discards an accepted prefix", () =>
             {
               session,
               lane: "pane",
+              turn: 1,
               frame: {
                 kind: "drawn",
                 receipt: 3 as EffectId,
