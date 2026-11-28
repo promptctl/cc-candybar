@@ -11,7 +11,8 @@ export interface TmuxServer {
   // The session's one pane, until a test splits it.
   readonly pane: string;
   run(...args: string[]): string;
-  // Ends the server: its one session was its last.
+  // Ends the server, with every session a test opened on it: ending only the
+  // first session leaves the server running while any other remains.
   kill(): void;
 }
 
@@ -58,7 +59,7 @@ export function tmuxServer(
     pane: run("list-panes", "-t", "bar", "-F", "#{pane_id}").trim(),
     run,
     kill: () => {
-      spawnSync("tmux", ["-S", socket, "kill-session", "-t", "bar"]);
+      spawnSync("tmux", ["-S", socket, "kill-server"]);
     },
   };
 }
