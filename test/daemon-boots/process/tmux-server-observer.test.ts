@@ -11,8 +11,6 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { until, throughout } from "../../../scripts/lib/until";
-import { watchTmuxEvents } from "../../../src/bar-window/tmux-events";
-import { reservationLease } from "../../../src/bar-window/reservation";
 import { productionTmuxServerObserver } from "../../../src/daemon/tmux-server-observer";
 import { WORLD } from "../../helpers/host";
 import { tmuxServer } from "../../helpers/private-tmux";
@@ -446,7 +444,7 @@ test("killing the guardian after hook installation and before its first frame cl
 
 test("the addressed server publishes linked and grouped panes, break/join and real client attachment changes", async () => {
   const r = setup();
-  const peers: ReturnType<typeof spawn>[] = [];
+  const peers: Array<ReturnType<typeof spawn>> = [];
   try {
     r.run("new-session", "-d", "-s", "other", "cat");
     r.run("new-session", "-d", "-s", "group", "-t", "bar");
@@ -743,61 +741,3 @@ test.each(["direct", "sourced"])(
     }
   },
 );
-
-test("the host observer cannot release or renew the floating window's active reservation", async () => {
-  const r = setup();
-  let window: ReturnType<typeof watchTmuxEvents> | undefined;
-  try {
-    try {
-      r.run("wait-for", "-El", "@candybar_private_contract");
-    } catch {
-      // This server has no floating-window reservation owner to coexist with.
-      expect(() => r.run("show-hooks", "-g", "client-closed")).toThrow();
-      return;
-    }
-    const title = "cc-candybar-window-observer-contract";
-    const lease = () =>
-      r.run("display-message", "-p", `#{${reservationLease(title)}}`).trim();
-    const ready = Promise.withResolvers<void>();
-    window = watchTmuxEvents(
-      WORLD,
-      r.server.socket,
-      title,
-      () => ready.resolve(),
-      (why) => ready.reject(new Error(why)),
-    );
-    await ready.promise;
-    const owner = lease();
-    const pane = r
-      .run(
-        "split-window",
-        "-d",
-        "-t",
-        r.server.pane,
-        "-l",
-        "1",
-        "-T",
-        title,
-        "-P",
-        "-F",
-        "#{pane_id}",
-        "",
-      )
-      .trim();
-    const f = r.follow();
-    await f.next((s) => s.includes("P " + pane + " "), "live reserved pane");
-    process.kill(r.pid(), "SIGKILL");
-    await until(() => f.failures.length > 0, "host observer lost");
-    await r.gone();
-    expect(r.run("list-panes", "-F", "#{pane_id}").split("\n")).toContain(pane);
-    expect(lease()).toBe(owner);
-    await window.close();
-    window = undefined;
-    expect(r.run("list-panes", "-F", "#{pane_id}").split("\n")).not.toContain(
-      pane,
-    );
-  } finally {
-    await window?.close();
-    await r.release();
-  }
-}, 15000);

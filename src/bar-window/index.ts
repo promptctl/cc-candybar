@@ -26,7 +26,6 @@ import {
   type NativeEvent,
   type Message,
 } from "./presentation.js";
-import { watchTmuxEvents } from "./tmux-events.js";
 
 export async function runBarWindow(
   argv: readonly string[],
@@ -55,10 +54,12 @@ export async function runBarWindow(
     .update(JSON.stringify([hostSocket, session]))
     .digest("hex")
     .slice(0, 32);
+  // [LAW:one-source-of-truth] The reservation is named by its session, so a
+  // follower that replaces a crashed one finds the rows it left and keeps them.
   const layout = new WindowLayout(
     world.launcher,
     { socket, pane },
-    `cc-candybar-window-${key}-${randomUUID()}`,
+    `cc-candybar-window-${key}`,
   );
   let placement: WindowPlacement = initial;
   let height = 1;
@@ -77,7 +78,6 @@ export async function runBarWindow(
   let layoutCanDraw = false;
   let refreshPending = false;
   let refreshing: Promise<void> | undefined;
-  let watcher: ReturnType<typeof watchTmuxEvents> | undefined;
   let stopped!: () => void;
   const stopping = new Promise<void>((resolve) => {
     stopped = resolve;
@@ -199,16 +199,7 @@ export async function runBarWindow(
     switch (message.kind) {
       case "owned":
         owned = true;
-        watcher = watchTmuxEvents(
-          world,
-          layout.target.socket,
-          layout.reservationTitle,
-          refresh,
-          (reason) => {
-            writeStatus(reason);
-            stop();
-          },
-        );
+        refresh();
         break;
       case "availability": {
         const observation = message;
@@ -325,12 +316,20 @@ export async function runBarWindow(
   const commands = lineSplitter((line) => {
     try {
       const message = readMessage(line);
-      if (
-        message.kind !== "placement" ||
-        (message.value !== "inset" && message.value !== "docked")
-      )
-        throw new Error("Invalid host window placement");
-      placement = message.value;
+      switch (message.kind) {
+        // [LAW:single-enforcer] The host's one observer of this tmux server
+        // says when it read the server again; this follower installs nothing
+        // on the server to hear it.
+        case "tmux":
+          break;
+        case "placement":
+          if (message.value !== "inset" && message.value !== "docked")
+            throw new Error("Invalid host window placement");
+          placement = message.value;
+          break;
+        default:
+          throw new Error("Unknown host window command");
+      }
       refresh();
     } catch (error) {
       writeStatus(String(error));
@@ -347,7 +346,6 @@ export async function runBarWindow(
   } finally {
     unsubscribe();
     try {
-      await watcher?.close();
       await refreshing;
       if (owned && !sourceRetired)
         sourceRetired = (await layout.clear()) === "server-ended";

@@ -21,6 +21,7 @@ export interface WindowDemand {
 
 interface Following {
   readonly channel: Channel;
+  readonly socket: string;
   readonly target: string;
   placement: WindowPlacement;
   stop: () => void;
@@ -31,6 +32,7 @@ interface Following {
 // follower releases the reservation before a replacement can claim that pane.
 export class WindowFollowers {
   private desired: ReadonlyMap<SessionId, WindowDemand> = new Map();
+  private observed: ReadonlySet<string> = new Set();
   private readonly active = new Map<SessionId, Following>();
   private readonly issues = observable.map<SessionId, string>();
   private readonly waiting = new Map<
@@ -63,8 +65,33 @@ export class WindowFollowers {
     );
   }
 
-  declare(desired: ReadonlyMap<SessionId, WindowDemand>) {
+  // [LAW:single-enforcer] The host's one observer of a tmux server says
+  // when it read the server again. A follower installs nothing to hear it.
+  tmuxRead(socket: string) {
+    for (const follower of this.active.values())
+      if (!follower.stopping && follower.socket === socket)
+        follower.channel.write(JSON.stringify({ kind: "tmux" }) + "\n");
+  }
+
+  // The tmux servers a wanted follower lays out on, which the host observes.
+  sockets(): ReadonlySet<string> {
+    return this.observed;
+  }
+
+  // Answers whether the servers to observe changed.
+  declare(desired: ReadonlyMap<SessionId, WindowDemand>): boolean {
     this.desired = desired;
+    const observed = new Set(
+      this.supported
+        ? [...desired.values()].flatMap((want) =>
+            want.pane ? [want.pane.socket] : [],
+          )
+        : [],
+    );
+    const moved =
+      observed.size !== this.observed.size ||
+      [...observed].some((socket) => !this.observed.has(socket));
+    this.observed = observed;
     for (const [sid, wait] of this.waiting) {
       const pane = desired.get(sid)?.pane;
       if (!pane || paneKey(pane) !== wait.target) {
@@ -75,6 +102,7 @@ export class WindowFollowers {
     for (const session of [...this.issues.keys()])
       if (!desired.has(session)) this.report(session, "");
     this.reconcile();
+    return moved;
   }
 
   private reconcile() {
@@ -156,6 +184,7 @@ export class WindowFollowers {
     });
     const follower: Following = {
       channel,
+      socket: pane.socket,
       target: paneKey(pane),
       placement,
       stopping: false,

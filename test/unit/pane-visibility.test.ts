@@ -52,6 +52,19 @@ test("linked panes are shown in the union of sessions; mouse describes visible c
   });
 });
 
+test("a pane that runs no process is still a pane, so its window stays known", () => {
+  // The window bar reserves its rows with an empty split: no pid, no tty.
+  const view = readServerView(snapshot(7, row, "P %2 $1 1 1 0 0 1 - -"));
+  expect(view.panes.get("%2")).toEqual({
+    shown: true,
+    zoomed: false,
+    mouse: true,
+    pid: null,
+    tty: "-",
+  });
+  expect(view.panes.get("%1")?.shown).toBe(true);
+});
+
 test.each([
   "B 7\nP %1 $2 0 1 0 1 0 45 /dev/ttys001",
   "B 7\nE 8",
@@ -70,6 +83,7 @@ function harness() {
     close: jest.Mock;
   }> = [];
   const changed = jest.fn();
+  const read = jest.fn();
   const log = jest.fn();
   const visibility = new PaneVisibility(
     {
@@ -79,14 +93,14 @@ function harness() {
         return close;
       },
     },
-    changed,
+    { changed, read },
     log,
   );
-  return { visibility, registrations, changed, log };
+  return { visibility, registrations, changed, read, log };
 }
 
 test("an observer belongs to each interested socket until it loses its last consumer", () => {
-  const { visibility, registrations, changed } = harness();
+  const { visibility, registrations, changed, read } = harness();
   expect(visibility.shown(null)).toBe(true);
   visibility.reconcile(new Set(["/a", "/b"]));
   const [a, b] = registrations;
@@ -98,6 +112,8 @@ test("an observer belongs to each interested socket until it loses its last cons
   expect(visibility.shown(hint("/b", "%1"))).toBe(false);
   a!.events.snapshot(snapshot(7, row));
   expect(changed).toHaveBeenCalledTimes(2);
+  // An unchanged read is still a read: geometry outside the view can move.
+  expect(read.mock.calls).toEqual([["/a"], ["/b"], ["/a"]]);
   visibility.reconcile(new Set(["/a"]));
   expect(b!.close).toHaveBeenCalledTimes(1);
   b!.events.snapshot(snapshot(8, row));
@@ -140,7 +156,7 @@ test("synchronous failure at registration retires the returned observer", () => 
         return close;
       },
     },
-    changed,
+    { changed, read: jest.fn() },
     jest.fn(),
   );
   visibility.reconcile(new Set(["/s"]));

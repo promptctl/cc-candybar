@@ -73,3 +73,49 @@ test("placement changes reuse a follower and a new session waits for the pane's 
   channels[2]!.finish();
   await closed;
 });
+
+test("a follower's server is observed by the host, and each read reaches only that server's followers", () => {
+  const writes: Array<{ args: readonly string[]; write: jest.Mock }> = [];
+  const windows = new WindowFollowers(
+    {
+      launchChannel: (opts: ChannelOpts) => {
+        const write = jest.fn();
+        writes.push({ args: opts.args ?? [], write });
+        return { pid: 10, write, end: jest.fn(), ended: new Promise(() => {}) };
+      },
+    },
+    { node: ["node"], bundle: "/test/dist/index.mjs", socket: "/host/socket" },
+    heldClock(new Date(0)),
+    jest.fn(),
+    true,
+  );
+  const a = sessionIdOf("a"),
+    b = sessionIdOf("b");
+  const one = { socket: "/tmp/one", pane: "%1", truecolor: null };
+  const two = { socket: "/tmp/two", pane: "%2", truecolor: null };
+  expect(
+    windows.declare(
+      new Map([
+        [a, { pane: one, placement: "inset" }],
+        [b, { pane: two, placement: "inset" }],
+      ]),
+    ),
+  ).toBe(true);
+  expect([...windows.sockets()]).toEqual(["/tmp/one", "/tmp/two"]);
+  expect(
+    windows.declare(
+      new Map([
+        [a, { pane: one, placement: "docked" }],
+        [b, { pane: two, placement: "inset" }],
+      ]),
+    ),
+  ).toBe(false);
+  for (const { write } of writes) write.mockClear();
+  windows.tmuxRead("/tmp/one");
+  const [first, second] = writes;
+  expect(first!.args).toContain("/tmp/one");
+  expect(first!.write.mock.calls).toEqual([['{"kind":"tmux"}\n']]);
+  expect(second!.write).not.toHaveBeenCalled();
+  expect(windows.declare(new Map())).toBe(true);
+  expect([...windows.sockets()]).toEqual([]);
+});

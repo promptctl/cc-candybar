@@ -6,7 +6,9 @@ export interface PaneFacts {
   readonly shown: boolean;
   readonly zoomed: boolean;
   readonly mouse: boolean;
-  readonly pid: number;
+  // [LAW:types-are-the-program] A pane can run no process: the window bar's
+  // reservation is split empty. It has no pid, and it is still a pane.
+  readonly pid: number | null;
   readonly tty: string;
 }
 
@@ -35,10 +37,10 @@ export function readServerView(raw: string): TmuxServerView {
       continue;
     }
     const pane =
-      /^P (%\d+) (\$\d+) (\d+) ([01]) ([01]) ([01]) ([01]) (\d+) (\/[^\s]+|-)$/u.exec(
+      /^P (%\d+) (\$\d+) (\d+) ([01]) ([01]) ([01]) ([01]) (\d+|-) (\/[^\s]+|-)$/u.exec(
         row,
       );
-    if (!pane || !Number.isSafeInteger(Number(pane[8])))
+    if (!pane || (pane[8] !== "-" && !Number.isSafeInteger(Number(pane[8]))))
       throw new Error("unrecognized tmux snapshot row");
     panes.push(pane);
   }
@@ -47,13 +49,14 @@ export function readServerView(raw: string): TmuxServerView {
     const [, id, session, attached, current, zoomed, active, mouse, pid, tty] =
       row;
     const previous = result.get(id!);
+    const panePid = pid === "-" ? null : Number(pid);
     const shown =
       Number(attached) > 0 &&
       (current === "1" || controlled.has(session!)) &&
       (zoomed === "0" || active === "1");
     if (
       previous &&
-      (previous.pid !== Number(pid) ||
+      (previous.pid !== panePid ||
         previous.tty !== tty ||
         previous.zoomed !== (zoomed === "1"))
     )
@@ -70,7 +73,7 @@ export function readServerView(raw: string): TmuxServerView {
       shown: shown || previous?.shown === true,
       zoomed: zoomed === "1",
       mouse: mouseEnabled,
-      pid: Number(pid),
+      pid: panePid,
       tty: tty!,
     });
   }
@@ -107,10 +110,13 @@ export class PaneVisibility {
   private readonly servers = new Map<string, Observation>();
   constructor(
     private readonly observer: TmuxServerObserver,
-    private readonly changed: (
-      socket: string,
-      view: TmuxServerView | null,
-    ) => void,
+    private readonly heard: {
+      // The server's view differs from the last one published.
+      readonly changed: (socket: string, view: TmuxServerView | null) => void;
+      // The server was read again after an event, changed or not: geometry
+      // the view leaves out can have moved.
+      readonly read: (socket: string) => void;
+    },
     private readonly log: DaemonLogger,
   ) {}
 
@@ -129,7 +135,7 @@ export class PaneVisibility {
       if (wanted.has(socket)) continue;
       this.servers.delete(socket);
       observation.close?.();
-      if (observation.view) this.changed(socket, null);
+      if (observation.view) this.heard.changed(socket, null);
     }
     for (const socket of wanted) {
       const held = this.servers.get(socket);
@@ -155,7 +161,7 @@ export class PaneVisibility {
       const close = held.close;
       held.close = null;
       close?.();
-      this.changed(socket, null);
+      this.heard.changed(socket, null);
     };
     try {
       const close = this.observer.observe(socket, {
@@ -169,18 +175,20 @@ export class PaneVisibility {
             lost(err instanceof Error ? err.message : String(err));
             return;
           }
-          if (sameServerView(held.view, view)) return;
-          held.view = view;
-          this.log(
-            "info",
-            `visibility socket=${JSON.stringify(socket)} server=${view.serverPid} shown=${
-              [...view.panes]
-                .filter(([, p]) => p.shown)
-                .map(([id]) => id)
-                .join(",") || "-"
-            }`,
-          );
-          this.changed(socket, view);
+          if (!sameServerView(held.view, view)) {
+            held.view = view;
+            this.log(
+              "info",
+              `visibility socket=${JSON.stringify(socket)} server=${view.serverPid} shown=${
+                [...view.panes]
+                  .filter(([, p]) => p.shown)
+                  .map(([id]) => id)
+                  .join(",") || "-"
+              }`,
+            );
+            this.heard.changed(socket, view);
+          }
+          this.heard.read(socket);
         },
       });
       if (held.reason !== null || this.servers.get(socket) !== held) close();

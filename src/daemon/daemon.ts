@@ -700,7 +700,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     subscribe: (session, subscriber, replaces) =>
       frameFeeds.subscribe(session, subscriber, replaces),
     announce: () => frameFeeds.announce(),
-    windows: (desired) => windowFollowers.declare(desired),
+    windows: (desired) => {
+      if (windowFollowers.declare(desired)) reconcileTmux();
+    },
     clock,
     log,
   });
@@ -753,10 +755,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const paneVisibility = new PaneVisibility(
     inputs.tmuxObserver(launcher, bundle.node, bundle.path, host.tmp),
-    (socket, view) => {
-      authority.observed(socket, view);
-      declaredSurfaces.observed(socket, view);
-      frameFeeds.announce();
+    {
+      changed: (socket, view) => {
+        authority.observed(socket, view);
+        declaredSurfaces.observed(socket, view);
+        frameFeeds.announce();
+      },
+      read: (socket) => windowFollowers.tmuxRead(socket),
     },
     log,
   );
@@ -818,6 +823,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     for (const req of frameFeeds.watchedRequests()) {
       if (req.hints.tmux) sockets.add(req.hints.tmux.socket);
     }
+    // [LAW:single-enforcer] A window follower lays out from this host's one
+    // observer of its server, so the follower's server is observed too.
+    for (const socket of windowFollowers.sockets()) sockets.add(socket);
     paneVisibility.reconcile(sockets, retry);
     // A saved switch or a returning physical hello can arrive after the
     // render. Replay cached candidates only when their source gains interest.

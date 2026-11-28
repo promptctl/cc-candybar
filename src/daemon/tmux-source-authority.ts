@@ -12,7 +12,10 @@ export interface SourcePaneProcess {
 
 interface ServerView {
   readonly serverPid: number;
-  readonly panes: ReadonlyMap<string, SourcePaneProcess>;
+  readonly panes: ReadonlyMap<
+    string,
+    { readonly pid: number | null; readonly tty: string }
+  >;
 }
 
 export interface SourceClaim {
@@ -169,8 +172,12 @@ export class TmuxSourceAuthority {
   }
 
   private locate(held: Held, view: ServerView | null): void {
-    const pane = view?.panes.get(held.source.pane);
-    if (view) held.located = pane !== undefined;
+    const fact = view?.panes.get(held.source.pane);
+    if (view) held.located = fact !== undefined;
+    // [LAW:parse-dont-validate] Only a pane running a process has one to
+    // prove; an empty pane in the source's place proves no session.
+    const pane: SourcePaneProcess | undefined =
+      fact?.pid == null ? undefined : { pid: fact.pid, tty: fact.tty };
     const previous = held.physical;
     if (
       view &&

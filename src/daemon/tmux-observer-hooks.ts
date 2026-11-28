@@ -7,10 +7,12 @@ const events = new Set([
   "client-attached",
   "client-detached",
   "client-session-changed",
+  "client-resized",
   "session-created",
   "session-closed",
   "session-window-changed",
   "window-layout-changed",
+  "window-resized",
   "window-pane-changed",
   "window-linked",
   "window-unlinked",
@@ -35,7 +37,7 @@ const globalContext = "%4294967296"; // No uint32 pane id; only global formats r
 const command = (...words: string[]) => words.map(singleQuoted).join(" ");
 const paneIds = "#{session_id} #{window_id} #{pane_id}";
 const paneFacts =
-  "P #{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active} #{?mouse,1,0} #{pane_pid} #{?pane_tty,#{pane_tty},-}";
+  "P #{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active} #{?mouse,1,0} #{?pane_pid,#{pane_pid},-} #{?pane_tty,#{pane_tty},-}";
 
 type Scope = string;
 function scopeArgs(scope: Scope): string[] {
@@ -172,8 +174,7 @@ export class ObserverServer {
     return [...slots.values()];
   }
   async arm() {
-    // Probe the addressed server. A keyed slot lets the floating-window
-    // owner distinguish host registration from a user's geometry-hook edits.
+    // Probe the addressed server for named hook slots.
     const probe = "after-set-hook[" + serverObserverHookPrefix + "probe]";
     const keys = await runTmuxAsync(
       this.launcher,
