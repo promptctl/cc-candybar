@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-990",
+      "ref": "refs/pull/990/merge",
+      "sha": "4b39e3b01c34d7c0624389751dfeab59afa39475",
+      "timestamp": "2026-11-28T11:12:04.258Z",
+      "commits": [
+        {
+          "sha": "4b39e3b01c34d7c0624389751dfeab59afa39475",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-28T04:10:44-07:00",
+          "message": "Merge ec2835c97374177dd9d7dd8ccd2b894f64e4ce92 into c58b95107c5a86fe47b9bbbb112c88530570c486\n"
+        },
+        {
+          "sha": "ec2835c97374177dd9d7dd8ccd2b894f64e4ce92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-28T04:10:13-07:00",
+          "message": "fix(bar-window): a window follower installs nothing on the tmux server\n\nEach window follower ran its own unattached tmux watcher: dozens of hooks\nper Claude session, a lease option, a blocking wait-for, and a re-read of\nevery pane and client on each event. With many sessions that load pinned\nthe tmux server and made the machine unusable.\n\nThe follower now installs nothing. The host's one observer of each tmux\nserver tells every follower on that server when it read the server again,\nand the follower re-lays out from that. The observer now also hears client\nand window resizes. A reservation is a plain empty split named by its\nsession, so a replacement follower finds the rows its predecessor left.\n"
+        },
+        {
+          "sha": "39abf54d7194b5da60d3d524f5020edb741e5df6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-28T03:53:23-07:00",
+          "message": "fix(tmux): a pane that runs no process keeps its server's visibility known\n\nThe window bar reserves its rows with an empty split, which has no pid.\nThe visibility snapshot refused the whole server on that row, and every\nstatusline request then respawned the observer, so a node process booted\nabout once a second while any reservation existed.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c58b95107c5a86fe47b9bbbb112c88530570c486",
