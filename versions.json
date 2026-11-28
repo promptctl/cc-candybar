@@ -4,15 +4,22 @@
     {
       "version": "pr-990",
       "ref": "refs/pull/990/merge",
-      "sha": "4b39e3b01c34d7c0624389751dfeab59afa39475",
-      "timestamp": "2026-11-28T11:12:04.258Z",
+      "sha": "bbe3ada5152d775ebdf781953f8bb3b0b1faa32d",
+      "timestamp": "2026-11-28T11:19:04.166Z",
       "commits": [
         {
-          "sha": "4b39e3b01c34d7c0624389751dfeab59afa39475",
+          "sha": "bbe3ada5152d775ebdf781953f8bb3b0b1faa32d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-28T04:10:44-07:00",
-          "message": "Merge ec2835c97374177dd9d7dd8ccd2b894f64e4ce92 into c58b95107c5a86fe47b9bbbb112c88530570c486\n"
+          "timestamp": "2026-11-28T11:18:04Z",
+          "message": "Merge 7bcc431bbdcd28daf6406ec832c8910c4bf88553 into c58b95107c5a86fe47b9bbbb112c88530570c486\n"
+        },
+        {
+          "sha": "7bcc431bbdcd28daf6406ec832c8910c4bf88553",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-28T04:17:49-07:00",
+          "message": "fix(bar-window): the host observes a window follower's tmux server and says when it read it\n\nA follower no longer watches tmux itself, so the host's one observer of\neach server now covers every server a wanted window follower lays out on,\nnot only servers with pane-lane interest. The docs stop describing the\nfollower's own watcher.\n"
         },
         {
           "sha": "ec2835c97374177dd9d7dd8ccd2b894f64e4ce92",

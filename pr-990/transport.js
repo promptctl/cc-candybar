@@ -104045,6 +104045,7 @@ var WindowFollowers = class {
   log;
   supported;
   desired = /* @__PURE__ */ new Map();
+  observed = /* @__PURE__ */ new Set();
   active = /* @__PURE__ */ new Map();
   issues = observable.map();
   waiting = /* @__PURE__ */ new Map();
@@ -104070,8 +104071,20 @@ var WindowFollowers = class {
       if (!follower.stopping && follower.socket === socket)
         follower.channel.write(JSON.stringify({ kind: "tmux" }) + "\n");
   }
+  // The tmux servers a wanted follower lays out on, which the host observes.
+  sockets() {
+    return this.observed;
+  }
+  // Answers whether the servers to observe changed.
   declare(desired) {
     this.desired = desired;
+    const observed2 = new Set(
+      this.supported ? [...desired.values()].flatMap(
+        (want) => want.pane ? [want.pane.socket] : []
+      ) : []
+    );
+    const moved = observed2.size !== this.observed.size || [...observed2].some((socket) => !this.observed.has(socket));
+    this.observed = observed2;
     for (const [sid, wait] of this.waiting) {
       const pane = desired.get(sid)?.pane;
       if (!pane || paneKey(pane) !== wait.target) {
@@ -104082,6 +104095,7 @@ var WindowFollowers = class {
     for (const session of [...this.issues.keys()])
       if (!desired.has(session)) this.report(session, "");
     this.reconcile();
+    return moved;
   }
   reconcile() {
     if (this.closing) return;
@@ -107973,7 +107987,9 @@ function createDaemon(inputs) {
     },
     subscribe: (session, subscriber, replaces) => frameFeeds.subscribe(session, subscriber, replaces),
     announce: () => frameFeeds.announce(),
-    windows: (desired) => windowFollowers.declare(desired),
+    windows: (desired) => {
+      if (windowFollowers.declare(desired)) reconcileTmux();
+    },
     clock,
     log
   });
@@ -108083,6 +108099,7 @@ function createDaemon(inputs) {
     for (const req of frameFeeds.watchedRequests()) {
       if (req.hints.tmux) sockets.add(req.hints.tmux.socket);
     }
+    for (const socket of windowFollowers.sockets()) sockets.add(socket);
     paneVisibility.reconcile(sockets, retry);
     if ([...sources.keys()].some((key) => !previous2.has(key))) {
       for (const req of frameFeeds.knownRequests()) {
