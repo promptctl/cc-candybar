@@ -19,6 +19,7 @@ import {
 } from "../daemon/foundations/durations.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
+  LANE_NAMES,
   MOVING_FPS,
   perLane,
   UNFOLLOWED,
@@ -48,7 +49,7 @@ import {
   changedDraw,
   comparisonOf,
   type FeedAdvance,
-  type FeedComparison,
+  type FeedComparisons,
   type FeedSchedule,
   type FeedHistory,
   type FeedResume,
@@ -110,21 +111,23 @@ export interface FeedDraw {
 }
 
 export interface FeedDeps {
-  // Draws a frame of the session for the wall instant `at`, or null while it
-  // has no view: a frame opens none. `fps` is the feed's ceiling, which the
-  // frame shows. [LAW:one-source-of-truth] The ceiling the feed's spacing
+  // Draws a frame of the session for one surface at the wall instant `at`,
+  // or null while it has no view: a frame opens none. `fps` is the feed's
+  // ceiling, which the frame shows. [LAW:one-source-of-truth] The ceiling the feed's spacing
   // sets, never a count of frames or the gap between two: a frame showing
   // either changes whenever it does, and is pushed for it, so a still bar
   // would never be still.
   readonly draw: (
     sessionId: SessionId,
+    surface: Lane,
     fps: number,
     readings: Readings,
-    following: ReadonlySet<Lane>,
     feeds: LaneFeeds,
     pointer: Pointer | null,
     prepare: PrepareDelivery,
   ) => FeedDraw | null;
+  // A lane stopped following the session: its surface is no longer drawn.
+  readonly left: (sessionId: SessionId, lane: Lane) => void;
   // [LAW:no-ambient-temporal-coupling] Holds the session's view open from the
   // feed's open to its close, and wakes the feed whenever the session's own
   // state changes: the feed being open is what keeps them.
@@ -139,8 +142,8 @@ interface Feed {
   schedule: FeedSchedule;
   // The tick the last frame was drawn at: what a wake is spaced from.
   last: Tick;
-  // The last frame drawn, which a lane's rate counts changes against.
-  frame: FeedComparison | null;
+  // Each lane's last frame drawn, which its rate counts changes against.
+  frames: FeedComparisons;
   // The ticks at which each followed lane's answer changed, within the
   // window: a subscriber's hand-over on joining is not one.
   readonly rates: Map<Lane, Tick[]>;
@@ -297,7 +300,7 @@ export class Feeds {
     if (history) {
       feed.schedule = history.schedule;
       feed.last = history.last ?? (-Infinity as Tick);
-      feed.frame = history.frame;
+      feed.frames = history.frames;
       feed.viewers = history.viewers;
       feed.rates.clear();
       for (const [lane, ticks] of Object.entries(history.rates))
@@ -386,8 +389,7 @@ export class Feeds {
         .map(({ feed, next }) => () => {
           recordMs(feed.lateness, (tick - next) * 1000);
           try {
-            const frame = this.drawOne(feed, readings, prepare);
-            if (frame !== null) frames.push(frame);
+            frames.push(...this.drawOne(feed, readings, prepare));
             if (tick - feed.summarizedAt >= SUMMARY_EVERY_S)
               this.summarize(feed, "running", tick);
           } catch (thrown) {
@@ -405,13 +407,6 @@ export class Feeds {
   // The lanes that follow the session and draw it now.
   following(sessionId: SessionId): ReadonlySet<Lane> {
     return followingOf(this.feeds.get(sessionId)?.viewers);
-  }
-
-  // [LAW:one-source-of-truth] What the follower that owns the session's
-  // pointer last said of it, as the host handed it with who watches: none
-  // while no follower owns it.
-  pointerOf(sessionId: SessionId): Pointer | null {
-    return this.feeds.get(sessionId)?.viewers.pointer ?? null;
   }
 
   // [LAW:nothing-unseen] What each lane of the session's frames is doing at
@@ -447,7 +442,7 @@ export class Feeds {
       viewers,
       schedule: { kind: "frame", next: tick, change: null },
       last: -Infinity as Tick,
-      frame: null,
+      frames: {},
       rates: new Map(),
       opened: tick,
       summarizedAt: tick,
@@ -482,18 +477,33 @@ export class Feeds {
 
   private close(feed: Feed, tick: Tick): void {
     this.feeds.delete(feed.sessionId);
-    feed.unpin();
+    runEach([
+      ...[...feed.rates.keys()].map(
+        (lane) => () => this.deps.left(feed.sessionId, lane),
+      ),
+      () => feed.unpin(),
+    ]);
     this.summarize(feed, "closed", tick);
   }
 
-  // A lane's rate is kept from its first subscriber joining to its last
-  // leaving.
+  // A lane's rate and last frame are kept from its first subscriber joining
+  // to its last leaving, when its surface stops being drawn.
   private keepRates(feed: Feed): void {
     const { lanes } = feed.viewers;
+    const left: Lane[] = [];
     for (const lane of feed.rates.keys())
-      if (lanes[lane] === undefined) feed.rates.delete(lane);
+      if (lanes[lane] === undefined) {
+        feed.rates.delete(lane);
+        left.push(lane);
+      }
+    if (left.length > 0) {
+      const frames = { ...feed.frames };
+      for (const lane of left) delete frames[lane];
+      feed.frames = frames;
+    }
     for (const lane of Object.keys(lanes) as Lane[])
       if (!feed.rates.has(lane)) feed.rates.set(lane, []);
+    runEach(left.map((lane) => () => this.deps.left(feed.sessionId, lane)));
   }
 
   // [LAW:single-enforcer] The interval between scheduled frames, in
@@ -505,11 +515,14 @@ export class Feeds {
     return (feed.viewers.shown ? moving : still) / 1000;
   }
 
+  // [LAW:one-source-of-truth] One frame for each lane following the session,
+  // each from that surface's own pointer and accepted presentation, all at
+  // one instant: one surface's frame never stands for another's.
   private drawOne(
     feed: Feed,
     readings: Readings,
     prepare: PrepareDelivery,
-  ): PushedFrame | null {
+  ): PushedFrame[] {
     const { at, tick } = readings;
     // A frame due for a change is drawn for that change's instant when the
     // due's wall reading falls just short of it.
@@ -518,54 +531,72 @@ export class Feeds {
       change !== null && change >= at && change - at <= TIMER_RESOLUTION_S
         ? change
         : at;
-    const drawn = this.deps.draw(
-      feed.sessionId,
-      paceOf(this.spacingOf(feed) * 1000),
-      { at: drawAt, tick },
-      this.following(feed.sessionId),
-      this.feedsOf(feed.sessionId, tick),
-      this.pointerOf(feed.sessionId),
-      prepare,
-    );
-    // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits until
-    // the event that opens one wakes it. A frame not drawn spaces nothing.
-    if (drawn === null) {
-      feed.noView++;
-      feed.schedule = { kind: "waiting", next: null };
-      this.report(feed);
-      return null;
+    const fps = paceOf(this.spacingOf(feed) * 1000);
+    const laneFeeds = this.feedsOf(feed.sessionId, tick);
+    const drawn: Array<readonly [Lane, FeedDraw]> = [];
+    for (const lane of LANE_NAMES) {
+      const seen = feed.viewers.lanes[lane];
+      if (seen === undefined) continue;
+      const draw = this.deps.draw(
+        feed.sessionId,
+        lane,
+        fps,
+        { at: drawAt, tick },
+        laneFeeds,
+        seen.pointer,
+        prepare,
+      );
+      // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits
+      // until the event that opens one wakes it. A frame not drawn spaces
+      // nothing. Every surface draws from the one view, so none has one.
+      if (draw === null) {
+        feed.noView++;
+        feed.schedule = { kind: "waiting", next: null };
+        this.report(feed);
+        return [];
+      }
+      drawn.push([lane, draw]);
     }
     feed.last = tick;
     feed.drawn++;
     this.drawnTotal++;
-    feed.evaluated += drawn.evaluated;
-    feed.cellBreaks += drawn.cellBreaks;
-    const { frame } = drawn;
-    const comparison = comparisonOf(frame);
-    const changed = changedDraw(feed.frame, comparison);
-    if (drawn.failure !== null) {
+    const frames = { ...feed.frames };
+    const changes: Lane[] = [];
+    let failure: FeedDraw["failure"] = null;
+    let changedFailure = false;
+    let nextChange = Infinity;
+    for (const [lane, draw] of drawn) {
+      feed.evaluated += draw.evaluated;
+      feed.cellBreaks += draw.cellBreaks;
+      const comparison = comparisonOf(draw.frame);
+      const changed = changedDraw(feed.frames[lane], comparison);
+      frames[lane] = comparison;
+      if (draw.failure !== null) {
+        failure ??= draw.failure;
+        changedFailure ||= changed;
+      }
+      if (draw.frame.kind === "drawn")
+        nextChange = Math.min(nextChange, draw.frame.bar.nextChange);
+      const rate = feed.rates.get(lane);
+      if (rate === undefined || !changed) continue;
+      noteSent(rate, tick);
+      changes.push(lane);
+    }
+    if (failure !== null) {
       feed.failed++;
       // [LAW:nothing-unseen] A failing frame's render event is logged when its
       // failure first shows: one that keeps throwing the same way draws the
       // same bytes, and the summary counts it.
-      if (changed("statusline"))
-        this.deps.log(drawn.failure.level, drawn.failure.line);
+      if (changedFailure) this.deps.log(failure.level, failure.line);
     }
-    const changes: Lane[] = [];
-    for (const [lane, rate] of feed.rates) {
-      if (!changed(lane)) continue;
-      noteSent(rate, tick);
-      changes.push(lane);
-    }
-    feed.frame = comparison;
-    this.schedule(
-      feed,
-      frame.kind === "drawn" ? frame.bar.nextChange : Infinity,
-      drawAt,
-      tick,
-    );
+    feed.frames = frames;
+    this.schedule(feed, nextChange, drawAt, tick);
     this.report(feed, { changed: changes });
-    return { session: feed.sessionId, frame };
+    return drawn.map(([lane, { frame }]) => ({
+      session: feed.sessionId,
+      lane,
+      frame,
+    }));
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame falls due when the bar

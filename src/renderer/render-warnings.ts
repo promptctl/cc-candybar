@@ -75,26 +75,3 @@ export function warningChanges(
     faults: faultsNote(next.faults, prior?.faults),
   };
 }
-
-// [LAW:single-enforcer] Merge surfaces in display order. A warning repeated
-// on one surface keeps its occurrences. An equal warning from another
-// surface consumes one such occurrence.
-export function combinedWarnings(
-  records: readonly FrameWarnings[],
-): readonly DescribedWarning[] {
-  const listed: DescribedWarning[] = [];
-  const seen = new Map<string, number>();
-  for (const record of records) {
-    const earlier = new Map(seen);
-    for (const warning of record.warnings) {
-      const { key } = warning;
-      const count = earlier.get(key) ?? 0;
-      if (count > 0) earlier.set(key, count - 1);
-      else {
-        seen.set(key, (seen.get(key) ?? 0) + 1);
-        listed.push(warning);
-      }
-    }
-  }
-  return listed;
-}

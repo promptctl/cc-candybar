@@ -3,7 +3,7 @@ import {
   durableHistory,
   type SessionHistory,
 } from "../renderer-interface/history-storage.js";
-import { VERB_APPLY_LAYOUT_OP } from "../click/wire.js";
+import { VERB_APPLY_LAYOUT_OP, VERB_COPY_DIAGNOSTIC } from "../click/wire.js";
 import { decodeLayoutOp } from "../config/layout-ops.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import type {
@@ -33,6 +33,10 @@ import {
 } from "../renderer-interface/stored-state.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { validFeedResumes } from "../renderer-interface/feed-history.js";
+import {
+  REQUEST_SURFACE,
+  type ProposedPresentation,
+} from "../renderer-interface/presentation.js";
 import { mainRendererOf } from "./main.js";
 
 // [LAW:parse-dont-validate] Admit known event arms with their required
@@ -78,7 +82,6 @@ const REPORTABLE_FIELDS = new Set([
   "frames",
   "frame",
   "bar",
-  "handoff",
   "receipt",
   "record",
   "stored",
@@ -155,6 +158,7 @@ function inputOf(
     throw new Error(`recording line ${line} has an invalid renderer input`);
   }
   const { event } = value;
+  if (wireVersion < SURFACE_WIRE) surfacesOfLegacyInput(value);
   if (
     Object.hasOwn(value, "presentation") &&
     (!isPlainObject(value.presentation) ||
@@ -193,6 +197,102 @@ function inputOf(
   }
   // The checked envelope holds the same payload taken by the private wire.
   return value as unknown as EventInput;
+}
+
+// Wire 37 keys every presentation fact by the surface a frame is shown on and
+// draws each followed lane its own frame. Older wires keyed them by drawer
+// (`request`, `feed`) and held the pointer once per session.
+const SURFACE_WIRE = 37;
+
+const legacyViewers = (viewers: unknown): void => {
+  if (!isPlainObject(viewers)) return;
+  for (const session of Object.values(viewers)) {
+    if (!isPlainObject(session)) continue;
+    // The session's one pointer named no surface, so no lane's frame is
+    // drawn with it.
+    delete session.pointer;
+    if (isPlainObject(session.lanes))
+      for (const lane of Object.values(session.lanes))
+        if (isPlainObject(lane)) lane.pointer = null;
+  }
+};
+
+const legacyResume = (resume: Record<string, unknown>): void => {
+  const { surfaces, motion } = resume;
+  if (!isPlainObject(surfaces) || !isPlainObject(motion)) return;
+  const clock = isPlainObject(motion.value) ? motion.value : {};
+  const { placements, made, ...held } = clock;
+  motion.value = held;
+  const request = surfaces.request;
+  // A request's frame was the statusline's, and its motion every surface's;
+  // the feed's one frame was no single surface's, so it is dropped.
+  resume.surfaces =
+    isPlainObject(request) && isPlainObject(request.value)
+      ? {
+          [REQUEST_SURFACE]: {
+            ...request,
+            value: { ...request.value, effects: { placements, made } },
+          },
+        }
+      : {};
+};
+
+// [LAW:single-enforcer] The one upgrade of an older input to the surface
+// keys. Every field it does not recognise is left for the checks below.
+function surfacesOfLegacyInput(value: Record<string, unknown>): void {
+  const { event, presentation, feedResumes } = value;
+  if (isPlainObject(event)) {
+    legacyViewers(event.viewers);
+    if (isPlainObject(event.click) && Array.isArray(event.click.steps))
+      for (const step of event.click.steps)
+        if (
+          isPlainObject(step) &&
+          step.verb === VERB_COPY_DIAGNOSTIC &&
+          Array.isArray(step.args) &&
+          step.args[1] === "request"
+        )
+          step.args = step.args.with(1, REQUEST_SURFACE);
+  }
+  if (isPlainObject(presentation) && Array.isArray(presentation.sessions))
+    for (const offer of presentation.sessions) {
+      if (!isPlainObject(offer)) continue;
+      const bases = isPlainObject(offer.bases) ? offer.bases : {};
+      offer.bases =
+        bases.request === undefined ? {} : { [REQUEST_SURFACE]: bases.request };
+      if (isPlainObject(offer.resume)) legacyResume(offer.resume);
+    }
+  if (Array.isArray(feedResumes))
+    for (const resume of feedResumes) {
+      if (!isPlainObject(resume) || !isPlainObject(resume.history)) continue;
+      const { frame: _drawnForEveryLane, ...history } = resume.history;
+      legacyViewers({ [String(resume.session)]: history.viewers });
+      resume.history = { ...history, frames: {} };
+    }
+}
+
+// What an older wire proposed for a statusline draw: the effects its frame
+// drew held in the session's motion. Both proposals were made against the
+// same image, so they share a kind.
+function legacyProposal({ surface, motion, menu }: ProposedPresentation) {
+  if (surface.kind === "whole" && motion.kind === "whole") {
+    const { effects, ...value } = surface.value;
+    return {
+      menu,
+      surface: { ...surface, value },
+      motion: { ...motion, value: { ...motion.value, ...effects } },
+    };
+  }
+  if (surface.kind === "change" && motion.kind === "change") {
+    const { effects, ...change } = surface.change;
+    return {
+      menu,
+      surface: { ...surface, change },
+      motion: { ...motion, change: { ...motion.change, ...effects } },
+    };
+  }
+  throw new Error(
+    "an older recording's statusline proposal has a surface and a motion of different kinds, which one wire 37 proposal cannot reproduce",
+  );
 }
 
 // [LAW:one-source-of-truth] Compare what JSON actually carries, including
@@ -272,6 +372,14 @@ function historicalOutputs(
   }
   return (output) => ({
     ...output,
+    record:
+      wireVersion >= SURFACE_WIRE
+        ? output.record
+        : output.record.flatMap((field) =>
+            // The draw noted which lanes the statusline handed the bar to,
+            // just before what it owed; this draw hands it to none.
+            field[0] === "owed" ? [["handoff", "-"], field] : [field],
+          ),
     subscriptions:
       wireVersion >= 35
         ? output.subscriptions
@@ -291,6 +399,12 @@ function historicalOutputs(
             ),
           },
     effects: output.effects.map((effect) => {
+      if (
+        wireVersion < SURFACE_WIRE &&
+        effect.kind === "present" &&
+        effect.proposal !== undefined
+      )
+        return { ...effect, proposal: legacyProposal(effect.proposal) };
       if (
         wireVersion >= 28 ||
         (effect.kind !== "change" && effect.kind !== "approve-repo")
@@ -451,6 +565,15 @@ export async function replayRecording(
       if (renderer === null)
         throw new Error(
           `recording line ${line} has a turn after refused construction`,
+        );
+      if (
+        wireVersion < SURFACE_WIRE &&
+        isPlainObject(entry.output) &&
+        Array.isArray(entry.output.frames) &&
+        entry.output.frames.length > 0
+      )
+        throw new Error(
+          `recording line ${line} carries feed frames from wire ${wireVersion}, which drew one frame for every lane; wire ${SURFACE_WIRE} draws each lane its own frame, so replay cannot compare them`,
         );
       const input = inputOf(entry.input, line, wireVersion);
       turns++;

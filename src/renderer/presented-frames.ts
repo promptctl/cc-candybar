@@ -6,15 +6,24 @@ import {
   type DrawSurface,
 } from "../renderer-interface/presentation.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
+import { LANE_NAMES } from "../config/lanes.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { DrawnFrame } from "../dsl/render.js";
 import {
   CompiledEffects,
+  NO_CLOCK,
+  NO_EFFECTS,
   SessionEffects,
+  holdEffects,
   holdMotion,
-  restoreMotion,
+  restoreEffects,
 } from "../render/effect.js";
-import type { HeldMotion } from "../render/effect.js";
+import type {
+  HeldMotion,
+  SessionClock,
+  SessionMotion,
+  SurfaceEffects,
+} from "../render/effect.js";
 import { holdLayout, restoreLayout } from "../render/held-layout.js";
 import type {
   HeldSurface,
@@ -38,14 +47,12 @@ import {
   type Idle,
 } from "./menu-idle.js";
 import {
-  combinedWarnings,
   describeWarning,
   warningChanges,
   type FrameWarnings,
 } from "./render-warnings.js";
 
 export type { DrawSurface };
-const SURFACES: readonly DrawSurface[] = ["request", "feed"];
 
 export interface FrameLayout {
   readonly record: DrawnFrame["memory"]["record"];
@@ -60,12 +67,11 @@ export interface FrameObservation {
   readonly diagnostics: FrameWarnings;
   readonly copies: ReadonlyMap<string, string>;
   readonly menu: DrawnMenu;
-  readonly config: symbol;
 }
 
 export interface FrameCandidate {
   readonly session: SessionId;
-  readonly by: DrawSurface;
+  readonly surface: DrawSurface;
   readonly target: symbol;
   readonly loadKey: string;
   readonly frame: FrameObservation;
@@ -81,20 +87,34 @@ interface AcceptedFrame extends Omit<
   // Once its view retires, keep presentation facts that do not hold a layout.
   readonly layout: FrameLayout | null;
   readonly copies: FrameObservation["copies"] | null;
+  // What this surface's frame drew under the session's clock.
+  readonly effects: SurfaceEffects & Partial<Pick<SessionMotion, "frame">>;
 }
 
 interface SessionFrames {
   readonly surfaces: Partial<Record<DrawSurface, AcceptedFrame>>;
-  readonly motion?: ReturnType<typeof restoreMotion>;
+  readonly motion?: SessionClock;
   readonly portableMotion?: Ordered<HeldMotion>;
   readonly idle?: Idle;
   readonly idleOrder?: number;
 }
 
-const latestOf = ({ request, feed }: SessionFrames["surfaces"]) =>
-  request !== undefined && (feed === undefined || request.order > feed.order)
-    ? request
-    : feed;
+// The surface whose frame was accepted last, which the session's shared
+// timelines (the animation clock, menu idle) advance with.
+const latestOf = (
+  surfaces: SessionFrames["surfaces"],
+): AcceptedFrame | undefined => {
+  let latest: AcceptedFrame | undefined;
+  for (const surface of LANE_NAMES) {
+    const held = surfaces[surface];
+    if (
+      held !== undefined &&
+      (latest === undefined || held.order > latest.order)
+    )
+      latest = held;
+  }
+  return latest;
+};
 
 export interface Acceptance {
   readonly faults: string | null;
@@ -111,7 +131,6 @@ export interface PortableDraw {
 // animation and idle timeline. Updating either commits one session record.
 export class PresentedFrames {
   private readonly sessions = new Map<SessionId, SessionFrames>();
-  private readonly configs = new WeakMap<object, symbol>();
   private readonly compiled = new CompiledEffects();
 
   readonly menuIdle = new MenuIdle({
@@ -154,27 +173,18 @@ export class PresentedFrames {
     }
   }
 
-  // [LAW:no-shared-mutable-globals] The token identifies a config without
-  // holding that config alive once its view's layout has retired.
-  configOf(config: object): symbol {
-    const held = this.configs.get(config);
-    if (held !== undefined) return held;
-    const token = Symbol();
-    this.configs.set(config, token);
-    return token;
-  }
-
   propose(
     candidate: FrameCandidate,
     input: PresentationInput,
   ): { portable: PortableDraw; proposal: ProposedPresentation } {
-    const { session, by, frame, loadKey } = candidate;
+    const { session, surface: by, frame, loadKey } = candidate;
     const prior = this.sessions.get(session);
     const bases = input.sessions.find((s) => s.session === session);
     const known = prior?.surfaces[by]?.portable;
     const knownMotion = prior?.portableMotion;
     const surface: HeldSurface = {
       layout: holdLayout(frame.layout.record, loadKey, bases?.revision ?? 0),
+      effects: holdEffects(frame.motion),
       copies: [...frame.copies],
       warnings: frame.diagnostics.warnings.map((w) => w.warning),
       faults: frame.diagnostics.faults,
@@ -217,7 +227,7 @@ export class PresentedFrames {
   ) {
     const prior = this.sessions.get(saved.session) ?? { surfaces: {} };
     const surfaces = { ...prior.surfaces };
-    for (const by of SURFACES) {
+    for (const by of LANE_NAMES) {
       const held = saved.surfaces[by];
       if (!held) {
         if ((surfaces[by]?.order ?? Infinity) <= saved.motion.order)
@@ -225,7 +235,7 @@ export class PresentedFrames {
         continue;
       }
       if ((surfaces[by]?.order ?? -1) >= held.order) continue;
-      const { layout, copies, warnings, faults } = held.value;
+      const { layout, effects, copies, warnings, faults } = held.value;
       const record =
         layout.revision === revision
           ? restoreLayout(layout, view.state, localRevision)
@@ -234,8 +244,8 @@ export class PresentedFrames {
         order: held.order,
         portable: held,
         target: view.presentationTargets[by],
-        config: record ? this.configOf(view.state.config) : Symbol(),
         layout: record ? { record, segments: new Map() } : null,
+        effects: restoreEffects(effects),
         copies: new Map(copies),
         diagnostics: { warnings: warnings.map(describeWarning), faults },
       };
@@ -245,7 +255,7 @@ export class PresentedFrames {
       ...prior,
       surfaces,
       ...(newer && {
-        motion: restoreMotion(saved.motion.value),
+        motion: saved.motion.value,
         portableMotion: saved.motion,
       }),
       ...(saved.idle.order > (prior.idleOrder ?? -1) && {
@@ -257,7 +267,7 @@ export class PresentedFrames {
 
   accept(
     id: EffectId,
-    { session, by, target, frame }: FrameCandidate,
+    { session, surface: by, target, frame }: FrameCandidate,
     portable?: PortableDraw,
   ): Acceptance | null {
     const prior = this.sessions.get(session) ?? { surfaces: {} };
@@ -270,6 +280,11 @@ export class PresentedFrames {
       ...surface,
       order,
       target,
+      effects: {
+        placements: motion.placements,
+        made: motion.made,
+        frame: motion.frame,
+      },
       ...(portable && { portable: { order, value: portable.surface } }),
     };
     const newer =
@@ -279,9 +294,10 @@ export class PresentedFrames {
     this.sessions.delete(session);
     this.store(session, {
       surfaces: { ...prior.surfaces, [by]: next },
-      // [LAW:one-source-of-truth] Keep one motion cache, even when both
-      // surfaces retain their layout. An older receipt cannot rewind it.
-      motion: newer ? motion : prior.motion,
+      // [LAW:one-source-of-truth] Keep one animation clock for the session,
+      // while each surface keeps what its own frame drew under it. An older
+      // receipt cannot rewind the clock.
+      motion: newer ? holdMotion(motion) : prior.motion,
       portableMotion: newer
         ? portable && { order: portable.order, value: portable.motion }
         : prior.portableMotion,
@@ -316,37 +332,31 @@ export class PresentedFrames {
     session: SessionId,
     targets: Readonly<Record<DrawSurface, symbol>>,
   ): FrameLayout | undefined {
-    const drawn = (by: DrawSurface) => {
+    const drawn: SessionFrames["surfaces"] = {};
+    for (const by of LANE_NAMES) {
       const frame = this.on(session, by);
-      return frame?.target === targets[by] && frame.layout !== null
-        ? frame
-        : undefined;
-    };
-    return (
-      latestOf({ request: drawn("request"), feed: drawn("feed") })?.layout ??
-      undefined
-    );
+      if (frame?.target === targets[by] && frame.layout !== null)
+        drawn[by] = frame;
+    }
+    return latestOf(drawn)?.layout ?? undefined;
   }
 
   diagnostics(session: SessionId, by: DrawSurface): FrameWarnings | undefined {
     return this.on(session, by)?.diagnostics;
   }
 
-  warnings(session: SessionId, by: DrawSurface, config: symbol) {
-    return combinedWarnings(
-      SURFACES.flatMap((surface) => {
-        const held = this.on(session, surface);
-        return held !== undefined && (surface === by || held.config === config)
-          ? [held.diagnostics]
-          : [];
-      }),
-    );
+  warnings(session: SessionId, by: DrawSurface) {
+    return this.on(session, by)?.diagnostics.warnings ?? [];
   }
 
-  effects(session: SessionId): SessionEffects<RenderedLine> {
+  effects(session: SessionId, by: DrawSurface): SessionEffects<RenderedLine> {
+    const held = this.sessions.get(session);
     return new SessionEffects(
       session,
-      this.sessions.get(session)?.motion,
+      {
+        ...(held?.motion ?? NO_CLOCK),
+        ...(held?.surfaces[by]?.effects ?? NO_EFFECTS),
+      },
       this.compiled,
     );
   }
@@ -363,7 +373,7 @@ export class PresentedFrames {
     const prior = this.sessions.get(session);
     if (prior === undefined) return;
     const surfaces = { ...prior.surfaces };
-    for (const by of SURFACES) {
+    for (const by of LANE_NAMES) {
       const held = surfaces[by];
       if (held === undefined || (successor && held.target !== targets[by]))
         continue;
@@ -385,7 +395,15 @@ export class PresentedFrames {
       ...prior,
       surfaces: {
         ...prior.surfaces,
-        [by]: { ...held, layout: null, copies: null, portable: undefined },
+        [by]: {
+          ...held,
+          layout: null,
+          copies: null,
+          portable: undefined,
+          // A surface no longer drawn fades its placements back in when it is
+          // drawn again, as one that was never drawn would.
+          effects: NO_EFFECTS,
+        },
       },
     });
   }
@@ -402,13 +420,13 @@ export class PresentedFrames {
     let effects = 0;
     let passages = 0;
     for (const held of this.sessions.values()) {
-      if (held.motion !== undefined) {
-        sessions++;
-        for (const effectsOfRow of held.motion.made.values())
+      if (held.motion !== undefined) sessions++;
+      for (const by of LANE_NAMES) {
+        const surface = held.surfaces[by];
+        for (const effectsOfRow of surface?.effects.made.values() ?? [])
           effects += effectsOfRow.size;
+        passages += surface?.layout?.record.passages?.size ?? 0;
       }
-      for (const by of SURFACES)
-        passages += held.surfaces[by]?.layout?.record.passages?.size ?? 0;
     }
     return { effects: { sessions, effects }, passages };
   }

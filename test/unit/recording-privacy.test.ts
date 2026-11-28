@@ -455,18 +455,14 @@ test("the output check sees the evaluated run environment in ordinary and pane f
   );
   const pane = {
     session: SESSION,
+    lane: "pane" as const,
     frame: {
       kind: "drawn" as const,
       receipt: 1 as EffectId,
       bar: present.frame,
-      handoff: null,
     },
   };
-  const plain = { ...present.frame, rows: [] };
-  for (const pushed of [
-    pane,
-    { ...pane, frame: { ...pane.frame, bar: plain, handoff: present.frame } },
-  ]) {
+  for (const pushed of [pane, { ...pane, lane: "window" as const }]) {
     const problem = recordingOutputProblem({
       ...output,
       effects: [],

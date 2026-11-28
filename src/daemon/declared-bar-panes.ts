@@ -113,7 +113,7 @@ export class DeclaredSurfaces {
       state.slot.allowOpen = true;
     state.session = session;
     // The authority releases only on proven physical loss or a move. Unknown
-    // observations arrive separately and keep the existing handoff alive.
+    // observations arrive separately and keep the existing pane alive.
     state.lost = session === null;
     this.reconcile(state);
     this.reported();

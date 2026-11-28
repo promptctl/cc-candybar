@@ -70,7 +70,7 @@ import {
   modeIsOpen,
   NO_HOVER,
 } from "../../config/click-mode";
-import type { Drawing } from "../../config/lanes";
+import { parseLane, type Lane } from "../../config/lanes";
 import { closingView } from "../closing-view";
 import type { Gates } from "../../daemon/foundations/gates";
 import type {
@@ -227,11 +227,11 @@ export interface DaemonContext {
   // The storage folder of each source that config declares, from the same
   // render state: what a `run` supersedes.
   readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
-  // What the diagnostic the frame renderer `by` last delivered for the
+  // What the diagnostic the frame the surface `by` last accepted for the
   // session listed under `key` copies; undefined when it lists none under it.
   readonly diagnosticCopy: (
     sessionId: SessionId,
-    by: Drawing["by"],
+    by: Lane,
     key: string,
   ) => string | undefined;
 }
@@ -289,16 +289,13 @@ function globalAct(
   );
 }
 
-// [LAW:parse-dont-validate] The renderer a copy click names: the surface it
-// was drawn on, whose last frame it copies from.
-const DRAWERS: ReadonlySet<string> = new Set<Drawing["by"]>([
-  "request",
-  "feed",
-]);
-function requireDrawer(by: string): Drawing["by"] {
-  if (!DRAWERS.has(by))
-    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
-  return by as Drawing["by"];
+// [LAW:parse-dont-validate] The surface a copy click names: the one it was
+// drawn on, whose last accepted frame it copies from.
+function requireSurface(by: string): Lane {
+  const surface = parseLane(by);
+  if (surface === null)
+    throw new BadVerbArgs(`unknown surface ${JSON.stringify(by)}`);
+  return surface;
 }
 
 // [LAW:no-silent-failure] A key the frame the click came from does not list
@@ -307,7 +304,7 @@ function requireDrawer(by: string): Drawing["by"] {
 const copyDiagnostic: VerbHandler = (args, ctx) => {
   const [by = "", key = ""] = args;
   const sid = ctx.session;
-  const text = ctx.diagnosticCopy(sid, requireDrawer(by), key);
+  const text = ctx.diagnosticCopy(sid, requireSurface(by), key);
   if (text === undefined)
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics — open the indicator beside the settings door again and copy from there`,

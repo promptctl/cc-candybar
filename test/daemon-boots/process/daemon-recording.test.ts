@@ -10,6 +10,7 @@ import { linksOf } from "../../../src/click/read";
 import { parseJson5Syntax } from "../../../src/config/loader/diagnostics";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { textOf, type WireFrame } from "../../../src/render/frame";
+import type { Lane } from "../../../src/config/lanes";
 import type { RecordingEntry } from "../../../src/renderer-interface/recording";
 import { replayRecording } from "../../../src/renderer/replay";
 import { click, frameRequest, observePane, renderBody } from "../../helpers/daemon-e2e";
@@ -24,7 +25,7 @@ const LOCALIZED = "50.000 03:30 -0400 03:00 -0500";
 
 function replayedFrames(stdout: string): readonly {
   readonly session: string;
-  readonly surface: "statusline" | "bar";
+  readonly surface: Lane;
   readonly frame: WireFrame;
 }[] {
   return stdout.trimEnd().split("\n").map((line) => JSON.parse(line));
@@ -203,7 +204,7 @@ test("the running host records two independent renderer sessions for offline rep
     expect(new Set(frames.map(({ session }) => session))).toEqual(new Set([namedSession]));
     expect(frames.some(({ surface, frame }) => surface === "statusline" && textOf(frame).includes("recorded-source padding=1"))).toBe(true);
     expect(frames.some(({ surface, frame }) => surface === "statusline" && textOf(frame).includes(LOCALIZED))).toBe(true);
-    const bars = frames.filter(({ surface }) => surface === "bar").map(({ frame }) => textOf(frame));
+    const bars = frames.filter(({ surface }) => surface === "pane").map(({ frame }) => textOf(frame));
     expect(bars).toEqual(expect.arrayContaining([
       expect.stringContaining("recorded-source padding=2 WIDER phase-a saved-by-click"),
       expect.stringContaining("recorded-source padding=2 WIDER phase-b saved-by-click"),

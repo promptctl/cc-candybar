@@ -62,12 +62,14 @@ function rig(
   const logged: string[] = [];
   const acknowledged: DaemonEvent[] = [];
   const watching: [string, boolean][] = [];
+  const left: [string, Lane][] = [];
   const deps: FeedDeps<Req> = {
     publishFrame,
     acknowledgeDisplayed: (events) => void acknowledged.push(...events),
     requestChanged: () => {},
     shown: (req) => !hidden.has(req.pane),
     watchingChanged: (session, on) => void watching.push([session, on]),
+    laneLeft: (session, lane) => void left.push([session, lane]),
     deliver: (make) =>
       new Promise((resolve, reject) =>
         owed.push({ make, end: (kind) => resolve({ kind }), reject }),
@@ -106,6 +108,7 @@ function rig(
     logged,
     acknowledged,
     watching,
+    left,
     slot,
     rejected,
     took,
@@ -175,16 +178,16 @@ const withoutHits = (answer: string): string => {
 const frame = (
   session = S,
   bar = "r",
-  handoff: string | null = "s",
+  lane: Lane = "pane",
   receipt = 1,
   displayedEvents?: readonly DaemonEvent[],
 ): PushedFrame => ({
   session,
+  lane,
   frame: {
     kind: "drawn",
     receipt: receipt as EffectId,
     bar: body(bar),
-    handoff: handoff === null ? null : body(handoff),
     displayedEvents,
   },
 });
@@ -211,13 +214,13 @@ function linkedFeeds() {
             },
           ],
         },
-        handoff: null,
       },
       evaluated: 1,
       cellBreaks: 0,
       failure: null,
     }),
     pin: () => () => {},
+    left: () => {},
     log: () => {},
     periods: { moving: 100, still: 1000 },
   });
@@ -284,15 +287,13 @@ describe("the viewers the renderer is handed", () => {
     r.feeds.subscribe(T, subscriber("statusline", false).sub);
     expect(r.feeds.viewers()).toEqual({
       [S]: {
-        lanes: { pane: { subscribers: 2, drawing: true } },
-        pointer: null,
+        lanes: { pane: { subscribers: 2, drawing: true, pointer: null } },
         shown: false,
         joined: 2,
       },
       // A session with no request yet counts as shown.
       [T]: {
-        lanes: { statusline: { subscribers: 1, drawing: false } },
-        pointer: null,
+        lanes: { statusline: { subscribers: 1, drawing: false, pointer: null } },
         shown: true,
         joined: 3,
       },
@@ -372,20 +373,25 @@ const paneOwnedBy = (owner: ReturnType<typeof owned>) => {
   return { ...view, sub: { ...view.sub, owner } };
 };
 
-describe("the owner of a session's pointer", () => {
-  test("is handed to the renderer with the session's viewers, as the pane declared it", () => {
+// The pointer a lane's frame is drawn with.
+const pointerOn = (r: ReturnType<typeof rig>, lane: Lane = "pane") =>
+  r.feeds.viewers()[S]!.lanes[lane]!.pointer;
+
+describe("the owner of a lane's pointer", () => {
+  test("is handed to the renderer with its lane's viewers, as the pane declared it, and to no other lane", () => {
     const r = rig();
     r.feeds.subscribe(S, paneOwnedBy(owned("a", "copy")).sub);
     r.feeds.subscribe(S, subscriber("statusline").sub);
-    expect(r.feeds.viewers()[S]!.pointer).toEqual({
+    expect(pointerOn(r)).toEqual({
       gestures: ["left", "hover"],
       hover: "copy",
     });
+    expect(pointerOn(r, "statusline")).toBeNull();
   });
 
   test("is the pane that spoke last, so the pointer follows the user from one pane to another", () => {
     const r = rig();
-    const hover = () => r.feeds.viewers()[S]!.pointer?.hover;
+    const hover = () => pointerOn(r)?.hover;
     r.feeds.subscribe(S, paneOwnedBy(owned("first")).sub);
     r.feeds.subscribe(S, paneOwnedBy(owned("second", "x")).sub);
     expect(hover()).toBe("x");
@@ -408,16 +414,16 @@ describe("the owner of a session's pointer", () => {
     leaveA();
     const owners = r.logged.filter((line) => line.includes("pointer owner="));
     expect(owners).toEqual([
-      `info feed sid="${S}" pointer owner="a" was=null`,
-      `info feed sid="${S}" pointer owner="b" was="a"`,
-      `info feed sid="${S}" pointer owner="a" was="b"`,
-      `info feed sid="${S}" pointer owner="b" was="a"`,
+      `info feed sid="${S}" lane=pane pointer owner="a" was=null`,
+      `info feed sid="${S}" lane=pane pointer owner="b" was="a"`,
+      `info feed sid="${S}" lane=pane pointer owner="a" was="b"`,
+      `info feed sid="${S}" lane=pane pointer owner="b" was="a"`,
     ]);
   });
 
   test("keeps a pane's facts while another owns, for the pane it returns to", () => {
     const r = rig();
-    const hover = () => r.feeds.viewers()[S]!.pointer?.hover;
+    const hover = () => pointerOn(r)?.hover;
     r.feeds.subscribe(S, paneOwnedBy(owned("a")).sub);
     const leaveB = r.feeds.subscribe(S, paneOwnedBy(owned("b", "b-first")).sub);
     r.feeds.pointerOf(S, owned("a", "a-last"));
@@ -431,7 +437,7 @@ describe("the owner of a session's pointer", () => {
   // from the pane the user is moving in is the pointer again.
   test("is not held by a pane whose stream reconnects while the user is in another", () => {
     const r = rig();
-    const hover = () => r.feeds.viewers()[S]!.pointer?.hover;
+    const hover = () => pointerOn(r)?.hover;
     r.feeds.subscribe(S, paneOwnedBy(owned("a", "a-old")).sub);
     r.feeds.subscribe(S, paneOwnedBy(owned("b", "b-over")).sub);
     r.feeds.subscribe(S, paneOwnedBy(owned("a", "a-restated")).sub);
@@ -448,9 +454,9 @@ describe("the owner of a session's pointer", () => {
       paneOwnedBy(owned("second", "y")).sub,
     );
     leaveSecond();
-    expect(r.feeds.viewers()[S]!.pointer?.hover).toBe("x");
+    expect(pointerOn(r)?.hover).toBe("x");
     expect(r.feeds.pointerOf(S, owned("first", "z"))).toEqual({ kind: "ok" });
-    expect(r.feeds.viewers()[S]!.pointer?.hover).toBe("z");
+    expect(pointerOn(r)?.hover).toBe("z");
   });
 
   test("keeps what it holds when the stream it replaced ends after it", () => {
@@ -461,7 +467,7 @@ describe("the owner of a session's pointer", () => {
     );
     r.feeds.subscribe(S, paneOwnedBy(owned("pane", "new")).sub);
     leaveOld();
-    expect(r.feeds.viewers()[S]!.pointer?.hover).toBe("new");
+    expect(pointerOn(r)?.hover).toBe("new");
   });
 
   test("ends with its subscription, and a report after that is refused saying why", () => {
@@ -469,7 +475,7 @@ describe("the owner of a session's pointer", () => {
     const leave = r.feeds.subscribe(S, paneOwnedBy(owned("a", "copy")).sub);
     r.feeds.subscribe(S, subscriber("pane").sub);
     leave();
-    expect(r.feeds.viewers()[S]!.pointer).toBeNull();
+    expect(pointerOn(r)).toBeNull();
     expect(r.feeds.pointerOf(S, owned("a", "late"))).toMatchObject({
       kind: "refused",
       reason: expect.stringContaining('no owner "a" follows session'),
@@ -485,7 +491,7 @@ describe("the owner of a session's pointer", () => {
     r.feeds.pointerOf(S, owned("a", "copy"));
     expect(r.owed).toHaveLength(1);
     await r.slot();
-    expect(r.handed.at(-1)![S]!.pointer?.hover).toBe("copy");
+    expect(r.handed.at(-1)![S]!.lanes.pane!.pointer?.hover).toBe("copy");
   });
 });
 
@@ -496,8 +502,8 @@ describe("a subscriber", () => {
     const line = subscriber("statusline");
     r.feeds.subscribe(S, pane.sub);
     r.feeds.subscribe(S, line.sub);
-    r.took([frame(S, "r1", "s1")]);
-    r.took([frame(S, "r2", "s1")]);
+    r.took([frame(S, "r1"), frame(S, "s1", "statusline", 2)]);
+    r.took([frame(S, "r2", "pane", 3), frame(S, "s1", "statusline", 4)]);
     expect(pane.sent).toEqual([ansiAnswer("r1"), ansiAnswer("r2")]);
     expect(line.sent).toEqual([ansiAnswer("s1", "statusline")]);
     expect(r.feeds.getStats()).toMatchObject({
@@ -507,62 +513,78 @@ describe("a subscriber", () => {
     });
   });
 
-  test("both lanes receive the same terminal bytes without a handoff, the pane lane alone with its hit map, and repeat frames are deduplicated", () => {
+  test("each lane is sent its own frame, the pane lane alone with its hit map, and a repeat of either is deduplicated", () => {
     const { feeds, took } = rig();
     const pane = subscriber("pane");
     const statusline = subscriber("statusline");
     feeds.subscribe(S, pane.sub);
     feeds.subscribe(S, statusline.sub);
-    const bar = body("answer");
-    took([
-      {
-        session: S,
-        frame: { kind: "drawn", receipt: 1 as EffectId, bar, handoff: null },
+    const drawn = (lane: Lane, receipt: number, text: string): PushedFrame => ({
+      session: S,
+      lane,
+      frame: {
+        kind: "drawn",
+        receipt: receipt as EffectId,
+        bar: { ...body(text), nextChange: receipt > 2 ? 45 : null },
       },
-    ]);
-    took([
-      {
-        session: S,
-        frame: {
-          kind: "drawn",
-          receipt: 2 as EffectId,
-          bar: { ...bar, nextChange: 45 },
-          handoff: null,
-        },
-      },
-    ]);
-    expect(pane.sent).toEqual([ansiAnswer("answer")]);
-    expect(statusline.sent).toEqual([ansiAnswer("answer", "statusline")]);
+    });
+    took([drawn("pane", 1, "pane bar"), drawn("statusline", 2, "line bar")]);
+    took([drawn("pane", 3, "pane bar"), drawn("statusline", 4, "line bar")]);
+    expect(pane.sent).toEqual([ansiAnswer("pane bar")]);
+    expect(statusline.sent).toEqual([ansiAnswer("line bar", "statusline")]);
   });
 
-  test("a failed draw uses the same refusal bytes in both lanes", () => {
+  test("a failed draw is refused to its own lane alone, in the same refusal bytes as any lane's", () => {
     const { feeds, took, settled } = rig();
     const pane = subscriber("pane");
     const statusline = subscriber("statusline");
     feeds.subscribe(S, pane.sub);
     feeds.subscribe(S, statusline.sub);
-    const failure: PushedFrame = {
+    const failure = (lane: Lane): PushedFrame => ({
       session: S,
+      lane,
       frame: { kind: "failed", message: "draw broke" },
-    };
-    took([failure, failure]);
+    });
+    const onPane = failure("pane");
+    took([onPane, onPane]);
     expect(pane.sent).toHaveLength(1);
-    expect(statusline.sent).toEqual(pane.sent);
+    expect(statusline.sent).toEqual([]);
     expect(JSON.parse(pane.sent[0]!)).toMatchObject({
       ok: false,
       code: "RENDER_FAILED",
       error: "draw broke",
     });
+    const onLine = failure("statusline");
+    took([onLine]);
+    expect(statusline.sent).toEqual(pane.sent);
     expect(settled).toEqual([
-      [failure, false],
-      [failure, false],
+      [onPane, false],
+      [onPane, false],
+      [onLine, false],
+    ]);
+  });
+
+  test("a lane whose last subscriber leaves retires its surface, while another lane still follows", () => {
+    const r = rig();
+    const leavePane = r.feeds.subscribe(S, subscriber("pane").sub);
+    const leaveLine = r.feeds.subscribe(S, subscriber("statusline").sub);
+    const second = r.feeds.subscribe(S, subscriber("pane").sub);
+    leavePane();
+    expect(r.left).toEqual([]);
+    second();
+    expect(r.left).toEqual([[S, "pane"]]);
+    expect(r.feeds.isWatched(S)).toBe(true);
+    leaveLine();
+    expect(r.left).toEqual([
+      [S, "pane"],
+      [S, "statusline"],
     ]);
   });
 
   test("joining later is handed the bar as it stands, at once", () => {
     const r = rig();
     r.feeds.subscribe(S, subscriber("pane").sub);
-    r.took([frame(S, "r1", "s1")]);
+    r.took([frame(S, "r1")]);
     const late = subscriber("pane");
     r.feeds.subscribe(S, late.sub);
     expect(late.sent).toEqual([ansiAnswer("r1")]);
@@ -607,7 +629,7 @@ describe("feed delivery", () => {
     const r = linkedFeeds();
     const old = subscriber("pane");
     const leave = r.feeds.subscribe(S, old.sub);
-    const staying = subscriber("statusline");
+    const staying = subscriber("pane");
     r.feeds.subscribe(S, staying.sub);
     await r.deliver(0);
     const [first] = r.due(0);
@@ -622,7 +644,7 @@ describe("feed delivery", () => {
     replacement.finish(true);
     await r.deliver(0.1);
     expect(r.due(0.1)).toEqual([]);
-    expect(staying.sent).toEqual(old.sent.map(withoutHits));
+    expect(staying.sent).toEqual(old.sent);
     expect(r.settled).toEqual([[first, true]]);
     expect(r.feeds.getStats()).toMatchObject({
       feeds: 1,
@@ -658,10 +680,31 @@ describe("feed delivery", () => {
     ]);
   });
 
+  test("a lane emptied while another lane follows releases its frame, and the pane that rejoins is drawn anew", async () => {
+    const r = linkedFeeds();
+    const old = subscriber("pane");
+    const leave = r.feeds.subscribe(S, old.sub);
+    const line = subscriber("statusline");
+    r.feeds.subscribe(S, line.sub);
+    await r.deliver(0);
+    r.due(0);
+
+    leave();
+    expect(r.left).toEqual([[S, "pane"]]);
+    expect(r.feeds.isWatched(S)).toBe(true);
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    expect(replacement.sent).toEqual([]);
+    await r.deliver(0.1);
+    expect(r.due(0.1).map(({ lane }) => lane)).toEqual(["statusline", "pane"]);
+    expect(replacement.sent).toEqual(old.sent);
+    expect(line.sent).toEqual(old.sent.map(withoutHits));
+  });
+
   test("a declined handover asks for a frame after an unchanged viewer delivery", async () => {
     const r = linkedFeeds();
     const leave = r.feeds.subscribe(S, subscriber("pane").sub);
-    r.feeds.subscribe(S, subscriber("statusline").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
     await r.deliver(0);
     const [first] = r.due(0);
 
@@ -689,7 +732,7 @@ describe("feed delivery", () => {
     r.feeds.note(S, { pane: "%1" }, 1);
     const old = subscriber("pane");
     const leave = r.feeds.subscribe(S, old.sub);
-    r.feeds.subscribe(S, subscriber("statusline").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
     await r.deliver(0);
     const [first] = r.due(0);
 
@@ -724,7 +767,7 @@ describe("feed delivery", () => {
     const worktree = rendererNameOf("worktree");
     const pane = deferredSubscriber("pane");
     feeds.subscribe(S, pane.sub);
-    const pushed = frame(S, "alternate", null);
+    const pushed = frame(S, "alternate");
     took([pushed], worktree);
     expect(routes).toEqual([{ renderer: worktree, session: S }]);
     expect(settled).toEqual([]);
@@ -735,14 +778,14 @@ describe("feed delivery", () => {
   test("one fast subscriber settles the candidate without waiting for a slower one", () => {
     const { feeds, took, settled } = rig();
     const pane = deferredSubscriber("pane");
-    const statusline = subscriber("statusline");
+    const fast = subscriber("pane");
     feeds.subscribe(S, pane.sub);
-    feeds.subscribe(S, statusline.sub);
+    feeds.subscribe(S, fast.sub);
     const pushed = frame();
 
     took([pushed]);
     expect(pane.sent).toEqual([ansiAnswer("r")]);
-    expect(statusline.sent).toEqual([ansiAnswer("s", "statusline")]);
+    expect(fast.sent).toEqual([ansiAnswer("r")]);
     expect(settled).toEqual([[pushed, true]]);
     pane.finish(false);
     expect(settled).toEqual([[pushed, true]]);
@@ -760,9 +803,9 @@ describe("feed delivery", () => {
       },
     });
     feeds.subscribe(S, { ...subscriber("pane").sub, frame: newestWins(out) });
-    const first = frame(S, "first", null, 1);
-    const second = frame(S, "second", null, 2);
-    const third = frame(S, "third", null, 3);
+    const first = frame(S, "first", "pane", 1);
+    const second = frame(S, "second", "pane", 2);
+    const third = frame(S, "third", "pane", 3);
 
     took([first, second, third]);
     expect(written).toEqual([ansiAnswer("first")]);
@@ -785,10 +828,10 @@ describe("feed delivery", () => {
     const { feeds, took, settled } = rig();
     const pane = deferredSubscriber("pane");
     feeds.subscribe(S, pane.sub);
-    const first = frame(S, "same", null, 1);
-    const second = frame(S, "same", null, 2);
-    const third = frame(S, "same", null, 3);
-    const fourth = frame(S, "same", null, 4);
+    const first = frame(S, "same", "pane", 1);
+    const second = frame(S, "same", "pane", 2);
+    const third = frame(S, "same", "pane", 3);
+    const fourth = frame(S, "same", "pane", 4);
 
     took([first]);
     expect(settled).toEqual([]);
@@ -813,8 +856,8 @@ describe("feed delivery", () => {
     const { feeds, took, settled } = rig();
     const pane = deferredSubscriber("pane");
     feeds.subscribe(S, pane.sub);
-    const first = frame(S, "retry", null, 1);
-    const second = frame(S, "retry", null, 2);
+    const first = frame(S, "retry", "pane", 1);
+    const second = frame(S, "retry", "pane", 2);
     took([first]);
     pane.finish(false);
     took([second]);
@@ -831,9 +874,9 @@ describe("feed delivery", () => {
     const { feeds, took, settled } = rig();
     const pane = deferredSubscriber("pane");
     feeds.subscribe(S, pane.sub);
-    const initial = frame(S, "initial", null, 1);
-    const different = frame(S, "changed", null, 2);
-    const returned = frame(S, "initial", null, 3);
+    const initial = frame(S, "initial", "pane", 1);
+    const different = frame(S, "changed", "pane", 2);
+    const returned = frame(S, "initial", "pane", 3);
     took([initial]);
     pane.finish(true);
     took([different, returned]);
@@ -855,9 +898,9 @@ describe("feed delivery", () => {
   test("unsubscribe and close settle only when all outstanding subscribers decline", () => {
     const { feeds, took, settled } = rig();
     const pane = deferredSubscriber("pane");
-    const statusline = deferredSubscriber("statusline");
+    const other = deferredSubscriber("pane");
     const leave = feeds.subscribe(S, pane.sub);
-    feeds.subscribe(S, statusline.sub);
+    feeds.subscribe(S, other.sub);
     const pushed = frame();
     took([pushed]);
 
@@ -865,7 +908,7 @@ describe("feed delivery", () => {
     pane.finish(true);
     expect(settled).toEqual([]);
     feeds.close();
-    statusline.finish(true);
+    other.finish(true);
     expect(settled).toEqual([[pushed, false]]);
   });
 
@@ -874,13 +917,13 @@ describe("feed delivery", () => {
     const pane = subscriber("pane", true, () => {
       throw new Error("broken subscriber");
     });
-    const statusline = subscriber("statusline");
+    const other = subscriber("pane");
     feeds.subscribe(S, pane.sub);
-    feeds.subscribe(S, statusline.sub);
+    feeds.subscribe(S, other.sub);
     const pushed = frame();
 
     took([pushed]);
-    expect(statusline.sent).toEqual([ansiAnswer("s", "statusline")]);
+    expect(other.sent).toEqual([ansiAnswer("r")]);
     expect(settled).toEqual([[pushed, true]]);
     expect(logged).toContainEqual(
       expect.stringContaining("send failed: Error: broken subscriber"),
@@ -901,8 +944,8 @@ describe("feed delivery", () => {
     const second = subscriber("pane");
     feeds.subscribe(S, first.sub);
     feeds.subscribe(T, second.sub);
-    const failed = frame(S, "bad", null);
-    const drawn = frame(T, "good", null);
+    const failed = frame(S, "bad");
+    const drawn = frame(T, "good");
 
     took([failed, drawn]);
     expect(JSON.parse(first.sent[0]!)).toMatchObject({
@@ -923,8 +966,7 @@ describe("feed delivery", () => {
   test("a failure building the pane's answer is the frame's, and the next session still presents", () => {
     const publish = publishingFrames(TEST_SIGNER);
     let first = true;
-    // The first body published is the bar of the first frame: the statusline's
-    // answer is of its handoff and never reads it.
+    // The first body published is the bar of the first frame.
     const { feeds, took, settled } = rig((body, source) => {
       const published = publish(body, source);
       if (!first) return published;
@@ -986,7 +1028,7 @@ describe("a subscription's lane", () => {
     expect(pane.refusals).toHaveLength(1);
     expect(line.refusals).toHaveLength(0);
     // The other lane streams on.
-    r.took([frame(S)]);
+    r.took([frame(S), frame(S, "s", "statusline", 2)]);
     expect(pane.sent).toEqual([]);
     expect(line.sent).toEqual([ansiAnswer("s", "statusline")]);
   });
@@ -1015,17 +1057,16 @@ test("measuring a window receives changed frames while display receipts and even
   const leave = feeds.subscribe(S, measure.sub);
   expect(followingOf(feeds.viewers()[S])).toEqual(new Set());
   expect(feeds.viewers()[S]).toMatchObject({
-    lanes: { window: { subscribers: 1, drawing: false } },
-    pointer: null,
+    lanes: { window: { subscribers: 1, drawing: false, pointer: null } },
   });
   const event: DaemonEvent = {
     kind: "act-failed",
     about: "act-failed",
     event: { text: "an act failed", at: 7 as Instant, answered: false },
   };
-  const first = frame(S, "menu open", null, 1, [event]);
-  const second = frame(S, "menu closed", null, 2, [event]);
-  const unchanged = frame(S, "menu closed", null, 3, [event]);
+  const first = frame(S, "menu open", "window", 1, [event]);
+  const second = frame(S, "menu closed", "window", 2, [event]);
+  const unchanged = frame(S, "menu closed", "window", 3, [event]);
   took([first, second, unchanged]);
   expect(measure.sent).toHaveLength(2);
   expect(settled).toEqual([
@@ -1057,9 +1098,9 @@ test("equal pane bytes with a different event require a new confirmed write", ()
     about: "act-failed",
     event: { ...event, revision: 2 },
   };
-  const older = frame(S, "warning", null, 1, [first]);
-  const newer = frame(S, "warning", null, 2, [second]);
-  const retry = frame(S, "warning", null, 3, [second]);
+  const older = frame(S, "warning", "pane", 1, [first]);
+  const newer = frame(S, "warning", "pane", 2, [second]);
+  const retry = frame(S, "warning", "pane", 3, [second]);
   took([older, newer]);
   expect(pane.sent).toEqual([ansiAnswer("warning"), ansiAnswer("warning")]);
   expect(settled).toEqual([]);
@@ -1076,7 +1117,7 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   pane.finish(true);
   expect(acknowledged).toEqual([first, second]);
 
-  const unchanged = frame(S, "warning", null, 4);
+  const unchanged = frame(S, "warning", "pane", 4);
   took([unchanged]);
   expect(pane.sent).toHaveLength(3);
   expect(settled.at(-1)).toEqual([unchanged, true]);
@@ -1091,8 +1132,8 @@ test("equal pane bytes with the same occurrence of another subject require a new
   const cut: DaemonEvent = { kind: "launch-pipes", about: "cut", event };
   const unread: DaemonEvent = { kind: "launch-pipes", about: "unread", event };
   took([
-    frame(S, "warning", null, 1, [cut]),
-    frame(S, "warning", null, 2, [unread]),
+    frame(S, "warning", "pane", 1, [cut]),
+    frame(S, "warning", "pane", 2, [unread]),
   ]);
   expect(pane.sent).toEqual([ansiAnswer("warning"), ansiAnswer("warning")]);
   pane.finish(true);
@@ -1101,8 +1142,8 @@ test("equal pane bytes with the same occurrence of another subject require a new
 });
 
 test.each([
-  ["pane", "warning"],
-  ["statusline", "handoff warning"],
+  ["pane", "pane warning"],
+  ["statusline", "statusline warning"],
 ] as const)(
   "a hot %s replay can acknowledge the event in its cached frame",
   (lane, text) => {
@@ -1114,7 +1155,7 @@ test.each([
       about: "renderer-ended",
       event: { text: "the renderer ended", at: 7 as Instant, answered: false },
     };
-    const offered = frame(S, "warning", "handoff warning", 1, [shown]);
+    const offered = frame(S, text, lane, 1, [shown]);
     took([offered]);
     initial.finish(false);
     expect(acknowledged).toEqual([]);
@@ -1151,8 +1192,8 @@ test("a slower pane confirmation reports its own event after another pane confir
     about: "renderer-ended",
     event: { ...event, revision: 2 },
   };
-  const older = frame(S, "old", null, 1, [first]);
-  const newer = frame(S, "new", null, 2, [second]);
+  const older = frame(S, "old", "pane", 1, [first]);
+  const newer = frame(S, "new", "pane", 2, [second]);
   took([older, newer]);
   faster.finish(false);
   faster.finish(true);
@@ -1191,7 +1232,7 @@ test("a pane write confirmed while its lane's refusal is flushing still answers 
     about: "act-failed",
     event: { text: "an act failed", at: 7 as Instant, answered: false },
   };
-  const offered = frame(S, "warning", null, 1, [shown]);
+  const offered = frame(S, "warning", "pane", 1, [shown]);
   took([offered]);
   feeds.switched({ [S]: { pane: false, statusline: true, window: false } });
   expect(settled).toEqual([[offered, false]]);
@@ -1241,14 +1282,18 @@ describe("each lane's answer", () => {
   });
 });
 
-describe("a window that owns the session's pointer", () => {
-  test("hands the renderer its pointer, as a pane does", () => {
+describe("a window that owns its lane's pointer", () => {
+  test("hands the renderer its pointer, as a pane does, and neither lane's pointer is the other's", () => {
     const r = rig();
     const view = subscriber("window");
     r.feeds.subscribe(S, { ...view.sub, owner: owned("w", "copy") });
-    expect(r.feeds.viewers()[S]!.pointer).toEqual({
+    r.feeds.subscribe(S, paneOwnedBy(owned("p", "menu")).sub);
+    expect(pointerOn(r, "window")).toEqual({
       gestures: ["left", "hover"],
       hover: "copy",
     });
+    expect(pointerOn(r)?.hover).toBe("menu");
+    expect(r.feeds.pointerOf(S, owned("p", "moved"))).toEqual({ kind: "ok" });
+    expect(pointerOn(r, "window")?.hover).toBe("copy");
   });
 });

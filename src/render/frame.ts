@@ -90,7 +90,7 @@ export function parseFrame<Link>(wire: WireFrame<Link>): Frame<Link> {
 }
 
 // [LAW:one-source-of-truth] Rows drawn in `frame`'s place: the diagnostics
-// viewer, or the handoff line. They are still text, so a feed drawing them waits
+// viewer. They are still text, so a feed drawing them waits
 // a still period, not the hidden bar's beat, though that bar can move again once
 // it is back. They drew none of its sources, so none of them are pending here.
 export function standIn(frame: Frame, rows: readonly Row[]): Frame {

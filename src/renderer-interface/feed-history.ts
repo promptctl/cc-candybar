@@ -3,7 +3,7 @@
 // already. The host and renderer keep the same projection of that frame.
 import { compareStructural } from "mobx";
 import { isPlainObject } from "../config/loader/validate-core.js";
-import { LANES, answerOf, type Lane } from "../config/lanes.js";
+import { LANES, type Lane } from "../config/lanes.js";
 import type { Frame, Row, WireFrame } from "../render/frame.js";
 import type { Instant, Tick } from "../utils/instant.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -25,11 +25,10 @@ interface FeedContent {
 
 export type FeedComparison =
   | { readonly kind: "failed"; readonly message: string }
-  | {
-      readonly kind: "drawn";
-      readonly bar: FeedContent;
-      readonly handoff: FeedContent | null;
-    };
+  | { readonly kind: "drawn"; readonly bar: FeedContent };
+
+// Each lane's last attempted frame: every surface is drawn its own.
+export type FeedComparisons = Readonly<Partial<Record<Lane, FeedComparison>>>;
 
 function contentOf({ depth, rows }: WireFrame): FeedContent {
   return { depth, rows: rows.map((row) => row.runs) };
@@ -38,41 +37,24 @@ function contentOf({ depth, rows }: WireFrame): FeedContent {
 export function comparisonOf(frame: FeedFrame): FeedComparison {
   return frame.kind === "failed"
     ? { kind: "failed", message: frame.message }
-    : {
-        kind: "drawn",
-        bar: contentOf(frame.bar),
-        handoff: frame.handoff && contentOf(frame.handoff),
-      };
+    : { kind: "drawn", bar: contentOf(frame.bar) };
 }
 
-// Compute each distinct presentation's comparison only when a subscriber
-// follows it. Several surfaces may draw the same bar.
+// Whether a lane's frame changed from the one drawn for it before.
 export function changedDraw(
-  previous: FeedComparison | null,
+  previous: FeedComparison | undefined,
   current: FeedComparison,
-): (lane: Lane) => boolean {
+): boolean {
   if (current.kind === "failed")
-    return () =>
-      previous?.kind !== "failed" || previous.message !== current.message;
-  if (previous?.kind !== "drawn") return () => true;
-  let bar: boolean | undefined;
-  let handoff: boolean | undefined;
-  const barChanged = () =>
-    (bar ??= !compareStructural(previous.bar, current.bar));
-  const statusChanged = () =>
-    (handoff ??=
-      previous.handoff === null && current.handoff === null
-        ? barChanged()
-        : !compareStructural(
-            previous.handoff ?? previous.bar,
-            current.handoff ?? current.bar,
-          ));
-  const choices = { resp: barChanged, statusline: statusChanged };
-  return (lane) => answerOf(choices, lane)();
+    return previous?.kind !== "failed" || previous.message !== current.message;
+  return (
+    previous?.kind !== "drawn" || !compareStructural(previous.bar, current.bar)
+  );
 }
 
-// A changed draw contributes one tick per presentation it changed, including
-// a draw a subscriber later refused. Receipt and rate have distinct owners.
+// A changed draw contributes one tick per lane whose frame it changed,
+// including a draw a subscriber later refused. Receipt and rate have distinct
+// owners.
 export interface FeedUpdate {
   readonly sequence: number;
   readonly session: SessionId;
@@ -85,7 +67,7 @@ export interface FeedHistory {
   readonly viewers: SessionViewers;
   readonly schedule: FeedSchedule;
   readonly last: Tick | null;
-  readonly frame: FeedComparison | null;
+  readonly frames: FeedComparisons;
   readonly rates: Readonly<Partial<Record<Lane, readonly Tick[]>>>;
 }
 
@@ -130,19 +112,25 @@ function isSchedule(value: unknown): boolean {
 
 // [LAW:parse-dont-validate] A draw and its comparison refer to exactly
 // the same attempt. Check the pairing before the host can publish a frame,
-// including an answer which omitted the history field altogether.
+// including an answer which omitted the history field altogether. A session's
+// attempt is one frame per lane, each lane at most once.
 export function validFeedUpdates(value: unknown, frames: unknown): boolean {
   if (!Array.isArray(frames)) return false;
   if (value === undefined) return frames.length === 0;
   if (!Array.isArray(value)) return false;
   const attempts = new Set<string>();
+  const drawn = new Set<string>();
   for (const frame of frames) {
     if (
       !isPlainObject(frame) ||
       typeof frame.session !== "string" ||
-      attempts.has(frame.session)
+      typeof frame.lane !== "string" ||
+      !Object.hasOwn(LANES, frame.lane)
     )
       return false;
+    const key = JSON.stringify([frame.session, frame.lane]);
+    if (drawn.has(key)) return false;
+    drawn.add(key);
     attempts.add(frame.session);
   }
   const seen = new Set<string>();
@@ -220,13 +208,17 @@ export function validFeedResumes(value: unknown): boolean {
               Array.isArray(ticks) &&
               ticks.every(Number.isFinite),
           ) &&
-          (h.frame === null ||
-            (isPlainObject(h.frame) &&
-              (h.frame.kind === "failed"
-                ? typeof h.frame.message === "string"
-                : h.frame.kind === "drawn" &&
-                  isPlainObject(h.frame.bar) &&
-                  Array.isArray(h.frame.bar.rows)))))
+          isPlainObject(h.frames) &&
+          Object.entries(h.frames).every(
+            ([lane, frame]) =>
+              Object.hasOwn(LANES, lane) &&
+              isPlainObject(frame) &&
+              (frame.kind === "failed"
+                ? typeof frame.message === "string"
+                : frame.kind === "drawn" &&
+                  isPlainObject(frame.bar) &&
+                  Array.isArray(frame.bar.rows)),
+          ))
       );
     })
   );

@@ -865,17 +865,34 @@ describe("ids a renderer mints", () => {
   };
   const drawn = (receipt: number) => ({
     session: SESSION,
+    lane: "pane" as const,
     frame: {
       kind: "drawn" as const,
       receipt: receipt as EffectId,
       bar,
-      handoff: null,
     },
   });
   const dropped = {
     session: SESSION,
+    lane: "window" as const,
     frame: { kind: "failed" as const, message: "no frame drawn" },
   };
+  // An output carrying `frames`, with the feed update every attempted frame
+  // is owed.
+  let sequence = 0;
+  const fed = (
+    frames: readonly (typeof dropped | ReturnType<typeof drawn>)[],
+  ) => ({
+    frames,
+    feedUpdates: [
+      {
+        sequence: ++sequence,
+        session: SESSION,
+        schedule: { kind: "waiting" as const, next: null },
+        changed: frames.map(({ lane }) => lane),
+      },
+    ],
+  });
   const done = (of: EffectId): EventInput => ({
     ...due,
     event: {
@@ -911,7 +928,7 @@ describe("ids a renderer mints", () => {
     const output = await reply(host, child, due, {
       ...NOTIFIED,
       effects: [effect],
-      frames: [dropped, drawn(1)],
+      ...fed([dropped, drawn(1)]),
     });
     expect(output.frames[0]).toEqual(dropped);
     const hostEffect = output.effects[0]!.id;
@@ -943,11 +960,11 @@ describe("ids a renderer mints", () => {
     await reply(host, child, pin, {
       ...PINNED,
       effects: [effect],
-      frames: [drawn(7)],
+      ...fed([drawn(7)]),
     });
     const valid = await reply(host, child, due, {
       ...NOTIFIED,
-      frames: [drawn(7)],
+      ...fed([drawn(7)]),
     });
     const frame = valid.frames[0]!.frame;
     if (frame.kind !== "drawn") throw new Error("output lost its frame");
@@ -960,7 +977,7 @@ describe("ids a renderer mints", () => {
     const first = host.children[0]!;
     first.say(startedLine(9001));
     const draw = (child: Child) =>
-      reply(host, child, due, { ...NOTIFIED, frames: [drawn(7)] });
+      reply(host, child, due, { ...NOTIFIED, ...fed([drawn(7)]) });
     const previous = (await draw(first)).frames[0]!.frame;
     if (previous.kind !== "drawn") throw new Error("the first frame was lost");
     first.exit(CRASHED);

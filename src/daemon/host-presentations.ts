@@ -6,8 +6,11 @@ import {
   type EffectId,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
+import { LANE_NAMES, perLane, type Lane } from "../config/lanes.js";
 import {
   idleAfterDraw,
+  REQUEST_SURFACE,
+  retiresWithFeed,
   MAX_PRESENTED_SESSIONS,
   motionAfter,
   surfaceAfter,
@@ -23,13 +26,16 @@ interface Slot {
   image?: PresentedSession;
   readonly exportProblems: Partial<Record<DrawSurface, string | null>>;
   revision: number;
-  feed: object;
+  // [LAW:no-ambient-temporal-coupling] Each lane's feed lifetime: a frame
+  // drawn for a lane whose last subscriber has since left cannot write its
+  // surface's image.
+  readonly feeds: Record<Lane, object>;
   readonly began: number;
   motionProblem?: string | null;
 }
 interface Pinned {
   readonly slot: Slot;
-  readonly feed: object;
+  readonly feeds: Readonly<Record<Lane, object>>;
   readonly prior?: PresentedSession;
   readonly observed: WeakSet<object>;
 }
@@ -54,17 +60,21 @@ export class HostPresentations {
     this.live.delete(session);
   }
 
-  stopFeed(session: SessionId): void {
+  // A lane's last subscriber left: its surface is no longer shown, so its
+  // image retires with the frames still on their way to it. Claude Code's
+  // statusline is still drawn on request, so its image stands.
+  stopFeed(session: SessionId, lane: Lane): void {
     const slot = this.live.get(session);
     if (!slot) return;
-    slot.feed = {};
-    delete slot.exportProblems.feed;
-    if (!slot.image?.surfaces.feed) return;
-    const { feed: _retired, ...surfaces } = slot.image.surfaces;
+    slot.feeds[lane] = {};
+    if (!retiresWithFeed(lane)) return;
+    delete slot.exportProblems[lane];
+    if (!slot.image?.surfaces[lane]) return;
+    const { [lane]: _retired, ...surfaces } = slot.image.surfaces;
     slot.image = {
       ...slot.image,
       surfaces,
-      exportProblem: slot.exportProblems.request ?? slot.motionProblem ?? null,
+      exportProblem: exportProblemOf(slot),
     };
   }
 
@@ -88,7 +98,7 @@ export class HostPresentations {
     const prior = this.live.get(session) ?? {
       exportProblems: {},
       revision: 0,
-      feed: {},
+      feeds: perLane(() => ({})),
       began: this.order,
     };
     this.live.delete(session);
@@ -143,7 +153,7 @@ export class HostPresentations {
         reader.set(slot, observed);
       }
       const prior = slot.image;
-      pinned.set(session, { slot, prior, observed, feed: slot.feed });
+      pinned.set(session, { slot, prior, observed, feeds: { ...slot.feeds } });
       if (!prior) {
         if (slot.revision)
           offers.push({
@@ -154,12 +164,14 @@ export class HostPresentations {
           });
         continue;
       }
-      const { request, feed } = prior.surfaces;
+      const shown = LANE_NAMES.flatMap((lane) => {
+        const held = prior.surfaces[lane];
+        return held ? [[lane, held] as const] : [];
+      });
       const facts = [
         prior.motion,
         prior.idle,
-        ...(request ? [request] : []),
-        ...(feed ? [feed] : []),
+        ...shown.map(([, held]) => held),
       ];
       const resume = facts.some((fact) => !observed.has(fact));
       if (!draws && !resume) continue;
@@ -167,10 +179,9 @@ export class HostPresentations {
         session,
         revision: slot.revision,
         motion: prior.motion.order,
-        bases: {
-          ...(request && { request: request.order }),
-          ...(feed && { feed: feed.order }),
-        },
+        bases: Object.fromEntries(
+          shown.map(([lane, held]) => [lane, held.order]),
+        ),
         ...(resume && { resume: prior }),
       });
       if (resume)
@@ -212,6 +223,7 @@ export class HostPresentations {
           id: EffectId,
           session: SessionId,
           by: DrawSurface,
+          fed: boolean,
           proposal?: ProposedPresentation,
         ) => {
           if (!proposal) return;
@@ -224,6 +236,7 @@ export class HostPresentations {
             this.proposed(
               session,
               by,
+              fed,
               order,
               input.tick,
               base,
@@ -234,10 +247,16 @@ export class HostPresentations {
         };
         for (const effect of output.effects)
           if (effect.kind === "present")
-            stage(effect.id, effect.session, "request", effect.proposal);
-        for (const { session, frame } of output.frames)
+            stage(
+              effect.id,
+              effect.session,
+              REQUEST_SURFACE,
+              false,
+              effect.proposal,
+            );
+        for (const { session, lane, frame } of output.frames)
           if (frame.kind === "drawn")
-            stage(frame.receipt, session, "feed", frame.proposal);
+            stage(frame.receipt, session, lane, true, frame.proposal);
         return (id, delivered) => {
           const take = pending.get(id);
           pending.delete(id);
@@ -249,6 +268,8 @@ export class HostPresentations {
   private proposed(
     session: SessionId,
     by: DrawSurface,
+    // Whether a feed drew it, so its lane's feed lifetime gates it.
+    fed: boolean,
     order: number,
     tick: Tick,
     base: Pinned,
@@ -270,7 +291,7 @@ export class HostPresentations {
       let drawnIdle: object | undefined;
       if (
         this.live.get(session) === slot &&
-        (by !== "feed" || slot.feed === base.feed)
+        (!fed || slot.feeds[by] === base.feeds[by])
       ) {
         const current = slot.image;
         if (order > (current?.surfaces[by]?.order ?? -1)) {
@@ -280,11 +301,7 @@ export class HostPresentations {
           slot.image = {
             session,
             surfaces: { ...current?.surfaces, [by]: nextSurface },
-            exportProblem:
-              slot.exportProblems.request ??
-              slot.exportProblems.feed ??
-              slot.motionProblem ??
-              null,
+            exportProblem: exportProblemOf(slot),
             motion: latest ? nextMotion : current.motion,
             idle:
               !current || order >= current.idle.order
@@ -308,3 +325,11 @@ export class HostPresentations {
     };
   }
 }
+
+// The first export problem of the surfaces the image holds, then its motion's.
+const exportProblemOf = (slot: Slot): string | null =>
+  LANE_NAMES.map((lane) => slot.exportProblems[lane]).find(
+    (problem) => problem != null,
+  ) ??
+  slot.motionProblem ??
+  null;

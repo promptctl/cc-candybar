@@ -31,7 +31,7 @@ import {
   type DrawnFrame,
 } from "../src/dsl/render";
 import { LOADING_GLYPH, type RenderedLine } from "../src/dsl/node-registry";
-import { holdMotion, restoreMotion, SessionEffects } from "../src/render/effect";
+import { holdEffects, holdMotion, restoreEffects, SessionEffects } from "../src/render/effect";
 import { holdLayout, restoreLayout } from "../src/render/held-layout";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
@@ -176,11 +176,11 @@ test("a fresh narrow peer holds a pending cell at its drawn width during a neigh
     expect(textOf(accepted.frame)).toContain("DEPARTING");
     home.unanswer();
     peer.unanswer();
-    const saved = {layout: holdLayout(accepted.memory.record, "resolved"), motion: holdMotion(accepted.memory.motion)};
+    const saved = {layout: holdLayout(accepted.memory.record, "resolved"), motion: holdMotion(accepted.memory.motion), effects: holdEffects(accepted.memory.motion)};
     const restored: typeof saved = JSON.parse(JSON.stringify(saved));
     const now = {visible: false, elapsed: 8};
     const expected = home.draw(34, {...now, effects});
-    const actual = peer.draw(34, {...now, effects: new SessionEffects("s", restoreMotion(restored.motion)),
+    const actual = peer.draw(34, {...now, effects: new SessionEffects("s", {...restored.motion, ...restoreEffects(restored.effects)}),
       record: restoreLayout(restored.layout, {config: reload, loadKey: "resolved"})});
     expect(actual.frame.pending).toContain("doc");
     expect(textOf(actual.frame)).toContain(LOADING_GLYPH);

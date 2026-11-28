@@ -22,14 +22,12 @@ import { type SessionId } from "../daemon/foundations/session-id";
 import type { EffectId } from "../renderer-interface/interface";
 import { repoQuestions } from "../config/repo-question";
 import {
-  writableRoles,
   type CacheEntry,
   type RenderCache,
   type DslRenderState,
   type SessionHold,
   type SessionView,
 } from "./render-cache";
-import { roleOf } from "../daemon/foundations/sighting-roles";
 import { partsOf } from "../dsl/parts.js";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { standIn, type Frame } from "../render/frame.js";
@@ -50,7 +48,6 @@ import { transcriptLossText } from "../utils/transcript-loss.js";
 import type { PendingRead } from "../var-system/types.js";
 import { isPending } from "../utils/outcome.js";
 import {
-  editGlobalsOf,
   laneSwitches,
   declaredLanes,
   resolveEffectiveGlobals,
@@ -58,14 +55,11 @@ import {
 import type { PassageFrame } from "../render/effect.js";
 import {
   feedsFact,
-  LANES,
   LANE_NAMES,
-  perLane,
   ANSWERING,
   type Drawing,
   type Lane,
   type LaneFeeds,
-  type LaneSwitches,
   type DeclaredLanes,
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
@@ -75,6 +69,7 @@ import { inClickMode } from "../render/click-mode-frame.js";
 import {
   CLICK_MODE_KEY,
   HOVER_KEY,
+  clickModeOf,
   modeInForce,
   modeIsOpen,
 } from "../config/click-mode.js";
@@ -85,7 +80,6 @@ import {
   clickErrorAt,
   type ClickErrorRecord,
 } from "../daemon/foundations/click-error.js";
-import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   aboutKind,
   aboutSubject,
@@ -98,8 +92,6 @@ import {
   diagnosticCopies,
   type SourcedText,
   diagnosticsProjection,
-  handoffRows,
-  type DiagnosticList,
   viewedIndex,
   viewerRowCap,
   viewerRows,
@@ -124,7 +116,11 @@ import type {
   FrameCandidate,
   PortableDraw,
 } from "./presented-frames.js";
-import type { ProposedPresentation } from "../renderer-interface/presentation.js";
+import {
+  REQUEST_SURFACE,
+  type DrawSurface,
+  type ProposedPresentation,
+} from "../renderer-interface/presentation.js";
 import {
   renderFailure,
   rendererFailureOf,
@@ -139,12 +135,13 @@ export interface RendererParts {
   readonly worldStates: WorldStates;
   // What the feeds know of who watches each session, which a request's
   // answer hands the bar to and shows the rate of.
-  readonly feeds: Pick<Feeds, "following" | "feedsOf">;
+  readonly feeds: Pick<Feeds, "feedsOf">;
 }
 
-// One frame of a subscribed session, drawn from its latest request at this
-// instant, by the render a request gets. The host presents the bar or its
-// statusline handoff, and the bar moves when its effects say it does.
+// One frame of a subscribed session for one surface, drawn from its latest
+// request at this instant, by the render a request gets, and from that
+// surface's own pointer and accepted presentation. The bar moves when its
+// effects say it does.
 // [LAW:parse-dont-validate] The request the session's view is declared with
 // crossed the checkpoint when it arrived, so a frame draws by it without
 // asking again. Null while the session has no view: a frame opens none.
@@ -158,14 +155,15 @@ export interface RendererParts {
 export function renderFrame(
   parts: RendererParts,
   sessionId: SessionId,
+  // The surface the frame is drawn for: its lane.
+  surface: Lane,
   fps: number,
   // The instant the frame is drawn for, and the tick of the turn drawing it.
   readings: Readings,
-  // Which lanes follow the session and draw it now, and what each was sent
-  // of late, as the feed knows them.
-  following: ReadonlySet<Lane>,
+  // What each lane following the session was sent of late, as the feed
+  // knows them.
   feeds: LaneFeeds,
-  // What the follower that owns the session's pointer says of it, if one does.
+  // What the surface's follower says of the pointer over it, if one does.
   pointer: Pointer | null,
   prepare: PrepareDelivery,
 ): FeedDraw | null {
@@ -173,17 +171,16 @@ export function renderFrame(
   try {
     using setup = setUpFrame(parts, sessionId, readings, facts);
     if (setup === null) return null;
-    const { drawn, evaluated, cellBreaks, lanes, candidate, eventsShown } =
-      drawRender(parts, setup, { by: "feed", fps }, feeds, pointer);
-    const bar = drawn.body;
-    const { frame: statusline } = statuslineOf(
+    const { drawn, evaluated, cellBreaks, candidate, eventsShown } = drawRender(
+      parts,
       setup,
-      parts.sessionState,
-      drawn,
-      handedOffTo(lanes, following),
+      { by: "feed", fps },
+      surface,
+      feeds,
+      pointer,
     );
-    const handoff = statusline === bar ? null : statusline;
     const { id: receipt, ...presentation } = prepare({
+      drawer: "feed",
       candidate,
       clickShown: null,
     });
@@ -193,8 +190,7 @@ export function renderFrame(
         displayed: displayedConfig(setup),
         receipt,
         ...presentation,
-        bar,
-        handoff,
+        bar: drawn.body,
         displayedEvents: eventsShown,
       },
       evaluated,
@@ -444,12 +440,16 @@ function setUpDraw(
 export function drawRender(
   parts: RendererParts,
   setup: RenderSetup,
+  // Who asked for the draw, which says what its answer still owes.
   drawing: Drawing,
+  // [LAW:one-source-of-truth] The surface it is shown on, whose accepted
+  // presentation it continues and records.
+  surface: DrawSurface,
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
-  // The pointer of the follower that owns the session's, which only a fed bar has:
-  // the request path draws for no pointer of its own.
+  // The pointer over that surface, which only a fed surface's follower
+  // reports: the request path draws for no pointer of its own.
   pointer: Pointer | null,
 ): {
   drawn: DrawnBar;
@@ -460,8 +460,6 @@ export function drawRender(
   // renderer's end, an act that failed, a task that threw), which an answer
   // carrying them marks answered.
   eventsShown: readonly DaemonEvent[] | undefined;
-  // Which animation lanes the session's settings switch on, as drawn.
-  lanes: LaneSwitches;
   candidate: FrameCandidate;
 } {
   const {
@@ -633,13 +631,11 @@ export function drawRender(
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
   // indicator reads it as the `diagnostics` projection and the viewer pages
   // the same object, so the two cannot disagree within a frame. Walk warnings
-  // come from the session's accepted frame on this surface and the other
-  // surface's accepted frame on the same config.
-  const config = presentations.configOf(state.config);
-  const target = view.presentationTargets[drawing.by];
+  // come from the session's accepted frame on this surface.
+  const target = view.presentationTargets[surface];
   const diagnostics = collectDiagnostics(
     sessionId,
-    drawing.by,
+    surface,
     errors,
     questions,
     [
@@ -649,20 +645,16 @@ export function drawRender(
         copy: warning.message,
       })),
       // A render warning is about its whole description.
-      ...presentations
-        .warnings(sessionId, drawing.by, config)
-        .map(({ key, warning }) => ({
-          about: aboutText(warning.kind, key),
-          text: warning.message,
-          copy: warning.message,
-        })),
+      ...presentations.warnings(sessionId, surface).map(({ key, warning }) => ({
+        about: aboutText(warning.kind, key),
+        text: warning.message,
+        copy: warning.message,
+      })),
     ],
   );
   // [LAW:one-source-of-truth] The mode this draw is in, once: the session's,
-  // unless the surface of the follower that owns the pointer (a link's, with none)
-  // delivers its gesture itself. Hover, the frame's links and whether the idle
-  // clock runs all read this one value; the idle close resets the session's
-  // own, which is what a lane that does not deliver the gesture reads.
+  // unless this surface's pointer (a link's, with none) delivers its gesture
+  // itself. Hover and the frame's links read this one value.
   const mode = modeInForce(
     sessionState.get(sessionId, CLICK_MODE_KEY),
     surfaceOf(pointer),
@@ -692,7 +684,7 @@ export function drawRender(
   // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
   // computation to drift from it.
   const renderOpts = renderOptionsOf(effective, width);
-  const effects = presentations.effects(sessionId);
+  const effects = presentations.effects(sessionId, surface);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts.
   // [LAW:no-silent-failure] What the walk had to settle for itself and could
@@ -716,7 +708,7 @@ export function drawRender(
       {
         ...effective,
         effects,
-        record: presentations.layout(sessionId, drawing.by, target)?.record,
+        record: presentations.layout(sessionId, surface, target)?.record,
         idleSince: idleSince ?? undefined,
       },
     );
@@ -773,7 +765,7 @@ export function drawRender(
       ? frame
       : standIn(
           frame,
-          viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
+          viewerRows(diagnostics, viewing, sessionId, surface, geometry),
         );
   const fx = memory.motion.frame;
   // Each placement wearing its own effect, on its own clock; `-` for none.
@@ -817,7 +809,7 @@ export function drawRender(
   const diagnosticsRecord = frameWarnings(warnings, faults);
   const change = warningChanges(
     diagnosticsRecord,
-    presentations.diagnostics(sessionId, drawing.by),
+    presentations.diagnostics(sessionId, surface),
   );
   noteFacts(facts, {
     faults: change.faults,
@@ -872,22 +864,17 @@ export function drawRender(
       // from; a viewer standing in for the body drew none.
       waited: viewing === null ? waited : [],
       document,
-      viewerOpen: viewing !== null,
-      diagnostics,
-      geometry,
     },
     evaluated,
     cellBreaks,
     clickShown,
     eventsShown: eventsShown.length > 0 ? eventsShown : undefined,
-    lanes,
     candidate: {
       session: sessionId,
-      by: drawing.by,
+      surface,
       target,
       loadKey: state.loadKey,
       frame: {
-        config,
         layout: { record: memory.record, segments },
         motion: memory.motion,
         diagnostics: diagnosticsRecord,
@@ -895,9 +882,14 @@ export function drawRender(
         menu: {
           tick: readings.tick,
           // [LAW:no-ambient-temporal-coupling] A click mode the user left on
-          // is open state as a menu is: the same idle period ends it.
+          // is open state as a menu is: the same idle period ends it. The
+          // period is the session's, so it reads the stored mode, never the
+          // mode in force on this one surface.
           shown:
-            frame.rows.some((row) => row.kind === "menu") || modeIsOpen(mode),
+            frame.rows.some((row) => row.kind === "menu") ||
+            modeIsOpen(
+              clickModeOf(sessionState.get(sessionId, CLICK_MODE_KEY)),
+            ),
           timeoutS: effective.menuTimeout,
         },
       },
@@ -1022,23 +1014,18 @@ const alone = (warning: StandingWarning): Standing => ({
   about: aboutKind(warning.kind),
 });
 
-// What one render drew: the body — the bar, or the viewer in its place — and
-// what the statusline's handoff line is drawn from: whether the body is the
-// viewer, the draw's one diagnostic list, and the geometry.
+// What one render drew: the body — the bar, or the viewer in its place — what
+// it owes, and the document it drew from.
 interface DrawnBar {
   readonly body: Frame;
   readonly waited: readonly PendingRead[];
   readonly document: WorldState;
-  readonly viewerOpen: boolean;
-  readonly diagnostics: DiagnosticList;
-  readonly geometry: DiagnosticGeometry;
 }
 
 // A render request's answer: the bar drawn for its client.
 export interface RequestAnswer {
   readonly displayed?: DisplayedConfig;
-  // What this request's client is shown: the statusline's frame to Claude
-  // Code's statusline, the bar to a client drawing it itself.
+  // What this request's client is shown: the bar.
   readonly frame: Frame;
   readonly displayedEvents?: readonly DaemonEvent[];
   // [LAW:single-enforcer] What the frame still owes, said by the draw that
@@ -1063,25 +1050,15 @@ export function answerRequest(
     facts,
     presentation,
   );
-  const { drawn, clickShown, eventsShown, lanes, candidate } = drawRender(
+  const { drawn, clickShown, eventsShown, candidate } = drawRender(
     parts,
     setup,
     ANSWERING,
+    REQUEST_SURFACE,
     feeds.feedsOf(sessionId, time.tick),
     null,
   );
-  const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
-  // A `frames` display draws the bar itself; Claude Code's statusline hands
-  // it to the lanes drawing it elsewhere.
-  const toStatusline = roleOf(presentation.client ?? null) === "statusline";
-  const { frame, waited } = toStatusline
-    ? statuslineOf(setup, parts.sessionState, drawn, elsewhere)
-    : { frame: drawn.body, waited: drawn.waited };
-  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How
-  // long the turn took is the host's `drew=`, timed around the turn.
-  noteFacts(facts, {
-    handoff: (toStatusline ? elsewhere : []).join(",") || "-",
-  });
+  const { body: frame, waited } = drawn;
   const awaiting = awaitingOf(waited, drawn.document);
   // [LAW:nothing-unseen] What the frame owes, by name; `-` for nothing.
   noteFacts(facts, {
@@ -1093,6 +1070,7 @@ export function answerRequest(
     displayedEvents: eventsShown,
     awaiting,
     delivery: {
+      drawer: ANSWERING.by,
       candidate,
       clickShown,
     },
@@ -1102,6 +1080,9 @@ export function answerRequest(
 // What a frame that reached its client showed, which its delivery records:
 // what its copy clicks copy and the session's click error.
 export interface Delivery {
+  // Who drew it: a feed's frame has no render event, so its accepted faults
+  // are noted on the turn.
+  readonly drawer: Drawing["by"];
   readonly candidate: FrameCandidate;
   readonly clickShown: ClickErrorRecord | null;
   readonly portable?: PortableDraw;
@@ -1129,54 +1110,4 @@ export function deliver(
   if (clickShown !== null)
     answeredClickError(parts.sessionState, candidate.session, clickShown);
   return accepted;
-}
-
-// What Claude Code's statusline shows of `drawn`: the bar, or — while lanes
-// draw it `elsewhere` — the handoff line, which says where, with the bar's
-// indicator after it. [LAW:one-source-of-truth] The indicator reads the draw's
-// one list, and its click opens the one viewer: while it is open the statusline
-// shows it, the same body the lanes draw. [LAW:single-enforcer] It says what
-// the frame it returns drew as not answered yet, so the frame and what it owes
-// are decided together: the handoff line stands in for the bar and draws none
-// of the bar's.
-function statuslineOf(
-  { sessionId, state, view }: RenderSetup,
-  picks: SessionStateRW,
-  drawn: DrawnBar,
-  elsewhere: readonly Lane[],
-): { readonly frame: Frame; readonly waited: readonly PendingRead[] } {
-  const first = elsewhere[0];
-  if (first === undefined || drawn.viewerOpen)
-    return { frame: drawn.body, waited: drawn.waited };
-
-  const effective = view.source.effective();
-  const defaultsAfterReset = state.remainingLanes.get(effective.preset);
-  if (defaultsAfterReset === undefined)
-    throw new Error(
-      `No lane reset defaults for resolved preset '${effective.preset}'`,
-    );
-  const editGlobals = editGlobalsOf(state.config, (key) =>
-    picks.get(sessionId, key),
-  );
-  const remaining = perLane(
-    (lane) =>
-      editGlobals[LANES[lane].switch.setting] ?? defaultsAfterReset[lane],
-  );
-  return {
-    frame: standIn(
-      drawn.body,
-      handoffRows(
-        laneHandoff(
-          sessionId,
-          writableRoles(view.configAccess()),
-          [first, ...elsewhere.slice(1)],
-          remaining,
-        ),
-        drawn.diagnostics,
-        sessionId,
-        drawn.geometry,
-      ),
-    ),
-    waited: [],
-  };
 }

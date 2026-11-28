@@ -4,6 +4,7 @@
 import type { Lane } from "../config/lanes.js";
 import type {
   EventInput,
+  FeedFrame,
   RendererOutput,
 } from "../renderer-interface/interface.js";
 import {
@@ -96,9 +97,9 @@ export class HostFeedHistory {
         problem: (session: SessionId) => string | null,
       ) => {
         if (!output.feedUpdates?.length) return;
-        const frames = new Map(
-          output.frames.map(({ session, frame }) => [session, frame]),
-        );
+        const frames = new Map<SessionId, Array<[Lane, FeedFrame]>>();
+        for (const { session, lane, frame } of output.frames)
+          frames.set(session, [...(frames.get(session) ?? []), [lane, frame]]);
         for (const update of output.feedUpdates) {
           const { session, schedule, changed } = update;
           const slot = this.watched.get(session);
@@ -115,7 +116,7 @@ export class HostFeedHistory {
             throw new Error(
               `feed for ${session} reported a schedule without viewers`,
             );
-          const frame = frames.get(session);
+          const drawn = frames.get(session);
           let rates = history?.rates ?? {};
           if (update.viewers || changed?.length) {
             const kept: Partial<Record<Lane, readonly Tick[]>> = {};
@@ -135,10 +136,17 @@ export class HostFeedHistory {
             viewers: seen,
             schedule: slot.latest.schedule,
             rates,
-            last: frame ? tick : (history?.last ?? null),
-            frame: frame ? comparisonOf(frame) : (history?.frame ?? null),
+            last: drawn ? tick : (history?.last ?? null),
+            // A lane that left takes its last frame with it.
+            frames: Object.fromEntries(
+              (Object.keys(seen.lanes) as Lane[]).flatMap((lane) => {
+                const now = drawn?.find(([of]) => of === lane)?.[1];
+                const kept = now ? comparisonOf(now) : history?.frames[lane];
+                return kept ? [[lane, kept]] : [];
+              }),
+            ),
           };
-          if (frame) slot.exportProblem = problem(session);
+          if (drawn) slot.exportProblem = problem(session);
           if (update.viewers) slot.installed = true;
         }
       },

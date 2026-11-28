@@ -98,6 +98,7 @@ function hostOver(
 const commandSession = sessionIdOf("command-session");
 const offeredFrame: PushedFrame = {
   session: commandSession,
+  lane: "pane",
   frame: { kind: "failed", message: "an unrelated frame" },
 };
 const offeredEffect: Effect = {
@@ -431,6 +432,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
   const frames: PushedFrame[] = [];
   const pushed: PushedFrame = {
     session: sessionIdOf("s"),
+    lane: "pane",
     frame: {
       kind: "drawn",
       receipt: 1 as EffectId,
@@ -441,7 +443,6 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
         motion: "still",
         pending: [],
       },
-      handoff: null,
     },
   };
   const host = rendererHost(
@@ -485,10 +486,10 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
   const receipt = 1 as EffectId;
   const pushed: PushedFrame = {
     session,
+    lane: "pane",
     frame: {
       kind: "drawn", receipt,
       bar: { depth: "none", rows: [], nextChange: null, motion: "still", pending: [] },
-      handoff: null,
     },
   };
   const writes: Array<(ok: boolean) => void> = [];
@@ -1066,6 +1067,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
             frames: [
               {
                 session,
+                lane: "pane",
                 frame: {
                   kind: "drawn",
                   receipt: 1 as EffectId,
@@ -1076,7 +1078,6 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
                     motion: "still",
                     pending: [],
                   },
-                  handoff: null,
                 },
               },
             ],

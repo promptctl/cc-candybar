@@ -751,9 +751,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watchingChanged: (session, watching) => {
       feedHistory.watching(session, watching);
-      if (!watching) presentations.stopFeed(session);
       reconcileTmux();
     },
+    laneLeft: (session, lane) => presentations.stopFeed(session, lane),
     deliver: async (make) => {
       const sent = await Promise.all(
         [...renderers.values()].map(({ renderer }) =>

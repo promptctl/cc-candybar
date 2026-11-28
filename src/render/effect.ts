@@ -383,10 +383,10 @@ function closingFlash(
   return () => idle;
 }
 
-// [LAW:types-are-the-program] A session's motion as its last kept frame left
-// it: one value a frame reads and returns its successor of. It is the
-// session's, not a surface's: every surface of a session animates in phase.
-interface MotionState {
+// [LAW:types-are-the-program] A session's animation clock as its last kept
+// frame left it. It is the session's, not a surface's: every surface of a
+// session animates in phase.
+export interface SessionClock {
   // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
   // changed to its current value: the effect's own t = 0 is a recorded fact,
   // never inferred from when renders happened to arrive.
@@ -398,10 +398,16 @@ interface MotionState {
   // never its reading, so no loop jumps phase. The host clock itself before
   // the session's first frame.
   readonly anchor: Timeline;
-  // The same fact for each placement wearing its own effect, by placement id,
-  // kept for the placements the latest frame drew: one that stopped being
-  // drawn starts its effect again at t = 0 when it is drawn again, as the
-  // effect comes into force for it again.
+}
+
+// What one surface's last kept frame drew under that clock. Each surface draws
+// its own placements and rows, so what one surface drew never decides whether
+// a placement fades in or keeps its effect on another.
+export interface SurfaceEffects {
+  // The same fact as the clock's `inForce` for each placement wearing its own
+  // effect, by placement id, kept for the placements the latest frame drew:
+  // one that stopped being drawn starts its effect again at t = 0 when it is
+  // drawn again, as the effect comes into force for it again.
   readonly placements: ReadonlyMap<string, InForce>;
   // The effects made for the rows the latest frame drew, by row and scope (the
   // bar's, or one placement's), with the name each was made for. Each frame
@@ -411,6 +417,8 @@ interface MotionState {
   readonly made: ReadonlyMap<string, ReadonlyMap<Scope, RowEffect>>;
 }
 
+type MotionState = SessionClock & SurfaceEffects;
+
 export interface SessionMotion extends MotionState {
   // [LAW:nothing-unseen] What the latest frame wore, for the render's event.
   readonly frame: EffectFrame;
@@ -418,46 +426,48 @@ export interface SessionMotion extends MotionState {
 
 // Only these facts affect the next draw. Per-draw timing and diagnostics
 // belong to the turn that produced them.
-export interface HeldMotion extends Pick<MotionState, "anchor" | "inForce"> {
+export type HeldMotion = SessionClock;
+export interface HeldEffects {
   readonly placements: ReadonlyArray<readonly [string, InForce]>;
   readonly made: ReadonlyArray<
     readonly [string, ReadonlyArray<readonly [Scope, RowEffect]>]
   >;
 }
 
-export function holdMotion({
+export const holdMotion = ({ anchor, inForce }: SessionClock): HeldMotion => ({
   anchor,
   inForce,
+});
+
+export const holdEffects = ({
   placements,
   made,
-}: MotionState): HeldMotion {
-  return {
-    anchor,
-    inForce,
-    placements: [...placements],
-    made: [...made].map(([row, scopes]) => [row, [...scopes]]),
-  };
-}
+}: SurfaceEffects): HeldEffects => ({
+  placements: [...placements],
+  made: [...made].map(([row, scopes]) => [row, [...scopes]]),
+});
 
-export function restoreMotion({
-  anchor,
-  inForce,
+export const restoreEffects = ({
   placements,
   made,
-}: HeldMotion): MotionState {
-  return {
-    anchor,
-    inForce,
-    placements: new Map(placements),
-    made: new Map(made.map(([row, scopes]) => [row, new Map(scopes)])),
-  };
-}
+}: HeldEffects): SurfaceEffects => ({
+  placements: new Map(placements),
+  made: new Map(made.map(([row, scopes]) => [row, new Map(scopes)])),
+});
 
-const NO_MOTION: SessionMotion = {
-  inForce: null,
-  anchor: Timeline.play(0),
+export const NO_EFFECTS: SurfaceEffects = {
   placements: new Map(),
   made: new Map(),
+};
+
+export const NO_CLOCK: SessionClock = {
+  inForce: null,
+  anchor: Timeline.play(0),
+};
+
+const NO_MOTION: SessionMotion = {
+  ...NO_CLOCK,
+  ...NO_EFFECTS,
   frame: {
     effect: EFFECT_FLOOR,
     t: 0,
@@ -473,10 +483,11 @@ const NO_MOTION: SessionMotion = {
 };
 
 /**
- * [LAW:no-shared-mutable-globals] One session's effect memory, owned by whoever
- * keeps the session (the renderer, per session id; a compile-only render, for
- * the one render it draws). A frame reads it (`clockAt`, `motion`) and returns
- * its successor; its only writer is `keep`, called by the turn that drew it.
+ * [LAW:no-shared-mutable-globals] One surface's effect memory under its
+ * session's clock, owned by whoever keeps the session (the renderer, per
+ * session id and surface; a compile-only render, for the one render it
+ * draws). A frame reads it (`clockAt`, `motion`) and returns its successor;
+ * its only writer is `keep`, called by the turn that drew it.
  */
 export class SessionEffects<Line> {
   constructor(

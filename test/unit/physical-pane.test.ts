@@ -40,6 +40,7 @@ function rig(existing?: ManagedPane) {
   const feeds = new FrameFeeds({
     shown: () => true,
     watchingChanged: () => {},
+    laneLeft: () => {},
     log: () => {},
     requestChanged: () => {},
     publishFrame: () => {
@@ -127,8 +128,7 @@ test("hidden and unknown placement retain the acknowledged handoff, move once on
   r.observe(true, false);
   expect(r.feeds.viewers()[a]).toMatchObject({
     shown: false,
-    lanes: { pane: { subscribers: 1, drawing: true } },
-    pointer: null,
+    lanes: { pane: { subscribers: 1, drawing: true, pointer: null } },
   });
   r.surfaces.observed(source.socket, null);
   expect(r.feeds.getStats().subscribers).toBe(1);

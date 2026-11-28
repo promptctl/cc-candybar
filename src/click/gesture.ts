@@ -64,9 +64,9 @@ export function parseGesture(text: string): Asked<Gesture> {
 export const HOVER = "hover";
 export type Delivered = GestureName | typeof HOVER;
 
-// [LAW:one-source-of-truth] What the follower that owns a session's pointer
-// says of it: the gestures its surface delivers, and the action the pointer
-// last stood on (null: none). It lives as long as the owner's subscription and
+// [LAW:one-source-of-truth] What the follower that owns a lane's pointer says
+// of it: the gestures its surface delivers, and the action the pointer last
+// stood on (null: none). It lives as long as the owner's subscription and
 // is never session state.
 export interface Pointer {
   readonly gestures: readonly Delivered[];

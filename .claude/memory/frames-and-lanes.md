@@ -4,7 +4,7 @@
 
 A subscription turns a connection into a stream of frames. Data and frames travel separately: render requests bring data, and frames are drawn from what the owners stored. A request's answer goes only to its own client and is never pushed, so every pushed frame was drawn by the feed.
 
-The host owns who watches and what each subscriber was sent; the renderer owns when frames are drawn. The host hands the renderer every session's viewers whole, so a lost or reordered delta can never leave a feed open that nobody watches, and it compares each frame per subscriber, sending only what changed for that subscriber's lane.
+The host owns who watches and what each subscriber was sent; the renderer owns when frames are drawn. The host hands the renderer every session's viewers whole, so a lost or reordered delta can never leave a feed open that nobody watches. A feed draws each followed lane its own frame, because a frame is drawn for one surface's pointer, width and accepted layout and serves no other, and the host sends a lane's frame only to that lane's subscribers, and only what changed.
 
 While someone watches a session, the host can hand its latest encoded frame to a joining subscriber. Replacing a viewer with the same lane and visibility needs no additional draw after that handover. The last viewer leaving releases the frame. Missing bytes or a declined handover ask for a draw through the viewer declaration, including when a sole viewer's departure and replacement share one mailbox slot.
 
@@ -38,11 +38,11 @@ A renderer's lane declaration sets the desired pane policy. The host's latest ac
 
 A lane's switch is read where the config is, in the renderer, and every output declares each viewed session's switches, a turn that threw included, so the host's gate ends a lane switched off while the render throws. The host gates on the switches the last output declared: a subscribe to a lane that's off is refused at once, and a subscriber whose lane goes off is ended, told why. A session with no view yet has no switch to read, since only an event opens a view, so its subscriber is admitted and the switches its view opens with decide.
 
-While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one small row instead of a second bar: a button that draws it back there, and the diagnostics indicator, so an error is seen even where the lane's bar isn't. Turning the switch on alone draws nothing.
+Claude Code's statusline keeps drawing the whole bar on request while other lanes follow the session: every surface draws its own frame, so no surface waits on another or stands in for it. Turning the switch on alone draws nothing.
 
 ## A follower's pointer
 
-A follower that draws a session reports what it delivers (for the pane, the gestures its tmux `mouse` setting lets through, and hover) and the region under the pointer, and the host keeps those per subscription. Only a lane whose frames say where a pointer acts (the pane's hit map, the window's runs) may own the pointer, because the hover it reports is the region it found there. A report is not an input of the session's frames: the renderer draws from it as it draws from the viewers, and a follower that stops drawing takes its facts with it. tmux's `mouse` is read per pane, since a session's value overrides the global one, from the same `list-panes` call that places the pane (a format spells it 1 or 0), so it costs the tick no process of its own, and the pane turns the mouse modes on when it starts drawing and restores them on exit.
+A follower that draws a session reports what it delivers (for the pane, the gestures its tmux `mouse` setting lets through, and hover) and the region under the pointer, and the host keeps those per subscription. Only a lane whose frames say where a pointer acts (the pane's hit map, the window's runs) may report the pointer, because the hover it reports is the region it found there. A report is an input of its own lane's frame alone: the renderer draws that lane from it as it draws from the viewers, and a follower that stops drawing takes its facts with it. tmux's `mouse` is read per pane, since a session's value overrides the global one, from the same `list-panes` call that places the pane (a format spells it 1 or 0), so it costs the tick no process of its own, and the pane turns the mouse modes on when it starts drawing and restores them on exit.
 
 ## The attach launcher
 

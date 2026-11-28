@@ -59,7 +59,7 @@ import type {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 36;
+export const RENDERER_WIRE_VERSION = 37;
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
@@ -331,14 +331,11 @@ export type Notification =
     };
 
 // [LAW:one-source-of-truth] Who watches one session's frames, as the host
-// derives it from its own sources: each lane's subscribers and whether any of
-// them draws the bar now, and
+// derives it from its own sources: each lane's subscribers, whether any of
+// them draws the bar now and the pointer over that lane's surface, and
 // whether the session's pane is on a screen.
 export interface SessionViewers {
   readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
-  // [LAW:one-source-of-truth] Where the follower that owns the session's
-  // pointer last said it is, whichever lane it follows: null while none does.
-  readonly pointer: Pointer | null;
   readonly shown: boolean;
   // The host's draw demand revision. A new viewer the host could not hand a
   // frame still needs one when the counts read as they did. The v8 wire name
@@ -349,6 +346,10 @@ export interface SessionViewers {
 export interface LaneViewers {
   readonly subscribers: number;
   readonly drawing: boolean;
+  // [LAW:one-source-of-truth] Where the lane's follower that spoke last said
+  // the pointer is over this surface: null while none reports one. Each
+  // surface's frame is drawn from its own pointer, never another surface's.
+  readonly pointer: Pointer | null;
 }
 
 // Every session someone watches, whole: a session absent has no viewer.
@@ -565,9 +566,8 @@ interface RendererDeclaration extends RendererDiagnostics {
   readonly stored: readonly StoreWrite[];
 }
 
-// [LAW:types-are-the-program] A feed's draw has one bar. A handoff stands
-// in for it only in Claude Code's statusline. A failed draw carries its
-// reason to whichever presentation publishes it.
+// [LAW:types-are-the-program] A feed's draw is one surface's bar. A failed
+// draw carries its reason to that surface's subscribers.
 export type FeedFrame<Body = WireFrame> =
   | {
       readonly kind: "drawn";
@@ -575,17 +575,17 @@ export type FeedFrame<Body = WireFrame> =
       readonly displayed?: DisplayedConfig;
       readonly receipt: EffectId;
       readonly bar: Body;
-      readonly handoff: Body | null;
-      // The bar and its statusline handoff share the draw's diagnostics.
       readonly displayedEvents?: readonly DaemonEvent[];
     }
   | { readonly kind: "failed"; readonly message: string };
 
-// A frame a feed drew, for the session's subscribers.
+// A frame a feed drew for one surface of a session, for that lane's
+// subscribers.
 // [LAW:decomposition] Every frame a feed draws is pushed: whether one changed
 // is the host's to judge, per subscriber, against what that one was sent.
 export interface PushedFrame {
   readonly session: SessionId;
+  readonly lane: Lane;
   // Read through `parseFrame`: Infinity crosses as null.
   readonly frame: FeedFrame;
 }

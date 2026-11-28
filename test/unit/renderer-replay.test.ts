@@ -1,7 +1,8 @@
 import { oversizedRendererHistory, oversizedSession } from "../helpers/oversized-renderer-history";
 import wire24 from "../fixtures/renderer-wire-24.json";
 import { SAMPLE_REGION } from "../../scripts/lib/draw-fixtures/sample-region.js";
-import type { EventInput, RendererBoot } from "../../src/renderer-interface/interface";
+import type { Effect, Event, EventInput, RendererBoot, RequestId } from "../../src/renderer-interface/interface";
+import { contextOf, snapshotOf, worldStateOf } from "../helpers/main-renderer";
 import { RECORDING_VERSION, type RecordingEntry } from "../../src/renderer-interface/recording";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import { RENDERER_WIRE_VERSION } from "../../src/renderer-interface/wire";
@@ -228,4 +229,91 @@ test("wire 28 reproduces its renderer-owned startup trim before the first input"
   await expect(
     replayRecording(linesOf({ ...checkpoint, result: { kind: "built" } }, end)),
   ).rejects.toThrow("recording boot differs at result.diagnostics");
+});
+
+// [LAW:verifiable-goals] Before wire 37 a recording keyed its presentation by
+// drawer and held one pointer per session. Replay reads its requests as the
+// statusline's, so a recording of request draws still verifies, and refuses
+// one whose outputs carry feed frames, drawn once for every lane.
+describe("a recording from before each lane drew its own frame", () => {
+  const context = contextOf("legacy-surfaces");
+  const session = context.hookData.session_id;
+  const events: Event[] = [
+    {
+      kind: "start",
+      sessions: [{ context, worldState: worldStateOf(session) }],
+      viewers: {},
+      configs: [
+        {
+          origin: context.requested,
+          config: snapshotOf('{segments:{a:{template:"a legacy mark"}},root:{h:["a"]}}'),
+        },
+      ],
+    },
+    { kind: "request", context, id: 1 as RequestId },
+    {
+      kind: "viewers",
+      viewers: {
+        [session]: {
+          lanes: { pane: { subscribers: 1, drawing: true, pointer: null } },
+          shown: true,
+          joined: 1,
+        },
+      },
+    },
+  ];
+  // Each event's turn, as this wire records it.
+  async function turns() {
+    const built = mainRendererOf(settings);
+    if (built.kind === "refused") throw new Error("fixture renderer refused construction");
+    const recorded = [];
+    for (const [order, event] of events.entries()) {
+      // The host's presentation turn, so the request's draw proposes one.
+      const input: EventInput = {
+        kind: "event", event, at: 1 as Instant, tick: 0 as Tick,
+        presentation: { order: order + 1, sessions: [] },
+      };
+      const json = JSON.stringify(input);
+      const output = await built.renderer.answer(JSON.parse(json));
+      recorded.push({ kind: "turn", input: JSON.parse(json), output: JSON.parse(JSON.stringify(output)) });
+    }
+    return recorded;
+  }
+  // The same turns as wire 36 recorded them: the request's drawn effects held
+  // in the session's motion, the lanes it handed the bar to, and the
+  // session's one pointer.
+  function legacy(recorded: Awaited<ReturnType<typeof turns>>) {
+    const [start, request, viewers] = structuredClone(recorded);
+    const { record } = request!.output;
+    record.splice(record.findIndex(([key]: [string]) => key === "owed"), 0, ["handoff", "-"]);
+    const present = request!.output.effects.find((effect: Effect) => effect.kind === "present");
+    const { surface, motion } = present.proposal;
+    const { effects, ...value } = surface.value;
+    present.proposal = {
+      ...present.proposal,
+      surface: { ...surface, value },
+      motion: { ...motion, value: { ...motion.value, ...effects } },
+    };
+    const watched = viewers!.input.event.viewers[session];
+    delete watched.lanes.pane.pointer;
+    watched.pointer = null;
+    return [start!, request!, viewers!];
+  }
+  const replayed = (wireVersion: number, recorded: readonly unknown[]) =>
+    replayRecording(linesOf({ ...boot, wireVersion }, ...recorded, { ...end, turns: recorded.length }));
+
+  test("replays its request's draw as the statusline's and its session pointer as no lane's", async () => {
+    const recorded = await turns();
+    expect(recorded[1]!.output.effects.some((effect: Effect) => effect.kind === "present")).toBe(true);
+    await expect(replayed(36, legacy(recorded))).resolves.toEqual({ turns: 3 });
+    await expect(replayed(36, recorded)).rejects.toThrow("recording turn 2 differs at output.effects");
+  });
+
+  test("refuses outputs that carry feed frames", async () => {
+    const recorded = legacy(await turns());
+    const due = { kind: "turn", input: { kind: "event", at: 1, tick: 0, event: { kind: "due" } }, output: { ...recorded[1]!.output, effects: [], frames: [{}] } };
+    await expect(replayed(36, [...recorded, due])).rejects.toThrow(
+      "recording line 5 carries feed frames from wire 36",
+    );
+  });
 });

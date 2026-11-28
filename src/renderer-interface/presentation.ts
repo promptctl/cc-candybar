@@ -1,17 +1,29 @@
 // [LAW:no-ambient-temporal-coupling] A draw's order is the host's order of
 // dispatch. Its delivery token belongs to the worker and can restart at boot.
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { Drawing } from "../config/lanes.js";
+import type { Lane } from "../config/lanes.js";
 import type { HeldLayout } from "../render/held-layout.js";
-import type { HeldMotion } from "../render/effect.js";
+import type { HeldEffects, HeldMotion } from "../render/effect.js";
 import type { RenderWarning } from "../dsl/render.js";
 import type { Tick } from "../utils/instant.js";
 import type { Crosses } from "./crosses.js";
 
-export type DrawSurface = Drawing["by"];
+// [LAW:types-are-the-program] What a presentation belongs to: the surface it
+// was shown on, never who asked for the draw. Hover, a transition and what a
+// copy click copies are facts of one surface, so a record two surfaces shared
+// would be wrong for one of them.
+export type DrawSurface = Lane;
+// The surface a render request's answer is shown on: Claude Code's statusline.
+export const REQUEST_SURFACE: DrawSurface = "statusline";
+// [LAW:single-enforcer] Whether a surface's presentation retires when its
+// lane's last subscriber leaves: every surface's but the one requests still
+// draw, which is still shown.
+export const retiresWithFeed = (surface: DrawSurface): boolean =>
+  surface !== REQUEST_SURFACE;
 export const MAX_PRESENTED_SESSIONS = 256;
 export interface HeldSurface {
   readonly layout: HeldLayout;
+  readonly effects: HeldEffects;
   readonly copies: ReadonlyArray<readonly [string, string]>;
   readonly warnings: readonly RenderWarning[];
   readonly faults: string;
@@ -69,6 +81,10 @@ export interface SurfaceChange {
   readonly placements?: Changes<HeldLayout["placements"]>;
   readonly rules?: HeldLayout["rules"];
   readonly passages?: HeldLayout["passages"];
+  readonly effects?: {
+    readonly placements?: Changes<HeldEffects["placements"]>;
+    readonly made?: Changes<HeldEffects["made"]>;
+  };
   readonly copies?: Changes<HeldSurface["copies"]>;
   readonly warnings?: readonly RenderWarning[];
   readonly faults?: string;
@@ -77,8 +93,6 @@ export interface SurfaceChange {
 export interface MotionChange {
   readonly anchor?: HeldMotion["anchor"];
   readonly inForce?: HeldMotion["inForce"];
-  readonly placements?: Changes<HeldMotion["placements"]>;
-  readonly made?: Changes<HeldMotion["made"]>;
 }
 
 export type Proposal<Value, Change> =
@@ -126,8 +140,16 @@ export function surfaceAfter(
   change: SurfaceChange,
 ): HeldSurface {
   if (Object.keys(change).length === 0) return prior;
-  const { placements, copies, rules, passages, source, warnings, faults } =
-    change;
+  const {
+    placements,
+    copies,
+    rules,
+    passages,
+    source,
+    effects,
+    warnings,
+    faults,
+  } = change;
   return {
     layout:
       source || placements || rules || passages !== undefined
@@ -139,6 +161,15 @@ export function surfaceAfter(
             passages: passages === undefined ? prior.layout.passages : passages,
           }
         : prior.layout,
+    effects: effects
+      ? {
+          placements: applyEntries(
+            prior.effects.placements,
+            effects.placements,
+          ),
+          made: applyEntries(prior.effects.made, effects.made),
+        }
+      : prior.effects,
     copies: applyEntries(prior.copies, copies),
     warnings: warnings ?? prior.warnings,
     faults: faults ?? prior.faults,
@@ -153,8 +184,6 @@ export function motionAfter(
   return {
     anchor: change.anchor ?? prior.anchor,
     inForce: change.inForce === undefined ? prior.inForce : change.inForce,
-    placements: applyEntries(prior.placements, change.placements),
-    made: applyEntries(prior.made, change.made),
   };
 }
 

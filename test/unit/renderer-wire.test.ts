@@ -191,11 +191,11 @@ test("both presentation paths carry the displayed event in their turn's answer",
     frames: [
       {
         session,
+        lane: "pane",
         frame: {
           kind: "drawn",
           receipt: 2 as EffectId,
           bar: frame,
-          handoff: null,
           displayedEvents,
         },
       },

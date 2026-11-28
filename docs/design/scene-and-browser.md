@@ -71,7 +71,7 @@ A page can live in a tab, in iTerm2's browser pane under the Claude Code session
 
 - **A tab**: `open <url>`. Day one.
 - **iTerm2 browser pane**: split, set the Browser profile, load the URL after the welcome page. The Python API does it today in a 30-line script; reimplementing iTerm2's protobuf-over-AppleScript handshake in-app was judged not tiny by the one review that looked, and the user who has iTerm2 has Python. Ship the script as a recipe in the docs and a menu action that runs it when iTerm2 is detected from the client's terminal hint. iTerm2 stays optional.
-- **The floating panel**: the `window` surface. A follower feeds a Swift WebKit panel over stdio from the daemon's unix socket, with no loopback listener, and the panel follows the terminal window through the Accessibility API, docked under it or inset over a reserved tmux pane. It replaces the statusline as the tmux pane does (`handsOff: true`).
+- **The floating panel**: the `window` surface. A follower feeds a Swift WebKit panel over stdio from the daemon's unix socket, with no loopback listener, and the panel follows the terminal window through the Accessibility API, docked under it or inset over a reserved tmux pane. It is drawn its own frame beside the statusline, as the tmux pane is.
 
 ## 8. Order of work
 

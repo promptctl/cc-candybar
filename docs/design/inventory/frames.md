@@ -20,7 +20,6 @@ A draw produces a frame: rows of styled runs in the colours drawn at its depth (
 - `src/render/picker.ts` and `src/render/carousel.ts`: their options, steps and close controls.
 - `src/render/diagnostics.ts`: `copyLink` and `viewerLink`.
 - `src/config/repo-question.ts`: the repository question, signed.
-- `src/renderer/lane-handoff.ts`: the handoff line.
 
 **Not built from it:**
 - `src/install/index.ts`: the printed `hello-world` test URL, which relies on bare-copy parsing.

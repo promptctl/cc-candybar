@@ -20,7 +20,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import type { RenderedLine } from "../src/dsl/node-registry";
-import { SessionEffects, holdMotion, restoreMotion } from "../src/render/effect";
+import { SessionEffects, holdMotion, holdEffects, restoreEffects } from "../src/render/effect";
 import type { FrameRecord } from "../src/render/frame-memory";
 import { holdLayout, restoreLayout } from "../src/render/held-layout";
 import { decideEffectName, type EffectName } from "../src/themes";
@@ -124,13 +124,13 @@ test("a new renderer resumes a narrow dissolving row at its accepted phase", () 
     expect(linkUrls(home.render(visible, homeFx, true, "shimmer"))).toContain(LINK);
     const leaving = home.draw(gone, homeFx, true, "shimmer");
     expect(leaving.frame.rows.length).toBeGreaterThan(1);
-    const held = { layout: holdLayout(leaving.memory.record, "same load"), motion: holdMotion(leaving.memory.motion) };
+    const held = { layout: holdLayout(leaving.memory.record, "same load"), motion: holdMotion(leaving.memory.motion), effects: holdEffects(leaving.memory.motion) };
     const wire = JSON.stringify(held);
     expect(wire).not.toContain(LINK);
     const arrived: typeof held = JSON.parse(wire);
     expect(restoreLayout(arrived.layout, {config: reload, loadKey: "other load"})).toBeUndefined();
     const predecessor = restoreLayout(arrived.layout, {config: reload, loadKey: "same load"});
-    const peerFx = new SessionEffects<RenderedLine>("s", restoreMotion(arrived.motion));
+    const peerFx = new SessionEffects<RenderedLine>("s", {...arrived.motion, ...restoreEffects(arrived.effects)});
     for (const elapsed of [7, 15, 30]) {
       const input = { ...gone, when: at(S + elapsed) };
       const expected = home.render(input, homeFx, true, "shimmer");

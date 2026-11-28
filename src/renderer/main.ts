@@ -419,11 +419,14 @@ export function mainRenderer(
         if (event.outcome.kind === "ok") {
           const accepted = deliver(parts, event.of, delivery);
           if (
-            delivery.candidate.by === "feed" &&
+            delivery.drawer === "feed" &&
             accepted !== null &&
             accepted.faults !== null
           )
-            record.push(["surface", "feed"], ["faults", accepted.faults]);
+            record.push(
+              ["surface", delivery.candidate.surface],
+              ["faults", accepted.faults],
+            );
         }
         return;
       }
@@ -882,24 +885,24 @@ function build(
     );
     return () => {
       unwatch();
-      // [LAW:single-enforcer] A feed's pin is its life: releasing it is the
-      // one moment the feed stops drawing, so its drawn copies retire with it.
-      renderCache.stopDrawing(sessionId, "feed");
       unhold();
     };
   };
   const feeds: Feeds = new Feeds({
-    draw: (sessionId, fps, readings, following, laneFeeds, pointer, prepare) =>
+    draw: (sessionId, surface, fps, readings, laneFeeds, pointer, prepare) =>
       renderFrame(
         parts,
         sessionId,
+        surface,
         fps,
         readings,
-        following,
         laneFeeds,
         pointer,
         prepare,
       ),
+    // [LAW:single-enforcer] A lane leaving is the one moment its surface
+    // stops being drawn, so that surface's drawn copies retire with it.
+    left: (sessionId, lane) => renderCache.stopDrawing(sessionId, lane),
     pin,
     log,
     periods: FEED_PERIODS,

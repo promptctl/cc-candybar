@@ -75,7 +75,7 @@ test("delivered frames become sparse bases, even if their renderer dies before r
   expect(book.inspect()).toBeUndefined();
   settle(sent.id, true);
   const accepted = book.inspect()!;
-  expect(accepted.surfaces.request!.order).toBe(
+  expect(accepted.surfaces.statusline!.order).toBe(
     firstTurn.input.presentation!.order,
   );
   const fresh: PresentationReader = new WeakMap();
@@ -89,7 +89,7 @@ test("delivered frames become sparse bases, even if their renderer dies before r
   expect(answer.frame).toEqual(sent.frame);
   expect(answer.proposal?.surface).toEqual({
     kind: "change",
-    base: accepted.surfaces.request!.order,
+    base: accepted.surfaces.statusline!.order,
     change: {},
   });
   expect(answer.proposal?.motion).toEqual({
@@ -110,8 +110,9 @@ test("a late delivery advances only its surface, and retired surfaces reject out
   const output = answered(await main.answer(producing.input));
   const present = presentOf(output.effects);
   const whole = present.proposal!;
+  // A request's answer presents on the statusline; a feed draws its lane.
   const proposed = (
-    by: DrawSurface,
+    by: DrawSurface | "request",
     proposal: ProposedPresentation,
     receipt: number,
   ): Pick<RendererOutput, "effects" | "frames"> => {
@@ -123,18 +124,18 @@ test("a late delivery advances only its surface, and retired surfaces reject out
           frames: [
             {
               session,
+              lane: by,
               frame: {
                 kind: "drawn",
                 receipt: id,
                 bar: present.frame,
-                handoff: null,
                 proposal,
               },
             },
           ],
         };
   };
-  const stage = (by: DrawSurface, receipt: number) => {
+  const stage = (by: DrawSurface | "request", receipt: number) => {
     const draw = book.turn(
       reader,
       by === "request" ? request : { kind: "due" },
@@ -146,7 +147,7 @@ test("a late delivery advances only its surface, and retired surfaces reject out
     };
   };
   const requestA = stage("request", 1);
-  const feed = stage("feed", 2);
+  const feed = stage("pane", 2);
   const requestB = stage("request", 3);
   requestB.accept();
   const expiry = book.turn(reader, { kind: "due" })!;
@@ -161,8 +162,8 @@ test("a late delivery advances only its surface, and retired surfaces reject out
   requestA.accept();
   expect(book.inspect()).toMatchObject({
     surfaces: {
-      request: { order: requestB.order },
-      feed: { order: feed.order },
+      statusline: { order: requestB.order },
+      pane: { order: feed.order },
     },
     motion: { order: requestB.order },
   });
@@ -170,11 +171,27 @@ test("a late delivery advances only its surface, and retired surfaces reject out
     order: expiry.input.presentation!.order,
     value: expired,
   });
-  const unwatched = stage("feed", 4);
-  book.shared.stopFeed(session);
+  const unwatched = stage("pane", 4);
+  book.shared.stopFeed(session, "pane");
   unwatched.accept();
-  expect(book.inspect()!.surfaces.feed).toBeUndefined();
-  const retired = stage("request", 5);
+  expect(book.inspect()!.surfaces.pane).toBeUndefined();
+  expect(book.inspect()!.surfaces.statusline).toEqual(
+    expect.objectContaining({ order: requestB.order }),
+  );
+  // The statusline lane's feed leaving stops its frames in flight, and the
+  // statusline's image stands, since requests still draw it.
+  const followed = stage("statusline", 5);
+  book.shared.stopFeed(session, "statusline");
+  followed.accept();
+  expect(book.inspect()!.surfaces.statusline).toEqual(
+    expect.objectContaining({ order: requestB.order }),
+  );
+  const answering = stage("request", 6);
+  answering.accept();
+  expect(book.inspect()!.surfaces.statusline).toEqual(
+    expect.objectContaining({ order: answering.order }),
+  );
+  const retired = stage("request", 7);
   book.shared.retire(session);
   retired.accept();
   expect(book.inspect()).toBeUndefined();

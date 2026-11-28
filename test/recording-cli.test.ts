@@ -24,8 +24,8 @@ const frame = (text: string): WireFrame => ({
 });
 
 const present = frame("request");
-const bar = frame("bar");
-const handoff = frame("handoff");
+const pane = frame("pane");
+const window = frame("window");
 const input: EventInput = {
   kind: "event",
   event: { kind: "due" },
@@ -58,9 +58,15 @@ const output: RendererOutput = {
   frames: [
     {
       session,
-      frame: { kind: "drawn", receipt: 2 as EffectId, bar, handoff },
+      lane: "pane",
+      frame: { kind: "drawn", receipt: 2 as EffectId, bar: pane },
     },
-    { session, frame: { kind: "failed", message: "no draw" } },
+    {
+      session,
+      lane: "window",
+      frame: { kind: "drawn", receipt: 3 as EffectId, bar: window },
+    },
+    { session, lane: "pane", frame: { kind: "failed", message: "no draw" } },
   ],
 };
 
@@ -105,8 +111,8 @@ test("replay delivers the verified frames and summary on separate streams", () =
         .map((line) => JSON.parse(line)),
     ).toEqual([
       { session, surface: "statusline", frame: present },
-      { session, surface: "bar", frame: bar },
-      { session, surface: "statusline", frame: handoff },
+      { session, surface: "pane", frame: pane },
+      { session, surface: "window", frame: window },
     ]);
   }));
 
@@ -141,11 +147,11 @@ test("frame export caps UTF-8 bytes and discards an accepted prefix", () =>
           frames: [
             {
               session,
+              lane: "pane",
               frame: {
                 kind: "drawn",
                 receipt: 3 as EffectId,
                 bar: frame("é".repeat(16 * 1024 * 1024)),
-                handoff: null,
               },
             },
           ],

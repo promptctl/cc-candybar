@@ -38,12 +38,23 @@ export function surfaceChange(
     source.preset !== prior.preset ||
     source.revision !== prior.revision;
   const changedPlacements = edits(prior.placements, placements);
+  const effectPlacements = edits(
+    before.effects.placements,
+    after.effects.placements,
+  );
+  const made = edits(before.effects.made, after.effects.made);
   const copies = edits(before.copies, after.copies);
   return {
     ...(changedSource && { source }),
     ...(changedPlacements && { placements: changedPlacements }),
     ...(!samePlainValue(prior.rules, rules) && { rules }),
     ...(!samePlainValue(prior.passages, passages) && { passages }),
+    ...((effectPlacements || made) && {
+      effects: {
+        ...(effectPlacements && { placements: effectPlacements }),
+        ...(made && { made }),
+      },
+    }),
     ...(copies && { copies }),
     ...(!samePlainValue(before.warnings, after.warnings) && {
       warnings: after.warnings,
@@ -56,8 +67,6 @@ export function motionChange(
   before: HeldMotion,
   after: HeldMotion,
 ): MotionChange {
-  const placements = edits(before.placements, after.placements);
-  const made = edits(before.made, after.made);
   return {
     ...(!samePlainValue(before.anchor, after.anchor) && {
       anchor: after.anchor,
@@ -65,8 +74,6 @@ export function motionChange(
     ...(!samePlainValue(before.inForce, after.inForce) && {
       inForce: after.inForce,
     }),
-    ...(placements && { placements }),
-    ...(made && { made }),
   };
 }
 

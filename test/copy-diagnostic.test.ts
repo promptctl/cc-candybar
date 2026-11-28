@@ -39,7 +39,7 @@ const PROMPT = `Fix my config.\n\n${"a placement that names nothing; ".repeat(20
 const drawn = () => {
   const list = collectDiagnostics(
     SID,
-    "request",
+    "statusline",
     [{ about: aboutSubject("dropped", "/x.json5"), text: "first line\nsecond", copy: PROMPT }],
     [],
     [],
@@ -63,7 +63,7 @@ test("the first line's click copies the full prompt, though its link carries onl
     link,
     verbContextWith(testVerbContext(new SessionState()), {
       diagnosticCopy: (sid, by, key) =>
-        sid === SID && by === "request" ? copies.get(key) : undefined,
+        sid === SID && by === "statusline" ? copies.get(key) : undefined,
     }),
     { launch: clickLaunchVia(recording) },
   );
@@ -96,7 +96,7 @@ test("a copy in a click that names a session fails on that session's bar", async
   const ctx = testVerbContext(state);
   const outcomes = await clickActing(
     effectsUrl([
-      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "key"] },
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "statusline", "key"] },
       { verb: VERB_COPY, args: ["x"] },
     ]),
     verbContextWith(ctx, { diagnosticCopy: () => PROMPT }),
@@ -134,7 +134,7 @@ test("a step the daemon's close cut off keeps its class, and holds nothing on th
   });
   const clicked = clickUrl(
     effectsUrl([
-      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] },
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "statusline", "k"] },
     ]),
     verbContextWith(testVerbContext(state), {
       diagnosticCopy: () => {

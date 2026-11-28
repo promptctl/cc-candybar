@@ -21,9 +21,9 @@ The browser is one more surface. The page is a Frame painter with no renderer of
 
 ### A surface, not a new kind of subscriber
 
-`Subscriber.lane` is required, and rates, `feedsOf`, `answerOf` and `feedsFact` all key on it. A surface gets compile-time totality, the rate readout and feed facts for free. A separate subscriber kind would need parallel paths for each, and it would be invisible to `feeds=`.
+`Subscriber.lane` is required, and rates, `feedsOf`, `feedsFact` and the frame each lane is drawn all key on it. A surface gets compile-time totality, the rate readout and feed facts for free. A separate subscriber kind would need parallel paths for each, and it would be invisible to `feeds=`.
 
-The `window` lane is one: a `LANES` entry with `handsOff: true`, so while a window follows the session Claude Code's statusline shows the one-row handoff, exactly as for the tmux pane. Its encoding is `frame`, the Frame's runs with each link signed, so its page needs no hit map and no link ids.
+The `window` lane is one: a `LANES` entry, drawn its own frame like the tmux pane while Claude Code's statusline keeps drawing its own. Its encoding is `frame`, the Frame's runs with each link signed, so its page needs no hit map and no link ids.
 
 Adding a surface touches `LANES` (its encoding names one of the feed's answers in `src/render/encodings.ts`) and `LANE_HELP`, which the compiler enforces, and these by hand: `LANE_NAMES` in `rust-client/src/follow.rs` (policed by `check-protocol`), the schema, and `docs/interaction-authoring.md`.
 
@@ -32,8 +32,6 @@ Adding a surface touches `LANES` (its encoding names one of the feed's answers i
 `FrameFeeds` keeps one feed per session with one timer. Width comes from the session's latest request, and depth is a config setting.
 
 **The first version draws at the session's width and the page scales it.** A second width isn't a parameter: `FrameMemory` and `SessionEffects` each hold one last frame, and alternating widths would stop fades and lose held cells. Sending the browser's own width as a render request would redeclare the view for every other subscriber, so that's ruled out.
-
-If reflow is wanted, it becomes a per-width surface inside the one feed, with those stores keyed by width and a third `Drawing` arm. A feed per width collides on `by: "feed"` and adds timers against a budget of 24 sessions at 30 fps on one thread.
 
 All modern browsers are truecolor. A Frame is drawn for one depth, so a browser surface wants truecolor frames even for a session configured lower. That makes depth, like width, a per-surface draw input, which this document hasn't worked through.
 
