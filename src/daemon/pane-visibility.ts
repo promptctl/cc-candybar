@@ -110,10 +110,13 @@ export class PaneVisibility {
   private readonly servers = new Map<string, Observation>();
   constructor(
     private readonly observer: TmuxServerObserver,
-    private readonly changed: (
-      socket: string,
-      view: TmuxServerView | null,
-    ) => void,
+    private readonly heard: {
+      // The server's view differs from the last one published.
+      readonly changed: (socket: string, view: TmuxServerView | null) => void;
+      // The server was read again after an event, changed or not: geometry
+      // the view leaves out can have moved.
+      readonly read: (socket: string) => void;
+    },
     private readonly log: DaemonLogger,
   ) {}
 
@@ -132,7 +135,7 @@ export class PaneVisibility {
       if (wanted.has(socket)) continue;
       this.servers.delete(socket);
       observation.close?.();
-      if (observation.view) this.changed(socket, null);
+      if (observation.view) this.heard.changed(socket, null);
     }
     for (const socket of wanted) {
       const held = this.servers.get(socket);
@@ -158,7 +161,7 @@ export class PaneVisibility {
       const close = held.close;
       held.close = null;
       close?.();
-      this.changed(socket, null);
+      this.heard.changed(socket, null);
     };
     try {
       const close = this.observer.observe(socket, {
@@ -172,18 +175,20 @@ export class PaneVisibility {
             lost(err instanceof Error ? err.message : String(err));
             return;
           }
-          if (sameServerView(held.view, view)) return;
-          held.view = view;
-          this.log(
-            "info",
-            `visibility socket=${JSON.stringify(socket)} server=${view.serverPid} shown=${
-              [...view.panes]
-                .filter(([, p]) => p.shown)
-                .map(([id]) => id)
-                .join(",") || "-"
-            }`,
-          );
-          this.changed(socket, view);
+          if (!sameServerView(held.view, view)) {
+            held.view = view;
+            this.log(
+              "info",
+              `visibility socket=${JSON.stringify(socket)} server=${view.serverPid} shown=${
+                [...view.panes]
+                  .filter(([, p]) => p.shown)
+                  .map(([id]) => id)
+                  .join(",") || "-"
+              }`,
+            );
+            this.heard.changed(socket, view);
+          }
+          this.heard.read(socket);
         },
       });
       if (held.reason !== null || this.servers.get(socket) !== held) close();

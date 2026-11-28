@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { clientKey, type Availability } from "../src/bar-window/availability";
 import { WindowLayout } from "../src/bar-window/layout";
-import { reservationLease } from "../src/bar-window/reservation";
 import { WORLD } from "./helpers/host";
 import { tmuxServer } from "./helpers/private-tmux";
 
@@ -94,7 +93,6 @@ test("one panel follows a visible attachment and retires only its unusable reser
         ?.includes("[-T title]")
     )
       return;
-    tmux.run("set-option", "-g", reservationLease(title), "1");
     const reserved = () =>
       tmux
         .run("list-panes", "-a", "-F", "#{pane_title}")

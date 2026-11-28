@@ -83,6 +83,7 @@ function harness() {
     close: jest.Mock;
   }> = [];
   const changed = jest.fn();
+  const read = jest.fn();
   const log = jest.fn();
   const visibility = new PaneVisibility(
     {
@@ -92,14 +93,14 @@ function harness() {
         return close;
       },
     },
-    changed,
+    { changed, read },
     log,
   );
-  return { visibility, registrations, changed, log };
+  return { visibility, registrations, changed, read, log };
 }
 
 test("an observer belongs to each interested socket until it loses its last consumer", () => {
-  const { visibility, registrations, changed } = harness();
+  const { visibility, registrations, changed, read } = harness();
   expect(visibility.shown(null)).toBe(true);
   visibility.reconcile(new Set(["/a", "/b"]));
   const [a, b] = registrations;
@@ -111,6 +112,8 @@ test("an observer belongs to each interested socket until it loses its last cons
   expect(visibility.shown(hint("/b", "%1"))).toBe(false);
   a!.events.snapshot(snapshot(7, row));
   expect(changed).toHaveBeenCalledTimes(2);
+  // An unchanged read is still a read: geometry outside the view can move.
+  expect(read.mock.calls).toEqual([["/a"], ["/b"], ["/a"]]);
   visibility.reconcile(new Set(["/a"]));
   expect(b!.close).toHaveBeenCalledTimes(1);
   b!.events.snapshot(snapshot(8, row));
@@ -153,7 +156,7 @@ test("synchronous failure at registration retires the returned observer", () => 
         return close;
       },
     },
-    changed,
+    { changed, read: jest.fn() },
     jest.fn(),
   );
   visibility.reconcile(new Set(["/s"]));

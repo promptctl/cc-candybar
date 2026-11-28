@@ -21,6 +21,7 @@ export interface WindowDemand {
 
 interface Following {
   readonly channel: Channel;
+  readonly socket: string;
   readonly target: string;
   placement: WindowPlacement;
   stop: () => void;
@@ -61,6 +62,14 @@ export class WindowFollowers {
       reason ? "warn" : "info",
       `window sid=${JSON.stringify(session)} ${reason || "ready"}`,
     );
+  }
+
+  // [LAW:single-enforcer] The host's one observer of a tmux server says
+  // when it read the server again. A follower installs nothing to hear it.
+  tmuxRead(socket: string) {
+    for (const follower of this.active.values())
+      if (!follower.stopping && follower.socket === socket)
+        follower.channel.write(JSON.stringify({ kind: "tmux" }) + "\n");
   }
 
   declare(desired: ReadonlyMap<SessionId, WindowDemand>) {
@@ -156,6 +165,7 @@ export class WindowFollowers {
     });
     const follower: Following = {
       channel,
+      socket: pane.socket,
       target: paneKey(pane),
       placement,
       stopping: false,

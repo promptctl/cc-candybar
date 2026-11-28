@@ -753,10 +753,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const paneVisibility = new PaneVisibility(
     inputs.tmuxObserver(launcher, bundle.node, bundle.path, host.tmp),
-    (socket, view) => {
-      authority.observed(socket, view);
-      declaredSurfaces.observed(socket, view);
-      frameFeeds.announce();
+    {
+      changed: (socket, view) => {
+        authority.observed(socket, view);
+        declaredSurfaces.observed(socket, view);
+        frameFeeds.announce();
+      },
+      read: (socket) => windowFollowers.tmuxRead(socket),
     },
     log,
   );

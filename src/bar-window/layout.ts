@@ -1,4 +1,4 @@
-import { reservationLease, reservationPredicate } from "./reservation.js";
+import { reservationPredicate } from "./reservation.js";
 import type { Launcher } from "../proc/launcher.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { Message } from "./presentation.js";
@@ -124,18 +124,23 @@ export class WindowLayout {
         throw error;
       }
     } else {
-      // The server checks the watcher's lease and splits atomically.
       id = (
         await this.tmux([
-          "if-shell",
-          "-F",
+          "split-window",
+          "-d",
+          "-v",
+          "-l",
+          String(height),
+          "-T",
+          this.reservationTitle,
           "-t",
           this.target.pane,
-          `#{${reservationLease(this.reservationTitle)}}`,
-          `split-window -d -v -l ${height} -T ${this.reservationTitle} -t ${this.target.pane} -P -F '#{pane_id}' ''`,
+          "-P",
+          "-F",
+          "#{pane_id}",
+          "",
         ])
       ).trim();
-      if (!id) return undefined;
       if (!/^%\d+$/.test(id))
         throw new Error("tmux did not return the reserved pane's id");
     }

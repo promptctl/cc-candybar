@@ -7,10 +7,12 @@ const events = new Set([
   "client-attached",
   "client-detached",
   "client-session-changed",
+  "client-resized",
   "session-created",
   "session-closed",
   "session-window-changed",
   "window-layout-changed",
+  "window-resized",
   "window-pane-changed",
   "window-linked",
   "window-unlinked",
@@ -172,8 +174,7 @@ export class ObserverServer {
     return [...slots.values()];
   }
   async arm() {
-    // Probe the addressed server. A keyed slot lets the floating-window
-    // owner distinguish host registration from a user's geometry-hook edits.
+    // Probe the addressed server for named hook slots.
     const probe = "after-set-hook[" + serverObserverHookPrefix + "probe]";
     const keys = await runTmuxAsync(
       this.launcher,
