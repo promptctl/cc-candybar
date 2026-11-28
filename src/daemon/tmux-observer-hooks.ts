@@ -35,7 +35,7 @@ const globalContext = "%4294967296"; // No uint32 pane id; only global formats r
 const command = (...words: string[]) => words.map(singleQuoted).join(" ");
 const paneIds = "#{session_id} #{window_id} #{pane_id}";
 const paneFacts =
-  "P #{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active} #{?mouse,1,0} #{pane_pid} #{?pane_tty,#{pane_tty},-}";
+  "P #{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active} #{?mouse,1,0} #{?pane_pid,#{pane_pid},-} #{?pane_tty,#{pane_tty},-}";
 
 type Scope = string;
 function scopeArgs(scope: Scope): string[] {

@@ -6,7 +6,9 @@ export interface PaneFacts {
   readonly shown: boolean;
   readonly zoomed: boolean;
   readonly mouse: boolean;
-  readonly pid: number;
+  // [LAW:types-are-the-program] A pane can run no process: the window bar's
+  // reservation is split empty. It has no pid, and it is still a pane.
+  readonly pid: number | null;
   readonly tty: string;
 }
 
@@ -35,10 +37,10 @@ export function readServerView(raw: string): TmuxServerView {
       continue;
     }
     const pane =
-      /^P (%\d+) (\$\d+) (\d+) ([01]) ([01]) ([01]) ([01]) (\d+) (\/[^\s]+|-)$/u.exec(
+      /^P (%\d+) (\$\d+) (\d+) ([01]) ([01]) ([01]) ([01]) (\d+|-) (\/[^\s]+|-)$/u.exec(
         row,
       );
-    if (!pane || !Number.isSafeInteger(Number(pane[8])))
+    if (!pane || (pane[8] !== "-" && !Number.isSafeInteger(Number(pane[8]))))
       throw new Error("unrecognized tmux snapshot row");
     panes.push(pane);
   }
@@ -47,13 +49,14 @@ export function readServerView(raw: string): TmuxServerView {
     const [, id, session, attached, current, zoomed, active, mouse, pid, tty] =
       row;
     const previous = result.get(id!);
+    const panePid = pid === "-" ? null : Number(pid);
     const shown =
       Number(attached) > 0 &&
       (current === "1" || controlled.has(session!)) &&
       (zoomed === "0" || active === "1");
     if (
       previous &&
-      (previous.pid !== Number(pid) ||
+      (previous.pid !== panePid ||
         previous.tty !== tty ||
         previous.zoomed !== (zoomed === "1"))
     )
@@ -70,7 +73,7 @@ export function readServerView(raw: string): TmuxServerView {
       shown: shown || previous?.shown === true,
       zoomed: zoomed === "1",
       mouse: mouseEnabled,
-      pid: Number(pid),
+      pid: panePid,
       tty: tty!,
     });
   }

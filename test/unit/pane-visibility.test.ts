@@ -52,6 +52,19 @@ test("linked panes are shown in the union of sessions; mouse describes visible c
   });
 });
 
+test("a pane that runs no process is still a pane, so its window stays known", () => {
+  // The window bar reserves its rows with an empty split: no pid, no tty.
+  const view = readServerView(snapshot(7, row, "P %2 $1 1 1 0 0 1 - -"));
+  expect(view.panes.get("%2")).toEqual({
+    shown: true,
+    zoomed: false,
+    mouse: true,
+    pid: null,
+    tty: "-",
+  });
+  expect(view.panes.get("%1")?.shown).toBe(true);
+});
+
 test.each([
   "B 7\nP %1 $2 0 1 0 1 0 45 /dev/ttys001",
   "B 7\nE 8",

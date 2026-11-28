@@ -9,7 +9,10 @@ import { foregroundMembers } from "../../src/daemon/tmux-source-edge";
 const source = { socket: "/private/one", pane: "%0", truecolor: null };
 const other = { ...source, socket: "/private/two" };
 const process = { pid: 51, tty: "/dev/pts/8" };
-const view = (pid: number, p = process) => ({
+const view = (
+  pid: number,
+  p: { pid: number | null; tty: string } = process,
+) => ({
   serverPid: pid,
   panes: new Map([["%0", p]]),
 });
@@ -147,6 +150,16 @@ test("only foreground descendants on the full source tty can own the pane", () =
   expect(() =>
     foregroundMembers({ pid: 51, tty: "/dev/pts/18" }, listing),
   ).toThrow("no matching foreground tty");
+});
+
+test("an empty pane in the source's place is located but proves no session", async () => {
+  const { authority: a, confirmed, inspected } = fixture();
+  a.observed(source.socket, view(1, { pid: null, tty: "-" }));
+  await a.report(source, A, undefined, "/c");
+  expect(inspected).toEqual([]);
+  expect(confirmed).not.toHaveBeenCalled();
+  expect(a.session(source)).toBeNull();
+  expect([...a.candidates(source)]).toEqual([A]);
 });
 
 test("candidate interest survives unknown topology but ends on positive removal or release", async () => {
