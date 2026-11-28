@@ -279,20 +279,21 @@ describe("a recording from before each lane drew its own frame", () => {
     }
     return recorded;
   }
-  // The same turns as wire 36 recorded them: the request's drawn effects held
-  // in the session's motion, the lanes it handed the bar to, and the
-  // session's one pointer.
+  // The same turns as wire 36 recorded them: the request's clock and drawn
+  // effects held in the session's motion, the lanes it handed the bar to,
+  // and the session's one pointer.
   function legacy(recorded: Awaited<ReturnType<typeof turns>>) {
     const [start, request, viewers] = structuredClone(recorded);
     const { record } = request!.output;
     record.splice(record.findIndex(([key]: [string]) => key === "owed"), 0, ["handoff", "-"]);
     const present = request!.output.effects.find((effect: Effect) => effect.kind === "present");
-    const { surface, motion } = present.proposal;
-    const { effects, ...value } = surface.value;
+    const { surface } = present.proposal;
+    expect(surface.kind).toBe("whole");
+    const { effects, clock, ...value } = surface.value;
     present.proposal = {
       ...present.proposal,
       surface: { ...surface, value },
-      motion: { ...motion, value: { ...motion.value, ...effects } },
+      motion: { kind: "whole", value: { ...clock, ...effects } },
     };
     const watched = viewers!.input.event.viewers[session];
     delete watched.lanes.pane.pointer;
@@ -306,7 +307,12 @@ describe("a recording from before each lane drew its own frame", () => {
     const recorded = await turns();
     expect(recorded[1]!.output.effects.some((effect: Effect) => effect.kind === "present")).toBe(true);
     await expect(replayed(36, legacy(recorded))).resolves.toEqual({ turns: 3 });
-    await expect(replayed(36, recorded)).rejects.toThrow("recording turn 2 differs at output.effects");
+    // A legacy proposal is compared by neither side, and the frame it carried
+    // still is.
+    const tampered = legacy(recorded);
+    const shown = tampered[1]!.output.effects.find((effect: Effect) => effect.kind === "present");
+    shown.frame = `${shown.frame} and more`;
+    await expect(replayed(36, tampered)).rejects.toThrow("recording turn 2 differs at output.effects");
   });
 
   test("refuses outputs that carry feed frames", async () => {

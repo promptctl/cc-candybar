@@ -33,7 +33,6 @@ import {
   MAIN_RENDERER,
   rendererNameOf,
 } from "../../src/daemon/foundations/renderer-name";
-import { followingOf } from "../../src/renderer-interface/interface";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
 import type { DaemonEvent } from "../../src/utils/event-hold";
@@ -62,14 +61,15 @@ function rig(
   const logged: string[] = [];
   const acknowledged: DaemonEvent[] = [];
   const watching: [string, boolean][] = [];
-  const left: [string, Lane][] = [];
+  const followed: [string, Lane, boolean][] = [];
   const deps: FeedDeps<Req> = {
     publishFrame,
     acknowledgeDisplayed: (events) => void acknowledged.push(...events),
     requestChanged: () => {},
     shown: (req) => !hidden.has(req.pane),
     watchingChanged: (session, on) => void watching.push([session, on]),
-    laneLeft: (session, lane) => void left.push([session, lane]),
+    laneFollowed: (session, lane, on) =>
+      void followed.push([session, lane, on]),
     deliver: (make) =>
       new Promise((resolve, reject) =>
         owed.push({ make, end: (kind) => resolve({ kind }), reject }),
@@ -108,7 +108,7 @@ function rig(
     logged,
     acknowledged,
     watching,
-    left,
+    followed,
     slot,
     rejected,
     took,
@@ -200,27 +200,34 @@ function linkedFeeds() {
   const effect = { verb: VERB_COPY, args: ["captured value"] } as const;
   let receipt = 0;
   const draws = new Feeds({
-    draw: () => ({
-      frame: {
-        kind: "drawn",
-        receipt: ++receipt as EffectId,
-        bar: {
-          ...body("copy"),
-          nextChange: Infinity,
-          rows: [
+    draw: (_session, lanes) =>
+      lanes.map(
+        ([lane]) =>
+          [
+            lane,
             {
-              kind: "diagnostic",
-              runs: [{ text: "copy", link: actionTarget([effect]) }],
+              frame: {
+                kind: "drawn",
+                receipt: ++receipt as EffectId,
+                bar: {
+                  ...body("copy"),
+                  nextChange: Infinity,
+                  rows: [
+                    {
+                      kind: "diagnostic",
+                      runs: [{ text: "copy", link: actionTarget([effect]) }],
+                    },
+                  ],
+                },
+              },
+              evaluated: 1,
+              cellBreaks: 0,
+              failure: null,
             },
-          ],
-        },
-      },
-      evaluated: 1,
-      cellBreaks: 0,
-      failure: null,
-    }),
+          ] as const,
+      ),
     pin: () => () => {},
-    left: () => {},
+    turned: () => {},
     log: () => {},
     periods: { moving: 100, still: 1000 },
   });
@@ -293,7 +300,9 @@ describe("the viewers the renderer is handed", () => {
       },
       // A session with no request yet counts as shown.
       [T]: {
-        lanes: { statusline: { subscribers: 1, drawing: false, pointer: null } },
+        lanes: {
+          statusline: { subscribers: 1, drawing: false, pointer: null },
+        },
         shown: true,
         joined: 3,
       },
@@ -564,21 +573,36 @@ describe("a subscriber", () => {
     ]);
   });
 
-  test("a lane whose last subscriber leaves retires its surface, while another lane still follows", () => {
+  test("a lane's drawer turns at its first subscriber and its last, while another lane still follows", () => {
     const r = rig();
     const leavePane = r.feeds.subscribe(S, subscriber("pane").sub);
     const leaveLine = r.feeds.subscribe(S, subscriber("statusline").sub);
     const second = r.feeds.subscribe(S, subscriber("pane").sub);
+    expect(r.followed).toEqual([
+      [S, "pane", true],
+      [S, "statusline", true],
+    ]);
     leavePane();
-    expect(r.left).toEqual([]);
+    expect(r.followed).toHaveLength(2);
     second();
-    expect(r.left).toEqual([[S, "pane"]]);
+    expect(r.followed.at(-1)).toEqual([S, "pane", false]);
     expect(r.feeds.isWatched(S)).toBe(true);
     leaveLine();
-    expect(r.left).toEqual([
-      [S, "pane"],
-      [S, "statusline"],
+    expect(r.followed.slice(2)).toEqual([
+      [S, "pane", false],
+      [S, "statusline", false],
     ]);
+  });
+
+  test("a frame drawn for a lane whose last subscriber has left is not kept for the next to join", () => {
+    const r = rig();
+    r.feeds.subscribe(S, subscriber("statusline").sub);
+    const leave = r.feeds.subscribe(S, subscriber("pane").sub);
+    leave();
+    r.took([frame(S, "drawn before it left")]);
+    const joining = subscriber("pane");
+    r.feeds.subscribe(S, joining.sub);
+    expect(joining.sent).toEqual([]);
   });
 
   test("joining later is handed the bar as it stands, at once", () => {
@@ -690,7 +714,7 @@ describe("feed delivery", () => {
     r.due(0);
 
     leave();
-    expect(r.left).toEqual([[S, "pane"]]);
+    expect(r.followed.filter(([, , on]) => !on)).toEqual([[S, "pane", false]]);
     expect(r.feeds.isWatched(S)).toBe(true);
     const replacement = deferredSubscriber("pane");
     r.feeds.subscribe(S, replacement.sub);
@@ -1055,7 +1079,6 @@ test("measuring a window receives changed frames while display receipts and even
   const { feeds, took, settled, acknowledged } = rig();
   const measure = subscriber("window", false);
   const leave = feeds.subscribe(S, measure.sub);
-  expect(followingOf(feeds.viewers()[S])).toEqual(new Set());
   expect(feeds.viewers()[S]).toMatchObject({
     lanes: { window: { subscribers: 1, drawing: false, pointer: null } },
   });
@@ -1077,7 +1100,9 @@ test("measuring a window receives changed frames while display receipts and even
   expect(acknowledged).toEqual([]);
   leave();
   feeds.subscribe(S, subscriber("window").sub);
-  expect(followingOf(feeds.viewers()[S])).toEqual(new Set(["window"]));
+  expect(feeds.viewers()[S]?.lanes).toEqual({
+    window: { subscribers: 1, drawing: true, pointer: null },
+  });
   took([unchanged]);
   expect(acknowledged).toEqual([event]);
   expect(settled.at(-1)).toEqual([unchanged, true]);

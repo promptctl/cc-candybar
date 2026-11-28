@@ -30,7 +30,7 @@ import type { DaemonLogger, LogLine } from "../../src/utils/logger";
 import { heldClock } from "../helpers/held-clock";
 import { NO_LAYERS } from "../helpers/history-step";
 import { rendererParts } from "../helpers/renderer-parts";
-import { NO_ACTS } from "../helpers/renderers";
+import { noActs } from "../helpers/renderers";
 
 const SESSION = sessionIdOf("session");
 const SOURCES: Subscriptions["sources"] = {
@@ -148,7 +148,7 @@ function rig(
       recorded: () => {},
       frames: () => {},
     },
-    NO_ACTS,
+    noActs(),
   );
   const due = (work: () => void = () => {}) => {
     parts.time.during(readingsAt(clock), () => parts.time.after("test task", 0, work));

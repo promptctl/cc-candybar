@@ -8,21 +8,14 @@ import type { RenderWarning } from "../dsl/render.js";
 import type { Tick } from "../utils/instant.js";
 import type { Crosses } from "./crosses.js";
 
-// [LAW:types-are-the-program] What a presentation belongs to: the surface it
-// was shown on, never who asked for the draw. Hover, a transition and what a
-// copy click copies are facts of one surface, so a record two surfaces shared
-// would be wrong for one of them.
-export type DrawSurface = Lane;
-// The surface a render request's answer is shown on: Claude Code's statusline.
-export const REQUEST_SURFACE: DrawSurface = "statusline";
-// [LAW:single-enforcer] Whether a surface's presentation retires when its
-// lane's last subscriber leaves: every surface's but the one requests still
-// draw, which is still shown.
-export const retiresWithFeed = (surface: DrawSurface): boolean =>
-  surface !== REQUEST_SURFACE;
 export const MAX_PRESENTED_SESSIONS = 256;
+// [LAW:types-are-the-program] What one surface last showed, keyed by its lane:
+// the surface it was shown on, never who asked for the draw. Hover, a
+// transition, the animation clock and what a copy click copies are facts of
+// one surface, so a record two surfaces shared would be wrong for one of them.
 export interface HeldSurface {
   readonly layout: HeldLayout;
+  readonly clock: HeldMotion;
   readonly effects: HeldEffects;
   readonly copies: ReadonlyArray<readonly [string, string]>;
   readonly warnings: readonly RenderWarning[];
@@ -48,10 +41,7 @@ export interface PresentedSession {
   // The host classifies the inputs from which these retained cells came.
   // Only a proven image can become the first input of an exported recording.
   readonly exportProblem: string | null;
-  readonly surfaces: Readonly<
-    Partial<Record<DrawSurface, Ordered<HeldSurface>>>
-  >;
-  readonly motion: Ordered<HeldMotion>;
+  readonly surfaces: Readonly<Partial<Record<Lane, Ordered<HeldSurface>>>>;
   readonly idle: Ordered<HeldIdle>;
 }
 
@@ -62,8 +52,7 @@ export interface PresentationInput {
   readonly sessions: ReadonlyArray<{
     readonly session: SessionId;
     readonly revision: number;
-    readonly bases: Readonly<Partial<Record<DrawSurface, number>>>;
-    readonly motion: number;
+    readonly bases: Readonly<Partial<Record<Lane, number>>>;
     readonly resume?: PresentedSession;
   }>;
 }
@@ -81,6 +70,7 @@ export interface SurfaceChange {
   readonly placements?: Changes<HeldLayout["placements"]>;
   readonly rules?: HeldLayout["rules"];
   readonly passages?: HeldLayout["passages"];
+  readonly clock?: MotionChange;
   readonly effects?: {
     readonly placements?: Changes<HeldEffects["placements"]>;
     readonly made?: Changes<HeldEffects["made"]>;
@@ -101,7 +91,6 @@ export type Proposal<Value, Change> =
 
 export interface ProposedPresentation {
   readonly surface: Proposal<HeldSurface, SurfaceChange>;
-  readonly motion: Proposal<HeldMotion, MotionChange>;
   readonly menu: PresentedMenu;
 }
 
@@ -146,6 +135,7 @@ export function surfaceAfter(
     rules,
     passages,
     source,
+    clock,
     effects,
     warnings,
     faults,
@@ -161,6 +151,7 @@ export function surfaceAfter(
             passages: passages === undefined ? prior.layout.passages : passages,
           }
         : prior.layout,
+    clock: clock ? motionAfter(prior.clock, clock) : prior.clock,
     effects: effects
       ? {
           placements: applyEntries(

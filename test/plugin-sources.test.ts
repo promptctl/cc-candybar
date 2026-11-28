@@ -15,7 +15,7 @@ import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import {
   eventRenderer,
   hostHeld,
-  NO_ACTS,
+  noActs,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -855,7 +855,7 @@ function statusline(r: Rig, configFile: string) {
     ),
     () => {},
     unfollowedCollector(r.collector),
-    { ...NO_ACTS, configs: r.configs.discovery },
+    { ...noActs(), configs: r.configs.discovery },
   );
   r.route(host);
   cleanups.push(host.closeWake);

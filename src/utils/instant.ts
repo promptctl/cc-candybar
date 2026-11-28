@@ -19,9 +19,9 @@ export const dateOf = (at: Instant): Date => new Date(at * 1000);
 export const instantAt = (clock: Pick<Timekeeper, "now">): Instant =>
   instantOf(new Date(clock.now()));
 
-// A time on a session's ANIMATION clock (brandon-menus-sjhy.nt2): seconds,
+// A time on a surface's ANIMATION clock (brandon-menus-sjhy.nt2): seconds,
 // like an Instant, but advancing at the session's animation speed — equal to
-// the wall instant for a session that has only ever run at 1x. Every looping
+// the wall instant for a surface that has only ever run at 1x. Every looping
 // effect, transition and template `frames` reads it; nothing measuring real
 // time does.
 // [LAW:types-are-the-program] Branded apart from Instant, so a wall instant

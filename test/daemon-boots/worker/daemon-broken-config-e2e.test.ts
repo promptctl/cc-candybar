@@ -269,7 +269,8 @@ describe("a config that cannot be drawn as written", () => {
         args: [sid, "statusline", expect.any(String)],
       });
     for (const c of copies) expect(c.args).toEqual(copies[0]!.args);
-    for (const u of copyUrls) expect(u.length).toBeLessThan(200);
+    for (const u of copyUrls)
+      expect(decodeURIComponent(u)).not.toContain("Fix my cc-candybar");
     expect(textOf(shown)).not.toContain("Fix my cc-candybar");
     // A key no draw lists (the message fixed since) is refused loudly.
     await expect(

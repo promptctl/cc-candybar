@@ -28,17 +28,13 @@ import {
   type ConfigSnapshot,
   type RepoQuestion,
 } from "../config/config-snapshot.js";
-import { perLane, type Lane } from "../config/lanes.js";
+import { LANE_NAMES, perLane, type Lane } from "../config/lanes.js";
 import {
   PresentedFrames,
   type FrameCandidate,
   type PortableDraw,
 } from "./presented-frames.js";
-import {
-  retiresWithFeed,
-  type DrawSurface,
-  type PresentedSession,
-} from "../renderer-interface/presentation.js";
+import type { PresentedSession } from "../renderer-interface/presentation.js";
 import type { EffectId } from "../renderer-interface/interface.js";
 import {
   loadSnapshot,
@@ -1197,8 +1193,7 @@ export class RenderCache<
   readonly presentations = new PresentedFrames((session) => {
     const view = this.views.get(session);
     if (view !== undefined)
-      for (const lane of Object.keys(view.presentationTargets) as Lane[])
-        view.presentationTargets[lane] = Symbol();
+      for (const lane of LANE_NAMES) view.presentationTargets[lane] = Symbol();
   });
   private readonly restoring = new Map<
     SessionId,
@@ -2187,18 +2182,13 @@ export class RenderCache<
   // What the diagnostic under `key` copies in the frame the surface `by`
   // last accepted for the session; undefined while that frame did not list
   // it. Reads, never opens, like latestView.
-  drawnCopy(
-    sessionId: SessionId,
-    by: DrawSurface,
-    key: string,
-  ): string | undefined {
+  drawnCopy(sessionId: SessionId, by: Lane, key: string): string | undefined {
     return this.presentations.copy(sessionId, by, key);
   }
 
-  // A lane's feed closed: unless its surface is still drawn on request, that
-  // surface's presentation retires with the receipts still on their way to it.
-  stopDrawing(sessionId: SessionId, by: DrawSurface): void {
-    if (!retiresWithFeed(by)) return;
+  // A lane's drawer changed (its first subscriber joined or its last left):
+  // what the old drawer showed retires with the receipts still on their way.
+  stopDrawing(sessionId: SessionId, by: Lane): void {
     const view = this.views.get(sessionId);
     if (view !== undefined) view.presentationTargets[by] = Symbol();
     this.presentations.stopDrawing(sessionId, by);

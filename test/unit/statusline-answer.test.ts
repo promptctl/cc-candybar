@@ -16,7 +16,8 @@ import {
   eventRenderer,
   hearingEvents,
   hostHeld,
-  NO_ACTS,
+  noActs,
+  NO_CONFIGS,
 } from "../helpers/renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
@@ -221,7 +222,7 @@ async function answer(
         recorded: () => {},
         holding,
       },
-      NO_ACTS,
+      noActs(),
     ),
     publishingFrames(TEST_SIGNER),
     {
@@ -470,10 +471,10 @@ test("a new session context retries its failed config with the same declaration,
       holding: () => () => {},
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       unheard: (why) => void unheard.push(why),
       configs: {
-        ...NO_ACTS.configs,
+        ...NO_CONFIGS,
         follow,
         snapshotOf: () => ({
           chain: [],
@@ -863,7 +864,7 @@ describe("the request's draws, and its wait for what a draw owes", () => {
         recorded: () => {},
         holding: () => () => {},
       },
-      NO_ACTS,
+      noActs(),
     );
     const answering = answerStatusline(
       host,

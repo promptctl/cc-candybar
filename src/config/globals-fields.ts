@@ -480,7 +480,7 @@ export const GLOBAL_FIELDS = {
   transitions: boolSetting(false, control("fade in/out", "look", { line: 2 })),
   // How fast every decorative animation runs — the effects above, fades and
   // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
-  // the rate the session's animation clock advances against the wall clock
+  // the rate each surface's animation clock advances against the wall clock
   // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
   animationSpeed: enumSetting(
     ANIMATION_SPEED_NAMES,

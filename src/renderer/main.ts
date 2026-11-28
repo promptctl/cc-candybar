@@ -20,7 +20,7 @@ import {
   deliver,
   openSession,
   contextFacts,
-  renderFrame,
+  renderFrames,
   retireSession,
   viewLanes,
   type Delivery,
@@ -416,10 +416,12 @@ export function mainRenderer(
             `effect-done for effect ${event.of}, which is no present, change or act on its way`,
           );
         deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") {
+        // [LAW:single-enforcer] Only a draw the host presented records its
+        // surface's presentation.
+        if (event.outcome.kind === "ok" && event.outcome.presented) {
           const accepted = deliver(parts, event.of, delivery);
           if (
-            delivery.drawer === "feed" &&
+            delivery.kind === "frame" &&
             accepted !== null &&
             accepted.faults !== null
           )
@@ -889,20 +891,11 @@ function build(
     };
   };
   const feeds: Feeds = new Feeds({
-    draw: (sessionId, surface, fps, readings, laneFeeds, pointer, prepare) =>
-      renderFrame(
-        parts,
-        sessionId,
-        surface,
-        fps,
-        readings,
-        laneFeeds,
-        pointer,
-        prepare,
-      ),
-    // [LAW:single-enforcer] A lane leaving is the one moment its surface
-    // stops being drawn, so that surface's drawn copies retire with it.
-    left: (sessionId, lane) => renderCache.stopDrawing(sessionId, lane),
+    draw: (sessionId, lanes, fps, readings, laneFeeds, prepare) =>
+      renderFrames(parts, sessionId, lanes, fps, readings, laneFeeds, prepare),
+    // [LAW:single-enforcer] A lane joining or leaving is the one moment its
+    // surface's drawer changes, so what the old drawer showed retires.
+    turned: (sessionId, lane) => renderCache.stopDrawing(sessionId, lane),
     pin,
     log,
     periods: FEED_PERIODS,

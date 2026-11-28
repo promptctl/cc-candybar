@@ -31,7 +31,6 @@ import type { Frame } from "../render/frame.js";
 import type { PrepareDelivery } from "./draw-bar.js";
 import type { Pointer } from "../click/gesture.js";
 import {
-  followingOf,
   type FeedFrame,
   type PushedFrame,
   type SessionViewers,
@@ -111,23 +110,24 @@ export interface FeedDraw {
 }
 
 export interface FeedDeps {
-  // Draws a frame of the session for one surface at the wall instant `at`,
-  // or null while it has no view: a frame opens none. `fps` is the feed's
-  // ceiling, which the frame shows. [LAW:one-source-of-truth] The ceiling the feed's spacing
-  // sets, never a count of frames or the gap between two: a frame showing
-  // either changes whenever it does, and is pushed for it, so a still bar
-  // would never be still.
+  // Draws a frame of the session for each lane, with the pointer over it, at
+  // the wall instant `at`, or null while it has no view: a frame opens none.
+  // `fps` is the feed's ceiling, which the frame shows.
+  // [LAW:one-source-of-truth] The ceiling the feed's spacing sets, never a
+  // count of frames or the gap between two: a frame showing either changes
+  // whenever it does, and is pushed for it, so a still bar would never be
+  // still.
   readonly draw: (
     sessionId: SessionId,
-    surface: Lane,
+    lanes: ReadonlyArray<readonly [Lane, Pointer | null]>,
     fps: number,
     readings: Readings,
     feeds: LaneFeeds,
-    pointer: Pointer | null,
     prepare: PrepareDelivery,
-  ) => FeedDraw | null;
-  // A lane stopped following the session: its surface is no longer drawn.
-  readonly left: (sessionId: SessionId, lane: Lane) => void;
+  ) => ReadonlyArray<readonly [Lane, FeedDraw]> | null;
+  // A lane started or stopped following the session: its surface's drawer
+  // changed.
+  readonly turned: (sessionId: SessionId, lane: Lane) => void;
   // [LAW:no-ambient-temporal-coupling] Holds the session's view open from the
   // feed's open to its close, and wakes the feed whenever the session's own
   // state changes: the feed being open is what keeps them.
@@ -404,11 +404,6 @@ export class Feeds {
     );
   }
 
-  // The lanes that follow the session and draw it now.
-  following(sessionId: SessionId): ReadonlySet<Lane> {
-    return followingOf(this.feeds.get(sessionId)?.viewers);
-  }
-
   // [LAW:nothing-unseen] What each lane of the session's frames is doing at
   // `tick`: its subscribers, the frames that went out to it in the last
   // second, and whether the session's pane is on a screen. Like every value
@@ -479,31 +474,29 @@ export class Feeds {
     this.feeds.delete(feed.sessionId);
     runEach([
       ...[...feed.rates.keys()].map(
-        (lane) => () => this.deps.left(feed.sessionId, lane),
+        (lane) => () => this.deps.turned(feed.sessionId, lane),
       ),
       () => feed.unpin(),
     ]);
     this.summarize(feed, "closed", tick);
   }
 
-  // A lane's rate and last frame are kept from its first subscriber joining
-  // to its last leaving, when its surface stops being drawn.
+  // [LAW:one-source-of-truth] A lane's rate and last frame are kept from its
+  // first subscriber joining to its last leaving, both by the one list of
+  // lanes that follow the session, and its surface's drawer turns at each.
   private keepRates(feed: Feed): void {
     const { lanes } = feed.viewers;
-    const left: Lane[] = [];
-    for (const lane of feed.rates.keys())
-      if (lanes[lane] === undefined) {
-        feed.rates.delete(lane);
-        left.push(lane);
-      }
-    if (left.length > 0) {
-      const frames = { ...feed.frames };
-      for (const lane of left) delete frames[lane];
-      feed.frames = frames;
-    }
-    for (const lane of Object.keys(lanes) as Lane[])
-      if (!feed.rates.has(lane)) feed.rates.set(lane, []);
-    runEach(left.map((lane) => () => this.deps.left(feed.sessionId, lane)));
+    const followed = (lane: Lane): boolean => lanes[lane] !== undefined;
+    const turned = LANE_NAMES.filter(
+      (lane) => feed.rates.has(lane) !== followed(lane),
+    );
+    for (const lane of turned)
+      if (followed(lane)) feed.rates.set(lane, []);
+      else feed.rates.delete(lane);
+    feed.frames = Object.fromEntries(
+      Object.entries(feed.frames).filter(([lane]) => followed(lane as Lane)),
+    );
+    runEach(turned.map((lane) => () => this.deps.turned(feed.sessionId, lane)));
   }
 
   // [LAW:single-enforcer] The interval between scheduled frames, in
@@ -532,38 +525,31 @@ export class Feeds {
         ? change
         : at;
     const fps = paceOf(this.spacingOf(feed) * 1000);
-    const laneFeeds = this.feedsOf(feed.sessionId, tick);
-    const drawn: Array<readonly [Lane, FeedDraw]> = [];
-    for (const lane of LANE_NAMES) {
-      const seen = feed.viewers.lanes[lane];
-      if (seen === undefined) continue;
-      const draw = this.deps.draw(
-        feed.sessionId,
-        lane,
-        fps,
-        { at: drawAt, tick },
-        laneFeeds,
-        seen.pointer,
-        prepare,
-      );
-      // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits
-      // until the event that opens one wakes it. A frame not drawn spaces
-      // nothing. Every surface draws from the one view, so none has one.
-      if (draw === null) {
-        feed.noView++;
-        feed.schedule = { kind: "waiting", next: null };
-        this.report(feed);
-        return [];
-      }
-      drawn.push([lane, draw]);
+    const drawn = this.deps.draw(
+      feed.sessionId,
+      LANE_NAMES.flatMap((lane) => {
+        const seen = feed.viewers.lanes[lane];
+        return seen === undefined ? [] : [[lane, seen.pointer] as const];
+      }),
+      fps,
+      { at: drawAt, tick },
+      this.feedsOf(feed.sessionId, tick),
+      prepare,
+    );
+    // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits
+    // until the event that opens one wakes it. A frame not drawn spaces
+    // nothing.
+    if (drawn === null) {
+      feed.noView++;
+      feed.schedule = { kind: "waiting", next: null };
+      this.report(feed);
+      return [];
     }
     feed.last = tick;
     feed.drawn++;
     this.drawnTotal++;
     const frames = { ...feed.frames };
     const changes: Lane[] = [];
-    let failure: FeedDraw["failure"] = null;
-    let changedFailure = false;
     let nextChange = Infinity;
     for (const [lane, draw] of drawn) {
       feed.evaluated += draw.evaluated;
@@ -571,10 +557,11 @@ export class Feeds {
       const comparison = comparisonOf(draw.frame);
       const changed = changedDraw(feed.frames[lane], comparison);
       frames[lane] = comparison;
-      if (draw.failure !== null) {
-        failure ??= draw.failure;
-        changedFailure ||= changed;
-      }
+      // [LAW:nothing-unseen] A failing frame's render event, which names its
+      // lane, is logged when that lane's failure first shows: one that keeps
+      // throwing the same way draws the same bytes, and the summary counts it.
+      if (draw.failure !== null && changed)
+        this.deps.log(draw.failure.level, draw.failure.line);
       if (draw.frame.kind === "drawn")
         nextChange = Math.min(nextChange, draw.frame.bar.nextChange);
       const rate = feed.rates.get(lane);
@@ -582,13 +569,7 @@ export class Feeds {
       noteSent(rate, tick);
       changes.push(lane);
     }
-    if (failure !== null) {
-      feed.failed++;
-      // [LAW:nothing-unseen] A failing frame's render event is logged when its
-      // failure first shows: one that keeps throwing the same way draws the
-      // same bytes, and the summary counts it.
-      if (changedFailure) this.deps.log(failure.level, failure.line);
-    }
+    if (drawn.some(([, draw]) => draw.failure !== null)) feed.failed++;
     feed.frames = frames;
     this.schedule(feed, nextChange, drawAt, tick);
     this.report(feed, { changed: changes });

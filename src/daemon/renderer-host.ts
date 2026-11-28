@@ -154,7 +154,9 @@ type MadeClick =
 // the daemon's close has begun, and where an act's failure goes that no
 // session's bar can hold.
 export interface HostWorld {
-  readonly presentationTurn?: (
+  // [LAW:single-enforcer] The one authority that says whether a delivered
+  // draw presents; a renderer accepts only the draws it says do.
+  readonly presentationTurn: (
     input: EventInput,
     observed: PresentationReader,
   ) => PresentationTurn | undefined;
@@ -1073,7 +1075,9 @@ export function rendererHost(
             issuer === generation
               ? doneOf(
                   effect,
-                  reason === null ? { kind: "ok" } : { kind: "failed", reason },
+                  reason !== null
+                    ? { kind: "failed", reason }
+                    : { kind: "ok", ...(received && { presented: true }) },
                 )
               : { kind: "down", message: retired, detail: retired },
           [["effect", String(effect.id)]],

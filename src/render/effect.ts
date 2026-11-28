@@ -155,9 +155,9 @@ interface InForce {
   readonly since: AnimationTime;
 }
 
-// [LAW:types-are-the-program] One frame's reading of the session's animation
+// [LAW:types-are-the-program] One frame's reading of its surface's animation
 // clock (brandon-menus-sjhy.nt2): the wall instant the frame is drawn at, and
-// the session's animation timeline — rich-js's map from the host clock to
+// the surface's animation timeline — rich-js's map from the host clock to
 // animation time, at the speed it runs at from this frame on. Read once before
 // the walk (`SessionEffects.clockAt`) and handed to every consumer — the
 // templates' `frames`, and `motion` — so all of a frame's animations run on one
@@ -383,20 +383,21 @@ function closingFlash(
   return () => idle;
 }
 
-// [LAW:types-are-the-program] A session's animation clock as its last kept
-// frame left it. It is the session's, not a surface's: every surface of a
-// session animates in phase.
-export interface SessionClock {
+// [LAW:types-are-the-program] A surface's animation clock as its last kept
+// frame left it. It is the surface's own, so what another surface drew never
+// moves it: a surface's frame depends on that surface's history alone.
+export interface SurfaceClock {
   // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
   // changed to its current value: the effect's own t = 0 is a recorded fact,
   // never inferred from when renders happened to arrive.
   readonly inForce: InForce | null;
-  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
+  // [LAW:no-ambient-temporal-coupling] The surface's animation timeline as
   // its last drawn frame left it — where the clock stood and the speed it ran
   // at from there: the anchor every later reading is measured from, so a
   // change of speed changes the clock's slope from the frame it lands in and
   // never its reading, so no loop jumps phase. The host clock itself before
-  // the session's first frame.
+  // the surface's first frame, so surfaces that have only ever run at 1x read
+  // one timeline and animate in phase.
   readonly anchor: Timeline;
 }
 
@@ -417,7 +418,11 @@ export interface SurfaceEffects {
   readonly made: ReadonlyMap<string, ReadonlyMap<Scope, RowEffect>>;
 }
 
-type MotionState = SessionClock & SurfaceEffects;
+// What a surface's last kept frame left for its next draw to read.
+export type KeptMotion = SurfaceClock &
+  SurfaceEffects &
+  Partial<Pick<SessionMotion, "frame">>;
+type MotionState = SurfaceClock & SurfaceEffects;
 
 export interface SessionMotion extends MotionState {
   // [LAW:nothing-unseen] What the latest frame wore, for the render's event.
@@ -426,7 +431,7 @@ export interface SessionMotion extends MotionState {
 
 // Only these facts affect the next draw. Per-draw timing and diagnostics
 // belong to the turn that produced them.
-export type HeldMotion = SessionClock;
+export type HeldMotion = SurfaceClock;
 export interface HeldEffects {
   readonly placements: ReadonlyArray<readonly [string, InForce]>;
   readonly made: ReadonlyArray<
@@ -434,7 +439,7 @@ export interface HeldEffects {
   >;
 }
 
-export const holdMotion = ({ anchor, inForce }: SessionClock): HeldMotion => ({
+export const holdMotion = ({ anchor, inForce }: SurfaceClock): HeldMotion => ({
   anchor,
   inForce,
 });
@@ -460,13 +465,9 @@ export const NO_EFFECTS: SurfaceEffects = {
   made: new Map(),
 };
 
-export const NO_CLOCK: SessionClock = {
+const NO_MOTION: SessionMotion = {
   inForce: null,
   anchor: Timeline.play(0),
-};
-
-const NO_MOTION: SessionMotion = {
-  ...NO_CLOCK,
   ...NO_EFFECTS,
   frame: {
     effect: EFFECT_FLOOR,
@@ -483,17 +484,17 @@ const NO_MOTION: SessionMotion = {
 };
 
 /**
- * [LAW:no-shared-mutable-globals] One surface's effect memory under its
- * session's clock, owned by whoever keeps the session (the renderer, per
- * session id and surface; a compile-only render, for the one render it
- * draws). A frame reads it (`clockAt`, `motion`) and returns its successor;
- * its only writer is `keep`, called by the turn that drew it.
+ * [LAW:no-shared-mutable-globals] One surface's effect memory and clock, as
+ * its last kept frame left them, read by the next frame drawn for it
+ * (`clockAt`, `motion`), which returns its successor. The renderer reads a
+ * fresh instance over each surface's accepted frame, which is that memory's
+ * one writer; a sample drawer that chains frames with no host to accept them
+ * writes it through `keep`.
  */
 export class SessionEffects<Line> {
   constructor(
     private readonly key: string,
-    private kept: MotionState &
-      Partial<Pick<SessionMotion, "frame">> = NO_MOTION,
+    private kept: KeptMotion = NO_MOTION,
     private readonly compiled = new CompiledEffects(),
   ) {}
 
@@ -509,14 +510,13 @@ export class SessionEffects<Line> {
     return [...this.kept.made.values()].reduce((n, row) => n + row.size, 0);
   }
 
-  // [LAW:single-enforcer] The one writer: the turn that drew a frame keeps
-  // the motion it returned.
+  // The motion a frame drawn from this memory returned, for the next frame.
   keep(motion: SessionMotion): void {
     this.kept = motion;
   }
 
   /**
-   * The session's animation clock read at the wall instant `at`, running at
+   * The surface's animation clock read at the wall instant `at`, running at
    * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
    * the last drawn frame passed at the speed in force then; before the first
    * frame the timeline is the host clock itself, so a session that has only

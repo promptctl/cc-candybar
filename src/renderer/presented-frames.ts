@@ -2,27 +2,18 @@ import {
   MAX_PRESENTED_SESSIONS,
   proposedValue,
   surfaceAfter,
-  motionAfter,
-  type DrawSurface,
 } from "../renderer-interface/presentation.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import { LANE_NAMES } from "../config/lanes.js";
+import { LANE_NAMES, type Lane } from "../config/lanes.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { DrawnFrame } from "../dsl/render.js";
 import {
   CompiledEffects,
-  NO_CLOCK,
-  NO_EFFECTS,
   SessionEffects,
   holdEffects,
   holdMotion,
   restoreEffects,
-} from "../render/effect.js";
-import type {
-  HeldMotion,
-  SessionClock,
-  SessionMotion,
-  SurfaceEffects,
+  type KeptMotion,
 } from "../render/effect.js";
 import { holdLayout, restoreLayout } from "../render/held-layout.js";
 import type {
@@ -32,11 +23,7 @@ import type {
   PresentedSession,
   ProposedPresentation,
 } from "../renderer-interface/presentation.js";
-import {
-  motionChange,
-  surfaceChange,
-  proposeValue,
-} from "./presentation-change.js";
+import { surfaceChange, proposeValue } from "./presentation-change.js";
 import type { RichText } from "@promptctl/rich-js";
 import type { EffectId } from "../renderer-interface/interface.js";
 import { KEPT_FAULTS } from "../renderer-interface/noted-faults.js";
@@ -51,8 +38,6 @@ import {
   warningChanges,
   type FrameWarnings,
 } from "./render-warnings.js";
-
-export type { DrawSurface };
 
 export interface FrameLayout {
   readonly record: DrawnFrame["memory"]["record"];
@@ -71,7 +56,7 @@ export interface FrameObservation {
 
 export interface FrameCandidate {
   readonly session: SessionId;
-  readonly surface: DrawSurface;
+  readonly surface: Lane;
   readonly target: symbol;
   readonly loadKey: string;
   readonly frame: FrameObservation;
@@ -87,20 +72,20 @@ interface AcceptedFrame extends Omit<
   // Once its view retires, keep presentation facts that do not hold a layout.
   readonly layout: FrameLayout | null;
   readonly copies: FrameObservation["copies"] | null;
-  // What this surface's frame drew under the session's clock.
-  readonly effects: SurfaceEffects & Partial<Pick<SessionMotion, "frame">>;
+  // What this surface's frame drew and its clock, for its next draw; null for
+  // a surface whose drawer changed, which draws again from the start.
+  readonly motion: KeptMotion | null;
 }
 
 interface SessionFrames {
-  readonly surfaces: Partial<Record<DrawSurface, AcceptedFrame>>;
-  readonly motion?: SessionClock;
-  readonly portableMotion?: Ordered<HeldMotion>;
+  readonly surfaces: Partial<Record<Lane, AcceptedFrame>>;
   readonly idle?: Idle;
   readonly idleOrder?: number;
 }
 
-// The surface whose frame was accepted last, which the session's shared
-// timelines (the animation clock, menu idle) advance with.
+// The surface whose frame was accepted last, which the session's menu idle
+// period advances with: the period closes the session's menus, so it is the
+// session's, never one surface's.
 const latestOf = (
   surfaces: SessionFrames["surfaces"],
 ): AcceptedFrame | undefined => {
@@ -123,12 +108,12 @@ export interface Acceptance {
 export interface PortableDraw {
   readonly order: number;
   readonly surface: HeldSurface;
-  readonly motion: HeldMotion;
 }
 
 // [LAW:single-enforcer] These are the renderer's accepted frame values.
-// Surface identities isolate layout while draw order gives the session one
-// animation and idle timeline. Updating either commits one session record.
+// Each surface keeps its own layout, effects and clock, while draw order
+// gives the session one idle timeline. Updating either commits one session
+// record.
 export class PresentedFrames {
   private readonly sessions = new Map<SessionId, SessionFrames>();
   private readonly compiled = new CompiledEffects();
@@ -181,36 +166,27 @@ export class PresentedFrames {
     const prior = this.sessions.get(session);
     const bases = input.sessions.find((s) => s.session === session);
     const known = prior?.surfaces[by]?.portable;
-    const knownMotion = prior?.portableMotion;
     const surface: HeldSurface = {
       layout: holdLayout(frame.layout.record, loadKey, bases?.revision ?? 0),
+      clock: holdMotion(frame.motion),
       effects: holdEffects(frame.motion),
       copies: [...frame.copies],
       warnings: frame.diagnostics.warnings.map((w) => w.warning),
       faults: frame.diagnostics.faults,
     };
-    const motion = holdMotion(frame.motion);
     const surfaceProposal = proposeValue(
       known,
       bases?.bases[by],
       surface,
       surfaceChange,
     );
-    const motionProposal = proposeValue(
-      knownMotion,
-      bases?.motion,
-      motion,
-      motionChange,
-    );
     return {
       portable: {
         order: input.order,
         surface: proposedValue(known, surfaceProposal, surfaceAfter),
-        motion: proposedValue(knownMotion, motionProposal, motionAfter),
       },
       proposal: {
         surface: surfaceProposal,
-        motion: motionProposal,
         menu: { shown: frame.menu.shown, timeoutS: frame.menu.timeoutS },
       },
     };
@@ -220,7 +196,7 @@ export class PresentedFrames {
     saved: PresentedSession,
     view: {
       state: { loadKey: string; config: object };
-      presentationTargets: Record<DrawSurface, symbol>;
+      presentationTargets: Record<Lane, symbol>;
     },
     revision: number,
     localRevision: number,
@@ -229,13 +205,15 @@ export class PresentedFrames {
     const surfaces = { ...prior.surfaces };
     for (const by of LANE_NAMES) {
       const held = saved.surfaces[by];
+      // A surface the saved image no longer holds, and no newer than it,
+      // retired there.
       if (!held) {
-        if ((surfaces[by]?.order ?? Infinity) <= saved.motion.order)
+        if ((surfaces[by]?.order ?? Infinity) <= saved.idle.order)
           delete surfaces[by];
         continue;
       }
       if ((surfaces[by]?.order ?? -1) >= held.order) continue;
-      const { layout, effects, copies, warnings, faults } = held.value;
+      const { layout, clock, effects, copies, warnings, faults } = held.value;
       const record =
         layout.revision === revision
           ? restoreLayout(layout, view.state, localRevision)
@@ -245,19 +223,14 @@ export class PresentedFrames {
         portable: held,
         target: view.presentationTargets[by],
         layout: record ? { record, segments: new Map() } : null,
-        effects: restoreEffects(effects),
+        motion: { ...clock, ...restoreEffects(effects) },
         copies: new Map(copies),
         diagnostics: { warnings: warnings.map(describeWarning), faults },
       };
     }
-    const newer = saved.motion.order > (prior.portableMotion?.order ?? -1);
     this.store(saved.session, {
       ...prior,
       surfaces,
-      ...(newer && {
-        motion: saved.motion.value,
-        portableMotion: saved.motion,
-      }),
       ...(saved.idle.order > (prior.idleOrder ?? -1) && {
         idle: saved.idle.value,
         idleOrder: saved.idle.order,
@@ -280,27 +253,13 @@ export class PresentedFrames {
       ...surface,
       order,
       target,
-      effects: {
-        placements: motion.placements,
-        made: motion.made,
-        frame: motion.frame,
-      },
+      motion,
       ...(portable && { portable: { order, value: portable.surface } }),
     };
-    const newer =
-      latest === undefined ||
-      order > (prior.portableMotion?.order ?? latest.order);
     const change = warningChanges(surface.diagnostics, previous?.diagnostics);
     this.sessions.delete(session);
     this.store(session, {
       surfaces: { ...prior.surfaces, [by]: next },
-      // [LAW:one-source-of-truth] Keep one animation clock for the session,
-      // while each surface keeps what its own frame drew under it. An older
-      // receipt cannot rewind the clock.
-      motion: newer ? holdMotion(motion) : prior.motion,
-      portableMotion: newer
-        ? portable && { order: portable.order, value: portable.motion }
-        : prior.portableMotion,
       idle:
         order >= (prior.idleOrder ?? latest?.order ?? -1)
           ? idleAfterDraw(prior.idle, menu)
@@ -315,13 +274,13 @@ export class PresentedFrames {
     if (prior) this.sessions.set(session, { ...prior, idleOrder: order });
   }
 
-  private on(session: SessionId, by: DrawSurface): AcceptedFrame | undefined {
+  private on(session: SessionId, by: Lane): AcceptedFrame | undefined {
     return this.sessions.get(session)?.surfaces[by];
   }
 
   layout(
     session: SessionId,
-    by: DrawSurface,
+    by: Lane,
     target: symbol,
   ): FrameLayout | undefined {
     const held = this.on(session, by);
@@ -330,44 +289,44 @@ export class PresentedFrames {
 
   latestLayout(
     session: SessionId,
-    targets: Readonly<Record<DrawSurface, symbol>>,
+    targets: Readonly<Record<Lane, symbol>>,
   ): FrameLayout | undefined {
-    const drawn: SessionFrames["surfaces"] = {};
-    for (const by of LANE_NAMES) {
-      const frame = this.on(session, by);
-      if (frame?.target === targets[by] && frame.layout !== null)
-        drawn[by] = frame;
-    }
+    const drawn = Object.fromEntries(
+      LANE_NAMES.flatMap((by) => {
+        const frame = this.on(session, by);
+        return frame?.target === targets[by] && frame.layout !== null
+          ? [[by, frame] as const]
+          : [];
+      }),
+    );
     return latestOf(drawn)?.layout ?? undefined;
   }
 
-  diagnostics(session: SessionId, by: DrawSurface): FrameWarnings | undefined {
+  diagnostics(session: SessionId, by: Lane): FrameWarnings | undefined {
     return this.on(session, by)?.diagnostics;
   }
 
-  warnings(session: SessionId, by: DrawSurface) {
+  warnings(session: SessionId, by: Lane) {
     return this.on(session, by)?.diagnostics.warnings ?? [];
   }
 
-  effects(session: SessionId, by: DrawSurface): SessionEffects<RenderedLine> {
-    const held = this.sessions.get(session);
+  // What the surface's next draw reads: its accepted frame's effects and
+  // clock, and none for a surface that draws from the start.
+  effects(session: SessionId, by: Lane): SessionEffects<RenderedLine> {
     return new SessionEffects(
       session,
-      {
-        ...(held?.motion ?? NO_CLOCK),
-        ...(held?.surfaces[by]?.effects ?? NO_EFFECTS),
-      },
+      this.on(session, by)?.motion ?? undefined,
       this.compiled,
     );
   }
 
-  copy(session: SessionId, by: DrawSurface, key: string): string | undefined {
+  copy(session: SessionId, by: Lane, key: string): string | undefined {
     return this.on(session, by)?.copies?.get(key);
   }
 
   retireView(
     session: SessionId,
-    targets: Readonly<Record<DrawSurface, symbol>>,
+    targets: Readonly<Record<Lane, symbol>>,
     successor: boolean,
   ): void {
     const prior = this.sessions.get(session);
@@ -387,7 +346,7 @@ export class PresentedFrames {
     this.sessions.set(session, { ...prior, surfaces });
   }
 
-  stopDrawing(session: SessionId, by: DrawSurface): void {
+  stopDrawing(session: SessionId, by: Lane): void {
     const prior = this.sessions.get(session);
     const held = prior?.surfaces[by];
     if (prior === undefined || held === undefined) return;
@@ -400,9 +359,9 @@ export class PresentedFrames {
           layout: null,
           copies: null,
           portable: undefined,
-          // A surface no longer drawn fades its placements back in when it is
-          // drawn again, as one that was never drawn would.
-          effects: NO_EFFECTS,
+          // A surface whose drawer changed fades its placements in and starts
+          // its clock when it is drawn again, as one never drawn would.
+          motion: null,
         },
       },
     });
@@ -420,10 +379,10 @@ export class PresentedFrames {
     let effects = 0;
     let passages = 0;
     for (const held of this.sessions.values()) {
-      if (held.motion !== undefined) sessions++;
+      if (LANE_NAMES.some((by) => held.surfaces[by]?.motion)) sessions++;
       for (const by of LANE_NAMES) {
         const surface = held.surfaces[by];
-        for (const effectsOfRow of surface?.effects.made.values() ?? [])
+        for (const effectsOfRow of surface?.motion?.made.values() ?? [])
           effects += effectsOfRow.size;
         passages += surface?.layout?.record.passages?.size ?? 0;
       }

@@ -39,7 +39,7 @@ import type {
 import { mainRenderer } from "../src/renderer/main";
 import {
   drawRender,
-  renderFrame,
+  renderFrames,
   setUpRender,
   type Delivery,
   type RendererParts,
@@ -56,7 +56,6 @@ import {
   UNFOLLOWED_FEEDS,
   type Lane,
 } from "../src/config/lanes";
-import type { DrawSurface } from "../src/renderer-interface/presentation";
 import { CLICK_MODE_KEY } from "../src/config/click-mode";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import {
@@ -117,7 +116,7 @@ import { writeStatePlan } from "./helpers/state-file";
 import {
   hearingEvents,
   hostHeld,
-  NO_ACTS,
+  noActs, NO_CONFIGS,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -176,18 +175,9 @@ function renderer(
       verbs,
     }),
     feeds: new Feeds({
-      draw: (session, surface, fps, readings, lanes, pointer, prepare) =>
-        renderFrame(
-          parts,
-          session,
-          surface,
-          fps,
-          readings,
-          lanes,
-          pointer,
-          prepare,
-        ),
-      left: (session, lane) => rig.cache.stopDrawing(session, lane),
+      draw: (session, lanes, fps, readings, laneFeeds, prepare) =>
+        renderFrames(parts, session, lanes, fps, readings, laneFeeds, prepare),
+      turned: (session, lane) => rig.cache.stopDrawing(session, lane),
       pin: (session) => rig.cache.pin(session),
       log: (level, message) => logged.push(`${level} ${message}`),
       periods: FEED_PERIODS,
@@ -374,7 +364,7 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-function presentation(rig: SessionRig, by: DrawSurface) {
+function presentation(rig: SessionRig, by: Lane) {
   const view = viewOf(rig);
   return view === null
     ? undefined
@@ -393,7 +383,9 @@ const done = (
       kind: "effect-done",
       session,
       of,
-      outcome: ok ? { kind: "ok" } : { kind: "failed", reason: "left" },
+      outcome: ok
+        ? { kind: "ok", presented: true }
+        : { kind: "failed", reason: "left" },
     },
   });
 
@@ -464,7 +456,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
       recorded: () => {},
       holding: () => () => {},
     },
-    { ...NO_ACTS, configs: discovery },
+    { ...noActs(), configs: discovery },
   );
   cleanups.push(() => host.closeWake());
   const submit = (event: Notification) =>
@@ -1097,10 +1089,8 @@ describe("a draw", () => {
         parts,
         setup,
         ANSWERING,
-        "statusline",
         UNFOLLOWED_FEEDS,
-        null,
-      );
+      )("statusline", null, []);
       return { drawn, candidate };
     };
     const first = draw();
@@ -1133,10 +1123,8 @@ describe("a draw", () => {
       parts,
       setup,
       ANSWERING,
-      "statusline",
       UNFOLLOWED_FEEDS,
-      null,
-    );
+    )("statusline", null, []);
     expect(candidate.frame.menu.shown).toBe(shown);
   });
 });
@@ -1228,30 +1216,37 @@ describe("a feed's frame", () => {
         openFailure: () => ({ error: new Error("the view would not open") }),
       },
     } as unknown as RendererParts;
-    const frame = renderFrame(
+    const frames = renderFrames(
       parts,
       SESSION,
-      "pane",
+      [
+        ["statusline", null],
+        ["pane", null],
+      ],
       30,
       READ,
       UNFOLLOWED_FEEDS,
-      null,
       () => {
         throw new Error("a failed draw requested a receipt");
       },
-    )!;
-    expect(frame.frame).toEqual({
-      kind: "failed",
-      message: "the view would not open",
-    });
-    expect(frame.failure).not.toBeNull();
+    );
+    // A view that would not open fails every lane, each naming its own.
+    expect(
+      frames?.map(([lane, { frame, failure }]) => [lane, frame, failure?.line]),
+    ).toEqual(
+      (["statusline", "pane"] as const).map((lane) => [
+        lane,
+        { kind: "failed", message: "the view would not open" },
+        expect.stringMatching(new RegExp(`^frame lane=${lane} `)),
+      ]),
+    );
   });
 
   test("a due frame records its shown copies only after its receipt is accepted", async () => {
     const t = renderer();
     const { r, recorded, rig } = t;
     await configure(t, checked());
-    const by: DrawSurface[] = [];
+    const by: Lane[] = [];
     const accept = rig.cache.acceptFrame.bind(rig.cache);
     rig.cache.acceptFrame = (id, candidate) => {
       const result = accept(id, candidate);
@@ -1278,9 +1273,9 @@ describe("a feed's frame", () => {
     expect(confirmed.record).toEqual([]);
   });
 
-  // [LAW:effects-at-boundaries] The record and transitions are a surface's
-  // own; the animation clock is the session's, one for both.
-  test("leaves the request's record of the view as it was, beside its own, under the session's one clock", async () => {
+  // [LAW:effects-at-boundaries] The record, transitions and animation clock
+  // are a surface's own.
+  test("leaves the request's record of the view as it was, beside its own", async () => {
     const { r, parts, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
@@ -1300,7 +1295,7 @@ describe("a feed's frame", () => {
     expect(parts.renderCache.presentations.stats().effects.sessions).toBe(1);
   });
 
-  test("an older feed receipt keeps its layout without rewinding the newer request's motion", async () => {
+  test("an older feed receipt keeps its layout without moving the newer request's clock", async () => {
     const t = renderer();
     const initial = presentOf(answered(await request(t)).effects);
     answered(await done(t.r, initial, true));
@@ -1318,8 +1313,8 @@ describe("a feed's frame", () => {
     const effects = t.rig.cache.presentations;
     const motion = effects.effects(SESSION, "statusline").lastFrame();
     expect(motion.t).toBe(3);
-    // The session's one clock, read on either surface.
-    const clock = (surface: DrawSurface) =>
+    // Each surface's own clock.
+    const clock = (surface: Lane) =>
       effects.effects(SESSION, surface).clockAt((READ.at + 4) as Instant, 2)
         .timeline;
     const newest = clock("statusline");
@@ -1330,7 +1325,7 @@ describe("a feed's frame", () => {
     expect(presentation(t.rig, "statusline")).toBe(requestLayout);
     expect(effects.effects(SESSION, "statusline").lastFrame()).toBe(motion);
     expect(clock("statusline")).toEqual(newest);
-    expect(clock("pane")).toEqual(newest);
+    expect(effects.effects(SESSION, "pane").lastFrame()).not.toBe(motion);
   });
 
   test("a dropped frame preserves the last accepted layout, cells and copies", async () => {
@@ -1421,19 +1416,18 @@ describe("a feed's frame", () => {
     answered(await request({ r, rig }));
     const candidates: Delivery[] = [];
     const draw = (at: Instant) =>
-      renderFrame(
+      renderFrames(
         parts,
         SESSION,
-        "pane",
+        [["pane", null]],
         MOVING_FPS,
         { at, tick: 0 as Tick },
         UNFOLLOWED_FEEDS,
-        null,
         (candidate) => {
           candidates.push(candidate);
-          return {id: parts.mint()};
+          return { id: parts.mint() };
         },
-      );
+      )?.[0]?.[1];
     const changedBefore = changed.length;
     const revision = rig.sessionState.latestRevision();
     expect(draw(AT)?.failure).toBeNull();
@@ -1477,32 +1471,39 @@ describe("each surface's frame", () => {
     );
     await configure(t, context);
     // One surface's frame drawn `elapsed` seconds in, kept only by `accept`.
-    const draw = (
-      surface: DrawSurface,
-      pointer: Pointer | null,
+    // Every lane named drawn in one call, as a feed draws them at one tick.
+    const drawAll = (
+      lanes: ReadonlyArray<readonly [Lane, Pointer | null]>,
       elapsed: number,
     ) => {
-      let delivery: Delivery | undefined;
-      const drawn = renderFrame(
+      const deliveries: Delivery[] = [];
+      const drawn = renderFrames(
         t.parts,
         SESSION,
-        surface,
+        lanes,
         MOVING_FPS,
         {
           at: (READ.at + elapsed) as Instant,
           tick: (READ.tick + elapsed) as Tick,
         },
         UNFOLLOWED_FEEDS,
-        pointer,
         (made) => {
-          delivery = made;
+          deliveries.push(made);
           return { id: t.parts.mint() };
         },
       );
-      if (drawn?.frame.kind !== "drawn" || delivery === undefined)
-        throw new Error(`the ${surface} drew no bar`);
-      const { frame } = drawn;
-      const { candidate } = delivery;
+      if (drawn === null) throw new Error("the session drew no bar");
+      return drawn.map(([surface, { frame }], i) => {
+        const delivery = deliveries[i];
+        if (frame.kind !== "drawn" || delivery === undefined)
+          throw new Error(`the ${surface} drew no bar`);
+        return { surface, frame, candidate: delivery.candidate };
+      });
+    };
+    const draw = (surface: Lane, pointer: Pointer | null, elapsed: number) => {
+      const [{ frame, candidate }] = drawAll([[surface, pointer]], elapsed) as [
+        ReturnType<typeof drawAll>[number],
+      ];
       return {
         bar: frame.bar,
         text: textOf(parseFrame(frame.bar)),
@@ -1513,8 +1514,25 @@ describe("each surface's frame", () => {
           ).not.toBeNull(),
       };
     };
-    return { t, draw };
+    return { t, draw, drawAll };
   }
+
+  // [LAW:one-source-of-truth] A feed draws every lane following the session
+  // from one setup; each lane's frame is still its own.
+  test("draws each lane in one call the frame its own draw would be", async () => {
+    const { draw, drawAll } = await surfaces();
+    const together = drawAll(
+      [
+        ["statusline", null],
+        ["pane", hovered],
+      ],
+      0,
+    );
+    expect(together.map(({ surface, frame }) => [surface, frame.bar])).toEqual([
+      ["statusline", draw("statusline", null, 0).bar],
+      ["pane", draw("pane", hovered, 0).bar],
+    ]);
+  });
 
   test("reads its own surface's hover and gestures: the pane draws the hovered tip and no mode button, the statusline the button and no tip", async () => {
     const { draw } = await surfaces();
@@ -1555,11 +1573,9 @@ describe("each surface's frame", () => {
     const { candidate } = drawRender(
       t.parts,
       setup,
-      ANSWERING,
-      "pane",
+      { by: "feed", fps: MOVING_FPS },
       UNFOLLOWED_FEEDS,
-      hovered,
-    );
+    )("pane", hovered, []);
     expect(candidate.frame.menu.shown).toBe(true);
     expect(draw("statusline", null, 0).text).toContain("⌥");
     expect(draw("pane", hovered, 0).text).not.toContain("⌥");
@@ -1692,10 +1708,10 @@ function productionAnswer(
     () => {},
     unfollowedCollector(t.rig.served.collector),
     {
-      ...NO_ACTS,
+      ...noActs(),
       unheard: (text) => void t.logged.push(text),
       configs: {
-        ...NO_ACTS.configs,
+        ...NO_CONFIGS,
         follow: discovery.follow.bind(discovery),
         snapshotOf: discovery.snapshotOf.bind(discovery),
         ...override,
@@ -1756,7 +1772,7 @@ describe("the session's config, ahead of its request", () => {
       hostHeld(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+      { ...noActs(), configs: t.rig.cache.configs.discovery },
     );
     cleanups.push(() => host.closeWake());
     // Its origin's config was delivered, so the next context opens the view itself.
@@ -1822,7 +1838,8 @@ describe("the session's config, ahead of its request", () => {
       expect.objectContaining({
         kind: "effect-done",
         session: SESSION,
-        outcome: { kind: "ok" },
+        // The host's verdict: Claude Code's statusline shows the answer.
+        outcome: { kind: "ok", presented: true },
       }),
     ]);
     expect(t.recorded).toHaveLength(1);
@@ -1967,9 +1984,9 @@ describe("the session's config, ahead of its request", () => {
         () => {},
         unfollowedCollector({ subscribed() {}, holding: () => () => {} }),
         {
-          ...NO_ACTS,
+          ...noActs(),
           configs: {
-            ...NO_ACTS.configs,
+            ...NO_CONFIGS,
             follow() {},
             snapshotOf(origin) {
               if (origin.cwd === waiting.requested.cwd && refuseFirstSnapshot) {
@@ -2159,7 +2176,7 @@ describe("two requests of one session at different keys", () => {
       ),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+      { ...noActs(), configs: t.rig.cache.configs.discovery },
     );
     t.rig.served.route(host);
     const ask = (pane: string, id: number) =>
@@ -2262,7 +2279,7 @@ test("overlapping requests draw the latest pane with each client's width, then a
     ),
     () => {},
     unfollowedCollector(collector),
-    { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+    { ...noActs(), configs: t.rig.cache.configs.discovery },
   );
   t.rig.served.route(host);
   let resumeOlder = (): void => {};
@@ -2368,10 +2385,8 @@ test("diagnostics use the requesting client's rows or its own default ceiling", 
       t.parts,
       setup,
       ANSWERING,
-      "statusline",
       UNFOLLOWED_FEEDS,
-      null,
-    ).drawn.body.rows;
+    )("statusline", null, []).drawn.body.rows;
   };
   // Shows the viewer where a click on the drawn bar would: the first link
   // whose description starts `described` (any link, when empty).

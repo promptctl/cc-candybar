@@ -258,10 +258,9 @@ function* frameEffects({ rows }: WireFrame): Generator<DrawnEffect> {
 
 // The surface a recorded frame was shown on: a request's on the statusline,
 // a feed's on its lane's.
-type RecordedSurface = Lane;
 interface RecordedFrame {
   session: SessionId;
-  surface: RecordedSurface;
+  surface: Lane;
   frame: WireFrame;
 }
 
@@ -279,7 +278,7 @@ function* drawnFrames(output: RendererOutput): Generator<RecordedFrame> {
 export class RecordingControls {
   private readonly sessions = new Map<
     SessionId,
-    Map<RecordedSurface, ReadonlySet<string>>
+    Map<Lane, ReadonlySet<string>>
   >();
 
   offers(session: SessionId, key: string, value: string | null): boolean {
@@ -295,8 +294,7 @@ export class RecordingControls {
     pairs: ReadonlySet<string>,
   ): void {
     const surfaces =
-      this.sessions.get(session) ??
-      new Map<RecordedSurface, ReadonlySet<string>>();
+      this.sessions.get(session) ?? new Map<Lane, ReadonlySet<string>>();
     if (pairs.size > 0) surfaces.set(surface, pairs);
     else surfaces.delete(surface);
     if (surfaces.size > 0) this.sessions.set(session, surfaces);

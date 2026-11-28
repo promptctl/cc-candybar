@@ -355,18 +355,15 @@ export interface LaneViewers {
 // Every session someone watches, whole: a session absent has no viewer.
 export type Viewers = Readonly<Record<SessionId, SessionViewers>>;
 
-// [LAW:one-source-of-truth] The lanes that follow a session and draw it now:
-// the one derivation from its viewers, which the renderer hands the bar to
-// and the host's lane edge waits on.
-export function followingOf(viewers: SessionViewers | undefined): Set<Lane> {
-  const following = new Set<Lane>();
-  for (const [lane, seen] of Object.entries(viewers?.lanes ?? {}))
-    if (seen.drawing) following.add(lane as Lane);
-  return following;
-}
-
 export type EffectOutcome =
-  | { readonly kind: "ok"; readonly sessionCommitted?: true }
+  | {
+      readonly kind: "ok";
+      readonly sessionCommitted?: true;
+      // [LAW:single-enforcer] A present or frame the host took as its
+      // surface's presentation: the host's verdict, the only one the renderer
+      // records a delivery by.
+      readonly presented?: true;
+    }
   | { readonly kind: "failed"; readonly reason: string }
   // Refused before it acted: a change to a setting that moved since the
   // renderer read it, so nothing made over that reading can land; or an act

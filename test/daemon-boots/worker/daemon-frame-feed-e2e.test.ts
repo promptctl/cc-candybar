@@ -301,10 +301,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // count includes has arrived: comparing after close raced the frames still
     // in flight, which closing drops.
     let after = before;
+    const watchedMs = 2000;
     const frames = await framesOf(
       "feed-moving",
       async ({ received, waitFor }) => {
-        await sleep(2000);
+        await sleep(watchedMs);
         after = await feedStats();
         const sent = after.pushed - before.pushed;
         await waitFor(
@@ -323,9 +324,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // An unchanged frame is never sent twice.
     for (let i = 1; i < frames.length; i++)
       expect(frames[i]!.resp).not.toEqual(frames[i - 1]!.resp);
-    // The daemon draws at 30 a second while the bar moves; half that leaves
-    // room for a slow CI box, and is far past Claude Code's one a second.
-    expect(after.drawn - before.drawn).toBeGreaterThanOrEqual(30);
+    // [LAW:verifiable-goals] A moving bar draws at the moving rate, which is
+    // told from the still rate by more draws than the still period allows in
+    // the time watched (one more for a draw at each end). How far past it a
+    // run gets says how busy the machine was, so nothing asserts it.
+    const stillMost = Math.floor(watchedMs / FEED_PERIODS.still) + 2;
+    expect(after.drawn - before.drawn).toBeGreaterThan(stillMost);
     // Every frame the daemon counted reached the subscriber; any after the
     // count are frames it pushed while the stream was still open.
     expect(pushed.length).toBeGreaterThanOrEqual(after.pushed - before.pushed);
@@ -349,9 +353,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(events[0]).toContain(" feeds=- ");
     const fps = /feeds=statusline:1sub\/(\d+)fps\/shown /u.exec(events.at(-1)!);
     expect(fps).not.toBeNull();
-    // 30 a second while the bar moves; a third of that leaves room for a slow
-    // CI box, and is far past the one a second a polled bar reaches.
-    expect(Number(fps![1])).toBeGreaterThanOrEqual(10);
+    // The moving rate, told from the still rate by more frames in the trailing
+    // second than the still period allows (one more for a frame at its edge).
+    expect(Number(fps![1])).toBeGreaterThan(1000 / FEED_PERIODS.still + 1);
   });
 
   test("a still bar is pushed once, and not again while nothing changes", async () => {

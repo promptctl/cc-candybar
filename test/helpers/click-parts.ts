@@ -5,7 +5,7 @@
 // these in.
 
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { holdable, hostHeld, NOTHING_STORED, NO_ACTS, NO_CONFIGS } from "./renderers";
+import { holdable, hostHeld, NOTHING_STORED, noActs, NO_CONFIGS } from "./renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
@@ -39,7 +39,7 @@ function clickWorld(): HostWorld {
   const fixture = snapshotOf("{}");
   let followed = new Set<string>();
   return {
-    ...NO_ACTS,
+    ...noActs(),
     configs: {
       ...NO_CONFIGS,
       follow: (origins) => { followed = new Set(origins.map(originKey)); },

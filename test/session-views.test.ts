@@ -24,10 +24,10 @@ import {
 } from "../src/renderer/render-warnings";
 import {
   PresentedFrames,
-  type DrawSurface,
   type FrameCandidate,
 } from "../src/renderer/presented-frames";
 import { ABSENT } from "../src/utils/outcome";
+import type { Lane } from "../src/config/lanes.js";
 import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { type Launcher } from "../src/proc/launcher";
 import { answerRepo } from "./helpers/repo-approval";
@@ -539,7 +539,7 @@ test("a config load starts no view's source, and still names a session value tha
 function copyCandidate(
   cache: RenderCache,
   view: SessionView,
-  by: DrawSurface,
+  by: Lane,
   text: string,
 ): FrameCandidate {
   const drawn = drawViewFrame(view, view.sessionId);
@@ -575,12 +575,13 @@ test("a copy click reads the frame its own surface last delivered, not another's
   expect(cache.drawnCopy(S_COPY, "statusline", "7")).toBe("before the fix");
   expect(cache.drawnCopy(S_COPY, "pane", "7")).toBe("after the fix");
   expect(cache.drawnCopy(S_COPY, "statusline", "8")).toBeUndefined();
-  // A lane that stops following takes its surface's list with it. Claude
-  // Code's statusline is still drawn on request, so its list stands.
+  // A surface whose drawer turns takes its list with it, and only its own:
+  // the next drawer's frame lists its own copies.
   cache.stopDrawing(S_COPY, "pane");
   expect(cache.drawnCopy(S_COPY, "pane", "7")).toBeUndefined();
-  cache.stopDrawing(S_COPY, "statusline");
   expect(cache.drawnCopy(S_COPY, "statusline", "7")).toBe("before the fix");
+  cache.stopDrawing(S_COPY, "statusline");
+  expect(cache.drawnCopy(S_COPY, "statusline", "7")).toBeUndefined();
 });
 
 test("the segment inspector reads the newest delivered layout still in the view", async () => {
@@ -657,7 +658,9 @@ test("the bounded presentation owner evicts a session as one record", async () =
   expect(frames.diagnostics(a.sessionId, "statusline")).toBeUndefined();
   expect(frames.diagnostics(a.sessionId, "pane")).toBeUndefined();
   expect(frames.copy(a.sessionId, "pane", "7")).toBeUndefined();
-  expect(frames.layout(a.sessionId, "statusline", request.target)).toBeUndefined();
+  expect(
+    frames.layout(a.sessionId, "statusline", request.target),
+  ).toBeUndefined();
   expect(frames.stats().effects.sessions).toBe(1);
 });
 

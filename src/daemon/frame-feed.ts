@@ -24,6 +24,7 @@ import type { PublishFrame } from "./foundations/frame-publication.js";
 import {
   LANES,
   LANE_NAMES,
+  perLane,
   type Lane,
   type LaneSwitches,
 } from "../config/lanes";
@@ -79,9 +80,9 @@ export interface FeedDeps<Req> {
   shown(req: Req): boolean;
   // A session gained its first subscriber or lost its last one.
   watchingChanged(session: SessionId, watching: boolean): void;
-  // A lane lost its last subscriber of the session: its surface is no longer
-  // drawn.
-  laneLeft(session: SessionId, lane: Lane): void;
+  // A lane of the session gained its first subscriber or lost its last: its
+  // surface's drawer changed.
+  laneFollowed(session: SessionId, lane: Lane, followed: boolean): void;
   // [LAW:single-enforcer] Hands the renderer every session's viewers, as
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
@@ -153,27 +154,26 @@ function ownerOf(watched: Watched, lane: Lane): HeldPointer | null {
   return found;
 }
 
+// Whether any subscriber of the session follows `lane`.
+const followsLane = (watched: Watched, lane: Lane): boolean =>
+  [...watched.followers.keys()].some((sub) => sub.lane === lane);
+
 // Who owns each lane's pointer: what an owner change is told against.
 type Owners = Readonly<Record<Lane, string | null>>;
 const ownersOf = (watched: Watched | undefined): Owners =>
-  Object.fromEntries(
-    LANE_NAMES.map((lane) => [
-      lane,
-      watched === undefined ? null : (ownerOf(watched, lane)?.id ?? null),
-    ]),
-  ) as Record<Lane, string | null>;
+  perLane((lane) =>
+    watched === undefined ? null : (ownerOf(watched, lane)?.id ?? null),
+  );
 
 // A frame as a lane's subscribers are sent it, and the failure it is when it
 // is one.
 interface EncodedAnswer {
   readonly json: string;
   readonly displayedEvents?: readonly DaemonEvent[];
-  readonly failure?: true;
 }
 
 const failedAnswer = (refusal: Refusal): EncodedAnswer => ({
   json: JSON.stringify(refusal),
-  failure: true,
 });
 
 function covers(prior: EncodedAnswer, offered: EncodedAnswer): boolean {
@@ -325,8 +325,10 @@ export class FrameFeeds<Req> {
       owner: sub.owner === null ? null : this.held(sub.owner),
     };
     const owned = ownersOf(watched);
+    const laneJoined = !followsLane(watched, sub.lane);
     watched.followers.set(sub, follower);
     this.ownerMoved(sessionId, owned, watched);
+    if (laneJoined) this.deps.laneFollowed(sessionId, sub.lane, true);
     this.handover(sessionId, watched, sub, follower);
     this.deps.log(
       "info",
@@ -441,25 +443,23 @@ export class FrameFeeds<Req> {
   }
 
   private seen(sessionId: SessionId, watched: Watched): SessionViewers {
-    const lanes: Partial<Record<Lane, LaneViewers>> = {};
-    for (const sub of watched.followers.keys()) {
-      const seen = lanes[sub.lane];
-      lanes[sub.lane] = {
-        subscribers: (seen?.subscribers ?? 0) + 1,
-        drawing: (seen?.drawing ?? false) || sub.drawing(),
-        pointer: seen?.pointer ?? ownerOf(watched, sub.lane)?.pointer ?? null,
+    const followers = [...watched.followers.keys()];
+    // [LAW:one-source-of-truth] Each followed lane's facts, once per lane and
+    // in the lanes' own order, so a replacement within a lane that changes
+    // follower order still reads as the same view. Its pointer is its owner's.
+    const lanes = LANE_NAMES.flatMap((lane) => {
+      const subs = followers.filter((sub) => sub.lane === lane);
+      if (subs.length === 0) return [];
+      const viewers: LaneViewers = {
+        subscribers: subs.length,
+        drawing: subs.some((sub) => sub.drawing()),
+        pointer: ownerOf(watched, lane)?.pointer ?? null,
       };
-    }
-    // Follower insertion order can change on a replacement within a lane.
-    // Emit the lane facts in the same order so that it remains the same view.
+      return [[lane, viewers] as const];
+    });
     return {
-      lanes: Object.fromEntries(
-        LANE_NAMES.flatMap((lane) => {
-          const viewed = lanes[lane];
-          return viewed === undefined ? [] : [[lane, viewed]];
-        }),
-      ),
-      shown: [...watched.followers.keys()].some(
+      lanes: Object.fromEntries(lanes),
+      shown: followers.some(
         (sub) => sub.presenting?.() ?? this.shown(sessionId),
       ),
       joined: watched.frameDemand,
@@ -518,8 +518,9 @@ export class FrameFeeds<Req> {
       }
   }
 
-  // The frames a renderer's turn drew: each kept as its lane's last, and sent
-  // to each of that lane's subscribers it changed.
+  // The frames a renderer's turn drew: each kept as its lane's last while the
+  // lane has a subscriber, and sent to each of that lane's subscribers it
+  // changed.
   took(
     renderer: RendererName,
     frames: readonly PushedFrame[],
@@ -552,7 +553,9 @@ export class FrameFeeds<Req> {
           );
         drawn = false;
       }
-      watched.last.set(lane, encoded);
+      // [LAW:one-source-of-truth] A lane's last frame lives exactly as long as
+      // the lane has a subscriber: one drawn before its last left is not kept.
+      if (followsLane(watched, lane)) watched.last.set(lane, encoded);
       if (drawn) {
         this.publish(session, watched, lane, encoded, (ok) =>
           settled(pushed, ok),
@@ -639,11 +642,7 @@ export class FrameFeeds<Req> {
     const owned = ownersOf(watched);
     watched.followers.delete(sub);
     this.ownerMoved(sessionId, owned, watched);
-    // [LAW:one-source-of-truth] A lane's last frame lives exactly as long as
-    // the lane has a subscriber.
-    const laneLeft = ![...watched.followers.keys()].some(
-      ({ lane }) => lane === sub.lane,
-    );
+    const laneLeft = !followsLane(watched, sub.lane);
     if (laneLeft) watched.last.delete(sub.lane);
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId);
@@ -652,7 +651,7 @@ export class FrameFeeds<Req> {
         `feed sid=${JSON.stringify(sessionId)} unwatched pushed=${watched.pushed}`,
       );
     }
-    if (laneLeft) this.deps.laneLeft(sessionId, sub.lane);
+    if (laneLeft) this.deps.laneFollowed(sessionId, sub.lane, false);
     if (watched.followers.size === 0)
       this.deps.watchingChanged(sessionId, false);
     this.announce();

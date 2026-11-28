@@ -24,7 +24,7 @@ import type {
 } from "../src/renderer-interface/interface";
 import type { Monotonic } from "../src/time";
 import { handClock } from "./helpers/hand-clock";
-import { eventRenderer, hostHeld } from "./helpers/renderers";
+import { eventRenderer, hostHeld, presenting } from "./helpers/renderers";
 import { NO_CONFIGS } from "./helpers/renderers";
 import { authorizeRun } from "../src/daemon/foundations/run-authorization";
 import { VERB_RUN, type RunEvidence } from "../src/click/wire";
@@ -109,6 +109,7 @@ function hostOver(
   const unheard: string[] = [];
   const heard: EventInput[] = [];
   const world: HostWorld = {
+    presentationTurn: presenting(),
     authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
     perform: async (act: HostAct): Promise<EffectOutcome> => {
       did.push(

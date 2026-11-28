@@ -33,10 +33,6 @@ import {
 } from "../renderer-interface/stored-state.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { validFeedResumes } from "../renderer-interface/feed-history.js";
-import {
-  REQUEST_SURFACE,
-  type ProposedPresentation,
-} from "../renderer-interface/presentation.js";
 import { mainRendererOf } from "./main.js";
 
 // [LAW:parse-dont-validate] Admit known event arms with their required
@@ -137,28 +133,35 @@ function lineEntry(raw: string, line: number): Record<string, unknown> {
 }
 
 function inputOf(
-  value: unknown,
+  recorded: unknown,
   line: number,
   wireVersion: number,
+  // The ids of the presents the recording's turns returned so far.
+  presents: ReadonlySet<unknown>,
 ): EventInput {
   if (
-    !isPlainObject(value) ||
-    value.kind !== "event" ||
-    typeof value.at !== "number" ||
-    !Number.isFinite(value.at) ||
-    typeof value.tick !== "number" ||
-    !Number.isFinite(value.tick) ||
-    !isPlainObject(value.event) ||
-    typeof value.event.kind !== "string" ||
-    Object.keys(value).length !==
+    !isPlainObject(recorded) ||
+    recorded.kind !== "event" ||
+    typeof recorded.at !== "number" ||
+    !Number.isFinite(recorded.at) ||
+    typeof recorded.tick !== "number" ||
+    !Number.isFinite(recorded.tick) ||
+    !isPlainObject(recorded.event) ||
+    typeof recorded.event.kind !== "string" ||
+    Object.keys(recorded).length !==
       4 +
-        Number(wireVersion >= 34 && Object.hasOwn(value, "presentation")) +
-        Number(wireVersion >= 36 && Object.hasOwn(value, "feedResumes"))
+        Number(wireVersion >= 34 && Object.hasOwn(recorded, "presentation")) +
+        Number(wireVersion >= 36 && Object.hasOwn(recorded, "feedResumes"))
   ) {
     throw new Error(`recording line ${line} has an invalid renderer input`);
   }
+  const value =
+    wireVersion < SURFACE_WIRE
+      ? surfaceInputOf(recorded, line, presents)
+      : recorded;
   const { event } = value;
-  if (wireVersion < SURFACE_WIRE) surfacesOfLegacyInput(value);
+  if (!isPlainObject(event))
+    throw new Error(`recording line ${line} has an invalid renderer event`);
   if (
     Object.hasOwn(value, "presentation") &&
     (!isPlainObject(value.presentation) ||
@@ -173,7 +176,7 @@ function inputOf(
       !validFeedResumes(value.feedResumes))
   )
     throw new Error(`recording line ${line} has an invalid feed handoff`);
-  const fields = ownValue(EVENT_FIELDS, value.event.kind);
+  const fields = ownValue(EVENT_FIELDS, recorded.event.kind);
   if (
     fields === undefined ||
     fields.some((field) => !Object.hasOwn(event, field))
@@ -199,100 +202,176 @@ function inputOf(
   return value as unknown as EventInput;
 }
 
-// Wire 37 keys every presentation fact by the surface a frame is shown on and
-// draws each followed lane its own frame. Older wires keyed them by drawer
-// (`request`, `feed`) and held the pointer once per session.
+// Wire 37 keys every presentation fact, the animation clock included, by the
+// surface a frame is shown on, draws each followed lane its own frame, and
+// records a delivery only by the host's `presented` verdict. Older wires keyed
+// presentation by drawer (`request`, `feed`), held one clock and one pointer
+// per session, and recorded every present that reached its client.
 const SURFACE_WIRE = 37;
 
-const legacyViewers = (viewers: unknown): void => {
-  if (!isPlainObject(viewers)) return;
-  for (const session of Object.values(viewers)) {
-    if (!isPlainObject(session)) continue;
-    // The session's one pointer named no surface, so no lane's frame is
-    // drawn with it.
-    delete session.pointer;
-    if (isPlainObject(session.lanes))
-      for (const lane of Object.values(session.lanes))
-        if (isPlainObject(lane)) lane.pointer = null;
-  }
-};
-
-const legacyResume = (resume: Record<string, unknown>): void => {
-  const { surfaces, motion } = resume;
-  if (!isPlainObject(surfaces) || !isPlainObject(motion)) return;
-  const clock = isPlainObject(motion.value) ? motion.value : {};
-  const { placements, made, ...held } = clock;
-  motion.value = held;
-  const request = surfaces.request;
-  // A request's frame was the statusline's, and its motion every surface's;
-  // the feed's one frame was no single surface's, so it is dropped.
-  resume.surfaces =
-    isPlainObject(request) && isPlainObject(request.value)
-      ? {
-          [REQUEST_SURFACE]: {
-            ...request,
-            value: { ...request.value, effects: { placements, made } },
-          },
-        }
-      : {};
-};
-
-// [LAW:single-enforcer] The one upgrade of an older input to the surface
-// keys. Every field it does not recognise is left for the checks below.
-function surfacesOfLegacyInput(value: Record<string, unknown>): void {
-  const { event, presentation, feedResumes } = value;
-  if (isPlainObject(event)) {
-    legacyViewers(event.viewers);
-    if (isPlainObject(event.click) && Array.isArray(event.click.steps))
-      for (const step of event.click.steps)
-        if (
-          isPlainObject(step) &&
-          step.verb === VERB_COPY_DIAGNOSTIC &&
-          Array.isArray(step.args) &&
-          step.args[1] === "request"
-        )
-          step.args = step.args.with(1, REQUEST_SURFACE);
-  }
-  if (isPlainObject(presentation) && Array.isArray(presentation.sessions))
-    for (const offer of presentation.sessions) {
-      if (!isPlainObject(offer)) continue;
-      const bases = isPlainObject(offer.bases) ? offer.bases : {};
-      offer.bases =
-        bases.request === undefined ? {} : { [REQUEST_SURFACE]: bases.request };
-      if (isPlainObject(offer.resume)) legacyResume(offer.resume);
-    }
-  if (Array.isArray(feedResumes))
-    for (const resume of feedResumes) {
-      if (!isPlainObject(resume) || !isPlainObject(resume.history)) continue;
-      const { frame: _drawnForEveryLane, ...history } = resume.history;
-      legacyViewers({ [String(resume.session)]: history.viewers });
-      resume.history = { ...history, frames: {} };
-    }
+// [LAW:parse-dont-validate] The one upgrade of an older wire's input to wire
+// 37: a new value, or a refusal naming the field it cannot map. A request's
+// frame was the statusline's, drawn under the session's clock and effects;
+// the feed's one frame was no single surface's, so it is dropped.
+function surfaceInputOf(
+  value: Record<string, unknown>,
+  line: number,
+  presents: ReadonlySet<unknown>,
+): Record<string, unknown> {
+  const refuse = (what: string): never => {
+    throw new Error(
+      `recording line ${line} has ${what} that wire ${SURFACE_WIRE} cannot read`,
+    );
+  };
+  const object = (raw: unknown, what: string): Record<string, unknown> =>
+    isPlainObject(raw) ? raw : refuse(what);
+  // The session's one pointer named no surface, so no lane's frame is drawn
+  // with it.
+  const seenOf = (raw: unknown) => {
+    const { pointer: _sessionPointer, ...seen } = object(raw, "viewers");
+    return {
+      ...seen,
+      lanes: Object.fromEntries(
+        Object.entries(object(seen.lanes, "viewers")).map(([lane, viewers]) => [
+          lane,
+          { ...object(viewers, "viewers"), pointer: null },
+        ]),
+      ),
+    };
+  };
+  const viewersOf = (raw: unknown) =>
+    Object.fromEntries(
+      Object.entries(object(raw, "viewers")).map(([sid, seen]) => [
+        sid,
+        seenOf(seen),
+      ]),
+    );
+  const resumeOf = (raw: unknown) => {
+    const { surfaces, motion, ...resume } = object(
+      raw,
+      "a presentation resume",
+    );
+    const { request } = object(surfaces, "a presentation resume");
+    const { placements, made, ...clock } = object(
+      object(motion, "a presentation resume").value,
+      "a presentation resume",
+    );
+    if (request === undefined) return { ...resume, surfaces: {} };
+    const held = object(request, "a request presentation");
+    if (placements === undefined || made === undefined)
+      refuse("a request presentation");
+    const drawn = object(held.value, "a request presentation");
+    return {
+      ...resume,
+      surfaces: {
+        statusline: {
+          ...held,
+          value: { ...drawn, clock, effects: { placements, made } },
+        },
+      },
+    };
+  };
+  const event = object(value.event, "a renderer event");
+  const click = isPlainObject(event.click) ? event.click : null;
+  const outcome = isPlainObject(event.outcome) ? event.outcome : null;
+  const upgraded: Record<string, unknown> = {
+    ...event,
+    ...(event.kind === "viewers" && { viewers: viewersOf(event.viewers) }),
+    ...(event.kind === "start" && { viewers: viewersOf(event.viewers) }),
+    ...(click !== null &&
+      Array.isArray(click.steps) && {
+        click: {
+          ...click,
+          steps: click.steps.map((step: unknown) => {
+            if (
+              !isPlainObject(step) ||
+              step.verb !== VERB_COPY_DIAGNOSTIC ||
+              !Array.isArray(step.args)
+            )
+              return step;
+            if (step.args[1] === "feed")
+              refuse("a copy click on a feed frame, which named no surface");
+            return step.args[1] === "request"
+              ? { ...step, args: step.args.with(1, "statusline") }
+              : step;
+          }),
+        },
+      }),
+    // Every present that reached its client was recorded as shown.
+    ...(event.kind === "effect-done" &&
+      presents.has(event.of) &&
+      outcome?.kind === "ok" && { outcome: { ...outcome, presented: true } }),
+  };
+  const { presentation, feedResumes } = value;
+  return {
+    ...value,
+    event: upgraded,
+    ...(presentation !== undefined && {
+      presentation: (() => {
+        const offered = object(presentation, "a presentation input");
+        if (!Array.isArray(offered.sessions)) refuse("a presentation input");
+        return {
+          ...offered,
+          sessions: (offered.sessions as unknown[]).map((raw) => {
+            const {
+              motion: _sessionMotion,
+              bases,
+              resume,
+              ...offer
+            } = object(raw, "a presentation offer");
+            const { request } = object(bases, "a presentation offer");
+            return {
+              ...offer,
+              bases: request === undefined ? {} : { statusline: request },
+              ...(resume !== undefined && { resume: resumeOf(resume) }),
+            };
+          }),
+        };
+      })(),
+    }),
+    ...(feedResumes !== undefined && {
+      feedResumes: (Array.isArray(feedResumes)
+        ? feedResumes
+        : refuse("a feed handoff")
+      ).map((raw: unknown) => {
+        const resume = object(raw, "a feed handoff");
+        const { frame: _drawnForEveryLane, ...history } = object(
+          resume.history,
+          "a feed handoff",
+        );
+        return {
+          ...resume,
+          history: { ...history, viewers: seenOf(history.viewers), frames: {} },
+        };
+      }),
+    }),
+  };
 }
 
-// What an older wire proposed for a statusline draw: the effects its frame
-// drew held in the session's motion. Both proposals were made against the
-// same image, so they share a kind.
-function legacyProposal({ surface, motion, menu }: ProposedPresentation) {
-  if (surface.kind === "whole" && motion.kind === "whole") {
-    const { effects, ...value } = surface.value;
-    return {
-      menu,
-      surface: { ...surface, value },
-      motion: { ...motion, value: { ...motion.value, ...effects } },
-    };
-  }
-  if (surface.kind === "change" && motion.kind === "change") {
-    const { effects, ...change } = surface.change;
-    return {
-      menu,
-      surface: { ...surface, change },
-      motion: { ...motion, change: { ...motion.change, ...effects } },
-    };
-  }
-  throw new Error(
-    "an older recording's statusline proposal has a surface and a motion of different kinds, which one wire 37 proposal cannot reproduce",
-  );
+// [LAW:one-source-of-truth] What an older wire's output and this one's are
+// both compared by. An older draw noted which lanes the statusline handed the
+// bar to, a fact this wire no longer has, and proposed its presentation as a
+// surface and a session motion, each a change against its own base; this
+// wire proposes one surface holding its clock. The frames, records and stored
+// writes each turn produces are compared in full.
+function withoutLegacyPresentation(output: unknown): unknown {
+  if (!isPlainObject(output)) return output;
+  const { record, effects } = output;
+  return {
+    ...output,
+    ...(Array.isArray(record) && {
+      record: record.filter(
+        (field) => !(Array.isArray(field) && field[0] === "handoff"),
+      ),
+    }),
+    ...(Array.isArray(effects) && {
+      effects: effects.map((effect: unknown) => {
+        if (!isPlainObject(effect) || effect.kind !== "present") return effect;
+        const { proposal: _proposal, ...present } = effect;
+        return present;
+      }),
+    }),
+  };
 }
 
 // [LAW:one-source-of-truth] Compare what JSON actually carries, including
@@ -372,14 +451,6 @@ function historicalOutputs(
   }
   return (output) => ({
     ...output,
-    record:
-      wireVersion >= SURFACE_WIRE
-        ? output.record
-        : output.record.flatMap((field) =>
-            // The draw noted which lanes the statusline handed the bar to,
-            // just before what it owed; this draw hands it to none.
-            field[0] === "owed" ? [["handoff", "-"], field] : [field],
-          ),
     subscriptions:
       wireVersion >= 35
         ? output.subscriptions
@@ -399,12 +470,6 @@ function historicalOutputs(
             ),
           },
     effects: output.effects.map((effect) => {
-      if (
-        wireVersion < SURFACE_WIRE &&
-        effect.kind === "present" &&
-        effect.proposal !== undefined
-      )
-        return { ...effect, proposal: legacyProposal(effect.proposal) };
       if (
         wireVersion >= 28 ||
         (effect.kind !== "change" && effect.kind !== "approve-repo")
@@ -512,7 +577,13 @@ function constructionOf(entry: Record<string, unknown>): {
     compareAs:
       wireVersion === RENDERER_WIRE_VERSION
         ? undefined
-        : historicalOutputs(boot.stored, wireVersion),
+        : wireVersion < SURFACE_WIRE
+          ? (() => {
+              const historical = historicalOutputs(boot.stored, wireVersion);
+              return (output: RendererOutput) =>
+                withoutLegacyPresentation(historical(output));
+            })()
+          : historicalOutputs(boot.stored, wireVersion),
   };
 }
 
@@ -531,6 +602,7 @@ export async function replayRecording(
   let ended = false;
   let line = 0;
   let turns = 0;
+  const presents = new Set<unknown>();
   for await (const raw of lines) {
     line++;
     if (ended)
@@ -575,16 +647,23 @@ export async function replayRecording(
         throw new Error(
           `recording line ${line} carries feed frames from wire ${wireVersion}, which drew one frame for every lane; wire ${SURFACE_WIRE} draws each lane its own frame, so replay cannot compare them`,
         );
-      const input = inputOf(entry.input, line, wireVersion);
+      const input = inputOf(entry.input, line, wireVersion, presents);
       turns++;
       let actual: RendererOutput;
       try {
         actual = await renderer.answer(input);
-      } catch {
-        throw new Error(`recording turn ${turns} was not answered`);
+      } catch (error) {
+        // [LAW:no-silent-failure] The renderer's own error says which field
+        // of the turn it could not draw from.
+        throw new Error(
+          `recording turn ${turns} was not answered: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
       }
       const output = verify(
-        entry.output,
+        wireVersion < SURFACE_WIRE
+          ? withoutLegacyPresentation(entry.output)
+          : entry.output,
         actual,
         `recording turn ${turns}`,
         "output",
@@ -603,6 +682,8 @@ export async function replayRecording(
           : "",
         compareAs,
       );
+      for (const effect of output.effects)
+        if (effect.kind === "present") presents.add(effect.id);
       onTurn?.(input, output);
     } else if (entry.kind === "end") {
       requireFields(

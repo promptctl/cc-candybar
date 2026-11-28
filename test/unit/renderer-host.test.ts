@@ -23,7 +23,7 @@ import type { Monotonic, TimerSource } from "../../src/time";
 import { handClock } from "../helpers/hand-clock";
 import type { Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
-import { hostHeld, NO_ACTS } from "../helpers/renderers";
+import { hostHeld, noActs, NO_CONFIGS } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
 import { digestOf } from "../../src/utils/plain";
 import { heardRequest } from "../helpers/click";
@@ -84,7 +84,7 @@ function hostOver(
       },
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       unheard: (line) => void unheard.push(line),
       perform: async (effect) => {
         acted.push(effect);
@@ -279,7 +279,7 @@ test("a command whose asker stopped waiting before its slot is not made, and rej
       recorded: () => {},
       holding: () => () => {},
     },
-    NO_ACTS,
+    noActs(),
   );
   const busy = host.command({ kind: "close-journal" });
   const wait = new AbortController();
@@ -294,7 +294,7 @@ test("a command whose asker stopped waiting before its slot is not made, and rej
 
 test("a start heads the mailbox, behind only the slot in progress", async () => {
   const heard: string[] = [];
-  const followed = jest.fn(NO_ACTS.configs.follow);
+  const followed = jest.fn(NO_CONFIGS.follow);
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
@@ -318,7 +318,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
       recorded: () => {},
       holding: () => () => {},
     },
-    { ...NO_ACTS, configs: { ...NO_ACTS.configs, follow: followed } },
+    { ...noActs(), configs: { ...NO_CONFIGS, follow: followed } },
   );
   const asked = host.command({ kind: "close-journal" });
   const waiting = host.deliver(
@@ -360,7 +360,7 @@ test("every turn's record reaches `recorded`, whatever input it took and however
         void records.push(record.map(([k, v]) => `${k}=${v}`).join(" ")),
       holding: () => () => {},
     },
-    NO_ACTS,
+    noActs(),
   );
   await host.start(
     () => ({
@@ -405,7 +405,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
       recorded: () => {},
       holding: () => () => {},
     },
-    NO_ACTS,
+    noActs(),
   );
   const first = host.deliver(
     () => ({ kind: "event", event: { kind: "due" } }),
@@ -466,7 +466,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       recorded: () => {},
       holding: () => () => {},
     },
-    { ...NO_ACTS, unheard: (text) => void unheard.push(text) },
+    { ...noActs(), unheard: (text) => void unheard.push(text) },
   );
   const turn = await host.answer(() => ({
     kind: "event",
@@ -515,7 +515,7 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
         for (const frame of frames) writes.push(ok => settle(frame, ok));
       },
     },
-    NO_ACTS,
+    noActs(),
   );
   for (let n = 0; n < 2; n++) {
     await host.start(() => ({ kind: "event", event: { kind: "start", viewers: {}, sessions: [] } }), []);
@@ -573,7 +573,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
       holding: () => () => {},
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       unheard: (text) => void unheard.push(text),
       perform: async (act) => {
         if (act.kind !== "copy") throw new Error("unexpected act");
@@ -639,9 +639,9 @@ test("a config named by a command reaches the renderer before the next queued ev
       holding: () => () => {},
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       configs: {
-        ...NO_ACTS.configs,
+        ...NO_CONFIGS,
         follow: () => {},
         snapshotOf: () => ({
           chain: [],
@@ -766,14 +766,14 @@ test("failed replacement starts leave the accepted declaration until a complete 
       holding: () => () => {},
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       perform: async (act) => {
         if (act.kind !== "copy") throw new Error(`unexpected ${act.kind}`);
         performed.push(act.text);
         return { kind: "ok" };
       },
       configs: {
-        ...NO_ACTS.configs,
+        ...NO_CONFIGS,
         follow: (wanted) => {
           const paths = wanted.map(({ cwd }) => cwd);
           followed.push(paths);
@@ -911,7 +911,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
       recorded: () => {},
       holding: () => () => {},
     },
-    NO_ACTS,
+    noActs(),
   );
   await host.deliver(
     () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
@@ -965,7 +965,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
       holding: () => () => {},
     },
     {
-      ...NO_ACTS,
+      ...noActs(),
       perform: async () => {
         await acted;
         return { kind: "ok" };
@@ -1020,7 +1020,7 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
       recorded: () => {},
       holding: () => () => {},
     },
-    NO_ACTS,
+    noActs(),
   );
   const retire = (session: string) =>
     host.deliver(
@@ -1104,7 +1104,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
       recorded: () => {},
       holding: () => () => {},
     },
-    NO_ACTS,
+    noActs(),
   );
   const submit = () => host.deliver(
     () => ({ kind: "event", event: { kind: "viewers", viewers: {} } }),

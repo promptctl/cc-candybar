@@ -4,7 +4,7 @@
 
 A subscription turns a connection into a stream of frames. Data and frames travel separately: render requests bring data, and frames are drawn from what the owners stored. A request's answer goes only to its own client and is never pushed, so every pushed frame was drawn by the feed.
 
-The host owns who watches and what each subscriber was sent; the renderer owns when frames are drawn. The host hands the renderer every session's viewers whole, so a lost or reordered delta can never leave a feed open that nobody watches. A feed draws each followed lane its own frame, because a frame is drawn for one surface's pointer, width and accepted layout and serves no other, and the host sends a lane's frame only to that lane's subscribers, and only what changed.
+The host owns who watches and what each subscriber was sent; the renderer owns when frames are drawn. The host hands the renderer every session's viewers whole, so a lost or reordered delta can never leave a feed open that nobody watches. A feed draws each followed lane its own frame, because a frame is drawn for one surface's pointer and accepted layout and serves no other (every lane draws at the session's terminal width), and the host sends a lane's frame only to that lane's subscribers, and only what changed.
 
 While someone watches a session, the host can hand its latest encoded frame to a joining subscriber. Replacing a viewer with the same lane and visibility needs no additional draw after that handover. The last viewer leaving releases the frame. Missing bytes or a declined handover ask for a draw through the viewer declaration, including when a sole viewer's departure and replacement share one mailbox slot.
 
@@ -39,6 +39,8 @@ A renderer's lane declaration sets the desired pane policy. The host's latest ac
 A lane's switch is read where the config is, in the renderer, and every output declares each viewed session's switches, a turn that threw included, so the host's gate ends a lane switched off while the render throws. The host gates on the switches the last output declared: a subscribe to a lane that's off is refused at once, and a subscriber whose lane goes off is ended, told why. A session with no view yet has no switch to read, since only an event opens a view, so its subscriber is admitted and the switches its view opens with decide.
 
 Claude Code's statusline keeps drawing the whole bar on request while other lanes follow the session: every surface draws its own frame, so no surface waits on another or stands in for it. Turning the switch on alone draws nothing.
+
+Each surface has one drawer at a time, and the host alone decides which draw presents. A lane's feed draws its surface while the lane has a subscriber. Otherwise only Claude Code's own statusline request draws, and only the statusline: cc-extra paints lane B's pushed frames into Claude Code's slot in place of the command's answer, and a `frames` client discards its request's answer, so an answer drawn then is shown nowhere and must not become the record the next frame continues. The drawer turns when a lane gains its first subscriber and when it loses its last, and each turn retires the surface's record, with every draw still on its way under the old drawer. So a pane that rejoins is redrawn whole.
 
 ## A follower's pointer
 

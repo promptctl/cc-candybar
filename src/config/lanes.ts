@@ -100,7 +100,7 @@ export type LaneFeeds = Readonly<Record<Lane, LaneFeed>>;
 export type Drawing =
   | { readonly by: "request" }
   | { readonly by: "feed"; readonly fps: number };
-export const ANSWERING: Drawing = { by: "request" };
+export const ANSWERING = { by: "request" } as const satisfies Drawing;
 export const DRAWING_VAR = "drawing";
 export const drawingVar = (field: "by" | "fps"): `drawing.${typeof field}` =>
   `${DRAWING_VAR}.${field}`;

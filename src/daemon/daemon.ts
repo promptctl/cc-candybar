@@ -753,7 +753,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       feedHistory.watching(session, watching);
       reconcileTmux();
     },
-    laneLeft: (session, lane) => presentations.stopFeed(session, lane),
+    laneFollowed: (session, lane, followed) =>
+      presentations.feedTurned(session, lane, followed),
     deliver: async (make) => {
       const sent = await Promise.all(
         [...renderers.values()].map(({ renderer }) =>

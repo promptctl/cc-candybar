@@ -66,7 +66,7 @@ import type { ActionDecl } from "../../src/config/action";
 import { instantOf } from "../../src/utils/instant";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
-import { NO_CONFIGS } from "./renderers";
+import { NO_CONFIGS, presenting } from "./renderers";
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept
 // beside the rig's session state, which a click reads its own session's from
@@ -426,6 +426,7 @@ export function actingWorld(
 ): HostWorld {
   const acts = testActs(ctx.log, deps);
   return {
+    presentationTurn: presenting(),
     sessionWriter: (_session, land) => land(),
     authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
     perform: (act) => acts.perform(act),

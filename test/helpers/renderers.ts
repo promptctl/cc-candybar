@@ -8,6 +8,7 @@ import type {
 } from "../../src/renderer-interface/interface";
 import { timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
+import { HostPresentations } from "../../src/daemon/host-presentations";
 import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
@@ -77,7 +78,26 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 // The world of a rig whose renderer asks no act: one it is handed fails by
 // name, its renderer names no origin, the daemon is not closing, and an act's
 // failure no bar holds would be the rig's bug.
-export const NO_ACTS: HostWorld = {
+// [LAW:no-shared-mutable-globals] A presentation authority of the rig's own,
+// for a host no feed follows a session in: each draw presents as its renderer
+// alone holds it, no session's export is refused, and the host owns every
+// session.
+export const presenting = (): HostWorld["presentationTurn"] => {
+  const presentations = new HostPresentations();
+  return (input, observed) =>
+    presentations.turn(
+      input,
+      observed,
+      () => [],
+      () => null,
+      () => true,
+    );
+};
+
+// A host world with no act to perform, and a presentation authority of its
+// own.
+export const noActs = (): HostWorld => ({
+  presentationTurn: presenting(),
   sessionWriter: (_session, land) => land(),
   authorizeRun: (request, captures) =>
     authorizeRun(TEST_SIGNER, request, captures),
@@ -93,7 +113,7 @@ export const NO_ACTS: HostWorld = {
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },
-};
+});
 
 // `renderer`, with `heard` told each event before it answers.
 export function hearingEvents(

@@ -32,7 +32,7 @@ export const noFeeds = (): Feeds =>
   new Feeds({
     draw: () => null,
     pin: () => () => {},
-    left: () => {},
+    turned: () => {},
     log: () => {},
     periods: FEED_PERIODS,
   });

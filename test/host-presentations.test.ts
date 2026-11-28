@@ -2,10 +2,8 @@ import {
   HostPresentations,
   type PresentationReader,
 } from "../src/daemon/host-presentations";
-import type {
-  DrawSurface,
-  ProposedPresentation,
-} from "../src/renderer-interface/presentation";
+import type { ProposedPresentation } from "../src/renderer-interface/presentation";
+import type { Lane } from "../src/config/lanes";
 import type {
   EffectId,
   Event,
@@ -92,11 +90,6 @@ test("delivered frames become sparse bases, even if their renderer dies before r
     base: accepted.surfaces.statusline!.order,
     change: {},
   });
-  expect(answer.proposal?.motion).toEqual({
-    kind: "change",
-    base: accepted.motion.order,
-    change: {},
-  });
   next.drawn(second)(answer.id, false);
   expect(book.inspect()).toBe(accepted);
 });
@@ -112,12 +105,12 @@ test("a late delivery advances only its surface, and retired surfaces reject out
   const whole = present.proposal!;
   // A request's answer presents on the statusline; a feed draws its lane.
   const proposed = (
-    by: DrawSurface | "request",
+    by: Lane | "request" | "frames",
     proposal: ProposedPresentation,
     receipt: number,
   ): Pick<RendererOutput, "effects" | "frames"> => {
     const id = receipt as EffectId;
-    return by === "request"
+    return by === "request" || by === "frames"
       ? { effects: [{ ...present, id, proposal }], frames: [] }
       : {
           effects: [],
@@ -135,10 +128,26 @@ test("a late delivery advances only its surface, and retired surfaces reject out
           ],
         };
   };
-  const stage = (by: DrawSurface | "request", receipt: number) => {
+  // A `cc-candybar frames` client asks with the same request; only its hint
+  // differs.
+  const fromFrames: Event = {
+    ...request,
+    context: {
+      ...context,
+      hints: {
+        ...context.hints,
+        client: { kind: "frames", bundle: "/bundle", source: null },
+      },
+    },
+  };
+  const stage = (by: Lane | "request" | "frames", receipt: number) => {
     const draw = book.turn(
       reader,
-      by === "request" ? request : { kind: "due" },
+      by === "request"
+        ? request
+        : by === "frames"
+          ? fromFrames
+          : { kind: "due" },
     )!;
     const settle = draw.drawn({ ...output, ...proposed(by, whole, receipt) });
     return {
@@ -146,6 +155,7 @@ test("a late delivery advances only its surface, and retired surfaces reject out
       accept: () => settle(receipt as EffectId, true),
     };
   };
+  book.shared.feedTurned(session, "pane", true);
   const requestA = stage("request", 1);
   const feed = stage("pane", 2);
   const requestB = stage("request", 3);
@@ -165,33 +175,48 @@ test("a late delivery advances only its surface, and retired surfaces reject out
       statusline: { order: requestB.order },
       pane: { order: feed.order },
     },
-    motion: { order: requestB.order },
   });
   expect(book.inspect()!.idle).toEqual({
     order: expiry.input.presentation!.order,
     value: expired,
   });
   const unwatched = stage("pane", 4);
-  book.shared.stopFeed(session, "pane");
+  book.shared.feedTurned(session, "pane", false);
   unwatched.accept();
   expect(book.inspect()!.surfaces.pane).toBeUndefined();
   expect(book.inspect()!.surfaces.statusline).toEqual(
     expect.objectContaining({ order: requestB.order }),
   );
-  // The statusline lane's feed leaving stops its frames in flight, and the
-  // statusline's image stands, since requests still draw it.
-  const followed = stage("statusline", 5);
-  book.shared.stopFeed(session, "statusline");
-  followed.accept();
+  // A frames client's answer is discarded, so it presents nowhere.
+  const discarded = stage("frames", 5);
+  discarded.accept();
   expect(book.inspect()!.surfaces.statusline).toEqual(
     expect.objectContaining({ order: requestB.order }),
   );
-  const answering = stage("request", 6);
+  // The statusline lane gaining a viewer hands Claude Code's statusline to
+  // its feed: the requests' image retires, with the answers on their way.
+  const superseded = stage("request", 6);
+  book.shared.feedTurned(session, "statusline", true);
+  superseded.accept();
+  expect(book.inspect()!.surfaces.statusline).toBeUndefined();
+  const fed = stage("statusline", 7);
+  fed.accept();
+  const unshown = stage("request", 8);
+  unshown.accept();
+  expect(book.inspect()!.surfaces.statusline).toEqual(
+    expect.objectContaining({ order: fed.order }),
+  );
+  // Its last viewer leaving hands the statusline back to requests.
+  const inFlight = stage("statusline", 9);
+  book.shared.feedTurned(session, "statusline", false);
+  inFlight.accept();
+  expect(book.inspect()!.surfaces.statusline).toBeUndefined();
+  const answering = stage("request", 10);
   answering.accept();
   expect(book.inspect()!.surfaces.statusline).toEqual(
     expect.objectContaining({ order: answering.order }),
   );
-  const retired = stage("request", 7);
+  const retired = stage("request", 11);
   book.shared.retire(session);
   retired.accept();
   expect(book.inspect()).toBeUndefined();
