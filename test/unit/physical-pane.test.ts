@@ -43,6 +43,7 @@ function rig(existing?: ManagedPane) {
       throw Error("no frame expected");
     },
     acknowledgeDisplayed: () => {},
+    presents: () => false,
     deliver: async (make) => {
       viewers.push(make());
       return { kind: "answered" };

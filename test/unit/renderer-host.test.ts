@@ -515,7 +515,7 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
       subscribed: () => {}, prepare: () => () => {}, recorded: () => {},
       holding: () => () => {},
       frames: (frames, settle) => {
-        for (const frame of frames) writes.push(ok => settle(frame, ok));
+        for (const frame of frames) writes.push(ok => settle(frame, ok ? null : "unshown"));
       },
     },
     noActs(),

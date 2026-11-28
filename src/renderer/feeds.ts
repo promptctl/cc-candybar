@@ -55,6 +55,7 @@ import {
   type FeedUpdate,
   RATE_WINDOW_S,
   activeTicks,
+  sameTurn,
 } from "../renderer-interface/feed-history.js";
 
 // Milliseconds from the start of one frame to the next: the closest a feed
@@ -475,14 +476,10 @@ export class Feeds {
     this.summarize(feed, "closed", tick);
   }
 
-  // [LAW:one-source-of-truth] A lane's rate and last frame are kept for one
-  // turn of the lane, as the host minted it: a new turn starts both over,
-  // even one the viewers between two deliveries read alike.
+  // A lane's rate and last frame are kept for one turn of the lane.
   private keepRates(feed: Feed, before: SessionViewers | null): void {
     const { lanes } = feed.viewers;
-    const kept = (lane: Lane): boolean =>
-      lanes[lane] !== undefined &&
-      lanes[lane].turn === before?.lanes[lane]?.turn;
+    const kept = (lane: Lane): boolean => sameTurn(feed.viewers, before, lane);
     for (const lane of LANE_NAMES)
       if (lanes[lane] === undefined) feed.rates.delete(lane);
       else if (!kept(lane)) feed.rates.set(lane, []);

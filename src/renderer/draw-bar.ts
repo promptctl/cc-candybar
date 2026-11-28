@@ -203,7 +203,11 @@ export function renderFrames(
         const { id: receipt, ...presentation } = prepare({
           kind: "frame",
           candidate,
-          clickShown,
+          // [LAW:one-source-of-truth] The click error is owed past its hold
+          // to Claude Code's statusline, so only a draw shown there answers
+          // it: the statusline lane's frame, which cc-extra shows in place
+          // of the command's answer, and never a pane's or a window's.
+          clickShown: lane === "statusline" ? clickShown : null,
         });
         const draw: FeedDraw = {
           frame: {
@@ -1118,8 +1122,8 @@ export function answerRequest(
 export interface Delivery {
   readonly kind: "answer" | "frame";
   readonly candidate: FrameCandidate;
-  // [LAW:one-source-of-truth] The click error the draw showed: a display
-  // that showed it, a feed's as much as Claude Code's, has answered it.
+  // The click error the draw showed on Claude Code's statusline, which a
+  // presented draw has answered.
   readonly clickShown: ClickErrorRecord | null;
   readonly portable?: PortableDraw;
 }

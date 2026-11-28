@@ -34,6 +34,7 @@ import type { FeedStats } from "./foundations/stats-snapshot";
 import type { LogLevel } from "../utils/logger";
 import { sameDaemonEvent, type DaemonEvent } from "../utils/event-hold.js";
 import type { Pointer } from "../click/gesture";
+import { drawsNow, type LaneTurn, type LaneTurns } from "./host-presentations";
 import type {
   FeedFrame,
   LaneViewers,
@@ -44,6 +45,10 @@ import type {
 
 // A subscriber holds the ANSI answer for its own display.
 type Delivered = (delivered: boolean) => void;
+
+// How a frame a renderer drew ended: null once a subscriber showed it, or why
+// none did.
+export type SettleFrame = (pushed: PushedFrame, unshown: string | null) => void;
 
 // [LAW:one-source-of-truth] A follower that sees the pointer over the surface
 // it draws: its id, and what it last said of the pointer. Held by the feed for
@@ -80,6 +85,9 @@ export interface FeedDeps<Req> {
   shown(req: Req): boolean;
   // A session gained its first subscriber or lost its last one.
   watchingChanged(session: SessionId, watching: boolean): void;
+  // Whether the host holds an image of the session's presentation, whose
+  // surfaces carry the turns they were drawn under.
+  presents(session: SessionId): boolean;
   // [LAW:single-enforcer] Hands the renderer every session's viewers, as
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
@@ -222,12 +230,13 @@ type Delivery = "current" | "owed" | "closed";
  * [LAW:no-shared-mutable-globals] Every session's latest request and every
  * watched session's subscribers: one owner, the host.
  */
-export class FrameFeeds<Req> {
+export class FrameFeeds<Req> implements LaneTurns {
   private readonly requests = new Map<SessionId, Noted<Req>>();
   // [LAW:one-source-of-truth] Each session lane's turn: a number minted from
   // one sequence each time the lane gains its first subscriber or loses its
   // last, so no two periods of any lane share one. A lane never followed
-  // reads 0, as does one whose session was trimmed.
+  // reads 0. A session's turns last while it is watched or the host holds its
+  // presentation: the lifetime of every draw and record that carries one.
   private readonly turns = new Map<SessionId, Partial<Record<Lane, number>>>();
   private turnsMinted = 0;
   private readonly watched = new Map<SessionId, Watched>();
@@ -425,10 +434,11 @@ export class FrameFeeds<Req> {
     return this.turns.get(session)?.[lane] ?? 0;
   }
 
-  // [LAW:single-enforcer] Whether a draw made under `turn` still draws its
-  // lane: the one check that decides both what is sent and what presents.
-  current(session: SessionId, lane: Lane, turn: number): boolean {
-    return turn === this.turnOf(session, lane);
+  laneOf(session: SessionId, lane: Lane): LaneTurn {
+    return {
+      turn: this.turnOf(session, lane),
+      followed: this.follows(session, lane),
+    };
   }
 
   follows(session: SessionId, lane: Lane): boolean {
@@ -437,14 +447,15 @@ export class FrameFeeds<Req> {
   }
 
   // The lane's drawer changed. The session's turns are trimmed oldest first
-  // past the bound, never a watched one's.
+  // past the bound, never while anything carries them.
   private turn(session: SessionId, lane: Lane): void {
     const turns = { ...this.turns.get(session), [lane]: ++this.turnsMinted };
     this.turns.delete(session);
     this.turns.set(session, turns);
     for (const oldest of this.turns.keys()) {
       if (this.turns.size <= MAX_REQUESTS) break;
-      if (!this.watched.has(oldest)) this.turns.delete(oldest);
+      if (!this.watched.has(oldest) && !this.deps.presents(oldest))
+        this.turns.delete(oldest);
     }
   }
 
@@ -552,21 +563,22 @@ export class FrameFeeds<Req> {
 
   // The frames a renderer's turn drew: each kept as its lane's last while the
   // lane has a subscriber, and sent to each of that lane's subscribers it
-  // changed.
+  // changed. Each settles shown, or with why it was not.
   took(
     renderer: RendererName,
     frames: readonly PushedFrame[],
-    settled: (pushed: PushedFrame, delivered: boolean) => void,
+    settled: SettleFrame,
   ): void {
     for (const pushed of frames) {
-      const { session, lane, frame } = pushed;
+      const { session, lane, turn, frame } = pushed;
       const watched = this.watched.get(session);
       if (watched === undefined) {
-        settled(pushed, false);
+        settled(pushed, "no subscriber follows its session");
         continue;
       }
       let encoded: EncodedAnswer;
-      let drawn = frame.kind === "drawn";
+      let unsent: string | null =
+        frame.kind === "drawn" ? null : "its frame failed";
       try {
         encoded = encodeFeed(lane, frame, this.deps.publishFrame, {
           renderer,
@@ -583,26 +595,23 @@ export class FrameFeeds<Req> {
             "error",
             `frame sid=${JSON.stringify(session)} lane=${lane} error=${JSON.stringify(refused.error)}`,
           );
-        drawn = false;
+        unsent = refused.error;
       }
-      // [LAW:single-enforcer] A frame drawn for an earlier turn of its lane,
-      // or for a lane no one follows, is shown nowhere: not kept, not sent,
-      // never presented.
-      if (
-        !this.follows(session, lane) ||
-        !this.current(session, lane, pushed.turn)
-      ) {
-        settled(pushed, false);
+      // [LAW:single-enforcer] A frame its lane's feed no longer draws (one
+      // drawn for an earlier turn of the lane, or for a lane no one follows)
+      // is shown nowhere: not kept, not sent, never presented.
+      if (!drawsNow(this, session, { by: "feed", lane, turn })) {
+        settled(pushed, "its lane's turn ended before it was sent");
         continue;
       }
       watched.last.set(lane, encoded);
-      if (drawn) {
+      if (unsent === null) {
         this.publish(session, watched, lane, encoded, (ok) =>
-          settled(pushed, ok),
+          settled(pushed, ok ? null : "no subscriber showed it"),
         );
       } else {
         this.publish(session, watched, lane, encoded);
-        settled(pushed, false);
+        settled(pushed, unsent);
       }
     }
   }

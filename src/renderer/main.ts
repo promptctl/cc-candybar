@@ -426,7 +426,13 @@ export function mainRenderer(
         deliveries.delete(event.of);
         // [LAW:single-enforcer] Only a draw the host presented records its
         // surface's presentation; one it did not says why.
-        if (event.outcome.kind !== "ok") return;
+        if (event.outcome.kind !== "ok") {
+          record.push(
+            ["delivery", event.outcome.kind],
+            ["reason", event.outcome.reason],
+          );
+          return;
+        }
         const { presentation } = event.outcome;
         // [LAW:no-silent-failure] A delivered draw always carries the
         // host's verdict.

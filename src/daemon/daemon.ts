@@ -538,9 +538,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:one-source-of-truth] Each lane's turn is the subscriber book's; the
   // presentations read it, holding none of their own.
   const presentations = new HostPresentations({
-    turnOf: (session, lane) => frameFeeds.turnOf(session, lane),
-    current: (session, lane, turn) => frameFeeds.current(session, lane, turn),
-    follows: (session, lane) => frameFeeds.follows(session, lane),
+    laneOf: (session, lane) => frameFeeds.laneOf(session, lane),
   });
   const feedHistory = new HostFeedHistory();
   const publishSession =
@@ -759,6 +757,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       feedHistory.watching(session, watching);
       reconcileTmux();
     },
+    presents: (session) => presentations.holds(session),
     deliver: async (make) => {
       const sent = await Promise.all(
         [...renderers.values()].map(({ renderer }) =>
@@ -1078,7 +1077,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         frames: (frames, settled) => {
           const routed = frames.filter((frame) => {
             if (nameOf(frame.session) === name) return true;
-            settled(frame, false);
+            settled(frame, "another renderer draws its session");
             return false;
           });
           frameFeeds.took(name, routed, settled);

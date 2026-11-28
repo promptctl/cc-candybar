@@ -39,6 +39,7 @@ import {
 } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
 import type { DaemonEvent } from "../../src/utils/event-hold";
+import { drawsNow } from "../../src/daemon/host-presentations";
 
 const S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -55,6 +56,8 @@ function rig(
   publishFrame: FeedDeps<Req>["publishFrame"] = publishingFrames(TEST_SIGNER),
 ) {
   const hidden = new Set<string>();
+  // The sessions the host holds an image of.
+  const presented = new Set<SessionId>();
   const handed: Viewers[] = [];
   const owed: Array<{
     make: () => Viewers;
@@ -67,6 +70,7 @@ function rig(
   const deps: FeedDeps<Req> = {
     publishFrame,
     acknowledgeDisplayed: (events) => void acknowledged.push(...events),
+    presents: (session) => presented.has(session),
     requestChanged: () => {},
     shown: (req) => !hidden.has(req.pane),
     watchingChanged: (session, on) => void watching.push([session, on]),
@@ -78,6 +82,8 @@ function rig(
   };
   const feeds = new FrameFeeds<Req>(deps);
   const settled: [PushedFrame, boolean][] = [];
+  // Why each frame no subscriber showed was not shown.
+  const unshown: string[] = [];
   // A frame the renderer drew under the lane's turn as it stands.
   const frame = (
     session = S,
@@ -95,9 +101,10 @@ function rig(
       displayedEvents,
     );
   const took = (frames: readonly PushedFrame[], renderer = MAIN_RENDERER) =>
-    feeds.took(renderer, frames, (pushed, delivered) =>
-      settled.push([pushed, delivered]),
-    );
+    feeds.took(renderer, frames, (pushed, reason) => {
+      settled.push([pushed, reason === null]);
+      if (reason !== null) unshown.push(reason);
+    });
   // The next delivery's slot comes: it reads the viewers and the turn ends
   // as `kind`.
   const slot = async (kind = "answered") => {
@@ -129,6 +136,8 @@ function rig(
     rejected,
     took,
     settled,
+    unshown,
+    presented,
   };
 }
 
@@ -615,10 +624,17 @@ describe("a subscriber", () => {
     second();
     expect(r.feeds.isWatched(S)).toBe(true);
     expect(r.feeds.follows(S, "pane")).toBe(false);
-    expect(r.feeds.current(S, "pane", followed)).toBe(false);
+    expect(drawsNow(r.feeds, S, { by: "feed", lane: "pane", turn: followed })).toBe(false);
     expect(r.feeds.viewers()[S]!.lanes.statusline!.turn).toBe(line);
     leaveLine();
-    expect(r.feeds.current(S, "statusline", line)).toBe(false);
+    expect(drawsNow(r.feeds, S, { by: "feed", lane: "statusline", turn: line })).toBe(false);
+    // Claude Code's request draws the statusline once its lane is left.
+    expect(
+      drawsNow(r.feeds, S, {
+        by: "request",
+        turn: r.feeds.turnOf(S, "statusline"),
+      }),
+    ).toBe(true);
   });
 
   test("a frame drawn for a lane whose last subscriber has left is not kept for the next to join", () => {
@@ -643,6 +659,7 @@ describe("a subscriber", () => {
     r.took([stale]);
     expect(rejoined.sent).toEqual([]);
     expect(r.settled).toEqual([[stale, false]]);
+    expect(r.unshown).toEqual(["its lane's turn ended before it was sent"]);
     const late = subscriber("pane");
     r.feeds.subscribe(S, late.sub);
     expect(late.sent).toEqual([]);
@@ -658,6 +675,22 @@ describe("a subscriber", () => {
     r.took([drawn]);
     expect(pane.sent).toEqual([ansiAnswer("kept")]);
     expect(r.settled).toEqual([[drawn, true]]);
+  });
+
+  // The host's image of the session keeps the turn its statusline was drawn
+  // under, so trimming it would read as a new drawer and restart the bar.
+  test("an unwatched session's turns outlast sessions coming and going while the host holds its presentation", () => {
+    const r = rig();
+    const held = sessionIdOf("held");
+    const dropped = sessionIdOf("dropped");
+    for (const session of [held, dropped])
+      r.feeds.subscribe(session, subscriber("statusline").sub)();
+    r.presented.add(held);
+    const turn = r.feeds.turnOf(held, "statusline");
+    for (let i = 0; i < 300; i++)
+      r.feeds.subscribe(sessionIdOf(`passing-${i}`), subscriber("pane").sub)();
+    expect(r.feeds.turnOf(held, "statusline")).toBe(turn);
+    expect(r.feeds.turnOf(dropped, "statusline")).toBe(0);
   });
 
   test("joining later is handed the bar as it stands, at once", () => {

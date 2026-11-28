@@ -48,9 +48,10 @@ const laneTurns = () => {
   const turns = new Map<Lane, number>();
   const followed = new Set<Lane>();
   const lanes: LaneTurns = {
-    turnOf: (_, lane) => turns.get(lane) ?? 0,
-    current: (sid, lane, turn) => lanes.turnOf(sid, lane) === turn,
-    follows: (_, lane) => followed.has(lane),
+    laneOf: (_, lane) => ({
+      turn: turns.get(lane) ?? 0,
+      followed: followed.has(lane),
+    }),
   };
   const follow = (lane: Lane, on: boolean) => {
     if (on) followed.add(lane);
@@ -145,7 +146,7 @@ test("a late delivery advances only its surface, and retired surfaces reject out
             {
               session,
               lane: by,
-              turn: book.lanes.turnOf(session, by),
+              turn: book.lanes.laneOf(session, by).turn,
               frame: {
                 kind: "drawn",
                 receipt: id,
@@ -225,8 +226,9 @@ test("a late delivery advances only its surface, and retired surfaces reject out
   expect(book.inspect()!.surfaces.statusline).toBeUndefined();
   const fed = stage("statusline", 7);
   expect(fed.accept()).toBe("presented");
-  const unshown = stage("request", 8);
-  expect(unshown.accept()).toBe("unshown");
+  // An answer drawn while the feed draws the statusline is not its drawer.
+  const undrawn = stage("request", 8);
+  expect(undrawn.accept()).toBe("turned");
   expect(book.inspect()!.surfaces.statusline).toEqual(
     expect.objectContaining({ order: fed.order }),
   );
@@ -288,4 +290,28 @@ test("a frames client's answer proposes no presentation, so it presents nowhere"
     presentation: "unshown",
   });
   expect(book.inspect()).toBeUndefined();
+});
+
+test("a frame for a session the book pinned no image of at its order is retired", async () => {
+  const book = host();
+  const main = rendererOf();
+  answered(await handIn(main, start));
+  const drawing = book.turn(new WeakMap(), request)!;
+  const output = answered(await main.answer(drawing.input));
+  const { frame, proposal } = presentOf(output.effects);
+  const due = book.turn(new WeakMap(), { kind: "due" })!;
+  const receipt = 11 as EffectId;
+  const take = due.drawn({
+    ...output,
+    effects: [],
+    frames: [
+      {
+        session: contextOf("unpinned").hookData.session_id,
+        lane: "pane",
+        turn: 0,
+        frame: { kind: "drawn", receipt, bar: frame, proposal },
+      },
+    ],
+  });
+  expect(take(receipt)).toEqual({ presentation: "retired" });
 });

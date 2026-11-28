@@ -10,6 +10,7 @@ import type {
 import {
   activeTicks,
   comparisonOf,
+  sameTurn,
   type FeedAdvance,
   type FeedHistory,
   type FeedResume,
@@ -117,22 +118,19 @@ export class HostFeedHistory {
               `feed for ${session} reported a schedule without viewers`,
             );
           const drawn = frames.get(session);
-          // [LAW:one-source-of-truth] A lane's rate and last frame are kept
-          // for one turn of the lane, as the renderer keeps them.
-          const sameTurn = (lane: Lane): boolean =>
-            seen.lanes[lane] !== undefined &&
-            seen.lanes[lane].turn === history?.viewers.lanes[lane]?.turn;
+          const kept = (lane: Lane): boolean =>
+            sameTurn(seen, history?.viewers, lane);
           let rates = history?.rates ?? {};
           if (update.viewers || changed?.length) {
-            const kept: Partial<Record<Lane, readonly Tick[]>> = {};
+            const next: Partial<Record<Lane, readonly Tick[]>> = {};
             for (const lane of Object.keys(seen.lanes) as Lane[]) {
-              const ticks = sameTurn(lane)
+              const ticks = kept(lane)
                 ? activeTicks(rates[lane] ?? [], tick)
                 : [];
               if (changed?.includes(lane)) ticks.push(tick);
-              kept[lane] = ticks;
+              next[lane] = ticks;
             }
-            rates = kept;
+            rates = next;
           }
           // An observation can arrive while the promise for an earlier turn
           // is landing. Keep the later schedule while accepting the actual
@@ -147,12 +145,12 @@ export class HostFeedHistory {
             frames: Object.fromEntries(
               (Object.keys(seen.lanes) as Lane[]).flatMap((lane) => {
                 const now = drawn?.find(([of]) => of === lane)?.[1];
-                const kept = now
+                const held = now
                   ? comparisonOf(now)
-                  : sameTurn(lane)
+                  : kept(lane)
                     ? history?.frames[lane]
                     : undefined;
-                return kept ? [[lane, kept]] : [];
+                return held ? [[lane, held]] : [];
               }),
             ),
           };

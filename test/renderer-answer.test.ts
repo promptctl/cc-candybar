@@ -10,6 +10,10 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import {
+  holdClickError,
+  lastClickError,
+} from "../src/daemon/foundations/click-error";
 import { fakeMetrics } from "../scripts/lib/draw-fixtures/payload-owners";
 import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
 import { requestEvent } from "../src/daemon/foundations/request-event";
@@ -1384,6 +1388,42 @@ describe("a feed's frame", () => {
     expect(presentation(t.rig, "pane")?.segments).toBe(prior?.segments);
     expect(t.recorded).toHaveLength(deliveries);
   });
+
+  test("a frame no display showed records why", async () => {
+    const t = renderer();
+    await configure(t, checked());
+    answered(await followFeed(t.r, "pane"));
+    const frame = await dueFrame(t.r);
+    const lost = answered(
+      await done(t.r, { session: SESSION, id: frame.receipt }, false),
+    );
+    expect(lost.record).toEqual(
+      expect.arrayContaining([
+        ["delivery", "failed"],
+        ["reason", "left"],
+      ]),
+    );
+  });
+
+  // The click error is owed past its hold to Claude Code's statusline, so a
+  // pane's frame that showed it leaves it owed there.
+  test.each([
+    ["pane", false],
+    ["statusline", true],
+  ] as const)(
+    "a presented %s frame that showed the click error answers it: %s",
+    async (lane, answers) => {
+      const t = renderer();
+      await configure(t, checked());
+      holdClickError(t.rig.sessionState, SESSION, "the click failed", READ.at);
+      answered(await followFeed(t.r, lane));
+      const frame = await dueFrame(t.r);
+      answered(await done(t.r, { session: SESSION, id: frame.receipt }, true));
+      expect(lastClickError(t.rig.sessionState, SESSION)?.answered).toBe(
+        answers,
+      );
+    },
+  );
 
   test("draws unsigned clickable addresses for the host to publish", async () => {
     const t = renderer();

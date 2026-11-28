@@ -20,23 +20,44 @@ import {
 
 export type PresentationReader = WeakMap<object, WeakSet<object>>;
 
-// [LAW:one-source-of-truth] Each lane's turn, as the host's subscriber book
-// owns it. Each surface has one drawer at a time: its lane's feed while the
-// lane is followed, and Claude Code's statusline request while it is not,
-// since cc-extra's statusline push shows a pushed frame in place of the
-// command's answer. A turn is one drawer's period, so a draw presents only
-// under the turn it was drawn in, and a surface drawn under an earlier turn is
-// no longer the one shown.
+// [LAW:one-source-of-truth] Each lane's turn and whether it is followed, as
+// the host's subscriber book owns them.
+export interface LaneTurn {
+  readonly turn: number;
+  readonly followed: boolean;
+}
 export interface LaneTurns {
-  turnOf(session: SessionId, lane: Lane): number;
-  current(session: SessionId, lane: Lane, turn: number): boolean;
-  follows(session: SessionId, lane: Lane): boolean;
+  laneOf(session: SessionId, lane: Lane): LaneTurn;
+}
+
+// [LAW:types-are-the-program] Who drew a surface, and under which turn of its
+// lane: the lane's feed, or Claude Code's statusline request.
+export type Drawer =
+  | { readonly by: "feed"; readonly lane: Lane; readonly turn: number }
+  | { readonly by: "request"; readonly turn: number };
+
+const surfaceOf = (drawer: Drawer): Lane =>
+  drawer.by === "feed" ? drawer.lane : "statusline";
+
+// [LAW:single-enforcer] Each surface has one drawer at a time: its lane's feed
+// while the lane is followed, and Claude Code's statusline request while it
+// is not, since cc-extra's statusline push shows a pushed frame in place of
+// the command's answer. A turn is one drawer's period, so a draw is sent and
+// presents only under the turn it was drawn in, and a surface drawn under an
+// earlier turn is no longer the one shown.
+export function drawsNow(
+  lanes: LaneTurns,
+  session: SessionId,
+  drawer: Drawer,
+): boolean {
+  const { turn, followed } = lanes.laneOf(session, surfaceOf(drawer));
+  return drawer.turn === turn && followed === (drawer.by === "feed");
 }
 
 interface Slot {
   image?: PresentedSession;
-  // The turn each surface of the image was drawn under.
-  readonly turns: Partial<Record<Lane, number>>;
+  // Who drew each surface of the image.
+  readonly drawers: Partial<Record<Lane, Drawer>>;
   readonly exportProblems: Partial<Record<Lane, string | null>>;
   revision: number;
   readonly began: number;
@@ -45,9 +66,8 @@ interface Pinned {
   readonly slot: Slot;
   readonly prior?: PresentedSession;
   readonly observed: WeakSet<object>;
-  // The statusline's turn while Claude Code's request draws it, null while
-  // its lane's feed does.
-  readonly requestTurn: number | null;
+  // Claude Code's statusline request, under the turn its draw began in.
+  readonly request: Drawer;
 }
 
 // What a delivered draw does to the image: presents, and says so once its
@@ -77,6 +97,10 @@ export class HostPresentations {
     this.live.delete(session);
   }
 
+  holds(session: SessionId): boolean {
+    return this.live.has(session);
+  }
+
   // [LAW:one-source-of-truth] The image as it stands: only the surfaces drawn
   // under their lane's current turn. What an earlier drawer showed is derived
   // away, never removed by an event the book would have to hear.
@@ -86,11 +110,10 @@ export class HostPresentations {
   ): PresentedSession | undefined {
     const { image } = slot;
     if (!image) return undefined;
-    const current = LANE_NAMES.filter(
-      (lane) =>
-        image.surfaces[lane] !== undefined &&
-        this.lanes.current(session, lane, slot.turns[lane] ?? 0),
-    );
+    const current = LANE_NAMES.filter((lane) => {
+      const drawer = slot.drawers[lane];
+      return drawer !== undefined && drawsNow(this.lanes, session, drawer);
+    });
     if (current.length === Object.keys(image.surfaces).length) return image;
     return {
       ...image,
@@ -119,7 +142,7 @@ export class HostPresentations {
 
   private hold(session: SessionId): Slot {
     const prior = this.live.get(session) ?? {
-      turns: {},
+      drawers: {},
       exportProblems: {},
       revision: 0,
       began: this.order,
@@ -180,9 +203,10 @@ export class HostPresentations {
         slot,
         prior,
         observed,
-        requestTurn: this.lanes.follows(session, "statusline")
-          ? null
-          : this.lanes.turnOf(session, "statusline"),
+        request: {
+          by: "request",
+          turn: this.lanes.laneOf(session, "statusline").turn,
+        },
       });
       // [LAW:one-source-of-truth] A draw is offered the image even when there
       // is none, so the renderer drops a record the host no longer holds (an
@@ -242,31 +266,32 @@ export class HostPresentations {
           reader.get(slot)?.add(idle);
         }
         const pending = new Map<EffectId, () => Verdict>();
+        // [LAW:no-silent-failure] Every draw is staged with what its delivery
+        // will do: a draw with no proposal (its client shows no answer) is
+        // shown nowhere, and one with no image pinned at its order (a due's
+        // frame for a session the host no longer holds) has none to continue.
         const stage = (
           id: EffectId,
           session: SessionId,
-          by: Lane,
-          turn: number | null,
+          drawer: (base: Pinned) => Drawer,
           proposal?: ProposedPresentation,
         ) => {
           const base = pinned.get(session);
-          // A draw with no proposal (a client that shows no answer) or none
-          // to continue presents nowhere; nor does a request's answer while
-          // the statusline's feed draws it, nor a due's frame for a slot that
-          // retired while it waited in the mailbox.
-          if (!proposal || !base || turn === null) return;
           pending.set(
             id,
-            this.proposed(
-              session,
-              by,
-              turn,
-              order,
-              input.tick,
-              base,
-              proposal,
-              exportProblem(session),
-            ),
+            !proposal
+              ? () => ({ presentation: "unshown" })
+              : !base
+                ? () => ({ presentation: "retired" })
+                : this.proposed(
+                    session,
+                    drawer(base),
+                    order,
+                    input.tick,
+                    base,
+                    proposal,
+                    exportProblem(session),
+                  ),
           );
         };
         for (const effect of output.effects)
@@ -274,13 +299,17 @@ export class HostPresentations {
             stage(
               effect.id,
               effect.session,
-              effect.surface,
-              pinned.get(effect.session)?.requestTurn ?? null,
+              ({ request }) => request,
               effect.proposal,
             );
         for (const { session, lane, turn, frame } of output.frames)
           if (frame.kind === "drawn")
-            stage(frame.receipt, session, lane, turn, frame.proposal);
+            stage(
+              frame.receipt,
+              session,
+              () => ({ by: "feed", lane, turn }),
+              frame.proposal,
+            );
         return (id) => {
           const take = pending.get(id);
           pending.delete(id);
@@ -289,11 +318,10 @@ export class HostPresentations {
       },
     };
   }
-  // What the delivery of a draw made under `turn` does to the image.
+  // What the delivery of `drawer`'s draw does to the image.
   private proposed(
     session: SessionId,
-    by: Lane,
-    turn: number,
+    drawer: Drawer,
     order: number,
     tick: Tick,
     base: Pinned,
@@ -302,6 +330,7 @@ export class HostPresentations {
   ): () => Verdict {
     const { prior, slot, observed } = base;
     const { surface, menu } = proposal;
+    const by = surfaceOf(drawer);
     const nextSurface = {
       order,
       value: proposedValue(prior?.surfaces[by], surface, surfaceAfter),
@@ -310,13 +339,13 @@ export class HostPresentations {
       if (this.live.get(session) !== slot) return { presentation: "retired" };
       // [LAW:single-enforcer] The check that decided whether a feed's frame
       // was sent decides whether it presents.
-      if (!this.lanes.current(session, by, turn))
+      if (!drawsNow(this.lanes, session, drawer))
         return { presentation: "turned" };
       const current = slot.image;
       const held = current?.surfaces[by];
-      if (held && slot.turns[by] === turn && order <= held.order)
+      if (held && slot.drawers[by]?.turn === drawer.turn && order <= held.order)
         return { presentation: "superseded" };
-      slot.turns[by] = turn;
+      slot.drawers[by] = drawer;
       slot.exportProblems[by] = problem;
       const surfaces = { ...current?.surfaces, [by]: nextSurface };
       slot.image = {

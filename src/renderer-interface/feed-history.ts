@@ -85,6 +85,18 @@ export function activeTicks(ticks: readonly Tick[], tick: Tick): Tick[] {
   return ticks.filter((sent) => sent > tick - RATE_WINDOW_S && sent <= tick);
 }
 
+// [LAW:single-enforcer] A lane's rate and last frame are kept for one turn of
+// the lane, as the host minted it: a new turn starts both over, even one the
+// viewers between two deliveries read alike. The renderer's feed and the
+// host's reconstruction of it both carry them over by this.
+export const sameTurn = (
+  now: SessionViewers,
+  before: SessionViewers | null | undefined,
+  lane: Lane,
+): boolean =>
+  now.lanes[lane] !== undefined &&
+  now.lanes[lane].turn === before?.lanes[lane]?.turn;
+
 // One-way state observations can only bring a watched feed forward.
 export interface FeedAdvance {
   readonly sequence: number;

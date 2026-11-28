@@ -29,6 +29,7 @@ import type {
   PresentationTurn,
   PresentationReader,
 } from "./host-presentations.js";
+import type { SettleFrame } from "./frame-feed.js";
 import {
   isCommand,
   sessionOfEvent,
@@ -296,7 +297,7 @@ export function rendererHost(
     // send each subscriber what changed for it.
     readonly frames: (
       frames: readonly PushedFrame[],
-      settled: (frame: PushedFrame, delivered: boolean) => void,
+      settled: SettleFrame,
     ) => void;
     // [LAW:single-enforcer] Where every output's stored writes go: the host's
     // copy of the renderer's stores, before any later input.
@@ -879,20 +880,15 @@ export function rendererHost(
           frame.kind === "drawn" ? [frame.receipt] : [],
         ),
       );
-      const settled = (
-        { session, frame }: PushedFrame,
-        delivered: boolean,
-      ): void => {
+      const settled: SettleFrame = ({ session, frame }, unshown) => {
         if (frame.kind === "drawn" && owed.delete(frame.receipt))
-          receipt(
-            { session, id: frame.receipt },
-            delivered ? null : "no subscriber took the frame",
-          );
+          receipt({ session, id: frame.receipt }, unshown);
       };
       if (
         recordTaken("frames", () => collector.frames(frames, settled)) === null
       )
-        for (const frame of frames) settled(frame, false);
+        for (const frame of frames)
+          settled(frame, "the host's feeds threw taking it");
     }
     if (!adoptDemand) return { kind: "following", named: [] };
     const named: RenderOrigin[] = [];
@@ -1066,13 +1062,11 @@ export function rendererHost(
       // [LAW:effects-at-boundaries] The write can acknowledge a daemon
       // event after its renderer has gone. Only the local receipt needs
       // the generation that issued it.
-      // [LAW:one-source-of-truth] An event is shown by a write a display
-      // shows, so an answer its client discards acknowledges none.
-      if (
-        reason === null &&
-        presentation !== "unshown" &&
-        effect.displayedEvents !== undefined
-      )
+      // [LAW:one-source-of-truth] An answer shows its events only where the
+      // host presented it, the one fact that also answers its click error:
+      // one its client discards, or that lost the statusline to its lane's
+      // feed, acknowledges none.
+      if (presentation === "presented" && effect.displayedEvents !== undefined)
         world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
       if (verdict?.presentation === "presented")

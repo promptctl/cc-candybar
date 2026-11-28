@@ -80,9 +80,7 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 
 // Lanes no subscriber ever followed: each is in its first turn.
 const UNFOLLOWED: LaneTurns = {
-  turnOf: () => 0,
-  current: (_session, _lane, turn) => turn === 0,
-  follows: () => false,
+  laneOf: () => ({ turn: 0, followed: false }),
 };
 
 // The world of a rig whose renderer asks no act: one it is handed fails by
